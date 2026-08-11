@@ -12,9 +12,9 @@ namespace ConditioningControlPanel.Services
     // PrepareTargetWindowAction; safe no-op for non-editor windows.
     internal static class DeeperTutorialPrep
     {
-        public static readonly Action<object> ExpandMetadataDrawer = o =>
+        public static readonly Action<Window> ExpandMetadataDrawer = w =>
         {
-            try { (o as DeeperEditorWindow)?.ExpandMetadataDrawer(); } catch { }
+            try { (w as DeeperEditorWindow)?.ExpandMetadataDrawer(); } catch { }
         };
     }
 
@@ -24,35 +24,89 @@ namespace ConditioningControlPanel.Services
     // highlighted the wrong thing (#443). Expand it via PrepareTargetWindowAction before those steps.
     internal static class CompanionTutorialPrep
     {
-        public static readonly Action<object> ExpandBehaviourSection = o =>
+        /// <summary>
+        /// Opens the Workshop drawer, which is where the redesign put every control the timing /
+        /// triggers / phrases steps point at (design §6). Replaces the old "expand SectionBehaviour"
+        /// prep — that Expander no longer exists.
+        /// </summary>
+        public static readonly Action<Window> ExpandWorkshop = w => Reveal(w, null);
+
+        /// <summary>The same, landing on the roster pigeonhole for the Switch / roster steps.</summary>
+        public static readonly Action<Window> ExpandRoster = w =>
+            Reveal(w, Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell);
+
+        /// <summary>Opens the Engine Room drawer for the provider step.</summary>
+        public static readonly Action<Window> ExpandEngineRoom = w =>
         {
-            try
-            {
-                var ex = FindExpander(o as Window, "SectionBehaviour");
-                if (ex != null) ex.IsExpanded = true;
-            }
-            catch { }
+            try { FindRoom(w)?.RevealEngineRoom(); }
+            catch { /* a tour never blocks on UI quirks */ }
         };
 
-        // Namescope-agnostic visual-tree search (the section lives inside the CompanionTabView
-        // UserControl, so Window.FindName wouldn't reach it). The Expander element itself is realized
-        // even while collapsed, so this finds it and flips IsExpanded; the overlay's UpdateLayout +
-        // bounds-retry then pick up the now-visible inner control.
-        private static System.Windows.Controls.Expander? FindExpander(DependencyObject? root, string name)
+        private static void Reveal(Window w, string? cellKey)
+        {
+            try { FindRoom(w)?.RevealWorkshop(cellKey); }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+
+        // Namescope-agnostic visual-tree search: the room lives inside the CompanionTabView
+        // UserControl, so Window.FindName wouldn't reach it. The control is realized as soon as the
+        // tab exists, even while the drawers are shut.
+        private static Views.Controls.Companion.CompanionRoomView? FindRoom(DependencyObject? root)
         {
             if (root == null) return null;
+            if (root is Views.Controls.Companion.CompanionRoomView hit) return hit;
             int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
             for (int i = 0; i < count; i++)
             {
-                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
-                if (child is System.Windows.Controls.Expander ex && ex.Name == name)
-                    return ex;
-                var found = FindExpander(child, name);
+                var found = FindRoom(System.Windows.Media.VisualTreeHelper.GetChild(root, i));
                 if (found != null) return found;
             }
             return null;
         }
     }
+
+    /// <summary>
+    /// Settings-door prep (Phase 2). The audio block and the account cards no longer live on the
+    /// dashboard or inside the App Info popup - they are sections of <c>AppSettingsTabView</c>
+    /// (tab key <c>appsettings</c>), one long scrolling page with a mini-rail. Landing on that
+    /// page is not the same as landing on the right section, so a step that needs a section says
+    /// so here.
+    ///
+    /// Two entry points because TutorialOverlay treats the two step shapes differently:
+    /// <list type="bullet">
+    /// <item><see cref="Focus"/> is for <c>OnActivate</c> - the only hook a
+    /// <c>TutorialStepPosition.Center</c> card gets, since <c>UpdateSpotlight</c> early-returns
+    /// before <c>PrepareTargetWindowAction</c> for centered cards.</item>
+    /// <item><see cref="Prepare"/> is the <c>PrepareTargetWindowAction</c> for a spotlight step;
+    /// the overlay's own <c>BringIntoView</c> would scroll the target into view anyway, this just
+    /// lights the matching rail pill so the page agrees with the card.</item>
+    /// </list>
+    /// Both are best-effort: a tour never blocks on UI quirks.
+    /// </summary>
+    internal static class AppSettingsTutorialPrep
+    {
+        /// <summary>Compose into a step's <c>OnActivate</c> (runs after the tab switch).</summary>
+        public static Action Focus(string sectionKey) =>
+            () => FocusOn(Application.Current?.MainWindow, sectionKey);
+
+        /// <summary>Use as a step's <c>PrepareTargetWindowAction</c>.</summary>
+        public static Action<Window> Prepare(string sectionKey) =>
+            w => FocusOn(w, sectionKey);
+
+        private static void FocusOn(Window? window, string sectionKey)
+        {
+            try
+            {
+                // Same resolve the Ctrl+K palette uses (SettingsPaletteWindow.Navigate): the view
+                // is an x:Name on MainWindow, so FindName reaches it without this service needing
+                // to know about the generated field.
+                (window?.FindName("AppSettingsTab") as Views.Tabs.AppSettingsTabView)
+                    ?.FocusSection(sectionKey);
+            }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+    }
+
     /// <summary>
     /// Types of tutorials available in the app
     /// </summary>
@@ -94,6 +148,39 @@ namespace ConditioningControlPanel.Services
         private Action? _showPatreon;
         private Action? _showAwareness;
         private Action? _showDeeper;
+        // Generic router for every other ShowTab key. The named callbacks above only cover eight
+        // keys, so before this existed a step declaring any other RequiresTab navigated nowhere
+        // (silently - the spotlight just landed on whatever tab happened to be open).
+        private Action<string>? _showTab;
+
+        /// <summary>
+        /// Nav entry element name -> the ShowTab key whose sidebar door owns that entry. A step can
+        /// spotlight a nav entry that lives in a *different* door than the tab it requires (the
+        /// "open the assets folder" step stands on the dashboard but points at the Assets entry), so
+        /// the door to open is decided by the target element first, RequiresTab second.
+        /// Keys are the x:Names the nav has always used - they are API for the tutorial and FX.
+        /// </summary>
+        private static readonly Dictionary<string, string> NavEntryDoorKeys = new(StringComparer.Ordinal)
+        {
+            ["BtnSettings"] = "settings",
+            ["BtnPresets"] = "presets",
+            ["BtnQuests"] = "quests",
+            ["BtnPrograms"] = "programs",
+            ["BtnEnhancements"] = "enhancements",
+            ["BtnDeeper"] = "deeper",
+            ["BtnAvailableSubjects"] = "availablesubjects",
+            ["BtnOpenAssetsTop"] = "assets",
+            ["BtnAchievements"] = "achievements",
+            ["BtnLeaderboard"] = "leaderboard",
+            ["BtnCompanion"] = "companion",
+            ["BtnDiscordTab"] = "discord",
+            // The x:Name is API and never changes; the VALUE is the live ShowTab key, so it moved
+            // to "play" when Phase 6 retired the Lab page into the Play door's card wall.
+            // ("lab" would still resolve — ExpandDoorForTab canonicalises the alias — but a door
+            // map that names a deleted view is how the next reader learns the wrong thing.)
+            ["BtnLab"] = "play",
+            ["BtnPatreonExclusives"] = "exclusives"
+        };
 
         public event EventHandler<TutorialStep>? StepChanged;
         public event EventHandler? TutorialStarted;
@@ -128,7 +215,8 @@ namespace ConditioningControlPanel.Services
             Action showCompanion,
             Action showPatreon,
             Action? showAwareness = null,
-            Action? showDeeper = null)
+            Action? showDeeper = null,
+            Action<string>? showTab = null)
         {
             _showSettings = showSettings;
             _showPresets = showPresets;
@@ -138,6 +226,7 @@ namespace ConditioningControlPanel.Services
             _showPatreon = showPatreon;
             _showAwareness = showAwareness;
             _showDeeper = showDeeper;
+            _showTab = showTab;
         }
 
         /// <summary>
@@ -202,38 +291,108 @@ namespace ConditioningControlPanel.Services
         {
             foreach (var step in _currentSteps)
             {
-                // Apply callbacks based on step requirements
-                if (step.RequiresTab != null)
-                {
-                    var tabAction = step.RequiresTab switch
-                    {
-                        "settings" => _showSettings,
-                        "presets" => _showPresets,
-                        "progression" => _showProgression,
-                        "achievements" => _showAchievements,
-                        "companion" => _showCompanion,
-                        "patreon" => _showPatreon,
-                        "awareness" => _showAwareness,
-                        "deeper" => _showDeeper,
-                        _ => null
-                    };
+                // Three slots, one fixed order: OnBeforeTab, then the RequiresTab navigation, then
+                // the step's own OnActivate. Most steps only fill the last two - the tab switch has
+                // to happen before anything that touches the page (AppSettingsTutorialPrep.Focus
+                // scrolls a section into view, which needs the page up). OnBeforeTab exists for the
+                // opposite need: the Studio rack steps must choose their module BEFORE ShowTab, or
+                // ShowTab's studio case announces whichever module was selected last.
+                var tabAction = step.RequiresTab != null ? ResolveTabAction(step.RequiresTab) : null;
+                var preTab = step.OnBeforeTab;
+                if (tabAction == null && preTab == null) continue;
 
-                    // Compose with any custom OnActivate the step set in its constructor
-                    // (e.g. demo-fire steps that need the tab switch AND a side-effect).
-                    if (tabAction != null)
-                    {
-                        var existingActivate = step.OnActivate;
-                        if (existingActivate == null)
-                        {
-                            step.OnActivate = tabAction;
-                        }
-                        else
-                        {
-                            step.OnActivate = () => { tabAction(); existingActivate(); };
-                        }
-                    }
-                }
+                // Compose with any custom OnActivate the step set in its constructor
+                // (e.g. demo-fire steps that need the tab switch AND a side-effect).
+                var existingActivate = step.OnActivate;
+                step.OnActivate = () =>
+                {
+                    preTab?.Invoke();
+                    tabAction?.Invoke();
+                    existingActivate?.Invoke();
+                };
             }
+        }
+
+        /// <summary>
+        /// The navigation action for a step's RequiresTab. The eight named callbacks keep their
+        /// hand-wired behaviour (presets also refreshes its list; "patreon" is kept wired for
+        /// compatibility but no step asks for it since Phase 2 moved the account cards to
+        /// Settings · Account); every other key goes through the generic router so adding a door
+        /// never means adding another callback field. "mod:*" keys belong to the Mod Creator
+        /// window's own tab strip and are handled there.
+        /// </summary>
+        private Action? ResolveTabAction(string tab)
+        {
+            if (tab.StartsWith("mod:", StringComparison.Ordinal)) return null;
+
+            var named = tab switch
+            {
+                "settings" => _showSettings,
+                "presets" => _showPresets,
+                "progression" => _showProgression,
+                "achievements" => _showAchievements,
+                "companion" => _showCompanion,
+                "patreon" => _showPatreon,
+                "awareness" => _showAwareness,
+                "deeper" => _showDeeper,
+                _ => null
+            };
+            if (named != null) return named;
+
+            if (_showTab != null)
+            {
+                var router = _showTab;
+                return () => router(tab);
+            }
+
+            // Last resort so a tour started before ConfigureCallbacks (or from a window that never
+            // configured one) still lands on the right tab instead of silently staying put.
+            return () =>
+            {
+                try { (Application.Current?.MainWindow as MainWindow)?.ShowTab(tab); }
+                catch { /* a tour never blocks on UI quirks */ }
+            };
+        }
+
+        /// <summary>
+        /// The ShowTab key whose sidebar door must be open before this step's target can be found
+        /// and measured. Null when the step points at chrome that lives outside the doors (title
+        /// bar, bottom bar), at nothing at all, or at another window's tabs ("mod:*").
+        /// TutorialOverlay calls this before every spotlight measure.
+        /// </summary>
+        internal static string? DoorTabKeyFor(TutorialStep step)
+        {
+            if (step.TargetElementName != null &&
+                NavEntryDoorKeys.TryGetValue(step.TargetElementName, out var navDoor))
+            {
+                return navDoor;
+            }
+
+            var tab = step.RequiresTab;
+            if (string.IsNullOrEmpty(tab)) return null;
+            if (tab!.StartsWith("mod:", StringComparison.Ordinal)) return null;
+            return tab;
+        }
+
+        /// <summary>
+        /// Selects an entry in the Studio rack (Phase 4). <c>ShowTab("studio")</c> only opens the
+        /// door and restores whatever entry was last selected, so a step that spotlights one
+        /// rack panel has to ask for it by name or it lands on a Collapsed panel and degrades to
+        /// a centred card.
+        ///
+        /// Wired to <see cref="TutorialStep.OnBeforeTab"/>, i.e. it runs BEFORE the RequiresTab
+        /// navigation, and selects QUIETLY: ShowTab's studio case re-announces the rack's current
+        /// selection on the way in, so choosing the step's module first makes that one announcement
+        /// name the right module instead of the one the user was last looking at. Selecting after
+        /// the switch (the Phase 4 wiring) announced the previous module and then this one.
+        ///
+        /// Unknown keys are a quiet no-op inside <c>PreselectRackEntry</c>, and the whole thing is
+        /// swallowed on failure: a tour never blocks on UI quirks.
+        /// </summary>
+        private static void FocusStudioRack(string rackKey)
+        {
+            try { (Application.Current?.MainWindow as MainWindow)?.StudioTab?.PreselectRackEntry(rackKey); }
+            catch { /* see above */ }
         }
 
         public void Next()
@@ -274,6 +433,25 @@ namespace ConditioningControlPanel.Services
 
         #region Tutorial Step Definitions
 
+        /// <summary>
+        /// Phase 8's doors tour - what the first-run wizard's last step launches and what the ?
+        /// button replays. It walks the rail, spotlighting each door HEADER while navigating to
+        /// that door's default tab.
+        ///
+        /// <para>Two mechanical rules keep the door steps working, both learned the hard way:</para>
+        /// <list type="bullet">
+        /// <item>A door step must NOT be <c>TutorialStepPosition.Center</c>: UpdateSpotlight
+        /// early-returns for centered cards before it measures anything, so a centered "look at
+        /// this door" step would spotlight nothing.</item>
+        /// <item><c>RequiresTab</c> is the door's DEFAULT tab, and that is what opens the
+        /// accordion. Door headers are deliberately NOT in <see cref="NavEntryDoorKeys"/> (that map
+        /// is for nav ENTRIES), so <see cref="DoorTabKeyFor"/> falls through to RequiresTab,
+        /// TutorialOverlay hands it to ExpandDoorForTab, and the settle loop re-measures while the
+        /// 160ms accordion animates.</item>
+        /// </list>
+        /// Step ids are stable API and are never renamed, which is why two of the door steps carry
+        /// ids from the top-tab world ("settings_tab" is the Home door, "presets_intro" is Studio).
+        /// </summary>
         private List<TutorialStep> CreateFullTourSteps()
         {
             return new List<TutorialStep>
@@ -283,8 +461,9 @@ namespace ConditioningControlPanel.Services
                     Id = "welcome",
                     Icon = "~",
                     Title = "Welcome to Conditioning Control Panel!",
-                    Description = "This quick tour will show you how to use the app effectively. " +
-                                  "You can restart this tutorial anytime using the ? button in the top right.",
+                    Description = "Everything lives behind seven doors down the left. This quick tour opens each " +
+                                  "one so you know where things are.\n\n" +
+                                  "You can replay it any time from the ? button in the title bar.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -298,33 +477,113 @@ namespace ConditioningControlPanel.Services
                 },
                 new TutorialStep
                 {
+                    // Id kept (stable API). This is the FIRST door in the walk - Home - not the
+                    // pinned Settings door at the bottom of the rail, which is "tour_door_settings".
                     Id = "settings_tab",
                     Icon = ">",
-                    Title = "Settings Tab",
-                    Description = "This is your main configuration area. Toggle features on/off, " +
-                                  "adjust frequencies, opacity, and more.",
-                    TargetElementName = "BtnSettings",
+                    Title = "Home",
+                    Description = "Your dashboard: the big START button, the feature mosaic, the browser card, " +
+                                  "today's program and the marquee.\n\n" +
+                                  "Left-click a mosaic tile to jump to its controls; right-click one to flip that " +
+                                  "feature on or off without leaving Home.",
+                    TargetElementName = "DoorHome",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },
                 new TutorialStep
                 {
+                    // Id kept: presets are one entry of this door now, and the door is the story.
                     Id = "presets_intro",
                     Icon = ">",
-                    Title = "Presets & Sessions",
-                    Description = "Save your settings as presets, or run timed sessions with crafted experiences.",
-                    TargetElementName = "BtnPresets",
-                    RequiresTab = "presets",
+                    Title = "Studio",
+                    Description = "Where every effect is tuned. The rack lists them - flashes, visuals, videos, " +
+                                  "subliminals, spirals, brain drain, bubbles - and the panel beside it is that " +
+                                  "effect's full settings.\n\n" +
+                                  "Presets & Sessions, the Scheduler, the Intensity Ramp and your toys are entries " +
+                                  "of this door too.",
+                    TargetElementName = "DoorStudio",
+                    RequiresTab = "studio",
                     TextPosition = TutorialStepPosition.Right
                 },
                 new TutorialStep
                 {
                     Id = "progression_intro",
                     Icon = ">",
-                    Title = "Progression",
-                    Description = "Gain XP and level up to unlock new features. Check the Progression tab for details.",
-                    TargetElementName = "BtnProgression",
+                    Title = "Progress",
+                    Description = "Running the engine earns XP and levels you up. Your level, XP bar and " +
+                                  "stat pills live on Home; the Skill Tree under You spends what you earn.",
+                    // Phase 8: was TargetElementName = "BtnProgression", an element that has not
+                    // existed since the two-row tab strip was replaced - the step had been
+                    // silently degrading to an unspotlit card. BtnSettings is the Home door
+                    // button, which is exactly where ShowTab("progression") lands and what
+                    // MainWindow.ChromeFx.cs already maps the key onto. RequiresTab stays
+                    // "progression": the key is API (54 bark rules per mod) and must keep firing.
+                    TargetElementName = "BtnSettings",
                     RequiresTab = "progression",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_companion",
+                    Icon = ">",
+                    Title = "Companion",
+                    Description = "Her room. Who she is, how she talks, and what she is allowed to do.\n\n" +
+                                  "Takeover, She's Listening and the Awareness engine are entries here, and every " +
+                                  "AI permission sits in one grid so you can see the whole picture at once.",
+                    TargetElementName = "DoorCompanion",
+                    RequiresTab = "companion",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_play",
+                    Icon = ">",
+                    Title = "Play",
+                    Description = "The card wall: Down the Rabbit Hole, Goon, Gaze, the Bureau, Deeper, Graded " +
+                                  "Intake, Lockdown, Remote Control and the Showcase shelf.\n\n" +
+                                  "Locked cards stay visible on purpose - the card tells you what it is before you " +
+                                  "ever decide whether you want it.",
+                    TargetElementName = "DoorPlay",
+                    RequiresTab = "play",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_you",
+                    Icon = ">",
+                    Title = "You",
+                    Description = "Your Trainer Card, quests, achievements, the Skill Tree, training programs and " +
+                                  "the leaderboard.\n\n" +
+                                  "Every feature is available from level 1 - XP buys skill points and bragging " +
+                                  "rights, not permission.",
+                    TargetElementName = "DoorYou",
+                    RequiresTab = "discord",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_library",
+                    Icon = ">",
+                    Title = "Library",
+                    Description = "Everything you own: your assets and content packs, your mods, the catalogue, " +
+                                  "your phrase pools and the media log.\n\n" +
+                                  "Drop images and videos into the assets folder from here and they start showing " +
+                                  "up in flashes and videos straight away.",
+                    TargetElementName = "DoorLibrary",
+                    RequiresTab = "assets",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_settings",
+                    Icon = ">",
+                    Title = "Settings",
+                    Description = "The system side, pinned to the bottom of the rail: language, audio, devices, " +
+                                  "performance, notifications, your account, your data and updates.\n\n" +
+                                  "One home each - the camera, the microphone and the panic key are configured " +
+                                  "here and nowhere else.",
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
                     TextPosition = TutorialStepPosition.Right
                 },
                 new TutorialStep
@@ -333,7 +592,7 @@ namespace ConditioningControlPanel.Services
                     Icon = "?",
                     Title = "Need Help?",
                     Description = "Click the ? button anytime to see detailed guides for each feature. " +
-                                  "You can also start focused tutorials for specific tabs!",
+                                  "You can also start focused tutorials for individual doors!",
                     TargetElementName = "BtnMainHelp",
                     TextPosition = TutorialStepPosition.Left
                 },
@@ -387,8 +646,12 @@ namespace ConditioningControlPanel.Services
                     Icon = ">",
                     Title = "Add Your Own Content",
                     Description = "Add images to 'assets/images' for flashes, and videos to 'assets/videos'. " +
-                                  "Use the folder button to open the assets folder directly.",
-                    TargetElementName = "BtnOpenAssets",
+                                  "The Library door opens that folder for you, and takes any folder you like " +
+                                  "instead.",
+                    // "BtnOpenAssets" only ever existed in the Gaze minigame window - in MainWindow
+                    // the assets nav entry has always been BtnOpenAssetsTop, so this step silently
+                    // degraded to a centered card. It lives in the Library door (see NavEntryDoorKeys).
+                    TargetElementName = "BtnOpenAssetsTop",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },
@@ -397,8 +660,8 @@ namespace ConditioningControlPanel.Services
                     Id = "gs_done",
                     Icon = "<3",
                     Title = "You're Ready!",
-                    Description = "That's the basics! Explore the tabs to discover more features, " +
-                                  "or click the ? button for detailed guides on each section.",
+                    Description = "That's the basics! Open the seven doors on the left to discover the rest, " +
+                                  "or click the ? button for detailed guides on each one.",
                     TextPosition = TutorialStepPosition.Center
                 }
             };
@@ -412,10 +675,14 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "set_intro",
                     Icon = "⚙",
-                    Title = "Settings Tab Guide",
-                    Description = "The Settings tab is where you configure all your conditioning effects. " +
-                                  "Let's explore each section!",
-                    RequiresTab = "settings",
+                    Title = "Effects Guide",
+                    Description = "The Studio door is where every conditioning effect is configured, and the " +
+                                  "Settings door holds the app itself - audio, devices, performance.\n\n" +
+                                  "Let's walk both.",
+                    // Phase 8: was RequiresTab = "settings" (the DASHBOARD, not Settings) with copy
+                    // to match. Every step below already navigates to "studio" or "appsettings";
+                    // this one now opens on the same door its first real step lands in.
+                    RequiresTab = "studio",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -429,9 +696,13 @@ namespace ConditioningControlPanel.Services
                                   "• Images: How many images per flash event\n" +
                                   "• Clickable: Click to dismiss or click-through\n" +
                                   "• Hydra Mode: Clicking spawns more images!",
-                    RequiresTab = "settings",
-                    TargetElementName = "FlashSection",
-                    TextPosition = TutorialStepPosition.Right
+                    // Phase 3: the dashboard flash card is a Studio shortcut now; the real
+                    // controls live on the rack. "FlashSection" was the dead LegacyDashboardHost
+                    // Border - the spotlight degraded to a centred card.
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelFlash",
+                    OnBeforeTab = () => FocusStudioRack("flash"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -443,9 +714,10 @@ namespace ConditioningControlPanel.Services
                                   "• Opacity: Make images more transparent\n" +
                                   "• Fade: Smooth fade in/out animation\n" +
                                   "• Duration: How long images stay visible",
-                    RequiresTab = "settings",
-                    TargetElementName = "VisualsSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVisuals",
+                    OnBeforeTab = () => FocusStudioRack("visuals"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -457,9 +729,10 @@ namespace ConditioningControlPanel.Services
                                   "• Force Focus: Bring video to front\n" +
                                   "• Attention Targets: Click targets to dismiss\n" +
                                   "Add videos to 'assets/videos' folder.",
-                    RequiresTab = "settings",
-                    TargetElementName = "VideoSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVideo",
+                    OnBeforeTab = () => FocusStudioRack("video"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -470,8 +743,13 @@ namespace ConditioningControlPanel.Services
                                   "• Audio Ducking: Lower other audio during videos\n" +
                                   "• Video Volume: Control video playback volume\n" +
                                   "• Moans: Enable/configure moaning sounds",
-                    RequiresTab = "settings",
+                    // Phase 2: the audio block moved off the dashboard into the Settings door
+                    // (Views/Controls/AppSettings/AudioSettingsSection.xaml). The Border kept the
+                    // name "AudioSection", and TutorialOverlay resolves by walking the visual tree
+                    // comparing Name, so it still finds it inside the nested UserControl.
+                    RequiresTab = "appsettings",
                     TargetElementName = "AudioSection",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("audio"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -483,9 +761,10 @@ namespace ConditioningControlPanel.Services
                                   "• Frequency: How often they appear\n" +
                                   "• Duration: How long they're visible\n" +
                                   "• Customize text in the Subliminals section",
-                    RequiresTab = "settings",
-                    TargetElementName = "SubliminalSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelSubliminal",
+                    OnBeforeTab = () => FocusStudioRack("subliminal"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -497,22 +776,31 @@ namespace ConditioningControlPanel.Services
                                   "• Start minimized to tray\n" +
                                   "• Custom assets folder location\n" +
                                   "• Open assets folder to add content",
-                    RequiresTab = "settings",
-                    TargetElementName = "SystemSection",
-                    TextPosition = TutorialStepPosition.Right
+                    // Phase 3: startup/tray/assets settings live in Settings - General now
+                    // ("SystemSection" was the dead LegacyDashboardHost Border).
+                    RequiresTab = "appsettings",
+                    TargetElementName = "SectionGeneral",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("general"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
                     Id = "set_overlays",
                     Icon = "🌀",
                     Title = "Overlays & Effects",
-                    Description = "Screen effects unlock as you level up:\n" +
-                                  "• Brain Drain: Blur/distortion effect (Lvl 10)\n" +
-                                  "• Edge Effects: Screen edge animations (Lvl 5)\n" +
-                                  "• Bouncing Text: Text that bounces around (Lvl 60)\n" +
-                                  "• Bubbles: Pop bubbles for XP! (Lvl 20)\n" +
-                                  "Check the Progression tab to see all unlocks!",
-                    RequiresTab = "progression",
+                    Description = "Every screen effect is available from the start - pick your dose:\n" +
+                                  "• Spiral Overlay: a spiral over your screen\n" +
+                                  "• Pink Filter: a colour wash over everything\n" +
+                                  "• Brain Drain: blur/distortion\n" +
+                                  "• Bouncing Text: phrases drifting across the screen\n" +
+                                  "• Bubbles: pop them for XP!\n" +
+                                  "They all live here in the Studio rack.",
+                    // Phase 8: was RequiresTab = "progression" with no target, so it landed on a
+                    // view nothing revealed and listed level gates that no longer exist
+                    // (gap-report T-4 - level gating was removed; every feature is on from
+                    // level 1). Re-pointed at the Studio rack the same way its neighbours are.
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("spiral"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -538,7 +826,8 @@ namespace ConditioningControlPanel.Services
                     Id = "pre_intro",
                     Icon = "💾",
                     Title = "Presets & Sessions Guide",
-                    Description = "The Presets tab lets you save configurations and run timed sessions.",
+                    Description = "Studio's Presets & Sessions entry lets you save configurations and run " +
+                                  "timed sessions.",
                     RequiresTab = "presets",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -598,8 +887,9 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "prog_intro",
                     Icon = "📊",
-                    Title = "Progression Guide",
-                    Description = "Track your progress and unlock new features!",
+                    Title = "Progress Guide",
+                    Description = "How XP, levels and the Skill Tree fit together - and what the Scheduler and " +
+                                  "Intensity Ramp do with your time.",
                     RequiresTab = "progression",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -613,7 +903,8 @@ namespace ConditioningControlPanel.Services
                                   "• Completing sessions\n" +
                                   "• Popping bubbles\n" +
                                   "• Clicking flash images\n" +
-                                  "Level up to unlock new features!",
+                                  "Levels earn skill points, rank titles and new companion personalities - " +
+                                  "never permission to use a feature.",
                     RequiresTab = "progression",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -621,12 +912,16 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "prog_unlocks",
                     Icon = "🔓",
-                    Title = "Feature Unlocks",
-                    Description = "Features unlock at specific levels:\n" +
-                                  "• Level 5: Edge overlay\n" +
-                                  "• Level 10: Brain Drain, Moans\n" +
-                                  "• Level 20: Bubbles\n" +
-                                  "• And many more up to Level 75!",
+                    Title = "What Levelling Buys You",
+                    Description = "No feature is locked behind a level - every effect is yours from " +
+                                  "level 1, in the Studio rack.\n" +
+                                  "Levels buy the extras instead:\n" +
+                                  "• Skill points for the Skill Tree (You ▸ Skill Tree)\n" +
+                                  "• Rank titles and stat pills on your XP bar\n" +
+                                  "• Extra companion personalities at higher levels",
+                    // Phase 8: the old copy listed Lvl 5/10/20/75 gates that were removed long ago
+                    // (gap-report T-4). RequiresTab stays "progression" - the key is API, and its
+                    // redirect lands on Home, which is the right backdrop for a levelling beat.
                     RequiresTab = "progression",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -638,9 +933,16 @@ namespace ConditioningControlPanel.Services
                     Description = "Set automatic start times:\n" +
                                   "• Choose active hours\n" +
                                   "• Select days of the week\n" +
-                                  "• App auto-starts during scheduled times",
-                    TargetElementName = "SchedulerPanel",
-                    RequiresTab = "progression",
+                                  "• App auto-starts during scheduled times\n" +
+                                  "Lives in Studio ▸ Scheduler.",
+                    // Phase 4: the Scheduler moved into the Studio rack. StudioSchedulerPanel is
+                    // that panel's root (Views/Controls/Studio/SchedulerRackPanel.xaml). The name
+                    // avoided colliding with the ghost tab's "SchedulerPanel" - Phase 8 has now
+                    // deleted that twin, so the duplicate-name hazard is gone, but the name stays
+                    // as authored: renaming it back would be churn for zero gain.
+                    TargetElementName = "StudioSchedulerPanel",
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("scheduler"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -651,9 +953,13 @@ namespace ConditioningControlPanel.Services
                     Description = "Gradually increase intensity over time:\n" +
                                   "• Start at lower intensity\n" +
                                   "• Ramp up to your settings\n" +
-                                  "• Great for longer sessions!",
-                    TargetElementName = "RampPanel",
-                    RequiresTab = "progression",
+                                  "• Great for longer sessions!\n" +
+                                  "Lives in Studio ▸ Intensity Ramp.",
+                    // Phase 4, same story as prog_scheduler above. The rack's copy is the richer
+                    // one - it owns CmbRampCurve, which the deleted twin never had.
+                    TargetElementName = "StudioRampPanel",
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("ramp"),
                     TextPosition = TutorialStepPosition.Left
                 }
             };
@@ -702,17 +1008,14 @@ namespace ConditioningControlPanel.Services
 
         private List<TutorialStep> CreateCompanionSteps()
         {
-            // OnActivate helper: idempotently reveal the companion roster tray.
-            // Don't call BtnSwitchCompanion_Click — it's a toggle and would hide
-            // the tray if the user had already opened it before launching the tour.
+            // OnActivate helper: idempotently open the Workshop on its roster pigeonhole, which is
+            // where the roster tray went (design §6). Idempotent by construction now — the hero's
+            // Switch chip stopped being a toggle, so this is the same call it makes.
             Action revealRoster = () =>
             {
                 try
                 {
-                    var win = Application.Current?.MainWindow as MainWindow;
-                    if (win == null) return;
-                    var tray = win.FindName("CompanionRosterTray") as FrameworkElement;
-                    if (tray != null) tray.Visibility = Visibility.Visible;
+                    if (Application.Current?.MainWindow is Window win) CompanionTutorialPrep.ExpandRoster(win);
                 }
                 catch { /* tour never blocks on UI quirks */ }
             };
@@ -739,10 +1042,11 @@ namespace ConditioningControlPanel.Services
                     Title = "Active Companion",
                     Description = "Up here you see who's currently active: her avatar, her name, " +
                                   "her level, and the XP bar toward her next level.\n\n" +
-                                  "The two pills on the right show whether AI is on (Off / Cloud / Local) " +
-                                  "and whether window-Awareness mode is running.",
+                                  "The two pills under her name show whether AI is on (Off / Cloud / Local) " +
+                                  "and whether she is watching your windows. Both are buttons - they jump " +
+                                  "straight to the section that controls them.",
                     RequiresTab = "companion",
-                    TargetElementName = "TxtActiveCompanionName",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Bottom
                 },
                 new TutorialStep
@@ -752,9 +1056,9 @@ namespace ConditioningControlPanel.Services
                     Title = "Five Companions",
                     Description = "There are five companions, and each one gives you a different XP bonus " +
                                   "(Pink Filter, Autonomy, XP Drain, Strict Mode, Session Completion).\n\n" +
-                                  "Hit Switch any time to swap between them — your XP for each is tracked separately.",
+                                  "The Switch chip opens the Workshop on her roster — your XP for each is tracked separately.",
                     RequiresTab = "companion",
-                    TargetElementName = "BtnSwitchCompanion",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Right,
                     OnActivate = revealRoster
                 },
@@ -763,12 +1067,13 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_roster",
                     Icon = "🎭",
                     Title = "The Roster — Two Clicks",
-                    Description = "Two different clicks live on each card:\n\n" +
+                    Description = "The roster lives in the Workshop, at the bottom of the page. " +
+                                  "Two different clicks live on each card:\n\n" +
                                   "• Click the card itself → switch to that companion.\n" +
                                   "• Click the small 🎭 button → assign an AI personality to her without switching.\n\n" +
                                   "Each card also shows that companion's level and her XP bonus.",
                     RequiresTab = "companion",
-                    TargetElementName = "CompanionRosterTray",
+                    TargetElementName = "WorkshopZone",
                     TextPosition = TutorialStepPosition.Top,
                     OnActivate = revealRoster
                 },
@@ -778,10 +1083,12 @@ namespace ConditioningControlPanel.Services
                     Icon = "💬",
                     Title = "Chat Hotkey",
                     Description = "She has a global hotkey for chat — Ctrl+T by default, anywhere on your machine.\n\n" +
-                                  "Click this button to rebind it to whatever combo you like. Useful when " +
-                                  "Ctrl+T collides with another app you use a lot.",
+                                  "The hero's Chat button shows the live combo; this is where you rebind it, " +
+                                  "in the Workshop's Behavior shelf. Useful when Ctrl+T collides with " +
+                                  "another app you use a lot.",
                     RequiresTab = "companion",
                     TargetElementName = "BtnChatShortcut",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -789,13 +1096,12 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_avatar",
                     Icon = "👁",
                     Title = "Avatar Window Controls",
-                    Description = "Three quick toggles for her avatar window:\n\n" +
-                                  "• Show Avatar — pop her on or off your screen.\n" +
-                                  "• Mute — silence her speech and sound effects.\n" +
-                                  "• Detach (the button next to Switch) — float her free of the main window so " +
-                                  "you can drag her anywhere.",
+                    Description = "Three quick chips on her card:\n\n" +
+                                  "• The eye chip — pop her on or off your screen.\n" +
+                                  "• The speaker chip — silence her speech and sound effects.\n" +
+                                  "• Detach — float her free of the main window so you can drag her anywhere.",
                     RequiresTab = "companion",
-                    TargetElementName = "ChkAvatarEnabledCompanion",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
@@ -803,25 +1109,26 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_customize",
                     Icon = "🎨",
                     Title = "Personality Editor",
-                    Description = "Customize opens the full personality editor — her tone, her quirks, " +
-                                  "the system prompt that drives every AI reply.\n\n" +
-                                  "The \"Open Advanced Personality\" button down in AI Brain opens the same editor.",
+                    Description = "\"Make her yours\" is the front door to her personality — preset chips, " +
+                                  "the spice switch, and who she currently is.\n\n" +
+                                  "The quiet links at the bottom of that card - View compiled prompt, Fork & edit " +
+                                  "by hand, Community prompts - open the full editor.",
                     RequiresTab = "companion",
-                    TargetElementName = "BtnCustomizeCompanion",
+                    TargetElementName = "PersonalityZone",
                     TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
                 {
                     Id = "comp_ai_brain_intro",
                     Icon = "🧠",
-                    Title = "AI Brain",
+                    Title = "The Engine Room",
                     Description = aiUnlocked
-                        ? "AI Brain is what gives her real conversation. She'll reply to you, react to " +
+                        ? "The Engine Room is what gives her real conversation. She'll reply to you, react to " +
                           "what's on your screen, and chime in unprompted.\n\n" +
                           "Three things to set up here: which provider, which capabilities, and how spicy."
-                        : "AI Brain is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
+                        : "The Engine Room is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
                           "Right now it's locked because you're not signed in. " +
-                          "Sign in with Discord or Patreon (Patreon tab) and the section unlocks. " +
+                          "Sign in with Discord or Patreon and her chat unlocks. " +
                           "AI is free for all signed-in users.",
                     RequiresTab = "companion",
                     TextPosition = TutorialStepPosition.Center
@@ -842,7 +1149,8 @@ namespace ConditioningControlPanel.Services
                                   "Pick Local and the model name + host fields appear below, along with a Setup wizard " +
                                   "that walks you through Ollama install.",
                     RequiresTab = "companion",
-                    TargetElementName = "AiProviderRadioGroup",
+                    TargetElementName = "EngineZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandEngineRoom,
                     TextPosition = TutorialStepPosition.Top
                 });
                 steps.Add(new TutorialStep
@@ -851,12 +1159,13 @@ namespace ConditioningControlPanel.Services
                     Icon = "💡",
                     Title = "Behaviour & Triggers",
                     Description = "Turning the provider above to Cloud or Local switches on her AI replies. " +
-                                  "Expand this Behaviour & Triggers section for the rest of her tuning:\n\n" +
+                                  "The Workshop holds the rest of her tuning:\n\n" +
                                   "• Idle chatter, bubble duration and trigger phrases.\n" +
-                                  "• Awareness Mode — she watches which window/program is active and reacts. " +
-                                  "Flipping it on reveals a cooldown slider so she doesn't spam.",
+                                  "• Awareness fine-tuning — the cooldowns that stop her spamming. The eye dial in " +
+                                  "\"What she can see\" is what turns the watching on.",
                     RequiresTab = "companion",
-                    TargetElementName = "SectionBehaviour",
+                    TargetElementName = "WorkshopZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                     TextPosition = TutorialStepPosition.Right
                 });
                 steps.Add(new TutorialStep
@@ -864,10 +1173,11 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_slut_mode",
                     Icon = "🌶",
                     Title = "Slut Mode",
-                    Description = "Flips her to the spicier personality variant — same companion, dirtier mouth.\n\n" +
+                    Description = "The flame switch on \"Make her yours\" flips her to the spicier " +
+                                  "personality variant — same companion, dirtier mouth.\n\n" +
                                   "Toggle on or off whenever; it doesn't change her level or XP.",
                     RequiresTab = "companion",
-                    TargetElementName = "ChkSlutMode",
+                    TargetElementName = "PersonalityZone",
                     TextPosition = TutorialStepPosition.Right
                 });
             }
@@ -878,12 +1188,13 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_ai_locked",
                     Icon = "🔒",
                     Title = "Login Unlocks AI",
-                    Description = "Everything in AI Brain — provider choice, chat replies, awareness, slut mode — " +
-                                  "lives behind this lock until you sign in.\n\n" +
-                                  "Discord login or Patreon login both work. Once you're in, replay this tour and " +
-                                  "we'll cover all the AI controls.",
+                    Description = "Chatting with her needs a login — that is what the veil on " +
+                                  "\"Talk to her\" is.\n\n" +
+                                  "Discord login or Patreon login both work, and everything else on this page - " +
+                                  "her barks, her diary, her personality - is already yours. Once you're in, " +
+                                  "replay this tour and we'll cover all the AI controls.",
                     RequiresTab = "companion",
-                    TargetElementName = "AiFeaturesLockOverlay",
+                    TargetElementName = "ChatZone",
                     TextPosition = TutorialStepPosition.Top
                 });
             }
@@ -893,14 +1204,14 @@ namespace ConditioningControlPanel.Services
                 Id = "comp_timing",
                 Icon = "⏱",
                 Title = "How Often, How Long",
-                Description = "Two timing sliders in the Behavior panel on the right:\n\n" +
+                Description = "Two timing sliders in the Workshop's Behavior shelf:\n\n" +
                               "• Idle Giggle Interval (5–300s) — how often she chimes in unprompted.\n" +
                               "• Bubble Duration (1–10s) — how long each speech bubble stays on screen.\n\n" +
                               "If she feels too chatty, raise the giggle interval. If you can't read fast enough, " +
                               "raise the bubble duration.",
                 RequiresTab = "companion",
                 TargetElementName = "SliderIdleIntervalCompanion",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -914,7 +1225,7 @@ namespace ConditioningControlPanel.Services
                               "where you can add or remove phrases.",
                 RequiresTab = "companion",
                 TargetElementName = "ChkTriggerModeCompanion",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -922,14 +1233,14 @@ namespace ConditioningControlPanel.Services
                 Id = "comp_phrases_community",
                 Icon = "📚",
                 Title = "Phrases & Community Prompts",
-                Description = "Three more knobs in this column:\n\n" +
+                Description = "Three more shelves in the Workshop:\n\n" +
                               "• Manage Phrases — her speech bubble library, with on/off per phrase.\n" +
                               "• Phrase Presets — save a phrase config and load it later.\n" +
                               "• Community Prompts — Browse / Import / Export AI personalities other users have made.\n" +
                               "• Hypnotube Links — comma-separated video URLs she's allowed to suggest (2000-char cap).",
                 RequiresTab = "companion",
                 TargetElementName = "BtnManagePhrases",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -937,8 +1248,8 @@ namespace ConditioningControlPanel.Services
                 Id = "comp_done",
                 Icon = "❤",
                 Title = "You're Set",
-                Description = "That's the whole tab.\n\n" +
-                              "• Want to replay this tour? The 🎓 button next to the tab title runs it again.\n" +
+                Description = "That's the whole Companion door.\n\n" +
+                              "• Want to replay this tour? The 🎓 button next to the page title runs it again.\n" +
                               "• It's also in the ? menu (top-right) under Companion.\n" +
                               "• Most controls have hover tooltips with extra detail.\n\n" +
                               "Click Finish — go play.",
@@ -949,6 +1260,13 @@ namespace ConditioningControlPanel.Services
             return steps;
         }
 
+        // Phase 2 retired the App Info popup's account section (gap-report R-2): the login cards,
+        // linking, cloud backup and privacy blocks are now Settings · Account. These five steps
+        // used RequiresTab="patreon", whose named callback opened that popup; they now say where
+        // they actually land. The "patreon" ShowTab key itself is untouched API (bark rules, ten
+        // redirect call sites) - only these steps stopped going through it.
+        // Every step here is a centered card, so the section focus has to ride OnActivate:
+        // UpdateSpotlight early-returns past PrepareTargetWindowAction for Center steps.
         private List<TutorialStep> CreatePatreonSteps()
         {
             return new List<TutorialStep>
@@ -957,9 +1275,11 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "pat_intro",
                     Icon = "💎",
-                    Title = "Patreon Exclusives Guide",
-                    Description = "Special features for Patreon supporters!",
-                    RequiresTab = "patreon",
+                    Title = "Account & Supporter Perks",
+                    Description = "Settings ▸ Account is where you sign in and where supporter features " +
+                                  "switch themselves on.",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -969,7 +1289,8 @@ namespace ConditioningControlPanel.Services
                     Title = "Logging In",
                     Description = "Click 'Login with Patreon' to connect your account.\n" +
                                   "Your subscription tier unlocks corresponding features automatically.",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -981,7 +1302,8 @@ namespace ConditioningControlPanel.Services
                                   "• Double-click the avatar to chat\n" +
                                   "• She remembers conversation context\n" +
                                   "• Personality adapts to your interactions",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -993,7 +1315,8 @@ namespace ConditioningControlPanel.Services
                                   "• Detects active windows\n" +
                                   "• Comments on your activity\n" +
                                   "• Privacy: Only window titles are read",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1005,7 +1328,8 @@ namespace ConditioningControlPanel.Services
                                   "• More provocative messages\n" +
                                   "• Adult-themed interactions\n" +
                                   "• Toggle on/off anytime",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 }
             };
@@ -1138,7 +1462,7 @@ namespace ConditioningControlPanel.Services
                     Icon = "\u26A1",
                     Title = "Features",
                     Description = "Replace feature icons (flash, video, subliminal, etc.) with your own artwork.\n\n" +
-                                  "Drag PNG images onto any slot. These are the icons that appear on the main tabs and UI controls.",
+                                  "Drag PNG images onto any slot. These are the icons that appear on the nav rail and UI controls.",
                     RequiresTab = "mod:features",
                     TextPosition = TutorialStepPosition.Center
                 },

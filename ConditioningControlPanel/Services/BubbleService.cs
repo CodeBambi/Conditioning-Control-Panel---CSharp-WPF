@@ -1095,6 +1095,44 @@ public class BubbleService : IDisposable
             return;
         }
 
+        // Chaos gif rain in flight: a fullscreen video / browser takeover opening over a falling
+        // cascade is the proven UI-thread killer, the same reason VideoService refuses to open one.
+        // This path had no cascade awareness at all (#871) — the video payload got as far as
+        // VideoService and was silently eaten there, the HT-link payload fired into the rain. Hold
+        // the payload instead: the user popped a bubble to earn it, so it runs once the rain stops.
+        if (heavy && ChaosGifCascadeOverlay.IsRaining)
+        {
+            App.Logger?.Information("Bubble: deferring {Kind} pop — chaos gif cascade in flight", payload.Kind);
+            ChaosGifCascadeOverlay.RunWhenClear(
+                () =>
+                {
+                    // Re-assert the preconditions at FIRE time, not just at pop time — a 90s defer
+                    // easily outlives them.
+                    //
+                    // The service itself first: if bubbles were stopped (engine stop, panic, the
+                    // feature switched off) while the rain fell, the user is no longer in the mode
+                    // that earned this, and a fullscreen video/browser takeover arriving after the
+                    // stop is the exact "I turned it off and it still fired" complaint.
+                    if (!_isRunning && !_chaosActive)
+                    {
+                        App.Logger?.Information("Bubble: dropped deferred {Kind} pop — bubbles are no longer running", payload.Kind);
+                        return;
+                    }
+
+                    // Then the one-takeover-at-a-time gate: the cascade may have outlived
+                    // whatever else started playing in the meantime.
+                    if (App.Video?.IsPlaying == true)
+                    {
+                        App.Logger?.Information("Bubble: dropped deferred {Kind} pop — a video is playing now", payload.Kind);
+                        return;
+                    }
+                    FireAndLogPayload(payload);
+                },
+                TimeSpan.FromSeconds(90),
+                $"bubble {payload.Kind} payload");
+            return;
+        }
+
         if (heavy)
         {
             // Let the click return first; the payload opens a fullscreen window either way.
@@ -2602,6 +2640,11 @@ internal class Bubble
         if (_shieldRing != null) it.ShieldOpacity = (float)_shieldRing.Opacity;
         if (_prismGhost != null) it.PrismOpacity = (float)_prismGhost.Opacity;
         if (_hintEl != null) it.HintOpacity = _hintEl.Visibility == Visibility.Visible ? (float)_hintEl.Opacity : 0f;
+
+        // #853: this is the ONLY writer of the draw item's dynamic fields, so it is also where the
+        // compositor learns the field moved. Without it the layer would report clean and the engine
+        // would skip the surface re-raster (the field steps at ~30fps, the engine ticks at refresh).
+        s_layer?.MarkDirty();
     }
 
     /// <summary>The box grown by <paramref name="expand"/> about its centre — the reach of its pop burst.</summary>

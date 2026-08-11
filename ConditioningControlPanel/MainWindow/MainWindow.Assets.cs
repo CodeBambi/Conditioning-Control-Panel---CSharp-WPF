@@ -1489,9 +1489,15 @@ namespace ConditioningControlPanel
             // Sync thumbnail checkboxes with new preset state
             RefreshThumbnailCheckboxes();
 
-            // Clear caches so services pick up new selection
-            App.Flash?.ClearFileCache();
-            App.Video?.RefreshVideosPath();
+            // Clear caches so services pick up new selection. A preset switch replaces the whole
+            // disabled set, so it needs exactly the invalidation a manual uncheck gets: the video
+            // AND bubble-count queues refill only when empty, so skipping them left the previous
+            // preset's clips playing until restart, and the applied set was never persisted.
+            InvalidateAssetPoolsAfterSelectionChange();
+            // The Goon Game transfer cache plans against the ACTIVE pool, so a preset switch is a
+            // re-plan (and the "N assets need compressing" nudge). Never blocks - it schedules.
+            try { Services.Transfer.TransferCompressionService.Instance.OnPresetChanged(preset.Id); }
+            catch (Exception ex) { App.Logger?.Debug("Transfer cache preset hook: {E}", ex.Message); }
 
             // Get actual counts after applying
             var (activeImages, activeVideos) = GetCurrentActiveAssetCounts();

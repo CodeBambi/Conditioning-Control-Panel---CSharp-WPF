@@ -199,9 +199,11 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <!-- One provider status chip (Lovense / Intiface / Mock). -->
+        <!-- One provider status chip (Lovense / Intiface / Mock).
+             A provider that is not enabled for connecting is ghosted rather than hidden: the strip
+             stays the same shape, and "off" reads as off instead of as "connected: no". -->
         <DataTemplate x:Key="HapticProviderChipTemplate">
-            <Border CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
+            <Border x:Name="ChipShell" CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
                     Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
                     BorderBrush="{Binding IsConnected, Converter={StaticResource StatusBrush}}">
                 <StackPanel Orientation="Horizontal">
@@ -210,6 +212,11 @@
                     <TextBlock Text="{Binding Label}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsEnabledForConnect}" Value="False">
+                    <Setter TargetName="ChipShell" Property="Opacity" Value="0.4"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- Capability chip (VIBE x2 / THRUST / DEPTH ...). -->
@@ -432,8 +439,28 @@
         </DataTemplate>
     </UserControl.Resources>
 
+    <!-- PAGE GUTTER, RETUNED FOR THE STUDIO RACK (UX restructure, Phase 4).
+
+         This view is no longer a top-level tab: it is the "haptics" module of the Studio rack
+         (Views/Tabs/StudioTabView.xaml), hosted RAW because its root is already a ScrollViewer -
+         wrapping it in the rack's shared one would hand it infinite available height and it
+         would never scroll again.
+
+         The old 36/22/36/28 gutter was authored against the full 1489px content column. The
+         detail pane is ~1225px (1489 - the tab's own 20px margin - the 230px rack list - its
+         14px gap), so a 72px horizontal inset now costs 6% of a pane that already gave up 16%,
+         and it left the page visibly indented relative to every other rack module (they sit at
+         the rack ScrollViewer's 2,0,14,10 padding). Trimmed to match, keeping enough right-hand
+         room for the scrollbar. MaxWidth/Center are retained: at the old full-tab width they
+         were what stopped the toy cards from stretching, and this view is still reachable at
+         that width if it is ever hosted alone again.
+
+         Nothing inside changed. In particular the routing rows built in
+         MainWindow.Haptics.cs:124-129 keep their exact order and labels - the last of them,
+         "Deeper", also gates FunScript because both ride HapticLayer.Pattern, and relabelling,
+         reordering or splitting that row is a documented regression. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="36,22,36,28" MaxWidth="1280" HorizontalAlignment="Center">
+        <StackPanel Margin="6,2,18,22" MaxWidth="1280" HorizontalAlignment="Center">
 
             <!-- ============================ HEADER ============================ -->
             <Grid Margin="0,0,0,16">
@@ -610,6 +637,10 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
                                             <CheckBox x:Name="ChkHapticProviderLovense" x:FieldModifier="internal"
                                                       Grid.Column="0" Content="{loc:Str btn_lovense_connect}" Foreground="White"
                                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
@@ -632,6 +663,26 @@
                                                       FontSize="12" VerticalAlignment="Center"
                                                       Checked="ChkHapticProvider_Changed" Unchecked="ChkHapticProvider_Changed"
                                                       Tag="mock" ToolTip="{loc:Str haptics_provider_mock_tip}"/>
+
+                                            <!-- Intiface's address IS editable (ButtplugProviderV2 reads
+                                                 Haptics.ButtplugUrl), it is just rarely touched — so the field
+                                                 only appears while that provider is enabled, and it is its own
+                                                 box: one box shared between two providers is how a typed value
+                                                 used to land on the wrong setting. -->
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8,10,0"
+                                                       Text="{loc:Str haptics_intiface_url_label}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                       VerticalAlignment="Center"
+                                                       Visibility="{Binding IsChecked, ElementName=ChkHapticProviderIntiface, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBox x:Name="TxtHapticIntifaceUrl" x:FieldModifier="internal"
+                                                     Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                                                     Background="{DynamicResource DarkerBgBrush}" Foreground="White"
+                                                     BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
+                                                     CaretBrush="{DynamicResource PinkBrush}" Padding="8,6" FontSize="13"
+                                                     VerticalContentAlignment="Center"
+                                                     TextChanged="TxtHapticIntifaceUrl_TextChanged"
+                                                     ToolTip="{loc:Str haptics_intiface_url_tip}"
+                                                     Visibility="{Binding IsChecked, ElementName=ChkHapticProviderIntiface, Converter={StaticResource BoolToVis}}"/>
                                         </Grid>
 
                                         <TextBlock x:Name="TxtHapticUrlHint" x:FieldModifier="internal"

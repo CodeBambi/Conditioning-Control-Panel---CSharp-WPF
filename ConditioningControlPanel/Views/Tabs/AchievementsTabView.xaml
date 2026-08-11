@@ -14,15 +14,24 @@
                     <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_achievements}" Margin="0"/>
                     <Button x:Name="HelpBtnAchievements" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Achievements"/>
                 </Grid>
-                <TextBlock Text="{loc:Str label_complete_challenges_to_unlock_achievements_lo}" 
-                           Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
-                
-                <!-- Achievement Grid (populated in code-behind) -->
-                <UniformGrid x:Name="AchievementGrid" x:FieldModifier="internal" Columns="7" Margin="0,5">
-                </UniformGrid>
+                <TextBlock Text="{loc:Str achv_subtitle_rewards}"
+                           Foreground="#888888" FontSize="12" Margin="0,0,0,10"/>
+
+                <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
+                <WrapPanel x:Name="AchievementFilters" x:FieldModifier="internal" Margin="0,0,0,8"/>
+
+                <!-- Achievement Grid (populated in code-behind). WrapPanel, not UniformGrid:
+                     cards are fixed-size, so the panel must not stretch the gutters with them. -->
+                <WrapPanel x:Name="AchievementGrid" x:FieldModifier="internal" Margin="0,5">
+                </WrapPanel>
 
                 <TextBlock x:Name="TxtAchievementCount" x:FieldModifier="internal" Text="{loc:Str label_0_25_achievements_unlocked}" Foreground="#888888" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,15,0,0"/>
+
+                <!-- Third, independent counter: wardrobe items earned through achievements.
+                     Never folded into the free or patron achievement counts. -->
+                <TextBlock x:Name="TxtRewardCount" x:FieldModifier="internal" Foreground="#8079A3" FontSize="12"
+                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
                 <!-- Patron-exclusive achievements: separate section with its OWN counter.
                      Free and patron counts are never summed. Free users see the locked
@@ -35,8 +44,8 @@
 
                 <Grid Margin="0,5,0,0">
                     <StackPanel>
-                        <UniformGrid x:Name="PatronAchievementGrid" x:FieldModifier="internal" Columns="7" Margin="0,5">
-                        </UniformGrid>
+                        <WrapPanel x:Name="PatronAchievementGrid" x:FieldModifier="internal" Margin="0,5">
+                        </WrapPanel>
                         <TextBlock x:Name="TxtPatronAchievementCount" x:FieldModifier="internal" Foreground="#888888" FontSize="14"
                                    HorizontalAlignment="Center" Margin="0,15,0,0"/>
                     </StackPanel>

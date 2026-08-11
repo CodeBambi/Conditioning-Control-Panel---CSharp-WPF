@@ -813,6 +813,14 @@ namespace ConditioningControlPanel.Services
             // Clear resource cache
             ModResourceResolver.ClearCache();
 
+            // Drop the companion's cached system-prompt prefix. Its fingerprint hashes ActiveModId,
+            // so a plain switch is already covered — but everything ELSE the mod contributes
+            // (GetCompanionName, GetUserTerm, MakeModAware's replacements) is read at build time and
+            // hashed by nothing, so a mod whose content changed under the same id would keep serving
+            // the stale prefix for the rest of the launch with no log line saying why.
+            try { BambiSprite.InvalidateStablePrompt(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: prompt cache invalidation failed: {E}", ex.Message); }
+
             // If the active companion isn't supported by the new mod, fall back to first supported companion
             if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
             {
@@ -1176,9 +1184,12 @@ namespace ConditioningControlPanel.Services
         public int GetAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
         public int GetAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
 
-        // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default)
+        // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default).
+        // Phase 7: the tree is user-facing "Skill Tree" now. These fallbacks shadow
+        // label_enhancement_tree_title / tooltip_enhancement_tree (App.Mods is never null in
+        // practice), so the rename has to land here too or the header keeps the old name.
         public string GetEnhancementTreeTitle() =>
-            _activeMod.Manifest.EnhancementOverrides?.TreeTitle ?? MakeModAware("Bimbo Enhancement Tree");
+            _activeMod.Manifest.EnhancementOverrides?.TreeTitle ?? MakeModAware("Bimbo Skill Tree");
 
         public string GetEnhancementTreeSubtitle() =>
             _activeMod.Manifest.EnhancementOverrides?.TreeSubtitle ?? MakeModAware("you earn sparkle points from leveling up + every 100 bubbles popped~");
@@ -1193,7 +1204,7 @@ namespace ConditioningControlPanel.Services
             _activeMod.Manifest.EnhancementOverrides?.StatsTitle ?? MakeModAware("Ditzy Data Stats");
 
         public string GetTabTooltip() =>
-            _activeMod.Manifest.EnhancementOverrides?.TabTooltip ?? MakeModAware("Bimbo Enhancement Tree");
+            _activeMod.Manifest.EnhancementOverrides?.TabTooltip ?? MakeModAware("Bimbo Skill Tree");
 
         public string GetPinkRushName() =>
             _activeMod.Manifest.EnhancementOverrides?.PinkRushName ?? MakeModAware("PINK RUSH!");
@@ -2038,6 +2049,12 @@ namespace ConditioningControlPanel.Services
             try { ModResourceResolver.ClearCache(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
+            // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
+            // event, and the adopted package may have just delivered the portrait PNGs — a stale
+            // cached "absent" would park the avatar on the legacy poses for the whole session.
+            try { AvatarPortraitLoader.InvalidateAvailabilityCache(); }
+            catch (Exception ex) { _log?.Debug("ModService: portrait cache clear failed: {Error}", ex.Message); }
+
             // The extracted mod.json can declare a different companion set than the hardcoded
             // manifest we were running on.
             try
@@ -2198,6 +2215,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Raises <see cref="ModAvailabilityChanged"/>; a throwing subscriber never escapes.</summary>
         private void RaiseModAvailabilityChanged(string modOrPackId)
         {
+            // A pack landing can be the moment the avatar portraits finally exist on disk; drop the
+            // cached "no portraits" answer so the next mod/avatar-set switch can enter portrait mode.
+            AvatarPortraitLoader.InvalidateAvailabilityCache();
             try { ModAvailabilityChanged?.Invoke(this, modOrPackId); }
             catch (Exception ex) { _log?.Debug("ModAvailabilityChanged subscriber error: {Error}", ex.Message); }
         }

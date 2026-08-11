@@ -1,0 +1,146 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Runtime.WorkshopAwarenessCell"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · AWARENESS FINE-TUNING — the intensity dial and the full
+         privacy notice.
+
+         Design §6: the awareness TOGGLE is superseded by Z5's dial; the
+         fine-tuning lands here, which is where Z5's "fine-tuning ↓"
+         deep-links to.
+
+         Awareness v2 replaces the two cooldown sliders with ONE dial
+         (doc 02 §8): line budget per hour, worthiness threshold and
+         whether the Rare tier is armed, all from one choice. The legacy
+         sliders are still in the tree — the v2 kill switch falls back to
+         the pipeline that reads them — but MainWindow only reveals them
+         while UseAwarenessV2 is off, because a slider that no longer
+         moves anything is a lie with a thumb on it.
+
+         The dial is four stacked radios rather than a four-stop strip:
+         this column is 312px, and four playful labels plus their rates
+         do not survive being squeezed into pills.
+
+         AwarenessSettingsPanel keeps its x:Name and its role. The
+         privacy notice stays visible either way — it describes what the
+         feature WOULD read, which is exactly what someone with it
+         switched off is here to find out.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Runtime/WorkshopCellTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="CmpIntensityRadioStyle" TargetType="RadioButton">
+                <Setter Property="Foreground" Value="#FFE8E2F5"/>
+                <Setter Property="FontSize" Value="11.5"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Margin" Value="0,0,0,5"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="CmpIntensityHintStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpCellHintStyle}">
+                <Setter Property="Margin" Value="19,-4,0,7"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="{loc:Str label_awareness_settings}" Style="{StaticResource CmpCellHintStyle}"
+                       VerticalAlignment="Center" Margin="0"/>
+            <Button x:Name="HelpBtnAwareness" x:FieldModifier="internal" Style="{DynamicResource HelpButtonStyle}"
+                    VerticalAlignment="Center" Margin="6,0,0,0" Tag="WindowAwareness"/>
+        </StackPanel>
+
+        <!-- ========== the intensity dial (Awareness v2) ========== -->
+        <Border x:Name="AwarenessIntensityPanel" x:FieldModifier="internal" Margin="0,0,0,9">
+            <StackPanel>
+                <TextBlock Text="{loc:Str companion_awareness_intensity_head}" Style="{StaticResource CmpCellLabelStyle}"
+                           Margin="0,0,0,6"/>
+
+                <RadioButton x:Name="RadioIntensityOff" x:FieldModifier="internal"
+                             GroupName="CmpAwarenessIntensity" Tag="Off"
+                             Style="{StaticResource CmpIntensityRadioStyle}"
+                             Content="{loc:Str companion_awareness_intensity_off}"
+                             Checked="IntensityRadio_Checked"/>
+                <TextBlock Text="{loc:Str companion_awareness_intensity_off_hint}" Style="{StaticResource CmpIntensityHintStyle}"/>
+
+                <RadioButton x:Name="RadioIntensitySubtle" x:FieldModifier="internal"
+                             GroupName="CmpAwarenessIntensity" Tag="Subtle"
+                             Style="{StaticResource CmpIntensityRadioStyle}"
+                             Content="{loc:Str companion_awareness_intensity_subtle}"
+                             Checked="IntensityRadio_Checked"/>
+                <TextBlock Text="{loc:Str companion_awareness_intensity_subtle_hint}" Style="{StaticResource CmpIntensityHintStyle}"/>
+
+                <RadioButton x:Name="RadioIntensityChatty" x:FieldModifier="internal"
+                             GroupName="CmpAwarenessIntensity" Tag="Chatty"
+                             Style="{StaticResource CmpIntensityRadioStyle}"
+                             Content="{loc:Str companion_awareness_intensity_chatty}"
+                             Checked="IntensityRadio_Checked"/>
+                <TextBlock Text="{loc:Str companion_awareness_intensity_chatty_hint}" Style="{StaticResource CmpIntensityHintStyle}"/>
+
+                <RadioButton x:Name="RadioIntensityUnhinged" x:FieldModifier="internal"
+                             GroupName="CmpAwarenessIntensity" Tag="Unhinged"
+                             Style="{StaticResource CmpIntensityRadioStyle}"
+                             Content="{loc:Str companion_awareness_intensity_unhinged}"
+                             Checked="IntensityRadio_Checked"/>
+                <TextBlock Text="{loc:Str companion_awareness_intensity_unhinged_hint}" Style="{StaticResource CmpIntensityHintStyle}"/>
+
+                <!-- The dial is a real setting even while her eyes are closed; it just has nothing to
+                     pace yet. Saying so beats disabling the control and beats pretending. -->
+                <TextBlock x:Name="TxtIntensityEyesClosed" x:FieldModifier="internal" Visibility="Collapsed"
+                           Style="{StaticResource CmpCellHintStyle}" TextWrapping="Wrap"
+                           Text="{loc:Str companion_awareness_intensity_eyes_closed}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ========== legacy cooldowns (only while UseAwarenessV2 is off) ========== -->
+        <Border x:Name="AwarenessSettingsPanel" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,0,0,7">
+            <StackPanel>
+                <Grid>
+                    <TextBlock Text="{loc:Str label_reaction_cooldown}" Style="{StaticResource CmpCellLabelStyle}"/>
+                    <TextBlock x:Name="TxtAwarenessCooldown" x:FieldModifier="internal" Text="{loc:Str label_90s}"
+                               Style="{StaticResource CmpCellValueStyle}"/>
+                </Grid>
+                <Slider x:Name="SliderAwarenessCooldown" x:FieldModifier="internal" Style="{DynamicResource PinkSlider}"
+                        Minimum="10" Maximum="300" Value="90" Margin="0,4,0,8"
+                        ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
+                <Grid>
+                    <TextBlock Text="{loc:Str label_reaction_cooldown_max}" Style="{StaticResource CmpCellLabelStyle}"/>
+                    <TextBlock x:Name="TxtAwarenessCooldownMax" x:FieldModifier="internal" Text="{loc:Str label_cooldown_off}"
+                               Style="{StaticResource CmpCellValueStyle}"/>
+                </Grid>
+                <Slider x:Name="SliderAwarenessCooldownMax" x:FieldModifier="internal" Style="{DynamicResource PinkSlider}"
+                        Minimum="0" Maximum="300" Value="0" Margin="0,4,0,3"
+                        ValueChanged="SliderAwarenessCooldownMax_ValueChanged"/>
+                <TextBlock Text="{loc:Str tooltip_reaction_cooldown_max}" Style="{StaticResource CmpCellHintStyle}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Background="#FF2A1A1A" CornerRadius="6" Padding="7" BorderBrush="#FF6B6B" BorderThickness="1">
+            <StackPanel>
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⚠️" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_privacy_notice}" Foreground="#FF6B6B" FontSize="11"
+                                   FontWeight="Bold" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="BtnPrivacySpoiler" x:FieldModifier="internal" Content="{loc:Str btn_click_to_reveal}"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
+                            HorizontalAlignment="Right" FontSize="10.5" Cursor="Hand"
+                            Click="BtnPrivacySpoiler_Click"/>
+                </Grid>
+                <TextBlock x:Name="TxtPrivacyDetails" x:FieldModifier="internal" Visibility="Collapsed"
+                           TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="10.5" Margin="0,6,0,0"
+                           Text="{loc:Str label_this_feature_reads_the_name_of_the_active_win}"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

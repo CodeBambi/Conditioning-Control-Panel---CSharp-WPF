@@ -227,7 +227,8 @@ namespace ConditioningControlPanel.Services.Deeper
                             PatternName = ev.PatternName,
                             CustomPattern = ev.CustomPattern,
                             Intensity = ev.Intensity,
-                            DurationMs = (int)Math.Max(50, ev.Duration * 1000)
+                            DurationMs = (int)Math.Max(50, ev.Duration * 1000),
+                            Target = ev.Target
                         }, ownerItem: null));
                     }
                     hapticIdx++;
@@ -1043,6 +1044,7 @@ namespace ConditioningControlPanel.Services.Deeper
             public string? PatternName;
             public List<double[]>? CustomPattern;
             public double Intensity = 1.0;
+            public Services.Haptics.Core.ToyRole? Target;
 
             public static BandEffect? FromTimelineItem(TimelineItem item)
             {
@@ -1101,7 +1103,8 @@ namespace ConditioningControlPanel.Services.Deeper
                     IsHaptic = true,
                     PatternName = ev.PatternName,
                     CustomPattern = ev.CustomPattern,
-                    Intensity = ev.Intensity
+                    Intensity = ev.Intensity,
+                    Target = ev.Target
                 };
             }
 
@@ -1152,6 +1155,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         CustomPattern = CustomPattern,
                         Intensity = Intensity,
                         DurationMs = Math.Max(50, durationMs),
+                        Target = Target,
                         Phase = phase,
                         EffectId = EffectId
                     };

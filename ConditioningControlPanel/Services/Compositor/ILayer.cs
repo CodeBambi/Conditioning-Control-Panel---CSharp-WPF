@@ -61,9 +61,14 @@ public interface IWpfLayer
     /// True if this layer's visible output changed since the last <see cref="ClearDirty"/>. The
     /// engine only re-rasters a shared surface when at least one of its active layers is dirty, so
     /// a slow layer (a ~10fps spiral GIF) or a static one (a steady pink tint) no longer forces the
-    /// fullscreen software surface to re-raster at 60fps on the UI thread (#550). Default true =
-    /// repaint every active frame, which is correct for continuously-animating layers (bubbles,
-    /// chaos FX, flash, subliminal); only slow/static layers override this.
+    /// fullscreen software surface to re-raster at 60fps on the UI thread (#550).
+    ///
+    /// The fold is per SURFACE, not per layer: a clean layer is still DRAWN into every present it
+    /// shares, it just doesn't cause one. So an inaccurate <c>true</c> here costs the whole
+    /// surface, and EVERY layer implements this honestly (#853) - including the ones that animate
+    /// continuously, which report dirty only at the cadence their owning service actually steps
+    /// them (a ~30fps bubble field, a 30fps brain-drain capture) rather than at refresh rate.
+    /// Default true is a safe fallback for a new layer, never a design choice.
     /// </summary>
     bool Dirty => true;
 

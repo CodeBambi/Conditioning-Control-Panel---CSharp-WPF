@@ -49,7 +49,7 @@
                     <Border Height="58" CornerRadius="10" Margin="0,0,0,20"
                             BorderBrush="#59B478FF" BorderThickness="1" ClipToBounds="True">
                         <Border.Background>
-                            <ImageBrush ImageSource="/Resources/programs/banner_default.png"
+                            <ImageBrush ImageSource="pack://application:,,,/Resources/programs/banner_default.png"
                                         Stretch="UniformToFill" AlignmentX="Right"/>
                         </Border.Background>
                         <Grid>
@@ -89,10 +89,10 @@
                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                             VerticalAlignment="Center">
                                     <Image x:Name="TierPlate1" x:FieldModifier="internal"
-                                           Source="/Resources/Patreon tier1.png"
+                                           Source="pack://application:,,,/Resources/Patreon tier1.png"
                                            Height="30" Margin="0,0,8,0" Opacity="0.3"/>
                                     <Image x:Name="TierPlate2" x:FieldModifier="internal"
-                                           Source="/Resources/Patreon tier2.png"
+                                           Source="pack://application:,,,/Resources/Patreon tier2.png"
                                            Height="30" Opacity="0.3"/>
                                 </StackPanel>
                             </Grid>
@@ -110,12 +110,17 @@
                                 <ColumnDefinition Width="1*"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- art (Ken Burns drift applied in code, honours motion prefs) -->
+                            <!-- Art. The band is ~5:1, so the source is cropped, never
+                                 stretched: Stretch stays UniformToFill and the source
+                                 (wide BannerArtResource, else the card art) plus the
+                                 zoom origin are set by ApplySpotlightArt. Rounded clip
+                                 comes from RoundClipOnResize(SpotArtHost, 14).
+                                 Ken Burns drift applied in code, honours motion prefs. -->
                             <Border x:Name="SpotArtHost" x:FieldModifier="internal"
                                     Grid.Column="0" Grid.ColumnSpan="2" ClipToBounds="True"
                                     CornerRadius="14">
                                 <Image x:Name="SpotArtImage" x:FieldModifier="internal"
-                                       Stretch="UniformToFill" RenderTransformOrigin="0.5,0.42">
+                                       Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5">
                                     <Image.RenderTransform>
                                         <ScaleTransform x:Name="SpotArtScale" ScaleX="1" ScaleY="1"/>
                                     </Image.RenderTransform>

@@ -73,9 +73,10 @@ namespace ConditioningControlPanel
             // ---- routing matrix -------------------------------------------------
             // Design pass: rows are compact at rest and open one at a time, so every row
             // shares ONE expansion scope regardless of which group it sits in.
-            HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey)
+            HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey,
+                                  HapticRowLegacyBinding legacy = HapticRowLegacyBinding.None)
             {
-                var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey);
+                var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey, legacy);
                 row.Scope = _hapticRowScope;
                 row.Changed += OnHapticRoutingRowChanged;
                 return row;
@@ -116,7 +117,16 @@ namespace ConditioningControlPanel
             _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🎮", Loc.Get("haptics_group_games"), new[]
             {
                 Ev(HapticEventKind.BubblePop, "🫧", "label_bubbles", "haptics_hint_bubble"),
-                Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh"),
+                // DtRH is the one EVENT row with live legacy readers: DtrhHapticDirector reads the
+                // v2 rule, but DtrhEnabled/DtrhIntensity are still mirrored (see the enum's docs).
+                Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh",
+                   HapticRowLegacyBinding.Dtrh),
+                // Deeper enhancements play authored keyframe envelopes through the Pattern LAYER
+                // (HapticService.SetSyncPatternAsync). Its rule has always been persisted and read;
+                // it just never had a row, so the enable/scale/role were unreachable. No legacy
+                // twin exists for this layer, so None is correct.
+                Ly(HapticLayer.Pattern, "🌊", "haptics_row_deeper", "haptics_hint_deeper",
+                   HapticRowLegacyBinding.None),
             }));
             HapticsTab.RoutingGroupsList.ItemsSource = _hapticRoutingGroups;
 
@@ -241,8 +251,9 @@ namespace ConditioningControlPanel
             // The Advanced expander tunes the same analysis pass, so it follows the same gate.
             if (HapticsTab.HapticAudioAdvanced != null)
                 HapticsTab.HapticAudioAdvanced.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            if (SettingsTab?.AudioSyncLatencyPanel != null)
-                SettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            // Phase 3: the mirror pair lives in Settings · Audio now, not on the dashboard.
+            if (AppSettingsTab?.AudioSyncLatencyPanel != null)
+                AppSettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ---------------------------------------------------------------- Phase F live status
@@ -337,6 +348,7 @@ namespace ConditioningControlPanel
             HapticsTab.ChkHapticProviderIntiface.IsChecked = s.V2.Provider("buttplug").Enabled;
             HapticsTab.ChkHapticProviderMock.IsChecked = s.V2.Provider("mock").Enabled;
             HapticsTab.TxtHapticUrl.Text = s.LovenseUrl ?? "";
+            HapticsTab.TxtHapticIntifaceUrl.Text = s.ButtplugUrl ?? "";
 
             var master = (int)Math.Round(Math.Clamp(s.GlobalIntensity, 0, 1) * 100);
             HapticsTab.SliderHapticIntensity.Value = master;
@@ -494,6 +506,11 @@ namespace ConditioningControlPanel
         /// CONCURRENTLY, so these are checkboxes, not a single-choice combo. The legacy
         /// <c>Provider</c> enum is still written (old settings files and a few call sites read
         /// it) using the same preference order the device manager uses for de-duplication.
+        ///
+        /// It goes through <see cref="HapticSettings.SetLegacyProviderMirror"/>, NOT a plain
+        /// assignment: assigning the enum directly fans it back out over all three v2 flags, so
+        /// ticking a second provider un-ticked the first one on the way out (the box stayed
+        /// checked, the provider never connected, and a restart showed it unchecked).
         /// </summary>
         internal void ChkHapticProvider_Changed(object sender, RoutedEventArgs e)
         {
@@ -503,21 +520,21 @@ namespace ConditioningControlPanel
             var v2 = HapticCfg.V2;
             v2.Provider(key).Enabled = box.IsChecked == true;
 
-            HapticCfg.Provider =
+            HapticCfg.SetLegacyProviderMirror(
                 v2.Provider("lovense").Enabled ? Services.Haptics.HapticProviderType.Lovense :
                 v2.Provider("buttplug").Enabled ? Services.Haptics.HapticProviderType.Buttplug :
-                Services.Haptics.HapticProviderType.Mock;
+                Services.Haptics.HapticProviderType.Mock);
 
             App.Settings.Save();
             RefreshHapticConnectionUi();
         }
 
         /// <summary>
-        /// One URL box, one property. The old code switched the box between LovenseUrl and
-        /// ButtplugUrl depending on the provider combo, so the value you typed could land on the
-        /// wrong setting when the combo changed underneath you (flagged in the Phase D notes).
-        /// Intiface's address is not user-editable here — it is the Intiface default and the
-        /// provider owns it.
+        /// ONE BOX PER PROVIDER, each hard-wired to its own property. The pre-Phase-E code had a
+        /// single box that switched between LovenseUrl and ButtplugUrl depending on the provider
+        /// combo, so a value you typed could land on the wrong setting when the combo changed
+        /// underneath you (flagged in the Phase D notes). Two boxes cannot do that — and the
+        /// Intiface one only appears while that provider is enabled.
         /// </summary>
         internal void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -525,6 +542,18 @@ namespace ConditioningControlPanel
             // Mirrors into V2.Provider("lovense").Url via HapticSettings.OnPropertyChanged.
             HapticCfg.LovenseUrl = HapticsTab.TxtHapticUrl.Text;
             App.Settings.Save();   // debounced in SettingsService: one write per typing burst
+        }
+
+        /// <summary>
+        /// Intiface / Buttplug server address. Writes the LEGACY <c>ButtplugUrl</c> because that is
+        /// what <c>ButtplugProviderV2</c> reads (its own v2 provider Url is only a mirror of it);
+        /// the mirror is kept in step by HapticSettings.OnPropertyChanged.
+        /// </summary>
+        internal void TxtHapticIntifaceUrl_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_isLoading || HapticsTab.TxtHapticIntifaceUrl == null) return;
+            HapticCfg.ButtplugUrl = HapticsTab.TxtHapticIntifaceUrl.Text;
+            App.Settings.Save();
         }
 
         internal void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
@@ -910,8 +939,8 @@ namespace ConditioningControlPanel
             HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
             App.Settings.Save();
 
-            if (SettingsTab?.SliderAudioSyncLatency != null)
-                SettingsTab.SliderAudioSyncLatency.Value = latencyMs;
+            if (AppSettingsTab?.SliderAudioSyncLatency != null)
+                AppSettingsTab.SliderAudioSyncLatency.Value = latencyMs;
         }
 
         internal void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -924,22 +953,22 @@ namespace ConditioningControlPanel
             HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
             App.Settings.Save();
 
-            if (SettingsTab?.SliderAudioSyncIntensity != null)
-                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
+            if (AppSettingsTab?.SliderAudioSyncIntensity != null)
+                AppSettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
         }
 
         internal void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading) return;
 
-            var latencyMs = (int)SettingsTab.SliderAudioSyncLatency.Value;
+            var latencyMs = (int)AppSettingsTab.SliderAudioSyncLatency.Value;
             HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
             App.Settings.Save();
 
-            if (SettingsTab.TxtAudioSyncLatency != null)
+            if (AppSettingsTab.TxtAudioSyncLatency != null)
             {
                 var sign = latencyMs >= 0 ? "+" : "";
-                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+                AppSettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
             }
         }
 
@@ -947,13 +976,13 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var intensityPercent = (int)SettingsTab.SliderAudioSyncIntensity.Value;
+            var intensityPercent = (int)AppSettingsTab.SliderAudioSyncIntensity.Value;
             HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
             // Safe per tick: SettingsService.Save() is debounced (500 ms of quiet -> one write).
             App.Settings.Save();
 
-            if (SettingsTab.TxtAudioSyncIntensity != null)
-                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+            if (AppSettingsTab.TxtAudioSyncIntensity != null)
+                AppSettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
         }
 
         #endregion

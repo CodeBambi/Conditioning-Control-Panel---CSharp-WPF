@@ -6,22 +6,42 @@ using System.Windows.Media;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// "She's Listening" Exclusive — the voice-control surface. Its toggles drive the SAME
-    /// AppSettings as the Takeover tab, so rather than duplicate the consent/settings logic, these
-    /// handlers mirror the value onto the Takeover control, call the existing handler (which runs
-    /// consent + saves + RefreshVoiceInputModes), then reflect the result back. Both tabs stay in
-    /// sync, and there is one source of truth for the logic.
+    /// "She's Listening" Exclusive — the voice-control surface.
+    ///
+    /// <para>Until Phase 2 of the UX restructure this file was a mirror: its toggles copied their
+    /// value onto a Collapsed twin on the Takeover tab, called that tab's handler, and copied the
+    /// result back, so the visible control and the logic that owned it lived on different tabs.
+    /// The microphone now has one owner — Settings → Devices — which holds the device picker, the
+    /// wake word, push-to-talk and headphone barge-in with their original x:Names and their
+    /// original MainWindow.Autonomy.cs handlers.</para>
+    ///
+    /// <para>What is left here is what belongs to this page: the master arm/disarm switch, the
+    /// loudness gate, spoken mantras, wake calibration, the test and mic consent — plus
+    /// <see cref="RefreshSheListeningDeviceChips"/>, which paints the read-only summary rows and,
+    /// in the other direction, re-seeds the Settings toggles after the master switch writes the
+    /// settings behind their back.</para>
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>Copy a checkbox's value to another without firing its Changed handler.</summary>
-        private void MirrorCheck(CheckBox from, CheckBox to)
-        {
-            var wasLoading = _isLoading;
-            _isLoading = true;
-            to.IsChecked = from.IsChecked;
-            _isLoading = wasLoading;
-        }
+        /// <summary>
+        /// The premium bar for the offline mic, spelled once. SheListeningGate is only a Border
+        /// over the tab, so every control under it stays reachable by keyboard focus and by
+        /// automation - the bar has to sit on the handlers that actually hand the mic to the wake
+        /// loop. Turning the mic OFF is never gated: a lapsed patron must always be able to stop
+        /// a mic that is already open.
+        /// </summary>
+        private static bool DemandSheListeningPremium()
+            => Services.TierGate.DemandPremium(Localization.Loc.Get("tab_shelistening"), "voice");
+
+        // RevertCheck lived here: it un-ticked a She's-Listening toggle the premium bar had just
+        // refused. The two toggles it guarded (wake word, push-to-talk) are read-only chips on this
+        // tab since Phase 2, and the bar moved with them into MainWindow.Autonomy.cs, which reverts
+        // through its own RevertToggle.
+
+        // MirrorCheck lived here: it copied a She's-Listening toggle onto the Collapsed twin on the
+        // Takeover tab, called that tab's handler, then copied the result back. Phase 2 of the UX
+        // restructure gave the mic one editor (Settings > Devices) and the hidden twin is gone, so
+        // the mirror - and the four handlers that used it - went with it.
 
         /// <summary>
         /// On-demand spoken mantras (the She's Listening capability = AppSettings.SpokenMantrasEnabled).
@@ -52,56 +72,6 @@ namespace ConditioningControlPanel
             s.SpokenMantrasEnabled = turningOn;
             App.Settings?.Save();
             RefreshSheListeningStatus();
-        }
-
-        internal void SL_WakeWord_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading || SheListeningTab == null) return;
-            MirrorCheck(SheListeningTab.ChkSL_WakeWord, BambiTakeoverTab.ChkSpeechWakeWord);
-            ChkSpeechWakeWord_Changed(sender, e);
-            MirrorCheck(BambiTakeoverTab.ChkSpeechWakeWord, SheListeningTab.ChkSL_WakeWord);
-            RefreshSheListeningStatus();
-            RefreshPremiumRail();
-            RefreshAutonomyVoiceHint(); // arming/disarming wake suppresses/restores surprise mantras
-        }
-
-        internal void SL_WakeWords_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading || SheListeningTab == null) return;
-            var wasLoading = _isLoading;
-            _isLoading = true;
-            BambiTakeoverTab.TxtSpeechWakeWords.Text = SheListeningTab.TxtSL_WakeWords.Text;
-            _isLoading = wasLoading;
-            TxtSpeechWakeWords_LostFocus(sender, e);
-            // The handler may normalize an empty box back to "hey bambi" — reflect that.
-            _isLoading = true;
-            SheListeningTab.TxtSL_WakeWords.Text = BambiTakeoverTab.TxtSpeechWakeWords.Text;
-            _isLoading = wasLoading;
-        }
-
-        internal void SL_PushToTalk_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading || SheListeningTab == null) return;
-            MirrorCheck(SheListeningTab.ChkSL_PushToTalk, BambiTakeoverTab.ChkSpeechPushToTalk);
-            ChkSpeechPushToTalk_Changed(sender, e);
-            MirrorCheck(BambiTakeoverTab.ChkSpeechPushToTalk, SheListeningTab.ChkSL_PushToTalk);
-            RefreshSheListeningStatus();
-            RefreshPremiumRail();
-            RefreshAutonomyVoiceHint(); // arming/disarming PTT suppresses/restores surprise mantras
-        }
-
-        /// <summary>
-        /// Headphones / barge-in preference (AppSettings.SpeechHeadphonesMode). When on, the command
-        /// listener skips the wait-until-she's-quiet echo guard so you can talk over her. Pure preference —
-        /// no consent prompt, no mic re-arm needed; the listener reads it on the next turn.
-        /// </summary>
-        internal void SL_Headphones_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading || SheListeningTab == null) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.SpeechHeadphonesMode = SheListeningTab.ChkSL_Headphones.IsChecked == true;
-            App.Settings?.Save();
         }
 
         private bool _calibratingWake;
@@ -222,6 +192,10 @@ namespace ConditioningControlPanel
 
             if (MicIsArmed()) { DisarmVoiceMic(); return; }
 
+            // Arming is the premium half - and this is the shared entry point for the master
+            // Start button and the dashboard Voice chip, so the bar covers both.
+            if (!DemandSheListeningPremium()) return;
+
             // Arm: consent, then default to the wake word so "she's listening" means something.
             if (App.Speech?.IsAvailable != true)
             {
@@ -242,9 +216,10 @@ namespace ConditioningControlPanel
             App.Settings?.Save();
             App.Autonomy?.RefreshVoiceInputModes();
 
-            RefreshSheListeningTab(); // reload the sub-toggles + status
-            RefreshPremiumRail();     // keep the dashboard Voice dot honest
-            UpdateMicPill();          // privacy pill: wake word is now armed → mic is open
+            RefreshSheListeningTab();          // reload the sub-toggles + status
+            RefreshSheListeningDeviceChips();  // arming writes the setting directly - tell Settings > Devices
+            RefreshPremiumRail();              // keep the dashboard Voice dot honest
+            UpdateMicPill();                   // privacy pill: wake word is now armed → mic is open
         }
 
         /// <summary>
@@ -271,6 +246,7 @@ namespace ConditioningControlPanel
             try { LockCardWindow.DisableVoiceForAll(); } catch { }
 
             if (SheListeningTab != null) RefreshSheListeningTab();
+            RefreshSheListeningDeviceChips();  // disarming writes the setting directly - re-seed Settings > Devices
             RefreshPremiumRail();
             UpdateMicPill();          // privacy pill: mic fully disarmed → pill off
         }
@@ -314,8 +290,8 @@ namespace ConditioningControlPanel
                 var wasLoading = _isLoading;
                 _isLoading = true;
                 if (BambiTakeoverTab?.ChkAutonomyVoice != null) BambiTakeoverTab.ChkAutonomyVoice.IsChecked = false;
-                if (BambiTakeoverTab?.ChkSpeechWakeWord != null) BambiTakeoverTab.ChkSpeechWakeWord.IsChecked = false;
-                if (BambiTakeoverTab?.ChkSpeechPushToTalk != null) BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = false;
+                if (AppSettingsTab?.ChkSpeechWakeWord != null) AppSettingsTab.ChkSpeechWakeWord.IsChecked = false;
+                if (AppSettingsTab?.ChkSpeechPushToTalk != null) AppSettingsTab.ChkSpeechPushToTalk.IsChecked = false;
                 _isLoading = wasLoading;
                 RefreshSheListeningTab();
                 RefreshAutonomyVoiceHint();
@@ -324,43 +300,6 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "SL_RevokeMicConsent_Click failed");
             }
-        }
-
-        internal void SL_SetPttKey_Click(object sender, RoutedEventArgs e)
-        {
-            if (_capturingPttKey || SheListeningTab == null) return;
-            _capturingPttKey = true;
-            SheListeningTab.BtnSL_SetPttKey.Content = "Press a key…";
-            PreviewKeyDown += CaptureSlPttKey;
-        }
-
-        private void CaptureSlPttKey(object sender, KeyEventArgs e)
-        {
-            if (!_capturingPttKey) return;
-            var key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
-                    or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.None)
-                return;
-
-            e.Handled = true;
-            _capturingPttKey = false;
-            PreviewKeyDown -= CaptureSlPttKey;
-
-            var s = App.Settings?.Current;
-            if (s != null)
-            {
-                s.SpeechPushToTalkKey = key.ToString();
-                App.Settings?.Save();
-                App.Autonomy?.RefreshVoiceInputModes();
-            }
-            var keyStr = key.ToString();
-            if (SheListeningTab != null)
-            {
-                SheListeningTab.TxtSL_PttKey.Text = keyStr;
-                SheListeningTab.BtnSL_SetPttKey.Content = "Set key…";
-            }
-            // Keep the Takeover tab's label in sync too.
-            if (BambiTakeoverTab?.TxtPttKey != null) BambiTakeoverTab.TxtPttKey.Text = keyStr;
         }
 
         /// <summary>Load the She's-Listening controls from settings + refresh status/gate. Called on tab show.</summary>
@@ -375,11 +314,6 @@ namespace ConditioningControlPanel
                 if (s != null)
                 {
                     SheListeningTab.ChkSL_Mantras.IsChecked = s.SpokenMantrasEnabled && s.MicConsentGiven;
-                    SheListeningTab.ChkSL_WakeWord.IsChecked = s.SpeechWakeWordEnabled && s.MicConsentGiven;
-                    SheListeningTab.TxtSL_WakeWords.Text = string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords;
-                    SheListeningTab.ChkSL_PushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
-                    SheListeningTab.TxtSL_PttKey.Text = string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
-                    SheListeningTab.ChkSL_Headphones.IsChecked = s.SpeechHeadphonesMode;
                     if (SheListeningTab.SldSL_MicSensitivity != null)
                     {
                         double sens = ThresholdToSens(s.SpeechLoudnessThreshold);
@@ -397,74 +331,73 @@ namespace ConditioningControlPanel
                     s?.MicConsentGiven == true ? Visibility.Visible : Visibility.Collapsed;
 
             RefreshWakeEngineStatus();
-            PopulateSlMicDevices();
+            RefreshSheListeningDeviceChips();
             RefreshSheListeningStatus();
             RefreshPremiumGate(SheListeningTab.SheListeningGate);
         }
 
-        /// <summary>Guards the mic-device combo while we rebuild it, so re-populating doesn't fire the handler.</summary>
-        private bool _slMicPopulating;
-
         /// <summary>
-        /// Fill the microphone picker with the available capture devices (index -1 = system default)
-        /// and select the one stored in <see cref="Models.AppSettings.SpeechInputDeviceIndex"/>. Mirrors
-        /// the webcam picker on the Lab tab. Safe to call repeatedly (e.g. on tab show / Refresh).
+        /// Repaint the read-only microphone chips on She's Listening AND re-seed the voice-mode
+        /// toggles in Settings → Devices from the settings file.
+        ///
+        /// <para>Both halves matter. The chips are display: the device, wake word, push-to-talk and
+        /// headphone rows on this tab were live editors until Phase 2 and are now a summary of what
+        /// Settings → Devices owns. The re-seed is the other direction: the master Start/Stop button
+        /// (<see cref="ToggleVoiceMic"/> / <see cref="DisarmVoiceMic"/>) and the title-bar privacy
+        /// pill write SpeechWakeWordEnabled and SpeechPushToTalkEnabled straight to settings without
+        /// touching a checkbox, so the Settings page has to be told, or arming the mic here would
+        /// leave the toggle over there stale until the next full LoadSettings.</para>
+        ///
+        /// Everything is null-guarded — either view may not be realized yet.
         /// </summary>
-        private void PopulateSlMicDevices()
+        internal void RefreshSheListeningDeviceChips()
         {
-            var combo = SheListeningTab?.CmbSL_MicDevice;
-            if (combo == null) return;
-
-            int saved = App.Settings?.Current?.SpeechInputDeviceIndex ?? -1;
-            _slMicPopulating = true;
-            try
-            {
-                combo.Items.Clear();
-                ComboBoxItem? toSelect = null;
-                foreach (var dev in Services.Speech.SpeechService.EnumerateInputDevices())
-                {
-                    var item = new ComboBoxItem { Content = dev.Name, Tag = dev.Index };
-                    combo.Items.Add(item);
-                    if (dev.Index == saved) toSelect = item;
-                }
-                // Fall back to "System default" if the saved device is gone (unplugged / reordered).
-                combo.SelectedItem = toSelect ?? (combo.Items.Count > 0 ? combo.Items[0] : null);
-            }
-            finally { _slMicPopulating = false; }
-        }
-
-        /// <summary>
-        /// User picked a microphone. Persist the index; <see cref="Services.Speech.SpeechService.ResolveDeviceNumber"/>
-        /// reads it the next time the mic opens. If we're listening right now, cut the in-flight session and
-        /// re-arm so the new device takes effect immediately.
-        /// </summary>
-        internal void SL_MicDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_slMicPopulating || _isLoading || SheListeningTab == null) return;
-            if (SheListeningTab.CmbSL_MicDevice?.SelectedItem is not ComboBoxItem item) return;
-            if (item.Tag is not int idx) return;
-
             var s = App.Settings?.Current;
             if (s == null) return;
-            var name = idx < 0 ? "" : (item.Content?.ToString() ?? "");
-            if (s.SpeechInputDeviceIndex == idx && s.SpeechInputDeviceName == name) return;
-            s.SpeechInputDeviceIndex = idx;
-            s.SpeechInputDeviceName = name; // matched by name on reopen — robust to ordinal reshuffle (#441b)
-            App.Settings?.Save();
 
-            // Apply live: stop the current capture so the wake loop reopens on the new device, then reconcile.
-            if (MicIsArmed())
+            // Settings → Devices: seed, never fire the change handlers.
+            if (AppSettingsTab != null)
             {
-                try { App.Speech?.StopListening(); } catch { }
-                try { App.Autonomy?.RefreshVoiceInputModes(); } catch { }
+                var wasLoading = _isLoading;
+                _isLoading = true;
+                try
+                {
+                    if (AppSettingsTab.ChkSpeechWakeWord != null)
+                        AppSettingsTab.ChkSpeechWakeWord.IsChecked = s.SpeechWakeWordEnabled && s.MicConsentGiven;
+                    if (AppSettingsTab.ChkSpeechPushToTalk != null)
+                        AppSettingsTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
+                    if (AppSettingsTab.TxtSpeechWakeWords != null)
+                        AppSettingsTab.TxtSpeechWakeWords.Text =
+                            string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords;
+                    if (AppSettingsTab.TxtPttKey != null)
+                        AppSettingsTab.TxtPttKey.Text =
+                            string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
+                }
+                finally { _isLoading = wasLoading; }
             }
-        }
 
-        /// <summary>Re-scan connected microphones (devices may have been plugged in since the tab opened).</summary>
-        internal void SL_MicRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            PopulateSlMicDevices();
-            RefreshSheListeningStatus();
+            if (SheListeningTab == null) return;
+
+            var device = string.IsNullOrWhiteSpace(s.SpeechInputDeviceName)
+                ? Localization.Loc.Get("set2_mic_system_default")
+                : s.SpeechInputDeviceName;
+            var off = Localization.Loc.Get("set2_chip_off");
+
+            if (SheListeningTab.TxtSL_MicDeviceChip != null)
+                SheListeningTab.TxtSL_MicDeviceChip.Text = device;
+            if (SheListeningTab.TxtSL_WakeWordChip != null)
+                SheListeningTab.TxtSL_WakeWordChip.Text =
+                    s.SpeechWakeWordEnabled && s.MicConsentGiven
+                        ? (string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords)
+                        : off;
+            if (SheListeningTab.TxtSL_PttChip != null)
+                SheListeningTab.TxtSL_PttChip.Text =
+                    s.SpeechPushToTalkEnabled && s.MicConsentGiven
+                        ? (string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey)
+                        : off;
+            if (SheListeningTab.TxtSL_HeadphonesChip != null)
+                SheListeningTab.TxtSL_HeadphonesChip.Text =
+                    s.SpeechHeadphonesMode ? Localization.Loc.Get("set2_chip_on") : off;
         }
 
         // "Mic sensitivity" slider <-> loudness gate. Slider 0..100 maps INVERSELY to the RMS threshold:

@@ -65,12 +65,13 @@ namespace ConditioningControlPanel
             _advAvatarDetachedOffsetY = CreateAdvNumberBox();
             stack.Children.Add(_advAvatarDetachedOffsetY);
 
-            // ── Sub-group 2: Enhancement Tree Overrides ──
-            stack.Children.Add(CreateSubHeader("Enhancement Tree Overrides"));
-            stack.Children.Add(CreateSectionDescription("Rename the labels of the enhancement (skill) tree tab. The grey hint text shows the default wording each field replaces. Max 200 characters per label."));
+            // ── Sub-group 2: Skill Tree Overrides ──
+            // (manifest field names stay `treeTitle`/`tabTooltip` etc. — only the wording changed)
+            stack.Children.Add(CreateSubHeader("Skill Tree Overrides"));
+            stack.Children.Add(CreateSectionDescription("Rename the labels of the skill tree tab. The grey hint text shows the default wording each field replaces. Max 200 characters per label."));
 
             stack.Children.Add(CreateFieldLabel("Tree Title"));
-            _advTreeTitle = CreateDarkTextBox("Bimbo Enhancement Tree");
+            _advTreeTitle = CreateDarkTextBox("Bimbo Skill Tree");
             stack.Children.Add(_advTreeTitle);
 
             stack.Children.Add(CreateFieldLabel("Tree Subtitle"));
@@ -90,7 +91,7 @@ namespace ConditioningControlPanel
             stack.Children.Add(_advStatsTitle);
 
             stack.Children.Add(CreateFieldLabel("Tab Tooltip"));
-            _advTabTooltip = CreateDarkTextBox("Bimbo Enhancement Tree");
+            _advTabTooltip = CreateDarkTextBox("Bimbo Skill Tree");
             stack.Children.Add(_advTabTooltip);
 
             stack.Children.Add(CreateFieldLabel("Pink Rush Name"));

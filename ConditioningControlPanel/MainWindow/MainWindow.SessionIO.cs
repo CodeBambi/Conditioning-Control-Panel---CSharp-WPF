@@ -92,9 +92,23 @@ namespace ConditioningControlPanel
 
                 // Already known (e.g. a LoadAllSessions raced us, or a double-register)?
                 // Adding twice would leave two identical cards in the Sessions tab.
-                if (_sessionManager.GetSession(session.Id) != null) return true;
+                //
+                // But KNOWN-TO-THE-MANAGER IS NOT VISIBLE-IN-THE-TAB. If the card build ever
+                // failed (AddNewSession registers the session BEFORE it raises SessionAdded),
+                // this branch would keep reporting success forever on a list nobody can see -
+                // #614 all over again. Reconcile the cards instead of trusting the registry.
+                if (_sessionManager.GetSession(session.Id) != null)
+                {
+                    if (!HasCustomSessionCard(session.Id)) RefreshCustomSessionCards();
+                    return true;
+                }
 
                 _sessionManager.AddNewSession(session, filePath);
+
+                // AddNewSession -> SessionAdded -> OnSessionAdded -> AddCustomSessionCard is the
+                // only thing between the file and the tab, and the caller swallows anything that
+                // goes wrong in it. Confirm the card landed; rebuild from the manager if not.
+                if (!HasCustomSessionCard(session.Id)) RefreshCustomSessionCards();
                 return true;
             }
             catch (Exception ex)
@@ -666,15 +680,29 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>Updates the hero pill text to match the saved shortcut.</summary>
+        /// <summary>
+        /// Updates every label that quotes the saved chat shortcut. Two surfaces launch the same
+        /// capture dialog since Phase 2 — the Companion Workshop pill and the Shortcuts row in
+        /// Settings → Devices — and the dialog remains the single editor, so both labels are
+        /// repainted from the same call. Each is guarded on its own: a Settings view that hasn't
+        /// been realized must not stop the Companion pill from updating (or vice versa), and the
+        /// old blanket catch would have swallowed the second write silently.
+        /// </summary>
         public void RefreshChatShortcutLabel()
         {
+            var text = AvatarTubeWindow.FormatChatShortcut();
             try
             {
-                if (CompanionTab.TxtChatShortcutLabel != null)
-                    CompanionTab.TxtChatShortcutLabel.Text = AvatarTubeWindow.FormatChatShortcut();
+                if (CompanionTab?.TxtChatShortcutLabel != null)
+                    CompanionTab.TxtChatShortcutLabel.Text = text;
             }
             catch { /* Tab not yet realized, fine */ }
+            try
+            {
+                if (AppSettingsTab?.TxtChatShortcutLabelDevices != null)
+                    AppSettingsTab.TxtChatShortcutLabelDevices.Text = text;
+            }
+            catch { /* Settings view not yet realized, fine */ }
         }
 
         // ---------------------------------------------------------------------
@@ -801,15 +829,22 @@ namespace ConditioningControlPanel
             return string.Join("+", parts);
         }
 
-        /// <summary>Updates the hero pill text to match the saved camera shortcut.</summary>
+        /// <summary>Updates both camera-shortcut labels (Companion pill + Settings → Devices row).</summary>
         public void RefreshCameraShortcutLabel()
         {
+            var text = FormatCameraShortcut();
             try
             {
-                if (CompanionTab.TxtCameraShortcutLabel != null)
-                    CompanionTab.TxtCameraShortcutLabel.Text = FormatCameraShortcut();
+                if (CompanionTab?.TxtCameraShortcutLabel != null)
+                    CompanionTab.TxtCameraShortcutLabel.Text = text;
             }
             catch { /* Tab not yet realized, fine */ }
+            try
+            {
+                if (AppSettingsTab?.TxtCameraShortcutLabelDevices != null)
+                    AppSettingsTab.TxtCameraShortcutLabelDevices.Text = text;
+            }
+            catch { /* Settings view not yet realized, fine */ }
         }
 
         /// <summary>
@@ -1238,6 +1273,71 @@ namespace ConditioningControlPanel
             {
                 PresetsTab.TxtCustomSessionsHeader.Visibility = Visibility.Collapsed;
             }
+        }
+
+        /// <summary>True when the Sessions tab already shows a card for <paramref name="sessionId"/>.
+        /// Cards carry their session id in Tag - see <see cref="AddCustomSessionCard"/>.</summary>
+        private bool HasCustomSessionCard(string sessionId)
+        {
+            try
+            {
+                var panel = PresetsTab?.CustomSessionsPanel;
+                if (panel == null || string.IsNullOrEmpty(sessionId)) return false;
+                return panel.Children.OfType<Border>().Any(b => (b.Tag as string) == sessionId);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Reconcile the Sessions tab with the CustomSessions folder.
+        ///
+        /// <see cref="Services.SessionManager.LoadAllSessions"/> runs exactly ONCE per launch
+        /// (<see cref="InitializeSessionManager"/>), so a .session.json written behind its back -
+        /// the Graded Intake's auto-draft above all (IntakeHostService.OnQuizResult) - is invisible
+        /// until relaunch whenever its single registration hop fails or never happens. That hop is
+        /// best-effort by design (it must never fail the draft), so the list needs a second chance
+        /// rather than a stricter hop.
+        ///
+        /// Cheap, idempotent and event-free: it does nothing unless the folder holds a file the
+        /// manager has never seen, it reuses LoadAllSessions + RefreshCustomSessionCards rather
+        /// than inventing a second loading path, and it raises NO SessionAdded events - so nothing
+        /// downstream (XP, punch card, achievements) can fire twice off a refresh.
+        /// </summary>
+        private void SyncCustomSessionsFromDisk()
+        {
+            try
+            {
+                if (_sessionManager == null) return;
+
+                var folder = SessionFileService.CustomSessionsFolder;
+                if (!Directory.Exists(folder)) return;
+
+                var known = new HashSet<string>(
+                    _sessionManager.CustomSessions
+                        .Select(s => s.SourceFilePath)
+                        .Where(p => !string.IsNullOrEmpty(p))
+                        .Select(Path.GetFullPath),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var onDisk = Directory.GetFiles(folder, "*.session.json");
+                if (onDisk.All(f => known.Contains(Path.GetFullPath(f)))) return;
+
+                // Reload drops and rebuilds every Session instance, so re-point the selection at
+                // the fresh object or Start Session would run a detached copy.
+                var selectedId = _selectedSession?.Id;
+                _sessionManager.LoadAllSessions();
+                RefreshCustomSessionCards();
+                if (!string.IsNullOrEmpty(selectedId))
+                {
+                    var again = _sessionManager.GetSession(selectedId);
+                    if (again != null) _selectedSession = again;
+                }
+
+                App.Logger?.Information(
+                    "SyncCustomSessionsFromDisk: picked up {N} session file(s) written after startup",
+                    onDisk.Length - known.Count);
+            }
+            catch (Exception ex) { App.Logger?.Debug("SyncCustomSessionsFromDisk: {E}", ex.Message); }
         }
 
         private void SessionBtn_Delete(object sender, RoutedEventArgs e)

@@ -1,0 +1,49 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AdornedAvatar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignHeight="104" d:DesignWidth="104">
+
+    <!-- ================================================================
+         ADORNED AVATAR — the wardrobe render surface (redesign Phase 3)
+
+         A circular avatar with an optional decoration stacked 1:1 over it.
+         The decoration is a 512 canvas PNG whose avatar circle sits centred
+         at 70% of the canvas width, so the ONLY layout maths in the whole
+         wardrobe is "draw the canvas at diameter / 0.70, centred" — there is
+         no per-item anchor data and no per-item code.
+
+         Deliberately a plain UserControl with code-set visuals rather than a
+         templated control: it has to drop into a leaderboard row, the friends
+         rail and the duel plate later, where a Style/converter dependency
+         would have to travel with it.
+
+         Nothing here clips: a hat has to overflow the avatar box, and layout
+         must NOT reserve room for it (the avatar still measures as its own
+         diameter, so the hero's columns do not move when a hat is equipped).
+         ================================================================ -->
+
+    <Grid x:Name="Root" Width="104" Height="104">
+        <!-- The avatar itself. Ring colour/thickness are properties: the profile
+             hero wants the pink ring, a leaderboard row will want none. -->
+        <Border x:Name="AvatarRing" CornerRadius="52" BorderBrush="#FF69B4" BorderThickness="3">
+            <Border.Background>
+                <ImageBrush x:Name="AvatarImageBrush" Stretch="UniformToFill"/>
+            </Border.Background>
+        </Border>
+
+        <!-- Decoration layer. Sized/centred in code from AvatarSize; Fill because
+             the canvas is square and must map onto the avatar exactly. The negative
+             margin that keeps WPF from layout-clipping it to the avatar box is set
+             in code beside the size (see ApplySize). -->
+        <Image x:Name="DecoLayer" Stretch="Fill" Visibility="Collapsed"
+               IsHitTestVisible="False" SnapsToDevicePixels="True"
+               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+        <!-- Presence dot, above the decoration so a choker can never hide it. -->
+        <Ellipse x:Name="PresenceDotShape" Width="20" Height="20"
+                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                 Margin="0,0,4,4" Stroke="#1E1E3F" StrokeThickness="3" Fill="#43B581"/>
+    </Grid>
+</UserControl>

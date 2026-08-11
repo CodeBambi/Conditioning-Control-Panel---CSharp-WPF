@@ -30,19 +30,14 @@ namespace ConditioningControlPanel.Tests;
 public class SessionLockSweepTests
 {
     /// <summary>Runs <paramref name="body"/> on a dedicated STA thread, rethrowing faithfully.</summary>
-    private static void OnSta(Action body)
-    {
-        ExceptionDispatchInfo? captured = null;
-        var t = new Thread(() =>
-        {
-            try { body(); }
-            catch (Exception e) { captured = ExceptionDispatchInfo.Capture(e); }
-        });
-        t.SetApartmentState(ApartmentState.STA);
-        t.Start();
-        Assert.True(t.Join(TimeSpan.FromSeconds(30)), "STA test thread hung");
-        captured?.Throw();
-    }
+    // Every WPF render suite shares one STA thread, via WpfRenderHarness. WPF caches a
+    // ResourceDictionary per pack URI, so these suites and the Settings-section suites end
+    // up holding the SAME Brush and Style instances - and those take thread affinity from
+    // whichever thread realizes them first. Two threads means the second one dies with
+    // "The calling thread cannot access this object because a different thread owns it".
+    // The harness leaves Application.Resources empty outside its own bodies, so nothing
+    // here sees a theme it did not merge itself.
+    private static void OnSta(Action body) => WpfRenderHarness.OnStaThread(body);
 
     private static CheckBox Owned(string name)
     {

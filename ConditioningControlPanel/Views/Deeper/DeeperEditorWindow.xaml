@@ -1312,6 +1312,11 @@
                                       ToolTip="{loc:Str deeper_editor_tt_haptic_pattern}"
                                       SelectionChanged="CmbHapticPattern_SelectionChanged"/>
 
+                            <TextBlock Text="{loc:Str deeper_editor_haptic_target}" Style="{StaticResource EditorLabel}"/>
+                            <ComboBox x:Name="CmbHapticTarget" Style="{StaticResource EditorComboBox}"
+                                      ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      SelectionChanged="CmbHapticTarget_SelectionChanged"/>
+
                             <StackPanel x:Name="CurveEditorPanel" Visibility="Collapsed" Margin="0,4,0,8">
                                 <TextBlock Text="{loc:Str deeper_editor_haptic_curve}"
                                            Foreground="{DynamicResource TextMutedBrush}"

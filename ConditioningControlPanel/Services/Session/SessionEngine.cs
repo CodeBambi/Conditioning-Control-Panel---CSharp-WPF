@@ -433,6 +433,8 @@ namespace ConditioningControlPanel.Services
             App.Flash?.Stop();
             App.Subliminal?.Stop();
             App.Bubbles?.Stop();
+            // Scheduler only. A pause must NOT dismiss a card the user is mid-way through typing —
+            // that would walk through strict mode and forfeit the card's XP (#875).
             App.LockCard?.Stop();
             App.PopQuiz?.Stop();
             App.BubbleCount?.Stop();
@@ -1184,6 +1186,15 @@ namespace ConditioningControlPanel.Services
                 if (current.BubblesEnabled)
                 {
                     App.Bubbles?.Start(bypassLevelCheck: true);
+                    // Start() no-ops when bubbles were already running from the dashboard,
+                    // which would keep spawning at the user's old rate for the whole session
+                    App.Bubbles?.RefreshFrequency();
+                }
+                else
+                {
+                    // Delayed or intermittent start: the session owns bubbles from t=0, so a
+                    // dashboard-started spawner must not keep running until the schedule kicks in
+                    App.Bubbles?.Stop();
                 }
             }
             else
@@ -1442,15 +1453,24 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        gifUri = new Uri(ModResourceResolver.ResolveUri("spirals/spiral.gif"), UriKind.Absolute);
-                        var resourceInfo = Application.GetResourceStream(gifUri);
-                        if (resourceInfo?.Stream != null)
+                        gifUri = new Uri(ModResourceResolver.ResolveSpiralUri(), UriKind.Absolute);
+                        if (gifUri.IsFile)
                         {
-                            using (resourceInfo.Stream)
-                            {
-                                img = System.Drawing.Image.FromStream(resourceInfo.Stream);
-                            }
+                            // Active-mod override: GetResourceStream only accepts pack:// URIs.
+                            img = System.Drawing.Image.FromFile(gifUri.LocalPath);
                             App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                        }
+                        else
+                        {
+                            var resourceInfo = Application.GetResourceStream(gifUri);
+                            if (resourceInfo?.Stream != null)
+                            {
+                                using (resourceInfo.Stream)
+                                {
+                                    img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                                }
+                                App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                            }
                         }
                     }
                     catch (Exception ex)

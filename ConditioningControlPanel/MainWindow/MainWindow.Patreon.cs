@@ -87,30 +87,39 @@ namespace ConditioningControlPanel
 
                 // Show unified DisplayName if available, otherwise Patreon display name
                 var nameToShow = unifiedDisplayName ?? patreonDisplayName;
-                PatreonTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
-                PatreonTab.TxtPatreonTier.Text = tier switch
+                AppSettingsTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
+                AppSettingsTab.TxtPatreonTier.Text = tier switch
                 {
                     PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
                     PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
                     _ when isWhitelisted => Loc.Get("label_patreon_tier_whitelisted"),
                     _ => Loc.Get(isActivePatron ? "label_patreon_tier_patron" : "label_patreon_tier_connected")
                 };
-                PatreonTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
+                AppSettingsTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
 
                 // Show "Link Patreon" if logged in via Discord, otherwise "Login"
-                PatreonTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
+                AppSettingsTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
             }
 
-            // AI Features lock overlay - hide when user is logged in (any provider)
-            CompanionTab.AiFeaturesLockOverlay.Visibility = App.HasCloudIdentity ? Visibility.Collapsed : Visibility.Visible;
+            // Phase 2: the Settings/Account tier card rides this method for the same reason the
+            // header chip rides UpdateLevelDisplay - it is the choke point every auth change
+            // already runs through (TierChanged for both providers, ClearAccountData, every
+            // login/link flow). The section also repaints itself when it becomes visible, so a
+            // missed call here degrades to "stale until you leave and come back", never to wrong.
+            AppSettingsTab?.RefreshAccountTierBadge();
+
+            // The page-wide AI lock veil is gone (design §6: superseded). Logged-out is an inline
+            // row in the Engine Room and a teaser on the chat card, so the Companion page never
+            // fully veils; both read App.HasCloudIdentity through the room's own sync.
+            CompanionRoom?.SyncBrain();
 
             // Update feature lockboxes
             // All features are now Tier 1 (or whitelisted)
@@ -118,8 +127,9 @@ namespace ConditioningControlPanel
             var level1Unlocked = hasPremiumAccess;
             var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
 
-            // Master overlay for the entire features grid
-            PatreonTab.PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+            // PHASE 8: PatreonFeaturesOverlay - the one big "become a patron" veil over the old
+            // Exclusives grid - went with PatreonTabView. The Play door's per-card lockbands
+            // (RefreshPlayCards, below) are the wall now, and they repaint on this same path.
 
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
@@ -146,6 +156,10 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(LockdownTab.LockdownGate);
             if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
             if (GradedIntakeTab != null) RefreshGradedIntakeGate();
+            // PHASE 6: the Play door's wall is per-card lockbands, not one overlay, so entitlement
+            // arriving (or lapsing) has to repaint it the same way it repaints every gate above.
+            // This is also the path that covers the free-user logout, where no TierChanged fires.
+            RefreshPlayCards();
 
             // Weekly intake pass. It is a FREE-TIER amenity - patrons have the feature outright and
             // must never see pass UI - so every surface that paints off IntakePassService has to be
@@ -183,51 +197,42 @@ namespace ConditioningControlPanel
                 ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
             }
 
-            // Update AI connection status
-            if (CompanionTab.TxtAiStatus != null)
+            // AI connection status. The old TxtAiStatus line lived on the AI Brain card; the
+            // Engine Room's status line replaced it (design §6: "demoted — Z7, verbatim"), and the
+            // attention gauge draws the same remaining-requests number as a meter. One difference
+            // worth stating: the custom-provider error hint is kept, because "AI initializing"
+            // forever is exactly the wrong thing to tell someone with a typo in their endpoint.
+            var engine = CompanionRoom?.EngineVm;
+            if (engine != null)
             {
                 var provider = App.Settings?.Current?.CompanionPrompt?.AiProvider ?? Models.AiProviderType.Cloud;
                 if (App.Ai?.IsAvailable == true)
                 {
                     var remaining = App.Ai.DailyRequestsRemaining;
-                    if (provider == Models.AiProviderType.Cloud)
-                    {
-                        CompanionTab.TxtAiStatus.Text = $"AI Ready - {remaining} requests remaining today";
-                    }
-                    else if (remaining < 0)
-                    {
-                        // Unlimited (local + custom provider with limit 0) → no remaining-count suffix
-                        CompanionTab.TxtAiStatus.Text = "AI Ready";
-                    }
-                    else
-                    {
-                        // Custom provider with a finite limit
-                        CompanionTab.TxtAiStatus.Text = $"AI Ready - {remaining} requests remaining today";
-                    }
+                    engine.SetStatus(remaining < 0
+                        ? Loc.Get("companion_engine_status_ready")
+                        : Loc.GetF("companion_engine_status_ready_fmt", remaining),
+                        healthy: true);
+                }
+                else if (provider == Models.AiProviderType.OpenAiCompatible)
+                {
+                    engine.SetStatus(Loc.Get("label_ai_custom_error"), healthy: false);
                 }
                 else
                 {
-                    // For the custom OpenAI-compatible provider, surface a clearer error hint
-                    // when the service is not available (likely bad endpoint/API key/model).
-                    if (provider == Models.AiProviderType.OpenAiCompatible)
-                    {
-                        CompanionTab.TxtAiStatus.Text = Loc.Get("label_ai_custom_error");
-                    }
-                    else
-                    {
-                        CompanionTab.TxtAiStatus.Text = Loc.Get("label_ai_initializing");
-                    }
+                    engine.SetStatus(Loc.Get("label_ai_initializing"), healthy: false);
                 }
             }
 
             // Re-evaluate keyword triggers access (may have been disabled before Patreon validated)
             var hasKeywordAccess = KeywordTriggerService.HasAccess();
-            if (PatreonTab.TxtKeywordTriggersLocked != null)
-                PatreonTab.TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
-            if (PatreonTab.BtnKeywordTriggersStartStop != null)
-                PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
-            if (PatreonTab.ChkScreenOcrEnabled != null)
-                PatreonTab.ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
+            // PHASE 5 (G3) + PHASE 8: the live editors are on the Awareness tab, and the OCR detail
+            // rows are hidden until access is confirmed - re-seed them with the fresh verdict.
+            // The three PatreonTab twins that used to be gated here (TxtKeywordTriggersLocked,
+            // BtnKeywordTriggersStartStop, ChkScreenOcrEnabled) died with PatreonTabView;
+            // SyncKeywordRescuePanelUi re-derives every one of those states from
+            // KeywordTriggerService.HasAccess() itself.
+            SyncKeywordRescuePanelUi();
 
             // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
             // start them now that access is confirmed
@@ -249,92 +254,14 @@ namespace ConditioningControlPanel
         }
 
         // ========================================================================
-        // Account sections reparenting (App Info & Data popup)
+        // Account sections reparenting — RETIRED in Phase 2 (gap-report R-2)
         // ========================================================================
-        // The Patreon login card, Discord login card, PatreonTab.AccountLinkingSection,
-        // PatreonTab.CloudSettingsBackupSection and PatreonTab.DataPrivacySection live physically inside
-        // PatreonTab's XAML tree (so their x:Name fields resolve for ~64 handler
-        // references across this file). When the dashboard's "App Info & Data"
-        // popup opens, we temporarily detach these Borders and attach them to the
-        // popup's host StackPanel so the user can manage their account/data from
-        // the dashboard. When the popup closes we put them back — the same element
-        // instances, so all handler refs remain valid.
-
-        private readonly System.Collections.Generic.List<System.Windows.FrameworkElement> _detachedAccountSections = new();
-
-        /// <summary>
-        /// Detaches the account/data sections from PatreonTab's content StackPanel
-        /// and attaches them to the provided target host (usually the AppInfoFeatureControl's
-        /// ExternalSectionsHost). Called when the App Info &amp; Data popup opens.
-        /// </summary>
-        internal void DetachAccountSectionsInto(System.Windows.Controls.Panel target)
-        {
-            if (target == null) return;
-            if (_detachedAccountSections.Count > 0) return; // already detached
-
-            // Order matters — this is the vertical order they'll appear in the popup.
-            var toMove = new System.Windows.FrameworkElement?[]
-            {
-                PatreonTab.PatreonLoginCard,
-                PatreonTab.SubscribeStarLoginCard,
-                PatreonTab.DiscordLoginCard,
-                PatreonTab.AccountLinkingSection,
-                PatreonTab.CloudSettingsBackupSection,
-                PatreonTab.DataPrivacySection,
-                PatreonTab.SupportDevelopmentCard,
-            };
-
-            foreach (var fe in toMove)
-            {
-                if (fe == null) continue;
-
-                // Detach from whichever parent it currently has (defensive:
-                // could be PatreonTab.PatreonTabContent on first open, or a stale popup
-                // host if a previous close didn't clean up).
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                {
-                    currentParent.Children.Remove(fe);
-                }
-                else if (fe.Parent is System.Windows.Controls.ContentControl cc)
-                {
-                    cc.Content = null;
-                }
-
-                try
-                {
-                    target.Children.Add(fe);
-                    _detachedAccountSections.Add(fe);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "DetachAccountSectionsInto: failed to attach {Name}", fe.Name);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Returns the detached account/data sections to PatreonTab so their
-        /// x:Name references stay valid and they can be borrowed again next time
-        /// the popup opens. Called when the App Info &amp; Data popup closes.
-        /// </summary>
-        internal void ReattachAccountSections()
-        {
-            if (_detachedAccountSections.Count == 0 || PatreonTab.PatreonTabContent == null) return;
-
-            // Insert right after the header Grid (index 0), preserving the original order.
-            int insertAt = 1;
-            foreach (var fe in _detachedAccountSections)
-            {
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                    currentParent.Children.Remove(fe);
-
-                if (insertAt > PatreonTab.PatreonTabContent.Children.Count)
-                    insertAt = PatreonTab.PatreonTabContent.Children.Count;
-                PatreonTab.PatreonTabContent.Children.Insert(insertAt, fe);
-                insertAt++;
-            }
-            _detachedAccountSections.Clear();
-        }
+        // The seven account/data cards used to live in PatreonTab's XAML tree and were
+        // borrowed at runtime (DetachAccountSectionsInto / ReattachAccountSections) so the
+        // dashboard's "App Info & Data" popup could show them. They now live in
+        // Views/Controls/AppSettings/AccountSettingsSection.xaml, mounted permanently on
+        // AppSettingsTab — same element names, same handlers, no reparenting. The writes
+        // below read AppSettingsTab.X. The popup keeps only its About/version content.
 
         internal async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
         {
@@ -366,8 +293,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Patreon to existing account
-                    PatreonTab.BtnPatreonLogin.IsEnabled = false;
-                    PatreonTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnPatreonLogin.IsEnabled = false;
+                    AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -395,7 +322,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnPatreonLogin.IsEnabled = true;
+                        AppSettingsTab.BtnPatreonLogin.IsEnabled = true;
                         UpdatePatreonUI();
                     }
                 }
@@ -436,8 +363,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Discord to existing account
-                    PatreonTab.BtnDiscordLogin.IsEnabled = false;
-                    PatreonTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnDiscordLogin.IsEnabled = false;
+                    AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -465,7 +392,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnDiscordLogin.IsEnabled = true;
+                        AppSettingsTab.BtnDiscordLogin.IsEnabled = true;
                         UpdateDiscordUI();
                     }
                 }
@@ -483,20 +410,20 @@ namespace ConditioningControlPanel
             {
                 // Use unified display name first, then fall back to Discord-specific
                 var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
-                PatreonTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
-                PatreonTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
-                PatreonTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
+                AppSettingsTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
+                AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
+                AppSettingsTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                 // Show "Link Discord" if logged in via Patreon, otherwise "Login"
-                PatreonTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
+                AppSettingsTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
             }
 
             // Update XP bar login state when Discord auth changes
@@ -515,15 +442,15 @@ namespace ConditioningControlPanel
 
             // Show section only if logged in and missing at least one provider
             bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
-            PatreonTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
 
             // Show individual buttons for unlinked providers
-            PatreonTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
 
             // Show cloud settings backup section if user has a cloud identity
-            PatreonTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
             if (hasUnifiedId)
             {
                 _ = UpdateBackupStatus();
@@ -537,8 +464,8 @@ namespace ConditioningControlPanel
         {
             if (App.Patreon == null) return;
 
-            PatreonTab.BtnLinkPatreon.IsEnabled = false;
-            PatreonTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkPatreon.IsEnabled = false;
+            AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -567,8 +494,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkPatreon.IsEnabled = true;
-                PatreonTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
+                AppSettingsTab.BtnLinkPatreon.IsEnabled = true;
+                AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
             }
         }
 
@@ -579,8 +506,8 @@ namespace ConditioningControlPanel
         {
             if (App.Discord == null) return;
 
-            PatreonTab.BtnLinkDiscord.IsEnabled = false;
-            PatreonTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkDiscord.IsEnabled = false;
+            AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -610,8 +537,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkDiscord.IsEnabled = true;
-                PatreonTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
+                AppSettingsTab.BtnLinkDiscord.IsEnabled = true;
+                AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
             }
         }
 
@@ -674,7 +601,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.AllowDiscordDm = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabAllowDm != null && DiscordTab.ChkDiscordTabAllowDm != chk)
+                if (DiscordTab?.ChkDiscordTabAllowDm != null && DiscordTab.ChkDiscordTabAllowDm != chk)
                     DiscordTab.ChkDiscordTabAllowDm.IsChecked = isChecked;
 
                 // Sync immediately so the setting takes effect on the leaderboard
@@ -710,7 +637,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.ShareProfilePicture = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabSharePfp != null && DiscordTab.ChkDiscordTabSharePfp != chk)
+                if (DiscordTab?.ChkDiscordTabSharePfp != null && DiscordTab.ChkDiscordTabSharePfp != chk)
                     DiscordTab.ChkDiscordTabSharePfp.IsChecked = isChecked;
 
                 // Sync immediately so the setting takes effect
@@ -721,6 +648,69 @@ namespace ConditioningControlPanel
             }
         }
 
+        #region Goon Game sharing toggles
+
+        // Goon Game consent flags (docs/GOON_DISCORD_CONTRACT.md §1/§2). Sharer-only:
+        // each flag governs what THIS user exposes to the current opponent. All default off.
+        //
+        // The two SHARE flags push to the server ON CHANGE (RemoteControl precedent,
+        // MainWindow.RemoteControl.cs:275-284) so a revoke lands before the next duel
+        // instead of waiting for the next scheduled sync. Each handler no-ops when the
+        // value is unchanged, because LoadDiscordTabState() assigns IsChecked
+        // programmatically and that re-fires Checked/Unchecked.
+        //
+        // GoonRichPresence is LOCAL-ONLY — never synced.
+
+        internal async void ChkGoonShareAvatar_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonShareAvatar == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonShareAvatar = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] avatar sharing changed: {Enabled}", isChecked);
+
+            // Push-on-change: revoking must reach the server (it drops the cached avatar
+            // bytes at sync time) without waiting for the next scheduled push.
+            if (App.ProfileSync != null)
+            {
+                try { await App.ProfileSync.SyncProfileAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[GoonShare] immediate avatar-flag sync push failed"); }
+            }
+        }
+
+        internal async void ChkGoonShareDiscordDm_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonShareDiscordDm == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonShareDiscordDm = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] opponent DMs changed: {Enabled}", isChecked);
+
+            if (App.ProfileSync != null)
+            {
+                try { await App.ProfileSync.SyncProfileAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[GoonShare] immediate dm-flag sync push failed"); }
+            }
+        }
+
+        internal void ChkGoonRichPresence_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonRichPresence == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonRichPresence = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] Goon Game rich presence changed: {Enabled}", isChecked);
+            // Deliberately NO sync push — this flag never leaves the machine.
+        }
+
+        #endregion
+
         internal async void ChkShowOnlineStatus_Changed(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current != null && sender is CheckBox chk)
@@ -729,7 +719,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.ShowOnlineStatus = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabShowOnline != null && DiscordTab.ChkDiscordTabShowOnline != chk)
+                if (DiscordTab?.ChkDiscordTabShowOnline != null && DiscordTab.ChkDiscordTabShowOnline != chk)
                     DiscordTab.ChkDiscordTabShowOnline.IsChecked = isChecked;
 
                 App.Logger?.Information("Online status visibility changed: {Visible}", isChecked);
@@ -814,19 +804,21 @@ namespace ConditioningControlPanel
             // that file was written to receive.
             InitializeSubscribeStarTab();
 
-            // Initialize companion settings
-            CompanionTab.ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;
-            CompanionTab.ChkMuteAvatarCompanion.IsChecked = settings.AvatarMuted;
+            // Initialize companion settings. Show/mute are the hero's own chips now and read
+            // AvatarEnabled / AvatarMuted straight out of settings (design §6: "kept — Z1 quick
+            // actions"), so there is nothing to seed for them here.
             // "Muted" is now its own flag, not the inverse of the enable (AppSettings.SubAudioMuted).
             CompanionTab.ChkMuteWhispersCompanion.IsChecked = settings.SubAudioMuted;
+            CompanionTab.ChkVoiceLinesCompanion.IsChecked = settings.CompanionVoiceLinesMuted;
             CompanionTab.SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             CompanionTab.TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
             CompanionTab.SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
             CompanionTab.TxtBubbleDurationCompanion.Text = $"{(int)settings.BubbleDurationSeconds}s";
 
-            // Awareness Mode settings (free for all users)
+            // Awareness Mode settings (free for all users). The on/off checkbox became Z5's dial
+            // (design §6: "toggle superseded by Z5 dial"), which reads the same two settings; the
+            // cooldowns below are the "kept" half and still live in the Workshop.
             var awarenessAvailable = true;
-            CompanionTab.ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             CompanionTab.SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             CompanionTab.TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
             CompanionTab.SliderAwarenessCooldownMax.Value = settings.AwarenessCooldownMaxSeconds;
@@ -834,9 +826,14 @@ namespace ConditioningControlPanel
                 ? Loc.Get("label_cooldown_off")
                 : $"{settings.AwarenessCooldownMaxSeconds}s";
 
-            // Show/hide awareness settings panel based on enabled state
+            // Show/hide awareness settings panel based on enabled state. Under Awareness v2 the two
+            // cooldown sliders are superseded by the intensity dial in the same cell and are no longer
+            // surfaced (doc 02 §8) — the SETTING is kept, because the v2 kill switch falls back to the
+            // legacy pipeline that reads it, but a control that no longer drives anything is a lie.
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
-            CompanionTab.AwarenessSettingsPanel.Visibility = awarenessEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CompanionTab.AwarenessSettingsPanel.Visibility =
+                awarenessEnabled && !settings.UseAwarenessV2 ? Visibility.Visible : Visibility.Collapsed;
+            CompanionTab.AwarenessCell.SyncIntensity();
 
             // Trigger Mode settings (free for all)
             CompanionTab.ChkTriggerModeCompanion.IsChecked = settings.TriggerModeEnabled;
@@ -856,25 +853,10 @@ namespace ConditioningControlPanel
             UpdatePatreonUI();
         }
 
-        internal void ChkAvatarEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var checkbox = sender as CheckBox;
-            var isEnabled = checkbox?.IsChecked == true;
-            App.Settings.Current.AvatarEnabled = isEnabled;
-
-            if (isEnabled)
-            {
-                ShowAvatarTube();
-            }
-            else
-            {
-                HideAvatarTube();
-            }
-
-            App.Settings.Save();
-        }
+        // ChkAvatarEnabled_Changed / ChkMuteAvatar_Changed are gone with the checkboxes they
+        // read (design §6: "kept — Z1 quick-action chips"). Their bodies live on as
+        // SetAvatarEnabled / SetAvatarMuted in MainWindow.CompanionRoom.cs, which take the value
+        // instead of fishing it back out of a control.
 
         internal void BtnDetachCompanion_Click(object sender, RoutedEventArgs e)
         {
@@ -883,17 +865,11 @@ namespace ConditioningControlPanel
 
             _avatarTubeWindow.ToggleDetached();
 
-            // Update button and status text
-            if (_avatarTubeWindow.IsDetached)
-            {
-                CompanionTab.BtnDetachCompanionTab.Content = Loc.Get("btn_attach");
-                CompanionTab.TxtDetachStatusCompanion.Text = Loc.Get("label_floating_freely_drag_to_reposition");
-            }
-            else
-            {
-                CompanionTab.BtnDetachCompanionTab.Content = Loc.Get("btn_detach");
-                CompanionTab.TxtDetachStatusCompanion.Text = Loc.Get("label_anchored_to_window");
-            }
+            // The hero's Detach chip carries a fixed label and the tooltip reads the status text,
+            // so only the (hidden, compat) status line is written now.
+            CompanionTab.TxtDetachStatusCompanion.Text = _avatarTubeWindow.IsDetached
+                ? Loc.Get("label_floating_freely_drag_to_reposition")
+                : Loc.Get("label_anchored_to_window");
         }
 
         internal void BtnCustomizeCompanion_Click(object sender, RoutedEventArgs e)
@@ -909,50 +885,14 @@ namespace ConditioningControlPanel
             UpdateCommunityPromptsUI();
         }
 
-        internal void BtnResetCompanionMemory_Click(object sender, RoutedEventArgs e)
-        {
-            try { App.Bark?.NotifyUiAction("reset_memory"); } catch { }
-            var confirm = System.Windows.MessageBox.Show(
-                this,
-                "Wipe the companion's chat memory?\n\nThis clears the AI's conversation history both in memory and on disk, plus the chat log shown in the avatar bubble. " +
-                "Useful when she's stuck in an old pattern (e.g. skipping links). She'll start fresh on the next message.\n\nThis can't be undone.",
-                "Reset Companion Memory",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.No);
-
-            if (confirm != MessageBoxResult.Yes) return;
-
-            try
-            {
-                // Cloud provider is stateless, so this only does work for local Ollama users.
-                // App.Ai is typed as the IAiService interface; ClearLocalHistory lives on
-                // the concrete strategy (which is what's always assigned).
-                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
-
-                // Drop the on-screen history too (the data store the avatar window binds to).
-                _avatarTubeWindow?.ChatHistory.Clear();
-
-                App.Logger?.Information("Companion memory reset by user");
-
-                System.Windows.MessageBox.Show(
-                    this,
-                    "Done — the companion's memory is clear. Send her a new message and she'll respond with no prior context.",
-                    "Reset Companion Memory",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to reset companion memory");
-                System.Windows.MessageBox.Show(
-                    this,
-                    "Couldn't fully reset the companion's memory: " + ex.Message,
-                    "Reset Companion Memory",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
-        }
+        // BtnResetCompanionMemory is gone (design §6: "superseded — absorbed by Z3's Forget
+        // everything"). Its two scopes were split rather than merged, per doc 01 §2.4:
+        //   · the DIARY's "Forget everything…" is THE wipe — facts, profile and conversation,
+        //     through CompanionBrain.Forget, behind an in-voice two-step confirm;
+        //   · this button's narrower job — drop the thread, keep everything she knows — survives as
+        //     the Engine Room's "clear conversation" (ClearCompanionConversation, in
+        //     MainWindow.CompanionRoom.cs), which is the same ForgetConversation call this made.
+        // Neither is orphaned and neither is hardcoded English any more.
 
         internal void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
         {
@@ -967,29 +907,45 @@ namespace ConditioningControlPanel
             CompanionTab.TxtPhraseCount.Text = $"{count} active";
         }
 
-        // Persist each Companion accordion's open/collapsed state so it survives a restart.
-        // The x:Name is "Section<Name>"; we store under just "<Name>".
-        internal void CompanionSection_ExpandedChanged(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            if (sender is not Expander exp || string.IsNullOrEmpty(exp.Name)) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            var key = exp.Name.StartsWith("Section") ? exp.Name.Substring("Section".Length) : exp.Name;
-            s.CompanionSectionOpen[key] = exp.IsExpanded;
-            App.Settings.Save();
-        }
-
-        // Re-apply the remembered open/collapsed state. Runs while _isLoading is true so the
-        // Expanded/Collapsed handlers above no-op and we don't write back what we just read.
+        /// <summary>
+        /// Re-applies the remembered drawer state.
+        ///
+        /// <para>The five accordions became two drawers (Engine Room and Workshop), so the five
+        /// remembered keys collapse to two. The old per-section keys stay in
+        /// <c>CompanionSectionOpen</c> untouched — the setting is a plain dictionary and nothing
+        /// reads the stale entries, so a user who downgrades gets their accordions back.</para>
+        ///
+        /// <para>Both drawers default CLOSED, which is the whole point of Z7/Z8: the plumbing
+        /// stopped being the front door.</para>
+        /// </summary>
         private void RestoreCompanionSectionStates()
         {
             var map = App.Settings?.Current?.CompanionSectionOpen;
-            if (map == null) return;
-            if (CompanionTab.SectionBehaviour != null && map.TryGetValue("Behaviour", out var b)) CompanionTab.SectionBehaviour.IsExpanded = b;
-            if (CompanionTab.SectionPhrases   != null && map.TryGetValue("Phrases",   out var p)) CompanionTab.SectionPhrases.IsExpanded   = p;
-            if (CompanionTab.SectionContent   != null && map.TryGetValue("Content",   out var c)) CompanionTab.SectionContent.IsExpanded   = c;
-            if (CompanionTab.SectionCommunity != null && map.TryGetValue("Community", out var m)) CompanionTab.SectionCommunity.IsExpanded  = m;
+            var room = CompanionRoom;
+            if (map == null || room == null) return;
+            if (map.TryGetValue(CompanionEngineDrawerKey, out var engineOpen)) room.EngineVm.IsExpanded = engineOpen;
+            if (map.TryGetValue(CompanionWorkshopDrawerKey, out var shopOpen)) room.WorkshopVm.IsExpanded = shopOpen;
+        }
+
+        /// <summary>Settings key for the Engine Room drawer's remembered state.</summary>
+        internal const string CompanionEngineDrawerKey = "EngineRoom";
+
+        /// <summary>Settings key for the Workshop drawer's remembered state.</summary>
+        internal const string CompanionWorkshopDrawerKey = "Workshop";
+
+        /// <summary>
+        /// Persists the two drawers' open/closed state. Called on tab hide and on shutdown rather
+        /// than per-toggle: the drawers are viewmodel state, not Expander events, and one write when
+        /// the user leaves is cheaper than one per click.
+        /// </summary>
+        internal void PersistCompanionDrawerStates()
+        {
+            var map = App.Settings?.Current?.CompanionSectionOpen;
+            var room = CompanionRoom;
+            if (map == null || room == null) return;
+            map[CompanionEngineDrawerKey] = room.EngineVm.IsExpanded;
+            map[CompanionWorkshopDrawerKey] = room.WorkshopVm.IsExpanded;
+            App.Settings?.Save();
         }
 
         internal void SliderIdleInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1098,34 +1054,11 @@ namespace ConditioningControlPanel
             }
         }
 
-        internal void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = CompanionTab.ChkAwarenessMode.IsChecked == true;
-
-            // Show/hide awareness settings panel
-            CompanionTab.AwarenessSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-            // Update settings
-            App.Settings.Current.AwarenessModeEnabled = isEnabled;
-            App.Settings.Current.AwarenessConsentGiven = isEnabled; // Auto-consent when enabling via UI
-            App.Settings.Save();
-
-            // Start or stop the awareness service
-            if (isEnabled)
-            {
-                App.WindowAwareness?.Start();
-                App.Logger?.Information("Awareness Mode enabled via UI");
-            }
-            else
-            {
-                App.WindowAwareness?.Stop();
-                App.Logger?.Information("Awareness Mode disabled via UI");
-            }
-
-            UpdateAiBrainPills();
-        }
+        // ChkAwarenessMode_Changed went with its checkbox: Z5's three-stop dial calls
+        // SetAwarenessEnabled (MainWindow.CompanionRoom.cs), which owns the service start/stop and the
+        // Workshop panel's visibility. The auto-consent that used to live there is gone — Awareness v2
+        // raises AwarenessConsentDialog the first time her eyes are opened (doc 02 §6.3), and a decline
+        // leaves the setting untouched.
 
         internal void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
         {
@@ -1166,74 +1099,41 @@ namespace ConditioningControlPanel
         // COMPANION TAB — Hero + AI Brain redesign (v5.9)
         // ============================================================
 
+        /// <summary>
+        /// The hero's Switch chip. The roster tray it used to toggle is a Workshop pigeonhole now
+        /// (design §6: "kept — Z8 Roster, opened by the hero's Switch chip"), so this opens the
+        /// drawer and scrolls the roster into view instead of flipping a Visibility.
+        ///
+        /// <para>Deliberately not a toggle any more: the old one hid the tray on a second click,
+        /// which is why the tutorial had to reach past it to reveal the roster.</para>
+        /// </summary>
         internal void BtnSwitchCompanion_Click(object sender, RoutedEventArgs e)
+            => RevealCompanionWorkshopCell(Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell);
+
+        /// <summary>Opens the Workshop drawer on a named pigeonhole. Safe before the tab exists.</summary>
+        internal void RevealCompanionWorkshopCell(string? cellKey)
         {
-            if (CompanionTab.CompanionRosterTray == null) return;
-            CompanionTab.CompanionRosterTray.Visibility = CompanionTab.CompanionRosterTray.Visibility == Visibility.Visible
-                ? Visibility.Collapsed : Visibility.Visible;
+            try { CompanionTab?.Room?.RevealWorkshop(cellKey); }
+            catch (Exception ex) { App.Logger?.Debug("RevealCompanionWorkshopCell: {E}", ex.Message); }
         }
 
-        internal void RadioAiOff_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.AiChatEnabled = false;
-            App.Settings.Save();
-            if (CompanionTab.LocalConfigPanel != null) CompanionTab.LocalConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.OpenAiCompatibleConfigPanel != null) CompanionTab.OpenAiCompatibleConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.DailyLimitPanel != null) CompanionTab.DailyLimitPanel.Visibility = Visibility.Collapsed;
-            // Drop any stale Live Actions — with AI off, nothing populates this feed.
-            App.AiLiveActions?.Clear();
-            UpdateAiBrainPills();
-        }
+        // The four provider radios became Z7's segmented row (design §6: "demoted — Z7 Engine
+        // Room, verbatim"). SetAiProviderMode (MainWindow.CompanionRoom.cs) writes the same two
+        // settings these four handlers wrote; the per-provider config PANELS they used to show and
+        // hide are gone too — the Engine Room shows the panel that belongs to the selected segment,
+        // declaratively, which is what those twelve Visibility writes were doing by hand.
+        //
+        // The one behaviour that was NOT just visibility is kept here: picking Local offers the
+        // Ollama setup wizard when nothing answers on the host.
 
-        internal void RadioAiCloud_Checked(object sender, RoutedEventArgs e)
+        /// <summary>Called by <see cref="SetAiProviderMode"/> after the settings write.</summary>
+        private void OnCompanionProviderSelected(Views.Controls.Companion.CompanionProviderMode mode)
         {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s?.CompanionPrompt == null) return;
-            s.AiChatEnabled = true;
-            s.CompanionPrompt.AiProvider = Models.AiProviderType.Cloud;
-            App.Settings.Save();
-            if (CompanionTab.LocalConfigPanel != null) CompanionTab.LocalConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.OpenAiCompatibleConfigPanel != null) CompanionTab.OpenAiCompatibleConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.DailyLimitPanel != null) CompanionTab.DailyLimitPanel.Visibility = Visibility.Collapsed;
-            // Cloud can't trigger effects, so prior local-session entries would be misleading.
-            App.AiLiveActions?.Clear();
-            SyncAiBrainUI();
-        }
+            if (mode != Views.Controls.Companion.CompanionProviderMode.LocalOllama) return;
 
-        internal void RadioAiLocal_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s?.CompanionPrompt == null) return;
-            s.AiChatEnabled = true;
-            s.CompanionPrompt.AiProvider = Models.AiProviderType.Local;
-            App.Settings.Save();
-            if (CompanionTab.LocalConfigPanel != null) CompanionTab.LocalConfigPanel.Visibility = Visibility.Visible;
-            if (CompanionTab.OpenAiCompatibleConfigPanel != null) CompanionTab.OpenAiCompatibleConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.DailyLimitPanel != null) CompanionTab.DailyLimitPanel.Visibility = Visibility.Collapsed;
-            SyncAiBrainUI();
-
-            // First-time opt-in: if Ollama isn't reachable, offer the setup wizard so
-            // the user doesn't have to hunt for the button. Detect runs on a 2s timeout.
+            // First-time opt-in: if Ollama isn't reachable, offer the setup wizard so the user
+            // doesn't have to hunt for the button. Detect runs on a 2s timeout.
             _ = MaybeOfferLocalAiSetupAsync();
-        }
-
-        internal void RadioAiOpenAiCompatible_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s?.CompanionPrompt == null) return;
-            s.AiChatEnabled = true;
-            s.CompanionPrompt.AiProvider = Models.AiProviderType.OpenAiCompatible;
-            App.Settings.Save();
-            if (CompanionTab.LocalConfigPanel != null) CompanionTab.LocalConfigPanel.Visibility = Visibility.Collapsed;
-            if (CompanionTab.OpenAiCompatibleConfigPanel != null) CompanionTab.OpenAiCompatibleConfigPanel.Visibility = Visibility.Visible;
-            if (CompanionTab.DailyLimitPanel != null) CompanionTab.DailyLimitPanel.Visibility = Visibility.Visible;
-            SyncAiBrainUI();
         }
 
         private async Task MaybeOfferLocalAiSetupAsync()
@@ -1264,57 +1164,27 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Lab tab "AI Companion Effects & Memory" notice button — switches to the
-        /// Companion tab so the user can see the AI Brain provider controls, then
-        /// launches the setup wizard. Effects need a local LLM (cloud is stateless +
-        /// has no command-output capability).
+        /// Lab tab "AI Companion Effects and Memory" notice button — switches to the
+        /// Companion tab so the user can see the provider controls, then launches the setup
+        /// wizard. Effects need a local LLM (cloud is stateless + has no command-output
+        /// capability).
+        ///
+        /// <para>Those controls are inside a collapsed drawer now, so this opens it. Sending
+        /// someone to a tab where the thing they were just promised sits behind a shut Expander
+        /// is the deep link failing quietly.</para>
         /// </summary>
         internal void BtnLabEffectsSetupLocal_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("companion");
+            try { CompanionTab?.Room?.RevealEngineRoom(); }
+            catch (Exception ex) { App.Logger?.Debug("BtnLabEffectsSetupLocal_Click: {E}", ex.Message); }
             LaunchLocalAiSetupWizard();
         }
 
-        /// <summary>
-        /// Slut Mode toggle: swaps the active personality's Personality text with its
-        /// SlutModePersonality variant in BambiSprite.GetSystemPrompt. Takes effect on
-        /// the next chat — no restart, no provider switch needed.
-        /// </summary>
-        internal void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null || CompanionTab.ChkSlutMode == null) return;
-
-            var newValue = CompanionTab.ChkSlutMode.IsChecked == true;
-
-            // CCBill AI Addendum: flipping SlutMode ON activates the explicit variant of
-            // any active preset that ships a SlutModePersonality. Gate behind acknowledgement.
-            if (newValue && !s.SlutModeEnabled)
-            {
-                var activePreset = App.Personality?.GetActivePreset();
-                if (Services.ExplicitContentGate.RequiresAcknowledgement(activePreset, slutModeOn: true))
-                {
-                    if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(s.CompanionPrompt))
-                    {
-                        var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
-                        var ok = dlg.ShowDialog() == true;
-                        if (!ok)
-                        {
-                            // Revert checkbox without re-triggering this handler.
-                            _isLoading = true;
-                            try { CompanionTab.ChkSlutMode.IsChecked = false; }
-                            finally { _isLoading = false; }
-                            return;
-                        }
-                        Services.ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
-                    }
-                }
-            }
-
-            s.SlutModeEnabled = newValue;
-            App.Settings?.Save();
-        }
+        // ChkSlutMode_Changed went with its checkbox: Z4's flame toggle sets SetSlutMode
+        // (MainWindow.CompanionRoom.cs), which still carries the CCBill explicit-content
+        // acknowledgement gate and still reports back what actually took effect when the
+        // acknowledgement is cancelled.
 
         private void LaunchLocalAiSetupWizard()
         {
@@ -1322,93 +1192,67 @@ namespace ConditioningControlPanel
             var ok = wizard.ShowDialog() == true;
             if (ok && wizard.LocalAiReady)
             {
-                if (CompanionTab.TxtAiModel != null) CompanionTab.TxtAiModel.Text = wizard.SelectedModel;
-                if (CompanionTab.RadioAiLocal != null) CompanionTab.RadioAiLocal.IsChecked = true;
+                var prompt = App.Settings?.Current?.CompanionPrompt;
+                if (prompt != null)
+                {
+                    prompt.AiModel = wizard.SelectedModel;
+                    App.Settings?.Save();
+                }
+                SetAiProviderMode(Views.Controls.Companion.CompanionProviderMode.LocalOllama);
                 UpdateAiBrainPills();
             }
         }
 
-        internal void TxtAiModel_LostFocus(object sender, RoutedEventArgs e)
+        // The five provider text fields (Ollama model/host, BYO endpoint/model/key, daily limit)
+        // moved into the Engine Room, where they are two-way bound to EngineRoomRuntimeVm and write
+        // the same CompanionPromptSettings properties these LostFocus handlers wrote. The API key
+        // is the one that changed shape rather than address: it is a PasswordBox now, pushed one-way
+        // through SetCustomApiKey (MainWindow.CompanionRoom.cs), so the stored secret is never read
+        // back into a control. The daily limit is a prompt dialog for the same reason it was a
+        // TextBox: it is a number, and it is the only one on that drawer.
+
+        /// <summary>
+        /// Commits whatever the user is currently typing.
+        ///
+        /// <para>The Engine Room's provider fields bind with the default LostFocus trigger, exactly
+        /// as the old TextBoxes did — a settings write per keystroke on an endpoint URL is a JSON
+        /// save per keystroke. Clicking Test normally moves focus and commits on the way, but the
+        /// old code carried a hand-written flush for the cases where it does not (keyboard
+        /// activation, a click that lands while the box is mid-IME), and dropping it here would
+        /// have made "Test" quietly probe the previous endpoint.</para>
+        /// </summary>
+        private static void CommitFocusedEdit()
         {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtAiModel == null) return;
-            s.AiModel = (CompanionTab.TxtAiModel.Text ?? "").Trim();
-            App.Settings.Save();
-        }
-
-        internal void TxtAiHost_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtAiHost == null) return;
-            s.AiOllamaHost = (CompanionTab.TxtAiHost.Text ?? "").Trim();
-            App.Settings.Save();
-        }
-
-        internal void TxtOpenAiEndpoint_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtOpenAiEndpoint == null) return;
-            s.OpenAiCompatibleEndpoint = (CompanionTab.TxtOpenAiEndpoint.Text ?? string.Empty).Trim();
-            App.Settings.Save();
-        }
-
-        internal void TxtOpenAiModel_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtOpenAiModel == null) return;
-            s.OpenAiCompatibleModel = (CompanionTab.TxtOpenAiModel.Text ?? string.Empty).Trim();
-            App.Settings.Save();
-        }
-
-        internal void TxtOpenAiApiKey_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtOpenAiApiKey == null) return;
-
-            var plain = CompanionTab.TxtOpenAiApiKey.Password ?? string.Empty;
-            s.OpenAiCompatibleApiKey = Services.SecureStringHelper.Protect(plain);
-            App.Settings.Save();
-        }
-
-        internal void TxtDailyLimit_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || CompanionTab.TxtDailyLimit == null) return;
-
-            var text = (CompanionTab.TxtDailyLimit.Text ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(text))
+            try
             {
-                s.DailyRequestLimit = 0;
+                if (Keyboard.FocusedElement is TextBox box)
+                    box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             }
-            else if (int.TryParse(text, out var value) && value >= 0)
-            {
-                s.DailyRequestLimit = value;
-            }
-
-            App.Settings.Save();
+            catch (Exception ex) { App.Logger?.Debug("CommitFocusedEdit: {E}", ex.Message); }
         }
 
+        /// <summary>
+        /// Probes the configured Ollama host. Same request, same 3s timeout; the result lands in
+        /// the Engine Room's status line rather than the AI Brain card's TxtAiHealthStatus, which
+        /// the drawer replaced. The host comes from settings rather than from a TextBox, which is
+        /// why the pending edit is committed first.
+        /// </summary>
         internal async void BtnTestOllamaConnection_Click(object sender, RoutedEventArgs e)
         {
-            if (CompanionTab.TxtAiHealthStatus == null || CompanionTab.TxtAiHost == null) return;
+            CommitFocusedEdit();
 
-            var host = (CompanionTab.TxtAiHost.Text ?? "").Trim();
+            var engine = CompanionRoom?.EngineVm;
+            if (engine == null) return;
+
+            var host = (App.Settings?.Current?.CompanionPrompt?.AiOllamaHost ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(host))
             {
-                CompanionTab.TxtAiHealthStatus.Text = Loc.Get("label_status_failed");
-                CompanionTab.TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                engine.SetStatus(Loc.Get("label_status_failed"), healthy: false);
                 return;
             }
             var url = host.TrimEnd('/') + "/api/tags";
 
-            CompanionTab.TxtAiHealthStatus.Text = Loc.Get("label_status_testing");
-            CompanionTab.TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Gray);
+            engine.SetStatus(Loc.Get("label_status_testing"), healthy: false);
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
@@ -1417,21 +1261,14 @@ namespace ConditioningControlPanel
                 using var http = new HttpClient();
                 var resp = await http.GetAsync(url, cts.Token);
                 sw.Stop();
-                if (resp.IsSuccessStatusCode)
-                {
-                    CompanionTab.TxtAiHealthStatus.Text = $"{Loc.Get("label_status_connected")} · {sw.ElapsedMilliseconds}ms";
-                    CompanionTab.TxtAiHealthStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x50, 0xC8, 0x78));
-                }
-                else
-                {
-                    CompanionTab.TxtAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {(int)resp.StatusCode}";
-                    CompanionTab.TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
-                }
+                engine.SetStatus(resp.IsSuccessStatusCode
+                    ? $"{Loc.Get("label_status_connected")} · {sw.ElapsedMilliseconds}ms"
+                    : $"{Loc.Get("label_status_failed")} · {(int)resp.StatusCode}",
+                    healthy: resp.IsSuccessStatusCode);
             }
             catch (Exception ex)
             {
-                CompanionTab.TxtAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {ex.GetType().Name}";
-                CompanionTab.TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                engine.SetStatus($"{Loc.Get("label_status_failed")} · {ex.GetType().Name}", healthy: false);
             }
         }
 
@@ -1451,27 +1288,21 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Probes the BYO endpoint. The old body flushed the two text boxes into settings by hand,
+        /// because a click did not always move focus in time; <see cref="CommitFocusedEdit"/> does
+        /// the same job generically now, so the service still reads what the drawer shows. The API
+        /// key is left alone for the same reason it always was — it is never read back into a
+        /// control.
+        /// </summary>
         internal async void BtnTestOpenAiConnection_Click(object sender, RoutedEventArgs e)
         {
-            if (CompanionTab.TxtOpenAiHealthStatus == null) return;
+            CommitFocusedEdit();
 
-            // Flush any pending text box edits to settings before testing. The text boxes
-            // normally persist on LostFocus, but clicking the test button does not always
-            // move focus in time, so the service would otherwise read stale/empty values.
-            // The API key is left alone — it is already saved on PasswordChanged, and the
-            // PasswordBox is not pre-populated, so re-reading it here could wipe a saved key.
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s != null)
-            {
-                if (CompanionTab.TxtOpenAiEndpoint != null)
-                    s.OpenAiCompatibleEndpoint = (CompanionTab.TxtOpenAiEndpoint.Text ?? string.Empty).Trim();
-                if (CompanionTab.TxtOpenAiModel != null)
-                    s.OpenAiCompatibleModel = (CompanionTab.TxtOpenAiModel.Text ?? string.Empty).Trim();
-                App.Settings.Save();
-            }
+            var engine = CompanionRoom?.EngineVm;
+            if (engine == null) return;
 
-            CompanionTab.TxtOpenAiHealthStatus.Text = Loc.Get("label_status_testing");
-            CompanionTab.TxtOpenAiHealthStatus.Foreground = new SolidColorBrush(Colors.Gray);
+            engine.SetStatus(Loc.Get("label_status_testing"), healthy: false);
 
             try
             {
@@ -1481,20 +1312,17 @@ namespace ConditioningControlPanel
 
                 if (diag.Success)
                 {
-                    CompanionTab.TxtOpenAiHealthStatus.Text = $"{Loc.Get("label_status_connected")} · {diag.ElapsedMs ?? 0}ms";
-                    CompanionTab.TxtOpenAiHealthStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x50, 0xC8, 0x78));
+                    engine.SetStatus($"{Loc.Get("label_status_connected")} · {diag.ElapsedMs ?? 0}ms", healthy: true);
                 }
                 else
                 {
                     var codePart = diag.HttpStatusCode.HasValue ? $" (HTTP {diag.HttpStatusCode.Value})" : string.Empty;
-                    CompanionTab.TxtOpenAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {diag.Message}{codePart}";
-                    CompanionTab.TxtOpenAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                    engine.SetStatus($"{Loc.Get("label_status_failed")} · {diag.Message}{codePart}", healthy: false);
                 }
             }
             catch (Exception ex)
             {
-                CompanionTab.TxtOpenAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {ex.GetType().Name}";
-                CompanionTab.TxtOpenAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                engine.SetStatus($"{Loc.Get("label_status_failed")} · {ex.GetType().Name}", healthy: false);
                 App.Logger?.Warning(ex, "MainWindow: OpenAI-compatible test connection failed");
             }
         }
@@ -1514,6 +1342,10 @@ namespace ConditioningControlPanel
 
             try
             {
+                // The brain owns the transcript for every provider since Train 1; clearing only the
+                // legacy local file would leave companion/session.json (and the live log) intact.
+                App.Brain?.ForgetConversation();
+
                 if (App.Ai is Services.AIService.AiServiceStrategy strategy)
                 {
                     strategy.ClearLocalHistory();
@@ -1538,28 +1370,63 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkChatMemoryEnabled == null) return;
-            var on = LabTab.ChkChatMemoryEnabled.IsChecked == true;
+            if (s == null || CompanionTab.ChkChatMemoryEnabled == null) return;
+            var on = CompanionTab.ChkChatMemoryEnabled.IsChecked == true;
             if (s.ChatMemoryEnabled == on) return;
             s.ChatMemoryEnabled = on;
             App.Settings?.Save();
 
-            // Turning memory off should wipe what's already saved — not just stop persisting new turns.
-            if (!on && App.Ai is Services.AIService.AiServiceStrategy strategy)
+            // Turning memory off should wipe what's already saved — not just stop persisting new
+            // turns. That promise now spans companion/session.json (every provider, since Train 1)
+            // AND the live turn log the brain holds, not just the legacy local-Ollama file: a cloud
+            // user unticking this box has a transcript on disk that never existed before Train 1,
+            // and it is exactly what they are asking to remove.
+            if (!on)
             {
-                try { strategy.ClearLocalHistory(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+                try { App.Brain?.ForgetConversation(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: brain wipe failed"); }
+
+                if (App.Ai is Services.AIService.AiServiceStrategy strategy)
+                {
+                    try { strategy.ClearLocalHistory(); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+                }
             }
         }
 
+        /// <summary>
+        /// The master "she may drive effects" switch, on the Companion door's permissions card
+        /// since Phase 5 of the UX restructure.
+        ///
+        /// <para>It carries the tier check the move made necessary. On the Lab tab the switch was
+        /// gated by geography — the whole page sat under LabSmokescreen — and the only thing left
+        /// after it was the force-clear in UpdateUnlockablesVisibility, which is a REPAIR (it undoes
+        /// a setting that outlived its entitlement) and not a gate (a Free account could still tick
+        /// the box and have it stick until the next refresh). The Companion door is Free/Tier 1, so
+        /// the bar has to be here.</para>
+        ///
+        /// <para>Only turning it ON is gated: unticking must always work, whatever the account.</para>
+        /// </summary>
         internal void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkCapEffects == null) return;
-            var on = LabTab.ChkCapEffects.IsChecked == true;
+            if (s == null || CompanionTab.ChkCapEffects == null) return;
+            var on = CompanionTab.ChkCapEffects.IsChecked == true;
+
+            if (on && !TierGate.DemandLab(Loc.Get("lab_ai_effects_memory_title")))
+            {
+                // Put the switch back without re-entering this handler, and leave the setting
+                // untouched — a refusal must not write.
+                var wasLoading = _isLoading;
+                _isLoading = true;
+                try { CompanionTab.ChkCapEffects.IsChecked = false; }
+                finally { _isLoading = wasLoading; }
+                return;
+            }
+
             s.AllowAiToControlEffects = on;
-            if (LabTab.EffectPermsPanel != null) LabTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (CompanionTab.EffectPermsPanel != null) CompanionTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             App.Settings.Save();
         }
 
@@ -1590,37 +1457,32 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.SliderMaxHapticIntensity == null) return;
-            s.MaxAiHapticIntensity = LabTab.SliderMaxHapticIntensity.Value;
-            if (LabTab.TxtMaxHapticIntensity != null)
-                LabTab.TxtMaxHapticIntensity.Text = $"{(int)(LabTab.SliderMaxHapticIntensity.Value * 100)}%";
+            if (s == null || CompanionTab.SliderMaxHapticIntensity == null) return;
+            s.MaxAiHapticIntensity = CompanionTab.SliderMaxHapticIntensity.Value;
+            if (CompanionTab.TxtMaxHapticIntensity != null)
+                CompanionTab.TxtMaxHapticIntensity.Text = $"{(int)(CompanionTab.SliderMaxHapticIntensity.Value * 100)}%";
             App.Settings.Save();
         }
 
+        /// <summary>
+        /// The two hero pills, plus the permissions card's "needs a local model" notice.
+        ///
+        /// <para>The pills are Z1's now and derive their own text from the same settings this used
+        /// to format (design §6: "kept — Z1, become deep-link buttons"), and the live-actions feed's
+        /// visibility is the Engine Room's. Both come from one re-read. The notice is Z7b's — same
+        /// Companion page since Phase 5, one card below the drawer it points at, which is why the
+        /// deep link behind its button can simply open that drawer.</para>
+        /// </summary>
         private void UpdateAiBrainPills()
         {
-            if (CompanionTab.PillAiProvider == null || CompanionTab.PillAwareness == null) return;
             var s = App.Settings?.Current;
             if (s?.CompanionPrompt == null) return;
-            var aiOn = s.AiChatEnabled;
-            var provider = s.CompanionPrompt.AiProvider;
-            CompanionTab.PillAiProvider.Text = !aiOn ? Loc.Get("label_ai_status_pill_off")
-                                : provider == Models.AiProviderType.Local ? Loc.Get("label_ai_status_pill_local")
-                                : provider == Models.AiProviderType.OpenAiCompatible ? Loc.Get("label_ai_status_pill_custom")
-                                : Loc.Get("label_ai_status_pill_cloud");
-            CompanionTab.PillAwareness.Text = s.AwarenessModeEnabled
-                                ? Loc.Get("label_awareness_pill_on")
-                                : Loc.Get("label_awareness_pill_off");
 
-            // Effects work with any provider that parses + executes command output
-            // (Local and OpenAI-compatible); cloud is stateless and has none. Show the
-            // Live Actions feed in the AI Brain panel and hide the "needs local" notice
-            // in the Lab effects card whenever the user is on an effects-capable provider.
-            var effectsActive = aiOn && ProviderSupportsEffects(provider);
-            if (CompanionTab.LiveActionsContainer != null)
-                CompanionTab.LiveActionsContainer.Visibility = effectsActive ? Visibility.Visible : Visibility.Collapsed;
-            if (LabTab.LabEffectsNeedsLocalNotice != null)
-                LabTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
+            CompanionRoom?.SyncBrain();
+
+            var effectsActive = s.AiChatEnabled && ProviderSupportsEffects(s.CompanionPrompt.AiProvider);
+            if (CompanionTab.LabEffectsNeedsLocalNotice != null)
+                CompanionTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // Providers that parse the model's response for command output and run it
@@ -1630,19 +1492,28 @@ namespace ConditioningControlPanel
             => provider == Models.AiProviderType.Local
                || provider == Models.AiProviderType.OpenAiCompatible;
 
-        private void UpdateLiveActionsPlaceholder()
-        {
-            if (CompanionTab.TxtLiveActionsPlaceholder == null) return;
-            CompanionTab.TxtLiveActionsPlaceholder.Visibility = (App.AiLiveActions?.Count ?? 0) == 0
-                ? Visibility.Visible : Visibility.Collapsed;
-        }
+        /// <summary>
+        /// The live-actions placeholder. The Engine Room binds its own list and swaps the
+        /// placeholder declaratively, and it subscribes to the collection itself, so this is now
+        /// only the nudge for callers that clear the feed by hand.
+        /// </summary>
+        private void UpdateLiveActionsPlaceholder() => CompanionRoom?.EngineVm.Sync();
 
         /// <summary>
-        /// Populate the Lab tab's AI effect-permission controls from settings. These
-        /// checkboxes live on the Lab tab but were only synced when the Companion tab
-        /// was visited, so after a restart the Lab tab showed XAML defaults while the
-        /// persisted AllowAi* values kept gating effects — videos fired that the UI
-        /// said were off (#512). Called from SyncAiBrainUI and on Lab tab open.
+        /// Populate the AI effect-permission controls from settings.
+        ///
+        /// <para>The name is a fossil: since Phase 5 of the UX restructure these controls are Z7b of
+        /// the Companion room, not the Lab tab. The method survives verbatim because the bug it was
+        /// written for survives the move — the grid was only ever synced when the Companion tab was
+        /// visited, so after a restart it showed XAML defaults while the persisted AllowAi* values
+        /// kept gating effects, and videos fired that the UI said were off (#512). Now that the grid
+        /// IS on the Companion tab there is exactly one caller (SyncAiBrainUI, from
+        /// SyncCompanionTabUI, from ShowTab("companion")), which is the point: the sync and the
+        /// surface can no longer be on different pages.</para>
+        ///
+        /// <para>Ends on the tier gate so the lockband and the values it covers are always painted
+        /// in the same pass — a grid showing a legit T2 user's ticked boxes under a lock, or a
+        /// lapsed one's under none, would be worse than either state alone.</para>
         /// </summary>
         internal void SyncLabEffectPermsUI()
         {
@@ -1653,132 +1524,67 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                if (LabTab.ChkCapEffects != null)
-                    LabTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
-                if (LabTab.EffectPermsPanel != null)
-                    LabTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                if (CompanionTab.ChkCapEffects != null)
+                    CompanionTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                if (CompanionTab.EffectPermsPanel != null)
+                    CompanionTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
                         ? Visibility.Visible : Visibility.Collapsed;
 
                 // Effect permission grid
-                if (LabTab.ChkAllowFlash != null)       LabTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
-                if (LabTab.ChkAllowVideo != null)       LabTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
-                if (LabTab.ChkAllowAudio != null)       LabTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
-                if (LabTab.ChkAllowBubbles != null)     LabTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
-                if (LabTab.ChkAllowSubliminal != null)  LabTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
-                if (LabTab.ChkAllowOverlay != null)     LabTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
-                if (LabTab.ChkAllowLockCard != null)    LabTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
-                if (LabTab.ChkAllowBounce != null)      LabTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
-                if (LabTab.ChkAllowHaptic != null)      LabTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
-                if (LabTab.ChkAllowGetBackToMe != null) LabTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
+                if (CompanionTab.ChkAllowFlash != null)       CompanionTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
+                if (CompanionTab.ChkAllowVideo != null)       CompanionTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
+                if (CompanionTab.ChkAllowAudio != null)       CompanionTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
+                if (CompanionTab.ChkAllowBubbles != null)     CompanionTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
+                if (CompanionTab.ChkAllowSubliminal != null)  CompanionTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
+                if (CompanionTab.ChkAllowOverlay != null)     CompanionTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
+                if (CompanionTab.ChkAllowLockCard != null)    CompanionTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
+                if (CompanionTab.ChkAllowBounce != null)      CompanionTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
+                if (CompanionTab.ChkAllowHaptic != null)      CompanionTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
+                if (CompanionTab.ChkAllowGetBackToMe != null) CompanionTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
 
                 // Max haptic intensity
-                if (LabTab.SliderMaxHapticIntensity != null) LabTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
-                if (LabTab.TxtMaxHapticIntensity != null)    LabTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+                if (CompanionTab.SliderMaxHapticIntensity != null) CompanionTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
+                if (CompanionTab.TxtMaxHapticIntensity != null)    CompanionTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
 
                 // Chat memory toggle
-                if (LabTab.ChkChatMemoryEnabled != null) LabTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+                if (CompanionTab.ChkChatMemoryEnabled != null) CompanionTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
             }
             finally
             {
                 _isLoading = wasLoading;
             }
+
+            CompanionTab.AiPermissions?.ApplyTierGate();
         }
 
         /// <summary>
-        /// Populate AI Brain controls from settings. Called from SyncCompanionTabUI.
+        /// Populate the AI-provider surface from settings. Called from SyncCompanionTabUI.
+        ///
+        /// <para>Was ~50 lines of writes into the AI Brain card's radios, panels and text boxes.
+        /// Every one of those controls moved into the Engine Room, which binds the same settings —
+        /// so this is a re-read plus the two things that are NOT the Engine Room's: the Lab tab's
+        /// effect-permission checkboxes, and the Workshop's awareness panel visibility (the panel is
+        /// "kept" while the toggle above it is superseded, so nothing else would hide it).</para>
         /// </summary>
         private void SyncAiBrainUI()
         {
             var s = App.Settings?.Current;
             if (s?.CompanionPrompt == null) return;
 
-            // Provider radios
-            var aiOn = s.AiChatEnabled;
-            var provider = s.CompanionPrompt.AiProvider;
-            if (CompanionTab.RadioAiOff != null)   CompanionTab.RadioAiOff.IsChecked   = !aiOn;
-            if (CompanionTab.RadioAiCloud != null) CompanionTab.RadioAiCloud.IsChecked = aiOn && provider == Models.AiProviderType.Cloud;
-            if (CompanionTab.RadioAiLocal != null) CompanionTab.RadioAiLocal.IsChecked = aiOn && provider == Models.AiProviderType.Local;
-            if (CompanionTab.RadioAiOpenAiCompatible != null)
-                CompanionTab.RadioAiOpenAiCompatible.IsChecked = aiOn && provider == Models.AiProviderType.OpenAiCompatible;
+            CompanionRoom?.SyncBrain();
 
-            if (CompanionTab.LocalConfigPanel != null)
-                CompanionTab.LocalConfigPanel.Visibility = (aiOn && provider == Models.AiProviderType.Local)
-                    ? Visibility.Visible : Visibility.Collapsed;
-            if (CompanionTab.OpenAiCompatibleConfigPanel != null)
-                CompanionTab.OpenAiCompatibleConfigPanel.Visibility = (aiOn && provider == Models.AiProviderType.OpenAiCompatible)
-                    ? Visibility.Visible : Visibility.Collapsed;
-
-            // Daily request limit row is only meaningful for the OpenAI-compatible provider
-            if (CompanionTab.DailyLimitPanel != null)
-            {
-                // Only show the daily request limit row when the custom OpenAI-compatible
-                // provider is active. Cloud uses built-in free/Patreon limits that are
-                // not user-editable; Local has unlimited requests.
-                CompanionTab.DailyLimitPanel.Visibility = (aiOn && provider == Models.AiProviderType.OpenAiCompatible)
-                    ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // Local config fields
-            if (CompanionTab.TxtAiModel != null) CompanionTab.TxtAiModel.Text = s.CompanionPrompt.AiModel ?? "";
-            if (CompanionTab.TxtAiHost != null)  CompanionTab.TxtAiHost.Text  = s.CompanionPrompt.AiOllamaHost ?? "";
-
-            // OpenAI-compatible provider fields
-            if (CompanionTab.TxtOpenAiEndpoint != null)
-                CompanionTab.TxtOpenAiEndpoint.Text = s.CompanionPrompt.OpenAiCompatibleEndpoint ?? string.Empty;
-            if (CompanionTab.TxtOpenAiModel != null)
-                CompanionTab.TxtOpenAiModel.Text = s.CompanionPrompt.OpenAiCompatibleModel ?? string.Empty;
-
-            // Daily request limit (0 = unlimited) – only for OpenAI-compatible provider
-            if (CompanionTab.TxtDailyLimit != null)
-            {
-                var limit = s.CompanionPrompt.DailyRequestLimit;
-                CompanionTab.TxtDailyLimit.Text = limit > 0 ? limit.ToString() : string.Empty;
-            }
-
-            // Capability checkboxes (CompanionTab.ChkAwarenessMode handled by its own sync path; AiChatEnabled is driven solely by the provider radios)
             SyncLabEffectPermsUI();
 
-            // Awareness panel visibility (from previous handler logic)
             if (CompanionTab.AwarenessSettingsPanel != null)
-                CompanionTab.AwarenessSettingsPanel.Visibility = s.AwarenessModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+                CompanionTab.AwarenessSettingsPanel.Visibility =
+                    s.AwarenessModeEnabled && !s.UseAwarenessV2 ? Visibility.Visible : Visibility.Collapsed;
 
-            // Hero pills
             UpdateAiBrainPills();
-
-            // Slut Mode toggle (no Patreon gate — available to all)
-            if (CompanionTab.ChkSlutMode != null) CompanionTab.ChkSlutMode.IsChecked = s.SlutModeEnabled;
-
-            // Live actions placeholder + ItemsSource binding
-            if (CompanionTab.LiveActionsList != null && CompanionTab.LiveActionsList.ItemsSource == null)
-            {
-                CompanionTab.LiveActionsList.ItemsSource = App.AiLiveActions;
-                // Auto-toggle the placeholder when entries arrive (added by AiCommandService).
-                App.AiLiveActions.CollectionChanged += (_, _) =>
-                {
-                    if (Dispatcher.CheckAccess()) UpdateLiveActionsPlaceholder();
-                    else Dispatcher.BeginInvoke(new Action(UpdateLiveActionsPlaceholder));
-                };
-            }
-            UpdateLiveActionsPlaceholder();
         }
 
 
 
 
-
-        internal void ChkMuteAvatar_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var checkbox = sender as CheckBox;
-            var isEnabled = checkbox?.IsChecked == true;
-            _avatarTubeWindow?.SetMuteAvatar(isEnabled);
-
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.AvatarMuted = isEnabled;
-                App.Settings.Save();
-            }
-        }
 
         internal void ChkMuteWhispers_Changed(object sender, RoutedEventArgs e)
         {
@@ -1811,6 +1617,20 @@ namespace ConditioningControlPanel
             var isPaused = checkbox?.IsChecked == true;
             await SetBrowserPaused(isPaused);
             _avatarTubeWindow?.SetBrowserPaused(isPaused);
+        }
+
+        // #846: mute only the spoken voicelines - the bubble, its text and the giggle cues stay.
+        // Read at the single playback choke point (AvatarTubeWindow.Speech ShowGiggle), so it
+        // covers barks, autonomy lines and voice-command responses alike.
+        internal void ChkVoiceLines_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var checkbox = sender as CheckBox;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.CompanionVoiceLinesMuted = checkbox?.IsChecked == true;
+                App.Settings.Save();
+            }
         }
 
         private async Task SetBrowserPaused(bool isPaused)
@@ -1850,8 +1670,10 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                // Update Companion tab controls
-                if (muteAvatar.HasValue) CompanionTab.ChkMuteAvatarCompanion.IsChecked = muteAvatar.Value;
+                // Update Companion tab controls. Mute-avatar is the hero's own chip and reads
+                // AvatarMuted from settings, which the caller has already written — so it needs a
+                // re-read rather than a checkbox poke.
+                if (muteAvatar.HasValue) CompanionRoom?.SyncHero();
                 if (muteWhispers.HasValue) CompanionTab.ChkMuteWhispersCompanion.IsChecked = muteWhispers.Value;
                 if (pauseBrowser.HasValue) CompanionTab.ChkPauseBrowserCompanion.IsChecked = pauseBrowser.Value;
             }
@@ -1869,8 +1691,11 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                // Settings tab - SettingsTab.ChkAudioWhispers represents "whispers enabled"
-                SettingsTab.ChkAudioWhispers.IsChecked = enabled;
+                // PHASE 8: the SettingsTab.ChkAudioWhispers mirror is gone with
+                // LegacyDashboardHost. The whispers ENABLE is SubAudioEnabled, whose only live
+                // editor is Features/SubliminalFeatureControl - which re-reads it on
+                // AppSettings.PropertyChanged, so the caller's write to s.SubAudioEnabled
+                // (ApplyVoiceMute) already repaints it. Nothing to push by hand.
 
                 // The Companion tab's box is a MUTE and no longer mirrors the enable, so it is
                 // driven from SubAudioMuted rather than !enabled (AppSettings.SubAudioMuted).
@@ -1920,8 +1745,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
 
@@ -1958,8 +1783,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
                 App.Settings?.Save();

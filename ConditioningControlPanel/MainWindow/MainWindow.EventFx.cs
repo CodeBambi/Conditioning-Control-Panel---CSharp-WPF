@@ -255,17 +255,24 @@ namespace ConditioningControlPanel
         {
             try
             {
-                Border? tile = null;
+                // The card is looked up directly rather than walked up from the badge Image: on the
+                // redesigned cards the Image's parent is a layout Grid inside the ToggleButton's
+                // content, not the card itself.
+                FrameworkElement? tile = null;
                 if (!string.IsNullOrEmpty(achievementId)
-                    && _achievementImages.TryGetValue(achievementId!, out var image))
+                    && _achievementCards.TryGetValue(achievementId!, out var card))
                 {
-                    tile = image?.Parent as Border;
-                    if (tile != null && AchievementsTab?.IsVisible == true) RevealAchievementTile(tile, image!);
+                    tile = card;
+                    _achievementImages.TryGetValue(achievementId!, out var image);
+                    if (image != null && AchievementsTab?.IsVisible == true) RevealAchievementTile(tile, image);
                 }
 
+                // Rail fallback goes through NavAnchorForTab, never the entry button directly: the
+                // You door is shut on most launches, and its entries then all map onto the same
+                // zero-height strip, so a raw BtnAchievements burst erupts from an unrelated row.
                 FireBurstAtFirstVisible(FxBurstSpot.Center, FxTheme.GlowColor, AchievementBurstCount,
                                         AchievementsTab?.IsVisible == true ? tile : null,
-                                        BtnAchievements);
+                                        NavAnchorForTab("achievements"));
             }
             catch (Exception ex) { App.Logger?.Debug("CelebrateAchievementUnlock: {E}", ex.Message); }
         }
@@ -277,7 +284,7 @@ namespace ConditioningControlPanel
         /// Where glow/blur is not allowed (Performance tier) it degrades to the opacity+scale
         /// settle alone, which is the same beat without the raster.
         /// </summary>
-        private void RevealAchievementTile(Border tile, Image image)
+        private void RevealAchievementTile(FrameworkElement tile, Image image)
         {
             try
             {
@@ -340,7 +347,8 @@ namespace ConditioningControlPanel
                 // The fill is the honest anchor when it has a width; a completed-but-unmeasured
                 // bar falls back to its track, which occupies the same strip of screen.
                 FireBurstAtFirstVisible(FxBurstSpot.RightEdge, null, QuestBurstCount,
-                                        fill?.ActualWidth > 1 ? fill : null, track, BtnQuests);
+                                        fill?.ActualWidth > 1 ? fill : null, track,
+                                        NavAnchorForTab("quests"));
             }
             catch (Exception ex) { App.Logger?.Debug("CelebrateQuestComplete: {E}", ex.Message); }
         }
@@ -374,7 +382,7 @@ namespace ConditioningControlPanel
             try
             {
                 FireBurstAtFirstVisible(FxBurstSpot.Center, null, EnhancementBurstCount,
-                                        node, BtnEnhancements);
+                                        node, NavAnchorForTab("enhancements"));
                 if (PrestigeRankNow() > rankBefore) CelebratePrestige();
             }
             catch (Exception ex) { App.Logger?.Debug("CelebrateEnhancementPurchase: {E}", ex.Message); }
@@ -392,7 +400,7 @@ namespace ConditioningControlPanel
             {
                 if (!EventFxAllowed) return;
                 FireBurstAtFirstVisible(FxBurstSpot.Center, FxTheme.GlowColor, PrestigeBurstCount,
-                                        _prestigeRowBorder, BtnEnhancements);
+                                        _prestigeRowBorder, NavAnchorForTab("enhancements"));
                 SweepSheen(EventFxHost, PrestigeSheen, PrestigeSheenSlide,
                            PrestigeSheenSeconds, PrestigeSheenPeak);
                 App.Logger?.Information("[FX] prestige rank-up celebrated");

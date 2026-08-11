@@ -350,10 +350,19 @@ namespace ConditioningControlPanel
         public static QuestService Quests { get; private set; } = null!;
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
         public static IntakePassService IntakePass { get; private set; } = null!;
+        /// <summary>The ? box's daily free premium feature (see DailyFreeService).</summary>
+        public static DailyFreeService? DailyFree { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
+        /// <summary>
+        /// The companion's conversational spine (Train 1). Owns the turn log, prompt assembly and
+        /// the transport call, so every provider shares one thread. Null only if construction failed
+        /// — callers must null-check and fall back to <see cref="Ai"/>'s legacy one-shot methods,
+        /// which is also what the <c>UseCompanionBrain</c> kill switch selects.
+        /// </summary>
+        public static Services.Companion.Brain.CompanionBrain? Brain { get; private set; }
         public static IAiCommandService Commands { get; private set; } = null!;
         public static Services.Moderation.IModerationGuard ModerationGuard { get; private set; } = null!;
         public static Services.Moderation.ModerationLog ModerationLog { get; private set; } = null!;
@@ -361,6 +370,15 @@ namespace ConditioningControlPanel
         public static Services.Moderation.IPromptValidator PromptValidator { get; private set; } = null!;
         public static Services.Moderation.IModerationCounter ModerationCounter { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
+
+        /// <summary>
+        /// Awareness v2's observer (Train 2): the dwell gate, the <c>ActivityLedger</c>, the worthiness
+        /// scorer and the one reaction arbiter. Null only if construction failed — every caller
+        /// null-checks and the legacy <see cref="WindowAwareness"/> pipeline carries on, which is also
+        /// exactly what the <c>UseAwarenessV2</c> kill switch selects.
+        /// </summary>
+        public static Services.Awareness.AwarenessObserver? Awareness { get; private set; }
+
         public static PatreonService Patreon { get; private set; } = null!;
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -397,6 +415,17 @@ namespace ConditioningControlPanel
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
+        /// <summary>
+        /// The one WH_KEYBOARD_LL hook that carries the panic key — MainWindow owns it and registers
+        /// it here on creation (and clears it on dispose). Published so code that has to know whether
+        /// a panic escape REALLY exists can ask the hook instead of trusting
+        /// <c>PanicKeyEnabled</c>: <see cref="GlobalKeyboardHook.IsInstalled"/> is false when
+        /// SetWindowsHookEx failed, and Windows silently un-registers a low-level hook whose callback
+        /// overran LowLevelHooksTimeout with nothing to reinstall it (#616-#623). Deliberately NOT the
+        /// short-lived hooks other windows spin up for themselves (e.g. the chaos countdown) — only
+        /// this one is wired to <c>HandlePanicKeyPress</c>.
+        /// </summary>
+        public static GlobalKeyboardHook? PanicHook { get; internal set; }
         public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
@@ -858,8 +887,9 @@ namespace ConditioningControlPanel
                 // Stop all visual overlays (spiral, pink filter, etc.)
                 Overlay?.Stop();
 
-                // Stop lock card and pop quiz if active
-                LockCard?.Stop();
+                // Stop lock card and pop quiz if active. Kill-everything path (panic + exit), so the
+                // card on screen goes too — see LockCardService.Stop(dismissOpenCards).
+                LockCard?.Stop(dismissOpenCards: true);
                 PopQuiz?.Stop();
 
                 // Stop mantra lab audio
@@ -1535,6 +1565,11 @@ namespace ConditioningControlPanel
             // constructor - that service is not built until later in OnStartup.
             IntakePass = new IntakePassService();
             IntakePunchCard = new IntakePunchCardService();
+            // The ? box's rotation. Constructor is pure (no I/O); the server-override fetch is
+            // fire-and-forget and falls back to the date-seeded pick, so being offline - or the
+            // endpoint not existing yet - costs nothing but the override.
+            DailyFree = new DailyFreeService();
+            _ = DailyFree.RefreshAsync();
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
             // safe here even though Patreon is not constructed until later in OnStartup.
@@ -1575,6 +1610,26 @@ namespace ConditioningControlPanel
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
 
+            // CompanionBrain sits between every caller and the AI strategy: it owns conversation
+            // state so providers stay dumb transports. Constructed unconditionally (it reads the
+            // stored session and can report it for diagnostics); whether calls actually route
+            // through it is the per-call-site UseCompanionBrain check. Bark exists by now
+            // (constructed above), so the BarkEcho hook can be attached immediately.
+            try
+            {
+                Brain = new Services.Companion.Brain.CompanionBrain(Ai);
+                Brain.AttachBarkSource(Bark);
+                Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
+                    Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
+            }
+            catch (Exception ex)
+            {
+                // A brain that won't build must not take the app down — every call site falls back
+                // to the legacy stateless path when App.Brain is null.
+                Brain = null;
+                Logger?.Error(ex, "CompanionBrain: initialization failed, falling back to legacy AI path");
+            }
+
             // If local Ollama is the active provider, kick off a background warm-up so
             // the model is hot in memory by the time the user sends their first chat.
             // No-op for cloud users; silent on failure (Ollama may not be running).
@@ -1584,6 +1639,119 @@ namespace ConditioningControlPanel
             }
 
             WindowAwareness = new WindowAwarenessService();
+
+            // Awareness v2 (Train 2). Built after Brain because the arbiter is the companion's one
+            // mouth and the memory seam is the brain's to fill later; started from
+            // WindowAwarenessService.Start(), which is the single on/off call site both the avatar tube
+            // and the Companion tab's awareness dial already use. Start() is also what loads and PRUNES
+            // the ledger, so retention is honoured whether or not any UI is ever opened.
+            try
+            {
+                var awarenessLedger = new Services.Awareness.ActivityLedger();
+
+                // ONE memory instance. The observer and the arbiter must share it, or the
+                // recent-reaction ban list splits across two rings and she repeats herself while both
+                // halves believe they are keeping her honest.
+                var awarenessMemory = new Services.Awareness.StubCompanionMemory();
+
+                // ONE scorer, for the same reason there is one arbiter. The arbiter is the ONLY thing
+                // that calls WorthinessScorer.RegisterDelivery, so handing it a different instance from
+                // the observer's leaves the whole silence budget inert: the floating threshold never
+                // rises after a delivered line and the per-app repetition penalty is permanently 0.0,
+                // which pins the score's threshold at the intensity baseline forever (doc 02 §3.4/§4.1).
+                var awarenessScorer = new Services.Awareness.WorthinessScorer();
+
+                // ONE arbiter. It is the single cooldown ledger every awareness line, bark and
+                // keyword-triggered comment passes through, which is the whole "one character, one
+                // mouth" guarantee — a second instance would be a second mouth with its own cooldowns.
+                // The staleness check asks "what is in front of the user NOW". The observer already
+                // resolved that on its last poll, so the speaker reads it from there instead of
+                // re-reading the foreground window and re-running AppClusterMap.Classify — one
+                // classification, and the answer it compares against is the same one the frame was
+                // built from. Deferred through a closure because the observer does not exist yet.
+                Services.Awareness.AwarenessObserver? observerRef = null;
+                var arbiter = new Services.Awareness.ReactionArbiter(
+                    cooldowns: null,
+                    scorer: awarenessScorer,
+                    localClock: null,
+                    speaker: new Services.Awareness.AvatarAwarenessSpeaker(
+                        currentAppId: () => observerRef?.CurrentAppId),
+                    lineSource: new Services.Awareness.BrainAwarenessLineSource(),
+                    memory: awarenessMemory);
+
+                Awareness = new Services.Awareness.AwarenessObserver(
+                    awarenessLedger,
+                    awarenessScorer,
+                    arbiter,
+                    awarenessMemory);
+                observerRef = Awareness;
+
+                // The trust surface's seam: the privacy panel renders the real last frame and erases
+                // the real ledger through these. Set before anything can cut a frame.
+                Services.Awareness.AwarenessLive.Ledger = awarenessLedger;
+                Services.Awareness.AwarenessLive.Memory = awarenessMemory;
+                Services.Awareness.AwarenessLive.ResetObserverState = Awareness.ResetTransientState;
+
+                // The in-RAM pacing half of the erasure. The ledger and the memory are files; the
+                // cooldown ledger's per-app last-spoke map and the scorer's repetition counters are
+                // not, and both are keyed by the app ids a wipe or a per-app forget just erased.
+                Services.Awareness.AwarenessLive.ResetPacingState = () =>
+                {
+                    arbiter.Cooldowns.Reset();
+                    awarenessScorer.Reset();
+                };
+                Services.Awareness.AwarenessLive.ForgetPacingState = id =>
+                {
+                    arbiter.Cooldowns.Forget(id);
+                    awarenessScorer.Forget(id);
+                };
+
+                // Retention does NOT depend on the feature being switched on. Every other pruning path
+                // hangs off the observer's Start(), which returns early when awareness is off — so a
+                // user who ran awareness for three weeks and then turned it off kept those three weeks
+                // on disk forever, while the consent dialog and the settings notice both promise the
+                // counts are deleted after the retention period. This sweep runs on every launch,
+                // creates nothing when there is no file, and is a no-op once the ledger is live.
+                try { awarenessLedger.PruneOnDisk(); }
+                catch (Exception pruneEx) { Logger?.Warning(pruneEx, "ActivityLedger: startup retention sweep failed"); }
+
+                // The two one-time initialisers used to hang off the consent dialog's accept path,
+                // which an upgrader with awareness already on never reaches. Run them here so the
+                // shipped deny groups are materialised and the pacing dial is migrated for every
+                // profile, whether or not the dialog is ever raised. Both are idempotent.
+                try
+                {
+                    var awarenessSettings = Settings?.Current;
+                    bool wrote = Services.Awareness.AwarenessPrivacyRules.EnsureSeeded(awarenessSettings);
+                    wrote |= Services.Awareness.AwarenessIntensityMigration.EnsureMigrated(awarenessSettings);
+                    if (wrote) Settings?.Save();
+                }
+                catch (Exception seedEx) { Logger?.Warning(seedEx, "Awareness: deny-group seed / intensity migration failed"); }
+
+                // Engages v2: suppresses the legacy awareness mouth (BarkService's awareness-gated
+                // rules, the tube's legacy reaction handlers) and lets the keyword engine register its
+                // lines against the one cooldown ledger. Without this call BOTH mouths stay in their
+                // v1 state and nothing in v2 speaks — the flag alone is not the switch.
+                Services.Awareness.AwarenessV2Routing.Attach(arbiter);
+
+                Logger?.Information("AwarenessObserver constructed (v2 enabled={Enabled})",
+                    Services.Awareness.AwarenessObserver.IsEnabled);
+            }
+            catch (Exception ex)
+            {
+                // An observer that will not build must not take the app down: the legacy awareness
+                // pipeline is still there and still works. Detach so the legacy mouth is not left
+                // suppressed by a half-built v2 that can never speak.
+                Awareness = null;
+                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+                Services.Awareness.AwarenessLive.Ledger = null;
+                Services.Awareness.AwarenessLive.Memory = null;
+                Services.Awareness.AwarenessLive.ResetObserverState = null;
+                Services.Awareness.AwarenessLive.ResetPacingState = null;
+                Services.Awareness.AwarenessLive.ForgetPacingState = null;
+                Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
+            }
+
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
             // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
@@ -1622,17 +1790,21 @@ namespace ConditioningControlPanel
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
             RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
+            // (No app-level GoonGameService singleton: the Goon Game's clients build their own
+            // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
+            // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
 
             // Auto-connect haptics if enabled (runs in background).
-            // The v2 device manager connects every ENABLED provider concurrently and no-ops when
-            // none is enabled, so the old "skip when Provider == Mock" special case is gone: it
-            // meant a Mock user (the default provider!) could never auto-connect, and it could
-            // not express "Lovense + Intiface at once" either.
-            if (Settings.Current.Haptics.AutoConnect)
+            // The v2 device manager connects every ENABLED provider concurrently, so this no longer
+            // needs the old single-provider special case — but Mock is the LEGACY ENUM'S DEFAULT
+            // value, which means every v6.6.3 upgrader with AutoConnect on would silently bring up
+            // three virtual toys and a stream of pink toasts at each launch. Only a REAL provider
+            // justifies auto-connecting; Lovense and/or Buttplug still work in any combination.
+            if (Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled())
             {
                 _ = AutoConnectHapticsAsync();
             }
@@ -1715,16 +1887,23 @@ namespace ConditioningControlPanel
             // attached.
             Notifications = new NotificationService();
 
-            // Phase 4 Attention-Check mechanic: scrapped pre-ship per design call.
-            // Service is still constructed so the AttentionCheckSettingsDialog
-            // and AttentionCheckFeatureControl files compile (they hold the
-            // mechanic's design intact for future revival), but it's never
-            // Start()'d and the default for AttentionCheckEnabled is false.
-            // To revive in a later release, restore the OnPass/OnFail handler
-            // wiring, the PropertyChanged subscription, the Start() call, and
-            // the no-webcam sticky — all of which were here at HEAD before
-            // this commit. The Lab UI surface and intro sticky also need to
-            // come back; see MainWindow for those touchpoints.
+            // Phase 4 Attention-Check mechanic: scrapped pre-ship per design call. The UX
+            // restructure's Phase 8 deleted its two remaining UI files
+            // (Dialogs/AttentionCheckSettingsDialog + Features/AttentionCheckFeatureControl) -
+            // the dialog had zero constructors anywhere, so the mechanic had no door at all.
+            //
+            // THE SERVICE STILL MUST BE CONSTRUCTED. Services/Companion/BarkService.cs wires
+            // App.AttentionCheck.OnPass / OnFail; a null service (or a deleted type) breaks the
+            // bark harness. It is simply never Start()'d, and AttentionCheckEnabled defaults false.
+            //
+            // The six AttentionCheck* settings are deliberately untouched: AttentionCheckService
+            // still reads them, they were persisted historically, and they must keep round-tripping
+            // out of old settings files. They are NOT the video attention-target settings
+            // (AttentionChecksEnabled / Density / Lifespan / Size / RandomizeAttentionTargets),
+            // which are a live, shipped feature owned by Features/VideoFeatureControl.
+            //
+            // To revive: restore the OnPass/OnFail handler wiring, the PropertyChanged
+            // subscription, the Start() call, the no-webcam sticky, and a real UI surface.
             AttentionCheck = new AttentionCheckService();
 
             // Deeper enhancement library — file ops, recent files, library scan.
@@ -1778,6 +1957,13 @@ namespace ConditioningControlPanel
                 Settings.Save();
                 Logger?.Information("Mantra Chant left OFF on startup (it never auto-resumes — #685)");
             }
+
+            // The companion's memory mirror subscribes its app signals when the brain is constructed,
+            // ~200 lines above — before Mantra (and anything else built down here) exists. This second
+            // pass picks those up; without it MantraCompleted is never wired for the whole process
+            // lifetime and "mantra" can never become a favourite feature.
+            try { (Brain?.Memory as Services.Companion.Brain.MemoryStore)?.WireDeferredSignals(); }
+            catch (Exception ex) { Logger?.Debug("MemoryStore: deferred signal pass failed: {Error}", ex.Message); }
 
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();
@@ -1862,6 +2048,29 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
 
+            // `--goon-test`: dev play-test cockpit for the Goon Game 1v1 duel — two independent
+            // player panels in this one process (each with its OWN GoonGameService, never the
+            // App.GoonGame singleton) so a full duel can be run against yourself over the real
+            // server signaling, or over the in-process loopback transport. Never opened otherwise.
+            if (e.Args.Contains("--goon-test"))
+            {
+                try { new GoonTestWindow().Show(); }
+                catch (Exception ex) { Logger?.Error(ex, "Failed to open the Goon Game test cockpit"); }
+            }
+
+            // `--shoot-doors [outDir]`: render every nav door to a PNG offscreen, then exit. Exists
+            // because screen capture returns a stale frame whenever the display is asleep or the
+            // session is locked, which is precisely when the owner is reviewing the UI remotely.
+            // See Services/Dev/DoorShooter.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--shoot-doors"))
+            {
+                var idx = Array.IndexOf(e.Args, "--shoot-doors");
+                var outDir = idx >= 0 && idx + 1 < e.Args.Length && !e.Args[idx + 1].StartsWith("--")
+                    ? e.Args[idx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "door-shots");
+                Services.Dev.DoorShooter.Run(mainWindow, outDir);
+            }
+
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
             // not persisted) so the compositor path can be A/B tested without editing settings.
             if (e.Args.Contains("--overlay-host"))
@@ -1896,17 +2105,57 @@ namespace ConditioningControlPanel
                 Services.Chaos.DtrhSpike.Run();
 
             // DtRH browser game, dev shortcuts: `--dtrh` launches the web game window immediately,
-            // bypassing the Lab UI and the ChaosWebGameEnabled flag; `--dtrh-m2test` additionally
-            // runs the M2 bridge exercise against a CLONED meta state (real save untouched).
+            // bypassing the Lab UI and the ChaosWebGameEnabled flag — but NOT the tier gate, which
+            // it now answers to like the Lab card does. `--dtrh-m2test` additionally runs the M2
+            // bridge exercise against a CLONED meta state (real save untouched) and stays
+            // unrestricted: it is the capture rig's entry point.
+            //
+            // Entitlement is read from the cached state loaded in PatreonService's constructor —
+            // online validation may still be in flight this early, so an unvalidated launch fails
+            // closed. Denials only log: a dialog here would fire before the user has done anything.
             if (e.Args.Contains("--dtrh-m2test"))
                 Services.Chaos.DtrhHostService.Launch(testMode: true);
             else if (e.Args.Contains("--dtrh"))
-                Services.Chaos.DtrhHostService.Launch();
+            {
+                var dtrhGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
+                if (dtrhGate.Allowed) Services.Chaos.DtrhHostService.Launch();
+                else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
+            }
 
-            // For You feed, dev shortcut: `--fyp` opens the feed window immediately,
-            // bypassing the Lab card and the premium gate (dev machines only).
+            // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
+            // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
+            // window natively above main and ducks main out of the way at launch.
+            if (e.Args.Contains("--goon"))
+                Services.GoonGame.GoonHostService.Launch();
+
+            // `--goon-vectors`: write the deterministic RNG/round/ramp parity vectors the browser
+            // client's tests assert against, then quit. Every dev arg in this method runs after
+            // startup (MainWindow is already built above), so the window flashes for an instant
+            // before Shutdown - acceptable for a throwaway build step, and it keeps the dumper
+            // running against a fully initialised App (logger, settings, version).
+            if (e.Args.Contains("--goon-vectors"))
+            {
+                try
+                {
+                    var vectorsPath = Services.GoonGame.GoonVectorDumper.Run();
+                    Logger?.Information("Goon parity vectors written to {Path}", vectorsPath);
+                }
+                catch (Exception ex) { Logger?.Error(ex, "Failed to write the Goon parity vectors"); }
+                Shutdown();
+                return;
+            }
+
+            // For You feed, dev shortcut: `--fyp` opens the feed window immediately, bypassing the
+            // Lab card — but it answers to the same tier-1 gate OpenFypFeed applies. Logs and skips
+            // on denial, like `--dtrh` above.
             if (e.Args.Contains("--fyp"))
-                Services.Fyp.FypHostService.Launch();
+            {
+                // Same subject the Play door's band and the OpenFypFeed refusal name, from the same
+                // key - "The For You feed" here vs "For You" there was two names for one gate.
+                var fypGate = Services.TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp");
+                if (fypGate.Allowed) Services.Fyp.FypHostService.Launch();
+                else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
+            }
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
@@ -2184,6 +2433,10 @@ namespace ConditioningControlPanel
                 Logger.Error(ex, "Failed to show achievement popup for: {Name}", achievement.Name);
             }
 
+            // If this achievement gates a wardrobe item, announce that too - a beat later, so it
+            // reads as a consequence of the achievement popup rather than a second competing toast.
+            ShowWardrobeRewardToasts(achievement);
+
             // Play achievement sound
             PlayAchievementSound();
 
@@ -2211,7 +2464,92 @@ namespace ConditioningControlPanel
                 Logger?.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", achievement.Name);
             }
         }
-        
+
+        /// <summary>Never show more than this many item toasts for one unlock - the column runs out of screen.</summary>
+        private const int MaxWardrobeRewardToasts = 3;
+
+        /// <summary>
+        /// Reverse-lookup of the wardrobe registry's achievement gates (item id → achievement id):
+        /// any item gated on THIS achievement just became wearable, so it gets an
+        /// <see cref="ItemUnlockedPopup"/> 900ms after the achievement popup.
+        ///
+        /// No suppression logic of its own, deliberately: <c>AchievementService.SuppressPopups</c>
+        /// already returns before the AchievementUnlocked event is fired (AchievementService.cs:830),
+        /// so a cloud restore that back-fills 40 achievements never reaches this handler at all.
+        ///
+        /// No haptics either - the unlock path already fires exactly one achievement pattern.
+        /// </summary>
+        private void ShowWardrobeRewardToasts(Models.Achievement? achievement)
+        {
+            try
+            {
+                var achievementId = achievement?.Id;
+                if (string.IsNullOrWhiteSpace(achievementId)) return;
+
+                var gates = WardrobeCatalog.AchievementGates();
+                if (gates == null || gates.Count == 0) return;   // null = no readable registry
+
+                var rewards = new System.Collections.Generic.List<WardrobeItem>();
+                foreach (var gate in gates)
+                {
+                    if (!string.Equals(gate.Value, achievementId, StringComparison.OrdinalIgnoreCase)) continue;
+                    var item = WardrobeCatalog.Find(gate.Key);
+                    if (item == null) continue;                  // registry id with no row - skip quietly
+                    rewards.Add(item);
+                    if (rewards.Count >= MaxWardrobeRewardToasts) break;
+                }
+
+                if (rewards.Count == 0) return;
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                Logger?.Information("Achievement '{Id}' unlocked {Count} wardrobe item(s); queuing item toast(s)",
+                    achievementId, rewards.Count);
+
+                // One-shot delay so the achievement popup lands first. DispatcherTimer (not
+                // Task.Delay) keeps the callback on the UI thread by construction - these are
+                // WPF windows and the handler is fire-and-forget.
+                var timer = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.Normal, dispatcher)
+                {
+                    Interval = TimeSpan.FromMilliseconds(900)
+                };
+                timer.Tick += (s, e) =>
+                {
+                    timer.Stop();
+                    try
+                    {
+                        if (Application.Current?.Dispatcher == null ||
+                            Application.Current.Dispatcher.HasShutdownStarted) return;
+
+                        // stackIndex pushes each extra toast a further (Height + 8) upward.
+                        for (int i = 0; i < rewards.Count; i++)
+                        {
+                            try
+                            {
+                                new ItemUnlockedPopup(rewards[i], i).Show();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Error(ex, "Item unlocked toast tick failed");
+                    }
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to resolve wardrobe reward for achievement: {Name}", achievement?.Name);
+            }
+        }
+
+
         /// <summary>
         /// Initialize Patreon and load cloud profile if authenticated
         /// </summary>
@@ -2428,6 +2766,26 @@ namespace ConditioningControlPanel
                         Logger?.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message);
                     }
                     Logger?.Information("Restored session validated successfully.");
+
+                    // ...and then actually USE the session we just validated. Only two places load
+                    // the cloud profile and start the heartbeat: InitializePatreonAndSyncAsync
+                    // (gated on Patreon.IsAuthenticated) and InitializeDiscordAsync (gated on
+                    // Discord.IsAuthenticated). A V2-only user - invite code, email login, or an
+                    // OAuth token that has since lapsed while the unified session stayed good -
+                    // satisfies neither, and this method is the ONLY startup path they take. So
+                    // their progression was never read back from the server on launch and they
+                    // never appeared online: their level/XP/skill points showed whatever the local
+                    // file happened to hold, which is the shape #865 reports. (We are past the
+                    // early returns for "a provider already authenticated" and "offline mode", so
+                    // there is no double-load to race here.) Re-checked rather than trusted from
+                    // before the round-trip: a provider can finish authenticating while this
+                    // request is in flight, and then it owns the load.
+                    if (ProfileSync != null && Patreon?.IsAuthenticated != true && Discord?.IsAuthenticated != true)
+                    {
+                        Logger?.Information("V2-only restored session — loading cloud profile...");
+                        await ProfileSync.LoadProfileAsync();
+                        ProfileSync.StartHeartbeat();
+                    }
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
@@ -2479,6 +2837,15 @@ namespace ConditioningControlPanel
                 // Only run on fresh installs (no settings file existed)
                 if (Settings?.WasSettingsFileMissing != true) return;
 
+                // ...but "no settings file" is also what a deliberate factory reset leaves behind.
+                // Settings ▸ Data drops this marker on its way out; consume it and stay quiet, or the
+                // reset is immediately offered its own undo under fresh-install copy.
+                if (ConsumeFactoryResetMarker())
+                {
+                    Logger?.Information("Skipping the cloud settings restore offer — the missing settings file is a factory reset");
+                    return;
+                }
+
                 // Wait for provider auth to complete
                 await Task.Delay(5000);
 
@@ -2498,18 +2865,43 @@ namespace ConditioningControlPanel
                 Logger?.Information("Cloud settings backup found (v{Version}, {Date})",
                     backupInfo.AppVersion, backupInfo.BackedUpAt);
 
+                // This prompt fires on exactly the population the FIRST-RUN WIZARD claims, and it is
+                // unowned and task-modal: landing it on top of the wizard disables the wizard's
+                // buttons behind a box that can hide under it, and accepting swaps
+                // App.Settings.Current out from under the flags the wizard already spent. So wait
+                // out the startup ladder (update dialog, What's New, season recap, the wizard) the
+                // same way MainWindow.xaml.cs:537 does - up to 5 minutes, because a mod pack can
+                // take that long to download inside the wizard - and re-check before showing.
+                for (int i = 0; i < 600 && (IsUpdateDialogActive ||
+                                           ConditioningControlPanel.MainWindow.IsStartupDialogShowing); i++)
+                {
+                    await Task.Delay(500);
+                }
+                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
+                {
+                    Logger?.Information("Cloud settings restore offer deferred to the next launch — a startup dialog is still open");
+                    return;
+                }
+
                 // Ask user on UI thread
                 await Current.Dispatcher.InvokeAsync(async () =>
                 {
                     var dateStr = backupInfo.BackedUpAt?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "unknown date";
-                    var result = System.Windows.MessageBox.Show(
-                        $"A cloud backup of your settings was found!\n\n" +
-                        $"Backed up: {dateStr}\n" +
-                        $"App version: {backupInfo.AppVersion}\n\n" +
-                        $"Would you like to restore your settings from this backup?",
-                        "Restore Settings from Cloud",
-                        System.Windows.MessageBoxButton.YesNo,
-                        System.Windows.MessageBoxImage.Question);
+                    var owner = MainWindowRef ?? Current?.MainWindow;
+                    var body = $"A cloud backup of your settings was found!\n\n" +
+                               $"Backed up: {dateStr}\n" +
+                               $"App version: {backupInfo.AppVersion}\n\n" +
+                               $"Would you like to restore your settings from this backup?";
+                    // Owned when there is a window: an unowned box can end up BEHIND the app.
+                    var result = owner != null
+                        ? System.Windows.MessageBox.Show(owner, body,
+                            "Restore Settings from Cloud",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Question)
+                        : System.Windows.MessageBox.Show(body,
+                            "Restore Settings from Cloud",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Question);
 
                     if (result != System.Windows.MessageBoxResult.Yes) return;
 
@@ -2540,6 +2932,27 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// True (once) if the previous run ended in a Settings ▸ Data factory reset. The marker is
+        /// deleted on the way out, so a later fresh install on the same machine still gets the offer.
+        /// </summary>
+        private static bool ConsumeFactoryResetMarker()
+        {
+            try
+            {
+                var marker = System.IO.Path.Combine(UserDataPath, "settings.json.factory-reset");
+                if (!System.IO.File.Exists(marker)) return false;
+                try { System.IO.File.Delete(marker); }
+                catch (Exception ex) { Logger?.Warning("Could not clear the factory-reset marker: {Error}", ex.Message); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning("Factory-reset marker check failed: {Error}", ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Apply restored settings while preserving identity and progression fields
         /// (those are server-authoritative and should not be overwritten from backup).
         /// </summary>
@@ -2561,8 +2974,18 @@ namespace ConditioningControlPanel
             restored.UserDisplayName = current.UserDisplayName;
             restored.PatreonTier = current.PatreonTier;
             restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+            // Tier-2 twin of the line above. Both are LOCAL entitlement grace windows, never the
+            // backup's - a restore from another machine must not import (or drop) Lab access.
+            restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
             restored.LastPatreonVerification = current.LastPatreonVerification;
             restored.OpenRouterApiKey = current.OpenRouterApiKey;
+
+            // First-run one-shots belong to THIS install and are already spent by the time a
+            // startup restore can land (FirstRunWizard.ShouldRunAndClaim writes both before the
+            // wizard opens). Importing the backup's values would re-arm the wizard - and the
+            // hardcoded assets prompt - on the next launch of an install that has already had them.
+            restored.Welcomed = current.Welcomed;
+            restored.FirstRunAssetsPromptShown = current.FirstRunAssetsPromptShown;
 
             // Preserve lifetime stats — take higher value (current may have server-synced data)
             restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);
@@ -2586,10 +3009,15 @@ namespace ConditioningControlPanel
 
             Settings.RestoreFrom(restored);
 
-            // Refresh UI if MainWindow is loaded
-            if (MainWindow is MainWindow mw)
+            // Refresh UI if MainWindow is loaded. ApplySessionSettings alone leaves every control on
+            // the Settings door painted from the discarded instance - the manual restore path
+            // (MainWindow.CloudBackup.cs) re-runs LoadSettings for exactly that reason, so this one
+            // does too.
+            var mw = MainWindowRef ?? (MainWindow as MainWindow);
+            if (mw != null)
             {
                 mw.ApplySessionSettings();
+                mw.ReloadSettingsUiAfterRestore();
             }
 
             Logger?.Information("Applied restored cloud settings (identity/progression fields preserved)");
@@ -2604,6 +3032,11 @@ namespace ConditioningControlPanel
             {
                 // Brief delay to let app load before checking updates
                 await Task.Delay(500);
+
+                // Did the previous run's silent install actually land? A rolled-back Inno install
+                // relaunches us on the OLD version with no error shown, so this is the only place
+                // the user ever learns the update failed (#849).
+                await ReportFailedUpdateAttemptAsync();
 
                 Logger?.Information("Background update check starting...");
                 var updateInfo = await Update.CheckForUpdatesAsync();
@@ -2698,6 +3131,53 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Consumes the marker left by the previous run's update attempt and, if the install did
+        /// not take, tells the user once and points them at the manual download.
+        /// </summary>
+        private static async Task ReportFailedUpdateAttemptAsync()
+        {
+            try
+            {
+                var outcome = UpdateService.ConsumePendingUpdateOutcome();
+                if (outcome == null || outcome.Succeeded) return;
+
+                // Don't stack on top of the What's New / startup dialogs.
+                for (int i = 0; i < 60 && ConditioningControlPanel.MainWindow.IsStartupDialogShowing; i++)
+                {
+                    await Task.Delay(500);
+                }
+
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    OfferManualUpdateDownload(
+                        Current?.MainWindow,
+                        Loc.Get("title_update_failed"),
+                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion));
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to report previous update attempt");
+            }
+        }
+
+        /// <summary>
+        /// True when a REAL haptic provider (Lovense and/or Buttplug) is enabled in the v2
+        /// per-provider config. Mock on its own never justifies an auto-connect: it is the value the
+        /// legacy <c>Provider</c> enum defaults to, so treating it as a provider choice would make
+        /// every upgrader auto-connect virtual toys they never asked for.
+        /// </summary>
+        private static bool HasRealHapticProviderEnabled()
+        {
+            try
+            {
+                var v2 = Settings.Current.Haptics.V2;
+                return v2.Provider("lovense").Enabled || v2.Provider("buttplug").Enabled;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
         /// Auto-connect to haptics device on startup if enabled
         /// </summary>
         private async Task AutoConnectHapticsAsync()
@@ -2761,6 +3241,8 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // "Later"/dismiss: don't re-offer this version for 24h (a manual check still forces it).
+                    UpdateService.SetSkippedUpdateVersion(updateInfo.Version);
                     IsUpdateDialogActive = false;
                 }
             }
@@ -2858,7 +3340,15 @@ namespace ConditioningControlPanel
                     if (result == MessageBoxResult.Yes)
                     {
                         Logger?.Information("Starting silent update for Inno Setup installation");
-                        Update.RunInstallerSilentlyAndExit(installerPath);
+                        if (!Update.RunInstallerSilentlyAndExit(installerPath))
+                        {
+                            // Helper never launched (UAC declined) - we're still alive on the old build.
+                            RestoreHiddenWindows();
+                            OfferManualUpdateDownload(
+                                owner,
+                                Loc.Get("title_update_not_installed"),
+                                Loc.Get("msg_update_permission_declined"));
+                        }
                     }
                     else
                     {
@@ -2925,6 +3415,33 @@ namespace ConditioningControlPanel
                     Update.DownloadProgressChanged -= progressHandler;
                 }
                 IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Tells the user an automatic update did not install and offers the releases page so they
+        /// can install it by hand. Without this, a failed silent install is invisible and the user
+        /// stays stranded on the old version forever (#849).
+        /// </summary>
+        private static void OfferManualUpdateDownload(Window? owner, string title, string message)
+        {
+            try
+            {
+                var result = owner != null && owner.IsLoaded
+                    ? MessageBox.Show(owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
+                    : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes) return;
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = UpdateService.ReleasesPageUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to show manual update download prompt");
             }
         }
 
@@ -2997,6 +3514,8 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
+                        // "Later"/dismiss: don't re-offer this version for 24h.
+                        UpdateService.SetSkippedUpdateVersion(updateInfo.Version);
                         IsUpdateDialogActive = false;
                     }
                     return true;
@@ -3450,6 +3969,14 @@ Application State:
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
 
+            // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
+            // watchdog, so a toy we don't countermand keeps running after the app is gone. This
+            // cannot be left to Haptics.Dispose() further down (the providers get torn down in the
+            // same breath) nor to the ProcessExit watchdog — OnExit ends in TerminateProcess, which
+            // skips ProcessExit handlers by design.
+            try { Haptics?.ShutdownStop(); }
+            catch (Exception ex) { Logger?.Warning(ex, "Haptics shutdown stop failed"); }
+
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
 
@@ -3523,7 +4050,18 @@ Application State:
             MindWipe?.Dispose();
             BrainDrain?.Dispose();
             Achievements?.Dispose();
+            // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
+            // observer's own Stop is what closes the open visit and flushes the ledger to disk.
+            // Detach first so nothing can route a line into a half-disposed arbiter on the way down.
+            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+            Awareness?.Dispose();
+            Services.Awareness.AwarenessLive.ResetObserverState = null;
+            Services.Awareness.AwarenessLive.Ledger = null;
+            Services.Awareness.AwarenessLive.Memory = null;
             WindowAwareness?.Dispose();
+            // Before Ai: Dispose flushes the conversation to companion/session.json and unhooks the
+            // bark echo, and it must not race the transport being torn down underneath it.
+            Brain?.Dispose();
             Ai?.Dispose();
             Patreon?.Dispose();
             Update?.Dispose();

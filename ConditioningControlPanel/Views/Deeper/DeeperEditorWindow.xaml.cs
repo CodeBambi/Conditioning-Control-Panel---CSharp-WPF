@@ -14,6 +14,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
+using ConditioningControlPanel.Services.Haptics.Core;
 using LibVLCSharp.Shared;
 using NAudio.Wave;
 using Microsoft.Win32;
@@ -167,6 +168,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             BuildColorSwatches();
             BuildPatternCombo();
+            FillHapticTargetCombo(CmbHapticTarget);
             LoadEnhancement(enhancement, filePath);
         }
 
@@ -177,6 +179,27 @@ namespace ConditioningControlPanel.Views.Deeper
                 CmbHapticPattern.Items.Add(name);
             CmbHapticPattern.Items.Add(Loc.Get("deeper_editor_haptic_pattern_custom"));
         }
+
+        // Index 0 is "All", stored as null so files stay clean.
+        private static readonly ToyRole?[] HapticTargets = { null, ToyRole.Reward, ToyRole.Punish, ToyRole.Ambient };
+
+        private static void FillHapticTargetCombo(ComboBox combo)
+        {
+            combo.Items.Clear();
+            combo.Items.Add(Loc.Get("haptics_role_all"));
+            combo.Items.Add(Loc.Get("haptics_role_reward"));
+            combo.Items.Add(Loc.Get("haptics_role_punish"));
+            combo.Items.Add(Loc.Get("haptics_role_ambient"));
+        }
+
+        private static int HapticTargetIndex(ToyRole? role)
+        {
+            var idx = Array.IndexOf(HapticTargets, role);
+            return idx >= 0 ? idx : 0;
+        }
+
+        private static ToyRole? HapticTargetAt(int index)
+            => index > 0 && index < HapticTargets.Length ? HapticTargets[index] : null;
 
         private void BuildColorSwatches()
         {
@@ -2420,6 +2443,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtHapticDuration.Text = _selectedHaptic.Duration.ToString("0.##", CultureInfo.InvariantCulture);
                 SliderHapticIntensity.Value = Math.Clamp(_selectedHaptic.Intensity, 0.0, 1.0);
                 TxtHapticIntensityValue.Text = $"{(int)(SliderHapticIntensity.Value * 100)}%";
+                CmbHapticTarget.SelectedIndex = HapticTargetIndex(_selectedHaptic.Target);
 
                 var isCustom = _selectedHaptic.CustomPattern != null && _selectedHaptic.CustomPattern.Count > 0;
                 if (isCustom)
@@ -2493,6 +2517,14 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             MarkDirty();
             RebuildHapticVisuals();
+            ScheduleValidation();
+        }
+
+        private void CmbHapticTarget_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressPatternSync || _selectedHaptic == null) return;
+            _selectedHaptic.Target = HapticTargetAt(CmbHapticTarget.SelectedIndex);
+            MarkDirty();
             ScheduleValidation();
         }
 
@@ -2642,7 +2674,20 @@ namespace ConditioningControlPanel.Views.Deeper
                     TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
                     return;
                 }
-                await App.Haptics.SetSyncPatternAsync(samples, durationMs);
+                // The preview waives the master toggle, but the Pattern routing row is the user's
+                // own dial — a disabled row silently swallows the envelope, so say so instead.
+                if (!App.Haptics.Settings.V2.Rule(HapticLayer.Pattern).Enabled)
+                {
+                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_row_off");
+                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                    return;
+                }
+                var ok = await App.Haptics.PreviewSyncPatternAsync(samples, durationMs, _selectedHaptic.Target);
+                if (!ok)
+                {
+                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_premium");
+                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                }
             }
             catch (Exception ex)
             {
@@ -3388,6 +3433,7 @@ namespace ConditioningControlPanel.Views.Deeper
             };
 
             ActionFields.Children.Add(combo);
+            AddHapticTargetField(ActionFields, h);
             ActionFields.Children.Add(curveHost);
             SyncCurveVisibility();
 
@@ -3395,6 +3441,30 @@ namespace ConditioningControlPanel.Views.Deeper
                 h.Intensity, v => h.Intensity = Math.Clamp(v, 0, 1));
             AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
                 h.DurationMs, v => h.DurationMs = Math.Max(50, v));
+        }
+
+        private void AddHapticTargetField(Panel host, IHapticPatternTarget h)
+        {
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_haptic_target"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
+            };
+            FillHapticTargetCombo(combo);
+            combo.SelectedIndex = HapticTargetIndex(h.Target);
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                h.Target = HapticTargetAt(combo.SelectedIndex);
+                MarkDirty();
+                ScheduleValidation();
+            };
+            host.Children.Add(combo);
         }
 
         // Generic effect-firing action (TriggerEffect). Lets a rule fire any of

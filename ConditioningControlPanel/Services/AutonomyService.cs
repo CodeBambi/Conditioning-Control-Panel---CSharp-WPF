@@ -319,7 +319,8 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("AutonomyService: Test failed - service not enabled. Enable Autonomy Mode first!");
 
-                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+                var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                                 || App.DailyFree?.IsFreeToday("takeover") == true;
                 var reason = !hasPatreon
                     ? "Bambi Takeover requires Patreon access."
                     : "Click the green \"Start\" button to enable it, then press Test again.";
@@ -612,7 +613,11 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
-            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+            // Daily free day (the ? box) counts as access here too - the UI gate
+            // (TierGate keyed overload) and this engine gate must agree or the chip
+            // toggles a takeover that then refuses to start.
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                             || App.DailyFree?.IsFreeToday("takeover") == true;
             return settings.AutonomyModeEnabled &&
                    settings.AutonomyConsentGiven &&
                    hasPatreon;
@@ -1501,8 +1506,10 @@ namespace ConditioningControlPanel.Services
             // from "a long video is still playing", so it either released too early or relied on
             // a chain of generation counters to stay out of the way.
 
-            // Navigate to video with fullscreen autoplay
-            if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true))
+            // Navigate to video with fullscreen autoplay. userInitiated: false - the companion
+            // decided this on her own, so an offline block must stay silent rather than pop a
+            // toast at a user who never clicked anything.
+            if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true, userInitiated: false))
             {
                 App.Logger?.Information("AutonomyService: Web video navigation initiated for '{Name}'", videoName);
             }
@@ -1937,7 +1944,12 @@ namespace ConditioningControlPanel.Services
                     // Bespoke voiced success response for this exact mantra.
                     var respAudio = App.MantraVoice?.ResolveAudio(mantra.ResponseAudio);
                     Speak(string.IsNullOrWhiteSpace(mantra.Response) ? "Good girl~" : mantra.Response, respAudio);
-                    App.Mantra?.TryCompleteMantra();
+                    // Typed-minigame credit if it happens to be running; otherwise credit the
+                    // spoken completion directly - TryCompleteMantra() bails when the minigame
+                    // is closed, which used to mean a mic-verified mantra credited nothing
+                    // (no XP, no quest, no program day).
+                    if (App.Mantra?.TryCompleteMantra() != true)
+                        App.Mantra?.CreditExternalMantra();
                     App.Logger?.Information("AutonomyService: SpokenMantra matched '{Phrase}' (score={Score:0.00}, conf={Conf:0.00})",
                         phrase, result.Score, result.Confidence);
                 }

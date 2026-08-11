@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 :: Configuration
-set VERSION=6.6.3
+set VERSION=6.7.4
 set PROJECT_DIR=ConditioningControlPanel
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish
 set INSTALLER_OUTPUT=installer-output
@@ -61,7 +61,7 @@ for %%D in (cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant) do (
 )
 
 echo.
-echo [2.6/6] Ensuring VC++ Redistributable bootstrapper is present...
+echo [2.6/6] Ensuring redistributable bootstrappers are present...
 :: Bundled into the installer so webcam features (OpenCvSharpExtern.dll) work on
 :: machines without the MSVC runtime. Downloaded once; cached in redist\.
 if not exist "redist" mkdir "redist"
@@ -70,6 +70,21 @@ if not exist "redist\VC_redist.x64.exe" (
     curl -L -f -o "redist\VC_redist.x64.exe" https://aka.ms/vs/17/release/vc_redist.x64.exe
     if errorlevel 1 (
         echo ERROR: Failed to download VC_redist.x64.exe
+        echo Manually place it in the redist\ folder and re-run.
+        pause
+        exit /b 1
+    )
+)
+
+:: The WebView2 Evergreen bootstrapper (~1.6 MB) is COMMITTED in redist\ - WebView2
+:: backs the FYP feed, Exclusives, DtRH, the Goon Game and the default video engine,
+:: so the installer must never ship without it. This is only a safety net for a
+:: checkout that somehow lacks the file.
+if not exist "redist\MicrosoftEdgeWebview2Setup.exe" (
+    echo redist\MicrosoftEdgeWebview2Setup.exe missing - downloading from go.microsoft.com ...
+    curl -L -f -o "redist\MicrosoftEdgeWebview2Setup.exe" "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+    if errorlevel 1 (
+        echo ERROR: Failed to download MicrosoftEdgeWebview2Setup.exe
         echo Manually place it in the redist\ folder and re-run.
         pause
         exit /b 1

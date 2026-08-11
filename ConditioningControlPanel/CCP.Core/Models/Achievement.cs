@@ -118,6 +118,15 @@ public class Achievement
             ImageName = "daily_maintenance.png",
             Category = AchievementCategory.Progression
         },
+        ["window_shopping"] = new Achievement
+        {
+            Id = "window_shopping",
+            Name = "Window Shopping",
+            Requirement = "Spend 100 Sparkle Points",
+            FlavorText = "A hundred sparkles gone and you'd do it again. Good girls love a spending habit.",
+            ImageName = "window_shopping.png",
+            Category = AchievementCategory.Progression
+        },
 
         // ========== TIME & SESSIONS ==========
         ["rose_tinted_reality"] = new Achievement
@@ -201,7 +210,34 @@ public class Achievement
             ImageName = "spiral_eyes.png",
             Category = AchievementCategory.TimeSessions
         },
-        
+        ["threadbare"] = new Achievement
+        {
+            Id = "threadbare",
+            Name = "Threadbare",
+            Requirement = "Spend 10 cumulative hours under the Spiral",
+            FlavorText = "Ten hours of the same turn. Whatever used to be there has been worn smooth.",
+            ImageName = "threadbare.png",
+            Category = AchievementCategory.TimeSessions
+        },
+        ["screen_time"] = new Achievement
+        {
+            Id = "screen_time",
+            Name = "Screen Time",
+            Requirement = "Watch 10 cumulative hours of mandatory video",
+            FlavorText = "Ten hours of footage and you couldn't name one thing you saw. Perfect attendance, zero notes.",
+            ImageName = "screen_time.png",
+            Category = AchievementCategory.TimeSessions
+        },
+        ["thirty_day_doll"] = new Achievement
+        {
+            Id = "thirty_day_doll",
+            Name = "Thirty-Day Doll",
+            Requirement = "Launch the app 30 days in a row",
+            FlavorText = "A whole month without missing a check-in. That's not a streak, sweetie, that's a schedule.",
+            ImageName = "thirty_day_doll.png",
+            Category = AchievementCategory.TimeSessions
+        },
+
         // ========== MINIGAMES & SKILL ==========
         ["mathematicians_nightmare"] = new Achievement
         {
@@ -237,6 +273,24 @@ public class Achievement
             Requirement = "Complete Lock Card (3 phrases) in under 15 seconds",
             FlavorText = "You didn't even read it, you just typed. Speed is a sign of devotion.",
             ImageName = "obedience_reflex.png",
+            Category = AchievementCategory.Minigames
+        },
+        ["word_perfect"] = new Achievement
+        {
+            Id = "word_perfect",
+            Name = "Word Perfect",
+            Requirement = "Complete 50 Lock Cards",
+            FlavorText = "Fifty cards typed out. You don't read them anymore, you just recite.",
+            ImageName = "word_perfect.png",
+            Category = AchievementCategory.Minigames
+        },
+        ["eyes_front"] = new Achievement
+        {
+            Id = "eyes_front",
+            Name = "Eyes Front",
+            Requirement = "Pass 100 attention checks",
+            FlavorText = "A hundred times you proved you were watching. That's the only homework here.",
+            ImageName = "eyes_front.png",
             Category = AchievementCategory.Minigames
         },
         ["mercy_beggar"] = new Achievement

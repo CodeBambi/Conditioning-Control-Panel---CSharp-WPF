@@ -20,29 +20,117 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.6.3";
+        public const string AppVersion = "6.7.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.6.3 - Video Hotfix 💗
+        public const string CurrentPatchNotes = @"v6.7 - ¯\_( ͡° ͜ʖ ͡°)_/¯
+
+🧠 AI COMPANION - HER ROOM
+- The Companion tab is now Her Room - her own space, redesigned from the ground up
+- A new brain: she remembers more, stays in character, and actually holds a conversation
+- Awareness: opt-in, she can notice what you're doing on your PC and react to it
+- You hold the leash: a plain-words dial for what leaves your PC (nothing / app names / + page titles), a proper app picker, incognito detection, and a one-hour pause button
+
+📱 FOR YOU FEED - ON DESKTOP
+- The mobile mosaic reel arrives on desktop - an endless For You feed of conditioning clips, right in the app
+- Ghost mode: make the feed see-through AND click-through - it haunts your screen while you do other things
+- Eye control: hands-free scrolling with your webcam gaze
+- Park it anywhere: opacity control, any monitor, survives Show Desktop
+
+🎮 GOON GAME - 1v1 DUELS
+- Duel another player in real time: throw media payloads, build heat, survive sudden death
+- Send your own photos, videos and GIFs in P2P, up to 64MB per video - sending your own media is a supporter perk, every seat still receives and duels in full
+- 10-second voice notes with opt-in consent and push-to-talk (V key on desktop)
+- Invite anyone with a share link - no account needed to join, Discord rich presence included
+- Privacy by design: received partner media is ephemeral and never outlives the match
+- Solo practice mode if you want to warm up first
+
+🎬 NEW VIDEO ENGINE (NOW DEFAULT)
+- Out-of-process browser video playback: crashes can't take the app down anymore
+- In-window attention targets, and grace pause - your first panic press pauses a mandatory video instead of ending it
+
+💎 THE VELVET VAULT
+- The new Exclusives tab replaces the launcher popup - one home for FYP, Goon Game and everything premium
+- Spotlight shelf, dedicated backdrop, and a peek at what is coming next
+
+🪪 PROFILE REDESIGN
+- Your profile is now a Trainer Card - rebuilt from the ground up
+- 12 hand-made scene banners, 3 per mod, sized exactly for the card
+- Wardrobe: 60 new adornments to dress your card, with a full editor and click-to-pin
+- Earn it to wear it: select wardrobe pieces, guild avatars and badges unlock through achievements
+- 12 preset 'blank subject' avatars, 3 per mod, if you'd rather stay faceless
+- New privacy dialog: you decide exactly what the leaderboard sees
+
+✨ ALSO NEW
+- HAPTICS OVERHAUL: multi-toy support, rebuilt Lovense + Buttplug providers, FunScript playback, temperament dial - now with Deeper editor parity
+- Flash: avoid-the-center exclusion box for gaming
+- Spiral opacity cap raised from 50% to 100%
+- Modular installer: ~1.1 GB moved into downloadable content packs - way smaller download
 
 🔧 BUG FIXES
-- A video that freezes mid-stop can no longer wedge the whole app. Stuck players are retired and rebuilt off-thread, and a frozen fullscreen video now releases the desktop instead of trapping you behind it
-- Fixed a crash where a video's frame buffer was freed while the decoder was still writing into it
-- Black screens no longer count toward video watch time, and video lengths are tracked correctly again after a player is replaced
-- The Bubble Count minigame got the same treatment: no more stale players, a memory leak fixed, and it now backs off for a minute instead of retrying into a broken state
-- Deeper haptics now work even when Video Haptic Sync is off (it was silently gating them)
-- The built-in browser recovers when it fails to load, actually falls back to your external browser, and the pop-out window comes to the front properly
-- Settings saves can no longer race each other or get corrupted by a badly timed shutdown, and restoring a backup no longer gets overwritten by profile sync
-- Unchecking an asset folder now immediately removes its images from the flash rotation
-- A stuck Lock Card or Pop Quiz can no longer jam interactions forever - the app now recovers and closes it cleanly
+- Content packs: a wedged pack download now heals itself on next launch
+- Profile: portrait display fixes and player-tag cleanup
+- Programs: spoken mantras credit correctly, session bubble rate fixed, every task shows a how-to line
+- Assets: deselection honored everywhere, chaos overlays and Graded Intake included (#762 #798 #619)
+- Video: blurred background fits the true aspect ratio (#786)
+- Audio: fixed the playback runaway that killed the app when Windows audio died (#778 #779)
+- Freeze fixes across the board, Brain Drain captures off the UI thread (#777)
+- Lockdown no longer swallows bare Esc system-wide (#680)
+- Quests: voice-command spiral/pink time counts (#719), streaks stop flashing 0
+- Lock card: paste/undo cheats blocked, AltGr + IME input fixed (#734)
+
+🌍 LOCALIZATION
+- Massive backfill: 701 missing keys translated in 7 languages, plus 364 in Simplified Chinese
+
+🩹 v6.7.2 HOTFIX
+- Audio: mandatory and startup videos no longer go silent 2-3 seconds in - the ducking system was catching the app's own new video engine
+- For You feed: clips your PC can't decode now show a clear notice and swap themselves out instead of sitting as silent black tiles
+- AI companion: replies with effects no longer get cut off - and raw JSON can never leak into her speech bubble again
+- Companion: new 'Mute Voice Lines' switch in Her Room - keep her bubbles and giggles, silence only the spoken lines
+
+🩹 v6.7.3 HOTFIX
+- Achievements: full art-forward redesign of the tab - big card art, no more drawer, no more dead space
+- AI companion: video suggestions fixed for real - she only names videos from your actual list now, suggestions are clickable links, and near-miss titles snap to the right video
+- Companion: killed the loop that had her inventing titles and fake creators - her own chat history was teaching her bad habits, and it now self-corrects
+
+🩹 v6.7.4 HOTFIX
+- Updates: fixed the silent update failure - the installer now asks for admin rights when it needs them, checks the install actually landed, and tells you (with a download link) when it didn't. If updates kept 'running' but nothing changed, this was you
+- Performance: heavy overlay combos (pink filter + spiral + bubbles + subliminals) no longer choke the app - overlays now only redraw when something actually changed
+- Personality presets: switching presets always takes effect now, even if an imported personality file was active - and hand-edited custom prompts actually reach her (if she suddenly sounds different, check your custom prompt toggle in the editor)
+- Personality files: the four preset personalities (Strict Domme, Soft Hypnotist, Elegant Mistress, Chaotic Gremlin) now actually ship with the app - the companion personality picker opens right on them
+- Personas, the real fix: the AI provider was silently cutting the MIDDLE out of long prompts - deleting her personality while keeping her old chat voice. That compression is now off, requests are kept inside her real memory window, and switching persona fences off her old voice so she can't imitate it
+- Profile: Discord avatars no longer get replaced by a blank-subject bust while they load
+- Privacy: the hidden-apps list in 'What she can see' is now clearly titled - those chips are what she can NEVER see
+- Mod manager: a real MOD MANAGER button next to the mod selector - no more hunting for the tiny gear
 
 Season: Airhead August";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
+
+        /// <summary>
+        /// Manual-download fallback shown whenever an automatic install could not complete.
+        /// </summary>
+        public const string ReleasesPageUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest";
+
+        /// <summary>
+        /// How long a skip marker suppresses re-offering the same version. The marker is written
+        /// when the user dismisses the update dialog and when an install attempt failed, so this
+        /// is the "don't pester me again" window in both cases.
+        /// </summary>
+        private const double SkipMarkerLifetimeHours = 24;
+
+        /// <summary>
+        /// An attempt marker older than this is stale (app wasn't restarted for days) and is
+        /// cleaned up silently instead of raising a confusing after-the-fact failure dialog.
+        /// </summary>
+        private const double AttemptMarkerReportWindowDays = 7;
+
+        /// <summary>Exit code slot for "the helper never recorded one".</summary>
+        internal const int UnknownExitCode = -1;
 
         private AppUpdateInfo? _latestUpdate;
         private bool _disposed;
@@ -112,9 +200,28 @@ Season: Airhead August";
         }
 
         /// <summary>
-        /// Whether the app was installed via the installer (has registry entry)
+        /// Whether the app was installed via the installer. The registry entry is the primary
+        /// signal, but it lives in HKCU: an install run under a different (elevated) account writes
+        /// it to that account's hive, which would silently disable updates forever. Inno's
+        /// uninstaller sitting next to our exe is the account-independent fallback.
         /// </summary>
-        public static bool IsInstalledViaInstaller => GetInstalledPath() != null;
+        public static bool IsInstalledViaInstaller
+        {
+            get
+            {
+                if (GetInstalledPath() != null) return true;
+
+                try
+                {
+                    var exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+                    return !string.IsNullOrEmpty(exeDir) && File.Exists(Path.Combine(exeDir, "unins000.exe"));
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
 
         public UpdateService()
         {
@@ -158,8 +265,10 @@ Season: Airhead August";
                     return null;
                 }
 
-                // Loop-prevention: if a recent update attempt didn't take, suppress the
-                // same version for up to 24h so we don't pester the user every launch.
+                // Loop-prevention: if the user dismissed this version, or an install attempt for it
+                // didn't take, suppress it for 24h so we don't pester them every launch. The marker
+                // must therefore survive the whole 24h — clearing it earlier made the window below
+                // unreachable and the skip logic a no-op (#849).
                 var skippedVersion = GetSkippedUpdateVersion();
                 if (!string.IsNullOrEmpty(skippedVersion))
                 {
@@ -170,10 +279,10 @@ Season: Airhead August";
                         ClearSkippedUpdateVersion();
                         skippedVersion = null;
                     }
-                    else if (skipAge.TotalMinutes > 5)
+                    else if (skipAge.TotalHours >= SkipMarkerLifetimeHours)
                     {
-                        App.Logger?.Information("Skip marker for {Version} is {Minutes:F1} minutes old, clearing it",
-                            skippedVersion, skipAge.TotalMinutes);
+                        App.Logger?.Information("Skip marker for {Version} is {Hours:F1}h old (>= {Limit}h), clearing it",
+                            skippedVersion, skipAge.TotalHours, SkipMarkerLifetimeHours);
                         ClearSkippedUpdateVersion();
                         skippedVersion = null;
                     }
@@ -188,19 +297,13 @@ Season: Airhead August";
                     return null;
                 }
 
+                // The marker was already aged out above, so anything still here is inside the window.
                 if (githubUpdate.IsNewer && !string.IsNullOrEmpty(skippedVersion) && skippedVersion == githubUpdate.Version)
                 {
                     var hoursSinceSkip = (DateTime.Now - GetSkippedUpdateTime()).TotalHours;
-                    if (hoursSinceSkip < 24)
-                    {
-                        App.Logger?.Warning("Skipping update to {Version} — attempted {Hours:F1}h ago but app still on old version. Retry after 24h.",
-                            githubUpdate.Version, hoursSinceSkip);
-                        githubUpdate.IsNewer = false;
-                    }
-                    else
-                    {
-                        ClearSkippedUpdateVersion();
-                    }
+                    App.Logger?.Information("Suppressing update to {Version} — skipped/attempted {Hours:F1}h ago. Re-offering after {Limit}h.",
+                        githubUpdate.Version, hoursSinceSkip, SkipMarkerLifetimeHours);
+                    githubUpdate.IsNewer = false;
                 }
 
                 _latestUpdate = githubUpdate;
@@ -258,14 +361,21 @@ Season: Airhead August";
             return DateTime.MinValue;
         }
 
-        private static void SetSkippedUpdateVersion(string version)
+        /// <summary>
+        /// Suppresses re-offering <paramref name="version"/> for 24h. Called when the user dismisses
+        /// the update dialog and when an install attempt for that version failed.
+        /// </summary>
+        public static void SetSkippedUpdateVersion(string version)
         {
+            if (string.IsNullOrWhiteSpace(version)) return;
+
             try
             {
                 var skipFile = GetSkipFilePath();
                 Directory.CreateDirectory(Path.GetDirectoryName(skipFile)!);
                 File.WriteAllText(skipFile, version);
-                App.Logger?.Information("Marked update to {Version} as pending - will track if it succeeds", version);
+                App.Logger?.Information("Marked update to {Version} as skipped - will not re-offer for {Hours}h",
+                    version, SkipMarkerLifetimeHours);
             }
             catch (Exception ex)
             {
@@ -285,6 +395,134 @@ Season: Airhead August";
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Result of a silent update attempt made by the previous run, read back on startup.
+        /// </summary>
+        public sealed class PendingUpdateOutcome
+        {
+            /// <summary>Version the previous run tried to install.</summary>
+            public string Version { get; init; } = "";
+
+            /// <summary>Inno Setup exit code, or <see cref="UnknownExitCode"/> if the helper never recorded one.</summary>
+            public int ExitCode { get; init; } = UnknownExitCode;
+
+            /// <summary>True only when the installer reported success AND we are actually running the new build.</summary>
+            public bool Succeeded { get; init; }
+        }
+
+        private static string GetAttemptFilePath() => Path.Combine(App.UserDataPath, "update_attempt.txt");
+
+        private static string GetAttemptResultFilePath() => Path.Combine(App.UserDataPath, "update_result.txt");
+
+        /// <summary>
+        /// Records that we are about to hand <paramref name="version"/> to the installer. The marker
+        /// is read back on the next launch to tell a real upgrade from a silent rollback.
+        /// </summary>
+        private static void SetPendingUpdateAttempt(string version)
+        {
+            try
+            {
+                var attemptFile = GetAttemptFilePath();
+                Directory.CreateDirectory(Path.GetDirectoryName(attemptFile)!);
+                try { File.Delete(GetAttemptResultFilePath()); } catch { }
+                File.WriteAllText(attemptFile, version);
+                App.Logger?.Information("Recorded pending update attempt for {Version}", version);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to write update attempt marker");
+            }
+        }
+
+        private static void ClearPendingUpdateAttempt()
+        {
+            try { File.Delete(GetAttemptFilePath()); } catch { }
+            try { File.Delete(GetAttemptResultFilePath()); } catch { }
+        }
+
+        /// <summary>
+        /// Decides whether a finished install attempt actually landed. Inno Setup returns 0 for
+        /// success, 2 for user-cancelled and anything else for failure; a rolled-back install can
+        /// still leave us on the old build, so the version has to agree with the exit code.
+        /// </summary>
+        internal static bool DidUpdateSucceed(string attemptedVersion, string currentVersion, int exitCode)
+        {
+            if (exitCode != 0 && exitCode != UnknownExitCode)
+                return false;
+
+            if (!Version.TryParse(attemptedVersion, out var attempted) ||
+                !Version.TryParse(currentVersion, out var current))
+            {
+                // Unparseable versions: trust the exit code alone rather than nagging blindly.
+                return exitCode == 0;
+            }
+
+            return current >= attempted;
+        }
+
+        /// <summary>
+        /// Reads back the previous run's install attempt and clears the marker. Returns null when no
+        /// attempt was pending (or it was too old to be worth reporting). On failure the version is
+        /// also written to the skip marker so we stop retrying the same broken install every launch.
+        /// </summary>
+        public static PendingUpdateOutcome? ConsumePendingUpdateOutcome()
+        {
+            try
+            {
+                var attemptFile = GetAttemptFilePath();
+                if (!File.Exists(attemptFile))
+                    return null;
+
+                var version = File.ReadAllLines(attemptFile).FirstOrDefault()?.Trim() ?? "";
+                var age = DateTime.Now - File.GetLastWriteTime(attemptFile);
+
+                var exitCode = UnknownExitCode;
+                try
+                {
+                    var resultFile = GetAttemptResultFilePath();
+                    if (File.Exists(resultFile))
+                    {
+                        var raw = File.ReadAllLines(resultFile).FirstOrDefault()?.Trim();
+                        if (int.TryParse(raw, out var parsed)) exitCode = parsed;
+                    }
+                }
+                catch { }
+
+                ClearPendingUpdateAttempt();
+
+                if (string.IsNullOrEmpty(version))
+                    return null;
+
+                var succeeded = DidUpdateSucceed(version, AppVersion, exitCode);
+
+                if (succeeded)
+                {
+                    App.Logger?.Information("Previous update to {Version} completed (installer exit={Code})", version, exitCode);
+                    ClearSkippedUpdateVersion();
+                    return new PendingUpdateOutcome { Version = version, ExitCode = exitCode, Succeeded = true };
+                }
+
+                App.Logger?.Error("Update to {Version} did not install (installer exit={Code}, still running {Current})",
+                    version, exitCode, AppVersion);
+
+                // Stop the silent retry loop: don't re-offer this version for 24h.
+                SetSkippedUpdateVersion(version);
+
+                if (age.TotalDays > AttemptMarkerReportWindowDays)
+                {
+                    App.Logger?.Information("Update attempt marker is {Days:F1} days old, not reporting to the user", age.TotalDays);
+                    return null;
+                }
+
+                return new PendingUpdateOutcome { Version = version, ExitCode = exitCode, Succeeded = false };
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to read pending update outcome");
+                return null;
+            }
         }
 
         /// <summary>
@@ -487,8 +725,10 @@ Season: Airhead August";
         /// <summary>
         /// Runs the downloaded Inno Setup installer silently to update in place.
         /// Uses the current install path from registry to upgrade without user interaction.
+        /// Returns false when the helper could not be launched (e.g. the user declined the UAC
+        /// prompt) — the app is then still running and the caller must surface that.
         /// </summary>
-        public void RunInstallerSilentlyAndExit(string installerPath)
+        public bool RunInstallerSilentlyAndExit(string installerPath)
         {
             if (!File.Exists(installerPath))
             {
@@ -535,36 +775,110 @@ Season: Airhead August";
             var logPath = Path.Combine(
                 App.UserDataPath, "logs", "update-helper.log");
 
-            var helperPath = WriteUpdateHelperScript(installerPath, installPath, pid, appExe, logPath);
+            // installer.iss is PrivilegesRequired=lowest with the override only offered via a
+            // *dialog* — which /SILENT can never show. So a Program Files install gets a
+            // non-elevated setup that fails, rolls back, and /SUPPRESSMSGBOXES hides it (#849).
+            // Elevate the helper (not the installer) so the UAC prompt appears now, while the app
+            // is still on screen and we can detect a decline; the installer then inherits the
+            // elevated token and the wait-for-exit handoff is unchanged.
+            var needsElevation = NeedsElevationToInstall(installPath);
 
-            App.Logger?.Information("Launching update helper: {Helper} (pid={Pid}, appExe={AppExe}, log={Log})",
-                helperPath, pid, appExe, logPath);
+            var helperPath = WriteUpdateHelperScript(
+                installerPath, installPath, pid, appExe, logPath, GetAttemptResultFilePath(), needsElevation);
 
-            // Run the .cmd via cmd.exe (a batch file is not a PE, so UseShellExecute=false
-            // requires an explicit interpreter). CreateNoWindow keeps it fully hidden; the
+            App.Logger?.Information("Launching update helper: {Helper} (pid={Pid}, appExe={AppExe}, elevate={Elevate}, log={Log})",
+                helperPath, pid, appExe, needsElevation, logPath);
+
+            // Run the .cmd via cmd.exe (a batch file is not a PE, so it needs an explicit
+            // interpreter). WindowStyle=Hidden keeps the console off screen in both modes; the
             // helper survives our exit because a WPF app doesn't job-object its children.
             var startInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
                 Arguments = $"/c \"{helperPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
 
-            Process.Start(startInfo);
+            if (needsElevation)
+            {
+                // Verb requires ShellExecute; CreateNoWindow is ignored in that mode.
+                startInfo.UseShellExecute = true;
+                startInfo.Verb = "runas";
+            }
+            else
+            {
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
+            }
+
+            // Written before launch so the next startup can tell a real upgrade from a rollback.
+            SetPendingUpdateAttempt(_latestUpdate?.Version ?? "");
+
+            try
+            {
+                Process.Start(startInfo);
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                // ERROR_CANCELLED — user dismissed the UAC prompt. Stay alive on the old version.
+                App.Logger?.Warning("Update cancelled: the elevation prompt was declined");
+                ClearPendingUpdateAttempt();
+                SetSkippedUpdateVersion(_latestUpdate?.Version ?? "");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to launch update helper");
+                ClearPendingUpdateAttempt();
+                SetSkippedUpdateVersion(_latestUpdate?.Version ?? "");
+                return false;
+            }
 
             // Exit the current application so the helper's wait-for-exit can proceed.
             App.Logger?.Information("Exiting application for silent update (helper will install + relaunch)...");
             Application.Current.Shutdown();
+            return true;
+        }
+
+        /// <summary>
+        /// True when the install directory cannot be written by the current token, i.e. the silent
+        /// installer needs admin rights. Per-user installs stay prompt-free.
+        /// </summary>
+        private static bool NeedsElevationToInstall(string? installPath)
+        {
+            if (string.IsNullOrEmpty(installPath)) return false;
+
+            try
+            {
+                if (!Directory.Exists(installPath)) return false;
+
+                var probe = Path.Combine(installPath, $".ccp-write-probe-{Guid.NewGuid():N}.tmp");
+                using (File.Create(probe, 1, FileOptions.DeleteOnClose)) { }
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return true;
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Could not probe install dir writability, assuming elevation is needed");
+                return true;
+            }
         }
 
         /// <summary>
         /// Writes the external update helper batch script and returns its path. The script waits
-        /// for this process (pid) to exit, runs the installer silently, then relaunches appExe.
+        /// for this process (pid) to exit, runs the installer silently, records the installer's exit
+        /// code to resultPath, then relaunches appExe.
         /// Values are baked in as literals (no positional-arg parsing) so paths with spaces are safe.
         /// </summary>
-        private static string WriteUpdateHelperScript(string installerPath, string? installPath, int pid, string appExe, string logPath)
+        private static string WriteUpdateHelperScript(string installerPath, string? installPath, int pid,
+            string appExe, string logPath, string resultPath, bool elevated)
         {
             var helperDir = Path.GetDirectoryName(installerPath) ?? Path.GetTempPath();
             var helperPath = Path.Combine(helperDir, "update-helper.cmd");
@@ -576,6 +890,13 @@ Season: Airhead August";
             // and guarantees the new files land where we'll relaunch from.
             var dirArg = string.IsNullOrEmpty(installPath) ? "" : $" /DIR=\"{installPath}\"";
 
+            // When the helper is elevated, a plain `start` would hand the app an admin token for the
+            // rest of the session. Going through the shell drops it back to the logged-on user's
+            // medium-integrity token, which is what every other launch of the app uses.
+            var relaunch = elevated
+                ? "start \"\" explorer.exe \"%APPEXE%\""
+                : "start \"\" \"%APPEXE%\"";
+
             var lines = new[]
             {
                 "@echo off",
@@ -583,7 +904,8 @@ Season: Airhead August";
                 $"set \"LOG={logPath}\"",
                 $"set \"APPEXE={appExe}\"",
                 $"set \"INSTALLER={installerPath}\"",
-                $"echo [update-helper] start pid={pid} > \"%LOG%\"",
+                $"set \"RESULT={resultPath}\"",
+                $"echo [update-helper] start pid={pid} elevated={(elevated ? 1 : 0)} > \"%LOG%\"",
                 // Wait for the old app to fully exit (release its exe lock). The PID filter is
                 // exact; `find` just detects whether a matching row was returned. Capped at ~30
                 // iterations (~1min) so a reused PID can never hang this forever.
@@ -602,9 +924,15 @@ Season: Airhead August";
                 "echo [update-helper] old app exited (tries=%tries%), running installer >> \"%LOG%\"",
                 $"\"%INSTALLER%\" /SILENT /SUPPRESSMSGBOXES /NORESTART{dirArg}",
                 "set RC=%errorlevel%",
-                "echo [update-helper] installer exit=%RC% >> \"%LOG%\"",
+                // Redirect FIRST: `echo %RC%>file` would parse a single-digit RC as a handle number.
+                ">\"%RESULT%\" echo %RC%",
+                "if \"%RC%\"==\"0\" (",
+                "  echo [update-helper] installer reported success >> \"%LOG%\"",
+                ") else (",
+                "  echo [update-helper] installer FAILED exit=%RC% >> \"%LOG%\"",
+                ")",
                 "echo [update-helper] relaunching app >> \"%LOG%\"",
-                "start \"\" \"%APPEXE%\"",
+                relaunch,
                 "echo [update-helper] done >> \"%LOG%\"",
                 "endlocal",
             };

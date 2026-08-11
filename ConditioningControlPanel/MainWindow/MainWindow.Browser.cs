@@ -352,22 +352,20 @@ namespace ConditioningControlPanel
             }
 
             // Sync the radio button to the URL we just initialized to so the toggle UI
-            // matches the page. Suppress the toggle handler's homepage navigation since
-            // the WebView2 is already on its way to the right URL.
+            // matches the page. No suppression flag needed since #867: the toggle handler
+            // runs on Click, so moving the selection in code navigates nothing.
             var lowerUrl = url.ToLowerInvariant();
             if (lowerUrl.Contains("bambicloud.com"))
             {
-                _skipSiteToggleNavigation = true;
                 SettingsTab.RbBambiCloud.IsChecked = true;
             }
             else if (lowerUrl.Contains("hypnotube.com"))
             {
-                _skipSiteToggleNavigation = true;
                 SettingsTab.RbHypnoTube.IsChecked = true;
             }
             else
             {
-                // External URL — deselect both so re-clicking either fires Checked again
+                // External URL — neither site is current, so show neither as selected.
                 SettingsTab.RbBambiCloud.IsChecked = false;
                 SettingsTab.RbHypnoTube.IsChecked = false;
             }
@@ -402,7 +400,7 @@ namespace ConditioningControlPanel
         /// bring-up that never completes falls through to the external browser rather than
         /// swallowing the click. Continuations resume on the dispatcher (UI thread).
         /// </summary>
-        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen)
+        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen, bool userInitiated)
         {
             // Surface the browser while it finishes coming up, exactly as the ready path does —
             // otherwise the click looks ignored for as long as the bring-up takes.
@@ -413,7 +411,9 @@ namespace ConditioningControlPanel
 
             if (_browser?.IsInitialized == true && _browser.WebView?.CoreWebView2 != null)
             {
-                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+                // Carry userInitiated across the wait: offline mode can be switched on during the
+                // bring-up, and the re-entry decides the toast all over again.
+                NavigateToUrlInBrowser(url, autoPlayFullscreen, userInitiated);
                 return;
             }
 
@@ -439,9 +439,106 @@ namespace ConditioningControlPanel
             }
         }
 
-        internal async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// #867 — offline mode used to swallow every browser action without a word, so the site
+        /// buttons, Pop Out and Reload all read as broken. Say what happened instead. Warning,
+        /// not Error: the user asked for offline mode, this is the setting doing its job.
+        /// </summary>
+        private void NotifyBrowserBlockedOffline()
+        {
+            App.Logger?.Debug("Browser action blocked by offline mode");
+            App.Notifications?.Show(Loc.Get("browser_toast_offline_blocked"),
+                NotificationType.Warning, TimeSpan.FromSeconds(6));
+        }
+
+        /// <summary>
+        /// True when the embedded browser is live and actually sitting on BambiCloud or HypnoTube.
+        /// That is the state in which the site radios are a READOUT of the page rather than a
+        /// preference, so moving them behind the user's back would make the UI lie.
+        /// </summary>
+        private bool IsBrowserShowingKnownSite()
+        {
+            try
+            {
+                if (!_browserInitialized || _browser == null) return false;
+                var current = _browser.GetCurrentUrl();
+                if (string.IsNullOrEmpty(current)) return false;
+                return current.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase)
+                    || current.Contains("hypnotube.com", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // Touching a crashed WebView2 throws. Unknown page = safe to sync.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// #867 — points the site radios at the active mod's own site. A mod switch could leave
+        /// the selection on a site the new mod does not even show, or (after an external link
+        /// deselected both) on nothing at all, and the radios are the browser's only site UI.
+        /// </summary>
+        /// <param name="navigateIfChanged">
+        /// False (the default) keeps this selection-only, for callers that issue their own
+        /// navigation right after — a mod switch loads the mod's default URL itself, and a second
+        /// navigate from here would race it. True is for the caller that has no navigation of its
+        /// own (the "show BambiCloud everywhere" override being switched off while BambiCloud is
+        /// the page on screen): without it the radio says HypnoTube over a live BambiCloud page.
+        /// </param>
+        internal void SyncSiteRadiosToActiveMod(bool navigateIfChanged = false)
+        {
+            try
+            {
+                if (SettingsTab?.RbBambiCloud == null || SettingsTab.RbHypnoTube == null) return;
+
+                // ShowBambiCloudOption only says whether the button is OFFERED; the mod's own
+                // default URL says which site it uses. A mod that does not use BambiCloud must
+                // land on HypnoTube even when the "show everywhere" override reveals the button.
+                var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+
+                // Never re-point the radios away from a page that is already on screen. Once the
+                // browser is on one of the two sites the radios report WHERE YOU ARE - both the
+                // user and RefreshBrowserLoadingText read them that way - so syncing a mod switch
+                // onto them would claim BambiCloud over a live HypnoTube page. The single
+                // exception is this sync's original purpose: a mod that HIDES BambiCloud may not
+                // be left sitting on it, and those callers navigate away immediately.
+                if (modWantsBambiCloud && IsBrowserShowingKnownSite()) return;
+
+                var defaultUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
+                var onBambiCloud = modWantsBambiCloud
+                    && defaultUrl.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase);
+
+                var target = onBambiCloud ? SettingsTab.RbBambiCloud : SettingsTab.RbHypnoTube;
+                var moved = target.IsChecked != true; // also true when an external link left both off
+                target.IsChecked = true;
+
+                // Offline mode is deliberately excluded: the browser has been parked on a blank
+                // page, and navigating it back to a site here would walk straight through the
+                // setting the user turned on.
+                if (moved && navigateIfChanged && App.Settings?.Current?.OfflineMode != true)
+                    NavigateBrowserToCurrentSiteHome();
+            }
+            catch (Exception ex) { App.Logger?.Debug("SyncSiteRadiosToActiveMod: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// #867 — the site radios' one entry point. Wired to Click rather than Checked so a
+        /// second click on the site you are already on still takes you back to its homepage,
+        /// and so code that moves the selection (mod switch, external-link sync) does not
+        /// navigate behind the user's back.
+        /// </summary>
+        internal async void BrowserSiteToggle_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return; // Don't auto-load browser during XAML init
+
+            // Offline mode is checked FIRST. It used to sit below the lazy-init branch, so the
+            // very first click in offline mode still built a WebView2 and loaded the homepage -
+            // the one case the block exists to prevent. Say so instead of dying quietly (#867).
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
 
             // Lazy-load browser on first toggle interaction. Pass the URL
             // matching the radio button the user just clicked — without an
@@ -457,16 +554,6 @@ namespace ConditioningControlPanel
                 return;
             }
             if (_browser == null) return;
-
-            // Block navigation in offline mode
-            if (App.Settings?.Current?.OfflineMode == true) return;
-
-            // Skip navigation if we're already navigating to a specific URL (from speech bubble link)
-            if (_skipSiteToggleNavigation)
-            {
-                _skipSiteToggleNavigation = false;
-                return;
-            }
 
             var isBambiCloud = SettingsTab.RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
@@ -498,13 +585,21 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="url">The URL to navigate to</param>
         /// <param name="autoPlayFullscreen">If true, auto-plays video and requests fullscreen on the video element</param>
+        /// <param name="userInitiated">
+        /// True when the navigation traces back to something the user just clicked (a speech-bubble
+        /// link, a companion link, a remote controller's explicit command) - those deserve the
+        /// offline toast, because otherwise the click reads as broken. False for navigation the app
+        /// decides on its own (Autonomy's fullscreen web video, a Chaos effect payload): the user
+        /// did not ask, so a toast there is just offline mode nagging in the background.
+        /// </param>
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
-        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false)
+        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false, bool userInitiated = true)
         {
-            // Block navigation in offline mode
+            // Block navigation in offline mode.
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
+                if (userInitiated) NotifyBrowserBlockedOffline();
                 return false;
             }
 
@@ -524,7 +619,7 @@ namespace ConditioningControlPanel
                     // set the moment CreateBrowserAsync returns, BrowserReady only fires once
                     // WebView_Loaded finishes). Re-initializing here would tear down an init that
                     // is still in flight, so wait it out and navigate when it lands.
-                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen);
+                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen, userInitiated);
                     return true;
                 }
                 if (_browserInitialized)
@@ -550,23 +645,21 @@ namespace ConditioningControlPanel
 
                 var lowerUrl = url.ToLowerInvariant();
 
-                // Switch to correct site tab based on URL
-                // Set flag to skip the homepage navigation in the toggle handler
+                // Switch to correct site tab based on URL. Since #867 the toggle handler runs on
+                // Click, so setting the selection here cannot kick off a second navigation and
+                // needs no suppression flag.
                 if (lowerUrl.Contains("bambicloud.com") && SettingsTab.RbBambiCloud.IsChecked != true)
                 {
-                    _skipSiteToggleNavigation = true;
                     SettingsTab.RbBambiCloud.IsChecked = true;
                 }
                 else if (lowerUrl.Contains("hypnotube.com") && SettingsTab.RbHypnoTube.IsChecked != true)
                 {
-                    _skipSiteToggleNavigation = true;
                     SettingsTab.RbHypnoTube.IsChecked = true;
                 }
                 else if (!lowerUrl.Contains("bambicloud.com") && !lowerUrl.Contains("hypnotube.com"))
                 {
-                    // External URL — deselect both radio buttons so clicking either one
-                    // fires a Checked event to navigate back (RadioButton.Checked only fires
-                    // on false→true transitions, so re-clicking an already-checked button does nothing)
+                    // External URL — neither site is current, so deselect both. Clicking either
+                    // one afterwards navigates back to it.
                     SettingsTab.RbBambiCloud.IsChecked = false;
                     SettingsTab.RbHypnoTube.IsChecked = false;
                 }
@@ -1294,6 +1387,11 @@ namespace ConditioningControlPanel
                 if (DiscordTab.ChkDiscordTabAllowDm != null) DiscordTab.ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
                 if (DiscordTab.ChkDiscordTabSharePfp != null) DiscordTab.ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
                 if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
+                // Goon Game sharing (all default off). The handlers no-op when the value is
+                // unchanged, so these programmatic assignments never trigger a sync push.
+                if (DiscordTab.ChkGoonShareAvatar != null) DiscordTab.ChkGoonShareAvatar.IsChecked = s.GoonShareAvatar;
+                if (DiscordTab.ChkGoonShareDiscordDm != null) DiscordTab.ChkGoonShareDiscordDm.IsChecked = s.GoonShareDiscordDm;
+                if (DiscordTab.ChkGoonRichPresence != null) DiscordTab.ChkGoonRichPresence.IsChecked = s.GoonRichPresence;
             }
 
             // Pre-fill search bar with user's unified display name (V2 auth) or fallback
@@ -1372,6 +1470,8 @@ namespace ConditioningControlPanel
             {
                 DiscordTab.ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
             }
+            // Nothing on screen belongs to anyone else any more, so the "back to me" chip retires.
+            SetProfileViewingSelf(true);
         }
 
         private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1680,6 +1780,10 @@ namespace ConditioningControlPanel
                 DiscordTab.OgBannerBadge.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // Staff + whitelist badges for own profile. Whitelist aggregates on PatreonService
+            // (Discord-only and SubscribeStar whitelists both fold in via SetWhitelistStatus).
+            ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
+
             // Avatar - load from Discord only if ShareProfilePicture is enabled
             if (DiscordTab.ProfileViewerAvatar != null)
             {
@@ -1700,16 +1804,22 @@ namespace ConditioningControlPanel
                         bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                         bitmap.EndInit();
                         DiscordTab.ProfileViewerAvatar.ImageSource = bitmap;
+                        SetProfilePictureLoad(ProfilePictureLoad.Loaded);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to load profile avatar");
                         DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                        SetProfilePictureLoad(ProfilePictureLoad.None);
                     }
                 }
                 else
                 {
+                    // Nothing to show (not logged in, or ShareProfilePicture off). This path is
+                    // fully synchronous, so the empty slot is final - the preset avatar may take
+                    // it, and with no preset equipped the card keeps its blank circle.
                     DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                    SetProfilePictureLoad(ProfilePictureLoad.None);
                 }
             }
 
@@ -1801,14 +1911,23 @@ namespace ConditioningControlPanel
             }
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
+            // Free-only count so the patron-exclusive set is never folded into this number.
+            var unlockedCount = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
+            var totalCount = App.Achievements?.GetTotalCount(exclusive: false)
+                        ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
             if (DiscordTab.TxtProfileViewerAchievements != null)
             {
-                // Free-only count so the patron-exclusive set is never folded into this number.
-                var unlocked = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
-                var total = App.Achievements?.GetTotalCount(exclusive: false)
-                            ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
-                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
+                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlockedCount} / {totalCount}";
             }
+
+            // Trainer Card surfaces (redesign Phase 1): hero XP meter, Showcase progress and the
+            // "back to me" chip. PlayerXP is progress inside the level; `xp` above is lifetime.
+            SetProfileViewingSelf(true);
+            UpdateProfileXpMeter(level, localXp);
+            UpdateProfileShowcase(unlockedCount, totalCount, progress?.UnlockedAchievements);
+            // Phase 2 cosmetics. Applied AFTER UpdateProfileShowcase because both touch the empty
+            // pin placeholders and this one is the authority on whether anything is pinned.
+            ApplyOwnProfileCosmetics();
 
             // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
             var patreonTier = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
@@ -1908,11 +2027,22 @@ namespace ConditioningControlPanel
                 DiscordTab.OgBannerBadge.Visibility = entry.IsSeason0Og ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            // Avatar - clear previous, will be loaded async
+            // Staff/whitelist pills: the leaderboard entry doesn't carry these, so clear the
+            // previous card's pills now; the /user/lookup round-trip below repaints them
+            // (own card gets local values immediately in the isOwnProfile branch further down).
+            ApplyProfileIdentityBadges(false, null, false);
+
+            // Avatar - clear previous, will be loaded async by the /user/lookup round-trip below.
+            // The slot is marked PENDING for exactly that window: cosmetics are applied
+            // synchronously at the bottom of this method, and an empty bubble that a load is still
+            // on its way to fill is NOT free for the preset avatar to claim (#847). When there is
+            // no name to look up nothing is coming, so the empty slot is final instead.
+            var avatarLookupPending = !string.IsNullOrEmpty(entry.DisplayName);
             if (DiscordTab.ProfileViewerAvatar != null)
             {
                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
             }
+            SetProfilePictureLoad(avatarLookupPending ? ProfilePictureLoad.Pending : ProfilePictureLoad.None);
 
             // Name
             if (DiscordTab.TxtProfileViewerName != null)
@@ -1932,9 +2062,9 @@ namespace ConditioningControlPanel
                         entry.IsOnline ? "#43B581" : "#747F8D"));
 
             // Trigger async lookup to get fresh online status and avatar
-            if (!string.IsNullOrEmpty(entry.DisplayName))
+            if (avatarLookupPending)
             {
-                _ = RefreshProfileViewerAsync(entry.DisplayName);
+                _ = RefreshProfileViewerAsync(entry.DisplayName!);
             }
 
             // Discord button (only if they have it and allow DMs)
@@ -1994,6 +2124,7 @@ namespace ConditioningControlPanel
                 // Use local Patreon data for own profile
                 tierToUse = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
                 hasPatreonAccess = tierToUse >= 1 || App.Patreon?.IsWhitelisted == true;
+                ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
             }
             else
             {
@@ -2067,11 +2198,73 @@ namespace ConditioningControlPanel
                 DiscordTab.TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
                 DiscordTab.TxtNoAchievements.Visibility = Visibility.Visible;
             }
+
+            // Trainer Card surfaces (redesign Phase 1). The leaderboard hands out a count, not the
+            // unlocked ids, so the Showcase's "next up" line stays hidden for other people's cards.
+            //
+            // entry.Xp is LIFETIME xp — it is exactly what the client uploads via
+            // ProgressionService.GetTotalXP, and it is what the ledger's "XP" row shows. The hero
+            // meter wants progress INSIDE the current level, so run it back through the documented
+            // inverse; feeding it the lifetime value pins every searched card's bar at 100%.
+            SetProfileViewingSelf(isOwnProfile);
+            UpdateProfileXpMeter(
+                entry.Level,
+                App.Progression?.GetCurrentLevelXP(entry.Level, entry.Xp) ?? 0);
+            UpdateProfileShowcase(
+                entry.AchievementsCount,
+                App.Achievements?.GetTotalCount(exclusive: false)
+                    ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
+                isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
+
+            // Phase 2 cosmetics. The leaderboard entry carries none, so someone else's card starts
+            // bare and is dressed by the /user/lookup round-trip already in flight above; your own
+            // card is dressed from settings immediately and never waits on the network.
+            if (isOwnProfile) ApplyOwnProfileCosmetics();
+            else ApplyViewedProfileCosmetics(null);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "DisplayProfileEntry failed for {Name}", entry?.DisplayName);
             }
+        }
+
+        /// <summary>
+        /// Toggle the STAFF and WHITELISTED identity pills on the hero card. The staff pill's
+        /// border (and label tint) encodes the tier: owner = purple, admin = crimson,
+        /// support = blue. A server too old to send staff_role but flagging is_staff falls
+        /// back to the admin look.
+        /// </summary>
+        private void ApplyProfileIdentityBadges(bool isStaff, string? staffRole, bool isWhitelisted)
+        {
+            if (DiscordTab.StaffBadge != null)
+            {
+                var visible = isStaff || !string.IsNullOrEmpty(staffRole);
+                DiscordTab.StaffBadge.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                if (visible)
+                {
+                    var (from, to, text) = (staffRole ?? "admin") switch
+                    {
+                        "owner" => ("#8A2BE2", "#C77DFF", "#D9B8FF"),
+                        "support" => ("#2F86FF", "#6FC3FF", "#B8D9FF"),
+                        _ => ("#DC143C", "#FF6B85", "#FFB3C2"),
+                    };
+                    var brush = new System.Windows.Media.LinearGradientBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(from),
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(to),
+                        new Point(0, 0), new Point(1, 1));
+                    brush.Freeze();
+                    DiscordTab.StaffBadge.BorderBrush = brush;
+                    if (DiscordTab.StaffBadgeLabel != null)
+                    {
+                        var fg = new System.Windows.Media.SolidColorBrush(
+                            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(text));
+                        fg.Freeze();
+                        DiscordTab.StaffBadgeLabel.Foreground = fg;
+                    }
+                }
+            }
+            if (DiscordTab.WhitelistBadge != null)
+                DiscordTab.WhitelistBadge.Visibility = isWhitelisted ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>
@@ -2082,7 +2275,11 @@ namespace ConditioningControlPanel
             try
             {
                 var lookup = await App.Leaderboard?.LookupUserAsync(displayName);
-                if (lookup == null) return;
+                if (lookup == null)
+                {
+                    await Dispatcher.InvokeAsync(() => ResolveProfilePictureUnavailable(displayName));
+                    return;
+                }
 
                 // Update on UI thread
                 await Dispatcher.InvokeAsync(() =>
@@ -2134,18 +2331,43 @@ namespace ConditioningControlPanel
                                 bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                                 bitmap.EndInit();
                                 DiscordTab.ProfileViewerAvatar.ImageSource = bitmap;
+                                // The picture landed: it evicts any preset painted while the slot
+                                // was still empty, and the cosmetics re-applied below leave it be.
+                                SetProfilePictureLoad(ProfilePictureLoad.Loaded);
                             }
                             catch (Exception ex)
                             {
                                 App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
                                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                                SetProfilePictureLoad(ProfilePictureLoad.None);
                             }
                         }
                         else
                         {
-                            // No avatar URL - clear any previous image
+                            // No avatar URL - clear any previous image. The lookup is back, so this
+                            // is a definitive "no picture" and the preset avatar may take the slot.
                             DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                            SetProfilePictureLoad(ProfilePictureLoad.None);
                         }
+                    }
+
+                    // Trainer Card cosmetics (Phase 2). Your own card is dressed from settings
+                    // instead: the local copy is what you just picked in the Customize dialog and
+                    // the server echo may still be a sync behind it.
+                    var ownName = App.Settings?.Current?.UserDisplayName
+                                  ?? App.Discord?.CustomDisplayName
+                                  ?? App.Discord?.DisplayName
+                                  ?? App.Patreon?.DisplayName;
+                    if (!string.IsNullOrEmpty(ownName) &&
+                        displayName.Equals(ownName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ApplyOwnProfileCosmetics();
+                        ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
+                    }
+                    else
+                    {
+                        ApplyViewedProfileCosmetics(lookup.Cosmetics);
+                        ApplyProfileIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
                     }
 
                     // Load achievements from lookup result (for other users)
@@ -2172,7 +2394,38 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to refresh profile viewer for {Name}", displayName);
+                try
+                {
+                    await Dispatcher.InvokeAsync(() => ResolveProfilePictureUnavailable(displayName));
+                }
+                catch { /* shutting down - nothing left to repaint */ }
             }
+        }
+
+        /// <summary>
+        /// Closes out a picture load that came back with nothing - a lookup that returned null or
+        /// threw. Without it the slot would sit <see cref="ProfilePictureLoad.Pending"/> forever and
+        /// the preset avatar (or the blank circle) could never take it, so a user whose lookup fails
+        /// would be stuck with whatever the previous card left behind.
+        ///
+        /// Guarded by the same "are we still showing this user" check as the success path: a card
+        /// the viewer has already navigated away from owns nothing on screen.
+        /// </summary>
+        private void ResolveProfilePictureUnavailable(string displayName)
+        {
+            try
+            {
+                if (DiscordTab?.TxtProfileViewerName?.Text != displayName) return;
+
+                if (DiscordTab.ProfileViewerAvatar != null)
+                    DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                SetProfilePictureLoad(ProfilePictureLoad.None);
+
+                // Repaint so the now-free slot gets what it should have had all along.
+                if (_profileViewingSelf) ApplyOwnProfileCosmetics();
+                else ApplyViewedProfileCosmetics(null);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ResolveProfilePictureUnavailable: {E}", ex.Message); }
         }
 
         private System.Windows.Media.Imaging.BitmapImage? LoadPatreonBadgeImage(int tier)
@@ -2217,7 +2470,12 @@ namespace ConditioningControlPanel
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image != null)
                     {
-                        achievementItems.Add(new { Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name, Image = image });
+                        achievementItems.Add(new ProfileAchievementTile
+                        {
+                            Id = achievement.Id,
+                            Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name,
+                            Image = image
+                        });
                     }
                 }
             }
@@ -2257,8 +2515,12 @@ namespace ConditioningControlPanel
 
         internal async void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
-            // Block in offline mode
-            if (App.Settings?.Current?.OfflineMode == true) return;
+            // Block in offline mode (#867: with a toast - this used to be a dead button)
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
 
             // Lazy-load browser on first pop-out
             if (!_browserInitialized)
@@ -2657,6 +2919,13 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void BtnReloadBrowser_Click(object sender, RoutedEventArgs e)
         {
+            // Offline first (#867): below the lazy-init branch this check was unreachable on the
+            // first click, which both leaked past offline mode and made the button look dead.
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
             if (!_browserInitialized)
             {
                 var initialUrl = SettingsTab.RbHypnoTube?.IsChecked == true
@@ -2665,7 +2934,6 @@ namespace ConditioningControlPanel
                 _ = InitializeBrowserAsync(initialUrl);
                 return;
             }
-            if (App.Settings?.Current?.OfflineMode == true) return;
             NavigateBrowserToCurrentSiteHome();
         }
 

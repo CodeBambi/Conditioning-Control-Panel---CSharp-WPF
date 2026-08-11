@@ -490,8 +490,16 @@ namespace ConditioningControlPanel
                     {
                         // Custom phrase audio overrides default sounds. Bark voicelines play through the
                         // companion-voice path (MasterVolume-gated), not the SubAudio-gated phrase path.
+                        // #846: "Mute Voice Lines" silences ONLY the spoken VO — the bubble keeps its
+                        // sound cue via the fallback, so she still reads as present. This is the single
+                        // choke point every voiced line funnels through (barks, autonomy, voice commands).
                         if (barkVoice)
-                            PlayBarkVoice(phraseAudioPath);
+                        {
+                            if (App.Settings?.Current?.CompanionVoiceLinesMuted == true)
+                                PlayFallbackBubbleSound();
+                            else
+                                PlayBarkVoice(phraseAudioPath);
+                        }
                         else
                             PlayPhraseAudio(phraseAudioPath);
                     }
@@ -1076,6 +1084,35 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Pass 3 — fuzzy recovery. The prompt tells her to say a title VERBATIM, but measured
+            // in a real session ~87% of her suggestions were near-misses ("Bambi TikTok Mix 1-8"
+            // for the pool key "Bambi TikTok 1-8") or outright inventions, and the exact pass
+            // above leaves all of them as dead text. Quoted / Title-Case spans that didn't match
+            // exactly get a token-overlap match against the same table; a span that matches
+            // NOTHING becomes a site-search link (one per bubble, only in video-ish context) so
+            // the user always gets a working affordance instead of a title they must retype.
+            // New replies arrive with off-pool titles already rewritten at the brain level
+            // (AiTextHygiene.RewriteOffPoolTitles), so the exact pass above catches them. This
+            // fuzzy pass exists for what the brain never touched: older stored history and any
+            // near-miss that survived. The pool title is shown as the link text — linking a
+            // wrong title to a right video quietly is worse than being visibly corrected.
+            var tableEntries = linkTable.Select(kvp => (Title: kvp.Key, Url: kvp.Value)).ToList();
+            foreach (var (spanStart, spanLength, _) in Services.Companion.CompanionTitleMatcher.CandidateSpans(processedText))
+            {
+                if (spanLength < Services.Companion.CompanionTitleMatcher.MinSpanLength) continue;
+                bool overlapsExisting = linkPositions.Any(lp =>
+                    spanStart < lp.start + lp.length && spanStart + spanLength > lp.start);
+                if (overlapsExisting) continue;
+
+                var span = processedText.Substring(spanStart, spanLength);
+                var fuzzy = Services.Companion.CompanionTitleMatcher.BestFuzzy(span, tableEntries);
+                if (fuzzy != null)
+                {
+                    linkPositions.Add((spanStart, spanLength, fuzzy.Value.Title, fuzzy.Value.Url));
+                    App.Logger?.Information("Fuzzy-linked video: '{Span}' -> '{Title}'", span, fuzzy.Value.Title);
+                }
+            }
+
             // Also detect raw URLs in the text (the AI sometimes outputs full URLs from the link pool)
             var urlRegex = new Regex(@"https?://[^\s,""'<>]+", RegexOptions.IgnoreCase);
             foreach (Match match in urlRegex.Matches(text))
@@ -1122,6 +1159,11 @@ namespace ConditioningControlPanel
                     var known = linkTable.FirstOrDefault(kvp =>
                         string.Equals(kvp.Value, url, StringComparison.OrdinalIgnoreCase)).Key;
                     displayText = known ?? Helpers.HtUrlHelper.DeriveTitleFromUrl(url);
+                }
+                else if (!string.Equals(name, actualText, StringComparison.OrdinalIgnoreCase))
+                {
+                    // A fuzzy hit: show the REAL pool title, not the model's approximation.
+                    displayText = name;
                 }
 
                 try

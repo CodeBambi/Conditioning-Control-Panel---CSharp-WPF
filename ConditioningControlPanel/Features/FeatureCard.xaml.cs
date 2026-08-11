@@ -64,6 +64,10 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(HelpSectionId), typeof(string), typeof(FeatureCard),
                 new PropertyMetadata(null, OnHelpSectionIdChanged));
 
+        public static readonly DependencyProperty TierBadgeProperty =
+            DependencyProperty.Register(nameof(TierBadge), typeof(string), typeof(FeatureCard),
+                new PropertyMetadata(null, OnTierBadgeChanged));
+
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
                 typeof(RoutedEventHandler), typeof(FeatureCard));
@@ -122,6 +126,23 @@ namespace ConditioningControlPanel.Features
         {
             get => (string?)GetValue(HelpSectionIdProperty);
             set => SetValue(HelpSectionIdProperty, value);
+        }
+
+        /// <summary>
+        /// Short price tag shown as a pill in the card's top-left corner — "TIER 1", "LAB",
+        /// "1 / WEEK", "SOON". Null or blank hides it, which is how a free tile says "free":
+        /// by carrying no tag at all, so the only badges on the wall are the ones that cost
+        /// something.
+        ///
+        /// <para>This is presentation only. The refusal lives in <see cref="Services.TierGate"/>,
+        /// which the click handler consults, so a badge and its refusal cannot drift apart the
+        /// way a hand-written "premium" label would. Deliberately NOT <see cref="IsLocked"/>:
+        /// that veils the card to 35% and hides the art these tiles exist to show.</para>
+        /// </summary>
+        public string? TierBadge
+        {
+            get => (string?)GetValue(TierBadgeProperty);
+            set => SetValue(TierBadgeProperty, value);
         }
 
         public event RoutedEventHandler Click
@@ -208,6 +229,19 @@ namespace ConditioningControlPanel.Features
         private static void OnActiveStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is FeatureCard c) c.ApplyActiveState();
+        }
+
+        private static void OnTierBadgeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not FeatureCard c) return;
+            var text = e.NewValue as string;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                c.TierBadgeHost.Visibility = Visibility.Collapsed;
+                return;
+            }
+            c.TxtTierBadge.Text = text;
+            c.TierBadgeHost.Visibility = Visibility.Visible;
         }
 
         private static void OnHelpSectionIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

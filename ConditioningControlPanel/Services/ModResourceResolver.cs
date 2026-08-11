@@ -133,6 +133,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Resolve the built-in spiral GIF to a URI string. Mods ship the override either in
+        /// resources/spirals/ (what the mod template scaffolds) or at resources/ root - probe
+        /// both so a mod using either layout is honoured by every spiral call site. The
+        /// embedded fallback is always the root Resources/spiral.gif.
+        /// </summary>
+        public static string ResolveSpiralUri()
+        {
+            return HasModOverride("spirals/spiral.gif")
+                ? ResolveUri("spirals/spiral.gif")
+                : ResolveUri("spiral.gif");
+        }
+
+        /// <summary>
         /// Resolve a sound file path. If the active mod has an override in resources/sounds/,
         /// returns the mod's file path. Otherwise returns the embedded Resources/sounds/ path.
         /// </summary>

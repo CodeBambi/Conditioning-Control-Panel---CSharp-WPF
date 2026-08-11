@@ -37,9 +37,9 @@ namespace ConditioningControlPanel.Models
 
     /// <summary>
     /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
-    /// Use CoreApp.Mods (ModService) instead.
+    /// Use App.Mods (ModService) instead.
     /// </summary>
-    [Obsolete("Use CoreApp.Mods (ModService) and ActiveModId instead")]
+    [Obsolete("Use App.Mods (ModService) and ActiveModId instead")]
     public enum ContentMode
     {
         BambiSleep,
@@ -60,6 +60,21 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How much motion the UI is allowed to show.
+    /// Full = everything (ambient loops, particles, parallax, entrance staggers).
+    /// Reduced = crossfades and state transitions only — no looping FX, no particles, no parallax.
+    /// Off = no animation at all; every helper snaps straight to the end state.
+    /// Capped to Reduced automatically when Windows' "Animation effects" is off
+    /// (SystemParameters.ClientAreaAnimation). See Services/MotionFx.cs.
+    /// </summary>
+    public enum MotionLevel
+    {
+        Full,
+        Reduced,
+        Off
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -69,7 +84,11 @@ namespace ConditioningControlPanel.Models
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-            // Bark hook removed from Core; the UI head wires this via property-change observation.
+            // Bark hook: surface every numeric/bool setting change as a SettingChanged trigger so
+            // the avatar can react to toggles, thresholds and easter-egg values. BarkService reads
+            // the new value off this instance by name and ignores non-numeric props. App.Bark is
+            // null during startup load, so no spurious barks while settings deserialize.
+            try { ConditioningControlPanel.App.Bark?.NotifySettingChanged(name); } catch { /* never break settings for a bark */ }
         }
 
         #region Language
@@ -206,6 +225,53 @@ namespace ConditioningControlPanel.Models
             set { _welcomed = value; OnPropertyChanged(); }
         }
 
+        private bool _modPickerShown = false;
+        /// <summary>
+        /// True once the first-run mod picker (<c>ModPickerDialog</c>) has been offered FOR REAL. The
+        /// picker is a first-launch courtesy, not a recurring prompt — after this, mods are downloaded
+        /// from the Mod Manager. Set BEFORE the dialog is shown so a crash inside it cannot turn the
+        /// picker into an every-launch popup. Defaults false, so existing installs upgrading into the
+        /// modular build see it once too (docs/CONTENT_PACKS_PLAN.md §4/§5).
+        ///
+        /// Handed BACK (set false again) when that showing ended in the offline state: with no
+        /// manifest every card is dead, so latching would cost an upgrader the content picker
+        /// forever for the crime of launching without network. <see cref="ModPickerOfflineOffers"/>
+        /// bounds how many times that re-arm can happen.
+        /// </summary>
+        public bool ModPickerShown
+        {
+            get => _modPickerShown;
+            set { _modPickerShown = value; OnPropertyChanged(); }
+        }
+
+        private int _modPickerOfflineOffers = 0;
+        /// <summary>
+        /// How many times the mod picker has opened only to land in its offline (no-manifest) state.
+        /// The re-arm above stops at <c>ModPickerDialog.MaxOfflineOffers</c>, so a user who is
+        /// deliberately offline forever sees the dead screen a handful of times, not every launch.
+        /// Never reset — a successful showing latches <see cref="ModPickerShown"/> and ends the
+        /// question either way.
+        /// </summary>
+        public int ModPickerOfflineOffers
+        {
+            get => _modPickerOfflineOffers;
+            set { _modPickerOfflineOffers = value; OnPropertyChanged(); }
+        }
+
+        private string _pendingModActivationId = "";
+        /// <summary>
+        /// Mod the user picked in the first-run mod picker whose content was still downloading, so it
+        /// could not be activated yet (<c>Services.PendingModActivation</c>). Persisted because the
+        /// download can outlive the session that started it — a restart mid-download still ends up on
+        /// the mod the user chose. Cleared once applied, and dropped the moment the user switches mods
+        /// by hand: a manual choice outranks a queued one.
+        /// </summary>
+        public string PendingModActivationId
+        {
+            get => _pendingModActivationId;
+            set { _pendingModActivationId = value ?? ""; OnPropertyChanged(); }
+        }
+
         private string _lastSeenVersion = "";
         /// <summary>
         /// Last version the user has seen patch notes for. Used to show "What's New" after updates.
@@ -214,6 +280,22 @@ namespace ConditioningControlPanel.Models
         {
             get => _lastSeenVersion;
             set { _lastSeenVersion = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private List<string> _recentBugReports = new();
+        /// <summary>
+        /// Ring buffer of the report numbers (BUG-XXXXXXXXXX) the server handed back for bug
+        /// reports and suggestions this user filed (#769). Kept so the number survives the
+        /// success dialog and can be quoted in Discord later — surfaced by the "My Reports"
+        /// list in App Info. Entry format: "{token}|{ISO-8601 UTC timestamp}|{kind}" where
+        /// kind is "bug" or "suggestion". Newest last; capped at
+        /// <see cref="Services.BugReportService.MaxRecentReports"/> (oldest trimmed on insert).
+        /// </summary>
+        [JsonProperty("recent_bug_reports")]
+        public List<string> RecentBugReports
+        {
+            get => _recentBugReports;
+            set { _recentBugReports = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
         private string _dismissedAnnouncementId = "";
@@ -445,6 +527,17 @@ namespace ConditioningControlPanel.Models
             set { _seasonalStreakRecoveryUsed = value; OnPropertyChanged(); }
         }
 
+        private int _streakFixCharges = 0;
+        /// <summary>
+        /// Cumulable streak-fix charges ("Oopsie Insurance"). Granted +1 every season
+        /// rollover, server-authoritative, never expires. Spending one is free.
+        /// </summary>
+        public int StreakFixCharges
+        {
+            get => _streakFixCharges;
+            set { _streakFixCharges = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private int _nightTimeUsageCount = 0;
         /// <summary>
         /// Number of times app was used between 11pm-5am.
@@ -581,19 +674,6 @@ namespace ConditioningControlPanel.Models
             set { _pinkRushEndTime = value; OnPropertyChanged(); }
         }
 
-        private AchievementProgress _achievementProgress = new();
-        /// <summary>
-        /// Lifetime achievement progress and unlock state. Persisted locally; the server
-        /// is the source of truth for leaderboard/rank but achievements are restored from
-        /// cloud sync on login.
-        /// </summary>
-        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public AchievementProgress AchievementProgress
-        {
-            get => _achievementProgress;
-            set { _achievementProgress = value ?? new(); OnPropertyChanged(); }
-        }
-
         #endregion
 
         #region Companion Greeting
@@ -682,17 +762,6 @@ namespace ConditioningControlPanel.Models
             set { _hydraLinkedTiming = value; OnPropertyChanged(); }
         }
 
-        private int _hydraMultiplyCount = 2; // Hydra children spawned per pop (2-5)
-        /// <summary>
-        /// How many new images spawn when a flash is popped in Hydra mode~ 🐙
-        /// Range 2-5. Default 2 preserves the legacy hardcoded behavior.
-        /// </summary>
-        public int HydraMultiplyCount
-        {
-            get => _hydraMultiplyCount;
-            set { _hydraMultiplyCount = Math.Clamp(value, 2, 5); OnPropertyChanged(); }
-        }
-
         private int _hydraLimit = 20; // Max images on screen (hard cap: 20)
         public int HydraLimit
         {
@@ -718,7 +787,7 @@ namespace ConditioningControlPanel.Models
             set { _imageScale = Math.Clamp(value, 50, 250); OnPropertyChanged(); }
         }
 
-        private int _flashOpacity = 80; // 10-100%
+        private int _flashOpacity = 100; // 10-100%
         public int FlashOpacity
         {
             get => _flashOpacity;
@@ -763,6 +832,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashDuration;
             set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        // Gaming quality-of-life (#770): keep flashes out of a centered square on every monitor so
+        // they never land on the crosshair / HUD centre. This is a PURE GLOBAL USER PREFERENCE —
+        // deliberately absent from SessionSettings, SessionEngine's save/restore, Preset and the
+        // remote/quiz generators, so no session or preset can ever stomp a gamer's exclusion box.
+        private bool _flashAvoidCenter = false;
+        public bool FlashAvoidCenter
+        {
+            get => _flashAvoidCenter;
+            set { _flashAvoidCenter = value; OnPropertyChanged(); }
+        }
+
+        private int _flashCenterExclusionPercent = 25; // 5-60% of the SHORTER monitor edge
+        /// <summary>
+        /// Size of the centered no-flash square, as a percentage of the shorter monitor edge.
+        /// The 60 ceiling is deliberate: above that the legal spawn bands vanish for large images
+        /// (high ImageScale), which would force the unconstrained fallback on every spawn.
+        /// </summary>
+        public int FlashCenterExclusionPercent
+        {
+            get => _flashCenterExclusionPercent;
+            set { _flashCenterExclusionPercent = Math.Clamp(value, 5, 60); OnPropertyChanged(); }
         }
 
         #endregion
@@ -949,6 +1041,19 @@ namespace ConditioningControlPanel.Models
             set { _excludeBambiCloudFromDucking = value; OnPropertyChanged(); }
         }
 
+        private bool _forceShowBambiCloud = false;
+        /// <summary>
+        /// User override: reveal the BambiCloud browser toggle even on mods whose
+        /// manifest hides it (ShowBambiCloudOption = false). The mod's own default
+        /// site (usually HypnoTube) stays selected; this only makes the BambiCloud
+        /// radio available to click. Mods that already show BambiCloud are unaffected.
+        /// </summary>
+        public bool ForceShowBambiCloud
+        {
+            get => _forceShowBambiCloud;
+            set { _forceShowBambiCloud = value; OnPropertyChanged(); }
+        }
+
         private bool _backgroundMusicEnabled = true;
         public bool BackgroundMusicEnabled
         {
@@ -966,6 +1071,35 @@ namespace ConditioningControlPanel.Models
         {
             get => _browserVideoMuted;
             set { _browserVideoMuted = value; OnPropertyChanged(); }
+        }
+
+        private bool _protectBrowserVideoPlayback = true;
+        /// <summary>
+        /// When true, nothing interrupts a video playing in the integrated browser — not the
+        /// mandatory-video scheduler, not Takeover actions, not chaos effect bubbles. Applies to
+        /// videos the user started themselves as well as ones the app started, and holds for
+        /// <see cref="BrowserVideoGraceSeconds"/> after playback stops so a clip isn't immediately
+        /// followed by an interruption. Default on: web videos being interruptible was reported
+        /// as the single most disruptive behaviour of the browser feature.
+        /// </summary>
+        [JsonProperty]
+        public bool ProtectBrowserVideoPlayback
+        {
+            get => _protectBrowserVideoPlayback;
+            set { _protectBrowserVideoPlayback = value; OnPropertyChanged(); }
+        }
+
+        private int _browserVideoGraceSeconds = 45;
+        /// <summary>
+        /// Cool-off after a browser video ends during which interruptions are still deferred.
+        /// Without this, the mandatory-video scheduler's reschedule and Takeover's retry tick can
+        /// both fire on the very next tick, which read as "it restarted a video immediately after".
+        /// </summary>
+        [JsonProperty]
+        public int BrowserVideoGraceSeconds
+        {
+            get => _browserVideoGraceSeconds;
+            set { _browserVideoGraceSeconds = Math.Max(0, Math.Min(600, value)); OnPropertyChanged(); }
         }
 
         private string? _rememberedConfigJson;
@@ -1150,6 +1284,36 @@ namespace ConditioningControlPanel.Models
             set { _subAudioEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _subAudioMuted = false;
+        /// <summary>
+        /// A plain MUTE for whisper/trigger audio, deliberately separate from
+        /// <see cref="SubAudioEnabled"/>.
+        ///
+        /// The avatar's "Mute whispers" menu item and the Companion tab used to flip
+        /// SubAudioEnabled, i.e. the feature's master ENABLE - which a session prescribes
+        /// (SessionSettings.AudioWhispersEnabled) and the session feature lock therefore locks. So
+        /// "mute" was really "opt out of the prescribed whispers dose", and once the lock landed it
+        /// would have been unavailable exactly when a user most wants it: someone walks in and the
+        /// sound needs to stop NOW.
+        ///
+        /// Splitting them lets the mute stay available during a session (it is a comfort/safety
+        /// reflex, like volume) while the dose itself stays locked. Nothing here changes how much
+        /// conditioning is scheduled - only whether you can currently hear it.
+        /// </summary>
+        public bool SubAudioMuted
+        {
+            get => _subAudioMuted;
+            set { _subAudioMuted = value; OnPropertyChanged(); OnPropertyChanged(nameof(SubAudioAudible)); }
+        }
+
+        /// <summary>
+        /// The single gate every whisper/trigger playback path should test: the feature is on AND
+        /// the user has not muted it. Prefer this over reading SubAudioEnabled directly, so a new
+        /// playback site cannot silently ignore the mute.
+        /// </summary>
+        [JsonIgnore]
+        public bool SubAudioAudible => SubAudioEnabled && !SubAudioMuted;
+
         private int _subAudioVolume = 50; // 0-100%
         public int SubAudioVolume
         {
@@ -1161,7 +1325,6 @@ namespace ConditioningControlPanel.Models
 
         #region System
 
-#pragma warning disable CS0618 // Legacy ContentMode members kept for migration compatibility
         private ContentMode _contentMode = ContentMode.BambiSleep;
         /// <summary>
         /// [LEGACY] Content mode determines theming. Kept for migration only.
@@ -1273,7 +1436,6 @@ namespace ConditioningControlPanel.Models
         public Dictionary<ContentMode, Dictionary<string, bool>>? LockCardPhrasesByMode { get; set; }
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<ContentMode, List<string>>? CustomTriggersByMode { get; set; }
-#pragma warning restore CS0618
 
         /// <summary>
         /// Per-mod pool backups so custom edits survive mod switching.
@@ -1298,10 +1460,18 @@ namespace ConditioningControlPanel.Models
         public Dictionary<string, Dictionary<string, string>>? VideoLinksByMod { get; set; }
 
         /// <summary>
+        /// Per-mod user overrides for avatar tube layout (set via the Mod Manager's Tube Fit editor).
+        /// When a mod id has an entry here it REPLACES the mod manifest's tubeLayout values.
+        /// Keyed by mod ID string.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, ModTubeLayout>? TubeLayoutOverridesByMod { get; set; }
+
+        /// <summary>
         /// Migrate legacy ContentMode-based settings to mod-based settings.
         /// Called once after deserialization when ActiveModId hasn't been set yet.
         /// </summary>
-        public void MigrateFromContentModeToMod()
+        internal void MigrateFromContentModeToMod()
         {
             // Primary gate: a v6-saved JSON is already past this migration. Without this guard,
             // a v6 user who deliberately picks CCP Default via the dropdown gets bumped to Bambi
@@ -1403,6 +1573,20 @@ namespace ConditioningControlPanel.Models
             set { _firstRunAssetsPromptShown = value; OnPropertyChanged(); }
         }
 
+        private string _dailyGiftLastRevealDate = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") of the last day the Dashboard's ? box was opened -
+        /// i.e. the first time the user HOVERED the tile that day and turned it to the reveal
+        /// face. It is only ever written from that hover, and it is what the tile's gold breath
+        /// is gated on: unopened today = the badge and ring keep breathing, opened = they rest
+        /// until tomorrow. See MainWindow.DashboardFx.cs, region 2c (RequestMysteryFace).
+        /// </summary>
+        public string DailyGiftLastRevealDate
+        {
+            get => _dailyGiftLastRevealDate;
+            set { _dailyGiftLastRevealDate = value ?? ""; OnPropertyChanged(); }
+        }
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();
@@ -1493,6 +1677,22 @@ namespace ConditioningControlPanel.Models
             set { _packGuidMap = value ?? new(); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, InstalledPackStamp> _installedContentPacks = new();
+        /// <summary>
+        /// Release-hosted content packs (audio/mod payload stripped out of the installer and fetched
+        /// from the vX.Y.0 GitHub release) that are installed under
+        /// <c>%LOCALAPPDATA%\ConditioningControlPanel\content\</c>. Maps pack id ->
+        /// {contentVersion, sha256}: a SET, not a bool, so we can tell "installed and current" from
+        /// "installed but the pack's bytes moved". Written by ReleaseContentService.
+        /// Unrelated to <see cref="InstalledPackIds"/> (those are the encrypted creator packs).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, InstalledPackStamp> InstalledContentPacks
+        {
+            get => _installedContentPacks;
+            set { _installedContentPacks = value ?? new(); OnPropertyChanged(); }
+        }
+
         private List<AssetPreset> _assetPresets = new();
         /// <summary>
         /// Saved asset presets that store which files are disabled.
@@ -1513,6 +1713,43 @@ namespace ConditioningControlPanel.Models
         {
             get => _currentAssetPresetId;
             set { _currentAssetPresetId = value; OnPropertyChanged(); }
+        }
+
+        private long _transferCacheCapBytes = 8L * 1024 * 1024 * 1024;
+        /// <summary>
+        /// Disk budget for the Goon Game transfer cache (compressed copies of the active pool).
+        /// Clamped to 1-64 GB by TransferCacheStore - the settings file is never trusted.
+        /// </summary>
+        [JsonProperty]
+        public long TransferCacheCapBytes
+        {
+            get => _transferCacheCapBytes;
+            set { _transferCacheCapBytes = value; OnPropertyChanged(); }
+        }
+
+        private bool _transferCacheAutoCompress = false;
+        /// <summary>
+        /// When true, the compression queue starts itself instead of waiting for the user to press
+        /// "Compress everything". Off by default: this is hours of GPU time on a big library.
+        /// </summary>
+        [JsonProperty]
+        public bool TransferCacheAutoCompress
+        {
+            get => _transferCacheAutoCompress;
+            set { _transferCacheAutoCompress = value; OnPropertyChanged(); }
+        }
+
+        private string? _lastSeenAssetPresetId = null;
+        /// <summary>
+        /// The preset the transfer cache last planned against. When this drifts from
+        /// <see cref="CurrentAssetPresetId"/> the user gets the "your preset changed - N assets need
+        /// compressing" nudge exactly once.
+        /// </summary>
+        [JsonProperty]
+        public string? LastSeenAssetPresetId
+        {
+            get => _lastSeenAssetPresetId;
+            set { _lastSeenAssetPresetId = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -1539,6 +1776,32 @@ namespace ConditioningControlPanel.Models
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
         }
 
+        // ---- Per-effect monitor targeting (suggestion #639) ----------------
+        // Overrides the global DualMonitorEnabled screen selection for a single
+        // effect. Sentinels: -1 = follow DualMonitorEnabled (default, backward
+        // compatible), -2 = all monitors, 0..N = that specific monitor index
+        // (into Screen.AllScreens). An index beyond the current monitor count is
+        // NOT clamped here — it falls back to -1 behavior at resolve time (via
+        // App.ResolveScreens) so a temporarily-unplugged monitor's target survives
+        // a reconnect. See App.ResolveScreens for the resolution semantics.
+        private int _spiralTargetMonitor = -1;
+        /// <summary>Monitor target for the Spiral overlay. -1 = follow DualMonitorEnabled,
+        /// -2 = all monitors, 0..N = specific monitor index. See <see cref="DualMonitorEnabled"/>.</summary>
+        public int SpiralTargetMonitor
+        {
+            get => _spiralTargetMonitor;
+            set { _spiralTargetMonitor = value; OnPropertyChanged(); }
+        }
+
+        private int _pinkFilterTargetMonitor = -1;
+        /// <summary>Monitor target for the Pink filter tint. -1 = follow DualMonitorEnabled,
+        /// -2 = all monitors, 0..N = specific monitor index. See <see cref="DualMonitorEnabled"/>.</summary>
+        public int PinkFilterTargetMonitor
+        {
+            get => _pinkFilterTargetMonitor;
+            set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC
@@ -1551,6 +1814,42 @@ namespace ConditioningControlPanel.Models
         {
             get => _fillAllMonitorsWithVideo;
             set { _fillAllMonitorsWithVideo = value; OnPropertyChanged(); }
+        }
+
+        private bool _videoBlurredBackgroundEnabled = true;
+        /// <summary>
+        /// Fill the letterbox/pillarbox bars around a video that doesn't match the screen
+        /// aspect (e.g. a vertical clip on a widescreen monitor) with an upscaled, blurred
+        /// copy of the same video — the "blurred background" look from TikTok / YouTube Shorts,
+        /// instead of flat black bars. Still one decoder per screen: the blurred fill and the
+        /// sharp centred video are the SAME decoded frame composited in WPF (LibVLC memory
+        /// callbacks, no airspace). Turn off to fall back to the classic VideoView render path
+        /// with plain black bars.
+        /// </summary>
+        public bool VideoBlurredBackgroundEnabled
+        {
+            get => _videoBlurredBackgroundEnabled;
+            set { _videoBlurredBackgroundEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _browserVideoEngineEnabled = true;
+        /// <summary>
+        /// Play mandatory videos in out-of-process WebView2 windows (the player page at
+        /// Resources/web/player) instead of in-process LibVLC. LibVLC stays the automatic fallback
+        /// for anything the browser cannot decode, so turning this on never removes a playback path —
+        /// it only changes which one is tried first. See docs/BROWSER_VIDEO_ENGINE_PLAN.md.
+        ///
+        /// Default ON from 6.7 (owner call for the pre-release; the engine shipped OFF-by-default
+        /// after v6.6.3 and was never released, so no user has the key persisted and every install
+        /// — fresh or upgrading — lands on true). Turning it off is still a one-click revert in
+        /// Settings ▸ System, and <c>BrowserVideoGate</c> already routes to LibVLC on its own when
+        /// the WebView2 runtime is missing, so ON is safe on a machine without Evergreen.
+        /// </summary>
+        [JsonProperty]
+        public bool BrowserVideoEngineEnabled
+        {
+            get => _browserVideoEngineEnabled;
+            set { _browserVideoEngineEnabled = value; OnPropertyChanged(); }
         }
 
         private bool _restrictGazeContentToCalibratedScreen = true;
@@ -1883,6 +2182,24 @@ namespace ConditioningControlPanel.Models
             set { _shareProfilePicture = value; OnPropertyChanged(); }
         }
 
+        private ProfileCosmetics _profileCosmetics = new();
+        /// <summary>
+        /// What this subject has equipped on their Trainer Card: banner, accent, worn title,
+        /// pinned achievements (and, from Phase 3, avatar decoration + charms).
+        ///
+        /// Stored locally AND synced (<c>cosmetics</c> in the /user/sync payload) so the same look
+        /// follows the account to a new machine and renders on other people's screens. Always run
+        /// it through <see cref="Services.CosmeticsCatalog.SanitizeOwn"/> before sending or
+        /// rendering - the settings file is user-editable and the ids in it may be from a build
+        /// whose art this one does not ship.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public ProfileCosmetics ProfileCosmetics
+        {
+            get => _profileCosmetics;
+            set { _profileCosmetics = value ?? new ProfileCosmetics(); OnPropertyChanged(); }
+        }
+
         private bool _showOnlineStatus = true;
         /// <summary>
         /// Show your online status on the leaderboard and profile viewer.
@@ -1936,6 +2253,27 @@ namespace ConditioningControlPanel.Models
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasCachedPremiumAccess => _patreonPremiumValidUntil.HasValue && DateTime.UtcNow < _patreonPremiumValidUntil.Value;
+
+        private DateTime? _patreonLabValidUntil = null;
+        /// <summary>
+        /// Tier-2 twin of <see cref="PatreonPremiumValidUntil"/>: stamped only when a validation
+        /// actually returned Level2, so the Lab grace can never be inferred from a tier number that
+        /// was cached once and then never expired. Same 14-day window as premium.
+        /// Absent from an older settings file → null → no grace (deliberate: no free Lab on upgrade).
+        /// </summary>
+        [JsonProperty("patreon_lab_valid_until")]
+        public DateTime? PatreonLabValidUntil
+        {
+            get => _patreonLabValidUntil;
+            set { _patreonLabValidUntil = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Check if cached Patreon Lab (tier 2) access is still valid (within the 2-week window)
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasCachedLabAccess => _patreonLabValidUntil.HasValue && DateTime.UtcNow < _patreonLabValidUntil.Value;
 
         #endregion
 
@@ -2119,6 +2457,16 @@ namespace ConditioningControlPanel.Models
             set { _endSessionOnRampComplete = value; OnPropertyChanged(); }
         }
 
+        // Easing curve applied to the ramp's progress (suggestion #660). Stored by
+        // ordinal like the other enum settings here; missing = Linear = unchanged
+        // legacy behaviour. Applied to both ramp systems — see Helpers/RampCurves.cs.
+        private RampCurve _rampCurve = RampCurve.Linear;
+        public RampCurve RampCurve
+        {
+            get => _rampCurve;
+            set { _rampCurve = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Spiral Overlay (Unlocks Lv.10)
@@ -2137,11 +2485,23 @@ namespace ConditioningControlPanel.Models
             set { _spiralPath = value ?? ""; OnPropertyChanged(); }
         }
 
-        private int _spiralOpacity = 25; // 0-50%
+        private bool _spiralRandomize = false;
+        /// <summary>
+        /// When enabled, each spiral overlay/session picks a random spiral from the pool
+        /// (the folder of SpiralPath if set, else assets/spirals) at start. Falls back to
+        /// the single spiral when the pool has fewer than two entries.
+        /// </summary>
+        public bool SpiralRandomize
+        {
+            get => _spiralRandomize;
+            set { _spiralRandomize = value; OnPropertyChanged(); }
+        }
+
+        private int _spiralOpacity = 10; // 0-100%
         public int SpiralOpacity
         {
             get => _spiralOpacity;
-            set { _spiralOpacity = Math.Clamp(value, 0, 50); OnPropertyChanged(); }
+            set { _spiralOpacity = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _spiralLinkRamp = false;
@@ -2149,6 +2509,55 @@ namespace ConditioningControlPanel.Models
         {
             get => _spiralLinkRamp;
             set { _spiralLinkRamp = value; OnPropertyChanged(); }
+        }
+
+        // Standalone corner-GIF overlays (Spiral card -> "Corner GIFs" window). Independent of
+        // sessions; driven app-wide by CornerGifService. Up to two slots (two screen corners).
+        private List<CornerGifOverlaySetting> _cornerGifOverlays = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<CornerGifOverlaySetting> CornerGifOverlays
+        {
+            get => _cornerGifOverlays;
+            set { _cornerGifOverlays = value ?? new(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Audio Layers (suggestion #659) + Audio-Only sessions (#668)
+
+        // User-maintained list of looping audio tracks mixed together through ONE output device
+        // by Services.Audio.LayeredAudioService. Independent of any single feature.
+        private List<AudioLayerTrack> _audioLayers = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<AudioLayerTrack> AudioLayers
+        {
+            get => _audioLayers;
+            set { _audioLayers = value ?? new(); OnPropertyChanged(); }
+        }
+
+        // Master on/off for the layered audio player (also auto-started for audio-only sessions).
+        private bool _audioLayersEnabled = false;
+        public bool AudioLayersEnabled
+        {
+            get => _audioLayersEnabled;
+            set { _audioLayersEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Overall volume for the layered mix (0-100), multiplied with the app master volume.
+        private int _audioLayersMasterVolume = 70;
+        public int AudioLayersMasterVolume
+        {
+            get => _audioLayersMasterVolume;
+            set { _audioLayersMasterVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        // #668 Audio-Only Hypno: when a session starts with this on, visual features
+        // (flash/spiral/video/etc.) are suppressed and the layered audio player runs instead.
+        private bool _audioOnlySession = false;
+        public bool AudioOnlySession
+        {
+            get => _audioOnlySession;
+            set { _audioOnlySession = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -2254,7 +2663,18 @@ namespace ConditioningControlPanel.Models
         public int ChaosRunDurationSec
         {
             get => _chaosRunDurationSec;
-            set { _chaosRunDurationSec = Math.Clamp(value, 60, 900); OnPropertyChanged(); }
+            // Ceiling raised 60..900 -> 60..7200 (2026-07-17): the old 900 cap silently clamped
+            // the 16/20-min portal chips down to 15 min, and The Hourglass unlock needs up to 2h.
+            // Ownership gating for >20 min lives at the use sites (FromSettings / PersistRunSetup).
+            set { _chaosRunDurationSec = Math.Clamp(value, 60, 7200); OnPropertyChanged(); }
+        }
+        // The Bottomless Fall unlock: last-chosen endless toggle (per-run, gated on owning
+        // endless_mode at read time). Persisted so the portal remembers the choice.
+        private bool _chaosEndless = false;
+        public bool ChaosEndless
+        {
+            get => _chaosEndless;
+            set { _chaosEndless = value; OnPropertyChanged(); }
         }
         // (ChaosLiveBubbleShare removed — the knob was inert; live/benign split is set by variant weights.)
         // Motion: "Mixed" (per-variant defaults), "FloatUp", "RainDown", "RoamBounce".
@@ -2315,11 +2735,13 @@ namespace ConditioningControlPanel.Models
             get => _chaosMenuMusicMuted;
             set { _chaosMenuMusicMuted = value; OnPropertyChanged(); }
         }
-        private bool _chaosBubbleSharedHost;
-        /// <summary>Default OFF until the shared-host global mouse hook reliably converts clicks to
-        /// pops in production: render chaos bubbles as one top-level layered Window per bubble, each
-        /// with native Avalonia PointerPressed handling. Falls back to the shared Canvas host when
-        /// enabled (intended for low-end machines once hit-testing is fully wired).</summary>
+        private bool _chaosBubbleSharedHost = true;
+        /// <summary>Default ON (proven win): render all chaos bubbles as visuals on ONE shared
+        /// click-through host window (Canvas-positioned) instead of one top-level layered Window per
+        /// bubble. The per-bubble-window model repositions every bubble via SetWindowPos each frame,
+        /// which saturates the UI thread and makes clicks register late under a dense field. With the
+        /// host on, pops are detected via the global mouse hook (swallow on hit) instead of WPF events,
+        /// so they're immune to that starvation. Falls back to the proven per-window path when off.</summary>
         public bool ChaosBubbleSharedHost
         {
             get => _chaosBubbleSharedHost;
@@ -2333,26 +2755,33 @@ namespace ConditioningControlPanel.Models
         /// Concurrent fullscreen layered windows were the root cause of the session-lag /
         /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
         /// end-state renderer. Was reverted to OFF once (2026-07-13, #550: unthrottled software
-        /// SKElement raster saturated the UI thread) — since fixed by dirty-gated invalidation,
-        /// so the compositor is the blessed path going forward. A Settings-tab toggle
-        /// ("Unified overlay renderer") lets users fall back to the legacy per-effect windows.</summary>
+        /// SKElement raster saturated the UI thread); the fix is off-thread present plus
+        /// dirty-gated invalidation, which only became effective for a STACK of concurrent effects
+        /// in #853 — until then every layer but pink/spiral inherited a permanently-true Dirty, and
+        /// the engine folds dirt per SURFACE, so one bubble re-rastered the fullscreen tint+spiral
+        /// with it at refresh rate. It still does when the field is genuinely animating: per-layer
+        /// damage rects are the next step. A Settings-tab toggle ("Unified overlay renderer") lets
+        /// users fall back to the legacy per-effect windows.</summary>
         public bool UnifiedOverlayHost
         {
             get => _unifiedOverlayHost;
             set { _unifiedOverlayHost = value; OnPropertyChanged(); }
         }
-        private bool _compositorOffThreadPresent;
-        /// <summary>Default OFF (experimental, #550 proper fix): when the unified overlay host is on,
-        /// render each monitor's layers OFF the UI thread. The UI-thread tick still runs Update() and
-        /// records the active layers into a cheap immutable SKPicture (draw-command capture, no raster);
-        /// a dedicated per-monitor present thread then rasterizes that picture into a DIB-backed surface
-        /// and pushes it with UpdateLayeredWindow(ULW_ALPHA). This removes the fullscreen software raster
-        /// + layered composite from the UI thread (the dispatcher-starvation that made the spiral lag the
-        /// whole app on some machines) while keeping per-pixel alpha, click-through and the layers'
-        /// UI-thread contract intact (SKImage frees route through the engine's deferred-disposal so an
-        /// image referenced by an in-flight picture is never freed under the present thread). No-op when
-        /// the unified host is off. Needs play-test on a high-res / multi-monitor machine before shipping
-        /// on - the win only shows where the UI-thread raster actually saturated.</summary>
+        private bool _compositorOffThreadPresent = true;
+        /// <summary>Default ON (#550 proper fix, promoted 6.4.1 after 6.4.0 shipped the compositor ON
+        /// but this OFF — bugs #588/#586/#587: fullscreen spiral rastered on the UI thread and starved
+        /// the dispatcher on high-res / multi-monitor machines, exactly the repro the flag was built for).
+        /// When the unified overlay host is on, render each monitor's layers OFF the UI thread. The
+        /// UI-thread tick still runs Update() and records the active layers into a cheap immutable
+        /// SKPicture (draw-command capture, no raster); a dedicated per-monitor present thread then
+        /// rasterizes that picture into a DIB-backed surface and pushes it with UpdateLayeredWindow(ULW_ALPHA).
+        /// This removes the fullscreen software raster + layered composite from the UI thread while keeping
+        /// per-pixel alpha, click-through and the layers' UI-thread contract intact (SKImage frees route
+        /// through the engine's deferred-disposal so an image referenced by an in-flight picture is never
+        /// freed under the present thread). No-op when the unified host is off. Falls back to the UI-thread
+        /// SKElement host when off; there is no dedicated UI toggle — the user-facing escape hatch is the
+        /// Settings > System "Unified overlay renderer" switch, which drops to the legacy per-effect windows
+        /// entirely (that path never had the UI-thread spiral raster either).</summary>
         public bool CompositorOffThreadPresent
         {
             get => _compositorOffThreadPresent;
@@ -2517,6 +2946,141 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region For You Feed (premium, WebView2)
+        private string _fypLayout = "duo";
+        /// <summary>Feed page layout: "duo" (landscape stacks two-up), "trio" (three-up) or
+        /// "random" (irregular mosaic quilt). Mirrors the mobile reel's setting.</summary>
+        public string FypLayout
+        {
+            get => _fypLayout;
+            set { _fypLayout = value is "duo" or "trio" or "random" ? value : "duo"; OnPropertyChanged(); }
+        }
+
+        private bool _fypIncludeGifs = true;
+        /// <summary>Mix animated GIFs from the images library into the feed.</summary>
+        public bool FypIncludeGifs
+        {
+            get => _fypIncludeGifs;
+            set { _fypIncludeGifs = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMosaicAutoChange = true;
+        /// <summary>Mosaic layout re-composes itself on a timer (off = holds until swiped).</summary>
+        public bool FypMosaicAutoChange
+        {
+            get => _fypMosaicAutoChange;
+            set { _fypMosaicAutoChange = value; OnPropertyChanged(); }
+        }
+
+        private int _fypMosaicChangeSec = 10;
+        /// <summary>Seconds between mosaic re-compositions. Floored at 3 - every morph
+        /// mounts/releases up to 4 media elements, so a faster cadence churns decoders.</summary>
+        public int FypMosaicChangeSec
+        {
+            get => _fypMosaicChangeSec;
+            set { _fypMosaicChangeSec = Math.Clamp(value, 3, 60); OnPropertyChanged(); }
+        }
+
+        private bool _fypAutoAdvance = false;
+        /// <summary>Scroll to the next page when a clip's window ends (off = loop forever).</summary>
+        public bool FypAutoAdvance
+        {
+            get => _fypAutoAdvance;
+            set { _fypAutoAdvance = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMuted = false;
+        /// <summary>Feed audio muted.</summary>
+        public bool FypMuted
+        {
+            get => _fypMuted;
+            set { _fypMuted = value; OnPropertyChanged(); }
+        }
+
+        private double _fypWindowOpacity = 1.0;
+        /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
+        /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
+        /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic
+        /// press, which restores the fully opaque real window regardless of this value.</summary>
+        public double FypWindowOpacity
+        {
+            get => _fypWindowOpacity;
+            set { _fypWindowOpacity = Math.Clamp(value, 0.01, 1.0); OnPropertyChanged(); }
+        }
+
+        private bool _fypAudioGlow = true;
+        /// <summary>Page-side visual: the playing tile pulses with its own audio level. Persisted
+        /// here and handed to the page in the init payload; the app itself does nothing with it.</summary>
+        public bool FypAudioGlow
+        {
+            get => _fypAudioGlow;
+            set { _fypAudioGlow = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeControl = false;
+        /// <summary>Webcam eye control for the feed: a blink swaps one tile, holding the eyes
+        /// shut for 2s changes the whole page. Off by default - it turns the camera on.</summary>
+        public bool FypEyeControl
+        {
+            get => _fypEyeControl;
+            set { _fypEyeControl = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeGaze = false;
+        /// <summary>With eye control on, a blink swaps the tile the user is LOOKING at rather than
+        /// a random one. Only meaningful once gaze is calibrated; ignored otherwise.</summary>
+        public bool FypEyeGaze
+        {
+            get => _fypEyeGaze;
+            set { _fypEyeGaze = value; OnPropertyChanged(); }
+        }
+
+        private string _fypSource = "library";
+        /// <summary>Where feed content comes from: "library" (local assets only), "online"
+        /// (Scrolller streaming only) or "mixed" (both, blended by FypOnlineRatio). The online
+        /// path fetches straight from the user's device — see planning/fyp-online/DESIGN.md.</summary>
+        public string FypSource
+        {
+            get => _fypSource;
+            set { _fypSource = value is "library" or "online" or "mixed" ? value : "library"; OnPropertyChanged(); }
+        }
+
+        private int _fypOnlineRatio = 30;
+        /// <summary>In "mixed" mode, the share of feed picks that come from the online pool (%).</summary>
+        public int FypOnlineRatio
+        {
+            get => _fypOnlineRatio;
+            set { _fypOnlineRatio = Math.Clamp(value, 5, 95); OnPropertyChanged(); }
+        }
+
+        private List<string> _fypOnlineNiches = new() { "hypno" };
+        /// <summary>Selected online niche ids (see FypOnlineCoordinator.Catalog).</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> FypOnlineNiches
+        {
+            get => _fypOnlineNiches;
+            set { _fypOnlineNiches = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _fypOnlineCustomSubs = new();
+        /// <summary>User-added subreddit names for the online feed (bare names, no "r/").</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> FypOnlineCustomSubs
+        {
+            get => _fypOnlineCustomSubs;
+            set { _fypOnlineCustomSubs = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private bool _fypOnlineConsented = false;
+        /// <summary>The one-time online-content consent card was accepted. Until then the
+        /// source setting cannot leave "library".</summary>
+        public bool FypOnlineConsented
+        {
+            get => _fypOnlineConsented;
+            set { _fypOnlineConsented = value; OnPropertyChanged(); }
+        }
+        #endregion
+
         #region Lock Card (Unlocks Lv.35)
         private bool _lockCardEnabled = false;
         public bool LockCardEnabled
@@ -2648,6 +3212,91 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Graded Intake (web core window mode)
+
+        private bool _intakeFullscreen = false;
+        /// <summary>Launch the Graded Intake window borderless-fullscreen. The SINGLE source of
+        /// truth for the mode: the page never stores it (a localStorage copy would disagree with
+        /// the window the host had already built), it only mirrors what C# echoes back. Written
+        /// by IntakeHostService whenever the page's toggle moves, so "how I left it" is how it
+        /// comes back. Defaults off - a Lab tool opening windowed is the recoverable state.</summary>
+        public bool IntakeFullscreen
+        {
+            get => _intakeFullscreen;
+            set { _intakeFullscreen = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonFullscreen = false;
+        /// <summary>Launch the Goon Game (1v1 duel) web client borderless-fullscreen. Same contract
+        /// as <see cref="IntakeFullscreen"/>: C# owns the window mode, the page only mirrors the
+        /// state the host echoes back, and GoonHostService writes this whenever the page's toggle
+        /// moves. Defaults off — and a recovery relaunch deliberately ignores it, so a wedged page
+        /// always comes back in a titled window that Windows can still close.</summary>
+        [JsonProperty]
+        public bool GoonFullscreen
+        {
+            get => _goonFullscreen;
+            set { _goonFullscreen = value; OnPropertyChanged(); }
+        }
+
+        // ---- Weekly Intake Pass (free-tier onboarding) ----------------------------
+        // The Graded Intake is a premium Exclusive, but free users get ONE run a week so
+        // the app has a front door: the intake drafts a session, and that session is the
+        // first real thing a new user experiences. Premium is unchanged - unlimited runs,
+        // none of this state is ever read for a patron.
+
+        private string _intakePassSpentWeek = "";
+        /// <summary>ISO week key ("2026-W31") of the week whose free pass has been SPENT.
+        /// This - not a timestamp comparison - is the authority on whether the door is open:
+        /// weeks are the unit the feature is sold in, so storing the week directly means a
+        /// clock that drifts by hours can never half-open a pass. Empty = never spent.
+        /// Written only on a COMPLETED intake (a quiz-result arrived), never on launch, so a
+        /// crash or an abort cannot burn someone's week.</summary>
+        public string IntakePassSpentWeek
+        {
+            get => _intakePassSpentWeek;
+            set { _intakePassSpentWeek = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>UTC instant the pass above was spent. Not used for gating (the week key
+        /// is), purely so a rolled-back clock is detectable: a spend stamped in the future
+        /// means the machine's clock moved, and the pass service refuses to re-open on that
+        /// evidence alone. Null = never spent.</summary>
+        private DateTime? _intakePassSpentUtc = null;
+        public DateTime? IntakePassSpentUtc
+        {
+            get => _intakePassSpentUtc;
+            set { _intakePassSpentUtc = value; OnPropertyChanged(); }
+        }
+
+        // IntakePassCeremonyWeek was removed when the Dashboard tile stopped being a once-a-week
+        // reveal and became a plate that alternates for as long as a pass is waiting. Existing
+        // settings.json files may still carry the key; Newtonsoft ignores unknown properties on
+        // load, so it simply falls away the next time settings are saved.
+
+        /// <summary>ISO week the weekly nudge popup was dismissed for. Deliberately NOT the
+        /// shared <see cref="DismissedAnnouncementId"/>: that slot belongs to server-triggered
+        /// announcements, and a recurring local nudge writing into it would silently eat the
+        /// next real announcement.</summary>
+        private string _intakeNudgeDismissedWeek = "";
+        public string IntakeNudgeDismissedWeek
+        {
+            get => _intakeNudgeDismissedWeek;
+            set { _intakeNudgeDismissedWeek = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>Show the once-a-week "your intake pass is ready" popup. On by default -
+        /// it is the feature's re-engagement hook - but a weekly popup with no off switch is
+        /// a bug report waiting to happen, so it has one.</summary>
+        private bool _intakeNudgeEnabled = true;
+        public bool IntakeNudgeEnabled
+        {
+            get => _intakeNudgeEnabled;
+            set { _intakeNudgeEnabled = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Pop Quiz (Session reinforcement questions)
 
         private bool _popQuizEnabled = false;
@@ -2754,6 +3403,76 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextAlwaysOnTop = value; OnPropertyChanged(); }
         }
 
+        private int _bouncingTextColorMode = 0; // 0=Random (classic), 1=Fixed, 2=Rainbow cycle
+        public int BouncingTextColorMode
+        {
+            get => _bouncingTextColorMode;
+            set { _bouncingTextColorMode = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private string _bouncingTextFixedColor = ""; // "#RRGGBB"; empty = hot pink
+        public string BouncingTextFixedColor
+        {
+            get => _bouncingTextFixedColor;
+            set { _bouncingTextFixedColor = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxBreathing = false;
+        public bool BouncingTextFxBreathing
+        {
+            get => _bouncingTextFxBreathing;
+            set { _bouncingTextFxBreathing = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxWobble = false;
+        public bool BouncingTextFxWobble
+        {
+            get => _bouncingTextFxWobble;
+            set { _bouncingTextFxWobble = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxSpin = false;
+        public bool BouncingTextFxSpin
+        {
+            get => _bouncingTextFxSpin;
+            set { _bouncingTextFxSpin = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxVelocityTilt = false;
+        public bool BouncingTextFxVelocityTilt
+        {
+            get => _bouncingTextFxVelocityTilt;
+            set { _bouncingTextFxVelocityTilt = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxSquashStretch = true;
+        public bool BouncingTextFxSquashStretch
+        {
+            get => _bouncingTextFxSquashStretch;
+            set { _bouncingTextFxSquashStretch = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxCornerBurst = true;
+        public bool BouncingTextFxCornerBurst
+        {
+            get => _bouncingTextFxCornerBurst;
+            set { _bouncingTextFxCornerBurst = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextOutline = false;
+        public bool BouncingTextOutline
+        {
+            get => _bouncingTextOutline;
+            set { _bouncingTextOutline = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextSecondText = false;
+        public bool BouncingTextSecondText
+        {
+            get => _bouncingTextSecondText;
+            set { _bouncingTextSecondText = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Pink Filter (Unlocks Lv.10)
@@ -2765,7 +3484,7 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _pinkFilterOpacity = 25; // 0-50%
+        private int _pinkFilterOpacity = 10; // 0-50%
         public int PinkFilterOpacity
         {
             get => _pinkFilterOpacity;
@@ -2777,6 +3496,15 @@ namespace ConditioningControlPanel.Models
         {
             get => _pinkFilterLinkRamp;
             set { _pinkFilterLinkRamp = value; OnPropertyChanged(); }
+        }
+
+        // User-picked tint color as "#RRGGBB". Empty = use the default (mod/hot-pink)
+        // color, preserving creator-mod retints until the user explicitly overrides.
+        private string _pinkFilterColor = "";
+        public string PinkFilterColor
+        {
+            get => _pinkFilterColor;
+            set { _pinkFilterColor = value ?? ""; OnPropertyChanged(); }
         }
 
         #endregion
@@ -2900,6 +3628,20 @@ namespace ConditioningControlPanel.Models
             set { _autoPerformanceMode = value; OnPropertyChanged(); }
         }
 
+        private MotionLevel _motionLevel = MotionLevel.Full;
+        /// <summary>
+        /// How much UI motion is allowed. Full by default; Reduced keeps crossfades but kills
+        /// ambient loops, particles and parallax; Off snaps everything. The effective level is
+        /// additionally capped to Reduced when the OS animation-effects flag is off — read
+        /// Services/MotionFx.Level rather than this property.
+        /// </summary>
+        [JsonProperty("MotionLevel")]
+        public MotionLevel MotionLevel
+        {
+            get => _motionLevel;
+            set { _motionLevel = value; OnPropertyChanged(); }
+        }
+
         private bool _videoForceHardwareDecoding = false;
         /// <summary>
         /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos
@@ -2950,6 +3692,27 @@ namespace ConditioningControlPanel.Models
             set { _aiChatEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _useCompanionBrain = true;
+        /// <summary>
+        /// Train 1 kill switch. True routes companion conversation through <c>CompanionBrain</c>
+        /// (<c>App.Brain</c>) — one turn log shared by every provider, so cloud chat finally has
+        /// memory of the current conversation and of previous launches.
+        ///
+        /// <para>False restores the pre-Train-1 behaviour exactly: each call site goes straight to
+        /// <c>IAiService</c>'s stateless one-shot methods. Nothing else differs — the moderation
+        /// spine, the pink AI badge semantics and the ChatMemoryEnabled toggle apply on both paths —
+        /// so this is a safe switch to flip if the brain misbehaves in the field.</para>
+        ///
+        /// <para>Not a privacy control: conversation persistence is gated by
+        /// <c>CompanionPrompt.ChatMemoryEnabled</c> on both paths.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool UseCompanionBrain
+        {
+            get => _useCompanionBrain;
+            set { _useCompanionBrain = value; OnPropertyChanged(); }
+        }
+
         private int _idleGiggleIntervalSeconds = 120; // 20-600 seconds; drives the idle BARK cadence (AvatarTubeWindow.OnIdleTick → BarkService.DispatchIdle)
         /// <summary>
         /// How often the companion speaks when idle (in seconds)
@@ -2968,6 +3731,54 @@ namespace ConditioningControlPanel.Models
         {
             get => _bubbleDurationSeconds;
             set { _bubbleDurationSeconds = Math.Clamp(value, 1.0, 10.0); OnPropertyChanged(); }
+        }
+
+        private bool _companionVoiceLinesMuted = false;
+        /// <summary>
+        /// Mute only the companion's spoken voicelines (#846): the bubble, its text, and the
+        /// giggle/bubble sound cues all stay — the pre-recorded VO alone goes quiet. Distinct
+        /// from AvatarMuted (which silences her outright) and from MasterVolume==0.
+        /// </summary>
+        [JsonProperty]
+        public bool CompanionVoiceLinesMuted
+        {
+            get => _companionVoiceLinesMuted;
+            set { _companionVoiceLinesMuted = value; OnPropertyChanged(); }
+        }
+
+        // Persisted avatar-tube (companion window) placement (#669). Restored on startup so a
+        // detached, dragged, or rescaled companion comes back where the user left it. Left/Top use
+        // NaN as the "unset" sentinel (no saved position yet -> fall back to the default anchor).
+        private bool _avatarTubeDetached = false;
+        /// <summary>Whether the companion window was detached from the main window at last exit.</summary>
+        public bool AvatarTubeDetached
+        {
+            get => _avatarTubeDetached;
+            set { _avatarTubeDetached = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeLeft = double.NaN;
+        /// <summary>Saved detached companion X position (NaN = unset).</summary>
+        public double AvatarTubeLeft
+        {
+            get => _avatarTubeLeft;
+            set { _avatarTubeLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeTop = double.NaN;
+        /// <summary>Saved detached companion Y position (NaN = unset).</summary>
+        public double AvatarTubeTop
+        {
+            get => _avatarTubeTop;
+            set { _avatarTubeTop = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeScale = 1.0;
+        /// <summary>Saved companion scale (Ctrl+scroll zoom). Default 1.0.</summary>
+        public double AvatarTubeScale
+        {
+            get => _avatarTubeScale;
+            set { _avatarTubeScale = value; OnPropertyChanged(); }
         }
 
         // ============================================================
@@ -3004,6 +3815,181 @@ namespace ConditioningControlPanel.Models
         {
             get => _awarenessReactionCooldownSeconds;
             set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private int _awarenessCooldownMaxSeconds = 0;
+        /// <summary>
+        /// Upper bound (seconds) for a randomized reaction cooldown. When set above
+        /// AwarenessReactionCooldownSeconds, each reaction rolls a random cooldown in
+        /// [base, max]; 0 (default) disables randomization so the fixed cooldown is used
+        /// unchanged. Clamped to the same 10-600 range as the base cooldown (plus 0).
+        /// </summary>
+        public int AwarenessCooldownMaxSeconds
+        {
+            get => _awarenessCooldownMaxSeconds;
+            set { _awarenessCooldownMaxSeconds = value <= 0 ? 0 : Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        // ---------- Awareness v2 (Train 2, "She notices") ----------
+
+        private bool _useAwarenessV2 = true;
+        /// <summary>
+        /// Train 2 kill switch. True runs the v2 pipeline: <c>AwarenessObserver</c> with a dwell gate,
+        /// the persisted <c>ActivityLedger</c> behind her callbacks, worthiness scoring, and one shared
+        /// arbiter so a bark and an LLM quip can no longer both fire on the same window change.
+        ///
+        /// <para>False restores today's behaviour end to end — the legacy <c>WindowAwarenessService</c>
+        /// poll, its cooldown helpers and the AvatarTube reaction path — with no ledger written and no
+        /// v2 setting on this page having any effect.</para>
+        ///
+        /// <para>Not a privacy control. Recording is governed by <see cref="AwarenessModeEnabled"/> +
+        /// <see cref="AwarenessConsentGiven"/>, the deny list and the adult-recording toggle, on both
+        /// paths.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool UseAwarenessV2
+        {
+            get => _useAwarenessV2;
+            set { _useAwarenessV2 = value; OnPropertyChanged(); }
+        }
+
+        private Services.Awareness.AwarenessIntensity _awarenessIntensity = Services.Awareness.AwarenessIntensity.Chatty;
+        /// <summary>
+        /// How talkative she is about what you are doing — the one dial that replaces the cooldown
+        /// slider, the cooldown-max slider and the (dead) per-category toggles. Maps internally to a
+        /// line budget per hour, the worthiness threshold and whether the Rare tier is armed
+        /// (<c>AwarenessIntensityProfile</c>). Off silences awareness lines without losing any settings.
+        /// </summary>
+        [JsonProperty]
+        public Services.Awareness.AwarenessIntensity AwarenessIntensity
+        {
+            get => _awarenessIntensity;
+            set { _awarenessIntensity = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _awarenessDenyList = new();
+        /// <summary>
+        /// Apps she must never see: matched as case-insensitive substrings against the resolved app id
+        /// and display name. A deny-listed app produces no frame, no ledger entry and no reaction —
+        /// ever.
+        ///
+        /// <para>Ships EMPTY. The privacy package seeds the recommended defaults (password managers,
+        /// banking, mail clients, health portals) so the seeding is visible and editable rather than
+        /// invisible and hard-coded. Entries are sanitised on the way in: length-capped, lowercased,
+        /// wildcard characters removed, and anything that would collapse to "match everything"
+        /// dropped.</para>
+        /// </summary>
+        [JsonProperty]
+        public List<string> AwarenessDenyList
+        {
+            get => _awarenessDenyList;
+            set { _awarenessDenyList = Services.Awareness.AwarenessText.SanitizeRuleList(value); OnPropertyChanged(); }
+        }
+
+        private List<string> _awarenessTitleAllowList = new();
+        /// <summary>
+        /// The only apps whose page/tab title may be included in what she is told —
+        /// <c>ContextFrame.PageTitleSanitized</c> stays null for everything else.
+        ///
+        /// <para>Ships EMPTY, which inverts today's behaviour: page titles currently go to the cloud
+        /// for every app. Same sanitising as the deny list, and for the same reason — an entry that
+        /// silently meant "every app" here would leak titles rather than merely over-mute.</para>
+        /// </summary>
+        [JsonProperty]
+        public List<string> AwarenessTitleAllowList
+        {
+            get => _awarenessTitleAllowList;
+            set { _awarenessTitleAllowList = Services.Awareness.AwarenessText.SanitizeRuleList(value); OnPropertyChanged(); }
+        }
+
+        private int _awarenessRetentionDays = 30;
+        /// <summary>
+        /// How many days of activity counters the local ledger keeps (7-90, default 30). Pruning runs
+        /// when the observer starts and on every day rollover — never only when a page is opened.
+        /// </summary>
+        [JsonProperty]
+        public int AwarenessRetentionDays
+        {
+            get => _awarenessRetentionDays;
+            set { _awarenessRetentionDays = Math.Clamp(value, 7, 90); OnPropertyChanged(); }
+        }
+
+        private bool _awarenessAdultReactionsEnabled = true;
+        /// <summary>
+        /// Whether she reacts at all to the adult-content cluster (doc 02 §6.1: on by default — it is
+        /// the app's whole theme and the funniest material). Off means those frames are scored and
+        /// recorded but never spoken about.
+        ///
+        /// <para>Independent of what crosses the wire: for that cluster only the cluster id is ever
+        /// sent, never the site name or the title, regardless of this toggle or any allow list.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessAdultReactionsEnabled
+        {
+            get => _awarenessAdultReactionsEnabled;
+            set { _awarenessAdultReactionsEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessAdultRecordingEnabled = true;
+        /// <summary>
+        /// Whether adult-cluster visits are written to the local ledger at all. Off means no counters,
+        /// no streaks and no callbacks for that cluster — and those entries are the first thing the
+        /// privacy panel's wipe button clears when it is on.
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessAdultRecordingEnabled
+        {
+            get => _awarenessAdultRecordingEnabled;
+            set { _awarenessAdultRecordingEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessConsentShownV2 = false;
+        /// <summary>
+        /// Whether the plain-language awareness consent dialog has been shown and accepted at least once
+        /// (doc 02 §6.3). False means the next attempt to open her eyes raises the dialog instead of
+        /// switching silently; true means the toggle is one click, as it is for every other setting.
+        ///
+        /// <para>Separate from <see cref="AwarenessConsentGiven"/> on purpose:
+        /// <c>AwarenessConsentGiven</c> is the live "is she allowed to watch" flag and follows the
+        /// toggle, while this records that the explanation was actually read once. Upgraders who had the
+        /// feature on before v2 land here as false and get the dialog the first time they touch it,
+        /// which is the whole point — they never saw one.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessConsentShownV2
+        {
+            get => _awarenessConsentShownV2;
+            set { _awarenessConsentShownV2 = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessDenySeeded = false;
+        /// <summary>
+        /// Whether the recommended deny groups (password managers, banking, email titles) have been
+        /// written into <see cref="AwarenessDenyList"/>. Set by
+        /// <c>AwarenessPrivacyRules.EnsureSeeded</c>, which runs once, from the consent flow.
+        ///
+        /// <para>Until it is true the privacy layer applies those groups anyway, so protection never
+        /// depends on start-up ordering. After it is true the user's list is authoritative: removing a
+        /// seeded chip removes the rule, and nothing puts it back.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessDenySeeded
+        {
+            get => _awarenessDenySeeded;
+            set { _awarenessDenySeeded = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessIntensityMigrated = false;
+        /// <summary>
+        /// Whether <see cref="AwarenessReactionCooldownSeconds"/> has been mapped onto
+        /// <see cref="AwarenessIntensity"/> (<c>AwarenessIntensityMigration</c>). Once only — a second
+        /// run would overwrite whatever the user picked on the dial afterwards.
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessIntensityMigrated
+        {
+            get => _awarenessIntensityMigrated;
+            set { _awarenessIntensityMigrated = value; OnPropertyChanged(); }
         }
 
         private Dictionary<string, bool> _companionSectionOpen = new();
@@ -3131,8 +4117,8 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public string OpenRouterApiKey
         {
-            get => Core.Services.SecureApiKeyStore.Retrieve() ?? "";
-            set { Core.Services.SecureApiKeyStore.Store(string.IsNullOrEmpty(value) ? null : value); OnPropertyChanged(); }
+            get => Services.SecureApiKeyStore.Retrieve() ?? "";
+            set { Services.SecureApiKeyStore.Store(string.IsNullOrEmpty(value) ? null : value); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -3146,9 +4132,9 @@ namespace ConditioningControlPanel.Models
             set
             {
                 // Migrate: if there's a plaintext key in settings.json, move it to DPAPI
-                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Core.Services.SecureApiKeyStore.Retrieve()))
+                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Services.SecureApiKeyStore.Retrieve()))
                 {
-                    Core.Services.SecureApiKeyStore.Store(value);
+                    Services.SecureApiKeyStore.Store(value);
                 }
             }
         }
@@ -3191,6 +4177,22 @@ namespace ConditioningControlPanel.Models
         {
             get => _activePersonalityPresetId;
             set { _activePersonalityPresetId = value ?? PersonalityPresets.BambiSpriteId; OnPropertyChanged(); }
+        }
+
+        private DateTime? _personaVoiceFenceUtc;
+        /// <summary>
+        /// UTC moment of the most recent personality-preset selection. Assistant-authored chat
+        /// history from BEFORE this moment is fenced off the WIRE (see
+        /// <c>PromptAssembler.FenceHistoryToPersona</c>): her own old-voice replies are the
+        /// strongest few-shot signal a small model has, and 1,600 tokens of them out-shout any
+        /// changed persona paragraph — the switch "took" in the prompt but not in what she said
+        /// (owner repro, 2026-08-07). Persisted so a restored session.json stays fenced across
+        /// launches. The stored history and the bubbles the user sees are untouched.
+        /// </summary>
+        public DateTime? PersonaVoiceFenceUtc
+        {
+            get => _personaVoiceFenceUtc;
+            set { _personaVoiceFenceUtc = value; OnPropertyChanged(); }
         }
 
         private List<PersonalityPreset> _userPersonalityPresets = new();
@@ -3242,7 +4244,7 @@ namespace ConditioningControlPanel.Models
         /// Display name for current content mode.
         /// </summary>
         [JsonIgnore]
-        public string ContentModeDisplay => CoreApp.Mods?.GetModeDisplayName() ?? "CCP Default";
+        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? "CCP Default";
 
         /// <summary>
         /// Gets/sets the hypnotube links for the currently active content mode.
@@ -3639,12 +4641,11 @@ namespace ConditioningControlPanel.Models
 
         private bool _takeoverVideosStrict = false;
         /// <summary>
-        /// Opt-in: mandatory videos launched by Takeover play with Strict Lock (no skip,
-        /// no ESC). Default OFF — Takeover videos have always been skippable so surprise
-        /// autonomous videos can be dismissed; this lets users who want the full loss of
-        /// control turn that on (support request, 2026-07-10). Passed to
-        /// VideoService.TriggerVideo as strictOverride, independent of the global
-        /// StrictLockEnabled.
+        /// RETIRED — no longer read or surfaced in the UI. Takeover videos are plain mandatory
+        /// videos and follow the global StrictLockEnabled flag like every other one; having a
+        /// second, independent notion of "strict" meant Takeover imposed unskippable videos (and
+        /// its own consent dialog) regardless of the mandatory-video setting. Kept only so
+        /// existing settings.json files continue to deserialize.
         /// </summary>
         [JsonProperty]
         public bool TakeoverVideosStrict
@@ -3776,7 +4777,7 @@ namespace ConditioningControlPanel.Models
         /// 0.015. One-shot — once relaxed (or once a user picks their own value via a future UI), it
         /// never re-fires.
         /// </summary>
-        public void MigrateLoudnessThreshold()
+        internal void MigrateLoudnessThreshold()
         {
             if (_loudnessThresholdRelaxed) return;
             if (_speechLoudnessThreshold >= 0.035 && _speechLoudnessThreshold <= 0.045)
@@ -3809,6 +4810,31 @@ namespace ConditioningControlPanel.Models
             if (_migratedUnifiedOverlayHostOn) return;
             _unifiedOverlayHost = true;
             _migratedUnifiedOverlayHostOn = true;
+        }
+
+        private bool _migratedCompositorOffThreadOn;
+        /// <summary>One-shot guard for <see cref="MigrateEnableCompositorOffThreadPresent"/> so a user who
+        /// turns the off-thread present toggle off afterwards isn't clobbered back on at the next launch.</summary>
+        [JsonProperty]
+        public bool MigratedCompositorOffThreadOn
+        {
+            get => _migratedCompositorOffThreadOn;
+            set { _migratedCompositorOffThreadOn = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Force the off-thread compositor present path ON once for users upgrading from 6.4.0 and
+        /// earlier, which persisted "false" (the flag defaulted OFF while the compositor itself
+        /// defaulted ON). That combo rastered the fullscreen spiral on the UI thread and starved the
+        /// dispatcher on high-res / multi-monitor machines (bugs #588/#586/#587), so the field-default
+        /// flip to ON wouldn't reach them without this. One-shot — turning the toggle off later sticks.
+        /// No-op when the unified host is off (the present path only runs under the compositor).
+        /// </summary>
+        internal void MigrateEnableCompositorOffThreadPresent()
+        {
+            if (_migratedCompositorOffThreadOn) return;
+            _compositorOffThreadPresent = true;
+            _migratedCompositorOffThreadOn = true;
         }
 
         private double _speechWakeThreshold = 0.15;
@@ -3940,14 +4966,56 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Lab — Wallpaper Override
+        #region Takeover — Wallpaper Override
 
         private bool _wallpaperEnabled = false;
+        /// <summary>
+        /// Keep her wallpaper changes on the desktop instead of reverting after
+        /// <see cref="WallpaperPulseSeconds"/>. Still restored when the app closes. (#694)
+        /// </summary>
         [JsonProperty]
         public bool WallpaperEnabled
         {
             get => _wallpaperEnabled;
             set { _wallpaperEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _wallpaperPulseSeconds = 30;
+        /// <summary>
+        /// How long a Takeover wallpaper change sticks around before the original comes back.
+        /// Ignored while <see cref="WallpaperEnabled"/> is on.
+        /// </summary>
+        [JsonProperty]
+        public int WallpaperPulseSeconds
+        {
+            get => _wallpaperPulseSeconds;
+            set { _wallpaperPulseSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private string _wallpaperOriginalPath = "";
+        /// <summary>
+        /// The desktop wallpaper WallpaperService captured before overriding it. Written on
+        /// activate and cleared on a successful restore, so a session that dies without
+        /// restoring (crash / task-kill) can put it back on the next launch (#692).
+        /// Not user-facing.
+        /// </summary>
+        [JsonProperty]
+        public string WallpaperOriginalPath
+        {
+            get => _wallpaperOriginalPath;
+            set { _wallpaperOriginalPath = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _wallpaperSourceFolder = "";
+        /// <summary>
+        /// Folder the wallpaper takeover pulls images from. Empty = default to the
+        /// assets/wallpapers folder under EffectiveAssetsPath.
+        /// </summary>
+        [JsonProperty]
+        public string WallpaperSourceFolder
+        {
+            get => _wallpaperSourceFolder;
+            set { _wallpaperSourceFolder = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -4004,8 +5072,8 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public string? AuthToken
         {
-            get => Core.Services.SecureAuthTokenStore.Retrieve();
-            set { Core.Services.SecureAuthTokenStore.Store(value); OnPropertyChanged(); }
+            get => Services.SecureAuthTokenStore.Retrieve();
+            set { Services.SecureAuthTokenStore.Store(value); OnPropertyChanged(); }
         }
 
         private string? _userDisplayName = null;
@@ -4041,14 +5109,6 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Progression level historically required for the persistent Brain Drain setting.
-        /// The WPF OverlayService gates BrainDrainEnabled on IsLevelUnlocked(70) at the service
-        /// (OverlayService.cs:203/:2190) and the Avalonia head mirrors that; the Level Features
-        /// UI card shows the same number. Shared here so there is exactly one source of truth.
-        /// </summary>
-        public const int BrainDrainUnlockLevel = 70;
-
-        /// <summary>
         /// Feature level gating has been removed — every feature is available from level 1.
         /// XP, levels, quests, achievements, and the skill tree still exist; they just no longer
         /// gate any features. Method stub preserved so existing call sites keep compiling.
@@ -4079,6 +5139,47 @@ namespace ConditioningControlPanel.Models
             get => _highestLevelEver;
             set { _highestLevelEver = Math.Max(0, value); OnPropertyChanged(); }
         }
+
+        #region Server-confirmed XP watermark (#865 regression guard)
+
+        // The highest CUMULATIVE XP the server itself has ever told us this account holds, and the
+        // season + account that figure belongs to. Written only from a server response — never from
+        // a local calculation — so it is a record of what the server agreed to, not of what this
+        // machine believes. ProfileSyncService uses it to refuse two things:
+        //   * SENDING a sync whose XP is below the watermark (a wiped local file must not talk the
+        //     server down to its own emptiness), and
+        //   * ADOPTING a response that zeroes a profile the server previously confirmed, unless the
+        //     user explicitly reset (logout/account switch) or the season legitimately rolled.
+        //
+        // Season-scoped because a season rollover lowers seasonal XP by design; an unscoped
+        // watermark would fight the rollover forever. Account-scoped because two accounts on one
+        // machine have nothing to say about each other.
+
+        private double _lastConfirmedServerXp = 0;
+        /// <summary>Highest cumulative XP the server has confirmed for <see cref="LastConfirmedServerXpAccount"/> during <see cref="LastConfirmedServerXpSeason"/>. 0 = no confirmation yet.</summary>
+        public double LastConfirmedServerXp
+        {
+            get => _lastConfirmedServerXp;
+            set { _lastConfirmedServerXp = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private string? _lastConfirmedServerXpAccount = null;
+        /// <summary>UnifiedId the watermark belongs to. A mismatch voids it (account switch).</summary>
+        public string? LastConfirmedServerXpAccount
+        {
+            get => _lastConfirmedServerXpAccount;
+            set { _lastConfirmedServerXpAccount = value; OnPropertyChanged(); }
+        }
+
+        private string? _lastConfirmedServerXpSeason = null;
+        /// <summary>Season key the watermark belongs to. A mismatch voids it (season rollover legitimately lowers XP).</summary>
+        public string? LastConfirmedServerXpSeason
+        {
+            get => _lastConfirmedServerXpSeason;
+            set { _lastConfirmedServerXpSeason = value; OnPropertyChanged(); }
+        }
+
+        #endregion
 
         #region Season Recap (local-only, per-device)
 
@@ -4333,6 +5434,53 @@ namespace ConditioningControlPanel.Models
             set { _keywordSessionMultiplier = Math.Clamp(value, 1.0, 3.0); OnPropertyChanged(); }
         }
 
+        private AwarenessAppScope _keywordTriggerAppScope = AwarenessAppScope.Everywhere;
+        /// <summary>
+        /// Which applications triggers may fire in, judged by the foreground window's process.
+        /// Defaults to <see cref="AwarenessAppScope.Everywhere"/>, i.e. the behaviour that shipped
+        /// before this setting existed - turning app scoping on is an opt-in.
+        /// </summary>
+        [JsonProperty]
+        public AwarenessAppScope KeywordTriggerAppScope
+        {
+            get => _keywordTriggerAppScope;
+            set { _keywordTriggerAppScope = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _keywordTriggerApps = new();
+        /// <summary>
+        /// The process names <see cref="KeywordTriggerAppScope"/> refers to - one list, read as a
+        /// block list or an allow list depending on the mode, so there is never a second stale list
+        /// sitting behind the one in use.
+        ///
+        /// Entries are process names, matched case-insensitively with an optional ".exe" that is
+        /// stripped before comparing ("chrome", "Chrome", "chrome.exe" are the same entry). Empty
+        /// while the mode is Everywhere.
+        /// </summary>
+        [JsonProperty]
+        public List<string> KeywordTriggerApps
+        {
+            get => _keywordTriggerApps;
+            set { _keywordTriggerApps = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _keywordTriggerIgnoreOwnFocus = false;
+        /// <summary>
+        /// Suppress every source while a Control Panel window itself holds focus - so typing a
+        /// keyword INTO the trigger editor, or into the companion's chat box, does not fire it.
+        ///
+        /// Distinct from <see cref="AwarenessIgnoreOwnUi"/>, which drops OCR hits that land inside
+        /// our own window RECTANGLES. That one cannot see the keyboard path at all; this one is
+        /// about who has focus and applies to every source. Default off: someone typing to their
+        /// companion may well want the reaction, so this is offered rather than assumed.
+        /// </summary>
+        [JsonProperty]
+        public bool KeywordTriggerIgnoreOwnFocus
+        {
+            get => _keywordTriggerIgnoreOwnFocus;
+            set { _keywordTriggerIgnoreOwnFocus = value; OnPropertyChanged(); }
+        }
+
         private bool _screenOcrEnabled = false;
         public bool ScreenOcrEnabled
         {
@@ -4535,6 +5683,33 @@ namespace ConditioningControlPanel.Models
             set { _mantraDroneVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
+        // ── Mantra Chant (ambient looped voiced mantras — see MantraChantService) ──
+
+        private bool _mantraChantEnabled = false;
+        /// <summary>
+        /// When on, the active mod's VOICED mantra clips loop back-to-back as ambient audio. No-ops
+        /// for mods that ship no voiced mantras. Distinct from the Mantra Lab drone/reps above.
+        /// </summary>
+        public bool MantraChantEnabled
+        {
+            get => _mantraChantEnabled;
+            set { _mantraChantEnabled = value; OnPropertyChanged(); }
+        }
+
+        private double _mantraChantVolume = 50;
+        public double MantraChantVolume
+        {
+            get => _mantraChantVolume;
+            set { _mantraChantVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private int _mantraChantGapSeconds = 5;
+        public int MantraChantGapSeconds
+        {
+            get => _mantraChantGapSeconds;
+            set { _mantraChantGapSeconds = Math.Clamp(value, 0, 60); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Remote Control
@@ -4608,6 +5783,81 @@ namespace ConditioningControlPanel.Models
                 _savedDirectoryStatusText = v.Length > 80 ? v.Substring(0, 80) : v;
                 OnPropertyChanged();
             }
+        }
+
+        #endregion
+
+        #region Goon Game (Discord sharing)
+
+        // Goon Game opt-in Discord sharing. Sharer-only gating: each flag governs what
+        // THIS user exposes to the opponent, never what they receive. All default false —
+        // privacy fails closed. See docs/GOON_DISCORD_CONTRACT.md §1/§2.
+        //
+        // Distinct from RemoteShareAvatar (remote-control audience) and
+        // ShareProfilePicture (leaderboard / Subjects directory audience). Do not conflate;
+        // different audience, different threat model.
+
+        private bool _goonShareAvatar = false;
+        /// <summary>
+        /// Show the linked Discord avatar to the Goon Game opponent (VS splash + HUD bubble).
+        /// Pushed to the server as `goon_share_avatar` on change.
+        /// </summary>
+        [JsonProperty("goonShareAvatar")]
+        public bool GoonShareAvatar
+        {
+            get => _goonShareAvatar;
+            set { _goonShareAvatar = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonShareDiscordDm = false;
+        /// <summary>
+        /// Let the Goon Game opponent open a Discord DM with this user (they get a Message
+        /// button; the snowflake is only ever resolved server-side).
+        /// Pushed to the server as `goon_share_dm` on change.
+        /// </summary>
+        [JsonProperty("goonShareDiscordDm")]
+        public bool GoonShareDiscordDm
+        {
+            get => _goonShareDiscordDm;
+            set { _goonShareDiscordDm = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonRichPresence = false;
+        /// <summary>
+        /// Show Goon Game activity in Discord Rich Presence (fixed strings only — never the
+        /// opponent's name, never free text). LOCAL-ONLY: never synced to the server.
+        /// </summary>
+        [JsonProperty("goonRichPresence")]
+        public bool GoonRichPresence
+        {
+            get => _goonRichPresence;
+            set { _goonRichPresence = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonSeenSharePrompt = false;
+        /// <summary>
+        /// True once the one-time first-duel sharing confirm has been shown. Written by the
+        /// page via the discord-prefs bridge verb, echoed back on the next `discord` message.
+        /// </summary>
+        [JsonProperty("goonSeenSharePrompt")]
+        public bool GoonSeenSharePrompt
+        {
+            get => _goonSeenSharePrompt;
+            set { _goonSeenSharePrompt = value; OnPropertyChanged(); }
+        }
+
+        private string _goonLastOpponentJson = "";
+        /// <summary>
+        /// Serialized { name, dmId, avatarFile, ts } for the MOST RECENT opponent only
+        /// (overwrite semantics). avatarFile is a bare filename inside
+        /// %LOCALAPPDATA%\ConditioningControlPanel\goon_avatars\ — never a full path.
+        /// Written by GoonHostService only.
+        /// </summary>
+        [JsonProperty("goonLastOpponentJson")]
+        public string GoonLastOpponentJson
+        {
+            get => _goonLastOpponentJson;
+            set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
         }
 
         #endregion
@@ -4920,14 +6170,6 @@ namespace ConditioningControlPanel.Models
             set { _blinkTrainerMixImages = value; OnPropertyChanged(); }
         }
 
-        // Tracks whether the user has visited the v5.9.8 Blink Trainer flagship
-        // page at least once. Used to suppress the one-time "moved to its own
-        // home" sticky toast (see Phase G). Defaults false so existing users
-        // see the toast on first launch after update; new users default to
-        // false too but the toast self-suppresses once they visit the tab.
-        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
-        public bool HasSeenBlinkTrainerFlagship { get; set; }
-
         /// <summary>
         /// Set once the one-time asset migration (install-dir assets -> %APPDATA% user folder)
         /// has completed. Without this flag the migration re-copies the entire library on every
@@ -4936,6 +6178,43 @@ namespace ConditioningControlPanel.Models
         /// launch, repeatedly filling the system drive.
         /// </summary>
         public bool HasMigratedAssetsToUserFolder { get; set; }
+
+        #endregion
+
+        #region Training Programs
+
+        /// <summary>
+        /// Set the first time the user clicks the Programs tab button. Until then the tab button
+        /// pulses once on startup to draw the eye to it, the same one-shot treatment the Deeper tab
+        /// got when it shipped (see <see cref="HasSeenDeeperTab"/>). Never cleared: the pulse is an
+        /// announcement, so a user who has already found the tab must not be nagged again.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenProgramsTab { get; set; }
+
+        /// <summary>
+        /// Set when the one-time "what Training Programs are" explainer has been shown. Kept
+        /// separate from <see cref="HasSeenProgramsTab"/> on purpose: the pulse is spent the moment
+        /// the tab is clicked, but the explainer has to survive that same click so it can open on
+        /// top of the tab the user just landed on.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenProgramsIntro { get; set; }
+
+        #endregion
+
+        #region First-time experience
+
+        // One-shot feature intro cards (Windows/FeatureIntroPopup). Each key is spent the
+        // moment its card is about to open - same contract as HasSeenProgramsIntro - so a
+        // card that fails to display burns nothing and one that displays never re-fires.
+        private List<string> _seenFeatureIntros = new();
+        [JsonProperty]
+        public List<string> SeenFeatureIntros
+        {
+            get => _seenFeatureIntros;
+            set { _seenFeatureIntros = value ?? new List<string>(); OnPropertyChanged(); }
+        }
 
         #endregion
 

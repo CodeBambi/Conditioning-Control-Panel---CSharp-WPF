@@ -994,6 +994,14 @@
                                                                    Foreground="{Binding TextBrush}"
                                                                    FontSize="13" FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"/>
+                                                        <!-- Mechanics line: which feature verifies this task and
+                                                             what has to happen. The description above stays in the
+                                                             program's voice; this one is deliberately literal. -->
+                                                        <TextBlock Text="{Binding HowTo}"
+                                                                   Visibility="{Binding HowToVisibility}"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="11" TextWrapping="Wrap"
+                                                                   Margin="0,3,0,0"/>
                                                         <Border CornerRadius="9999" Padding="7,1" Margin="0,4,0,0"
                                                                 HorizontalAlignment="Left"
                                                                 Visibility="{Binding BadgeVisibility}"

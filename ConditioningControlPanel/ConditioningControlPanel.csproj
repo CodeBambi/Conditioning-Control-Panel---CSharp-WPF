@@ -10,7 +10,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);CCP.Core\**;CCP.Avalonia\**;CCP.Avalonia.Desktop\**;CCP.Avalonia.Desktop.Windows\**;CCP.Avalonia.Desktop.Linux\**;CCP.Avalonia.Desktop.macOS\**;CCP.Avalonia.Android\**;CCP.WindowsOnly\**;tests\**</DefaultItemExcludes>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.6.3</Version>
+    <Version>6.7.4</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -139,6 +139,16 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
 
+    <!-- WebRTC data channel for the Goon Game 1v1 transport (Services\GoonGame\).
+         Pure managed .NET (BouncyCastle DTLS + its own SCTP stack), MIT, no native libs — so
+         it survives the single-file / self-contained publish with no extraction shim.
+         DATA CHANNEL ONLY: no media tracks are ever created; mic/cam never cross the wire.
+         Verified at coding time on net8.0 + Windows 11 (26200): two in-process peers reach
+         `connected` in ~0.85 s, an ordered/reliable channel opens at ~0.97 s, a 60 KB string
+         round-trips intact (SCTP fragmentation works), and public STUN yields an srflx
+         candidate. See docs/GOON_GAME_PLAN.md "Transport decisions". -->
+    <PackageReference Include="SIPSorcery" Version="10.0.13" />
+
     <!-- SVG rendering for color emoji (Twemoji) — WPF can't render Segoe UI Emoji
          in color, so we ship the Twemoji SVG set and render via SharpVectors.
          See Helpers/EmojiImage.cs. -->
@@ -169,6 +179,14 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Shipped AI personality presets (Strict Domme etc.) - the Companion tab's per-companion
+         personality picker offers these; without this block they exist only in the repo and no
+         user ever received them -->
+    <Content Include="assets\prompts\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- AI knowledge base placeholder (read by Services/AIService/Enrichment/KnowledgeService) -->
     <Content Include="assets\knowledge.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -181,6 +199,29 @@
          so the no-copy None item doesn't suppress this Content copy. -->
     <None Remove="assets\Chaos\**\*.png;assets\Chaos\**\*.gif;assets\Chaos\**\*.json" />
     <Content Include="assets\Chaos\**\*.png;assets\Chaos\**\*.gif;assets\Chaos\**\*.json" Exclude="assets\Chaos\**\_staging*\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Profile cosmetics: the wardrobe registry + the 512x512 avatar-decoration and
+         charm PNGs (Resources\cosmetics\<mod>\<id>.png). Loaded OFF DISK from
+         AppContext.BaseDirectory like the Chaos art, NOT via pack:// - so a missing
+         file degrades to "no decoration" instead of failing a Resource URI at runtime.
+         Remove from the default None glob first so the no-copy None item doesn't
+         suppress this Content copy. -->
+    <None Remove="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json" />
+    <!-- The art pipeline leaves downscale sanity checks (<id>_104.png, <id>_28.png) and
+         placement guides (<id>_guide.png) beside the finals. Only ids the registry names
+         are ever loaded, so those would ship as dead weight - keep them out of the build. -->
+    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json"
+             Exclude="Resources\cosmetics\**\*_28.png;Resources\cosmetics\**\*_104.png;Resources\cosmetics\**\*_guide.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Exclusives tab art (vault backdrop), loaded off disk by Views/Tabs/ExclusivesTabView -->
+    <None Remove="assets\exclusives\*.png" />
+    <Content Include="assets\exclusives\*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -322,11 +363,19 @@
   <ItemGroup>
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
     <Resource Include="Resources\features\*.png" />
+    <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
+         MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
+    <Resource Include="Resources\nav\*.png" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
     <Resource Include="Resources\programs\*.png" />
+
+    <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
+         loader is pack:// only, and these must never fall under the Resources\cosmetics\**
+         Content glob that ships the wardrobe art loose on disk. -->
+    <Resource Include="Resources\banners\*.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -455,6 +504,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Awareness v2 angle cards. Shipped as Content next to app_clusters.json by the glob above so a
+         mod can REPLACE the file on disk, and ALSO embedded here so there is a fail-closed floor: a
+         missing, oversized, malformed or hostile override falls back to this copy rather than to a
+         prompt with no angle cards and no persona digest.
+         See Services\Awareness\AwarenessAngleCards.cs. -->
+    <EmbeddedResource Include="Resources\sounds\companion_audio\awareness_angles.json" />
     <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js) and the
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy

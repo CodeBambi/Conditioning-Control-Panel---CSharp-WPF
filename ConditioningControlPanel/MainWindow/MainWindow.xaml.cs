@@ -76,7 +76,10 @@ namespace ConditioningControlPanel
         private bool _suppressModSelectorChange;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
-        private bool _skipSiteToggleNavigation = false;
+        // _skipSiteToggleNavigation removed in #867: the site toggle handler moved from Checked
+        // to Click, so setting the radios in code no longer navigates and there is nothing left
+        // to suppress. A flag that is only cleared by the handler is a trap once the handler
+        // stops running - the next real click gets eaten instead.
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
         private bool _isBrowserFullscreen = false;
@@ -248,6 +251,16 @@ namespace ConditioningControlPanel
                 ApplyCameraShortcutTo();
                 RefreshCameraShortcutLabel();
                 ApplyGlobalCameraHotkey();
+                // Ctrl+K settings palette (Windows/SettingsPaletteWindow.xaml.cs). Registered
+                // AFTER the camera shortcut on purpose: WPF executes the FIRST matching
+                // InputBinding, so a user who rebound the camera hotkey to Ctrl+K keeps their
+                // explicit choice and the palette quietly yields. In-window only by design - the
+                // palette is a navigation aid for this window, not something to summon from a
+                // browser, so it deliberately does not take a system-wide GlobalHotkeyService slot.
+                InputBindings.Add(new KeyBinding(SettingsPaletteWindow.OpenPaletteCommand,
+                                                Key.K, ModifierKeys.Control));
+                CommandBindings.Add(new CommandBinding(SettingsPaletteWindow.OpenPaletteCommand,
+                    (_, ce) => { SettingsPaletteWindow.Toggle(this); ce.Handled = true; }));
                 HookFocusGazeService();
                 HookBlinkTrainerService();
                 // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
@@ -262,6 +275,9 @@ namespace ConditioningControlPanel
                 // drift, rail hover, browser frame. Same reason for being here, and it must
                 // follow InitializeChromeFx - it rides that file's loop funnel.
                 InitializeDashboardFx();
+                // Nav rail collapse/hover-expand. After the FX inits on purpose: it caches a
+                // visual-tree walk of the rail, so every templated row has to be real first.
+                InitializeNavRail();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
@@ -272,7 +288,9 @@ namespace ConditioningControlPanel
 
             // Set version dynamically from assembly
             var version = Services.UpdateService.GetCurrentVersion();
-            ProgressionTab.TxtVersion.Text = $"Version {version}";
+            // Phase 8: ProgressionTab.TxtVersion is gone. The two live version readouts seed
+            // themselves - Settings · Updates (UpdatesSettingsSection.xaml.cs) and the System
+            // popup's AppInfoFeatureControl - alongside the three chrome labels below.
             Title = $"Conditioning Control Panel v{version}";
             TxtTitleBarVersion.Text = $"Conditioning Control Panel v{version}";
             TxtHeaderVersion.Text = $"v{version}";
@@ -334,6 +352,7 @@ namespace ConditioningControlPanel
 
             // Initialize global keyboard hook (only if panic key is enabled)
             _keyboardHook = new GlobalKeyboardHook();
+            App.PanicHook = _keyboardHook;   // #875: lock cards ask this whether a panic escape really exists
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
             _keyboardHook.KeyPressedWithVkCode += (key, vkCode) => App.KeywordTriggers?.OnKeyPressed(key, vkCode);
             App.KeywordTriggers?.SetSessionActiveCallback(() => _sessionEngine?.IsRunning == true);
@@ -408,6 +427,19 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForQuests;
+                // The 4x4 wall's active rings ride the same INPC (resurrected 2026-08-11 with
+                // the FX tiles themselves): any of the eleven *Enabled flags moving - from the
+                // rack panels, a session ramp, remote control or the wall's own right-click -
+                // repaints the rings, so the wall never shows yesterday's mix.
+                App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForWall;
+            }
+
+            // A landed server override for the ? box repaints the wall + rail + lockbands: the
+            // rail refresh is the one funnel that already fans out to all three.
+            if (App.DailyFree != null)
+            {
+                App.DailyFree.TodayChanged += () =>
+                    Dispatcher.BeginInvoke(new Action(RefreshPremiumRail));
             }
 
             // Subscribe to skill tree events
@@ -440,17 +472,23 @@ namespace ConditioningControlPanel
 
             // v6.0: fresh installs land on CCP Default (neutral baseline).
             // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
-            // installer, so the picker is back — for BOTH populations. First launch gets it below,
-            // before the tutorial; every ALREADY-Welcomed install gets it from the else branch,
-            // because the modular installer's [InstallDelete] sweep just took their bundled mod audio
-            // away and they would otherwise never be offered it back. ModPickerDialog.ShowIfNeeded
-            // owns the one-shot guards (ModPickerShown / IsFullInstall / null service), so it no-ops
-            // for everyone who should not see it — including every install that still has its
-            // bundled audio.
+            // installer, so the picker is back — for BOTH populations. First launch gets it as step 2
+            // of the wizard below, before the tour; every ALREADY-Welcomed install gets the standalone
+            // ModPickerDialog from the else branch, because the modular installer's [InstallDelete]
+            // sweep just took their bundled mod audio away and they would otherwise never be offered
+            // it back. The one-shot guards (ModPickerShown / ModPickerOfflineOffers / IsFullInstall /
+            // null service) are the SAME rules on both paths - the wizard's mod step reuses
+            // ModPickerDialog's own guard predicates rather than restating them - so each population
+            // is offered exactly once and nobody who should not see it does.
 
-            // Show welcome dialog on first launch, then start tutorial
-            // But delay tutorial if update dialog is being shown
-            if (WelcomeDialog.ShowIfNeeded())
+            // Phase 8: one screen instead of the gauntlet. FirstRunWizard.ShouldRunAndClaim reads
+            // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
+            // instant, so the else branch below - What's New, season recap, the upgrader's mod
+            // picker - is reached by exactly the same population as before. The wizard itself
+            // owns what used to be three separate modals: the welcome card, the first-run mod
+            // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
+            // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            if (FirstRunWizard.ShouldRunAndClaim())
             {
                 Dispatcher.BeginInvoke(new Action(async () =>
                 {
@@ -461,23 +499,25 @@ namespace ConditioningControlPanel
                         await Task.Delay(500);
                     }
 
-                    // The spotlight overlay measures this window's controls, so it must not
-                    // start against a window that hasn't loaded yet (up to 10s).
+                    // The wizard's doors step and the spotlight overlay both measure this window's
+                    // controls, so neither may start against a window that hasn't loaded yet (up
+                    // to 10s). This is why the wizard opens here rather than in the constructor.
                     for (int i = 0; i < 20 && !IsLoaded; i++)
                     {
                         await Task.Delay(500);
                     }
 
-                    // Only start tutorial if update dialog is done
                     if (!App.IsUpdateDialogActive && IsLoaded)
                     {
-                        // Mod picker first: it is modal and the tutorial's spotlight overlay measures
-                        // THIS window's controls, so the two must never be on screen together. No-ops
-                        // on a full/dev install, when the pack service is missing, or after the
-                        // ModPickerShown flag is set.
-                        ModPickerDialog.ShowIfNeeded(this);
-
-                        StartTutorial();
+                        FirstRunWizard.Run(this);
+                    }
+                    else
+                    {
+                        // The waits above gave up (an update dialog still on screen after 30s, a
+                        // window that never loaded). Hand the flags back rather than spending a
+                        // first run nobody was shown - the next launch offers it properly.
+                        FirstRunWizard.HandBackFirstRun(
+                            App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
                     }
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
                     // host + avatar animations) that Loaded-priority items are starved and never
@@ -617,16 +657,16 @@ namespace ConditioningControlPanel
             // handlers were removed when the launcher became a real tab — see
             // MainWindow.Exclusives.cs.)
 
-            // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
-            // keep them in sync when settings change anywhere else.
-            Loaded += (_, __) => RefreshFeatureCardActiveStates();
-            if (App.Settings?.Current is System.ComponentModel.INotifyPropertyChanged settingsInpc)
-            {
-                settingsInpc.PropertyChanged += OnSettingsPropertyChangedForCards;
-            }
-            // velvet-mosaic: right-clicking a card quick-toggles its feature on/off.
-            SettingsTab.VelvetFeatureGrid.AddHandler(Features.FeatureCard.ToggleRequestedEvent,
-                new RoutedEventHandler(OnFeatureCardToggleRequested));
+            // velvet-mosaic (2026-08-11 rebuild): the active-state INPC subscription and the
+            // ToggleRequested handler that used to be registered here are gone with the twelve FX
+            // tiles they served. The wall is eight destinations now — "on" is not a state Down the
+            // Rabbit Hole has — so there is nothing to highlight and nothing to quick-toggle. The
+            // gesture moved to the premium rail, where the chips genuinely are toggles, and the
+            // per-feature state dots live in the Studio rack beside the dials.
+            //
+            // The mosaic's own repaint (tier price tags) hangs off RefreshPremiumRail instead,
+            // which already carries the three triggers it needs: patron status arriving or being
+            // lost, the Home door being shown, and the weekly intake pass changing.
         }
 
         private void OnXPChanged(object? sender, double xp)
@@ -802,6 +842,40 @@ namespace ConditioningControlPanel
         private void HandlePanicKeyPress()
         {
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
+
+            // #875: an open lock card outranks every hand-off below, so it is answered FIRST. A lock
+            // card can coexist with a descent, the DtRH window or the feed — AutonomyService,
+            // RemoteControlService and MantraLockScreenCommand all show one with no guard against them
+            // — and the card is a fullscreen HWND_TOPMOST cover that steals focus from the game's own
+            // Esc ladder. With DtRH up the hand-off below returns unconditionally, so the panic key
+            // never reached StopAdHocEffects and the card had no exit at all: a permanent trap. The
+            // press is consumed here (like the video grace pause) and deliberately does NOT advance the
+            // press ladder, so it can never be the tap that exits the app.
+            // IsAnyOpen also covers a deferred show still pending; cancelling that is the right answer
+            // to panic too, and DismissAll clears both, so the next press falls through normally.
+            if (LockCardWindow.IsAnyOpen())
+            {
+                VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
+                App.LockCard?.Stop(dismissOpenCards: true);
+                return;
+            }
+
+            // Ctrl+K palette. Escape is the DEFAULT panic key and the LL hook delivers it whatever
+            // has focus, so an Esc aimed at "close the palette" also arrives here — and the ladder
+            // below EXITS THE APP on press 2. Consume it (which closes the palette) without
+            // advancing _panicPressCount, exactly like the lock-card hand-off above.
+            // Gated on the panic key really being Escape, so a user who rebound panic to F8 still
+            // gets a real panic from F8 while the palette is open; the palette then closes itself
+            // through its own Esc handler and never sees this path. TryConsumeEscape carries a
+            // short grace window, so the press is claimed exactly once whichever of the two
+            // deliveries (WPF KeyDown vs the hook's queued handler) lands first.
+            if (string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
+                && SettingsPaletteWindow.TryConsumeEscape())
+            {
+                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed)");
+                return;
+            }
+
             // A live Rabbit Hole descent owns the panic key: the chaos key hook pauses the
             // run (and a second press surfaces it). Without this hand-off a mid-run panic
             // fell into the "not running" branch below — where a second press EXITS the app.
@@ -997,7 +1071,7 @@ namespace ConditioningControlPanel
                 App.BubbleCount?.Stop();
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
-                App.LockCard?.Stop();
+                App.LockCard?.Stop(dismissOpenCards: true);   // panic: the card on screen is the point
 
                 // Clear the settings flags so a running reconcile loop won't recreate them, then
                 // stop the windows directly — voice/Deeper start spiral & pink ad-hoc (no reconcile
@@ -1016,10 +1090,10 @@ namespace ConditioningControlPanel
 
         private void UpdatePanicKeyButton()
         {
-            if (SettingsTab.BtnPanicKey != null)
+            if (AppSettingsTab.BtnPanicKey != null)
             {
                 var currentKey = App.Settings.Current.PanicKey;
-                SettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
+                AppSettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
             }
         }
 
@@ -1039,18 +1113,19 @@ namespace ConditioningControlPanel
 
         internal void RequestToggleOfflineMode(bool enable)
         {
-            // Drive the existing handler via the legacy checkbox so the two-way sync logic
-            // (UpdateOfflineModeUI, login button disable, etc.) runs exactly once.
-            if (SettingsTab.ChkOfflineMode == null) return;
-            if ((SettingsTab.ChkOfflineMode.IsChecked ?? false) == enable) return;
-            SettingsTab.ChkOfflineMode.IsChecked = enable;
+            // Drive the existing handler via the one live checkbox (Settings · Data since Phase 2)
+            // so the two-way sync logic (UpdateOfflineModeUI, login button disable, etc.) runs
+            // exactly once.
+            if (AppSettingsTab.ChkOfflineMode == null) return;
+            if ((AppSettingsTab.ChkOfflineMode.IsChecked ?? false) == enable) return;
+            AppSettingsTab.ChkOfflineMode.IsChecked = enable;
         }
 
         internal void RequestToggleNoPanic(bool disablePanic)
         {
-            if (SettingsTab.ChkNoPanic == null) return;
-            if ((SettingsTab.ChkNoPanic.IsChecked ?? false) == disablePanic) return;
-            SettingsTab.ChkNoPanic.IsChecked = disablePanic;
+            if (AppSettingsTab.ChkNoPanic == null) return;
+            if ((AppSettingsTab.ChkNoPanic.IsChecked ?? false) == disablePanic) return;
+            AppSettingsTab.ChkNoPanic.IsChecked = disablePanic;
         }
 
         /// <summary>
@@ -1086,7 +1161,7 @@ namespace ConditioningControlPanel
 
             // Sync MainWindow checkbox without triggering handler
             _isLoading = true;
-            SettingsTab.ChkNoPanic.IsChecked = disablePanic;
+            AppSettingsTab.ChkNoPanic.IsChecked = disablePanic;
             _isLoading = false;
 
             return true;
@@ -1130,9 +1205,9 @@ namespace ConditioningControlPanel
             UpdateOfflineModeUI(enable);
             App.Settings.Save();
 
-            // Sync MainWindow checkbox without triggering handler
+            // Sync the Settings · Data checkbox without triggering handler
             _isLoading = true;
-            SettingsTab.ChkOfflineMode.IsChecked = enable;
+            AppSettingsTab.ChkOfflineMode.IsChecked = enable;
             _isLoading = false;
 
             return true;
@@ -1140,6 +1215,12 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Syncs the keyboard hook and MainWindow NoPanic checkbox after the setting changes externally.
+        /// <para>
+        /// Callers are the non-UI writers of <c>PanicKeyEnabled</c>: LockdownService (activate /
+        /// deactivate / crash recovery) and RemoteControlService (enable_panic / disable_panic and
+        /// the two stop-effects cleanups). They must call this rather than writing the flag alone -
+        /// the keyboard hook is started/stopped here, and the checkbox is the surface the user sees.
+        /// </para>
         /// </summary>
         internal void SyncNoPanicState()
         {
@@ -1157,12 +1238,18 @@ namespace ConditioningControlPanel
             }
 
             _isLoading = true;
-            SettingsTab.ChkNoPanic.IsChecked = !panicEnabled;
+            AppSettingsTab.ChkNoPanic.IsChecked = !panicEnabled;
             _isLoading = false;
         }
 
         /// <summary>
         /// Syncs the MainWindow offline mode UI after the setting changes externally.
+        /// <para>
+        /// Kept for non-UI callers. Everything that flips <c>OfflineMode</c> today goes through
+        /// <see cref="ApplyOfflineMode"/> or ChkOfflineMode_Changed, both of which already do this
+        /// work inline; anything new that writes the flag directly must call this instead, because
+        /// SaveSettings deliberately no longer re-derives OfflineMode from the checkbox.
+        /// </para>
         /// </summary>
         internal void SyncOfflineModeState()
         {
@@ -1172,20 +1259,19 @@ namespace ConditioningControlPanel
             UpdateOfflineModeUI(isOffline);
 
             _isLoading = true;
-            SettingsTab.ChkOfflineMode.IsChecked = isOffline;
+            AppSettingsTab.ChkOfflineMode.IsChecked = isOffline;
             _isLoading = false;
         }
 
         internal bool RequestToggleWindowsStartup(bool enable)
         {
-            // The legacy SettingsTab.ChkWinStart hidden on MainWindow uses a Click handler that
-            // doesn't fire on programmatic IsChecked changes — so just toggling the
-            // checkbox here would silently skip StartupManager.SetStartupState and
-            // the OS shortcut would never be created/removed. Drive the registration
-            // ourselves and mirror the result onto the legacy checkbox for any code
-            // that still reads it.
-            if (SettingsTab.ChkWinStart == null) return StartupManager.IsRegistered();
-            if ((SettingsTab.ChkWinStart.IsChecked ?? false) == enable && StartupManager.IsRegistered() == enable)
+            // Settings · General's ChkWinStart uses a Click handler, which doesn't fire on
+            // programmatic IsChecked changes — so just toggling the checkbox here would
+            // silently skip StartupManager.SetStartupState and the OS shortcut would never
+            // be created/removed. Drive the registration ourselves and mirror the result
+            // onto the checkbox for any code that still reads it.
+            if (AppSettingsTab.ChkWinStart == null) return StartupManager.IsRegistered();
+            if ((AppSettingsTab.ChkWinStart.IsChecked ?? false) == enable && StartupManager.IsRegistered() == enable)
                 return enable;
 
             if (!StartupManager.SetStartupState(enable))
@@ -1197,14 +1283,14 @@ namespace ConditioningControlPanel
                     MessageBoxImage.Warning);
                 var actual = StartupManager.IsRegistered();
                 _isLoading = true;
-                try { SettingsTab.ChkWinStart.IsChecked = actual; } finally { _isLoading = false; }
+                try { AppSettingsTab.ChkWinStart.IsChecked = actual; } finally { _isLoading = false; }
                 App.Settings.Current.RunOnStartup = actual;
                 App.Settings.Save();
                 return actual;
             }
 
             _isLoading = true;
-            try { SettingsTab.ChkWinStart.IsChecked = enable; } finally { _isLoading = false; }
+            try { AppSettingsTab.ChkWinStart.IsChecked = enable; } finally { _isLoading = false; }
             App.Settings.Current.RunOnStartup = enable;
             App.Settings.Save();
             return enable;
@@ -1246,8 +1332,10 @@ namespace ConditioningControlPanel
                 if (BambiTakeoverTab.TxtTakeoverUnlocked != null) BambiTakeoverTab.TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
                 if (BambiTakeoverTab.BtnAutonomyStartStop != null)
                     BambiTakeoverTab.BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
-                if (PatreonTab.RunPatreonFeatures != null)
-                    PatreonTab.RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
+                // Phase 2: the Support Development card (and its RunPatreonFeatures inline Run)
+                // moved from PatreonTab to Settings/Account.
+                if (AppSettingsTab?.RunPatreonFeatures != null)
+                    AppSettingsTab.RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
             }
             catch (Exception ex)
             {
@@ -1373,9 +1461,14 @@ namespace ConditioningControlPanel
                     res["AccentGradientBrush"] = new SolidColorBrush(accent);
 
                 // === TITLE BAR (most visible — direct assignment for immediate update) ===
+                // 2026-08-11: the mod accent lands on the UNDERLINE, not the fill. The bar used to
+                // be a full-width slab of the accent, which made chrome the loudest thing on every
+                // screen; it is a dark surface now (MainWindow.xaml) and the accent survives as the
+                // 2px rule beneath it, so a re-skinned mod still recolours the title bar.
+                // Lockdown still swaps Background outright - that one IS meant to shout.
                 var accentBrush = new SolidColorBrush(accent);
                 if (TitleBarBorder != null)
-                    TitleBarBorder.Background = accentBrush;
+                    TitleBarBorder.BorderBrush = accentBrush;
 
                 // === HEADER AREA ===
                 if (TxtPlayerTitle != null)
@@ -1492,11 +1585,12 @@ namespace ConditioningControlPanel
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
 
-            // Keep the mod's own default site (HypnoTube) selected when the button is
-            // only visible because of the user override — the override reveals BambiCloud,
-            // it doesn't switch to it.
-            if (!modWantsBambiCloud)
-                SettingsTab.RbHypnoTube.IsChecked = true;
+            // #867: select the site from the mod - not only when BambiCloud is hidden. The
+            // override reveals BambiCloud, it doesn't switch to it, and after an external link
+            // neither radio is selected at all. SyncSiteRadiosToActiveMod covers both, and it
+            // stands down while a live page owns the radios so RefreshBrowserLoadingText below
+            // keeps describing the site actually on screen.
+            SyncSiteRadiosToActiveMod();
 
             RefreshBrowserLoadingText();
         }
@@ -1529,25 +1623,56 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Resolves a wall tile's per-mod face: a .ccpmod override of the BASE path wins
+        /// outright (that is the contract every mod already relies on), then the app-shipped
+        /// themed variant for the active built-in mod (features/{name}_{suffix}.png - same
+        /// filename-fork mechanism as the takeover art), then the base art. Returns null only
+        /// when even the base fails to resolve, in which case the XAML pack-URI face stands.
+        /// </summary>
+        private static System.Windows.Media.ImageSource? ModTileVariant(string baseName)
+        {
+            var modOverride = ModResourceResolver.ResolveImage($"features/{baseName}.png");
+            // ResolveImage falls back to the app's own resource when the mod has no override,
+            // so "did the mod override it" needs the mod folder check to be meaningful only if
+            // the resolver distinguishes. It does not - so order the lookups by specificity
+            // instead: themed variant first (it only exists app-side), unless the active mod is
+            // a third-party one, whose base-path override must win.
+            var suffix = App.Mods?.ActiveModId switch
+            {
+                Models.BuiltInMods.BambiSleepId => "_bambi",
+                Models.BuiltInMods.SissyHypnoId => "_sissy",
+                Models.BuiltInMods.DronificationId => "_drone",
+                Models.BuiltInMods.LockedId => "_locked",
+                _ => null,
+            };
+            if (suffix == null) return modOverride;
+            return ModResourceResolver.ResolveImage($"features/{baseName}{suffix}.png") ?? modOverride;
+        }
+
+        /// <summary>
         /// Loads feature images from mod resources (if overrides exist) or embedded resources.
         /// </summary>
         private void LoadFeatureImages()
         {
             try
             {
-                // Dashboard feature cards (velvet mosaic)
+                // Dashboard feature cards (velvet mosaic, 4x4 hybrid wall since 2026-08-11).
+                // The FX tiles are back on their ORIGINAL art paths - the ones every .ccpmod
+                // override has always targeted - so the one-day 3x3 detour cost the contract
+                // nothing (its dtrh/loom/deeper rows shipped in no release). NO ART PATH WAS
+                // EVER RENAMED - mod contract rule 2.
                 var cardMap = new (string resourcePath, Features.FeatureCard? card)[]
                 {
                     ("features/flash.png", SettingsTab.CardFlash),
-                    ("features/mandatory_videos.png", SettingsTab.CardVideo),
                     ("features/subliminal.png", SettingsTab.CardSubliminal),
-                    ("features/spiral_overlay.png", SettingsTab.CardSpiral),
-                    ("features/Pink_filter.png", SettingsTab.CardPinkFilter),
+                    ("features/bouncing_text.png", SettingsTab.CardBouncingText),
                     ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
                     ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
-                    ("features/bouncing_text.png", SettingsTab.CardBouncingText),
-                    ("features/Mind_Wipers.png", SettingsTab.CardMindWipe),
-                    ("features/Bubble_count.png", SettingsTab.CardBubbleCount),
+                    ("features/justdrop.png", SettingsTab.CardJustDrop),
+                    // The ? box and the Vault resolve through ModTileVariant below: built-in
+                    // mods get app-shipped themed faces (features/mysterybox_bambi.png, ...)
+                    // by filename convention - same mechanism as the takeover art fork - while
+                    // a .ccpmod that overrides the BASE path still wins outright.
                 };
                 foreach (var (path, card) in cardMap)
                 {
@@ -1557,28 +1682,46 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
-                // Legacy progression tab rectangles
-                var featureMap = new (string resourcePath, System.Windows.Shapes.Rectangle? rect)[]
+                if (SettingsTab.CardMystery != null)
                 {
-                    ("features/spiral_overlay.png", ProgressionTab.SpiralFeatureImage),
-                    ("features/Pink_filter.png", ProgressionTab.PinkFilterFeatureImage),
-                    ("features/Bubble_pop.png", ProgressionTab.BubblePopFeatureImage),
-                    ("features/Phrase_Lock.png", ProgressionTab.LockCardFeatureImage),
-                    ("features/Bubble_count.png", ProgressionTab.BubbleCountFeatureImage),
-                    ("features/bouncing_text.png", ProgressionTab.BouncingTextFeatureImage),
-                    ("features/brain_drain.png", ProgressionTab.BrainDrainFeatureImage),
-                    ("features/Mind_Wipers.png", ProgressionTab.MindWipeFeatureImage),
-                };
-
-                foreach (var (path, rect) in featureMap)
-                {
-                    if (rect == null) continue;
-                    var image = ModResourceResolver.ResolveImage(path);
-                    if (image != null)
-                    {
-                        rect.Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
-                    }
+                    var img = ModTileVariant("mysterybox");
+                    if (img != null) SettingsTab.CardMystery.Icon = img;
                 }
+                if (SettingsTab.CardVault != null)
+                {
+                    var img = ModTileVariant("vault");
+                    if (img != null) SettingsTab.CardVault.Icon = img;
+                }
+
+                // The three diagonal tiles: per-half art through the resolver, so mods reskin
+                // each half exactly as they reskinned the old single tiles for these features.
+                if (SettingsTab.ComboVideoBubble != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/mandatory_videos.png");
+                    var b = ModResourceResolver.ResolveImage("features/Bubble_count.png");
+                    if (a != null) SettingsTab.ComboVideoBubble.IconA = a;
+                    if (b != null) SettingsTab.ComboVideoBubble.IconB = b;
+                }
+                if (SettingsTab.ComboSpiralPink != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/spiral_overlay.png");
+                    var b = ModResourceResolver.ResolveImage("features/Pink_filter.png");
+                    if (a != null) SettingsTab.ComboSpiralPink.IconA = a;
+                    if (b != null) SettingsTab.ComboSpiralPink.IconB = b;
+                }
+                if (SettingsTab.ComboMindDrain != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/Mind_Wipers.png");
+                    var b = ModResourceResolver.ResolveImage("features/brain_drain.png");
+                    if (a != null) SettingsTab.ComboMindDrain.IconA = a;
+                    if (b != null) SettingsTab.ComboMindDrain.IconB = b;
+                }
+
+                // PHASE 8: the eight "legacy progression tab rectangles" rows are gone with
+                // ProgressionTabView. Mod art coverage is unchanged - the FX paths above are
+                // the same eight resource-relative paths, including features/brain_drain.png,
+                // so every one of those overrides still repaints on a mod switch. No art path was
+                // renamed or dropped (mod contract rule 2).
 
                 // Image elements in description cards + Video Haptic Sync card.
                 // Takeover image is mod-specific: BambiSleep uses "bambi takeover.png",
@@ -1622,6 +1765,7 @@ namespace ConditioningControlPanel
                     ("ArtIntake",    "features/lab_quiz_hero.png",  512),
                     ("ArtRemote",    "features/remote_control.png", 768),
                     ("ArtBlink",     "features/blink_trainer.png",  512),
+                    ("ArtFyp",       "features/fyp.png",           512),
                     ("ArtLockdown",  "lockdown_icon.png",          1024),
                 };
                 var railResources = SettingsTab.PremiumRail?.Resources;
@@ -1636,14 +1780,20 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                // Lab hero headers (mod-sensitive): drone-mode ships green versions under
+                // "Lab" hero headers (mod-sensitive): drone-mode ships green versions under
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
+                // Only two rows left - the Lab tab's own three moved to playHeroMap below with the
+                // cards they paint (Phase 6). The NAME is historical, like the filenames: the art
+                // path is the mod compatibility surface and is never renamed to match the room.
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
                     ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
-                    ("features/lab_aimemory_hero.png", LabTab.LabAiMemoryHeroBrush),
-                    ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
-                    ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
+                    // Still a "lab hero" by filename — the art path is the mod compatibility
+                    // surface and is never renamed — but the card it paints is the Companion
+                    // door's permissions grid since Phase 5. The row travels with the brush: a
+                    // dropped row does not fail the build, it just silently stops repainting on a
+                    // mod switch.
+                    ("features/lab_aimemory_hero.png", CompanionTab.LabAiMemoryHeroBrush),
                 };
                 foreach (var (path, brush) in labHeroMap)
                 {
@@ -1652,6 +1802,45 @@ namespace ConditioningControlPanel
                     if (image != null)
                         brush.ImageSource = image;
                 }
+
+                // Play door card heroes (UX restructure, Phase 6). The three that came off the Lab
+                // tab keep their EXACT resource paths - features/lab_gaze_hero.png,
+                // features/lab_focusgaze_hero.png, features/goon_game.png - because the path is the
+                // mod compatibility surface and is never renamed to match the room it now hangs in
+                // (same reason lab_aimemory_hero.png still says "lab" on the Companion door). The
+                // four joining them are the same files their other surfaces already use.
+                //
+                // Unlike labHeroMap above, this block goes through LoadModImageDecoded: these are
+                // 132-138px card headers, and ResolveImage decodes at full resolution, which is how
+                // the rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps mirror
+                // railArtMap's, and the brush's ImageSource is mutated IN PLACE - the cards bind the
+                // brush itself, so replacing the brush would repaint nothing.
+                var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth)[]
+                {
+                    ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512),
+                    ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512),
+                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512),
+                    ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512),
+                    ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512),
+                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768),
+                    ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512),
+                    ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024),
+                };
+                foreach (var (path, brush, decodeWidth) in playHeroMap)
+                {
+                    if (brush == null || brush.IsFrozen) continue;
+                    var image = LoadModImageDecoded(path, decodeWidth);
+                    if (image != null)
+                        brush.ImageSource = image;
+                }
+
+                // The rail chips do NOT all paint straight from the resources above: the hover
+                // nudge (PrepareRailArtNudge) hands each of them a private Clone(), which stops
+                // observing the resource the moment it is made. Push the freshly mutated art into
+                // those clones or a runtime mod switch repaints the resource and nothing else.
+                // No-op before the dashboard FX are wired (the list is empty), which is exactly
+                // the startup case where the clones are made AFTER this method and are correct.
+                RefreshRailArtClones();
             }
             catch (Exception ex)
             {
@@ -1712,12 +1901,54 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Activates the mod the user chose in the first-run picker, now that its content is on disk.
+        /// Deliberately routed through the SAME two steps as the top-bar combo (ActivateMod +
+        /// <see cref="ApplyActiveModChange"/>) rather than a parallel switching path.
+        /// Called on the UI thread by <see cref="PendingModActivation"/>; never throws back into the
+        /// pack-install callback that triggered it.
+        /// </summary>
+        internal void ActivateChosenMod(string modId, PendingModActivation.Trigger trigger)
+        {
+            try
+            {
+                if (App.Mods == null || string.IsNullOrWhiteSpace(modId)) return;
+
+                App.Mods.ActivateMod(modId);
+                if (!string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase))
+                {
+                    // ActivateMod refuses ids it doesn't know yet (registration can trail the pack).
+                    // Keep the choice pending so the next availability signal retries it.
+                    App.Logger?.Warning("[ModPicker] {ModId} could not be activated yet - keeping the choice pending", modId);
+                    return;
+                }
+
+                ApplyActiveModChange(fromPickerChoice: true);
+                PendingModActivation.Clear("activated");
+
+                App.Logger?.Information(
+                    "[ModPicker] Auto-activated the mod chosen in the first-run picker: {ModId} (trigger: {Trigger})",
+                    modId, trigger);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[ModPicker] Failed to activate the chosen mod {ModId}", modId);
+            }
+        }
+
+        /// <summary>
         /// Centralized refresh of mod-aware UI after the active mod changes.
         /// Called by both the top-bar ComboBox and the Manage Mods dialog return path.
         /// </summary>
-        private void ApplyActiveModChange()
+        /// <param name="fromPickerChoice">
+        /// True only for <see cref="ActivateChosenMod"/>. Every other caller is a MANUAL switch, which
+        /// outranks a first-run picker choice still waiting on its download - so the pending choice is
+        /// dropped rather than yanking the user off the mod they just picked by hand.
+        /// </param>
+        private void ApplyActiveModChange(bool fromPickerChoice = false)
         {
             if (App.Mods == null) return;
+
+            if (!fromPickerChoice) PendingModActivation.Clear("the user switched mods manually");
 
             App.Settings.Current.ActiveModId = App.Mods.ActiveModId;
             App.Settings.Current.ModChosen = true;
@@ -1730,15 +1961,24 @@ namespace ConditioningControlPanel
             RefreshThemeAwareElements();
             PopulateAchievementGrid();
             DrawSkillTree();
+            // The secret-skill rail under the tree is mod-dependent on two axes (per-skill art via
+            // ModResourceResolver, names via MakeModAware), so it repaints on the same signal as
+            // the tree. Idempotent: it null-guards the tab and clears before rebuilding.
+            PopulateSecretSkills();
 
             var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+            // #867: the selection follows the new mod's own site, not just when BambiCloud is
+            // hidden - otherwise a switch could leave the radio pointing at a site this mod never
+            // uses, and clicking it was the only way to find out. It leaves the radios alone
+            // while they are reporting a live page; the !modWantsBambiCloud branch below is the
+            // one case that overrides that, and it navigates in the same breath.
+            SyncSiteRadiosToActiveMod();
             if (!modWantsBambiCloud)
             {
-                // Mod doesn't want BambiCloud as its site: keep HypnoTube selected and
-                // navigate to the mod's default even if the override reveals the button.
-                SettingsTab.RbHypnoTube.IsChecked = true;
+                // Mod doesn't want BambiCloud as its site: navigate to the mod's default even
+                // if the override reveals the button.
                 if (_browser != null && _browserInitialized)
                 {
                     var url = App.Mods.GetDefaultBrowserUrl();
@@ -2068,9 +2308,19 @@ namespace ConditioningControlPanel
             var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
             var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
             var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
-            
-            Left = screenLeft + (screenWidth - Width) / 2;
-            Top = screenTop + (screenHeight - Height) / 2;
+
+            // Clamp SIZE to the work area before centring. Phase 1 grew the default window to
+            // 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling (1536x816 logical)
+            // — an unclamped centre put Left at -60 and the title-bar buttons past the right edge.
+            // The root Viewbox (MainWindow.xaml:139) is Stretch="Fill" over a fixed design canvas,
+            // so shrinking the window scales the content instead of clipping it. Width/Height are
+            // still floored by MinWidth/MinHeight; the Max() below keeps the top-left corner
+            // on-screen in that case, so the window is always grabbable.
+            if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
+            if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+
+            Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
+            Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
         }
 
 
@@ -2098,6 +2348,11 @@ namespace ConditioningControlPanel
             // Wire the in-app notification surface. Anything App.Notifications.Show()'d
             // before this point is replayed on attach.
             App.Notifications?.AttachHost(NotificationHost);
+
+            // First-run picker: activate the mod the user chose there once its pack is on disk. Armed
+            // here rather than in the ctor because the switch repaints this window's tabs, and the
+            // resume case can fire the moment it is armed (download finished while the app was shut).
+            PendingModActivation.Attach(this);
 
             // Phase 1.6: legacy calibration prompt. Pre-multi-monitor-hotfix
             // saves have MonitorBounds without DeviceName, so the runtime
@@ -2130,51 +2385,6 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Debug("Recalibrate-suggest check failed: {Error}", ex.Message);
-            }
-
-            // v5.9.8 Blink Trainer flagship sticky. Fires once for users who
-            // updated to v5.9.8 and haven't yet visited the new Exclusives →
-            // Blink Trainer page. Suppression is belt-and-suspenders:
-            //   - ShowSticky no-ops if its key is in DismissedNotificationKeys
-            //   - the if-check below short-circuits when HasSeenBlinkTrainerFlagship is true
-            //   - the action handler ALSO adds the key to DismissedNotificationKeys
-            //     in case HasSeen somehow doesn't persist.
-            try
-            {
-                const string flagshipKey = "blink-trainer-flagship-v5.9.8";
-                if (App.Settings?.Current?.HasSeenBlinkTrainerFlagship == false)
-                {
-                    App.Notifications?.ShowSticky(
-                        flagshipKey,
-                        Localization.Loc.Get("blink_trainer_flagship_toast"),
-                        Services.NotificationType.Info,
-                        actionLabel: Localization.Loc.Get("blink_trainer_flagship_toast_action"),
-                        action: () =>
-                        {
-                            try
-                            {
-                                // Belt-and-suspenders dedupe: add the key to
-                                // DismissedNotificationKeys so the toast can't
-                                // refire next launch even if HasSeen flag fails
-                                // to persist.
-                                var s = App.Settings?.Current;
-                                if (s != null && !s.DismissedNotificationKeys.Contains(flagshipKey))
-                                {
-                                    s.DismissedNotificationKeys.Add(flagshipKey);
-                                    App.Settings?.Save();
-                                }
-                                ShowTab("blinktrainer");
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Warning(ex, "Blink Trainer toast action: failed");
-                            }
-                        });
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Blink Trainer flagship sticky: failed");
             }
 
             // One-time premium celebration for entitlements granted silently (cached state
@@ -2246,6 +2456,8 @@ namespace ConditioningControlPanel
             if (App.Mods != null)
             {
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+                // The Studio rack's row captions are mod-aware too (Phase 4).
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() => StudioTab?.RepaintModAwareChrome());
                 // Re-render the Remote Control QR code in the new mod's accent color
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() =>
                 {
@@ -2324,37 +2536,38 @@ namespace ConditioningControlPanel
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
-            // Initialize Discord Rich Presence checkboxes (both locations).
-            // Guard with _isLoading so the Changed handler doesn't fire the
-            // "Discord Not Linked" MessageBox during startup for users whose
-            // saved setting is enabled but who haven't linked Discord.
+            // Initialize the Discord Rich Presence checkbox. Guard with _isLoading so the Changed
+            // handler doesn't fire the "Discord Not Linked" MessageBox during startup for users
+            // whose saved setting is enabled but who haven't linked Discord.
+            // Phase 8: the dead ProgressionTab copy is gone; the live twins are the Home quick
+            // toggle here and DiscordTab.ChkDiscordTabRichPresence (seeded by UpdateDiscordUI).
             _isLoading = true;
             try
             {
-                ProgressionTab.ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
                 SettingsTab.ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
             }
             finally { _isLoading = false; }
 
             // Audio-sync ENABLE moved onto the Haptics tab's routing matrix (Media > Audio sync)
             // in the Phase E rebuild, and the Haptics tab's own delay/power sliders are loaded by
-            // LoadHapticsSettingsToUi(). Only the Settings-tab mirrors are initialised here.
-            if (SettingsTab.SliderAudioSyncLatency != null)
+            // LoadHapticsSettingsToUi(). Only the mirror pair is initialised here — it lived on
+            // the dashboard's browser card until Phase 3 moved it into Settings · Audio.
+            if (AppSettingsTab.SliderAudioSyncLatency != null)
             {
-                SettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                AppSettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
                 var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
                 var sign = latencyMs >= 0 ? "+" : "";
-                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+                AppSettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
             }
-            if (SettingsTab.SliderAudioSyncIntensity != null)
+            if (AppSettingsTab.SliderAudioSyncIntensity != null)
             {
                 var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
-                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
-                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+                AppSettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
+                AppSettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
             }
-            if (SettingsTab.AudioSyncLatencyPanel != null)
+            if (AppSettingsTab.AudioSyncLatencyPanel != null)
             {
-                SettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
+                AppSettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 

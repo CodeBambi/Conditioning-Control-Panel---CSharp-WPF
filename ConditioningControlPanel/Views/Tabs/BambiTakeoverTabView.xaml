@@ -347,26 +347,31 @@
 
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
 
-                            <!-- Pointer: the mic controls moved to the She's Listening exclusive -->
+                            <!-- Pointer to the one place that owns the mic. Until Phase 2 of the UX
+                                 restructure the five real voice controls were parked here, Collapsed,
+                                 as the hidden source of truth that She's Listening mirrored onto -
+                                 which meant the setting's only visible editor and its handlers lived
+                                 on different tabs. They moved to Settings → Devices intact (same
+                                 x:Names, same MainWindow.Autonomy.cs handlers), and this is now a
+                                 plain signpost with nothing hiding behind it. -->
                             <Border Background="#22FF69B4" CornerRadius="6" Padding="12,10">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Width="18" Height="18" VerticalAlignment="Top" Margin="0,1,10,0"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Image Grid.Column="0" Width="18" Height="18" VerticalAlignment="Top" Margin="0,1,10,0"
                                            Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17" MaxWidth="520"
-                                               Text="Mic &amp; voice control — wake word (&quot;Hey Bambi&quot;), push-to-talk and spoken commands — now live in the She's Listening exclusive. They work whether or not Takeover is running."/>
-                                </StackPanel>
+                                    <TextBlock Grid.Column="1" Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                                               TextWrapping="Wrap" LineHeight="17" VerticalAlignment="Center"
+                                               Text="{loc:Str set2_takeover_mic_moved}"/>
+                                    <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
+                                            Margin="12,0,0,0" Padding="10,4" FontSize="11" VerticalAlignment="Center"
+                                            Style="{StaticResource OutlineButton}"
+                                            Click="BtnOpenDeviceSettings_Click"/>
+                                </Grid>
                             </Border>
-
-                            <!-- Hidden source-of-truth for the mic toggles: the visible controls live in
-                                 SheListeningTabView, which mirrors onto these so the existing handlers,
-                                 settings load, and Takeover state all keep working unchanged. -->
-                            <StackPanel x:Name="TakeoverVoiceInputLegacy" x:FieldModifier="internal" Visibility="Collapsed">
-                                <CheckBox x:Name="ChkSpeechWakeWord" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Checked="ChkSpeechWakeWord_Changed" Unchecked="ChkSpeechWakeWord_Changed"/>
-                                <TextBox x:Name="TxtSpeechWakeWords" x:FieldModifier="internal" Text="hey bambi" LostFocus="TxtSpeechWakeWords_LostFocus"/>
-                                <CheckBox x:Name="ChkSpeechPushToTalk" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Checked="ChkSpeechPushToTalk_Changed" Unchecked="ChkSpeechPushToTalk_Changed"/>
-                                <TextBlock x:Name="TxtPttKey" x:FieldModifier="internal" Text="F8"/>
-                                <Button x:Name="BtnSetPttKey" Content="Set key…" Click="BtnSetPttKey_Click"/>
-                            </StackPanel>
                         </StackPanel>
                     </Border>
 

@@ -1724,6 +1724,18 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
                     avatar.GigglePriority(line, playSound: true, aiGenerated: aiGenerated);
+
+                    // One mouth (doc 02 §5.3): a keyword comment is a third source on the arbiter's
+                    // shared cooldown ledger, so an awareness quip cannot stack on top of it seconds
+                    // later. Keyword lines RANK ABOVE awareness — the user configured them by hand, so
+                    // they are exempt from the LLM floor and the hourly budget and are never starved;
+                    // they are only paced by the global gap that stops two voices inside a second.
+                    // Reported after the line is on screen, because cooldowns burn on delivery only.
+                    // Gated on IsActive like every other legacy call site: with the v2 kill switch down
+                    // the flag's contract is "no v2 setting on this page has any effect", and writing
+                    // into a ledger nothing reads is how that quietly stops being true.
+                    if (Awareness.AwarenessV2Routing.IsActive)
+                        Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Keyword);
                 }
                 catch (Exception ex) { App.Logger?.Debug("AvatarWindow awareness line failed: {Error}", ex.Message); }
             }));

@@ -85,8 +85,32 @@ namespace ConditioningControlPanel.Services
                 perHour, firstDelay, windowMinutes is > 0 ? $"{windowMinutes.Value:F1}min" : "open-ended");
         }
 
-        public void Stop()
+        /// <summary>
+        /// Stop the scheduler. <paramref name="dismissOpenCards"/> additionally tears down a card that
+        /// is already on screen.
+        /// </summary>
+        /// <param name="dismissOpenCards">
+        /// #875: dismiss the visible card FIRST, before the not-running early-return. A card can be on
+        /// screen with the scheduler stopped — every ad-hoc surface shows one that way (voice command,
+        /// the dashboard Test button, Deeper, MantraLockScreenCommand, remote trigger_lock_card). The
+        /// panic key reaches an ad-hoc card only through MainWindow.StopAdHocEffects -> this Stop(), so
+        /// the early-return made panic a silent no-op and left the user staring at a card nothing could
+        /// close.
+        ///
+        /// It stays opt-in because most Stop() callers are not an escape at all: pausing a session,
+        /// un-ticking the lock-card feature, applying a preset. Dismissing there would walk straight
+        /// through strict mode and forfeit the XP of a card the user was mid-way through typing — a
+        /// feature toggle must never be a back door out of a lock. Only panic and genuine
+        /// kill-everything paths pass true. ForceCloseAll is idempotent, so true with no card up is a
+        /// no-op.
+        /// </param>
+        public void Stop(bool dismissOpenCards = false)
         {
+            if (dismissOpenCards)
+            {
+                try { LockCardWindow.ForceCloseAll(); } catch { }
+            }
+
             if (!_isRunning) return;
             _isRunning = false;
             
@@ -330,8 +354,9 @@ namespace ConditioningControlPanel.Services
         {
             if (_isDisposed) return;
             _isDisposed = true;
-            
-            Stop();
+
+            // Teardown: nothing is left to solve the card against, so it must not outlive the service.
+            Stop(dismissOpenCards: true);
         }
     }
 }

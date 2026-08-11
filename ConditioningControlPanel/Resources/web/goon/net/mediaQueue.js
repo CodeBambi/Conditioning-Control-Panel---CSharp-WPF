@@ -1,0 +1,995 @@
+// net/mediaQueue.js — the PREPICK QUEUE (spec §3): what gets sent, when, and how a landed
+// artifact ends up on a payload the opponent is about to receive.
+//
+// It owns exactly three things: one net/mediaChannel.js instance, the queue of picks, and the
+// `enabled()` gate. Everything else is injected, so this module is node-testable and imports
+// nothing from exec/ or ui/.
+//
+// THE DRAW IS Math.random, NOT core/rng.js GoonRng — and that looks like a bug unless it is
+// written down. GoonRng is the SHARED DETERMINISTIC stream: both clients derive it from the same
+// seed, so anything drawn from it is knowable by the opponent IN ADVANCE. Which of your files you
+// are about to send must be private and non-deterministic. exec/media.js's own deck uses
+// Math.random for exactly this reason (media.js:41). NO_ECHO = 8 is ported from there too, so a
+// small pool does not repeat itself.
+//
+// SILENT DEGRADATION IS THE ABSENCE OF A SPECIAL CASE. On a relay transport `supportsBulk` is
+// false, `enabled()` is false, `tagsFor()` returns [], and `tryFirePayload` fires the payload
+// untagged — byte-identical to the wire before this feature existed. There is no "relay mode"
+// branch anywhere, and there must never be one.
+//
+// TWO QUALITY RULES LIVE HERE, AND NEITHER IS ALLOWED TO EMPTY THE LANE (2026-08-05):
+//
+//  1. GIF-ORIGIN CLIPS ARE A LAST RESORT IN THE VIDEO LANE, NOT AN EXCLUSION. The desktop
+//     compresses an animated gif into an mp4, so what travels is `video/mp4` — deliberately, the
+//     offer gate refuses any kind/mime disagreement — and a Video payload could therefore land a
+//     two-second loop where the owner expected footage. `tagsFor` now prefers a landed artifact
+//     whose `origin` is NOT 'gif' and falls back to one that is, because a gif of THEIRS still
+//     beats a clip of the receiver's own, which is the whole point of the lane.
+//
+//  2. AN ARTIFACT THE PEER CANNOT DECODE IS NEVER OFFERED. `eligible()` drops it with a
+//     once-per-reason warn, on exactly the saidWhy pattern below: a silent skip here would look
+//     identical to "the transfer doesn't work", which is the failure mode this file has already
+//     been debugged for three times. Fail-open throughout — unknown codec or a peer that named
+//     none means OFFER IT (net/codecs.js owns that contract).
+//
+// AND A THIRD RULE, THE VARIETY ONE (2026-08-05, phone play-test r9): "SEEMS LIKE I AM RECEIVING
+// ALWAYS THE SAME GIF". Every gate above passed and every layer worked; the receiver's pool was
+// simply TOO SMALL AND TOO LOPSIDED for the first minute of the match, so the two animated images
+// that happened to land first were the two images every early burst had to choose between. Three
+// changes, all of them about the SHAPE of the pool rather than its existence:
+//
+//  3a. DEPTH IS EARNED BY SIZE, not fixed at four. `targetDepth()` keeps roughly QUEUE_AHEAD_MS of
+//      WIRE TIME landed ahead of the match instead of a flat count, so a library of 400 KB stills
+//      primes ten deep during the untimed draft while a library of 40 MB clips still primes four.
+//      The wire budget is unchanged — `eligible()` still refuses anything that cannot land inside
+//      MAX_XFER_MS at the measured rate — this only decides how many of the affordable ones we
+//      bother to keep ahead. LANDED_MAX (12) is deliberately above QUEUE_DEPTH_MAX (10) so the
+//      ring can never truncate the working set it was told to build.
+//
+//  3b. THE PUMP BALANCES KINDS AND FAVOURS DISTINCTNESS. The draw was a straight `deck.pop()`, so
+//      four consecutive videos was as likely as any other hand and the FlashBurst lane could sit
+//      empty for a minute. `nextPick` now scans the top PICK_SCAN entries of the (still shuffled,
+//      still Math.random) deck and prefers the kind the receiver's pool is SHORT of, then an
+//      `origin` that differs from the last pick — a soft score, never a filter, so a single-kind
+//      or all-gif library behaves exactly as it did. Ties keep the topmost card, which is what
+//      keeps the shuffle in charge of everything the score does not care about.
+//
+//  3c. TAGS REMEMBER WHAT THE PEER HAS ALREADY BEEN SHOWN. `markConsumed` was a pure delete; it
+//      now also writes a small `shown` ledger (sha -> {kind, seq}), and `tagsFor` fills a burst's
+//      spare slots from it least-recently-shown-first when the landed pool is short. THE LEDGER
+//      CAN ONLY TOP UP, NEVER OPEN: a tag set that found nothing fresh still comes back EMPTY, so
+//      "one landing, one drop" and the untagged diagnostic below both survive intact, and the
+//      receiver's own rotation (exec/media.js drawReceived) stays the answer for "nothing new".
+//
+// AND A FOURTH RULE, THE PRELOAD ONE (2026-08-05, owner, final): "WE NEED TO PRELOAD 1 OR TWO
+// VIDEOS, SO THEY LAND IMMEDIATELY, THIS IS MISLEADING."
+//
+//  4. UNTIL TWO FOOTAGE VIDEOS HAVE LANDED, THE PUMP PICKS THE SMALLEST FOOTAGE VIDEO IT CAN
+//     AFFORD — AND THAT OUTRANKS THE RULE-3b SCORE. A video attack does not stream anything: it
+//     renders from an artifact that ALREADY LANDED, so what the opponent actually watches was
+//     decided minutes earlier, here, by which card this pump drew. Stills and gif-converted loops
+//     are small and land in seconds; real footage is tens of megabytes and lands late. Rules 1 and
+//     3b are both honest about the pool's SHAPE and neither of them has an opinion about this, so
+//     the queue produced exactly the outcome the owner named: you throw a Video, the opponent sees
+//     a two-second loop, every gate passed, nothing is broken, and the throw LIED. Rule 1 already
+//     conceded half of this — `tagsFor` prefers footage over a gif-origin clip — but a preference
+//     cannot conjure an artifact that is still on the wire, which is why the fix has to live in
+//     the SENDER'S PICK ORDER and not in the tagging.
+//
+//     SMALLEST, NOT THE DECK'S ORDER, because the unit here is WALL CLOCK and nothing else. A 4 MB
+//     clip that crosses in eight seconds and a 40 MB one that takes ninety fill the same slot with
+//     the same promise kept; the only difference is how many early throws lie while we wait. The
+//     shuffle is deliberately overruled for these two picks and gets the whole rest of the match.
+//
+//     THE QUOTA COUNTS LANDINGS, NOT OFFERS. `footageLanded` ticks in `pushLanded` — which is also
+//     where the `decline:'have'` path lands, correctly: an artifact the peer kept from a previous
+//     session is ON THE PEER, which is the only thing the quota is about. Because it counts
+//     landings and MAX_CONCURRENT_OUT is still 1, the pump re-evaluates after every landing rather
+//     than committing to a plan: two is a ceiling on what the rule may ASK FOR, never a countdown
+//     it has to finish.
+//
+//     EVERY GATE ABOVE STILL APPLIES, and this rule may never stall the lane waiting for one of
+//     them to relent. The candidates come out of `eligible()` untouched, so a footage video the
+//     link cannot afford inside MAX_XFER_MS or the peer cannot decode is simply NOT THERE — the
+//     rule then either takes the smallest one that IS affordable or, with none at all, finds
+//     nothing and falls straight through to the rule-3b score. A library with one footage video
+//     preloads one; a library with none behaves exactly as it did before this rule existed. The
+//     failure mode this rule must never have is an empty bulk lane holding out for a 60 MB file.
+//
+//     THE COST IS ACCEPTED, CONSCIOUSLY. One bulk lane means these two picks DELAY the stills that
+//     feed the early FlashBursts, so the first minute of a match is worse at flashes and honest
+//     about videos. That is the owner's call, and it is bounded: two artifacts, then rule 3b
+//     resumes with its scoring untouched — the balance score immediately reads the pool as
+//     video-heavy and spends the next picks on images, which is the trade-off unwinding itself.
+//
+// TWO tryFirePayload INSTANCE WRAPPERS NOW EXIST. boot.js applies the matchLog wrapper first
+// (attachMatch -> matchLog.attach), then this one, so the queue's wrapper is the OUTERMOST: a
+// payload gets its tags BEFORE the log sees it, and the log records exactly what went out. Order
+// matters for readability, not correctness — both are instance patches that die with the match.
+
+import { GoonMatchPhase, GoonPayloadKind } from '../core/contracts.js';
+import { codecFromMime, normalizeCodec } from './codecs.js';
+import {
+  createMediaChannel,
+  ACCEPT_MIME,
+  MAX_ARTIFACT_BYTES,
+  MAX_EXEMPT_BYTES,
+  MAX_XFER_MS,
+  XFER_TAGS_MAX,
+  XferDecline,
+} from './mediaChannel.js';
+
+/**
+ * Landed-or-in-flight artifacts we try to keep ahead of the match — THE FLOOR, not the answer.
+ * `targetDepth()` raises it toward QUEUE_DEPTH_MAX when the library is cheap enough to go deeper
+ * (rule 3a in the header); it is never lowered, because four ahead is the depth the whole feature
+ * was tuned at and a slow link deserves the same patience it always had.
+ */
+export const QUEUE_DEPTH = 4;
+/**
+ * …and the ceiling. Held BELOW LANDED_MAX on purpose: the moment the target depth could exceed
+ * the landed ring, the pump would spend the wire on artifacts the ring then silently dropped.
+ */
+export const QUEUE_DEPTH_MAX = 10;
+/**
+ * How much WIRE TIME the queue tries to keep landed ahead of the match, which is the honest unit:
+ * "four artifacts" means half a minute of small stills and six minutes of long clips. 45 s is the
+ * draft's own dead time plus a margin — enough that a still-image library is primed several deep
+ * before the first payload fires, which is precisely the minute the owner saw repeats in.
+ */
+export const QUEUE_AHEAD_MS = 45000;
+/**
+ * How many cards off the top of the shuffled deck `nextPick` may score before it settles. Small
+ * on purpose: a window this size is enough to find a card of the hungrier kind in any mixed
+ * library, and short enough that the SHUFFLE — not the score — still decides most hands.
+ */
+export const PICK_SCAN = 12;
+/**
+ * How many footage-origin videos must LAND on the peer before the pump returns to the rule-3b
+ * score (rule 4). Two, not one: the first one is spent by the first Video throw and a match that
+ * opens with two video attacks would be back to lying by the second, so the quota is "a real clip
+ * for the opening throw, and a real clip behind it". It is a CEILING on what the preload may ask
+ * for — a library holding one footage video preloads one, a library holding none preloads none.
+ */
+export const PRELOAD_FOOTAGE = 2;
+/** The idle poll only bothers when fewer than this many have landed. */
+export const QUEUE_MIN = 2;
+/** How many landed artifacts are tracked per match, so a 12-minute run cannot grow unbounded. */
+export const LANDED_MAX = 12;
+/**
+ * Rows in the "already shown them this" ledger (rule 3c). Bounded for the same reason LANDED_MAX
+ * is; at 64 a twelve-minute match has never truncated anything a burst would have asked for.
+ */
+export const SHOWN_MAX = 64;
+/** Ported from exec/media.js: a reshuffled deck must not repeat the last N picks. */
+export const NO_ECHO = 8;
+/** Cheap wedge insurance while the match is running. */
+export const IDLE_POLL_MS = 5000;
+/** Throughput guess before anything has landed. Replaced by the measured rate. */
+export const EST_THROUGHPUT_BPS = 500 * 1024;
+
+/**
+ * The payload kinds that carry sender media in v1. BubbleSwarm (sub-second pop confetti, many
+ * per swarm) and the BrainDrain wash (re-picks on a slow timer, feeds a CSS custom property
+ * rather than an element src) are excluded ON PURPOSE — listed as decisions, not oversights.
+ */
+export const XFER_KINDS = Object.freeze(new Set([GoonPayloadKind.Video, GoonPayloadKind.FlashBurst]));
+
+/** Payload kind -> the media kind exec/ will ask the store for. */
+const KIND_MEDIA = Object.freeze({
+  [GoonPayloadKind.Video]: 'video',
+  [GoonPayloadKind.FlashBurst]: 'image',
+});
+
+/** How many tags one payload of that kind may carry. */
+const KIND_TAGS = Object.freeze({
+  [GoonPayloadKind.Video]: 1,          // one artifact per floating window
+  [GoonPayloadKind.FlashBurst]: XFER_TAGS_MAX,
+});
+
+const noop = () => {};
+
+/**
+ * @param {object} o
+ * @param {{listSendable:() => Array, open:(sha:string) => (object|Promise<object|null>|null)}} o.artifacts
+ *   The compression side's local artifact source. Only those two verbs are used.
+ * @param {object} o.store   exec/receivedStore.js — handed straight to the channel
+ * @param {object} [o.blocklist] net/blocklist.js
+ * @param {object} [o.logger]
+ * @param {() => boolean} [o.canSend] the PREMIUM gate: session.caps.mediaTransfer === true
+ * @param {string[]|null} [o.acceptsCodecs] what THIS runtime can decode (net/codecs.js
+ *   probeDecodeCodecs, probed once by boot). Handed to the channel, which advertises it on the
+ *   hello; null advertises nothing and every peer keeps offering us everything.
+ * @param {number} [o.idlePollMs] TEST AFFORDANCE
+ * @param {object} [o.channelOptions] TEST AFFORDANCE — {timeouts, limits} for the channel
+ */
+export function createMediaQueue({
+  artifacts = null, store = null, blocklist = null, logger = null,
+  canSend = null, acceptsCodecs = null, idlePollMs, channelOptions = null,
+} = {}) {
+  const info = (m) => { try { logger?.info?.('[GG queue] ' + m); } catch (_e) { /* ignore */ } };
+  const warn = (m) => { try { logger?.warn?.('[GG queue] ' + m); } catch (_e) { /* ignore */ } };
+  const POLL_MS = Number.isFinite(idlePollMs) ? idlePollMs : IDLE_POLL_MS;
+  const sendGate = typeof canSend === 'function' ? canSend : (() => false);
+
+  let match = null;
+  let transport = null;
+  let channel = null;
+  let unsubs = [];
+  let pollTimer = 0;
+  let attached = false;
+
+  let origFire = null;
+  let wrappedFire = null;
+
+  /** {sha, kind, mime, bytes} for everything that has LANDED and not yet been consumed. */
+  let landed = [];
+  /** sha -> {state:'offered'|'sending', attempts} for what is in flight. */
+  const inFlight = new Map();
+  /** sha -> attempts, so one requeue is allowed before a permanent skip. */
+  const attempts = new Map();
+  /** Shas this match will never offer again (blocked, hash-mismatched, twice-failed). */
+  const neverOffer = new Set();
+  /** Shas already landed (or in flight) this match — never offer the same file twice. */
+  const seen = new Set();
+  /** What we knew about a sha when we picked it — the `decline:'have'` landing needs it back. */
+  const pickInfo = new Map();
+
+  /** The shuffled deck over eligible artifacts, drawn from the end. */
+  let deck = [];
+  const recent = [];
+  /**
+   * The `origin` of the last card taken ('' or 'gif'), so `nextPick` can lean away from four
+   * converted loops in a row. A ONE-CARD memory is all this needs: `seen` already guarantees the
+   * same FILE never goes twice, so the only repetition left to break up is of a KIND of thing.
+   */
+  let lastOrigin = '';
+  /**
+   * How many FOOTAGE-ORIGIN VIDEOS have landed on the peer this attachment (rule 4). Monotonic,
+   * and deliberately NOT derived from `landed`: `markConsumed` empties that array as payloads
+   * spend it, but spending a tag does not un-send the file — exec/media.js `received` is a Map
+   * that only ever grows — so a quota read off `landed` would re-arm itself after the first Video
+   * throw and preload footage forever. `cancelAll` leaves it alone for the same reason it leaves
+   * the STORE alone; only `detach` (a new match, a new peer, a new store) resets it.
+   */
+  let footageLanded = 0;
+  /**
+   * sha -> {kind, seq} for every artifact a fired payload has already pointed the peer at.
+   * `seq` is a monotonic counter, so "least recently shown" is a number comparison and nothing
+   * here has to know what time it is. Written ONLY by markConsumed (rule 3c).
+   */
+  const shown = new Map();
+  let showSeq = 0;
+
+  const receivedSubs = new Set();
+  let picks = 0;
+  let consumed = 0;
+
+  /* ------------------------------------------------------------------- the gate */
+
+  /**
+   * ALL FIVE, AND'd (spec §3.6). Note `transport.supportsBulk` and NOT `isConnected`:
+   * CONNECTED_STATES treats P2P and Relay identically, so "connected" is true on exactly
+   * the transport that must never see a byte of media.
+   */
+  function enabled() {
+    return !!(sendGate()
+      && match && match.peerSupportsTransfer
+      && match.localMediaTransfer
+      && match.remoteMediaTransfer
+      && transport && transport.supportsBulk
+      && channel && channel.helloSeen);
+  }
+
+  /**
+   * The RECEIVE gate. Deliberately NOT `enabled()`: receiving is not premium-gated (a free player
+   * seeing a supporter's media is the whole product), so `canSend` has no business here.
+   */
+  function acceptOffers() {
+    return !!(match && match.peerSupportsTransfer
+      && match.localMediaTransfer && match.remoteMediaTransfer
+      && transport && transport.supportsBulk);
+  }
+
+  /* ------------------------------------------------------------- eligibility + deck */
+
+  function estBps() {
+    const rate = channel ? (channel.stats().lastRateBps || 0) : 0;
+    return rate > 0 ? rate : EST_THROUGHPUT_BPS;
+  }
+
+  /**
+   * Reasons an artifact was skipped for a codec the peer cannot decode — said ONCE per codec per
+   * match, exactly like `saidWhy` below and for the same reason: the alternative is a lane that
+   * quietly does nothing and a play-test that can only guess why.
+   */
+  const saidSkip = new Set();
+
+  /** Everything from the local source we would be willing to offer RIGHT NOW. */
+  function eligible() {
+    let all = [];
+    try { all = artifacts && typeof artifacts.listSendable === 'function' ? artifacts.listSendable() : []; }
+    catch (e) { warn('listSendable threw: ' + ((e && e.message) || e)); return []; }
+    if (!Array.isArray(all)) return [];
+
+    const budget = estBps();
+    const out = [];
+    for (const raw of all) {
+      const a = raw || {};
+      const sha = typeof a.sha === 'string' ? a.sha : (typeof a.sha256 === 'string' ? a.sha256 : '');
+      if (!/^[0-9a-f]{64}$/.test(sha)) continue;
+      if (neverOffer.has(sha) || seen.has(sha)) continue;
+      const mime = String(a.mime || '');
+      if (!ACCEPT_MIME.has(mime)) continue;
+      const kind = a.kind === 'video' ? 'video' : (a.kind === 'image' ? 'image' : '');
+      if (!kind) continue;
+      const bytes = Number(a.bytes);
+      if (!Number.isInteger(bytes) || bytes < 1) continue;
+      // An exempt original is by definition un-optimised, so it gets the tighter cap.
+      if (bytes > (a.exempt ? MAX_EXEMPT_BYTES : MAX_ARTIFACT_BYTES)) continue;
+      // …and nothing is offered that cannot plausibly land inside the match's patience.
+      if ((bytes / budget) * 1000 > MAX_XFER_MS) continue;
+
+      /* THE CODEC GATE. The artifact's codec comes off the producer (the C# cache knows it made
+       * an "avc1" mp4; the page encoder knows the same; an exempt ORIGINAL knows nothing and is
+       * the fail-open case the design accepts) or, failing that, off the mime's `codecs=`
+       * parameter. `peerCanDecodeCodec` answers true for every uncertainty, so the only thing
+       * that ever drops out here is a KNOWN codec against a peer that KNOWN-ly lacks it. */
+      const codec = String(a.codec || '') || codecFromMime(mime);
+      if (kind === 'video' && channel && typeof channel.peerCanDecodeCodec === 'function'
+        && !channel.peerCanDecodeCodec(codec)) {
+        const fam = normalizeCodec(codec);
+        if (!saidSkip.has(fam)) {
+          saidSkip.add(fam);
+          warn('skipping ' + fam + ' video artifacts — the peer\'s build does not advertise a '
+            + fam + ' decoder, and sending one would land a silent black window '
+            + '(said once per codec)');
+        }
+        continue;
+      }
+
+      out.push({
+        sha, bytes, mime, kind, exempt: !!a.exempt,
+        // 'gif' or nothing. Taste that travels: see rule 1 in the header.
+        origin: a.origin === 'gif' ? 'gif' : '',
+        codec,
+      });
+    }
+    return out;
+  }
+
+  /** Reshuffle over the CURRENT eligible set, pushing the last NO_ECHO picks to the bottom. */
+  function reshuffle(pool) {
+    deck = pool.slice();
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;             // Math.random — see the header
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    if (deck.length > NO_ECHO) {
+      for (const sha of recent) {
+        const at = deck.findIndex((x) => x.sha === sha);
+        if (at >= 0) { const [e] = deck.splice(at, 1); deck.unshift(e); }
+      }
+    }
+  }
+
+  /* --------------------------------------------------------- depth + kind balance (rule 3) */
+
+  /**
+   * How deep to keep the queue RIGHT NOW, in artifacts. Wire time is the unit (see QUEUE_AHEAD_MS)
+   * and the MEAN artifact is the estimator — coarse on purpose, because the only decision it feeds
+   * is "a few more or not", and a median would cost a sort on every pump for an answer that
+   * differs by one.
+   *
+   * `estBps()` is the SAME budget `eligible()` filters against, so depth and admission can never
+   * disagree: nothing in the pool has already been refused for being too slow to land.
+   *
+   * @param {Array} [pool] the eligible set, when the caller already has one
+   */
+  function targetDepth(pool) {
+    let p = pool;
+    if (!Array.isArray(p)) { try { p = eligible(); } catch (_e) { return QUEUE_DEPTH; } }
+    if (!p.length) return QUEUE_DEPTH;
+    let sum = 0;
+    for (const a of p) sum += a.bytes;
+    const msEach = ((sum / p.length) / estBps()) * 1000;
+    if (!(msEach > 0)) return QUEUE_DEPTH;                 // NaN/0 -> the floor, never a huge depth
+    const n = Math.floor(QUEUE_AHEAD_MS / msEach);
+    return Math.max(QUEUE_DEPTH, Math.min(QUEUE_DEPTH_MAX, n));
+  }
+
+  /** How many of each media kind are landed or in flight right now. */
+  function kindCounts() {
+    let image = 0;
+    let video = 0;
+    for (const a of landed) { if (a.kind === 'video') video++; else image++; }
+    for (const sha of inFlight.keys()) {
+      const meta = pickInfo.get(sha);
+      if (!meta) continue;
+      if (meta.kind === 'video') video++; else image++;
+    }
+    return { image, video };
+  }
+
+  /**
+   * The kind the receiver's pool is SHORT of, or '' for "no opinion".
+   *
+   * '' is the answer whenever the preference could do harm rather than good: a pool that already
+   * holds the same number of each, and — the important one — a library that only HAS one kind,
+   * where wanting the other would just mean scoring every card identically. Both cases fall
+   * straight back to the shuffle.
+   */
+  function hungriestKind(pool) {
+    let hasImage = false;
+    let hasVideo = false;
+    for (const a of pool) {
+      if (a.kind === 'video') hasVideo = true; else hasImage = true;
+      if (hasImage && hasVideo) break;
+    }
+    if (!hasImage || !hasVideo) return '';
+    const c = kindCounts();
+    if (c.image === c.video) return '';
+    return c.image < c.video ? 'image' : 'video';
+  }
+
+  /**
+   * Which card of the deck to take: the best-scoring one in the top PICK_SCAN, index into `deck`.
+   *
+   * THE SCORE IS SOFT, TWICE OVER, and that is the whole design. Wanting the hungrier kind is
+   * worth 2 and a fresh `origin` is worth 1, so kind balance outranks distinctness but neither can
+   * EXCLUDE anything: on a library where no card scores, the topmost card of a shuffled deck wins,
+   * which is byte-identical to the `deck.pop()` this replaced. Ties go to the topmost for the same
+   * reason (the comparison is strict `>` while scanning downward from the top).
+   */
+  function pickIndex(want) {
+    let best = deck.length - 1;
+    let bestScore = -1;
+    const from = Math.max(0, deck.length - PICK_SCAN);
+    for (let i = deck.length - 1; i >= from; i--) {
+      const e = deck[i];
+      let score = 0;
+      if (want && e.kind === want) score += 2;
+      if ((e.origin || '') !== lastOrigin) score += 1;
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    return best;
+  }
+
+  /**
+   * FOOTAGE-ORIGIN VIDEO, and the definition is one line because it has to be the same line
+   * everywhere: kind `video` AND an `origin` that is not 'gif'. `origin` is plumbed from the
+   * host's own flag through boot's listSendable (see 6h) and an ABSENT origin reads as footage on
+   * purpose — the same fail-open reading exec/media.js addReceived uses, so a host too old to send
+   * the field keeps every clip it has as eligible as it is today.
+   */
+  function isFootageVideo(a) { return !!a && a.kind === 'video' && a.origin !== 'gif'; }
+
+  /**
+   * RULE 4: the card the preload wants, or null when it wants nothing.
+   *
+   * `pool` is `eligible()` and NOTHING is re-checked here, which is the whole safety argument: the
+   * codec gate, the MAX_XFER_MS wire budget, the size caps, `seen` and `neverOffer` have all
+   * already had their say, so "the smallest footage video in the pool" is by construction the
+   * smallest one we can AFFORD and the peer can DECODE. A pool with none returns null and the
+   * caller scores as usual — the rule can skip, it can never wait.
+   */
+  function preloadPick(pool) {
+    if (footageLanded >= PRELOAD_FOOTAGE) return null;
+    let best = null;
+    // Strict `<`, so equal-sized candidates keep the source order rather than churning.
+    for (const e of pool) if (isFootageVideo(e) && (!best || e.bytes < best.bytes)) best = e;
+    return best;
+  }
+
+  /** The next artifact worth offering, or null. */
+  function nextPick() {
+    const pool = eligible();
+    if (!pool.length) return null;
+    const live = new Set(pool.map((e) => e.sha));
+    deck = deck.filter((e) => live.has(e.sha) && !seen.has(e.sha) && !neverOffer.has(e.sha));
+    if (!deck.length) reshuffle(pool);
+    if (!deck.length) return null;
+    /* THE PRELOAD OUTRANKS THE SCORE (rule 4) — and takes its card OUT OF THE DECK rather than
+     * beside it, so the shuffle it overruled resumes on a deck that has not silently kept a
+     * duplicate. The `at < 0` arm is the honest fallback for a pool that has outgrown a stale deck
+     * (an artifact compressed mid-match is eligible before it is dealt): the rule still wins, and
+     * `seen` keeps the deck's copy, if one ever appears, from being drawn twice. */
+    const forced = preloadPick(pool);
+    let pick = null;
+    if (forced) {
+      const at = deck.findIndex((e) => e.sha === forced.sha);
+      pick = at >= 0 ? deck.splice(at, 1)[0] : forced;
+    } else {
+      pick = deck.splice(pickIndex(hungriestKind(pool)), 1)[0];
+    }
+    if (!pick) return null;
+    lastOrigin = pick.origin || '';
+    recent.push(pick.sha);
+    if (recent.length > NO_ECHO) recent.shift();
+    return pick;
+  }
+
+  /* -------------------------------------------------------------------- the pump */
+
+  function inFlightCount() { return inFlight.size; }
+
+  /**
+   * Fill to `targetDepth()`. Event-driven: channel open, xfer_done, decline:'have', consumption.
+   *
+   * The loop still terminates after ONE offer in practice — `offerNext` refuses while anything is
+   * in flight (MAX_CONCURRENT_OUT is 1 and lives on the channel, because two artifacts sharing one
+   * bulk lane is not throughput, it is interleaving) — so depth buys LANDINGS OVER TIME, not
+   * parallelism: each landing re-enters here and takes the next card.
+   */
+  function pump() {
+    if (!attached || !enabled()) return;
+    const depth = targetDepth();
+    let guard = 0;
+    while (landed.length + inFlightCount() < depth && guard++ < QUEUE_DEPTH_MAX) {
+      if (!offerNext()) break;
+    }
+  }
+
+  /**
+   * The 5 s idle poll's cheaper cousin — only bothers when the larder is actually low. "Low"
+   * scales with the target: a two-artifact floor was the right hunger line at depth four and is
+   * plain wrong at depth ten, where three landed out of ten wanted is a starving queue.
+   */
+  function pumpIfHungry() {
+    if (landed.length < Math.max(QUEUE_MIN, targetDepth() >> 1)) pump();
+  }
+
+  /** @returns {boolean} true when an offer went out (or is being opened). */
+  function offerNext() {
+    if (!channel) return false;
+    if (inFlightCount() >= 1) return false;               // MAX_CONCURRENT_OUT
+    const pick = nextPick();
+    if (!pick) return false;
+
+    seen.add(pick.sha);
+    // `origin` is kept here too, because the `decline:'have'` landing (cross-session reuse) never
+    // sees the artifact again and would otherwise land it as un-flagged footage.
+    pickInfo.set(pick.sha, {
+      kind: pick.kind, mime: pick.mime, bytes: pick.bytes,
+      origin: pick.origin || '', codec: pick.codec || '',
+    });
+    inFlight.set(pick.sha, { state: 'offered', attempts: attempts.get(pick.sha) || 0 });
+    picks++;
+
+    // artifacts.open may be async (the page fetches the bytes once and slices).
+    let opened = null;
+    try { opened = artifacts.open(pick.sha); } catch (e) {
+      warn(`open(${pick.sha.slice(0, 8)}) threw: ${(e && e.message) || e}`);
+      opened = null;
+    }
+    Promise.resolve(opened).then((src) => {
+      if (!attached || !channel) return;
+      if (!src || typeof src.read !== 'function') {
+        inFlight.delete(pick.sha);
+        neverOffer.add(pick.sha);                          // unreadable is permanently unsendable
+        return;
+      }
+      const tid = channel.send({
+        sha256: pick.sha,
+        bytes: Number(src.bytes) || pick.bytes,
+        mime: src.mime || pick.mime,
+        kind: pick.kind,
+        origin: pick.origin || undefined,
+        codec: pick.codec || undefined,
+        read: (offset, len) => src.read(offset, len),
+      });
+      if (tid == null) {
+        // The channel refused right now (busy, not open, sha refused earlier). Put it
+        // back: a NULL RETURN IS NORMAL and the next top-up tries something else.
+        inFlight.delete(pick.sha);
+        seen.delete(pick.sha);
+      }
+    }).catch((e) => {
+      inFlight.delete(pick.sha);
+      warn(`open(${pick.sha.slice(0, 8)}) failed: ${(e && e.message) || e}`);
+    });
+    return true;
+  }
+
+  /** A slot died. One requeue, then a permanent skip for the match. */
+  function failed(sha, why, permanent) {
+    inFlight.delete(sha);
+    if (permanent) { neverOffer.add(sha); return; }
+    const n = (attempts.get(sha) || 0) + 1;
+    attempts.set(sha, n);
+    if (n >= 2) neverOffer.add(sha);
+    else seen.delete(sha);                                 // eligible again, at the back
+    void why;
+  }
+
+  function pushLanded(a) {
+    landed.push(a);
+    // Rule 4's quota, ticked at the ONE place both landing paths meet (a completed transfer and a
+    // `decline:'have'` reuse) — and before the ring truncates, because LANDED_MAX evicting a row
+    // does not take the file back off the peer.
+    if (isFootageVideo(a)) footageLanded++;
+    while (landed.length > LANDED_MAX) landed.shift();
+  }
+
+  /* -------------------------------------------------------------------- the tags */
+
+  /**
+   * WHY is a media-kind payload about to fire untagged? One short sentence naming
+   * the FIRST failing gate, for the diagnostic below. The order mirrors enabled().
+   */
+  function whyNoTags() {
+    if (!sendGate()) return 'this side\'s send capability is off (caps.mediaTransfer)';
+    if (!match || !match.peerSupportsTransfer) return 'the peer\'s build does not advertise transfer (stale page?)';
+    if (!match.localMediaTransfer) return 'our lobby send toggle is off';
+    if (!match.remoteMediaTransfer) return 'their lobby send toggle is off';
+    if (!transport || !transport.supportsBulk) return 'no bulk lane on this link (relay fallback)';
+    if (!channel || !channel.helloSeen) return 'the peer never said xfer_hello';
+    let sendable = -1;
+    try { sendable = eligible().length + seen.size; } catch (_e) { /* leave -1 */ }
+    return 'no artifact landed yet (sendable=' + sendable + ', in flight=' + inFlightCount()
+      + ', landed=' + landed.length + ', consumed=' + consumed + ')';
+  }
+
+  /** Reasons already said this match — the diagnostic prints each ONCE, not per throw. */
+  const saidWhy = new Set();
+
+  /**
+   * The tags for one payload, or [] when nothing has landed / the feature is off.
+   * `[]` IS THE NORMAL PATH: the payload then fires exactly as it does today, and a drop can
+   * never block on a transfer.
+   *
+   * THE WARN IS THE PLAY-TEST'S EYES (2026-08-05). "It defaults to local media" reached the
+   * owner three times with three different root causes upstream of here (relay link, the
+   * un-advertised transfer cap, a stale phone page) and every round was diagnosed by
+   * archaeology. A media-kind payload leaving untagged now SAYS WHY, once per distinct
+   * reason per match — warn level, because that is what reaches the C# log and the phone's
+   * ?debug=1 overlay.
+   */
+  function tagsFor(kind) {
+    if (!XFER_KINDS.has(kind)) return [];
+    const out = [];
+    if (enabled()) {
+      const want = KIND_TAGS[kind] || 1;
+      const mediaKind = KIND_MEDIA[kind];
+      const pool = landed.filter((a) => a.kind === mediaKind);
+
+      /* THE SOFT PREFERENCE (rule 1 in the header), and every word of "soft" is load-bearing.
+       * A Video payload takes real footage first and a converted gif loop only when footage is
+       * all that is missing — TWO PASSES over the same list, never a filter, because a filter
+       * would turn "the owner does not like gif videos" into "a gif-only library sends nothing"
+       * and hand the receiver back its own pool. The FlashBurst/image lane never asks: a gif
+       * there is exactly what a gif is supposed to be. */
+      const gifLast = mediaKind === 'video'
+        ? pool.filter((a) => a.origin !== 'gif').concat(pool.filter((a) => a.origin === 'gif'))
+        : pool;
+
+      for (const a of gifLast) {
+        out.push('xfer:' + a.sha);
+        if (out.length >= want) break;
+      }
+
+      /* THE LEDGER TOP-UP (rule 3c). A FlashBurst asks for three and the landed pool routinely
+       * holds one, so two of its three exact slots used to go out empty. Those slots are now
+       * filled from `shown`, LEAST-RECENTLY-SHOWN FIRST, with artifacts this peer demonstrably
+       * already holds (they landed, and a fired payload pointed at them).
+       *
+       * `out.length` GATES IT, and that guard is the load-bearing part: with nothing fresh at all
+       * the answer stays [], which keeps "one landing, one drop" true, keeps the untagged
+       * diagnostic below firing, and leaves "nothing new has landed" to the receiver's own
+       * rotation — exec/media.js drawReceived already spends the rest of every peer burst there
+       * and rotates least-recently-SHOWN, so a stale pin would only make that answer worse. */
+      if (out.length && out.length < want) {
+        const repeats = [];
+        for (const [sha, meta] of shown) {
+          if (meta.kind === mediaKind && out.indexOf('xfer:' + sha) < 0) repeats.push([sha, meta.seq]);
+        }
+        repeats.sort((x, y) => x[1] - y[1]);
+        for (const [sha] of repeats) {
+          out.push('xfer:' + sha);
+          if (out.length >= want) break;
+        }
+      }
+    }
+    if (!out.length) {
+      const why = whyNoTags();
+      if (!saidWhy.has(why)) {
+        saidWhy.add(why);
+        warn('payload kind ' + kind + ' fired untagged — ' + why + ' (said once per reason)');
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Note that a fired payload has pointed the peer at this artifact. The ledger's ONLY writer —
+   * `tagsFor` deliberately does not touch it, so a tag set built for a payload that then failed
+   * its charge check cannot age the record of something the peer never actually saw.
+   */
+  function noteShown(sha, kind) {
+    const meta = shown.get(sha);
+    if (meta) { meta.seq = ++showSeq; return; }
+    shown.set(sha, { kind: kind === 'video' ? 'video' : 'image', seq: ++showSeq });
+    /* Over the cap we drop the MOST recently shown row, not the oldest: a row's whole value here
+     * is as a repeat candidate, and the least-recently-shown rows are the good ones. */
+    while (shown.size > SHOWN_MAX) {
+      let worstSha = '';
+      let worstSeq = -1;
+      for (const [s, m] of shown) if (m.seq > worstSeq) { worstSeq = m.seq; worstSha = s; }
+      if (!worstSha) break;
+      shown.delete(worstSha);
+    }
+  }
+
+  /** A payload went out carrying these tags — those artifacts are spent. */
+  function markConsumed(tags) {
+    if (!Array.isArray(tags) || !tags.length) return;
+    const spent = new Set();
+    for (const t of tags) {
+      if (typeof t === 'string' && t.startsWith('xfer:')) spent.add(t.slice(5));
+    }
+    if (!spent.size) return;
+    // The ledger is written BEFORE the filter, while `landed` still knows each artifact's kind.
+    // `pickInfo` is the backstop for a deliberate repeat (already gone from `landed`).
+    for (const sha of spent) {
+      const from = landed.find((a) => a.sha === sha) || pickInfo.get(sha) || null;
+      noteShown(sha, from ? from.kind : 'image');
+    }
+    const before = landed.length;
+    landed = landed.filter((a) => !spent.has(a.sha));
+    consumed += before - landed.length;
+    pump();                                                // consumption is a top-up trigger
+  }
+
+  /* ------------------------------------------------------------------- lifecycle */
+
+  function bindChannel() {
+    channel = createMediaChannel(Object.assign({
+      sendBulk: (d) => transport.sendBulk(d),
+      bulkBufferedAmount: () => transport.bulkBufferedAmount,
+      bulkLowThreshold: () => transport.bulkLowThreshold,
+      onBulkMessage: (fn) => transport.onBulkMessage(fn),
+      onBulkStateChanged: (fn) => transport.onBulkStateChanged(fn),
+      store,
+      blocklist,
+      logger,
+      acceptOffers,
+      acceptsCodecs,
+      isHost: !!(match && match.isHost),
+      tag: (match && match.isHost) ? 'GG:xfer:host' : 'GG:xfer:guest',
+    }, channelOptions || {}));
+
+    unsubs.push(channel.onLanded((e) => {
+      if (e.direction === 'out') {
+        inFlight.delete(e.sha256);
+        pushLanded({
+          sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes,
+          origin: e.origin || deckKindFor(e.sha256).origin || '',
+        });
+        info(`sent ${e.sha256.slice(0, 8)} (${Math.round(e.bytes / 1024)} KB in ${e.ms}ms)`);
+        pump();
+        return;
+      }
+      // INBOUND: the store already committed it. Announce it so boot can register it
+      // with exec/media.js — this module never imports exec/.
+      for (const fn of Array.from(receivedSubs)) {
+        try {
+          fn({
+            sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url || '',
+            // Straight through to exec/media.js addReceived — the receiver's own
+            // "prefer real footage" preference is fed from this field and nothing else.
+            origin: e.origin || '',
+          });
+        }
+        catch (err) { warn('onReceived handler threw: ' + ((err && err.message) || err)); }
+      }
+    }));
+
+    unsubs.push(channel.onDeclined((e) => {
+      if (e.direction !== 'out') return;
+      if (e.why === XferDecline.Have) {
+        // A SUCCESS — cross-session reuse. The slot lands immediately and this must not
+        // read as a failure anywhere, in the code or the logs.
+        inFlight.delete(e.sha256);
+        const kindOf = deckKindFor(e.sha256);
+        pushLanded({
+          sha: e.sha256, kind: kindOf.kind, mime: kindOf.mime, bytes: kindOf.bytes,
+          origin: kindOf.origin || '',
+        });
+        info(`they already had ${e.sha256.slice(0, 8)} — reusing it`);
+        pump();
+        return;
+      }
+      // `blocked` gets a permanent skip and NO sender-facing UI, ever: telling a sender
+      // their file is blocklisted is a moderation-evasion oracle.
+      failed(e.sha256, e.why, e.why === XferDecline.Blocked);
+      pump();
+    }));
+
+    unsubs.push(channel.onFailed((e) => {
+      if (e.direction !== 'out') return;
+      failed(e.sha256, e.why, false);
+      pump();
+    }));
+
+    // The transport's 'open' fires the moment the channel attaches, and on the ANSWERING side
+    // that is routinely already readyState 'open' — pass supportsBulk so the open is never missed.
+    channel.open({ alreadyOpen: !!(transport && transport.supportsBulk) });
+  }
+
+  function deckKindFor(sha) {
+    return pickInfo.get(sha) || { kind: 'image', mime: '', bytes: 0, origin: '', codec: '' };
+  }
+
+  function onPhase(phase) {
+    if (phase === GoonMatchPhase.Draft) {
+      // THE BIGGEST DEAD-TIME BUDGET THE MATCH HAS. The draft is untimed and both consents
+      // have just landed, so this is where the queue primes to depth.
+      info('draft — priming the send queue');
+      pump();
+      return;
+    }
+    if (phase === GoonMatchPhase.Recap || phase === GoonMatchPhase.Idle) {
+      cancelAll('match_over');
+      return;
+    }
+    pumpIfHungry();
+  }
+
+  function cancelAll(why) {
+    if (why && (inFlight.size || landed.length)) {
+      info(`clearing the queue (${why}): ${inFlight.size} in flight, ${landed.length} landed`);
+    }
+    inFlight.clear();
+    landed = [];
+    deck = [];
+    // The STORE is deliberately untouched: committed artifacts are hash-keyed and stay valid.
+  }
+
+  function startPoll() {
+    stopPoll();
+    try {
+      pollTimer = setInterval(() => {
+        if (!attached || !match) return;
+        const p = match.phase;
+        if (p === GoonMatchPhase.Draft || p === GoonMatchPhase.Countdown
+          || p === GoonMatchPhase.Live || p === GoonMatchPhase.SuddenDeath) pumpIfHungry();
+      }, POLL_MS);
+      if (pollTimer && typeof pollTimer.unref === 'function') pollTimer.unref();
+    } catch (_e) { pollTimer = 0; }
+  }
+
+  function stopPoll() {
+    if (!pollTimer) return;
+    try { clearInterval(pollTimer); } catch (_e) { /* ignore */ }
+    pollTimer = 0;
+  }
+
+  /** Unbind everything. A NAMED function, so `attach` never depends on a `this` binding. */
+  function detach() {
+    attached = false;
+    saidWhy.clear();                 // a new match earns fresh diagnostics
+    saidSkip.clear();                // …and so does the codec-skip warn (a new peer, a new answer)
+    stopPoll();
+    for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
+    unsubs = [];
+    // Restores the wrapper matchLog installed UNDERNEATH ours — one layer peeled,
+    // not the whole stack, because the log's patch is not ours to remove.
+    if (match && origFire && match.tryFirePayload === wrappedFire) {
+      match.tryFirePayload = (req) => origFire(req);
+    }
+    origFire = null;
+    wrappedFire = null;
+    if (channel) { try { channel.close(); } catch (_e) { /* ignore */ } }
+    channel = null;
+    cancelAll();
+    pickInfo.clear();
+    attempts.clear();
+    neverOffer.clear();
+    seen.clear();
+    recent.length = 0;
+    // A new match has shown the new peer nothing, and owes the old one's taste nothing either.
+    shown.clear();
+    showSeq = 0;
+    lastOrigin = '';
+    footageLanded = 0;               // a new peer holds none of our footage — preload again
+    match = null;
+    transport = null;
+  }
+
+  return {
+    /**
+     * Bind to a match + transport. Called from boot.js attachMatch, which the relay fallback
+     * re-runs through onCurrentMatchChanged — so the queue re-attaches over the NEW transport
+     * automatically, sees supportsBulk false, and goes dormant. No special case.
+     */
+    attach(m, t) {
+      detach();
+      if (!m || !t) return false;
+      match = m;
+      transport = t;
+      attached = true;
+
+      bindChannel();
+
+      unsubs.push(match.onPhaseChanged(onPhase));
+      unsubs.push(match.onConsentChanged(() => {
+        // A player who withdraws the toggle mid-lobby stops the queue immediately.
+        if (!enabled()) cancelAll('consent withdrawn');
+        else pump();
+      }));
+
+      /* THE INSTANCE WRAP (spec §4.2). Applied AFTER boot's matchLog wrapper, so this one is
+       * outermost — see the header. Zero changes to ui/arsenal.js and ui/soloDriver.js. */
+      origFire = match.tryFirePayload.bind(match);
+      wrappedFire = (req) => {
+        let out = req;
+        // No enabled() pre-check here: tagsFor answers [] when the lane is off
+        // AND says why (once per reason) — the pre-check was hiding exactly the
+        // failures the 2026-08-05 play-tests needed named.
+        if (req && XFER_KINDS.has(req.kind) && !req.tags) {
+          const tags = tagsFor(req.kind);                  // [] when nothing has landed
+          if (tags.length) out = Object.assign({}, req, { tags });
+        }
+        const res = origFire(out);
+        if (res && res.ok && out.tags) markConsumed(out.tags);
+        return res;
+      };
+      match.tryFirePayload = wrappedFire;
+
+      startPoll();
+      onPhase(match.phase);
+      return true;
+    },
+
+    detach,
+
+    tagsFor,
+    markConsumed,
+    enabled,
+
+    /**
+     * How many local artifacts could be offered RIGHT NOW. The lobby's honesty
+     * line: every consent/connection gate can pass and the lane still starves
+     * when the library was never compressed (round-11's "sendable=0" — the last
+     * root cause of the 2026-08-05 saga), and only a number the UI can read
+     * turns that from archaeology into a sentence on the screen.
+     */
+    sendableCount() {
+      try { return eligible().length; } catch (_e) { return 0; }
+    },
+
+    /** @returns {() => void} unsubscribe. {sha, kind, mime, bytes, url} for INBOUND landings. */
+    onReceived(fn) {
+      if (typeof fn !== 'function') return noop;
+      receivedSubs.add(fn);
+      return () => receivedSubs.delete(fn);
+    },
+
+    /** Manual top-up. The event triggers cover the real cases; this is for tests + __gg. */
+    pump,
+
+    stats() {
+      return {
+        attached,
+        enabled: enabled(),
+        landed: landed.length,
+        inFlight: inFlightCount(),
+        neverOffer: neverOffer.size,
+        picks,
+        consumed,
+        deck: deck.length,
+        // The variety dials, so a play-test can read the pool's SHAPE and not just its size.
+        depth: targetDepth(),
+        kinds: kindCounts(),
+        shown: shown.size,
+        // Rule 4's state, so a play-test can tell "the preload is still working" apart from
+        // "the library has no footage in it" without reading the log.
+        preload: { landed: footageLanded, quota: PRELOAD_FOOTAGE },
+        estBps: estBps(),
+        channel: channel ? channel.stats() : null,
+      };
+    },
+  };
+}
+
+export default createMediaQueue;

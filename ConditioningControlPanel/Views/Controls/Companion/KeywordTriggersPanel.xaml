@@ -1,0 +1,210 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.KeywordTriggersPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignHeight="520" d:DesignWidth="900">
+    <!--
+      PHASE 5 (G3) — the custom keyword-trigger + Screen OCR editors rescued from the
+      permanently-Collapsed PatreonTabView (Views/Tabs/PatreonTabView.xaml:83-251).
+      That corpse is NOT deleted here (Phase 8 owns demolition); this panel is the live
+      surface and MainWindow's handlers now read these controls.
+
+      Deliberately NOT re-hosted, because the Awareness page above already owns them and
+      PLAN.md's Phase-2 exit rule is one editor per property:
+        * master start/stop      -> ChkAwarenessMaster
+        * premium lock label     -> AwarenessGate (whole-tab overlay, same T1 gate)
+        * Screen OCR on/off      -> ChkAwarenessOcr           (SIGNAL SOURCES)
+        * global cooldown        -> SliderAwarenessGlobalCooldown (TIMING)
+        * highlight on/off       -> ChkAwarenessHighlight     (SAFETY)
+        * highlight in capture   -> ChkAwarenessHighlightVisibleInCapture
+        * app scoping            -> CmbAwarenessAppScope + list + seen-app chips
+      The two detail blocks below therefore *follow* those masters instead of duplicating
+      them, and say so when the master is off.
+
+      FX: this panel is deliberately quiet. No storyboards, no Forever loops - the
+      Companion door's one-Forever budget belongs to the portrait breathe
+      (CompanionTheme.xaml:22), and the Awareness status dot keeps its existing
+      SetStatusPulse mechanism untouched.
+    -->
+    <Expander x:Name="KeywordTriggersExpander" x:FieldModifier="internal"
+              Style="{StaticResource CollapsibleCard}" IsExpanded="False">
+        <Expander.Header>
+            <TextBlock Text="{loc:Str cp5_awareness_custom_triggers_header}"
+                       Foreground="White" FontSize="14" FontWeight="Bold"/>
+        </Expander.Header>
+
+        <!-- CollapsibleCard's ContentPresenter already insets 15,0,15,15 - do not double it. -->
+        <StackPanel Margin="0,2,0,0">
+
+            <!-- ==================== INTRO ==================== -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="{loc:Str label_keyword_triggers_2}" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                <Button x:Name="HelpBtnKeywordTriggers" x:FieldModifier="internal"
+                        Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center"
+                        Margin="8,0,0,0" Tag="KeywordTriggers" Panel.ZIndex="1"/>
+            </StackPanel>
+            <TextBlock Text="{loc:Str cp5_awareness_custom_triggers_note}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                       TextWrapping="Wrap" Margin="0,0,0,2"/>
+            <TextBlock Text="{loc:Str label_your_everyday_typing_becomes_part_of_your_con}"
+                       Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                       TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+            <!-- ==================== DETECTION TIMING ==================== -->
+            <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,10"
+                    Background="{DynamicResource DarkerBgBrush}" BorderBrush="#2E2E48" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Buffer timeout -->
+                    <StackPanel Grid.Column="0"
+                                ToolTip="{loc:Str tooltip_how_long_to_wait_after_a_keystroke_before_che}">
+                        <TextBlock Text="{loc:Str label_buffer_timeout}" Foreground="#A0A0A0" FontSize="10"/>
+                        <Grid>
+                            <Slider x:Name="SliderKeywordBufferTimeout" x:FieldModifier="internal"
+                                    Minimum="1000" Maximum="10000"
+                                    TickFrequency="500" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderKeywordBufferTimeout_ValueChanged"/>
+                            <TextBlock x:Name="TxtKeywordBufferTimeout" x:FieldModifier="internal"
+                                       Text="{loc:Str label_3_0s}" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Session XP boost -->
+                    <StackPanel Grid.Column="2"
+                                ToolTip="{loc:Str tooltip_xp_multiplier_bonus_when_triggers_fire_during}">
+                        <TextBlock Text="{loc:Str label_session_xp_boost}" Foreground="#A0A0A0" FontSize="10"/>
+                        <Grid>
+                            <Slider x:Name="SliderKeywordSessionMultiplier" x:FieldModifier="internal"
+                                    Minimum="1.0" Maximum="3.0"
+                                    TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderKeywordSessionMultiplier_ValueChanged"/>
+                            <TextBlock x:Name="TxtKeywordSessionMultiplier" x:FieldModifier="internal"
+                                       Text="1.5x" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ==================== SCREEN OCR DETAIL ==================== -->
+            <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,10"
+                    Background="{DynamicResource DarkerBgBrush}" BorderBrush="#353550" BorderThickness="1">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <TextBlock Text="{loc:Str label_screen_text_detection_ocr}" Foreground="#C0C0C0"
+                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button x:Name="HelpBtnScreenOcr" x:FieldModifier="internal"
+                                Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center"
+                                Margin="6,0,0,0" Tag="ScreenOcr" Panel.ZIndex="1"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str label_scans_your_screen_for_trigger_keywords_using}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                    <!-- Shown instead of the detail rows while the SIGNAL SOURCES master is off.
+                         The master itself deliberately lives above, not here. -->
+                    <TextBlock x:Name="TxtScreenOcrOffHint" x:FieldModifier="internal"
+                               Text="{loc:Str cp5_ocr_detail_needs_source}"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                    <StackPanel x:Name="ScreenOcrIntervalPanel" x:FieldModifier="internal" Visibility="Collapsed">
+                        <TextBlock Text="{loc:Str label_scan_interval}" Foreground="#A0A0A0" FontSize="10"/>
+                        <Grid ToolTip="{loc:Str tooltip_how_often_to_scan_your_screen_for_trigger_key}">
+                            <Slider x:Name="SliderScreenOcrInterval" x:FieldModifier="internal"
+                                    Minimum="2" Maximum="10"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderScreenOcrInterval_ValueChanged"/>
+                            <TextBlock x:Name="TxtScreenOcrInterval" x:FieldModifier="internal"
+                                       Text="{loc:Str label_3s}" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="{loc:Str cp5_ocr_confirm_label}" Foreground="#A0A0A0" FontSize="10"
+                                       VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbOcrConfirmation" x:FieldModifier="internal" Margin="6,0,0,0" MinWidth="150"
+                                      Style="{StaticResource DarkComboBoxStyle}" FontSize="10"
+                                      SelectionChanged="CmbOcrConfirmation_SelectionChanged"
+                                      ToolTip="{loc:Str cp5_ocr_confirm_tip}">
+                                <ComboBoxItem Content="{loc:Str cp5_ocr_confirm_first}"/>
+                                <ComboBoxItem Content="{loc:Str cp5_ocr_confirm_double}"/>
+                                <ComboBoxItem Content="{loc:Str cp5_ocr_confirm_triple}"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== HIGHLIGHT DETAIL ==================== -->
+            <Border CornerRadius="8" Padding="12,10" Margin="0,0,0,10"
+                    Background="{DynamicResource DarkerBgBrush}" BorderBrush="#353550" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str setting_highlight_matched_keywords_on_screen}"
+                               Foreground="#C0C0C0" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+                    <TextBlock x:Name="TxtHighlightOffHint" x:FieldModifier="internal"
+                               Text="{loc:Str cp5_highlight_detail_needs_source}"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"
+                               TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                    <StackPanel x:Name="HighlightDurationPanel" x:FieldModifier="internal" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="{loc:Str label_highlight_mode}" Foreground="#A0A0A0" FontSize="10"
+                                       VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbOcrHighlightMode" x:FieldModifier="internal" Margin="6,0,0,0" MinWidth="110"
+                                      Style="{StaticResource DarkComboBoxStyle}" FontSize="10"
+                                      SelectionChanged="CmbOcrHighlightMode_SelectionChanged"
+                                      ToolTip="{loc:Str tooltip_all_matches_highlights_every_keyword_immediat}">
+                                <ComboBoxItem Content="{loc:Str btn_all_matches}"/>
+                                <ComboBoxItem Content="{loc:Str btn_random_subset}"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str label_highlight_duration}" Foreground="#A0A0A0" FontSize="10"/>
+                        <Grid ToolTip="{loc:Str tooltip_how_long_the_pink_highlight_stays_on_screen_0}">
+                            <Slider x:Name="SliderKeywordHighlightDuration" x:FieldModifier="internal"
+                                    Minimum="0.3" Maximum="5.0"
+                                    TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderKeywordHighlightDuration_ValueChanged"/>
+                            <TextBlock x:Name="TxtKeywordHighlightDuration" x:FieldModifier="internal"
+                                       Text="{loc:Str label_0_6s}" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== TRIGGER LIST ====================
+                 Rows are built imperatively by MainWindow.CreateKeywordTriggerRow; preset
+                 clones (Id prefix "preset:") are filtered out and stay owned by the preset
+                 detail dialogs on the PRESETS row above. -->
+            <TextBlock Text="{loc:Str label_keyword_triggers}" Foreground="#8A8AA0" FontSize="10"
+                       FontWeight="Bold" Margin="0,2,0,6"/>
+            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto"
+                          PreviewMouseWheel="InnerScrollViewer_PreviewMouseWheel">
+                <StackPanel x:Name="KeywordTriggerListPanel" x:FieldModifier="internal"/>
+            </ScrollViewer>
+
+            <!-- ==================== ACTIONS ==================== -->
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <Button Content="{loc:Str btn_add_trigger}" Background="{DynamicResource PinkBrush}"
+                        Foreground="White" FontWeight="Bold" FontSize="11" Padding="12,6"
+                        BorderThickness="0" Cursor="Hand"
+                        Click="BtnAddKeywordTrigger_Click"/>
+                <Button Content="{loc:Str btn_import_from_trigger_mode}" Background="#353550"
+                        Foreground="#A0A0A0" FontSize="11" Padding="12,6" Margin="8,0,0,0"
+                        BorderThickness="0" Cursor="Hand"
+                        Click="BtnImportFromCustomTriggers_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Expander>
+</UserControl>

@@ -584,12 +584,8 @@
                                                FontSize="13" FontWeight="SemiBold"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                            ToolTip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
-                                    <CheckBox x:Name="ChkBlinkRecalDeeper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                              Checked="ChkBlinkRecalShortcut_Changed" Unchecked="ChkBlinkRecalShortcut_Changed"/>
-                                    <TextBlock Text="Blink to recal" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                </StackPanel>
+                                <!-- "Blink to recalibrate" is one toggle in Settings → Devices since
+                                     Phase 2; this was the fifth copy of the same bool. -->
                             </Grid>
                             <TextBlock Text="Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here."
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
@@ -604,36 +600,34 @@
                                 </Grid.ColumnDefinitions>
     
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{loc:Str blink_trainer_camera_device}" Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
-                                    <Grid Margin="0,0,0,10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox Grid.Column="0" x:Name="CmbDeeperWebcamDevice" x:FieldModifier="internal"
-                                                  Foreground="Black" Background="White" FontSize="10"
-                                                  SelectionChanged="CmbDeeperWebcamDevice_SelectionChanged"/>
-                                        <Button Grid.Column="1" Content="{loc:Str blink_trainer_camera_refresh}"
-                                                Margin="6,0,0,0" Padding="8,3" FontSize="10"
-                                                Style="{StaticResource OutlineButton}"
-                                                Click="BtnDeeperWebcamRefresh_Click"/>
-                                    </Grid>
-    
-                                    <TextBlock Text="{loc:Str webcam_monitor_label}"
-                                               Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
-                                    <ComboBox x:Name="CmbDeeperWebcamMonitor" x:FieldModifier="internal"
-                                              Foreground="Black" Background="White" FontSize="10"
-                                              Margin="0,0,0,10"
-                                              ToolTip="{loc:Str webcam_monitor_tooltip}"
-                                              SelectionChanged="CmbDeeperWebcamMonitor_SelectionChanged"/>
-    
-                                    <CheckBox x:Name="ChkDeeperWebcamRestrictGazeToCalScreen" x:FieldModifier="internal"
-                                              Content="Restrict gaze-reactive effects to the calibrated screen"
-                                              ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors."
-                                              Foreground="#AAAAAA" FontSize="10"
-                                              Margin="0,4,0,0"
-                                              Checked="ChkDeeperWebcamRestrictGazeToCalScreen_Changed"
-                                              Unchecked="ChkDeeperWebcamRestrictGazeToCalScreen_Changed"/>
+                                    <!-- Phase 2: the camera picker, the monitor picker and the
+                                         restrict-gaze checkbox were the third copy of settings the
+                                         Lab and Blink Trainer also edited. Settings → Devices owns
+                                         them; this chip is display only. Consent + calibration in
+                                         the next column are actions and stay, so a free user can
+                                         still set the camera up without leaving Deeper. -->
+                                    <Border x:Name="WebcamStatusChipDeeper" x:FieldModifier="internal"
+                                            CornerRadius="6" Padding="10,8" Margin="0,0,0,10"
+                                            Background="{DynamicResource PanelBgBrush}"
+                                            BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse x:Name="WebcamStatusChipDeeperDot" x:FieldModifier="internal"
+                                                         Width="8" Height="8" Fill="{DynamicResource TextMutedBrush}"
+                                                         Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="White"
+                                                           FontSize="11" FontWeight="Medium" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtWebcamStatusChipDeeper" x:FieldModifier="internal"
+                                                       Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontFamily="Consolas" FontSize="10" Margin="16,2,0,0"/>
+                                            <Button Content="{loc:Str set2_configure_in_settings}"
+                                                    HorizontalAlignment="Left" Margin="16,6,0,0"
+                                                    Padding="8,3" FontSize="10"
+                                                    Style="{StaticResource OutlineButton}"
+                                                    Click="BtnOpenDeviceSettings_Click"/>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
     
                                 <StackPanel Grid.Column="2">

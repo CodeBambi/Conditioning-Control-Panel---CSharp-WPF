@@ -84,10 +84,21 @@ public partial class AchievementPopup : Window
         try
         {
             App.Logger?.Debug("Loading achievement image: {Name}", imageName);
-            
-            // Try to load from Resources/achievements folder (file on disk)
+
+            // Mod override first, then the embedded pack:// resource - both handled by the
+            // resolver. Probing the disk copy first would always hit the bundled PNG and make
+            // mod art unreachable here (the gallery and profile showcase resolve the same way).
+            var image = Services.ModResourceResolver.ResolveImage($"achievements/{imageName}");
+            if (image != null)
+            {
+                AchievementImage.Source = image;
+                App.Logger?.Debug("Loaded achievement image");
+                return;
+            }
+
+            // Last resort: a loose file on disk (content pack or hand-dropped art)
             var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "achievements", imageName);
-            
+
             if (File.Exists(imagePath))
             {
                 App.Logger?.Debug("Found image file at: {Path}", imagePath);
@@ -100,19 +111,7 @@ public partial class AchievementPopup : Window
             }
             else
             {
-                // Try mod override, then pack URI (embedded resource)
-                try
-                {
-                    App.Logger?.Debug("Trying mod/pack URI for: {Name}", imageName);
-                    var image = Services.ModResourceResolver.ResolveImage($"achievements/{imageName}");
-                    if (image != null)
-                        AchievementImage.Source = image;
-                    App.Logger?.Debug("Loaded achievement image");
-                }
-                catch (Exception packEx)
-                {
-                    App.Logger?.Warning(packEx, "Achievement image not found: {Name}", imageName);
-                }
+                App.Logger?.Warning("Achievement image not found: {Name}", imageName);
             }
         }
         catch (Exception ex)

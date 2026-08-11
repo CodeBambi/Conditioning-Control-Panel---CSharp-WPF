@@ -11,19 +11,23 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// PR-4a of the FX overhaul: <b>Takeover</b>, <b>Lab</b>, the shared <b>premium-gate</b>
-    /// treatment, and the status pulses on <b>Blink Trainer</b>, <b>Haptics</b>,
-    /// <b>She's Listening</b> and <b>Awareness</b>. Nothing here touches the shell (PR-1), the
-    /// dashboard (PR-2) or PR-3's tabs.
+    /// PR-4a of the FX overhaul: <b>Takeover</b>, the shared <b>premium-gate</b> treatment, and the
+    /// status pulses on <b>Blink Trainer</b>, <b>Haptics</b>, <b>She's Listening</b> and
+    /// <b>Awareness</b>. (<b>Lab</b> was the fifth surface until Phase 6 of the UX restructure
+    /// retired it — see the tombstone below.) Nothing here touches the shell (PR-1), the dashboard
+    /// (PR-2) or PR-3's tabs.
     ///
     /// What each surface gets, per FX plan section 4:
     ///   * Takeover  - the orb, and only the orb. It is the tab's whole identity, so it is allowed
     ///     to be the most present FX in the app; it is also a Skia control that parks itself the
     ///     instant the tab is collapsed (see Controls/TakeoverOrb.cs). No second loop is added to
     ///     that tab.
-    ///   * Lab       - one ember DustField behind the Rabbit Hole launcher, the tab's "portal"
-    ///     surface, plus a one-shot folder-stamp thunk the first time the Bureau placeholder is
-    ///     seen in a session. Colour is FxTheme's, never a hard-coded ember orange.
+    ///   * Lab       - RETIRED (UX restructure, Phase 6). The ember DustField behind the Rabbit
+    ///     Hole launcher and the Bureau folder-stamp both moved to the Play door with the cards
+    ///     they decorate: the canvas is composed and registered by Views\Tabs\PlayTabView.xaml.cs
+    ///     (as RegisterTabFx("play", ...)) and the stamp is dispatched from RefreshPlayCards in
+    ///     MainWindow.PlayTab.cs. Nothing in this file paints that surface any more; the four
+    ///     status tabs and the Takeover orb below are all that is left of PR-4a.
     ///   * Gates     - Controls/PremiumGateFx.cs, attached from the existing RefreshPremiumGate
     ///     choke points. Gating LOGIC is untouched; only the paint moves.
     ///   * Blink / Haptics / She's Listening / Awareness - status pulses ONLY. The forms stay calm.
@@ -47,9 +51,9 @@ namespace ConditioningControlPanel
     {
         // ---- tuning ----------------------------------------------------------------
 
-        /// <summary>Ember alpha behind the Rabbit Hole card. Low: the card's own gradient and the
-        /// neon title are the subject, the embers are the draught coming up out of the hole.</summary>
-        private const double RabbitHoleFxIntensity = 0.62;
+        // RabbitHoleFxIntensity (0.62) left with the canvas it tuned: it is now a private const of
+        // Views\Tabs\PlayTabView.xaml.cs, kept to the digit so the portal hero looks identical to
+        // the Lab card it replaces. Do not re-declare it here.
 
         /// <summary>Glow-breath bracket and period for every status dot in this file. 2.8s is the
         /// slow end of "alive" and deliberately clear of the 0.8s blink the Blink Trainer used to
@@ -63,15 +67,9 @@ namespace ConditioningControlPanel
         private const double StatusPulseBlurSmall = 10;
         private const double StatusPulseBlurLarge = 26;
 
-        /// <summary>The Bureau folder's arrival: a stamp, not a bounce. One overshoot, 260ms.</summary>
-        private const double BureauStampScale = 1.15;
-        private const int BureauStampMs = 260;
-
         // ---- state -----------------------------------------------------------------
 
         private bool _pr4aFxInitialized;
-        private bool _labFxInitialized;
-        private bool _bureauStampPlayed;
 
         /// <summary>Every status dot currently asking for a pulse, and how it wants to look. The
         /// dictionary is the single record of intent; <see cref="ApplyPr4aStatusPulses"/> is the
@@ -96,7 +94,8 @@ namespace ConditioningControlPanel
         // ============================== lifecycle ==============================
 
         /// <summary>
-        /// Wires this PR's hooks up once, from whichever of its six tabs is refreshed first.
+        /// Wires this PR's hooks up once, from whichever of its five surfaces is refreshed first
+        /// (Takeover + the four status tabs; the Lab surface was retired in Phase 6).
         /// Nothing is created that a user who never opens any of them has to pay for - the Skia
         /// surfaces themselves are inert until their tab is visible.
         /// </summary>
@@ -119,7 +118,11 @@ namespace ConditioningControlPanel
                 HookPr4aTab(HapticsTab);
                 HookPr4aTab(SheListeningTab);
                 HookPr4aTab(AwarenessTab);
-                HookPr4aTab(LabTab);
+                // The Play door is deliberately NOT hooked here. Its one ambient loop is composed
+                // and registered by the view itself (PlayTabView.xaml.cs, on its own
+                // IsVisibleChanged), which is what lets the canvas live on the surface it decorates
+                // instead of being driven from the window. Adding a hook here would give that
+                // canvas two owners.
 
                 if (App.Mods != null) App.Mods.ModChanged += OnPr4aModChanged;
             }
@@ -139,8 +142,6 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (ReferenceEquals(sender, LabTab) && LabTab?.IsVisible == true) OnLabTabShown();
-
                 // Haptics is the one status tab with no refresh-on-show of its own - the dot is
                 // painted from the Connect handler and nowhere else - so opening the tab with a
                 // device already connected (auto-connect on startup) has to seed the pulse here.
@@ -188,82 +189,24 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("ApplyPr4aFxLoops: {E}", ex.Message); }
         }
 
-        // ============================== 1. Lab ==============================
-
-        /// <summary>
-        /// Called the first time the Lab tab becomes visible and on every visit after. The canvas
-        /// is composed once; <see cref="RegisterTabFx"/> then parks it on the way out of the tab and
-        /// resumes it on the way back in, for free.
-        /// </summary>
-        private void OnLabTabShown()
-        {
-            try
-            {
-                EnsurePr4aFx();
-                if (!_labFxInitialized)
-                {
-                    _labFxInitialized = true;
-                    var canvas = LabTab?.RabbitHoleFx;
-                    if (canvas != null)
-                    {
-                        // Embers, not weather: a DustField alone. The card already carries a
-                        // three-stop gradient of its own and a fog layer on top of that would just
-                        // wash it out. Colour is FxTheme's particle slot, so this is an ember on a
-                        // Bambi build and a green mote on Dronification - no orange is hard-coded.
-                        canvas.StartLayers(new AmbientFxConfig
-                        {
-                            Layers = AmbientFxLayers.DustField,
-                            Intensity = RabbitHoleFxIntensity,
-                        });
-                        RegisterTabFx("lab", canvas);
-                    }
-                }
-                // One dispatcher hop at Normal priority (never Loaded - that queue is starved in
-                // this window and the callback would simply never run): IsVisibleChanged fires on
-                // the tab before the flag has finished propagating down to the folder art, so
-                // checking art.IsVisible synchronously here would read false on the very first
-                // visit and spend nothing.
-                Dispatcher.BeginInvoke(new Action(PlayBureauStamp),
-                                       System.Windows.Threading.DispatcherPriority.Normal);
-            }
-            catch (Exception ex) { App.Logger?.Debug("OnLabTabShown: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// The Bureau placeholder's folder lands with a thunk the first time it is seen in a
-        /// session: one 1.15 overshoot settling to 1.0 with a fade, on the RenderTransform only, so
-        /// nothing around it moves. Once per session, and skipped entirely under MotionLevel.Off.
-        /// </summary>
-        private void PlayBureauStamp()
-        {
-            if (_bureauStampPlayed) return;
-            try
-            {
-                var art = LabTab?.BureauFolderArt;
-                if (art == null || !art.IsVisible) return;
-                _bureauStampPlayed = true;
-                if (!MotionFx.AllowTransitions) return;
-
-                var scale = new ScaleTransform(BureauStampScale, BureauStampScale);
-                art.RenderTransformOrigin = new Point(0.5, 0.5);
-                art.RenderTransform = scale;
-
-                var settle = new DoubleAnimation(BureauStampScale, 1.0,
-                                                 TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, settle);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, settle);
-
-                var fade = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                art.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
-            catch (Exception ex) { App.Logger?.Debug("PlayBureauStamp: {E}", ex.Message); }
-        }
+        // ============================== 1. Lab - RETIRED ==============================
+        //
+        // TOMBSTONE (UX restructure, Phase 6). OnLabTabShown lived here and did two things for the
+        // Lab tab; both left with the cards they decorated when the Lab view was deleted:
+        //
+        //   * the ember DustField behind the Rabbit Hole launcher - composed and registered by
+        //     Views\Tabs\PlayTabView.xaml.cs on its own first show, as RegisterTabFx("play", ...).
+        //     The registry key MUST be the key ShowTab passes for that view: SwitchTabFx compares
+        //     the incoming key against the registry, so registering the Play canvas under "lab"
+        //     would park it on arrival and leave it running on the way out. ShowTab canonicalises
+        //     the permanent "lab" alias to "play" before it calls SwitchTabFx for exactly that
+        //     reason (MainWindow.TabNavigation.cs, CanonicalTabKey);
+        //   * the one-shot Bureau folder stamp - now dispatched from RefreshPlayCards in
+        //     MainWindow.PlayTab.cs, at DispatcherPriority.Normal (never Loaded; that queue is
+        //     starved in this window).
+        //
+        // Do not restore either here. The window no longer hooks the Play view's visibility at all
+        // (see EnsurePr4aFx above) - the view owns its own loop.
 
         // ============================== 2. status pulses ==============================
 

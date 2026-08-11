@@ -27,57 +27,9 @@ using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
-    // Tab/button animation helpers: expandable icon buttons and tab transition management.
+    // Tab animation helpers: per-tab ambient loops and tab transition management.
     public partial class MainWindow
     {
-        #region Expandable Icon Button Animation
-
-        private readonly Dictionary<Button, double> _expandedWidths = new();
-
-        private void ExpandableIcon_MouseEnter(object sender, MouseEventArgs e)
-        {
-            // Animation disabled - was causing crashes
-            // Just show the label text without animation
-            try
-            {
-                if (sender is not Button btn) return;
-                if (btn.Template == null || !btn.IsLoaded) return;
-
-                var label = btn.Template.FindName("LabelText", btn) as TextBlock;
-                if (label == null) return;
-
-                label.Visibility = Visibility.Visible;
-                label.Margin = new Thickness(6, 0, 0, 0);
-            }
-            catch
-            {
-                // Silently ignore animation errors
-            }
-        }
-
-        private void ExpandableIcon_MouseLeave(object sender, MouseEventArgs e)
-        {
-            // Animation disabled - was causing crashes
-            // Just hide the label text without animation
-            try
-            {
-                if (sender is not Button btn) return;
-                if (btn.Template == null || !btn.IsLoaded) return;
-
-                var label = btn.Template.FindName("LabelText", btn) as TextBlock;
-                if (label == null) return;
-
-                label.Visibility = Visibility.Collapsed;
-                label.Margin = new Thickness(0);
-            }
-            catch
-            {
-                // Silently ignore animation errors
-            }
-        }
-
-        #endregion
-
         #region Tab Animation Management
 
         private void StartSeasonTitleShimmer()
@@ -130,22 +82,34 @@ namespace ConditioningControlPanel
 
         private void StartLockdownPulse()
         {
-            if (_lockdownPulseStoryboard != null) return;
+            if (_lockdownPulseStoryboard != null) return; // already running
+            // Ambient loop: never starts at the Performance tier or under reduced motion — the
+            // lockdown card keeps its static pink border instead.
+            if (!Services.MotionFx.AllowAmbientLoops) return;
             try
             {
+                // Same namescope trap as the season shimmer: the brush and glow live inside the
+                // LockdownTabView UserControl, so the old SetTargetName("LockdownTab.…") dotted path
+                // could never resolve from MainWindow's scope and threw on every Lockdown tab entry.
+                // Target the objects directly.
+                var borderBrush = LockdownTab?.LockdownImageBorderBrush;
+                var glow = LockdownTab?.LockdownImageGlow;
+                if (borderBrush == null || glow == null) return;
+
                 _lockdownPulseStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true };
                 var colorAnim = new ColorAnimation { From = (Color)ColorConverter.ConvertFromString("#FF1493"), To = (Color)ColorConverter.ConvertFromString("#FF69B4"), Duration = TimeSpan.FromSeconds(1.5) };
-                Storyboard.SetTargetName(colorAnim, "LockdownTab.LockdownImageBorderBrush");
+                Storyboard.SetTarget(colorAnim, borderBrush);
                 Storyboard.SetTargetProperty(colorAnim, new PropertyPath(SolidColorBrush.ColorProperty));
                 var blurAnim = new DoubleAnimation { From = 12, To = 22, Duration = TimeSpan.FromSeconds(1.5) };
-                Storyboard.SetTargetName(blurAnim, "LockdownTab.LockdownImageGlow");
+                Storyboard.SetTarget(blurAnim, glow);
                 Storyboard.SetTargetProperty(blurAnim, new PropertyPath(DropShadowEffect.BlurRadiusProperty));
                 var opacAnim = new DoubleAnimation { From = 0.7, To = 1.0, Duration = TimeSpan.FromSeconds(1.5) };
-                Storyboard.SetTargetName(opacAnim, "LockdownTab.LockdownImageGlow");
+                Storyboard.SetTarget(opacAnim, glow);
                 Storyboard.SetTargetProperty(opacAnim, new PropertyPath(DropShadowEffect.OpacityProperty));
                 _lockdownPulseStoryboard.Children.Add(colorAnim);
                 _lockdownPulseStoryboard.Children.Add(blurAnim);
                 _lockdownPulseStoryboard.Children.Add(opacAnim);
+                Timeline.SetDesiredFrameRate(_lockdownPulseStoryboard, AmbientFrameRate);
                 _lockdownPulseStoryboard.Begin(this, true);
             }
             catch (Exception ex)

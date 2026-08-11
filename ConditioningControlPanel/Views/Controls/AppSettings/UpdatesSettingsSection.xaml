@@ -1,0 +1,81 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.UpdatesSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="760">
+
+    <!-- ================================================================
+         SETTINGS · UPDATES (Phase 2)
+
+         BtnCheckUpdates moved here from Features/AppInfoFeatureControl.xaml
+         (same x:Name, same self-contained handler body - it never went
+         through MainWindow). The popup keeps its About/version header and
+         the three support buttons; this is now the place you check for and
+         read about a release.
+
+         There is deliberately NO "check automatically" toggle: no such
+         AppSettings property exists and Phase 2 does not invent settings.
+
+         Quiet surface (PLAN §2.9 / ground rule 8): no ambient loops here.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_updates}" Style="{StaticResource SectionHeader}"/>
+
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,15">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtUpdatesVersion" x:FieldModifier="internal" Text=""
+                                   Foreground="White" FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtUpdatesProduct" x:FieldModifier="internal" Text=""
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnCheckUpdates" x:FieldModifier="internal" Grid.Column="1"
+                            Content="{loc:Str btn_check_updates}"
+                            Style="{DynamicResource OutlineButton}"
+                            Padding="16,8" FontSize="13"
+                            VerticalAlignment="Center"
+                            Click="BtnCheckUpdates_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Patch notes for the installed build (UpdateService.CurrentPatchNotes). Shown inline in
+             a bounded, scrollable box so a long release never stretches the settings page, with the
+             same WhatsNewDialog the post-update popup uses available for a full read. -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,15">
+            <StackPanel>
+                <Grid Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtPatchNotesHeader" x:FieldModifier="internal"
+                               Text="{loc:Str set2_whats_new_header}"
+                               Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="BtnViewPatchNotes" x:FieldModifier="internal"
+                            Content="{loc:Str set2_btn_view_patch_notes}"
+                            Style="{DynamicResource OutlineButton}"
+                            Padding="12,6" FontSize="12"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Click="BtnViewPatchNotes_Click"/>
+                </Grid>
+
+                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto"
+                              PreviewMouseWheel="InnerScrollViewer_PreviewMouseWheel">
+                    <TextBlock x:Name="TxtPatchNotes" x:FieldModifier="internal" Text=""
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap"/>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

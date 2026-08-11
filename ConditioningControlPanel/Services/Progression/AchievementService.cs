@@ -33,6 +33,28 @@ public class AchievementService : IDisposable
     // a single long stall — sleep/resume, the app suspended for minutes — can only ever add 10s.
     private const double AutonomyTickCreditCapMinutes = 10.0 / 60.0;
 
+    // ===== Cumulative-counter thresholds =====
+    // Named so the number the tracker branches on and the number the achievement's Requirement
+    // string promises the user can be pinned together by a test instead of drifting apart.
+
+    /// <summary>"screen_time" — 10 cumulative hours of mandatory video.</summary>
+    internal const double ScreenTimeVideoMinutes = 600;
+
+    /// <summary>"threadbare" — 10 cumulative hours under the spiral.</summary>
+    internal const double ThreadbareSpiralMinutes = 600;
+
+    /// <summary>"eyes_front" — attention checks passed, lifetime.</summary>
+    internal const int EyesFrontAttentionChecks = 100;
+
+    /// <summary>"word_perfect" — lock cards completed, lifetime.</summary>
+    internal const int WordPerfectLockCards = 50;
+
+    /// <summary>"thirty_day_doll" — consecutive launch days.</summary>
+    internal const int ThirtyDayDollConsecutiveDays = 30;
+
+    /// <summary>"window_shopping" — sparkle points spent, lifetime (the Prestige metric).</summary>
+    internal const long WindowShoppingPointsSpent = 100;
+
 
     public event EventHandler<Achievement>? AchievementUnlocked;
 
@@ -206,6 +228,23 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
+    /// Does an overlay effect (pink filter / spiral) count as active for progress + quest time?
+    /// True when the persistent feature is on during an overlay run — the original rule, kept
+    /// verbatim so existing sessions credit identically — OR when the effect is genuinely ON SCREEN
+    /// through one of the ad-hoc paths that never touch the setting: ShowOverlaySustained (voice
+    /// "turn on spiral" / "go pink", Deeper enhancement bands) and ShowOverlayTimed (dashboard
+    /// trigger bubbles).
+    ///
+    /// #719: the voice command shows a sustained overlay and deliberately does NOT flip
+    /// settings.SpiralEnabled (that setting is the user's saved preference — it drives the settings
+    /// UI checkbox, survives restarts, and is what the 500ms reconciler tears the overlay down
+    /// against). Crediting the visible state here fixes the quest without letting a transient voice
+    /// command rewrite persisted preferences.
+    /// </summary>
+    internal static bool IsOverlayEffectActive(bool featureEnabled, bool overlayRunning, bool effectVisible)
+        => (featureEnabled && overlayRunning) || effectVisible;
+
+    /// <summary>
     /// Track time-based progress (called every second)
     /// </summary>
     private void TrackTimeBasedProgress(object? sender, EventArgs e)
@@ -221,9 +260,12 @@ public class AchievementService : IDisposable
             App.SkillTree?.AddConditioningTime(1.0 / 60.0);
         }
 
-        // Track Pink Filter time - only when overlay is actually running
-        var isPinkFilterActive = settings.PinkFilterEnabled &&
-                                 App.Overlay?.IsRunning == true;
+        // Track Pink Filter time - the persistent feature during a run, OR the tint actually on
+        // screen through an ad-hoc path (voice command / Deeper band / trigger bubble). See
+        // IsOverlayEffectActive.
+        var isPinkFilterActive = IsOverlayEffectActive(settings.PinkFilterEnabled,
+                                                       App.Overlay?.IsRunning == true,
+                                                       App.Overlay?.IsPinkFilterVisible == true);
         if (isPinkFilterActive)
         {
             var elapsed = (now - _lastPinkFilterCheck).TotalMinutes;
@@ -249,9 +291,11 @@ public class AchievementService : IDisposable
             _lastPinkFilterCheck = now;
         }
 
-        // Track Spiral time - only when overlay is actually running
-        var isSpiralActive = settings.SpiralEnabled &&
-                             App.Overlay?.IsRunning == true;
+        // Track Spiral time - the persistent feature during a run, OR the spiral actually on screen
+        // through an ad-hoc path (voice "turn on spiral" / Deeper band / trigger bubble).
+        var isSpiralActive = IsOverlayEffectActive(settings.SpiralEnabled,
+                                                   App.Overlay?.IsRunning == true,
+                                                   App.Overlay?.IsSpiralVisible == true);
         if (isSpiralActive)
         {
             var elapsed = (now - _lastSpiralCheck).TotalMinutes;
@@ -265,6 +309,12 @@ public class AchievementService : IDisposable
                 if (_progress.ContinuousSpiralMinutes >= 20)
                 {
                     TryUnlock("spiral_eyes");
+                }
+
+                // Check Threadbare (10 cumulative hours = 600 minutes)
+                if (_progress.TotalSpiralMinutes >= ThreadbareSpiralMinutes)
+                {
+                    TryUnlock("threadbare");
                 }
 
                 // Track for quests
@@ -380,13 +430,20 @@ public class AchievementService : IDisposable
     }
     
     /// <summary>
-    /// Check Daily Maintenance achievement (7 days streak)
+    /// Check streak achievements (Daily Maintenance at 7 days, Thirty-Day Doll at 30).
+    /// Called on startup from App.OnStartup, so both are retroactive: a user already past
+    /// a threshold unlocks on the next launch rather than waiting for another increment.
     /// </summary>
     public void CheckDailyMaintenance()
     {
         if (_progress.ConsecutiveDays >= 7)
         {
             TryUnlock("daily_maintenance");
+        }
+
+        if (_progress.ConsecutiveDays >= ThirtyDayDollConsecutiveDays)
+        {
+            TryUnlock("thirty_day_doll");
         }
     }
     
@@ -554,6 +611,12 @@ public class AchievementService : IDisposable
         // Track for quests
         App.Quests?.TrackLockCardCompleted();
 
+        // Word Perfect (50 lock cards completed)
+        if (_progress.TotalLockCardsCompleted >= WordPerfectLockCards)
+        {
+            TryUnlock("word_perfect");
+        }
+
         // Check for perfect accuracy
         if (errors == 0)
         {
@@ -585,6 +648,12 @@ public class AchievementService : IDisposable
         App.Logger?.Information("Video watched: {Duration}s ({Minutes:F2} min). Total: {Total:F1} minutes",
             durationSeconds, minutes, _progress.TotalVideoMinutes);
         Save(); // Save immediately so sync picks up the new value
+
+        // Screen Time (10 cumulative hours = 600 minutes)
+        if (_progress.TotalVideoMinutes >= ScreenTimeVideoMinutes)
+        {
+            TryUnlock("screen_time");
+        }
 
         // Track for quests
         App.Quests?.TrackVideoMinutes(minutes);
@@ -851,6 +920,12 @@ public class AchievementService : IDisposable
             _progress.VideoAttentionChecksPassed++;
         }
         _isDirty = true;
+
+        // Eyes Front (100 attention checks passed)
+        if (_progress.TotalAttentionChecksPassed >= EyesFrontAttentionChecks)
+        {
+            TryUnlock("eyes_front");
+        }
     }
 
     /// <summary>
@@ -931,6 +1006,12 @@ public class AchievementService : IDisposable
         if (amount <= 0) return;
         _progress.LifetimeSkillPointsSpent += amount;
         _isDirty = true;
+
+        // Window Shopping (100 sparkle points spent, lifetime)
+        if (_progress.LifetimeSkillPointsSpent >= WindowShoppingPointsSpent)
+        {
+            TryUnlock("window_shopping");
+        }
     }
 
     /// <summary>
@@ -942,6 +1023,15 @@ public class AchievementService : IDisposable
         if (serverValue <= _progress.LifetimeSkillPointsSpent) return;
         _progress.LifetimeSkillPointsSpent = serverValue;
         _isDirty = true;
+
+        // Same threshold as TrackSkillPointsSpent. Hooking it here too is what makes Window
+        // Shopping retroactive: a user whose spend happened before this achievement existed
+        // (or on another device) unlocks on the next profile sync instead of having to buy
+        // one more node. TryUnlock is idempotent, so the double check is harmless.
+        if (_progress.LifetimeSkillPointsSpent >= WindowShoppingPointsSpent)
+        {
+            TryUnlock("window_shopping");
+        }
     }
 
     /// <summary>

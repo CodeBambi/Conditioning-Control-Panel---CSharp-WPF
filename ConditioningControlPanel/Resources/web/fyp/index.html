@@ -35,6 +35,28 @@
           <span>Feed options</span>
           <button id="btn-options-close" class="round-btn small" title="Close">✕</button>
         </div>
+        <div class="options-label">Content source</div>
+        <div class="layout-row">
+          <button class="source-chip" data-source="library"><span class="chip-icon">💾</span>Library</button>
+          <button class="source-chip" data-source="mixed"><span class="chip-icon">🔀</span>Mixed</button>
+          <button class="source-chip" data-source="online"><span class="chip-icon">🌐</span>Online</button>
+        </div>
+        <div class="option-row hidden" id="online-ratio-row">
+          <div class="option-text"><div class="option-title">Online share</div></div>
+          <input id="online-ratio" type="range" min="5" max="95" step="5">
+          <span id="online-ratio-label">30%</span>
+        </div>
+        <div id="online-config" class="hidden">
+          <div class="options-label online-label">Niches</div>
+          <div id="niche-chips"></div>
+          <div class="option-row" id="custom-sub-row">
+            <input id="custom-sub-input" type="text" placeholder="Add a subreddit (r/…)" spellcheck="false" autocomplete="off">
+            <button id="btn-add-sub" class="mini-btn">Add</button>
+          </div>
+          <div id="custom-sub-chips"></div>
+          <div class="option-status hidden" id="online-status"></div>
+        </div>
+        <div class="options-divider"></div>
         <div class="options-label">Layout</div>
         <div class="layout-row">
           <button class="layout-chip" data-layout="duo"><span class="chip-icon">▤</span>Duo</button>
@@ -127,14 +149,31 @@
     <!-- attention check -->
     <button id="attention" class="hidden" title="tap!">💗</button>
 
+    <!-- one-time online-content consent. Blocks the source switch, not the app: declining
+         simply stays on Library. Acceptance persists (FypOnlineConsented) via the bridge. -->
+    <div id="consent-scrim" class="hidden">
+      <div id="consent-card">
+        <h1>🌐 Online Feed</h1>
+        <p>This streams <b>adult content from the internet</b>, via Scrolller - a public
+           Reddit media browser. It comes from public communities and is
+           <b>not curated by CC Labs</b>: anything those communities post can appear.</p>
+        <p>Your device fetches it directly. Nothing is uploaded anywhere, and nothing is
+           saved into your library.</p>
+        <div class="consent-btns">
+          <button id="btn-consent-accept" class="empty-btn">TURN IT ON</button>
+          <button id="btn-consent-cancel" class="mini-btn">Not now</button>
+        </div>
+      </div>
+    </div>
+
     <!-- empty state -->
     <div id="empty" class="hidden">
-      <div class="empty-emoji">🎬</div>
+      <div class="empty-emoji" id="empty-emoji">🎬</div>
       <h1>For You</h1>
-      <p>An endless feed of 20-40 second clips from your own videos and GIFs.<br>
+      <p id="empty-copy">An endless feed of 20-40 second clips from your own videos and GIFs.<br>
          Add some to your assets folder to switch it on.</p>
       <button id="btn-include-gifs" class="empty-btn hidden"></button>
-      <p class="empty-hint">Only active videos and GIFs are used - curate in the Assets tab.</p>
+      <p class="empty-hint" id="empty-hint">Only active videos and GIFs are used - curate in the Assets tab.</p>
     </div>
 
     <!-- crash containment -->
@@ -143,6 +182,27 @@
       <h1>The For You feed crashed</h1>
       <p id="crash-detail"></p>
       <button id="btn-retry" class="empty-btn">RETRY</button>
+    </div>
+
+    <!-- intro gate. NOTHING in the feed exists until DIVE IN is pressed: main.js holds the
+         host's init payload and never calls applyConfig(), so no page, no <video>, no <img>
+         and therefore no audio can exist behind this card. Shown on every open on purpose -
+         it is also the user gesture that legitimises autoplay-with-sound. -->
+    <div id="intro" class="hidden">
+      <div id="intro-card">
+        <div id="intro-art-wrap">
+          <img id="intro-art" src="fyp-art.jpg" alt="">
+        </div>
+        <div id="intro-body">
+          <h1>For You</h1>
+          <p>An endless feed cut from your own library - random 20-40 second slices of your
+             videos and GIFs, a few on screen at a time. It watches what you linger on and
+             quietly serves you more of that. Scroll or use the arrow keys to keep it moving;
+             it never runs out.</p>
+          <button id="btn-intro-start" class="empty-btn">DIVE IN</button>
+          <p class="intro-hint">Clips start with sound - press <b>M</b> to mute, <b>Esc</b> to close.</p>
+        </div>
+      </div>
     </div>
 
     <!-- boot -->

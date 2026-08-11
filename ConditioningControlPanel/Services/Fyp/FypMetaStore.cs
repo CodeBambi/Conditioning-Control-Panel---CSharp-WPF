@@ -21,7 +21,13 @@ internal sealed class FypMetaStore
         public long? DurationMs { get; set; }
         public int? Width { get; set; }
         public int? Height { get; set; }
+        /// <summary>Load/decode failures the page reported for this asset (#562). Null until
+        /// the first strike so the JSON stays additive for old files.</summary>
+        public int? FailStrikes { get; set; }
     }
+
+    /// <summary>Strikes needed before the manifest stops serving an asset.</summary>
+    public const int FailStrikeLimit = 2;
 
     private readonly Dictionary<string, Meta> _byId;
     private readonly object _lock = new();
@@ -57,6 +63,29 @@ internal sealed class FypMetaStore
                 _dirty = true;
             }
         }
+    }
+
+    /// <summary>
+    /// One failure strike for an asset the page could not decode/load (#562). The page
+    /// de-dupes per session, so a strike ≈ one session that failed on this file — at
+    /// <see cref="FailStrikeLimit"/> the manifest stops serving it. Saved eagerly: strikes
+    /// are rare and losing one to a crash would reset the counter.
+    /// </summary>
+    public void RecordFailure(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var m))
+            {
+                if (_byId.Count >= MaxEntries) return;
+                m = new Meta();
+                _byId[id] = m;
+            }
+            m.FailStrikes = (m.FailStrikes ?? 0) + 1;
+            _dirty = true;
+        }
+        Save();
     }
 
     public void Save()

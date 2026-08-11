@@ -1,0 +1,1605 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+                    xmlns:cmp="clr-namespace:ConditioningControlPanel.Views.Controls.Companion">
+
+    <!-- =================================================================================
+         COMPANION TAB REDESIGN — "Her Room" — shared visual language.
+
+         Translated 1:1 from planning/ai-companion-rework/companion-tab-mockup.html. Every
+         hex, radius, glow radius and spacing token below came out of that stylesheet; when
+         the two disagree the mockup wins and this file gets corrected, not the controls.
+
+         Rules this file exists to enforce:
+           · Stock WPF only — LinearGradientBrush, RadialGradientBrush, DropShadowEffect,
+             Storyboard, Path/geometry. No third-party UI packages.
+           · Every key is prefixed "Cmp" so it can never collide with an app-level key
+             (a duplicate ResourceDictionary key is a launch crash).
+           · Converters are instanced HERE, not borrowed from app resources, because a
+             DataTemplate declared inside a dictionary resolves StaticResource against that
+             dictionary's scope (Known Issues #4).
+           · Exactly ONE Forever storyboard is defined (CmpPortraitBreatheStoryboard, the
+             hero portrait ring). Everything else is a one-shot, triggered on load or on an
+             event. Clone() a storyboard before Begin()-ing it against a second target.
+
+         Consumed by: Views/Controls/Companion/*.xaml (each control merges this dictionary
+         into its own Resources — the tab wiring swap happens later and must not need
+         App.xaml edits).
+         ================================================================================= -->
+
+    <!-- ============================ 0. converters ============================ -->
+    <cmp:FractionToStarConverter x:Key="CmpFractionToStar"/>
+    <cmp:FractionToStarConverter x:Key="CmpFractionToRemainderStar" Invert="True"/>
+    <cmp:CompanionBoolToVisibilityConverter x:Key="CmpBoolToVis"/>
+    <cmp:CompanionBoolToVisibilityConverter x:Key="CmpBoolToVisInverse" Invert="True"/>
+    <cmp:CompanionEmptyToVisibilityConverter x:Key="CmpHasContentToVis"/>
+    <cmp:CompanionEmptyToVisibilityConverter x:Key="CmpEmptyToVis" Invert="True"/>
+    <cmp:CompanionBoolToOpacityConverter x:Key="CmpBoolToOpacity"/>
+    <cmp:CompanionEnumEqualsConverter x:Key="CmpEnumEquals"/>
+    <cmp:CompanionIntEqualsConverter x:Key="CmpIntEquals"/>
+    <cmp:CompanionEnumToVisibilityConverter x:Key="CmpEnumToVis"/>
+    <cmp:CompanionEnumToVisibilityConverter x:Key="CmpEnumToVisInverse" Invert="True"/>
+    <!-- WPF cannot draw COLR/CPAL colour fonts; every emoji glyph goes through the Twemoji
+         image pipeline exactly like the rest of the app. -->
+    <helpers:EmojiToImageSourceConverter x:Key="CmpEmojiToImage"/>
+
+    <!-- ============================ 1. spacing tokens ============================
+         The mockup's rhythm: 6/8/12/16/22. Cards sit 16 apart, card padding is 18x20,
+         the room breathes 22/26. Use these instead of typing margins by hand. -->
+    <sys:Double x:Key="CmpGapXs">4</sys:Double>
+    <sys:Double x:Key="CmpGapS">8</sys:Double>
+    <sys:Double x:Key="CmpGapM">12</sys:Double>
+    <sys:Double x:Key="CmpGapL">16</sys:Double>
+    <sys:Double x:Key="CmpGapXl">22</sys:Double>
+
+    <Thickness x:Key="CmpCardPadding">20,18,20,18</Thickness>
+    <Thickness x:Key="CmpCardMargin">0,0,0,16</Thickness>
+    <Thickness x:Key="CmpRoomPadding">26,22,26,26</Thickness>
+    <Thickness x:Key="CmpChipPadding">13,6,13,6</Thickness>
+    <Thickness x:Key="CmpRowGap">0,0,0,12</Thickness>
+    <Thickness x:Key="CmpTightRowGap">0,0,0,8</Thickness>
+
+    <CornerRadius x:Key="CmpRadiusRoom">14</CornerRadius>
+    <CornerRadius x:Key="CmpRadiusCard">14</CornerRadius>
+    <CornerRadius x:Key="CmpRadiusInner">10</CornerRadius>
+    <CornerRadius x:Key="CmpRadiusSmall">7</CornerRadius>
+    <!-- NOT the capsule. Read this before reaching for it.
+
+         The mockup's chips are border-radius:999px. CSS clamps that to a stadium; WPF does NOT.
+         Border clamps the X and Y radii to half the width and half the height INDEPENDENTLY, so
+         an over-large radius renders a full ELLIPSE — measured at 78% fill on a 110x26 Border,
+         which is pi/4, against 94% for a correct stadium. An earlier revision of this file
+         asserted the opposite in a comment, and every chip, pill, tag, badge and switch on the
+         page was drawing as a lens because of it.
+
+         For a stadium use cmp:CompanionCapsule.IsCapsule="True": it pins the radius at half the
+         rendered height with no layout-thrash binding (CornerRadius is AffectsRender only, so
+         the write cannot feed back into the size that caused it). This token remains only as the
+         static fallback for fixed-height chrome, sized for the page's standard ~26px chip. -->
+    <CornerRadius x:Key="CmpRadiusPill">13</CornerRadius>
+
+    <!-- ============================ 2. palette ============================
+         :root of the mockup. Colours are exposed as both Color (for gradient stops and
+         animations) and Brush (for direct use). -->
+    <Color x:Key="CmpRoomColor">#FF0E0C1B</Color>
+    <Color x:Key="CmpRoom2Color">#FF12101F</Color>
+    <Color x:Key="CmpCardColor">#FF1A1A2E</Color>
+    <Color x:Key="CmpSurfaceColor">#FF252542</Color>
+    <Color x:Key="CmpElevColor">#FF16162B</Color>
+    <Color x:Key="CmpPinkColor">#FFFF69B4</Color>
+    <Color x:Key="CmpPinkLightColor">#FFFF8FCB</Color>
+    <Color x:Key="CmpPurpleColor">#FFB478FF</Color>
+    <Color x:Key="CmpVioletColor">#FF9370DB</Color>
+    <Color x:Key="CmpGoldColor">#FFFFD700</Color>
+    <Color x:Key="CmpSteelColor">#FF7FB2D9</Color>
+    <Color x:Key="CmpLiveColor">#FF6EE7A7</Color>
+    <Color x:Key="CmpDangerColor">#FFFF5C7A</Color>
+
+    <SolidColorBrush x:Key="CmpRoomBrush" Color="{StaticResource CmpRoomColor}"/>
+    <SolidColorBrush x:Key="CmpRoom2Brush" Color="{StaticResource CmpRoom2Color}"/>
+    <!-- .card background is #1A1A2Eee — 93% opaque over the room. -->
+    <SolidColorBrush x:Key="CmpCardBrush" Color="#EE1A1A2E"/>
+    <SolidColorBrush x:Key="CmpSurfaceBrush" Color="{StaticResource CmpSurfaceColor}"/>
+    <SolidColorBrush x:Key="CmpElevBrush" Color="{StaticResource CmpElevColor}"/>
+    <SolidColorBrush x:Key="CmpPinkBrush" Color="{StaticResource CmpPinkColor}"/>
+    <SolidColorBrush x:Key="CmpPurpleBrush" Color="{StaticResource CmpPurpleColor}"/>
+    <SolidColorBrush x:Key="CmpVioletBrush" Color="{StaticResource CmpVioletColor}"/>
+    <SolidColorBrush x:Key="CmpGoldBrush" Color="{StaticResource CmpGoldColor}"/>
+    <SolidColorBrush x:Key="CmpSteelBrush" Color="{StaticResource CmpSteelColor}"/>
+    <SolidColorBrush x:Key="CmpLiveBrush" Color="{StaticResource CmpLiveColor}"/>
+    <SolidColorBrush x:Key="CmpDangerBrush" Color="{StaticResource CmpDangerColor}"/>
+
+    <!-- text ramp: the mockup's txt / dim / muted / faint custom properties -->
+    <SolidColorBrush x:Key="CmpTextBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="CmpDimBrush" Color="#FFB8B1CC"/>
+    <SolidColorBrush x:Key="CmpMutedBrush" Color="#FF9A93B8"/>
+    <SolidColorBrush x:Key="CmpFaintBrush" Color="#FF6C6689"/>
+    <SolidColorBrush x:Key="CmpSubtitleBrush" Color="#FFC9C2DD"/>
+    <SolidColorBrush x:Key="CmpBodyBrush" Color="#FFE8E2F5"/>
+
+    <!-- borders & hairlines -->
+    <SolidColorBrush x:Key="CmpCardBorderBrush" Color="#66FF69B4"/>
+    <SolidColorBrush x:Key="CmpVioletCardBorderBrush" Color="#59B478FF"/>
+    <SolidColorBrush x:Key="CmpHairlineBrush" Color="#14FFFFFF"/>
+    <SolidColorBrush x:Key="CmpHairlineSoftBrush" Color="#0DFFFFFF"/>
+    <SolidColorBrush x:Key="CmpChipBorderBrush" Color="#22FFFFFF"/>
+    <SolidColorBrush x:Key="CmpChipFillBrush" Color="#10FFFFFF"/>
+    <SolidColorBrush x:Key="CmpTrackBrush" Color="#22FFFFFF"/>
+    <SolidColorBrush x:Key="CmpTrackSoftBrush" Color="#14FFFFFF"/>
+    <SolidColorBrush x:Key="CmpDrawerBorderBrush" Color="#FF3A3A52"/>
+    <SolidColorBrush x:Key="CmpWorkshopBorderBrush" Color="#33808080"/>
+
+    <!-- gradients -->
+    <LinearGradientBrush x:Key="CmpPinkPurpleBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="CmpPinkPurpleDiagonalBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Z6 attention bar: pink → light pink → purple. -->
+    <LinearGradientBrush x:Key="CmpAttentionBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource CmpPinkLightColor}" Offset="0.5"/>
+        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- the room backdrop, from .room's linear-gradient base layer -->
+    <LinearGradientBrush x:Key="CmpRoomBackdropBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FF1B1733" Offset="0"/>
+        <GradientStop Color="#FF12101F" Offset="0.30"/>
+        <GradientStop Color="#FF1A1430" Offset="0.70"/>
+        <GradientStop Color="#FF0E0C1B" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- .room's two warm radial washes, as separate layers (WPF has no multi-background) -->
+    <RadialGradientBrush x:Key="CmpRoomGlowPurpleBrush" Center="0.18,-0.08" GradientOrigin="0.18,-0.08"
+                         RadiusX="0.75" RadiusY="0.62">
+        <GradientStop Color="#662A1E4D" Offset="0"/>
+        <GradientStop Color="#002A1E4D" Offset="1"/>
+    </RadialGradientBrush>
+    <RadialGradientBrush x:Key="CmpRoomGlowPinkBrush" Center="0.88,0.04" GradientOrigin="0.88,0.04"
+                         RadiusX="0.62" RadiusY="0.66">
+        <GradientStop Color="#1FFF69B4" Offset="0"/>
+        <GradientStop Color="#00FF69B4" Offset="1"/>
+    </RadialGradientBrush>
+
+    <!-- hero banner: painted as a Border background, NEVER an <Image> — an unconstrained
+         Image inside a StackPanel/ScrollViewer measures to its natural size and blew the
+         profile hero to 1383px (DiscordTabView:131-142). -->
+    <LinearGradientBrush x:Key="CmpHeroBannerBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF2A1E4D" Offset="0"/>
+        <GradientStop Color="#FF3B2159" Offset="0.48"/>
+        <GradientStop Color="#FF1E1E3F" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- left-dark scrim so the identity stack always reads over the banner -->
+    <LinearGradientBrush x:Key="CmpHeroScrimBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#F51A1A2E" Offset="0"/>
+        <GradientStop Color="#D91A1A2E" Offset="0.45"/>
+        <GradientStop Color="#A61A1A2E" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- constellation band wash -->
+    <LinearGradientBrush x:Key="CmpConstellationBandBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#05FFFFFF" Offset="0"/>
+        <GradientStop Color="#24000000" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- the connector line under the stage nodes: earned pink, unearned hairline -->
+    <LinearGradientBrush x:Key="CmpConstellationConnectorBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#FFFF69B4" Offset="0"/>
+        <GradientStop Color="#FFFF69B4" Offset="0.42"/>
+        <GradientStop Color="#66B478FF" Offset="0.55"/>
+        <GradientStop Color="#1AFFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Velvet-Vault veil (Z2 locked teaser). Decoration only: IsHitTestVisible=False on the
+         veil, the CTA chip is the sole hit-testable child (cards never block navigation). -->
+    <RadialGradientBrush x:Key="CmpVeilBrush" Center="0.45,0.45" GradientOrigin="0.45,0.45"
+                         RadiusX="0.85" RadiusY="0.85">
+        <GradientStop Color="#801E1632" Offset="0"/>
+        <GradientStop Color="#D20C0A18" Offset="1"/>
+    </RadialGradientBrush>
+
+    <!-- shimmer sweep brush: a skewed white band that a TranslateTransform walks across once -->
+    <LinearGradientBrush x:Key="CmpShimmerBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#00FFFFFF" Offset="0"/>
+        <GradientStop Color="#2BFFFFFF" Offset="0.5"/>
+        <GradientStop Color="#00FFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="CmpShimmerSoftBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#00FFFFFF" Offset="0"/>
+        <GradientStop Color="#17FFFFFF" Offset="0.5"/>
+        <GradientStop Color="#00FFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Z4 interview spotlight card -->
+    <LinearGradientBrush x:Key="CmpInterviewBrush" StartPoint="0,0" EndPoint="1,0.6">
+        <GradientStop Color="#FF2A1E4D" Offset="0"/>
+        <GradientStop Color="#FF3B2159" Offset="0.6"/>
+        <GradientStop Color="#FF26204A" Offset="1"/>
+    </LinearGradientBrush>
+    <RadialGradientBrush x:Key="CmpInterviewGlowBrush" Center="0.88,0.10" GradientOrigin="0.88,0.10"
+                         RadiusX="0.5" RadiusY="0.6">
+        <GradientStop Color="#33FF69B4" Offset="0"/>
+        <GradientStop Color="#00FF69B4" Offset="1"/>
+    </RadialGradientBrush>
+
+    <!-- ============================ 3. glows ============================
+         House glow = DropShadowEffect with ShadowDepth 0. Budget (design §7.4): hero title,
+         portrait ring, active constellation node, section titles. Never on a scrolling item
+         container — fact cards get their emphasis from BorderBrush instead.
+
+         THE BUDGET IS ENFORCED, not aspirational. Everything below is either one of those four
+         surfaces or a HOVER/PRESS state, which is transient and single by construction. Chips,
+         pills, tier plates, gauge fills, AI badges, filled constellation nodes and checked
+         segments all carry their emphasis in a brush now: a resting DropShadowEffect inside
+         PageScroll is re-rendered on every wheel notch, and the page had ~30 of them.
+
+         If you are about to add a resting Effect, add a BorderBrush or a gradient instead. -->
+    <DropShadowEffect x:Key="CmpTitleGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="18"
+                      ShadowDepth="0" Opacity="0.85"/>
+    <DropShadowEffect x:Key="CmpSectionGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="14"
+                      ShadowDepth="0" Opacity="0.70"/>
+    <DropShadowEffect x:Key="CmpNameGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="20"
+                      ShadowDepth="0" Opacity="0.50"/>
+    <DropShadowEffect x:Key="CmpRingGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="26"
+                      ShadowDepth="0" Opacity="0.35"/>
+    <DropShadowEffect x:Key="CmpLockGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="10"
+                      ShadowDepth="0" Opacity="1"/>
+
+    <!-- The hero card used to carry a BlurRadius=40 / ShadowDepth=6 DropShadowEffect, which made
+         a ~1460x300 surface the single most expensive thing on the page: WPF re-renders an
+         Effect's subtree whenever its offset transform changes, so the whole hero was re-blurred
+         on every wheel notch. The card reads against the room on its own #66FF69B4 border, so the
+         lift is a static gradient overlay now — a Border, not a bitmap effect. -->
+    <LinearGradientBrush x:Key="CmpHeroCardLiftBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00000000" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.70"/>
+        <GradientStop Color="#3D000000" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- ============================ 4. text styles ============================ -->
+    <Style x:Key="CmpPageTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="/Fonts/#Fredoka"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="27"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="Effect" Value="{StaticResource CmpTitleGlow}"/>
+    </Style>
+
+    <Style x:Key="CmpPageSubtitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpSubtitleBrush}"/>
+        <Setter Property="Margin" Value="0,3,0,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+
+    <!-- .card h2 — the zone header. Glow is on the title only, not the whole row. -->
+    <Style x:Key="CmpSectionTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="16.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Effect" Value="{StaticResource CmpSectionGlow}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+
+    <Style x:Key="CmpSectionHintStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="9,1,0,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+
+    <Style x:Key="CmpBodyTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="18"/>
+    </Style>
+
+    <Style x:Key="CmpDimTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style x:Key="CmpFaintTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <!-- in-character italic copy: dormant promises, flavor lines, veil sell copy -->
+    <Style x:Key="CmpFlavorTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="18"/>
+    </Style>
+
+    <!-- quiet expert-door link -->
+    <Style x:Key="CmpLinkButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="0,2,10,2"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Margin="{TemplateBinding Padding}"
+                               Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}"
+                               TextDecorations="Underline" Background="Transparent"/>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Txt" Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================ 4b. the room shell ============================
+         The outermost stratum, promoted here by the assembler so CompanionRoomView is the
+         only thing that needs it and nothing has to re-type the mockup's .room rule.
+
+         .room in the mockup is one element with four stacked backgrounds. WPF has no
+         multi-background, so the shell is the linear base and the two radial washes ride
+         above it as sibling Borders — CmpRoomGlowPurpleBrush / CmpRoomGlowPinkBrush, both
+         already defined in §2. The third wash (the cool pool at 55% 108%) is folded into
+         CmpRoomFloorGlowBrush below.
+
+         ClipToBounds is not optional: the washes overhang the corner radius and the
+         ambient dust canvas paints to the full bounds. -->
+    <SolidColorBrush x:Key="CmpRoomBorderBrush" Color="#33B478FF"/>
+
+    <RadialGradientBrush x:Key="CmpRoomFloorGlowBrush" Center="0.55,1.08" GradientOrigin="0.55,1.08"
+                         RadiusX="0.58" RadiusY="0.70">
+        <GradientStop Color="#CC1E1E3F" Offset="0"/>
+        <GradientStop Color="#001E1E3F" Offset="1"/>
+    </RadialGradientBrush>
+
+    <Style x:Key="CmpRoomShellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpRoomBackdropBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpRoomBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- A wash layer: pure decoration, never in the hit-test path. -->
+    <Style x:Key="CmpRoomWashStyle" TargetType="Border">
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+    </Style>
+
+    <!-- ============================ 5. cards ============================ -->
+    <Style x:Key="CmpCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusCard}"/>
+        <Setter Property="Padding" Value="{StaticResource CmpCardPadding}"/>
+        <Setter Property="Margin" Value="{StaticResource CmpCardMargin}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- .card.violet — the personality / awareness cards -->
+    <Style x:Key="CmpVioletCardStyle" TargetType="Border" BasedOn="{StaticResource CmpCardStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpVioletCardBorderBrush}"/>
+    </Style>
+
+    <!-- inset panel inside a card (knows-strip, spice row, workshop cell) -->
+    <Style x:Key="CmpInsetPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="#B312101F"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpHairlineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="12,10,12,10"/>
+    </Style>
+
+    <!-- ============================ 6. train microtags ============================ -->
+    <Style x:Key="CmpTrainTagStyle" TargetType="Border">
+        <Setter Property="Background" Value="#14B478FF"/>
+        <Setter Property="BorderBrush" Value="#55B478FF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="8,2,8,2"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="CmpTrainTagTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpPurpleBrush}"/>
+    </Style>
+    <!-- .ttag.live — green, "this is real right now" -->
+    <Style x:Key="CmpTrainTagLiveStyle" TargetType="Border" BasedOn="{StaticResource CmpTrainTagStyle}">
+        <Setter Property="Background" Value="#126EE7A7"/>
+        <Setter Property="BorderBrush" Value="#556EE7A7"/>
+    </Style>
+    <Style x:Key="CmpTrainTagLiveTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpTrainTagTextStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpLiveBrush}"/>
+    </Style>
+
+    <!-- ============================ 7. chips & pills ============================ -->
+    <!-- .chip — the neutral action chip. Hover = pink border + glow. -->
+    <Style x:Key="CmpChipButtonStyle" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="Padding" Value="{StaticResource CmpChipPadding}"/>
+        <Setter Property="MinWidth" Value="34"/>
+        <Setter Property="Margin" Value="0,0,7,0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{StaticResource CmpChipFillBrush}"
+                            BorderBrush="{StaticResource CmpChipBorderBrush}" BorderThickness="1"
+                            cmp:CompanionCapsule.IsCapsule="True"
+                            Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="{TemplateBinding FontWeight}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#88FF69B4"/>
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.30"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .btn-chat / .veil .cta / .interview .go — the gradient call to action. -->
+    <Style x:Key="CmpCtaButtonStyle" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="Padding" Value="22,11,22,11"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{StaticResource CmpPinkPurpleBrush}"
+                            CornerRadius="10" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FFFF69B4" BlurRadius="22" ShadowDepth="0" Opacity="0.40"/>
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="{TemplateBinding FontWeight}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- the mockup's 1px hover lift, done as a RenderTransform swap: a named
+                             transform inside a property value is not a legal trigger target. -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform Y="-1"/>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.55"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.40"/>
+                            <Setter TargetName="Bd" Property="Effect" Value="{x:Null}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- small gradient pill version of the CTA (veil chip, "Start~", mod chip when clickable) -->
+    <Style x:Key="CmpCtaPillStyle" TargetType="ButtonBase" BasedOn="{StaticResource CmpCtaButtonStyle}">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="16,6,16,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{StaticResource CmpPinkPurpleBrush}"
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.40"/>
+                        </Border.Effect>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="Bold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="22" ShadowDepth="0" Opacity="0.55"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .modchip — non-interactive gradient identity pill -->
+    <Style x:Key="CmpModChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="11,4,11,4"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <!-- No resting glow: the gradient IS the emphasis (glow budget, §3 header). -->
+    </Style>
+    <Style x:Key="CmpModChipTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+    </Style>
+
+    <!-- .pill.ai / .pill.aw — the two status pills. They are BUTTONS now: the AI pill opens the
+         Engine Room, the awareness pill focuses "What she can see". -->
+    <Style x:Key="CmpStatusPillStyleBase" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="12,5,12,5"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
+        <Setter Property="Foreground" Value="#FFFF9CCE"/>
+        <Setter Property="Background" Value="#FF2A1A3A"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
+                        <StackPanel Orientation="Horizontal">
+                            <!-- the little glowing state dot; it takes the pill's foreground -->
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"
+                                     Fill="{TemplateBinding Foreground}"/>
+                            <ContentPresenter VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.FontSize="{TemplateBinding FontSize}"
+                                              TextBlock.FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.30"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="CmpAiPillStyle" TargetType="ButtonBase" BasedOn="{StaticResource CmpStatusPillStyleBase}"/>
+    <Style x:Key="CmpAwarenessPillStyle" TargetType="ButtonBase" BasedOn="{StaticResource CmpStatusPillStyleBase}">
+        <Setter Property="Background" Value="#FF1F2A3A"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpVioletBrush}"/>
+        <Setter Property="Foreground" Value="#FFC4B0F0"/>
+    </Style>
+    <!-- provider off / eyes closed: the pill goes gray but stays a button -->
+    <Style x:Key="CmpDormantPillStyle" TargetType="ButtonBase" BasedOn="{StaticResource CmpStatusPillStyleBase}">
+        <Setter Property="Background" Value="#FF1B1B2C"/>
+        <Setter Property="BorderBrush" Value="#40FFFFFF"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+    </Style>
+
+    <!-- .stat — gold profile-strip chip. Read-only: these are achievements, not settings. -->
+    <Style x:Key="CmpStatChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="#14FFD700"/>
+        <Setter Property="BorderBrush" Value="#33FFD700"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="11,4,11,4"/>
+        <Setter Property="Margin" Value="0,3,7,3"/>
+    </Style>
+    <Style x:Key="CmpStatChipTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFF2E3B3"/>
+    </Style>
+
+    <!-- .tchip — violet trait chip -->
+    <Style x:Key="CmpTraitChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="#1AB478FF"/>
+        <Setter Property="BorderBrush" Value="#40B478FF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="11,4,11,4"/>
+        <Setter Property="Margin" Value="0,3,6,3"/>
+    </Style>
+    <Style x:Key="CmpTraitChipTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFD6C4F5"/>
+    </Style>
+
+    <!-- .d — deny-list chip (red), and .d.add (dashed "add app…") -->
+    <Style x:Key="CmpDenyChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="#12FF5C7A"/>
+        <Setter Property="BorderBrush" Value="#40FF5C7A"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="11,4,11,4"/>
+        <Setter Property="Margin" Value="0,3,6,3"/>
+    </Style>
+    <Style x:Key="CmpDenyChipTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFFFB0BE"/>
+    </Style>
+
+    <!-- .f-chip / .preset — the toggle chips (kind filter row, preset row). -->
+    <Style x:Key="CmpToggleChipStyle" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="Padding" Value="12,4,12,4"/>
+        <Setter Property="Margin" Value="0,3,6,3"/>
+        <!-- German-safe: chips never crush below this, and long words trim rather than clip. -->
+        <Setter Property="MinWidth" Value="44"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="#08FFFFFF" BorderBrush="#1FFFFFFF" BorderThickness="1"
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="Bold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                        </Trigger>
+                        <!-- checked = fill + pink hairline + bright text. No Effect: a chip row
+                             lives inside PageScroll and the checked state is not transient. -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#2BFF69B4"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .plate — the gold LEVEL/RANK jewelry from the profile hero. -->
+    <Style x:Key="CmpGoldPlateStyle" TargetType="Border">
+        <Setter Property="Background" Value="#26FFD700"/>
+        <Setter Property="BorderBrush" Value="#59FFD700"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="16,6,16,6"/>
+        <Setter Property="MinWidth" Value="62"/>
+    </Style>
+    <Style x:Key="CmpGoldPlateKeyStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="8.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFD8C88A"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="CmpGoldPlateValueStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="26"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpGoldBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,1,0,0"/>
+        <!-- The gold reads on its own against #26FFD700; no resting glow (glow budget). -->
+    </Style>
+
+    <!-- .tierplate — the AI entitlement plate in the header band -->
+    <Style x:Key="CmpTierPlateStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleDiagonalBrush}"/>
+        <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="11,5,11,5"/>
+        <Setter Property="Margin" Value="8,0,0,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <!-- The diagonal gradient plus the #33FFFFFF hairline is the lit state (glow budget). -->
+    </Style>
+    <!-- .tierplate.dim — not entitled. Still clickable (it deep-links to the Patreon tab). -->
+    <Style x:Key="CmpTierPlateDimStyle" TargetType="Border" BasedOn="{StaticResource CmpTierPlateStyle}">
+        <Setter Property="Opacity" Value="0.28"/>
+    </Style>
+
+    <!-- ============================ 8. gauge primitives ============================
+         Every bar on this page is the Trainer Card recipe: a rounded track Border with a
+         two-column Grid inside, the fill column bound to a star GridLength. No ActualWidth
+         maths anywhere, so nothing thrashes layout while the page scrolls. -->
+    <Style x:Key="CmpGaugeTrackStyle" TargetType="Border">
+        <Setter Property="Height" Value="10"/>
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Background" Value="{StaticResource CmpTrackBrush}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </Style>
+    <!-- .g-track — the thin 6px trait gauge -->
+    <Style x:Key="CmpGaugeTrackThinStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeTrackStyle}">
+        <Setter Property="Height" Value="6"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="Background" Value="{StaticResource CmpTrackSoftBrush}"/>
+    </Style>
+    <!-- .att-track — the 12px attention gauge -->
+    <Style x:Key="CmpGaugeTrackThickStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeTrackStyle}">
+        <Setter Property="Height" Value="12"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Background" Value="{StaticResource CmpTrackSoftBrush}"/>
+    </Style>
+
+    <!-- The heat used to be a DropShadowEffect on every fill. Gauges live inside PageScroll and
+         there are a dozen of them once the Workshop is open, so the glow is a brush now: a
+         lighter top edge inside the fill reads as "lit" without a bitmap effect. -->
+    <Style x:Key="CmpGaugeFillStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        <Setter Property="BorderBrush" Value="#59FFB8DC"/>
+    </Style>
+    <Style x:Key="CmpGaugeFillThinStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeFillStyle}">
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style x:Key="CmpGaugeFillAttentionStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeFillStyle}">
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Background" Value="{StaticResource CmpAttentionBrush}"/>
+        <Setter Property="BorderBrush" Value="#66FFD0E6"/>
+    </Style>
+    <Style x:Key="CmpGaugeLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="Margin" Value="0,4,0,0"/>
+    </Style>
+
+    <!-- ============================ 9. veil / lock / dormant ============================ -->
+    <!-- The Velvet-Vault rule: a veil is DECORATION. IsHitTestVisible=False here means the card
+         underneath still scrolls and the tab still navigates; only the CTA chip takes clicks. -->
+    <Style x:Key="CmpVeilStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpVeilBrush}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+    <Style x:Key="CmpVeilCopyStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="#FFF2DEED"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="MaxWidth" Value="280"/>
+        <Setter Property="LineHeight" Value="17"/>
+        <Setter Property="Margin" Value="0,8,0,10"/>
+    </Style>
+    <Style x:Key="CmpLockGlyphStyle" TargetType="Image">
+        <Setter Property="Width" Value="26"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Effect" Value="{StaticResource CmpLockGlow}"/>
+    </Style>
+
+    <!-- .dormant-blk — the designed "not built yet" block. Never gray, never the word TODO:
+         a dashed violet outline, in-character italic copy, and a one-shot shimmer sweep. -->
+    <Style x:Key="CmpDormantBlockStyle" TargetType="Border">
+        <Setter Property="Background" Value="#0AB478FF"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="14"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </Style>
+    <Style x:Key="CmpDormantCopyStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="#FFC9B8EC"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="18"/>
+    </Style>
+    <!-- Border cannot dash, so a dormant block's outline is a Rectangle laid over it. -->
+    <Style x:Key="CmpDashedOutlineStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="#4DB478FF"/>
+        <Setter Property="StrokeThickness" Value="1"/>
+        <Setter Property="StrokeDashArray" Value="4 3"/>
+        <Setter Property="RadiusX" Value="10"/>
+        <Setter Property="RadiusY" Value="10"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+    <!-- the "tell me things and I'll keep them~" empty-state variant is pink, not violet -->
+    <Style x:Key="CmpEmptyOutlineStyle" TargetType="Rectangle" BasedOn="{StaticResource CmpDashedOutlineStyle}">
+        <Setter Property="Stroke" Value="#4DFF69B4"/>
+    </Style>
+    <Style x:Key="CmpEmptyBlockStyle" TargetType="Border" BasedOn="{StaticResource CmpDormantBlockStyle}">
+        <Setter Property="Background" Value="#0AFF69B4"/>
+    </Style>
+    <Style x:Key="CmpEmptyCopyStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpDormantCopyStyle}">
+        <Setter Property="Foreground" Value="#FFF2C9E0"/>
+    </Style>
+
+    <!-- ============================ 10. chat bubbles ============================ -->
+    <!-- .bub.her is TWO borders in CSS: a faint #FF69B440 outline plus a SOLID 3px pink rail on
+         the left. One WPF BorderBrush cannot be two colours, and painting the 3px edge in the
+         25%-alpha pink loses the strongest cue that her line is hers. So the outline lives here
+         and the rail is a separate Rectangle in the bubble template — the same trick the fact
+         wall uses for its kind rail. -->
+    <Style x:Key="CmpBubbleHerStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF2A1A3A"/>
+        <Setter Property="BorderBrush" Value="#40FF69B4"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="4,14,14,14"/>
+        <Setter Property="Padding" Value="14,9,14,9"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="MaxWidth" Value="420"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </Style>
+    <Style x:Key="CmpBubbleYouStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF1F2A3A"/>
+        <Setter Property="BorderBrush" Value="#409370DB"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14,4,14,14"/>
+        <Setter Property="Padding" Value="14,9,14,9"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="MaxWidth" Value="420"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </Style>
+    <!-- her bubble's solid pink rail. A Rectangle, not the Border's own BorderBrush — see
+         CmpBubbleHerStyle. Bottom margin matches the bubble's so it stops at the same line. -->
+    <Style x:Key="CmpBubbleHerRailStyle" TargetType="Rectangle">
+        <Setter Property="Width" Value="3"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Fill" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="RadiusX" Value="1.5"/>
+        <Setter Property="RadiusY" Value="1.5"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
+    <!-- .bub.echo — what her voice said out loud. Visualises the one-mouth design.
+         Transparent: the DASHED outline is CmpBubbleEchoOutlineStyle, because Border cannot dash. -->
+    <Style x:Key="CmpBubbleEchoStyle" TargetType="Border">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="14,8,14,8"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="MaxWidth" Value="440"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </Style>
+    <!-- the echo's dashed white-1F outline (.bub.echo { border: 1px dashed #ffffff1f }) -->
+    <Style x:Key="CmpBubbleEchoOutlineStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="#1FFFFFFF"/>
+        <Setter Property="StrokeThickness" Value="1"/>
+        <Setter Property="StrokeDashArray" Value="4 3"/>
+        <Setter Property="RadiusX" Value="14"/>
+        <Setter Property="RadiusY" Value="14"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
+    <Style x:Key="CmpBubbleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="19"/>
+    </Style>
+    <Style x:Key="CmpBubbleEchoTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpBubbleTextStyle}">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+    </Style>
+
+    <!-- .watchchip — sits under her line when she NAMED something the app has a real link for.
+         Quiet by design: it is an offer, not a call to action, and it must never compete with the
+         zone's own CTA. The play glyph is the whole affordance; the label is her wording. -->
+    <Style x:Key="CmpWatchChipStyle" TargetType="Button">
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="0,7,0,0"/>
+        <Setter Property="Padding" Value="9,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chip" CornerRadius="9" Padding="{TemplateBinding Padding}"
+                            Background="#26FF69B4" BorderBrush="#59FF69B4" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="▶" FontSize="9" VerticalAlignment="Center"
+                                       Margin="0,0,5,0" Foreground="{TemplateBinding Foreground}"/>
+                            <TextBlock Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis"
+                                       MaxWidth="240" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chip" Property="Background" Value="#3DFF69B4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .aibadge — the pink AI badge. INVARIANT: this rides IsAiGenerated only. It must never
+         appear on a bark, a canned line, or a BarkEcho. -->
+    <Style x:Key="CmpAiBadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="Padding" Value="7,2,7,2"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,-8,-6,0"/>
+        <!-- NO Effect. This badge rides one bubble each, inside the scrolling thread — a
+             per-item gaussian blur here is the expensive mistake the glow budget exists for. -->
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="#59FFC2E0"/>
+    </Style>
+    <Style x:Key="CmpAiBadgeTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="8.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+    </Style>
+
+    <!-- rounded chat entry + the heart send button -->
+    <Style x:Key="CmpChatInputStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpChipBorderBrush}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="18,10,18,10"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            cmp:CompanionCapsule.IsCapsule="True">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.25"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CmpSendButtonStyle" TargetType="ButtonBase">
+        <Setter Property="Width" Value="41"/>
+        <Setter Property="Height" Value="41"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Grid>
+                        <!-- resting: no Effect (glow budget). The hover trigger below still glows,
+                             because a hover is transient and there is only ever one. -->
+                        <Ellipse x:Name="Disc" Fill="{StaticResource CmpPinkPurpleDiagonalBrush}"/>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Disc" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="22" ShadowDepth="0" Opacity="0.55"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Disc" Property="Opacity" Value="0.40"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================ 11. fact wall ============================ -->
+    <Style x:Key="CmpFactCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="#A6252542"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpHairlineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="12,11,12,9"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </Style>
+    <!-- boundary cards: steel-blue rail, always sorted first. Consent hygiene made visible. -->
+    <Style x:Key="CmpFactBoundaryCardStyle" TargetType="Border" BasedOn="{StaticResource CmpFactCardStyle}">
+        <Setter Property="Background" Value="#A61D2735"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpSteelBrush}"/>
+        <Setter Property="BorderThickness" Value="3,1,1,1"/>
+    </Style>
+    <Style x:Key="CmpFactKindTagStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="8.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpVioletBrush}"/>
+    </Style>
+    <Style x:Key="CmpFactBoundaryKindTagStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFactKindTagStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpSteelBrush}"/>
+    </Style>
+    <Style x:Key="CmpFactTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="17"/>
+        <Setter Property="Margin" Value="0,4,0,0"/>
+    </Style>
+    <Style x:Key="CmpFactMetaStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="9.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="Margin" Value="0,6,0,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <!-- the hover-reveal 📌 / ✏ / 🗑 row: pure trigger, no code-behind -->
+    <Style x:Key="CmpFactActionStyle" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Margin" Value="4,0,0,0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{StaticResource CmpRoom2Brush}"
+                            BorderBrush="{StaticResource CmpChipBorderBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="6,2,6,2">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- danger: "Forget everything…". Subtle by design — it is destructive, not decorative. -->
+    <Style x:Key="CmpDangerButtonStyle" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFFF9CB0"/>
+        <Setter Property="Padding" Value="14,6,14,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="#59FF5C7A" BorderThickness="1"
+                            CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="Bold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#1AFF5C7A"/>
+                            <Setter TargetName="Bd" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFF5C7A" BlurRadius="12" ShadowDepth="0" Opacity="0.25"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================ 12. segmented dial ============================
+         Three (or four) RadioButtons sharing one templated pill strip: the Z5 intensity dial
+         and the Z7 provider row. No custom control, no code-behind — IsChecked binds through
+         CmpEnumEquals with a per-button ConverterParameter. -->
+    <Style x:Key="CmpSegmentStyle" TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="Padding" Value="6,8,6,8"/>
+        <Setter Property="MinWidth" Value="70"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="Bold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background">
+                                <Setter.Value>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{StaticResource CmpVioletColor}" Offset="0"/>
+                                        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                            <!-- the violet→purple fill IS the checked state; no Effect (glow budget) -->
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.35"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- the strip the segments sit in -->
+    <Style x:Key="CmpSegmentStripStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpRoom2Brush}"/>
+        <Setter Property="BorderBrush" Value="#1CFFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </Style>
+
+    <!-- .seg — the Engine Room's deliberately unglamorous square variant -->
+    <Style x:Key="CmpEngineSegmentStripStyle" TargetType="Border" BasedOn="{StaticResource CmpSegmentStripStyle}">
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+    <Style x:Key="CmpEngineSegmentStyle" TargetType="RadioButton" BasedOn="{StaticResource CmpSegmentStyle}">
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="Padding" Value="16,7,16,7"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="{StaticResource CmpRoom2Brush}" Padding="{TemplateBinding Padding}"
+                            BorderThickness="1" BorderBrush="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="Bold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FF2A1A3A"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#66FF69B4"/>
+                            <Setter Property="Foreground" Value="#FFFF9CCE"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .toggle — the 38x20 pill switch (spice, page titles) -->
+    <Style x:Key="CmpToggleSwitchStyle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="38"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Track" Background="#1FFFFFFF" cmp:CompanionCapsule.IsCapsule="True">
+                        <Ellipse x:Name="Knob" Width="16" Height="16" Fill="#FF8F87AD"
+                                 HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
+                            <Setter TargetName="Knob" Property="Fill" Value="{StaticResource CmpTextBrush}"/>
+                            <Setter TargetName="Knob" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#FFFFFFFF" BlurRadius="8" ShadowDepth="0" Opacity="0.60"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.40"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================ 13. wire view (Z5) ============================
+         The trust element: a terminal chip showing EXACTLY the projected ContextFrame. -->
+    <Style x:Key="CmpWireStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF0B0A16"/>
+        <Setter Property="BorderBrush" Value="#336EE7A7"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="Padding" Value="13,10,13,10"/>
+    </Style>
+    <Style x:Key="CmpWireTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="#FF8FE3B0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="CmpWireCaptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFaintTextStyle}">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Margin" Value="2,6,2,12"/>
+    </Style>
+
+    <!-- ============================ 14. drawers (Z7 / Z8) ============================
+         Deliberately unglamorous: flat, thin gray border, no glow, no gradient. The contrast
+         with everything above IS the design — that is her, this is wiring. -->
+    <Style x:Key="CmpDrawerStyle" TargetType="Expander">
+        <Setter Property="Foreground" Value="#FFA9A3C4"/>
+        <Setter Property="Margin" Value="0,16,0,0"/>
+        <!-- The chrome is a TemplateBinding, not a hardcode, precisely so the Engine Room can be
+             a shade grayer than the Workshop (the mockup's .drawer vs .drawer.engine). -->
+        <Setter Property="BorderBrush" Value="{StaticResource CmpWorkshopBorderBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <Border Background="#D916162B" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="12" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <ToggleButton x:Name="HeaderToggle" Grid.Row="0" Cursor="Hand" Focusable="True"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="HeadBd" Background="Transparent" Padding="18,13,18,13">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
+                                                <!-- ▼ / ▲ swap rather than a rotate: a named transform
+                                                     inside a property value is not a trigger target. -->
+                                                <TextBlock x:Name="Arrow" Grid.Column="1" Text="&#x25BC;" FontSize="11"
+                                                           VerticalAlignment="Center" Foreground="#FFA9A3C4"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Arrow" Property="Text" Value="&#x25B2;"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Arrow" Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <ContentPresenter ContentSource="Header"/>
+                            </ToggleButton>
+                            <Border x:Name="BodyHost" Grid.Row="1" Visibility="Collapsed"
+                                    BorderBrush="{StaticResource CmpHairlineSoftBrush}" BorderThickness="0,1,0,0"
+                                    Padding="20,4,20,18">
+                                <ContentPresenter/>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="BodyHost" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- the Engine Room is a shade grayer still than the Workshop (mockup: .drawer.engine) -->
+    <Style x:Key="CmpEngineDrawerStyle" TargetType="Expander" BasedOn="{StaticResource CmpDrawerStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpDrawerBorderBrush}"/>
+    </Style>
+
+    <Style x:Key="CmpDrawerHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFA9A3C4"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="CmpDrawerNoteStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,8,0,12"/>
+    </Style>
+
+    <!-- .gbtn — the Engine Room's plain gray button -->
+    <Style x:Key="CmpGrayButtonStyle" TargetType="ButtonBase">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#FFCFC9E4"/>
+        <Setter Property="Padding" Value="14,7,14,7"/>
+        <Setter Property="Margin" Value="0,0,8,8"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ButtonBase">
+                    <Border x:Name="Bd" Background="{StaticResource CmpSurfaceBrush}" BorderBrush="#26FFFFFF"
+                            BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"
+                                          TextBlock.FontWeight="SemiBold"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpVioletBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CmpFieldLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="Margin" Value="0,0,0,3"/>
+    </Style>
+    <!-- The BYO API-key field. Same chrome as CmpFieldBoxStyle, on a PasswordBox: the key is a
+         real secret, and PasswordBox is the only text input in WPF that does not expose its
+         content as a dependency property a binding (or an automation client) can read. -->
+    <Style x:Key="CmpFieldPasswordStyle" TargetType="PasswordBox">
+        <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="#FFCFC9E4"/>
+        <Setter Property="CaretBrush" Value="#FFCFC9E4"/>
+        <Setter Property="BorderBrush" Value="#1CFFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="10,7,10,7"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CmpFieldBoxStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="#FFCFC9E4"/>
+        <Setter Property="CaretBrush" Value="#FFCFC9E4"/>
+        <Setter Property="BorderBrush" Value="#1CFFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="10,7,10,7"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- .ws-cell — a Workshop pigeonhole -->
+    <Style x:Key="CmpWorkshopCellStyle" TargetType="Border">
+        <Setter Property="Background" Value="#8012101F"/>
+        <Setter Property="BorderBrush" Value="#10FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="13,11,13,11"/>
+        <Setter Property="Margin" Value="0,0,10,10"/>
+    </Style>
+    <Style x:Key="CmpWorkshopCellTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFC4B0F0"/>
+        <Setter Property="Margin" Value="0,0,0,7"/>
+    </Style>
+    <Style x:Key="CmpWorkshopRowStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="Margin" Value="0,2.5,0,2.5"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <!-- ============================ 15. constellation nodes ============================ -->
+    <Style x:Key="CmpConstellationNodeStyle" TargetType="Border">
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Background" Value="{StaticResource CmpRoom2Brush}"/>
+        <Setter Property="BorderBrush" Value="#26FFFFFF"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="CmpConstellationNodeFilledStyle" TargetType="Border" BasedOn="{StaticResource CmpConstellationNodeStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Background">
+            <Setter.Value>
+                <RadialGradientBrush Center="0.35,0.30" GradientOrigin="0.35,0.30">
+                    <GradientStop Color="#FFFF9CCE" Offset="0"/>
+                    <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0.7"/>
+                </RadialGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <!-- No glow on a FILLED node: there can be four of them and the budget names only the
+             ACTIVE one (§7.4). The radial fill already separates reached from unreached. -->
+    </Style>
+    <Style x:Key="CmpConstellationNodeCurrentStyle" TargetType="Border" BasedOn="{StaticResource CmpConstellationNodeStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpGoldBrush}"/>
+        <Setter Property="Background">
+            <Setter.Value>
+                <RadialGradientBrush Center="0.35,0.30" GradientOrigin="0.35,0.30">
+                    <GradientStop Color="#FFFFE9A8" Offset="0"/>
+                    <GradientStop Color="#FFFFB84D" Offset="0.7"/>
+                </RadialGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="{StaticResource CmpGoldColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.65"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="CmpConstellationLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,7,0,0"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style x:Key="CmpConstellationLabelReachedStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpConstellationLabelStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+    </Style>
+    <Style x:Key="CmpConstellationLabelCurrentStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpConstellationLabelStyle}">
+        <Setter Property="Foreground" Value="#FFFFE9A8"/>
+    </Style>
+
+    <!-- ============================ 16. virtualised lists ============================
+         Requirement: fact walls and any unbounded list virtualise. A bare ItemsControl does
+         NOT virtualise — it needs a ScrollViewer with CanContentScroll=True in its template
+         plus a VirtualizingStackPanel as ItemsPanel. This style supplies both. -->
+    <Style x:Key="CmpVirtualizedItemsControlStyle" TargetType="ItemsControl">
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel Orientation="Vertical" IsVirtualizing="True"
+                                            VirtualizationMode="Recycling"/>
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer CanContentScroll="True" Focusable="False"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="{TemplateBinding Padding}">
+                        <ItemsPresenter/>
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============================ 17. motion ============================
+         FX-plan rule: ONE ambient loop per tab. That budget is spent below on the hero
+         portrait ring. Everything else here is a one-shot fired on load or on an event.
+         Clone() before Begin()-ing any of these against a second target. -->
+
+    <!-- THE ambient loop: the portrait disc breathes 1.000 ↔ 1.015 over 5s. -->
+    <Storyboard x:Key="CmpPortraitBreatheStoryboard" x:Shared="False" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="ScaleX" From="1.0" To="1.015" Duration="0:0:2.5">
+            <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+        <DoubleAnimation Storyboard.TargetProperty="ScaleY" From="1.0" To="1.015" Duration="0:0:2.5">
+            <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- one-shot shimmer sweep: walks a skewed highlight band across a card, once, on load.
+         The X keyframes are set in code-behind from the host's ActualWidth at Loaded time
+         (a one-time read, not a binding), so nothing thrashes layout. -->
+    <Storyboard x:Key="CmpShimmerSweepStoryboard" x:Shared="False">
+        <DoubleAnimation Storyboard.TargetProperty="X" From="-90" To="900" Duration="0:0:1.4"
+                         BeginTime="0:0:0.25">
+            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- one-shot node pop, fired on tab load and on stage-up (never looping) -->
+    <Storyboard x:Key="CmpNodePulseStoryboard" x:Shared="False">
+        <DoubleAnimation Storyboard.TargetProperty="ScaleX" From="1.0" To="1.18" Duration="0:0:0.32"
+                         AutoReverse="True"/>
+        <DoubleAnimation Storyboard.TargetProperty="ScaleY" From="1.0" To="1.18" Duration="0:0:0.32"
+                         AutoReverse="True"/>
+    </Storyboard>
+
+    <!-- three-dot "she's thinking" pulse. Triggered while a send is in flight, stopped after. -->
+    <Storyboard x:Key="CmpThinkingDotsStoryboard" x:Shared="False" RepeatBehavior="Forever">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.25" To="1.0" Duration="0:0:0.45"
+                         AutoReverse="True"/>
+    </Storyboard>
+
+    <!-- the wire view's blinking cursor — only alive while the awareness card is live -->
+    <Storyboard x:Key="CmpCursorBlinkStoryboard" x:Shared="False" RepeatBehavior="Forever">
+        <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility" Duration="0:0:1.2">
+            <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{x:Static Visibility.Visible}"/>
+            <DiscreteObjectKeyFrame KeyTime="0:0:0.6" Value="{x:Static Visibility.Hidden}"/>
+        </ObjectAnimationUsingKeyFrames>
+    </Storyboard>
+
+</ResourceDictionary>

@@ -113,6 +113,39 @@
                 </StackPanel>
             </Border>
 
+            <!-- Tier badge (top-left). A price tag, NOT the LockedOverlay veil above.
+                 The veil is right for an XP-gated card - there is nothing to sell, you
+                 just have not levelled yet - but the mosaic's eight destination tiles are
+                 advertisements as much as doors, and the Play door already settled this
+                 argument for the whole app: dimming, never disabling, because "a dead ad
+                 is a worse ad" (MainWindow.PlayTab.cs:107-108). So the art stays bright
+                 and the badge names the price.
+
+                 IsHitTestVisible=False on purpose, same as the Play door's lockbands: a
+                 locked click still lands on the real handler, which is what raises the
+                 TierGate "See tiers" toast. The badge is presentation; TierGate is
+                 enforcement, and they read the same verdict.
+
+                 Text only, no emoji: WPF cannot draw COLR/CPAL colour-emoji fonts, and
+                 the app-wide workaround (EmojiToImageSource) would put a bitmap inside a
+                 9px pill. "TIER 1" says it without one. -->
+            <Border x:Name="TierBadgeHost"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,8,0,0" Padding="6,2,7,3"
+                    CornerRadius="7"
+                    Background="#D91A1A2E"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="1"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="11"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="TxtTierBadge"
+                           Text="TIER 1"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="9"
+                           FontWeight="Bold"/>
+            </Border>
+
             <!-- Help icon overlay (top-right corner) -->
             <Button x:Name="BtnHelp"
                     Style="{DynamicResource HelpButtonStyle}"

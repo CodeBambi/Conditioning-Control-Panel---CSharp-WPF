@@ -68,6 +68,22 @@ html, body {
   filter: blur(4px) brightness(0.75);
 }
 
+/* a media element that refused to decode/load — visible instead of silent black (#562).
+   pointer-events off so drag/chevrons keep working over it. */
+.surface .media-fail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  background: rgba(18, 10, 26, 0.6);
+  pointer-events: none;
+}
+
 /* audible-tile cue — an overlay (not a shadow on .tile) so it paints ABOVE the
    video/img; purely visual, never in the way of the drag gesture */
 .audio-ring {
@@ -177,6 +193,9 @@ html, body {
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  /* the source + niches sections outgrew the fixed card */
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
 }
 
 .options-header {
@@ -216,6 +235,96 @@ html, body {
 
 .options-divider { height: 1px; background: #2c2c4a; margin: 12px 0; }
 
+/* ---------- online source (Scrolller) ---------- */
+
+.source-chip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 0;
+  border-radius: 10px;
+  border: 1px solid #34345a;
+  background: transparent;
+  color: #b0b0c8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.source-chip .chip-icon { font-size: 18px; line-height: 1; }
+.source-chip.selected {
+  border-color: #ff69b4;
+  background: rgba(255, 105, 180, 0.15);
+  color: #ffb3d9;
+}
+
+#online-ratio-row { margin-top: 10px; }
+#online-ratio { flex: 1; accent-color: #ff69b4; }
+#online-ratio-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
+
+.online-label { margin-top: 12px; }
+
+#niche-chips, #custom-sub-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#custom-sub-chips { margin-top: 6px; }
+#custom-sub-chips:empty { display: none; }
+
+.niche-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid #34345a;
+  background: transparent;
+  color: #b0b0c8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.niche-chip.selected {
+  border-color: #ff69b4;
+  background: rgba(255, 105, 180, 0.15);
+  color: #ffb3d9;
+}
+.niche-chip.custom { border-style: dashed; }
+.niche-chip.custom .chip-x { margin-left: 6px; opacity: 0.7; }
+
+#custom-sub-row { margin-top: 8px; }
+#custom-sub-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid #34345a;
+  background: rgba(0, 0, 0, 0.25);
+  color: #eee;
+  font-size: 12px;
+  outline: none;
+}
+#custom-sub-input:focus { border-color: rgba(255, 105, 180, 0.55); }
+
+/* ---------- online consent card ---------- */
+
+#consent-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 40;                    /* over the options popover (20) */
+  background: rgba(10, 10, 20, 0.72);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#consent-card {
+  width: min(440px, calc(100vw - 48px));
+  background: #1f1f36;
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+#consent-card h1 { font-size: 20px; margin: 0 0 12px; }
+#consent-card p { font-size: 13px; color: #c8c8de; line-height: 1.55; margin: 0 0 10px; }
+.consent-btns { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+
 .option-row { display: flex; align-items: center; gap: 10px; }
 .option-text { flex: 1; }
 .option-title { font-size: 14px; font-weight: 500; }
@@ -247,6 +356,11 @@ html, body {
 .pill-toggle.on::after { left: 23px; }
 
 #mosaic-slider-row, #opacity-row, #clickthrough-row, #eye-gaze-row { margin-top: 10px; }
+
+/* The opacity row's title+description were being crushed to one word per line by the
+   slider (both flex:1 in a 288px card). Wrap instead: text on its own line, slider under. */
+#opacity-row { flex-wrap: wrap; }
+#opacity-row .option-text { flex-basis: 100%; }
 
 /* sub-option: indented under its master toggle, and inert until the master
    (and, for gaze, a calibration) makes it meaningful */
@@ -372,6 +486,76 @@ body.clickthrough #attention { display: none !important; }
   justify-content: center;
   background: #12121f;
   z-index: 40;
+}
+
+/* ---------- intro gate ---------- */
+
+/* Above #boot (40): the card takes over the moment the host's init lands, and the feed
+   itself is not built until it goes away. */
+#intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 8, 16, 0.86);
+  backdrop-filter: blur(6px);
+  z-index: 45;
+  transition: opacity 220ms ease;
+}
+#intro.gone { opacity: 0; pointer-events: none; }
+
+/* Nothing behind the card is actionable yet - the gear/mute/fullscreen buttons would just
+   be blurred decoration. They come back with the feed. */
+body.intro-gate #chrome { display: none !important; }
+
+#intro-card {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  background: #1a1a2e;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  animation: intro-in 260ms cubic-bezier(0.22, 0.9, 0.36, 1);
+}
+#intro.gone #intro-card { transform: scale(0.94); transition: transform 220ms ease; }
+
+#intro-art-wrap { position: relative; flex-shrink: 0; line-height: 0; background: #12121f; }
+#intro-art { width: 100%; height: auto; display: block; }
+/* the art fades into the card instead of ending on a hard edge */
+#intro-art-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 45%;
+  background: linear-gradient(to bottom, rgba(26, 26, 46, 0), #1a1a2e);
+  pointer-events: none;
+}
+
+#intro-body { padding: 2px 26px 26px; text-align: center; overflow-y: auto; }
+#intro-body h1 { font-size: 26px; margin-bottom: 10px; }
+#intro-body p { font-size: 13.5px; color: #b0b0c8; line-height: 1.6; }
+
+#btn-intro-start { margin-top: 18px; padding: 13px 34px; font-size: 15px; }
+#btn-intro-start:focus-visible { outline: 2px solid #ffb3d9; outline-offset: 3px; }
+
+.intro-hint { font-size: 11.5px !important; color: #6a6a88 !important; margin-top: 12px; }
+.intro-hint b { color: #b0b0c8; }
+
+/* short window: the copy and the button matter, the art does not */
+@media (max-height: 480px) {
+  #intro-art-wrap { display: none; }
+  #intro-body { padding-top: 24px; }
+}
+
+@keyframes intro-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
 }
 .boot-pulse {
   font-size: 44px;

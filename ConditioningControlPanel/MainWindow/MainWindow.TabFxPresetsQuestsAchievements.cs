@@ -80,8 +80,14 @@ namespace ConditioningControlPanel
         private double _weeklyQuestFraction = -1;
         private bool _questTracksHooked;
 
-        private readonly HashSet<Border> _achievementTilesUnlocked = new();
-        private readonly HashSet<Border> _achievementTilesWired = new();
+        private readonly HashSet<FrameworkElement> _achievementTilesUnlocked = new();
+        /// <summary>
+        /// Hover source (the card) → the element the tilt actually transforms. On the redesigned
+        /// achievement cards those are two different things: the pointer enters the CARD, but the
+        /// rotation lands on the badge art, because rotating the card would fight the reward
+        /// drawer sliding open underneath the pointer. Doubles as the "already wired" set.
+        /// </summary>
+        private readonly Dictionary<FrameworkElement, FrameworkElement> _achievementTiltTargets = new();
 
         /// <summary>The single gate for this file's one ambient loop.</summary>
         private bool TabFxAmbientAllowed =>
@@ -222,6 +228,11 @@ namespace ConditioningControlPanel
                 }
                 if (!IsIncomingTab("presets")) return;  // the outgoing tab's fade-out re-show
                 _presetsTabVisible = true;
+
+                // DATA BEFORE FX. A session drafted while this tab sat collapsed (the Graded
+                // Intake ducks the whole window for the run) must be on the list before the
+                // stagger animates it in - see SyncCustomSessionsFromDisk / #614.
+                SyncCustomSessionsFromDisk();
 
                 InitializePresetsFx();
                 StaggerPresetCards();
@@ -565,14 +576,23 @@ namespace ConditioningControlPanel
         /// unlocked. Locked tiles deliberately get nothing - a blurred "???" that tilts invitingly
         /// is the UI flirting about something you cannot have.
         /// </summary>
-        internal void PrepareAchievementTileFx(Border tile, bool unlocked)
+        /// <param name="tile">The element the pointer enters (the card).</param>
+        /// <param name="tiltTarget">
+        /// What the lift/tilt transforms, when that is not the tile itself. The reward cards pass
+        /// their badge-art host: the card must stay still so the drawer can slide open under a
+        /// stationary pointer.
+        /// </param>
+        internal void PrepareAchievementTileFx(FrameworkElement tile, bool unlocked,
+                                               FrameworkElement? tiltTarget = null)
         {
             if (tile == null) return;
             try
             {
                 SetAchievementTileUnlocked(tile, unlocked);
-                if (!_achievementTilesWired.Add(tile)) return;
-                EnsureCardTransforms(tile, withRotate: true);
+                if (_achievementTiltTargets.ContainsKey(tile)) return;
+                var target = tiltTarget ?? tile;
+                EnsureCardTransforms(target, withRotate: true);
+                _achievementTiltTargets[tile] = target;
                 tile.MouseEnter += AchievementTile_MouseEnter;
                 tile.MouseLeave += AchievementTile_MouseLeave;
             }
@@ -581,29 +601,34 @@ namespace ConditioningControlPanel
 
         /// <summary>Called when a tile's unlock state changes so the tilt starts (or stops) being
         /// offered without rebuilding the grid.</summary>
-        internal void SetAchievementTileUnlocked(Border tile, bool unlocked)
+        internal void SetAchievementTileUnlocked(FrameworkElement tile, bool unlocked)
         {
             if (tile == null) return;
             try
             {
                 if (unlocked) _achievementTilesUnlocked.Add(tile);
-                else if (_achievementTilesUnlocked.Remove(tile)) TiltAchievementTile(tile, 0, false);
+                else if (_achievementTilesUnlocked.Remove(tile))
+                    TiltAchievementTile(TiltTargetFor(tile), 0, false);
             }
             catch (Exception ex) { App.Logger?.Debug("SetAchievementTileUnlocked: {E}", ex.Message); }
         }
+
+        private FrameworkElement? TiltTargetFor(FrameworkElement tile)
+            => _achievementTiltTargets.TryGetValue(tile, out var target) ? target : tile;
 
         private void AchievementTile_MouseEnter(object sender, MouseEventArgs e)
         {
             try
             {
-                if (sender is not Border tile || !_achievementTilesUnlocked.Contains(tile)) return;
+                if (sender is not FrameworkElement tile || !_achievementTilesUnlocked.Contains(tile)) return;
+                var target = TiltTargetFor(tile);
                 // Tilt towards the side the pointer entered on - the foil catches the light from
                 // where you came from, which is what sells it as a surface rather than a sticker.
                 double sign = 1;
                 var p = e.GetPosition(tile);
                 if (tile.ActualWidth > 0) sign = p.X < tile.ActualWidth / 2 ? -1 : 1;
-                MotionFx.HoverLift(tile, true);
-                TiltAchievementTile(tile, sign * AchievementTiltDegrees, true);
+                MotionFx.HoverLift(target, true);
+                TiltAchievementTile(target, sign * AchievementTiltDegrees, true);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseEnter: {E}", ex.Message); }
         }
@@ -612,14 +637,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (sender is not Border tile) return;
-                MotionFx.HoverLift(tile, false);
-                TiltAchievementTile(tile, 0, true);
+                if (sender is not FrameworkElement tile) return;
+                var target = TiltTargetFor(tile);
+                MotionFx.HoverLift(target, false);
+                TiltAchievementTile(target, 0, true);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseLeave: {E}", ex.Message); }
         }
 
-        private void TiltAchievementTile(Border tile, double degrees, bool animate)
+        private void TiltAchievementTile(FrameworkElement? tile, double degrees, bool animate)
         {
             try
             {

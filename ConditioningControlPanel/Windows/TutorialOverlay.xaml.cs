@@ -557,6 +557,12 @@ namespace ConditioningControlPanel
 
             SpotlightCanvas.Children.Clear();
 
+            // The sidebar keeps a door's entries collapsed until the door is open, so any step that
+            // needs a tab must open that door FIRST - a collapsed entry has no measurable bounds and
+            // FindElementByName may not even reach it. Done before the Center early-return too, so a
+            // "here's the X tab" card still leaves the user looking at the right open door.
+            bool doorOpened = PrepareDoorForStep(step);
+
             // Click-through hole only when the step is gated on a specific element interaction.
             // Manual steps and follow-up cards block all clicks (full opaque overlay).
             bool clickThroughHole = step.AdvanceTrigger != TutorialAdvanceTrigger.Manual &&
@@ -594,29 +600,10 @@ namespace ConditioningControlPanel
             try { _targetWindow.UpdateLayout(); } catch { }
 
             var bounds = GetElementBounds(targetElement);
+            bool unmeasured = bounds.X == 0 && bounds.Y == 0 && bounds.Width <= 100;
 
-            if (bounds.X == 0 && bounds.Y == 0 && bounds.Width <= 100)
+            if (unmeasured)
             {
-                var currentStep = step;
-                _spotlightDelayTimer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(120)
-                };
-                _spotlightDelayTimer.Tick += (s, e) =>
-                {
-                    var t = _spotlightDelayTimer;
-                    try { t?.Stop(); } catch { }
-                    if (t == _spotlightDelayTimer) _spotlightDelayTimer = null;
-                    if (_thisOverlayCompleted) return;
-                    if (_tutorialService.CurrentStep == currentStep)
-                    {
-                        var retryBounds = GetElementBounds(targetElement);
-                        SpotlightCanvas.Children.Clear();
-                        DrawSpotlightOverlay(retryBounds, clickThroughHole);
-                        PositionTextPanel(retryBounds, currentStep.TextPosition);
-                    }
-                };
-                _spotlightDelayTimer.Start();
                 DrawFullOverlay(step.BlockBackgroundClicks);
                 CenterTextPanel();
             }
@@ -624,6 +611,97 @@ namespace ConditioningControlPanel
             {
                 DrawSpotlightOverlay(bounds, clickThroughHole);
                 PositionTextPanel(bounds, step.TextPosition);
+            }
+
+            // Re-measure when the target wasn't laid out yet, and also whenever we just opened a
+            // door: an accordion animates, so the entry's bounds keep moving for a few frames after
+            // the door "is" open and the first measure would pin the spotlight to a stale rect.
+            if (unmeasured || doorOpened)
+            {
+                ScheduleSpotlightSettle(step, targetElement, clickThroughHole, allowDegenerateDraw: unmeasured);
+            }
+        }
+
+        /// <summary>
+        /// Polls the target's bounds a few times and redraws the spotlight until they stop moving.
+        /// Replaces the old single 120ms retry: same first tick, but it now converges instead of
+        /// painting whatever the one shot happened to catch.
+        /// </summary>
+        private void ScheduleSpotlightSettle(TutorialStep currentStep, FrameworkElement targetElement,
+                                             bool clickThroughHole, bool allowDegenerateDraw)
+        {
+            const int maxTicks = 4;
+            int ticks = 0;
+            Rect lastBounds = Rect.Empty;
+
+            // Held in a local as well as the field: a later step replaces the field, and this
+            // closure must always stop ITS OWN timer, never the successor's.
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(120)
+            };
+            _spotlightDelayTimer = timer;
+
+            void StopSelf()
+            {
+                try { timer.Stop(); } catch { }
+                if (ReferenceEquals(_spotlightDelayTimer, timer)) _spotlightDelayTimer = null;
+            }
+
+            timer.Tick += (s, e) =>
+            {
+                ticks++;
+                bool last = ticks >= maxTicks;
+
+                if (_thisOverlayCompleted || _tutorialService.CurrentStep != currentStep)
+                {
+                    StopSelf();
+                    return;
+                }
+
+                var b = GetElementBounds(targetElement);
+                bool degenerate = b.X == 0 && b.Y == 0 && b.Width <= 100;
+
+                // Keep a good spotlight rather than replacing it with a bad measurement; only the
+                // never-measured case is allowed to draw a degenerate rect (old behaviour).
+                if (!degenerate || (allowDegenerateDraw && last))
+                {
+                    SpotlightCanvas.Children.Clear();
+                    DrawSpotlightOverlay(b, clickThroughHole);
+                    PositionTextPanel(b, currentStep.TextPosition);
+                }
+
+                // Settled (two identical measurements) or out of tries.
+                if (last || (!degenerate && b == lastBounds))
+                {
+                    StopSelf();
+                    return;
+                }
+                lastBounds = b;
+            };
+            timer.Start();
+        }
+
+        /// <summary>
+        /// Opens the sidebar door that owns this step's target before we try to measure it.
+        /// Returns true when a door was addressed (the caller then re-measures once it settles).
+        /// </summary>
+        private bool PrepareDoorForStep(TutorialStep step)
+        {
+            if (_targetWindow is not MainWindow mainWindow) return false;
+
+            var tabKey = TutorialService.DoorTabKeyFor(step);
+            if (string.IsNullOrEmpty(tabKey)) return false;
+
+            try
+            {
+                mainWindow.ExpandDoorForTab(tabKey!);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("TutorialOverlay ExpandDoorForTab({Tab}) failed: {Err}", tabKey, ex.Message);
+                return false;
             }
         }
 

@@ -150,6 +150,14 @@ internal sealed class BrainDrainCapturePump
 
     // pump -> UI.
     private volatile Slot[] _slots = Array.Empty<Slot>();
+    private int _framesPublished;
+
+    /// <summary>Monotonic count of frames this pump has published, across all monitors. The layer's
+    /// dirty gate reads it to tell "a new frame exists" from "the engine ticked again" (#853): the
+    /// capture runs at 30fps (60 on high-refresh) while the engine ticks at the display's refresh
+    /// rate, so without it the excluded surface re-rastered a fullscreen upscale of an IDENTICAL
+    /// frame 2-4x more often than the pump could produce one. Any thread.</summary>
+    public int FramesPublished => Volatile.Read(ref _framesPublished);
 
     // Pump-thread-only state (the blur/melt chain, lifted verbatim from the old CapturePass).
     private readonly SKPaint _blurPaint = new();
@@ -460,6 +468,7 @@ internal sealed class BrainDrainCapturePump
                         canvas.DrawImage(raw, 0, 0, _blurFilter != null ? _blurPaint : null);
                     }
                     slot.Frame.Publish(slot.Surface.Snapshot());
+                    Interlocked.Increment(ref _framesPublished);
                 }
             }
             finally

@@ -1387,12 +1387,12 @@ namespace ConditioningControlPanel.Models
 
                 EnhancementOverrides = new ModEnhancementOverrides
                 {
-                    TreeTitle = "Drone Enhancement Tree",
+                    TreeTitle = "Drone Skill Tree",
                     TreeSubtitle = "you earn enhancement points from leveling up + every 100 packets destroyed~",
                     TreeWarning = "once you pick a path, there's no going back~",
                     PointsLabel = "Enhancement Points",
                     StatsTitle = "Corrupted Data Stats",
-                    TabTooltip = "Drone Enhancement Tree",
+                    TabTooltip = "Drone Skill Tree",
                     PinkRushName = "SYSTEM SURGE!",
                     PinkRushDescription = "3x XP for 60 seconds!",
                     LuckyFlashLabel = "Lucky Injection",

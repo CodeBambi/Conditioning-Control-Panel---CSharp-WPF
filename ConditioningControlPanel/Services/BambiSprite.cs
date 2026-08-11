@@ -17,9 +17,13 @@ namespace ConditioningControlPanel.Services
         // 1. KNOWLEDGE BASE (The "Lore")
         // ==========================================
 
+        /// <summary>Sentinel for the media-links block, substituted after the mod word-replacement
+        /// passes so pool titles reach the model un-rewritten (see the call site).</summary>
+        private const string MediaLinksToken = "{{MEDIA_LINKS}}";
+
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
-        private static string GetCoreMediaLinks()
+        private string GetCoreMediaLinks()
         {
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
 
@@ -31,10 +35,9 @@ namespace ConditioningControlPanel.Services
                 // Audio/playlist guidance below is unchanged either way.
                 string bambiVideoTitles =
                     "Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - In Beat - Longer Version, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7, Bambi's Naughty TikTok Collection";
-                var bambiPool = App.Mods?.GetVideoLinks();
+                var bambiPool = GetVideoPool();
                 if (bambiPool != null && bambiPool.Count > 0)
-                    bambiVideoTitles = string.Join(", ", bambiPool.Keys
-                        .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase)));
+                    bambiVideoTitles = string.Join(", ", PoolTitles());
 
                 // Draw the example title from the live pool (varies every build) instead of
                 // hardcoding "Naughty Bambi" — a fixed example here made the companion fixate on
@@ -46,9 +49,9 @@ CLICKABLE MEDIA — Suggest these FREQUENTLY. They become clickable links in the
 
 ==== HOW TO LINK ====
 For PLAYLISTS, ALWAYS wrap the title in markdown link syntax with its URL copied EXACTLY from the list below:
-  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)~""
+  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)"" - phrased in your persona's own voice
 For VIDEOS, just say the EXACT title (the app auto-links it):
-  Example: ""Try {exampleTitle}~""
+  Example: ""Try {exampleTitle}"" - phrased in your persona's own voice
 NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — there's no other way to link audio.
 
 ==== BAMBICLOUD PLAYLISTS (the ONLY audio you can recommend) ====
@@ -64,11 +67,11 @@ NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — t
 ==== VIDEOS (the ONLY videos you can recommend — say the EXACT title, the app auto-links) ====
 " + bambiVideoTitles + @"
 
-CRITICAL: Recommend ONLY titles copied VERBATIM from the list directly above. NEVER invent, rename, extend, shorten, or guess a title — do NOT turn the user's words into a title. A title that isn't on the list word-for-word will NOT become a link and frustrates the user. If you're unsure, pick any one title from the list and copy it character-for-character. When the user asks for ""another one,"" choose a DIFFERENT exact title from the list.
+CRITICAL: Recommend ONLY titles copied VERBATIM from the list directly above. NEVER invent, rename, extend, shorten, or guess a title — do NOT turn the user's words into a title. A title that isn't on the list word-for-word will NOT become a link and frustrates the user. If you're unsure, pick any one title from the list and copy it character-for-character. When the user asks for ""another one,"" choose a DIFFERENT exact title from the list. Never attribute a video to an uploader, channel or creator (never say a video is ""from"" someone) — say the title alone.
 
 DO NOT name old Bambi Sleep audio files (Bambi IQ Lock, Bambi Body Lock, Rapid Induction, Bubble Induction, Bambi Cockslut, Bambi Takeover, Bambi Awakens, Bambi Named and Drained, Bambi Uniformed, etc.) — those are obsolete here, they have no link, and recommending them frustrates the user. When the user wants audio, use a Programming playlist instead. ""Bambi IQ Lock"" → say [IQ Programming]. ""Bambi Cockslut"" → say [Cockslut Programming]. Etc.
 
-Creator to recommend: PlatinumPuppets";
+If asked who makes this content, credit the creator PlatinumPuppets — but still only ever name the exact titles and playlists listed above; never invent a title ""by"" them or anyone else.";
             }
 
             // Mod-aware video knowledge: a themed mod (e.g. Locked) that ships its own
@@ -76,19 +79,17 @@ Creator to recommend: PlatinumPuppets";
             // recommends the mod's content instead of falling into the legacy Bambi/Sissy
             // branches below. The titles become clickable when the AI says them verbatim
             // (KnownVideoLinks is reloaded from the active mod's links on switch).
-            var modVideoLinks = App.Mods?.GetVideoLinks();
+            var modVideoLinks = GetVideoPool();
             if (modVideoLinks != null && modVideoLinks.Count > 0)
             {
                 // List one title per line, quoted — the same format the legacy HYPNOTUBE
                 // section uses, which the models copy from reliably (so the titles match
                 // KnownVideoLinks and render as clickable links).
-                var titleLines = string.Join("\n", modVideoLinks.Keys
-                    .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase))
-                    .Select(k => $"- \"{k}\""));
+                var titleLines = string.Join("\n", PoolTitles().Select(k => $"- \"{k}\""));
                 App.Logger?.Debug("BambiSprite: mod video-link block active with {Count} titles", modVideoLinks.Count);
                 return $@"
 --- VIDEO LINKS (the ONLY videos you may name) ---
-When you suggest a video, copy its title EXACTLY from this list, word for word, and say it naturally — the app turns it into a clickable link. Do NOT output URLs. NEVER invent a title or name anything not on this list. If nothing fits, don't name a video at all.
+When you suggest a video, copy its title EXACTLY from this list, word for word, and say it naturally — the app turns it into a clickable link. Do NOT output URLs. NEVER invent a title or name anything not on this list. Never attribute a video to an uploader or creator (never say it is ""from"" someone) — say the title alone. If nothing fits, don't name a video at all.
 {titleLines}";
             }
 
@@ -131,24 +132,29 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         }
 
         /// <summary>
-        /// Returns up to <paramref name="count"/> distinct video titles drawn at random from the
-        /// ACTIVE mod's real video pool (the same names <see cref="AvatarTubeWindow.KnownVideoLinks"/>
-        /// can auto-link). Prompt EXAMPLES are seeded from this so the model anchors on titles that
-        /// (a) actually exist for the current mod and (b) rotate every build — replacing the
-        /// hardcoded "Naughty Bambi"/"Yes Brain Loop" examples that made the companion fixate on one
-        /// Bambi video and, in Sissy mode, invent un-linkable titles. Empty when the mod ships no
-        /// pool (e.g. Sissy default with no configured links) — callers fall back to generic prose.
+        /// Returns up to <paramref name="count"/> distinct video titles from the ACTIVE mod's real
+        /// video pool (the same names <see cref="AvatarTubeWindow.KnownVideoLinks"/> can auto-link).
+        /// Prompt EXAMPLES are seeded from this so the model anchors on titles that actually exist
+        /// for the current mod — replacing the hardcoded "Naughty Bambi"/"Yes Brain Loop" examples
+        /// that made the companion fixate on one Bambi video and, in Sissy mode, invent un-linkable
+        /// titles. Empty when the mod ships no pool (e.g. Sissy default with no configured links) —
+        /// callers fall back to generic prose.
+        ///
+        /// <para>In the two-zone build (<see cref="GetStablePrompt"/>) the pick is
+        /// <see cref="StableSample"/>: resolved ONCE per app-session from the alphabetised pool, so
+        /// the prompt prefix is byte-identical call after call and provider prompt caching can hit.
+        /// The legacy build keeps the per-call Fisher-Yates shuffle — which is exactly the thing that
+        /// guaranteed a 0% cache rate, and is why it now only runs behind the kill switch.</para>
         /// </summary>
-        private static List<string> SampleVideoTitles(int count)
+        private List<string> SampleVideoTitles(int count)
         {
-            var pool = App.Mods?.GetVideoLinks();
-            if (pool == null || pool.Count == 0) return new List<string>();
+            var titles = PoolTitles().ToList();
+            if (titles.Count == 0 || count <= 0) return new List<string>();
 
-            var titles = pool.Keys
-                .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            if (_deterministicSampling) return StableSample(titles, count, PromptSessionSeed);
 
-            // Fisher–Yates shuffle so examples cycle across the whole pool, not just the first keys.
+            // Legacy: Fisher–Yates shuffle so examples cycle across the whole pool, not just the
+            // first keys — at the price of a brand-new prompt on every single call.
             var rng = System.Random.Shared;
             for (int i = titles.Count - 1; i > 0; i--)
             {
@@ -156,6 +162,54 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
                 (titles[i], titles[j]) = (titles[j], titles[i]);
             }
             return titles.Take(count).ToList();
+        }
+
+        /// <summary>
+        /// Deterministic sample: the same <paramref name="titles"/> and <paramref name="seed"/> always
+        /// yield the same list, in the same order. Seeded once per app-session so examples still
+        /// rotate between launches (no fixation on one title across days) while every prompt built
+        /// within a launch is byte-identical.
+        /// </summary>
+        internal static List<string> StableSample(IReadOnlyList<string> titles, int count, int seed)
+        {
+            if (titles == null || titles.Count == 0 || count <= 0) return new List<string>();
+
+            var work = titles.ToList();
+            var rng = new System.Random(seed);
+            for (int i = work.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (work[i], work[j]) = (work[j], work[i]);
+            }
+            return work.Take(count).ToList();
+        }
+
+        /// <summary>
+        /// The active mod's video pool, behind one accessor so the whole prompt build sees a single
+        /// consistent snapshot source (and so tests can supply a pool without a ModService).
+        /// </summary>
+        private static Dictionary<string, string>? GetVideoPool()
+            => VideoPoolProvider != null ? VideoPoolProvider() : App.Mods?.GetVideoLinks();
+
+        /// <summary>Test seam for <see cref="GetVideoPool"/>. Null in production.</summary>
+        internal static Func<Dictionary<string, string>?>? VideoPoolProvider;
+
+        /// <summary>
+        /// Linkable titles from the pool ("Movies" is a folder, not a video). Alphabetical in the
+        /// two-zone build — a FIXED order is half of what makes the prefix cacheable — and in pool
+        /// order on the legacy path so its output is byte-for-byte what shipped before.
+        /// </summary>
+        private IEnumerable<string> PoolTitles()
+        {
+            var pool = GetVideoPool();
+            if (pool == null || pool.Count == 0) return Enumerable.Empty<string>();
+
+            var titles = pool.Keys
+                .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase));
+
+            return _deterministicSampling
+                ? titles.OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                : titles;
         }
 
         /// <summary>
@@ -220,8 +274,10 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         {
             "The 20 Days Challenge (playlists for total transformation)",
             "Day 1 through Day 7 (The 1h Long Form Sessions)",
-            // Clarified: PlatinumPuppets is a CREATOR
-            "Any file by the creator 'PlatinumPuppets' (The gold standard channel)"
+            // Clarified: PlatinumPuppets is a CREATOR — credit them when asked, but never
+            // invent titles "by" them (that phrasing taught the model to fabricate
+            // "<made-up title> from PlatinumPuppets" recommendations, observed 0807).
+            "PlatinumPuppets (the gold-standard creator — credit them if asked, but only recommend exact listed titles)"
         };
 
         private readonly List<string> _officialClassics = new List<string>
@@ -236,6 +292,16 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         /// Content item with clickable link for speech bubble suggestions.
         /// </summary>
         private record ContentSuggestion(string Name, string Description, string Url);
+
+        /// <summary>
+        /// The built-in clickable content as plain (title, url) pairs, for
+        /// <see cref="Companion.CompanionLinkIndex"/>. The list is compile-time constant and never
+        /// mutated after construction, so one snapshot serves the whole process.
+        /// </summary>
+        internal static IReadOnlyList<(string Name, string Url)> ContentCatalogue => CatalogueSnapshot.Value;
+
+        private static readonly Lazy<IReadOnlyList<(string Name, string Url)>> CatalogueSnapshot =
+            new(() => StableBuilder._clickableContent.Select(c => (c.Name, c.Url)).ToList());
 
         /// <summary>
         /// Default hypnotube link URLs for the Sissy Hypno content mode, comma-separated.
@@ -507,7 +573,220 @@ Example responses with REAL video names:
         // ==========================================
         // 3. MAIN PROMPT BUILDER - Uses Active Personality Preset
         // ==========================================
+
+        #region Two-zone layout (stable prefix)
+
+        /// <summary>
+        /// When true this instance builds the STABLE PREFIX: alphabetised media list, session-stable
+        /// examples, no per-call randomness. Set once at construction and never mutated, so the two
+        /// shared builder instances below are safe to use from several provider threads at once.
+        /// </summary>
+        private readonly bool _deterministicSampling;
+
+        /// <summary>
+        /// Drawn once per process. Keeps every prompt built during this launch byte-identical while
+        /// still letting the {{VIDEO}} examples differ from launch to launch (doc 01 §5.2: "resolved
+        /// ONCE per app-session"). Provider prompt caches live for minutes, so per-launch rotation
+        /// costs nothing and per-call rotation costs everything.
+        /// </summary>
+        private static readonly int PromptSessionSeed = System.Random.Shared.Next();
+
+        /// <summary>Stateless builder used for the cached prefix; only reads settings/mod state.</summary>
+        private static readonly BambiSprite StableBuilder = new(deterministicSampling: true);
+
+        private static readonly object PrefixLock = new();
+        private static string? _cachedPrefix;
+        private static string? _cachedFingerprint;
+
+        /// <summary>Number of times the prefix was actually rebuilt. Diagnostics + tests.</summary>
+        internal static int PrefixBuildCount { get; private set; }
+
+        public BambiSprite() : this(deterministicSampling: false) { }
+
+        private BambiSprite(bool deterministicSampling)
+        {
+            _deterministicSampling = deterministicSampling;
+        }
+
+        /// <summary>
+        /// The STABLE PREFIX (doc 01 §5.2): byte-identical across calls and purposes, rebuilt only
+        /// when something it is made of actually changed — mod switch, personality/preset edit, slut
+        /// mode, knowledge-base links, quiz result, video pool. That is the single biggest cost lever
+        /// in the whole rework: providers discount the longest common prefix of a prompt, and until
+        /// now <c>SampleVideoTitles</c> shuffled titles into the middle of every build, so the common
+        /// prefix between two consecutive calls ended somewhere in the first few hundred tokens.
+        ///
+        /// <para>Everything that varies per call — memory, time of day, the recommendation exclusion
+        /// set, the purpose instruction — lives in <see cref="Companion.Brain.PromptAssembler"/>'s
+        /// dynamic tail instead, appended after this string.</para>
+        /// </summary>
+        internal static string GetStablePrompt()
+        {
+            var fingerprint = ComputeFingerprint(CaptureFingerprintInputs());
+
+            lock (PrefixLock)
+            {
+                if (_cachedPrefix != null && string.Equals(_cachedFingerprint, fingerprint, StringComparison.Ordinal))
+                    return _cachedPrefix;
+
+                var built = StableBuilder.BuildSystemPrompt();
+                _cachedPrefix = built;
+                _cachedFingerprint = fingerprint;
+                PrefixBuildCount++;
+
+                App.Logger?.Information(
+                    "[AI-PROMPT] prefix rebuilt prefix_tok~{Tokens} builds={Builds}",
+                    built.Length / 4, PrefixBuildCount);
+
+                return built;
+            }
+        }
+
+        /// <summary>
+        /// Drops the cached prefix. The fingerprint already catches every input we know about; this
+        /// exists for the cases we don't (a mod hot-reloading its own files) and for tests.
+        /// </summary>
+        internal static void InvalidateStablePrompt()
+        {
+            lock (PrefixLock)
+            {
+                _cachedPrefix = null;
+                _cachedFingerprint = null;
+            }
+        }
+
+        /// <summary>
+        /// Everything the stable prefix is built from. Captured as plain values so
+        /// <see cref="ComputeFingerprint"/> stays a pure function the tests can drive without an
+        /// <see cref="App"/>.
+        /// </summary>
+        internal sealed record PrefixInputs(
+            string ModId,
+            bool IsBambiMode,
+            bool SlutMode,
+            string PresetId,
+            string CommunityPromptId,
+            bool UseCustomPrompt,
+            IReadOnlyList<string> PromptSections,
+            IReadOnlyList<string> GlobalLinks,
+            string BambiLinks,
+            string SissyLinks,
+            int QuizPercent,
+            string QuizArchetype,
+            string QuizProfile,
+            IReadOnlyList<string> VideoPoolTitles);
+
+        /// <summary>
+        /// The linkable titles exactly as the stable prefix lists them: alphabetical, "Movies"
+        /// dropped. A FIXED order is half of what makes the prefix cacheable, so it is worth a seam
+        /// of its own rather than being an emergent property of a 900-line build.
+        /// </summary>
+        internal static IReadOnlyList<string> StableMediaTitles() => StableBuilder.PoolTitles().ToList();
+
+        /// <summary>
+        /// Which of the two personality systems owns the wire prompt. <c>UseCustomPrompt</c> alone
+        /// decides it: a hand-edited prompt (the Companion tab's editor) never gets an
+        /// <c>ActiveCommunityPromptId</c>, so also requiring one here silently discarded the user's
+        /// edits and shipped the preset instead. What keeps the single flag coherent is the other
+        /// half of the pair — <see cref="PersonalityService.SetActivePreset"/> clears the flag, so
+        /// picking a preset really does take the custom/community prompt off the wire.
+        /// </summary>
+        internal static bool UsesCustomPrompt(Models.AppSettings? settings)
+            => settings?.CompanionPrompt?.UseCustomPrompt == true;
+
+        internal static PrefixInputs CaptureFingerprintInputs()
+        {
+            var s = App.Settings?.Current;
+            var companionPrompt = s?.CompanionPrompt;
+            var useCustom = UsesCustomPrompt(s);
+
+            // The sections that actually get baked in: the community prompt when one is assigned,
+            // otherwise the active preset's. Hashing the TEXT (not just the id) is what makes an edit
+            // in the Companion tab invalidate the prefix on the very next call.
+            var sections = Sections(useCustom ? companionPrompt : App.Personality?.GetActivePreset()?.PromptSettings);
+
+            return new PrefixInputs(
+                ModId: App.Mods?.ActiveModId ?? "none",
+                IsBambiMode: App.Mods?.IsBambiMode ?? false,
+                SlutMode: s?.SlutModeEnabled == true,
+                PresetId: s?.ActivePersonalityPresetId ?? string.Empty,
+                CommunityPromptId: s?.ActiveCommunityPromptId ?? string.Empty,
+                UseCustomPrompt: useCustom,
+                PromptSections: sections,
+                GlobalLinks: s?.GlobalKnowledgeBaseLinks?.Select(l => l.ToPromptText()).ToList()
+                             ?? new List<string>(),
+                BambiLinks: s?.HypnotubeLinksBambiSleep ?? string.Empty,
+                SissyLinks: s?.HypnotubeLinksSissyHypno ?? string.Empty,
+                QuizPercent: s?.LatestQuizScorePercentage ?? -1,
+                QuizArchetype: s?.LatestQuizArchetype ?? string.Empty,
+                QuizProfile: s?.LatestQuizProfileText ?? string.Empty,
+                VideoPoolTitles: StableMediaTitles());
+
+            static IReadOnlyList<string> Sections(Models.CompanionPromptSettings? p) => new[]
+            {
+                p?.Personality ?? string.Empty,
+                p?.SlutModePersonality ?? string.Empty,
+                p?.ExplicitReaction ?? string.Empty,
+                p?.KnowledgeBase ?? string.Empty,
+                p?.ContextReactions ?? string.Empty,
+                p?.OutputRules ?? string.Empty
+            };
+        }
+
+        /// <summary>
+        /// Stable hash of the prefix inputs. Pure: same inputs in, same string out, no app state.
+        /// A record's own <c>GetHashCode</c> would not do — it is randomised per process and does not
+        /// look inside the lists.
+        /// </summary>
+        internal static string ComputeFingerprint(PrefixInputs inputs)
+        {
+            var sb = new StringBuilder();
+            // Every value is length-prefixed and every list is count-prefixed, so no two different
+            // input sets can collide by concatenation — a collision here means an edit silently keeps
+            // a stale prompt for the rest of the launch.
+            void Field(string? value) { var v = value ?? string.Empty; sb.Append(v.Length).Append(':').Append(v); }
+            void List(IReadOnlyList<string> values)
+            {
+                sb.Append(values.Count).Append('#');
+                foreach (var value in values) Field(value);
+            }
+
+            Field(inputs.ModId);
+            Field(inputs.IsBambiMode ? "1" : "0");
+            Field(inputs.SlutMode ? "1" : "0");
+            Field(inputs.PresetId);
+            Field(inputs.CommunityPromptId);
+            Field(inputs.UseCustomPrompt ? "1" : "0");
+            List(inputs.PromptSections);
+            List(inputs.GlobalLinks);
+            Field(inputs.BambiLinks);
+            Field(inputs.SissyLinks);
+            Field(inputs.QuizPercent.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Field(inputs.QuizArchetype);
+            Field(inputs.QuizProfile);
+            List(inputs.VideoPoolTitles);
+
+            var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+            return Convert.ToHexString(hash);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// The system prompt for this build. Routes to the cached two-zone prefix when the companion
+        /// brain is on, and to the legacy per-call build (shuffled examples, pool-ordered media list)
+        /// when the <c>UseCompanionBrain</c> kill switch is off — so flipping the switch really does
+        /// restore today's byte-for-byte output.
+        /// </summary>
         public string GetSystemPrompt()
+            => Companion.Brain.CompanionBrain.IsEnabled ? GetStablePrompt() : BuildSystemPrompt();
+
+        /// <summary>
+        /// The actual assembly, unchanged from what shipped. Randomness (and therefore whether the
+        /// result is byte-stable) is decided by <see cref="_deterministicSampling"/>, not by this
+        /// method.
+        /// </summary>
+        internal string BuildSystemPrompt()
         {
             // Layer 2 (Safety Sandwich): every system prompt this method returns is
             // wrapped with SafetyComposer.Preamble (first) and SafetyComposer.Floor
@@ -519,15 +798,15 @@ Example responses with REAL video names:
             // never persisted, never editable, never visible to the user.
             string assembled;
 
-            // Check for active community prompt (assigned via prite/companion)
+            // Check for an active custom prompt: a community/asset prompt assigned via the
+            // Companion tab, or one hand-edited in the prompt editor (which carries no id).
             var companionPrompt = App.Settings?.Current?.CompanionPrompt;
-            if (companionPrompt?.UseCustomPrompt == true &&
-                !string.IsNullOrEmpty(App.Settings?.Current?.ActiveCommunityPromptId))
+            if (UsesCustomPrompt(App.Settings?.Current))
             {
                 // Build a temporary preset wrapper so we can reuse BuildPromptFromPreset
                 var communityPreset = new Models.PersonalityPreset
                 {
-                    Id = App.Settings!.Current!.ActiveCommunityPromptId!,
+                    Id = App.Settings?.Current?.ActiveCommunityPromptId ?? "custom",
                     Name = "Community Prompt",
                     PromptSettings = companionPrompt
                 };
@@ -561,17 +840,40 @@ Example responses with REAL video names:
             // base personality, spicier vibe. Falls back to standard Personality if the
             // preset has no slut variant (e.g., presets that are already explicit).
             var slutMode = App.Settings?.Current?.SlutModeEnabled == true;
-            var personalityText = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality)
-                ? settings.SlutModePersonality
-                : settings.Personality;
+            var usingSlutVariant = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality);
+            var personalityText = usingSlutVariant ? settings.SlutModePersonality : settings.Personality;
             if (!string.IsNullOrWhiteSpace(personalityText))
             {
                 sb.AppendLine(personalityText);
                 sb.AppendLine();
+                // The chat window rides along as few-shot, and a small model imitates its own
+                // recent replies harder than it obeys a changed persona paragraph - so a user who
+                // switches persona mid-conversation hears the old voice indefinitely. Countered
+                // here, in the never-trimmed first zone, not in the tail.
+                sb.AppendLine("CURRENT PERSONA OVERRIDES HISTORY: if earlier replies in this conversation are in a different voice or persona, that persona is gone. Do not imitate their style, tone or pet phrases. Every new reply is fully in the CURRENT persona described above.");
+                sb.AppendLine();
             }
 
-            // Add explicit reaction rules
-            if (!string.IsNullOrWhiteSpace(settings.ExplicitReaction))
+            // Add explicit reaction rules.
+            //
+            // ExplicitReaction answers exactly one question: "what do you do when they bring up
+            // sex?". Every NON-explicit preset answers it with a deflection — the stock default's
+            // [FEIGNED INNOCENCE PROTOCOL] ("you wont engage in sex roleplay, just gracefully change
+            // topic to training"), Gentle Trainer's and Bimbo Cow's [GENTLE DEFLECTION], and so on.
+            //
+            // Once the user has flipped Slut Mode on AND this preset ships a SlutModePersonality,
+            // the personality block three lines above has already answered that question the other
+            // way. Emitting the tame answer as well shipped a prompt that said "engage fully" and
+            // "FLUSTERED DENIAL, change the subject" a paragraph apart — and the deflection is the
+            // more specific rule ("IF User mentions 'cock', 'cum', 'sex': ..."), so it is the one
+            // the model followed. The user's opted-in, acknowledgement-gated spice toggle then had
+            // no visible effect at all.
+            //
+            // This drops ONLY the stale non-explicit variant of a persona section the user has
+            // already switched away from. It touches no moderation control: SafetyComposer's
+            // preamble and floor still wrap the result, ModerationGuard still runs on the wire, and
+            // ExplicitContentGate still gates the toggle that gets us here.
+            if (!usingSlutVariant && !string.IsNullOrWhiteSpace(settings.ExplicitReaction))
             {
                 sb.AppendLine(settings.ExplicitReaction);
                 sb.AppendLine();
@@ -604,8 +906,13 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
-            // Always append core media links so videos/audio are always clickable
-            sb.AppendLine(GetCoreMediaLinks());
+            // Always append core media links so videos/audio are always clickable. Via a sentinel,
+            // not inline: MakeModAware below does blind string.Replace over the whole prompt
+            // ("Bambi" → "babe" on sissyhypno), which rewrote pool TITLES inside this block into
+            // strings that exist in no link table — the model then faithfully suggested un-linkable
+            // titles by construction. Same trick {{VIDEO}} already uses; substituted after the
+            // replacement passes so the titles the model sees are the exact linkable keys.
+            sb.AppendLine(MediaLinksToken);
             sb.AppendLine();
 
             // Append GLOBAL knowledge base links (shared across all personalities)
@@ -627,7 +934,7 @@ Example responses with REAL video names:
             // link pools here stops off-theme (sissy) suggestions like "Ultimate Sissy Mindfuck"
             // from leaking in through HypnotubeLinksSissyHypno.
             string hypnotubeLinks = "";
-            var modProvidesVideoLinks = (App.Mods?.GetVideoLinks()?.Count ?? 0) > 0;
+            var modProvidesVideoLinks = (GetVideoPool()?.Count ?? 0) > 0;
             if (settings != null && !modProvidesVideoLinks)
             {
                 if (App.Settings?.Current?.IsBambiMode == true)
@@ -706,11 +1013,21 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
+            // The link floor, on this path too. GetCoreMediaLinks() carries a prohibition inside
+            // three of its four branches, but the fourth — SissyHypno with no configured links and
+            // no mod pool — still only forbids naming TITLES, which is exactly the branch the live
+            // bug took. A floor that only exists on the legacy prompt path is not a floor: presets
+            // are the normal path, so append it here as well.
+            sb.AppendLine(LinkFloorRule);
+
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
             var prompt = MakePromptModeAware(sb.ToString());
 
             // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
             prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+
+            // Substitute the media-links block AFTER the replacement passes — see MediaLinksToken.
+            prompt = prompt.Replace(MediaLinksToken, GetCoreMediaLinks());
 
             // Fill {{VIDEO}} example placeholders with REAL, varied titles from the active mod's
             // pool. Done LAST — after mod text-replacement — so sampled titles aren't corrupted
@@ -729,7 +1046,7 @@ Example responses with REAL video names:
         /// without hardcoding one title. Falls back to a neutral phrase when the mod ships no pool,
         /// so a sentence never ends up naming a fake, un-linkable title.
         /// </summary>
-        private static string FillVideoPlaceholders(string text)
+        private string FillVideoPlaceholders(string text)
         {
             const string token = "{{VIDEO}}";
             if (string.IsNullOrEmpty(text) || !text.Contains(token)) return text;
@@ -791,6 +1108,27 @@ Example responses with REAL video names:
         }
 
         /// <summary>
+        /// The one link rule every prompt gets, appended after the branches rather than inside one
+        /// of them.
+        ///
+        /// <para>Live bug 2026-08-06: the "never include URLs" instruction existed ONLY in the
+        /// branch that shipped a video list. A user on the SissyHypno mod with no configured links
+        /// took the other branch — no list to quote from AND no prohibition — so when asked for a
+        /// video she invented YouTube URLs from training data, one of them not even a valid video
+        /// id. The case with nothing real to offer was the case least defended.</para>
+        ///
+        /// <para>This is the advisory half of the fix; <see cref="AiTextHygiene.StripUnsanctionedLinks"/>
+        /// is the half that actually holds when a small model ignores it.</para>
+        /// </summary>
+        internal const string LinkFloorRule = @"
+LINK RULE (applies to every reply, no exceptions):
+- NEVER write a URL, web address, or markdown link that was not given to you above. Do not invent,
+  guess, complete, or reconstruct one - not for YouTube, not for any site.
+- If you want to suggest something you have no link for, NAME it in words only. The app turns a name
+  you got from the lists above into a real, working link by itself.
+- You have no way to check whether a link works, so a link you wrote from memory is always wrong.";
+
+        /// <summary>
         /// Returns the default BambiSprite prompt (fallback).
         /// </summary>
         private string GetDefaultBambiSpritePrompt()
@@ -801,10 +1139,28 @@ Example responses with REAL video names:
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
+            // The active mod's OWN pool — user override, else the mod's shipped DefaultVideoLinks
+            // (App.Mods.GetVideoLinks, the same source the browser and chaos link pool read).
+            //
+            // Live bug 2026-08-06: this branch used to consult only the LEGACY
+            // HypnotubeLinksSissyHypno setting, so a SissyHypno user who never edited that field
+            // was told "you don't have a specific video list" while their mod shipped 17 curated
+            // ones. Given nothing real to name, the model invented titles (and, before the link
+            // floor rule, URLs to match). She was starved, not disobedient.
+            //
+            // Sorted, because a Dictionary's key order is not stable across runs and this text sits
+            // in the CACHED PREFIX — an unsorted list would break prompt caching on every launch.
+            var modPool = App.Mods?.GetVideoLinks();
+            var poolNames = modPool is { Count: > 0 }
+                ? modPool.Keys.Where(n => !string.IsNullOrWhiteSpace(n))
+                              .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+                : new List<string>();
+
             var sb = new StringBuilder();
 
-            // In SH mode without user-configured links, don't include specific video names
-            if (!isBambiMode && !hasUserSHLinks)
+            // Only when there is genuinely nothing to name do we fall back to "browse HypnoTube"
+            // (the LinkFloorRule below is appended AFTER both branches — see its remarks).
+            if (poolNames.Count == 0 && !isBambiMode && !hasUserSHLinks)
             {
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
@@ -843,12 +1199,17 @@ OUTPUT RULES:
             }
             else
             {
-                // Bambi mode OR SH mode with user-configured links - include video names
-                var videoNames = _clickableContent
-                    .Where(c => c.Url.Contains("hypnotube"))
-                    .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
-                    .Select(c => c.Name)
-                    .ToList();
+                // The active mod's own pool wins — it is mod-appropriate by construction and is what
+                // the rest of the app (browser, chaos link pool, watch chips) already treats as
+                // truth. The built-in list is the fallback for a mod that ships no pool, and keeps
+                // its Bambi-name filter so a non-Bambi mod never quotes Bambi titles.
+                var videoNames = poolNames.Count > 0
+                    ? poolNames
+                    : _clickableContent
+                        .Where(c => c.Url.Contains("hypnotube"))
+                        .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
+                        .Select(c => c.Name)
+                        .ToList();
 
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
@@ -898,6 +1259,8 @@ OUTPUT RULES:
                     sb.AppendLine(link.ToPromptText());
                 }
             }
+
+            sb.AppendLine(LinkFloorRule);
 
             var defaultPrompt = sb.ToString();
             return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;

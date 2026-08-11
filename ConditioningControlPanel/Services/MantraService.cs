@@ -37,6 +37,29 @@ namespace ConditioningControlPanel.Services
             NextMantra();
         }
 
+        /// <summary>
+        /// Credits a mantra completed OUTSIDE the typed minigame - a spoken mantra the mic
+        /// actually verified (Takeover / voice prompt). Shares the typed game's per-minute cap
+        /// so voice paths cannot be farmed, pays the base XP without the streak bonus (streaks
+        /// belong to the typed game) and feeds the same quest/program verifier. Without this,
+        /// every mic-verified mantra ended at her spoken praise and credited nothing.
+        /// </summary>
+        public bool CreditExternalMantra()
+        {
+            if ((DateTime.UtcNow - _minuteWindowStart).TotalSeconds >= 60)
+            {
+                _completionsThisMinute = 0;
+                _minuteWindowStart = DateTime.UtcNow;
+            }
+            if (_completionsThisMinute >= 20)
+                return false;
+            _completionsThisMinute++;
+
+            App.Progression?.AddXP(30, XPSource.Mantra);
+            App.Quests?.TrackMantraCompleted();
+            return true;
+        }
+
         public bool TryCompleteMantra()
         {
             if (!IsActive || CurrentMantra == null) return false;

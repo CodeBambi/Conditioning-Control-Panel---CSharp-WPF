@@ -1,0 +1,50 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Runtime.WorkshopLibraryCell"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · HER LIBRARY — the per-mod Hypnotube link pool, moved whole.
+         The scope signpost comes with it: these links are mod-scoped
+         while everything around them is global, and losing that line in
+         the move would have been the one genuinely confusing drop.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Runtime/WorkshopCellTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="{loc:Str label_current_mode}" Style="{StaticResource CmpCellHintStyle}" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TxtHypnotubeModeLabel" x:FieldModifier="internal" Text="{loc:Str label_bambi_sleep}"
+                       FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                       VerticalAlignment="Center" Margin="3,0,0,0"/>
+            <Button x:Name="HelpBtnVideoLinks" x:FieldModifier="internal" Style="{DynamicResource HelpButtonStyle}"
+                    VerticalAlignment="Center" Margin="6,0,0,0" Tag="HypnotubeLinks"/>
+        </StackPanel>
+
+        <TextBlock Text="{loc:Str label_video_links_pool_desc}" Style="{StaticResource CmpCellHintStyle}" Margin="0,0,0,5"/>
+
+        <Border CornerRadius="7" Padding="6" MinHeight="52" MaxHeight="200" Margin="0,0,0,6"
+                BorderBrush="#22808080" BorderThickness="1" Background="#FF14121F">
+            <ScrollViewer x:Name="LinkPoolScroll" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="VideoLinkPoolPanel" x:FieldModifier="internal">
+                    <TextBlock x:Name="TxtNoVideoLinks" x:FieldModifier="internal" Text="{loc:Str label_no_video_links_yet}"
+                               Foreground="#505050" FontSize="10.5" FontStyle="Italic"
+                               HorizontalAlignment="Center" Margin="0,12,0,12"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Button x:Name="BtnAddVideoLink" Content="{loc:Str btn_add_link_to_pool}"
+                Style="{StaticResource CmpCellButtonStyle}" Click="BtnAddVideoLink_Click"/>
+    </StackPanel>
+</UserControl>

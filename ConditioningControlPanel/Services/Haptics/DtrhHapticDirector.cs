@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Services.Haptics
     {
         private sealed record Accent(int Tier, double Rel, VibrationMode Mode, int Ms);
 
-        // The curated verb table. Rel is a fraction of the user's DtrhIntensity slider.
+        // The curated verb table. Rel is a fraction of the DtRH routing row's intensity.
         private static readonly Dictionary<string, Accent> Map = new()
         {
             // ---- tier 3: rare moments (preempt whatever is playing) ----
@@ -95,12 +95,24 @@ namespace ConditioningControlPanel.Services.Haptics
 
         private static HapticSettings? Settings => App.Settings?.Current?.Haptics;
 
+        /// <summary>
+        /// THE control for DtRH haptics is the DtrhAccent row of the Haptics tab's routing matrix
+        /// (v6.6.3's ChkHapticDtrh / SliderHapticDtrh were removed in the Phase E rebuild, so the
+        /// legacy DtrhEnabled / DtrhIntensity pair has no UI writing it any more). Read the rule
+        /// LIVE on every use — the row VM writes straight into this POCO and raises no event, so a
+        /// cached copy would be stale the moment the user touched the toggle.
+        /// The row also mirrors its writes back onto the legacy pair, which is what keeps
+        /// <see cref="OnSettingsChanged"/> firing and a downgrade honest.
+        /// </summary>
+        private static HapticEventRule? AccentRule => Settings?.V2?.Rule(HapticEventKind.DtrhAccent);
+
         private static bool Ready
         {
             get
             {
                 var s = Settings;
-                return _active && !_testMode && s is { Enabled: true, DtrhEnabled: true }
+                return _active && !_testMode && s is { Enabled: true }
+                       && AccentRule?.Enabled == true
                        && App.Haptics is { IsConnected: true };
             }
         }
@@ -275,8 +287,8 @@ namespace ConditioningControlPanel.Services.Haptics
 
             try
             {
-                var s = Settings;
-                var intensity = Math.Clamp((s?.DtrhIntensity ?? 0.6) * accent.Rel, 0.06, 1.0);
+                // Accent ceiling = the routing row's intensity, read fresh (see AccentRule).
+                var intensity = Math.Clamp((AccentRule?.Intensity ?? 0.6) * accent.Rel, 0.06, 1.0);
                 // Buttplug's ~1.3s command latency turns short patterns into mush — stretch them.
                 var ms = haptics.IsButtplugProvider ? accent.Ms * 2 : accent.Ms;
                 App.Logger?.Debug("DtrhHaptics: accent {Label} T{Tier} {Pct}% {Ms}ms {Mode}",
@@ -303,7 +315,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var haptics = App.Haptics;
             if (haptics == null) return Task.CompletedTask;
-            var target = App.Settings?.Current?.Haptics?.V2?.Rule(HapticEventKind.DtrhAccent).Target ?? ToyRole.All;
+            var target = AccentRule?.Target ?? ToyRole.All;
             return haptics.PlayPatternAsync(intensity, ms, mode, tier, target, token);
         }
 
@@ -396,6 +408,8 @@ namespace ConditioningControlPanel.Services.Haptics
 
         private static void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
         {
+            // DtrhEnabled is the legacy MIRROR the routing row writes on every toggle (the v2 rule
+            // itself raises nothing), so this is still how "switched off mid-run" reaches us.
             if (e.PropertyName is not (nameof(HapticSettings.Enabled) or nameof(HapticSettings.DtrhEnabled)))
                 return;
             if (Ready) return;   // still on — nothing to kill

@@ -339,11 +339,30 @@ internal sealed class ChaosWebViewHost : IDisposable
     private void RefreshNativeOwner()
     {
         if (!_glueAttached) return;
+        if (_glueSuspended) { ApplyNativeOwner(false); return; }
         bool ownerDown = _glueOwner == null || _glueOwner.WindowState == WindowState.Minimized;
         ApplyNativeOwner(!ownerDown);
         // Main is minimized: nothing can bury us, so the link buys nothing and the cascade would
         // only take us down with it. Make sure we survived it.
         if (ownerDown) EnsureNativeVisible();
+    }
+
+    private bool _glueSuspended;
+
+    /// <summary>Sever the owner link for as long as the caller needs the window to be immune to
+    /// the OWNER's window-state changes, then re-apply it. Built for the For You ghost mode:
+    /// while the feed window is parked off the virtual desktop, the link buys nothing (z-order
+    /// is meaningless off-screen) and is the one path Show Desktop / Win+D still reaches the
+    /// parked window through - minimizing the OWNER makes USER32 hide its owned windows, a
+    /// hidden source stops being composed, and the DWM mirror freezes on its last frame.
+    /// While suspended, main's StateChanged keeps firing RefreshNativeOwner - the guard there
+    /// keeps the link severed until resume.</summary>
+    public void SuspendMainWindowGlue(bool suspend)
+    {
+        _glueSuspended = suspend;
+        if (!_glueAttached) return;
+        if (suspend) ApplyNativeOwner(false);
+        else RefreshNativeOwner();
     }
 
     private void ApplyNativeOwner(bool owned)

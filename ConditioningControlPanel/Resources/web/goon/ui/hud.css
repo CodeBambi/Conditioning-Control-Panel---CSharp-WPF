@@ -1,0 +1,2890 @@
+/* ============================================================================
+ * ui/hud.css — HUD TIER: the duel desk, the opponent monitor, the arsenal, the
+ * closeness dial, the attention check, the emote sheet, the mercy chrome and the
+ * whole sudden-death surface.
+ *
+ * Rules of the tier:
+ *   * everything is gg- prefixed and lives here; goon.css (tokens, z-stack,
+ *     component kit, MERCY isolation) is never edited by this wave;
+ *   * decorative motion opts in with `animation-play-state: var(--gg-deco-play)`
+ *     so goon.css's armor rule can park it at html[data-gg-fx="hot"] — the ONE
+ *     exemption is .gg-mon-proj, which re-declares the property because the
+ *     opponent's little screen is information, not chrome (see its block);
+ *   * every colour state also carries a word in the DOM — nothing here is the
+ *     only channel for a piece of information;
+ *   * hit areas are >= 48px on anything a finger is expected to find;
+ *   * the CENTRE of the screen belongs to #gg-stage. The frame is edge-anchored
+ *     and the well in the middle is pointer-transparent.
+ * ==========================================================================*/
+
+:root {
+  --gg-hud-gap: clamp(0.5rem, 1.2vw, 1rem);
+  --gg-item: clamp(58px, 6vw, 78px);
+  --gg-mon-w: clamp(210px, 22vw, 280px);
+  --gg-amber: #ffb454;
+  --gg-hot: #ff1493;
+  /* The middle rung of the closeness dial — one real step along the pink ramp
+     between --gg-pink (#ff69b4) and --gg-hot (#ff1493), not a hue change. It
+     exists because that rung used to be --gg-gold; see THE DIAL HAS NO YELLOW. */
+  --gg-pink-deep: #ff479f;
+  /* the ONLY green in the HUD: "they passed it", nothing else. */
+  --gg-green: #5ef2a0;
+  --gg-green-rgb: 94, 242, 160;
+}
+
+/* ---------------------------------------------------------------------------
+ * FRAME
+ * ------------------------------------------------------------------------ */
+/* The id selector is load-bearing: goon.css says `#gg-hud > * { pointer-events:
+   auto }` (specificity 1,0,0), so a bare `.gg-hud-frame` rule would lose and the
+   frame would swallow every click meant for #gg-stage. */
+#gg-hud > .gg-hud-frame { pointer-events: none; }
+.gg-hud-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  /* THE ONE COLUMN, AND WHY IT IS PINNED TO ZERO.
+   *
+   * A grid with no `grid-template-columns` gets ONE implicit `auto` column, and
+   * an auto track's base size is the largest MIN-CONTENT contribution among its
+   * items — it is allowed to grow past the container. `.gg-hud-top` below is
+   * `1fr auto 1fr` where `1fr` means `minmax(auto, 1fr)`, so each side track has
+   * a min-content floor it can never go under, and `.gg-timer` adds an explicit
+   * `min-width`. On a 428px phone those floors (the score column + timer + the
+   * attention plate and two 48px buttons) added up to ~442px, the implicit
+   * column took that as its base size, and EVERY row inherited it — which is
+   * how the opponent monitor, the "they claim" panel, the receipts and the
+   * closeness dial all ended up ~34px past the right edge of the screen while
+   * the absolutely-placed rails (which measure the frame's padding box) stayed
+   * put. (owner, 2026-08-04: "waaaaay too cluttered".)
+   *
+   * minmax(0, 1fr) removes the floor: the column is exactly the frame's content
+   * box at every viewport, so a row that cannot fit overflows ON ITS OWN and
+   * can never drag the other two rows off screen with it. Desktop has room to
+   * spare, so nothing there changes. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  gap: var(--gg-hud-gap);
+  padding: clamp(0.6rem, 1.6vw, 1.4rem);
+  padding-left: calc(clamp(0.6rem, 1.6vw, 1.4rem) + env(safe-area-inset-left, 0px));
+  padding-right: calc(clamp(0.6rem, 1.6vw, 1.4rem) + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(clamp(0.6rem, 1.6vw, 1.4rem) + env(safe-area-inset-bottom, 0px));
+  font-family: var(--gg-font);
+}
+/* the second half of the same guarantee: a row may not refuse to be narrower
+   than its own contents want to be */
+.gg-hud-top,
+.gg-hud-body,
+.gg-hud-bottom { min-width: 0; }
+/* THE ALLOWLIST. `pointer-events` is INHERITED, so the `none` above reaches
+   every descendant of the frame and this is the complete list of things on the
+   desk a pointer can touch. A control that is not on it is invisible to the
+   mouse no matter what its own JS listens for — which is exactly how the
+   opponent monitor shipped undraggable (see .gg-mon-grip below). */
+.gg-hud-frame button,
+.gg-hud-frame .gg-plate,
+.gg-hud-frame .gg-item,
+.gg-hud-frame .gg-dial,
+.gg-hud-frame .gg-emotes,
+.gg-hud-frame .gg-mon-grip,
+.gg-hud-frame .gg-att-token { pointer-events: auto; }
+
+/* Sudden death contracts the desk: rails, monitor and dial step aside. */
+.gg-hud-frame.is-sd .gg-hud-body,
+.gg-hud-frame.is-sd .gg-hud-bottom { opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+.gg-hud-frame.is-over { opacity: 0.35; pointer-events: none; }
+
+/* ---------------------------------------------------------------------------
+ * ZEN — the desk cleared down to the two things the duel is played on: their
+ * monitor and the arsenal. One bit (ui/hud.js HUD_ZEN_CLASS/HUD_ZEN_ATTR), every
+ * hide below it, nothing in JS.
+ *
+ * WHAT GOES: the score, your name plate, the closeness dial, the closeness THEY
+ * claim, the live-effect chips and MERCY.
+ * WHAT STAYS: the monitor, the rails, the timer, the attention ring and the
+ * toggle itself. (The charge count used to be on the STAYS list, as "the
+ * arsenal's currency, not a readout". There is no currency and no count since
+ * 2026-08-05 — see the tombstone at the top bar.)
+ *
+ * THE TWO ADDED 2026-08-04 (owner: "we need space to see the animations"):
+ *   .gg-mon-close   the "they claim / warm" panel. It is the opponent's half of
+ *                   the closeness readout, and zen already takes YOUR half away
+ *                   with .gg-dial-host — keeping one and hiding the other read
+ *                   as a bug on a phone. Both halves now leave together.
+ *   .gg-fxrail      the "bubbles / subliminals" chips. They narrate effects the
+ *                   player is ALREADY WATCHING happen, which is the one thing
+ *                   zen exists to stop covering up.
+ * The arsenal is deliberately NOT on this list — including the emote tile. It
+ * is what the duel is played on, the suite pins that zen never hides .gg-item
+ * or .gg-rail, and a tile whose sheet was hidden underneath it would be a
+ * control that silently does nothing.
+ *
+ * MERCY IS NOT A DESCENDANT. #gg-mercy is its own fixed layer in goon.css, so
+ * the same bit is mirrored onto <html> and reached from there. This does not
+ * touch the isolation block: nothing is dimmed, filtered, scaled or animated,
+ * the layer is restored by the same button that took it away, and Escape
+ * concedes throughout (boot.js's ladder calls declareMercy() directly).
+ * ------------------------------------------------------------------------ */
+/* (`.gg-hud--zen .gg-plus1` was the second line of this list. The chip it hid
+   was deleted on 2026-08-05 with the charge readout it belonged to.) */
+.gg-hud-frame.gg-hud--zen .gg-score,
+.gg-hud-frame.gg-hud--zen .gg-me,
+.gg-hud-frame.gg-hud--zen .gg-dial-host,
+.gg-hud-frame.gg-hud--zen .gg-mon-close,
+.gg-hud-frame.gg-hud--zen .gg-fxrail { display: none; }
+/* the bottom deck reclaims MERCY's keep-out — there is nothing parked below it */
+.gg-hud-frame.gg-hud--zen .gg-hud-bottom { padding-bottom: 0; }
+
+html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
+
+/* ---------------------------------------------------------------------------
+ * TOP BAR — score · charges | timer | attention · gear
+ * ------------------------------------------------------------------------ */
+.gg-hud-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: var(--gg-hud-gap);
+}
+
+.gg-scorebox { position: relative; display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+.gg-score {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.55), 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+/* THE SCORE MULTIPLIER IS GONE (2026-08-05). `.gg-risk` ("×1.30 risk") became
+   `.gg-mult` ("×1.30 score") on 2026-08-04 and was deleted outright a day later
+   with the rest of the risk indicator — a fixed number, set at the draft and
+   unmovable for the whole match, is not a readout a live desk needs. The score
+   directly above it already carries every point the multiplier bought.
+   ui/hud.js builds no such node, so do not restyle one back into being. */
+.gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
+
+/* THE CHARGE READOUT IS GONE, IN TWO STEPS ON THE SAME DAY (2026-08-05).
+   STEP ONE took the SHAPE: `.gg-pips` / `.gg-pip` / `.gg-pip--sm` and
+   @keyframes ggPipPop drew five 16px squares rotated 45° — outline for the cap,
+   filled pink for what you held — under the score here and, at 12px, in the
+   opponent monitor's titlebar. The owner asked twice for "the little yellow
+   squares" to go. THE DIAMOND IS NOT A SHAPE THIS UI USES ANY MORE: do not
+   reintroduce one for a count, because a rotated square in this app has a
+   history and the next person to see it will read it as the risk meter.
+   STEP TWO took the DATA. `.gg-charges` ("3 / 5 charges") and, in the monitor
+   titlebar, `.gg-mon-charges` replaced the pips in the morning and were deleted
+   the same evening, when the owner removed the charge REQUIREMENT itself. A
+   charge now gates nothing, so both were counting something that decides
+   nothing — the audit is in ui/hud.js's top-bar note. Neither file builds the
+   node; there is nothing left on this desk for these rules to style.
+   `.gg-plus1` (position:absolute, floated up beside the score) went with them:
+   it was the +1 flourish for a charge gain and had no other producer. NOTE
+   @keyframes ggFloatUp SURVIVES — two other rules in this file animate on it.
+   The arsenal's amber `.gg-cost-pip` price dots went in the same pass; their
+   tombstone is down at the item rail. */
+@keyframes ggFloatUp {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-22px); }
+}
+
+.gg-timer { justify-self: center; min-width: 128px; text-align: center; padding: 0.4rem 0.9rem 0.5rem; }
+.gg-timer-clock { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.gg-timer-track { margin-top: 0.35rem; height: 2px; background: rgba(255, 255, 255, 0.12); border-radius: 2px; overflow: hidden; }
+.gg-timer-fill { display: block; height: 100%; width: 0; background: var(--gg-pink); transition: width .4s linear; }
+.gg-timer.is-urgent .gg-timer-fill { background: var(--gg-gold); }
+.gg-timer.is-urgent .gg-timer-clock { color: var(--gg-gold); animation: ggPulse 1s steps(2, end) infinite; }
+.gg-timer.is-sd .gg-timer-clock { color: var(--gg-pink); font-size: 0.86rem; letter-spacing: 0.14em; }
+@keyframes ggPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.gg-hud-topright { display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.5rem; }
+.gg-gear {
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.gg-gear:hover { color: #fff; border-color: var(--gg-pink); }
+
+/* The zen toggle, beside the gear and built to the same 48px hit area — it is
+   the ONLY way back once the panels are away, so it is never the thing that
+   shrinks. No animation of any kind: it would need pinning against the
+   --gg-deco-play park, and a control that must be findable at heat does not
+   move anyway. */
+.gg-zen {
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.gg-zen:hover { color: #fff; border-color: var(--gg-pink); }
+/* pressed = the desk is cleared; the glyph flips as well, colour is never alone */
+.gg-zen[aria-pressed="true"] { color: var(--gg-pink); border-color: rgba(var(--gg-pink-rgb), 0.7); }
+
+/* ---------------------------------------------------------------------------
+ * ATTENTION — the ring, the dot history, the token, the missed-check banner
+ * ------------------------------------------------------------------------ */
+.gg-att { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.7rem; }
+.gg-att-ring {
+  position: relative;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(var(--gg-pink) var(--gg-ring, 0%), rgba(255, 255, 255, 0.10) 0);
+}
+.gg-att-ring::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%;
+  background: rgba(12, 6, 20, 0.92);
+}
+.gg-att-ring-num { position: relative; z-index: 1; font-size: 0.68rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gg-att-ring.is-due { box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.7); }
+.gg-att-col { display: flex; flex-direction: column; gap: 0.28rem; }
+.gg-att-label { font-size: 0.7rem; color: var(--gg-text-3); }
+.gg-att-dots { display: flex; gap: 4px; }
+.gg-att-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.gg-att-dot.is-ok { background: var(--gg-pink); }
+.gg-att-dot.is-bad { background: var(--gg-amber); }
+
+.gg-att-token {
+  position: fixed;
+  width: 88px; height: 88px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--gg-pink);
+  background: rgba(20, 8, 28, 0.86);
+  box-shadow: 0 0 30px rgba(var(--gg-pink-rgb), 0.45);
+  color: #fff; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.1em;
+  cursor: pointer;
+  opacity: 0; transform: scale(0.85);
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 2;
+}
+.gg-att-token.is-live { opacity: 1; transform: scale(1); }
+.gg-att-token.is-held { opacity: 0; transform: scale(1.25); border-color: var(--gg-pink); }
+.gg-att-token.is-missed { opacity: 0; transform: scale(0.8); border-color: var(--gg-amber); }
+.gg-att-token-ring {
+  position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.35);
+  clip-path: inset(0 0 0 0);
+  animation: ggGrace var(--gg-grace, 12000ms) linear forwards;
+}
+@keyframes ggGrace { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 100% 0); } }
+.gg-att-token-word { position: relative; }
+
+.gg-att-chip {
+  position: fixed; left: 50%; top: 22%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(20, 8, 28, 0.9);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.6);
+  font-size: 0.8rem;
+  animation: ggFloatUp 1.8s ease-out forwards;
+  pointer-events: none;
+}
+.gg-att-banner {
+  position: fixed; left: 50%; top: 18%;
+  transform: translateX(-50%) translateY(-6px);
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--gg-radius-plate);
+  background: rgba(38, 22, 6, 0.94);
+  border: 1px solid var(--gg-amber);
+  color: var(--gg-amber);
+  font-size: 0.86rem;
+  opacity: 0;
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+.gg-att-banner.is-in { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------------------------------------------------------------------------
+ * BODY — arsenal sidebar | well | monitor column
+ * ------------------------------------------------------------------------ */
+.gg-hud-body {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--gg-hud-gap);
+  min-height: 0;
+}
+.gg-well { pointer-events: none; }
+
+.gg-rail { display: flex; flex-direction: column; gap: 0.55rem; }
+
+/* ===========================================================================
+ * THE ARSENAL SIDEBAR — one collapsible panel for everything you can throw
+ * (owner, 2026-08-04: "the throwable items should live in a sidebar that can be
+ * collapsed", on desktop AND on the phone that joined by link).
+ *
+ * WHY THE LEFT. The right edge already carries three things — the opponent's
+ * monitor, the receipts under it, and exec/videos.js's keepOutRects(), which
+ * refuses to BEAR a floating window on the right 22vw or in the bottom-centre
+ * mercy gutter. The left gutter is the only structurally empty side of the desk
+ * and it is nowhere near MERCY's 0.28w..0.72w keep-out.
+ *
+ * FOUR RULES, ALL OF THEM LEARNED ON THIS DESK:
+ *
+ * 1. IT MAY NOT EAT THE FIELD. `.gg-arsenal` is pointer-events:none at the same
+ *    0,2,0 specificity as the `.gg-hud-frame .gg-plate { pointer-events: auto }`
+ *    rule near the top of this file, and LATER in the file, so a restyle that
+ *    reaches for .gg-plate cannot silently drop a dead 200px column onto the
+ *    desk. Only the tiles (`.gg-item`, already opted in) and the handle take
+ *    pointer input. Bubbles rise on #gg-fx BELOW #gg-hud, so one drifting behind
+ *    the panel is still poppable straight through it — which matters more here
+ *    than anywhere, since popping is the only thing that ever fills this panel.
+ *
+ * 2. NO SCRIM, EVER, ON ANY BREAKPOINT. An open sheet at Live once froze the
+ *    drop economy outright because its scrim owned the bubble-spawn strip, and a
+ *    z70 scrim would bury MERCY (z60) on top of that. The drawer is scrimless:
+ *    it is a panel, not a modal, and the match keeps running behind it.
+ *
+ * 3. COLLAPSED IS EMPTY, NOT INVISIBLE. `.gg-arsenal-panel` is display:none when
+ *    shut — no zero-opacity box, no off-screen transform still holding a hit
+ *    area over the field. What is left is the handle and its badge.
+ *
+ * 4. IT CANNOT REACH MERCY. #gg-hud is position:fixed with z-index 40, i.e. its
+ *    own stacking context, so NO z-index written in this file can climb past
+ *    #gg-mercy's z60 — not even the `position: fixed` the drawer takes on a
+ *    phone. That is a structural guarantee, not a number to keep in step.
+ * ======================================================================== */
+.gg-arsenal {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  min-height: 0;
+}
+/* rule 1, at 0,2,0 and after the .gg-plate rule it has to beat */
+.gg-hud-frame .gg-arsenal,
+.gg-hud-frame .gg-arsenal-panel,
+.gg-hud-frame .gg-arsenal-rails { pointer-events: none; }
+/* …and the two things inside it that ARE targets — same specificity again and
+   later still. A pointer-events:auto child of a none parent is hit-testable. */
+.gg-hud-frame .gg-arsenal-tab,
+.gg-hud-frame .gg-arsenal .gg-item { pointer-events: auto; }
+
+.gg-arsenal-panel {
+  display: none;              /* rule 3: shut means gone, not transparent */
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5rem 0.45rem;
+  border-radius: 14px;
+  /* A PLATE-LOOK WITHOUT .gg-plate. Wearing the class would re-enable pointer
+     events at 0,2,0 and undo rule 1 in one word, so the treatment is copied
+     rather than inherited — deliberately, and it is why rule 1 is written where
+     it is. */
+  background: linear-gradient(180deg, rgba(20, 8, 32, 0.66), rgba(12, 5, 22, 0.56));
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.16), 0 8px 26px rgba(0, 0, 0, 0.35);
+  /* AND NO backdrop-filter — the one plate treatment this deliberately drops.
+     Rule 1 leaves bubbles clickable straight THROUGH this panel; a bubble you
+     can click but cannot see well enough to aim at is rule 1 honoured in the
+     letter only. Translucent and unblurred: the field behind stays readable. */
+}
+.gg-arsenal.is-open .gg-arsenal-panel { display: flex; }
+
+/* TWO COLUMNS, NOT ONE. Eight tiles stacked vertically is ~720px, which does not
+   fit a laptop under the top bar; four-and-four is ~360px and keeps every tile a
+   full finger wide. The two rails keep their names — they are the sidebar's
+   columns now instead of the desk's two edges. */
+.gg-arsenal-rails {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- the handle: the one node that never hides -------------------------- */
+.gg-arsenal-tab {
+  position: relative;
+  flex: 0 0 auto;
+  /* >= 48px both ways. It is the only way back to your own items on a phone, so
+     it is never one of the things that shrinks — same rule as .gg-zen. */
+  width: 48px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  color: var(--gg-text-1);
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(28, 10, 42, 0.9), rgba(16, 6, 28, 0.86));
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.3), 0 4px 16px rgba(0, 0, 0, 0.45);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow .18s ease, transform .12s ease, background .18s ease;
+}
+.gg-arsenal-tab:hover,
+.gg-arsenal-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.7), 0 0 18px rgba(var(--gg-pink-rgb), 0.35);
+}
+.gg-arsenal-tab-glyph {
+  font-style: normal;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--gg-pink);
+}
+/* The badge is the whole readout of a shut drawer: how many shots are banked
+   across every sticker it is hiding. A number, with a labelled name on it for a
+   reader — colour and a glow are never the only channel here. */
+.gg-arsenal-tab-count {
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(10, 4, 18, 0.92);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.6);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.gg-arsenal-tab-count[hidden] { display: none; }
+.gg-arsenal-tab.is-stocked { box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.55), 0 0 14px rgba(var(--gg-pink-rgb), 0.25); }
+/* ONE beat, then nothing: a key pressed into a shut drawer, or a drop landing
+   behind it, still has to be visible somewhere. No looping animation is left on
+   the handle — the mercy frame budget is not negotiable. */
+.gg-arsenal-tab.is-bump { animation: ggTabBump .3s ease-out 1; }
+/* NOT gated on --gg-deco-play, and neither is ggDrawerIn below. Both are the
+   same exemption .gg-mon-proj and the heat glow already carry: this is not
+   decoration, it is a control ARRIVING (or the only sign a key press behind a
+   shut drawer did anything). Parking them at html[data-gg-fx="hot"] would leave
+   the drawer stuck at its off-screen keyframe for most of a real match. The hard
+   off switch (prefers-reduced-motion) still wins with `animation: none`. */
+@keyframes ggTabBump {
+  0%   { transform: scale(1); box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.9), 0 0 22px rgba(var(--gg-pink-rgb), 0.75); }
+  55%  { transform: scale(1.09); }
+  100% { transform: scale(1); }
+}
+/* the armor rule's other half. goon.css turns .gg-plate opaque at full effect
+   pressure because a translucent surface over a flashing stage is unreadable;
+   the panel deliberately is not a .gg-plate (rule 1), so it opts into the same
+   treatment by name rather than going unarmored and unreadable. */
+html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
+/* max-width, not width, on every box between the grid cell and the bezel: the
+   monitor column is the right-hand edge of the desk, so anything it cannot fit
+   inside leaves the screen rather than wrapping. */
+.gg-rightcol {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.45rem;
+  width: var(--gg-mon-w);
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * ARSENAL — CHROMELESS. The item art IS the button: the PNGs are transparent
+ * sticker cutouts with their own baked outline, so there is no plate, no border,
+ * no fill and no rounded box anywhere on a tile. Every affordance that used to
+ * be drawn on the plate now rides the alpha instead:
+ *
+ *   hover / focus / armed   scale-up + a pink drop-shadow GLOW on the cutout
+ *   too poor / used / filtered  desaturate + dim (plus the word, as always)
+ *   cooling                 a small conic dial in the corner, not a box overlay
+ *   missing art             a CSS stand-in, also chromeless (spiral = a disc)
+ *   LOCKED                  fully desaturated + a small "?" over the sticker.
+ *                           No hover lift, no grab cursor, no drag — ui/arsenal.js
+ *                           refuses the gesture, this stops it LOOKING grabbable.
+ *   ARMED                   full colour + a ×N stack badge on the shoulder
+ *
+ * The lock/badge are the ONLY chrome added by the drop economy, and both ride
+ * the sticker's own box — still no plates (deliberate owner call).
+ * ------------------------------------------------------------------------ */
+.gg-item {
+  position: relative;
+  width: var(--gg-item);
+  min-height: var(--gg-item);
+  padding: 0.15rem 0.1rem 0.35rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+  cursor: pointer;
+  color: var(--gg-text-1);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: opacity .18s ease, transform .12s ease;
+  touch-action: none;
+}
+.gg-item-img,
+.gg-item-fallback {
+  width: 84%;
+  max-width: 68px;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+  transition: filter .18s ease;
+}
+.gg-item.is-noart .gg-item-img { display: none; }
+
+/* the drawn-in-CSS stand-in, only when the PNG is missing */
+.gg-item-fallback { display: none; aspect-ratio: 1; }
+.gg-item.is-noart .gg-item-fallback {
+  display: block;
+  border-radius: 10px;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.85);
+  background: rgba(var(--gg-pink-rgb), 0.16);
+}
+.gg-item.is-noart[data-gg-item="spiral"] .gg-item-fallback {
+  border: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(var(--gg-pink-rgb), 0.95) 0 14deg,
+    rgba(24, 8, 36, 0.95) 14deg 28deg);
+  -webkit-mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, 0.6) 62%, transparent 72%);
+  mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, 0.6) 62%, transparent 72%);
+  filter: drop-shadow(0 0 9px rgba(var(--gg-pink-rgb), 0.55));
+}
+
+.gg-item-name { font-size: 0.6rem; letter-spacing: 0.04em; color: var(--gg-text-2); text-align: center; }
+/* THE PRICE ROW IS GONE (2026-08-05). `.gg-item-cost` was a flex row of one
+   `.gg-cost-pip` per charge the item cost — 7px, pink, and amber (`.is-short`)
+   on a tile you could not afford. The owner named it directly: "remove the
+   requirement entirely (and the Need 1/2/3 under the throwables)". Nothing is
+   priced any more, so a price under a sticker would be a number about nothing.
+   ui/arsenal.js builds neither node. A tile now says only what it IS and what
+   state it is in, and its inventory is the ×N stack badge. */
+.gg-item-state { font-size: 0.55rem; color: var(--gg-text-4); text-align: center; min-height: 0.7em; line-height: 1.1; }
+
+/* reach states — a glow on the alpha, never an outline box */
+.gg-item:hover:not(:disabled),
+.gg-item:focus-visible { transform: translateY(-2px) scale(1.06); outline: none; }
+.gg-item:hover:not(:disabled) .gg-item-img,
+.gg-item:hover:not(:disabled) .gg-item-fallback,
+.gg-item:focus-visible .gg-item-img,
+.gg-item:focus-visible .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.7));
+}
+.gg-item.is-glow .gg-item-img,
+.gg-item.is-glow .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 12px rgba(var(--gg-pink-rgb), 0.55));
+}
+.gg-item.is-armed { transform: translateY(-3px) scale(1.1); }
+.gg-item.is-armed .gg-item-img,
+.gg-item.is-armed .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(var(--gg-pink-rgb), 0.95)) brightness(1.08);
+}
+
+/* out-of-reach states — desaturate + dim, on top of the word.
+   `.gg-item.is-poor` (too few charges) headed this list until 2026-08-05: the
+   state does not exist any more, because holding an item is the whole of being
+   able to throw it. The three that are left are all real refusals — spent
+   heavy, kind the peer cannot receive, cooldown. */
+.gg-item.is-used,
+.gg-item.is-filtered { opacity: 0.5; }
+.gg-item.is-used .gg-item-img, .gg-item.is-used .gg-item-fallback,
+.gg-item.is-filtered .gg-item-img, .gg-item.is-filtered .gg-item-fallback,
+.gg-item.is-cooling .gg-item-img, .gg-item.is-cooling .gg-item-fallback {
+  filter: grayscale(0.85) brightness(0.62) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+.gg-item.is-used .gg-item-name { text-decoration: line-through; }
+.gg-item.is-dragging { opacity: 0.35; }
+.gg-item.is-shake { animation: ggShake .12s linear 1; }
+
+/* ---- the drop economy: locked / armed ------------------------------------
+   A locked slot is an item you have not EARNED yet, not one you cannot afford:
+   it is dimmer than "too poor", it does not lift under the pointer, and the
+   cursor says so too. The word ("locked") is on the tile as always. */
+.gg-item.is-locked { opacity: 0.34; cursor: default; }
+.gg-item.is-locked .gg-item-img,
+.gg-item.is-locked .gg-item-fallback {
+  filter: grayscale(1) brightness(0.5) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+/* the one affordance a locked sticker gets */
+.gg-item-lock {
+  position: absolute;
+  top: 38%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-style: normal;
+  font-weight: 800;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: rgba(var(--gg-pink-rgb), 0.85);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+.gg-item:not(.is-locked) .gg-item-lock { display: none; }
+/* no lift, no glow, no ghost: a locked tile is scenery until a bubble drops one */
+.gg-item.is-locked:hover, .gg-item.is-locked:focus-visible { transform: none; }
+.gg-item.is-locked:hover .gg-item-img,
+.gg-item.is-locked:hover .gg-item-fallback,
+.gg-item.is-locked:focus-visible .gg-item-img,
+.gg-item.is-locked:focus-visible .gg-item-fallback {
+  filter: grayscale(1) brightness(0.5) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+
+/* how many shots are banked. Hidden (the element carries `hidden`) at zero. */
+.gg-item-stack {
+  position: absolute;
+  top: -2px; left: 0;
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(10, 4, 18, 0.92);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.6), 0 2px 6px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  pointer-events: none;
+}
+.gg-item-stack[hidden] { display: none; }
+
+/* the drop landing: ONE short pulse, then nothing. No looping animation is ever
+   left running on the rails (the mercy frame budget is not negotiable). */
+.gg-item.is-dropped .gg-item-img,
+.gg-item.is-dropped .gg-item-fallback {
+  animation: ggDropIn .5s ease-out 1;
+}
+@keyframes ggDropIn {
+  0%   { transform: scale(0.86); filter: brightness(2) drop-shadow(0 0 18px rgba(var(--gg-pink-rgb), 1)); }
+  60%  { transform: scale(1.12); }
+  100% { transform: scale(1); filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)); }
+}
+/* the spark that flies from the popped bubble to the slot it fed. Fixed, above
+   the HUD but UNDER mercy (z55, same tier as the fire spark and the drag ghost),
+   and removed on a timer whether or not a frame ever ran. */
+.gg-drop-fly {
+  position: fixed;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--gg-pink) 60%, rgba(var(--gg-pink-rgb), 0) 100%);
+  box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.95);
+  pointer-events: none;
+  z-index: 55;
+  transition: transform .48s cubic-bezier(.2, .7, .3, 1), opacity .48s ease;
+}
+@keyframes ggShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* cooldown: a little dial parked on the sticker's shoulder. --gg-sweep is the
+   percentage READY (100% = free to fire), written by ui/arsenal.js. */
+.gg-item-sweep {
+  position: absolute; top: 0; right: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(var(--gg-pink) var(--gg-sweep, 100%), rgba(6, 2, 12, 0.85) 0);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.45), 0 2px 6px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.gg-item.is-cooling .gg-item-sweep { opacity: 1; }
+
+.gg-item-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.96);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  font-size: 0.66rem;
+  z-index: 3;
+  pointer-events: none;
+}
+/* Inside the sidebar a CENTRED tip hangs ~30px off the left column and lands
+   half off the screen — the panel is at the frame's left edge and nothing clips
+   it back. Anchored to the tile's right it grows into the stage instead, which
+   has room to spare on both breakpoints. */
+.gg-arsenal .gg-item-tip { left: auto; right: -0.35rem; transform: none; }
+
+.gg-item-ghost {
+  position: fixed;
+  z-index: 55;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.6));
+}
+.gg-spark {
+  position: fixed;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.9);
+  pointer-events: none;
+  z-index: 55;
+  transition: transform .3s cubic-bezier(.2, .7, .3, 1), opacity .3s ease;
+}
+
+.gg-cool {
+  font-size: 0.68rem; color: var(--gg-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+ * THE HEAT GAUGE — the drop economy's face (ui/drops.js, ui/hud.js paintHeat).
+ *
+ * WHAT IT IS. Popping bubbles banks heat; the fuller the bar, the likelier the
+ * next pop drops an item into the arsenal; a drop spends a chunk of the bar
+ * back. It replaced an invisible flat 12%-per-pop coin flip, so being SEEN is
+ * the entire reason it exists — a gauge nobody notices is the bug it fixes.
+ *
+ * WHERE IT SITS. First thing inside .gg-arsenal-panel, directly on top of the
+ * two rails it fills. It moved here WITH the arsenal when the sidebar landed
+ * (2026-08-04): it is the item economy's meter, not the monitor's, so it belongs
+ * in the panel that collapses with the items — a gauge for stickers you cannot
+ * see is a readout with nothing to read. Same on a phone, where the panel is a
+ * drawer: the gauge is simply part of what slides in.
+ *
+ * IT NEVER TOUCHES MERCY. #gg-mercy is a separate fixed z60 layer (goon.css) and
+ * #gg-hud is its own z40 stacking context, so nothing in this file — the drawer's
+ * `position: fixed` included — can be raised above it. The gauge cannot cover
+ * the button, cannot gate it, and takes no pointer events at all.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP. `.gg-hud-frame .gg-plate { pointer-events:
+ * auto }` near the top of this file is specificity 0,2,0. The gauge deliberately
+ * does NOT wear .gg-plate, but the opt-out below is written at the same 0,2,0
+ * and later in the file anyway, so a future restyle that reaches for .gg-plate
+ * for the border treatment cannot silently drop a dead 190px box on the desk.
+ *
+ * MOTION. The fill is a TRANSITION, not an animation: transitions ignore
+ * `animation-play-state`, so the bar keeps tracking heat even when goon.css's
+ * armor rule parks decorative motion at html[data-gg-fx="hot"] — which is most
+ * of a real match. The only true animation is the glow pulse past two thirds,
+ * and it re-declares `--gg-deco-play: running` for the same reason .gg-mon-proj
+ * does: this is INFORMATION. It is one 8px box shadow on a 190px bar, nothing
+ * the mercy button's frame budget will ever notice. The hard off switches
+ * (prefers-reduced-motion below, .is-calm) still win with `animation: none`.
+ *
+ * COLOUR IS NEVER ALONE. The word "heat" is always in the DOM beside the bar and
+ * ui/hud.js keeps role=progressbar + aria-valuenow/valuetext in step with it.
+ * ======================================================================== */
+.gg-heat {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.gg-heat-label {
+  flex: 0 0 auto;
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gg-text-4);
+  transition: color .3s ease;
+}
+.gg-heat-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 7px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.gg-heat-fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gg-violet), var(--gg-pink));
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.55);
+  /* 180ms: fast enough that a pop lands ON the pop, slow enough that the
+     ~58-point drop spend reads as the bar DROPPING rather than teleporting. */
+  transition: width .18s ease-out, box-shadow .3s ease;
+}
+/* Past two thirds the next pop is properly likely — the bar says so before the
+   item does. Both channels move: the label brightens with the glow. */
+.gg-heat.is-hot .gg-heat-label { color: var(--gg-pink); }
+.gg-heat.is-hot .gg-heat-fill {
+  --gg-deco-play: running;
+  animation: ggHeatGlow 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggHeatGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.55); }
+  50%      { box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.95); }
+}
+
+/* the 0,2,0 opt-out, written at the same specificity as the .gg-plate rule and
+   later in the file so it wins outright: the gauge is a readout, never a target */
+.gg-hud-frame .gg-heat { pointer-events: none; }
+
+/* ZEN KEEPS IT. Zen clears the READOUTS (score, multiplier, dial) and keeps what
+   the duel is played on — the monitor and the arsenal. The gauge is the arsenal's
+   own meter: hiding it would leave the rails filling for reasons the player can
+   no longer see, which is exactly the state this feature exists to end. */
+
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-heat-label { font-size: 0.5rem; letter-spacing: 0.12em; }
+  .gg-heat-track { height: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* the bar still tracks heat exactly — it just stops pulsing and stops sliding */
+  .gg-heat.is-hot .gg-heat-fill { animation: none !important; }
+  .gg-heat-fill { transition: none !important; }
+}
+
+/* receipts strip -------------------------------------------------------- */
+.gg-receipts { display: flex; flex-direction: column; gap: 3px; width: 100%; align-items: flex-end; }
+.gg-receipt {
+  display: flex; gap: 0.4rem; align-items: baseline;
+  font-size: 0.66rem; color: var(--gg-text-3);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.6);
+  border-left: 2px solid rgba(var(--gg-pink-rgb), 0.5);
+}
+.gg-receipt-kind { color: var(--gg-text-2); }
+.gg-receipt.is-ok .gg-receipt-state { color: var(--gg-pink); }
+.gg-receipt.is-warn .gg-receipt-state { color: var(--gg-amber); }
+.gg-receipt.is-gold { border-left-color: var(--gg-gold); }
+.gg-receipt.is-gold .gg-receipt-state,
+.gg-receipt.is-gold .gg-receipt-note { color: var(--gg-gold); }
+
+/* ---------------------------------------------------------------------------
+ * OPPONENT MONITOR
+ * ------------------------------------------------------------------------ */
+.gg-mon-host { width: 100%; min-width: 0; display: flex; justify-content: flex-end; }
+.gg-mon {
+  width: 100%;
+  max-width: var(--gg-mon-w);
+  min-width: 0;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  transition: opacity .3s ease;
+}
+.gg-mon.is-wobbly { opacity: 0.7; }
+.gg-mon.is-gone { opacity: 0.4; }
+
+/* ---------------------------------------------------------------------------
+ * THE LOOSE MONITOR — drag it, wheel it bigger (owner, 2026-08-04: "like the
+ * gifs"). The arithmetic, the traps and the decision to detach ON DEMAND rather
+ * than always are all documented in ui/opponent.js; this is only the styling
+ * half, and it is four rules.
+ *
+ * 1. THE GRAB SURFACE IS THE WHOLE CARD, and it is claimed while DOCKED too —
+ *    the drag has to be able to start before the monitor has ever left the
+ *    column. `touch-action: none` is what stops a finger's first 6px being read
+ *    as a page pan and stolen from us; `user-select: none` is the mouse's half
+ *    of the same claim, and it is also why the JS deliberately does NOT
+ *    preventDefault on pointerdown (which would have taken the arsenal's
+ *    armed-tap-to-fire path down with it).
+ *
+ * 2. WIDTH IS THE ONLY DIAL. --gg-mon-loose-w, written by the wheel, falling
+ *    back to the docked --gg-mon-w when nothing has written it. NEVER
+ *    `transform: scale`: a scale fights the drag offset and resamples the bezel
+ *    art instead of re-laying it out. Everything inside the frame is a
+ *    PERCENTAGE of it (--gg-mon-face-*, aspect-ratio: 16/9), so the minis, the
+ *    projection rect and the targeting ring all follow the width for free.
+ *
+ * 3. Z 45 — above the desk, under the way out. #gg-hud is z40 and a stacking
+ *    context, so nothing written here can climb past it: MERCY (z60), the mercy
+ *    takeover (z65), the toasts (z50) and the inbound projectile (z55, on
+ *    <body>) all stay on top by construction, which is exactly right — a
+ *    projectile thrown FROM the monitor should fly OVER it. Inside the layer, 45
+ *    puts a dragged monitor over the arsenal sidebar and the receipts, which is
+ *    what "picked up" looks like. It is a fixed box because it has to escape the
+ *    column; no ancestor between here and the viewport carries a transform,
+ *    filter or backdrop-filter, so `fixed` really is viewport-relative. IF ONE
+ *    IS EVER ADDED to .gg-hud-frame / .gg-hud-body / .gg-rightcol, this pins to
+ *    that element instead and the drag silently offsets — that is the one thing
+ *    to check first if it ever goes wrong.
+ *
+ * 4. `transform: none; animation: none` is the keyframes-outrank-inline-styles
+ *    guard exec/flashes.js and exec/videos.js both learned the hard way. There
+ *    is nothing on .gg-mon to kill TODAY — its only flourish is the throw flare,
+ *    which lives on the descendant .gg-mon-throw (one animation slot per node,
+ *    the rule this file already followed) — and these two lines are what keep
+ *    the inline left/top authoritative if a keyframe is ever put on the root.
+ * ------------------------------------------------------------------------ */
+.gg-mon {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.gg-mon.is-loose {
+  position: fixed;
+  z-index: 45;
+  width: var(--gg-mon-loose-w, var(--gg-mon-w));
+  max-width: none;
+  transform: none;
+  animation: none;
+}
+.gg-mon.is-grabbed { cursor: grabbing; }
+
+/* 5. THE GRIP — and the bug it exists to fix (owner, 2026-08-04 round 2: "the
+ *    opponent monitor cannot be moved").
+ *
+ *    Rule 1 above says the grab surface is the whole card. It was not, and it
+ *    could not be: `#gg-hud > .gg-hud-frame { pointer-events: none }` at the top
+ *    of this file makes the entire desk transparent so the bubble field can be
+ *    played through it, `pointer-events` inherits, and .gg-mon was not on the
+ *    allowlist that opts things back in. No pointerdown ever reached the
+ *    monitor, so it could never detach — and `.gg-mon-host.is-mon-loose >
+ *    .gg-mon { pointer-events: auto }` below, the rule that would have made it
+ *    grabbable, only applies AFTER a detach that could not happen. The drag, the
+ *    wheel and the double-tap reset were all dead behind one inherited keyword.
+ *
+ *    Putting .gg-mon on the allowlist would have fixed the drag and broken the
+ *    game: the monitor sits over the top-right of the stage, bubbles drift under
+ *    it, and a card that takes clicks eats every pop in that corner (the arsenal
+ *    learned this the same way — see IT MAY NOT EAT THE FIELD). So the CARD stays
+ *    transparent and the HEAD ROW becomes a titlebar. It is ~20px of a 280px
+ *    card, it contains nothing interactive, and it is the whole cost.
+ *
+ *    Once the monitor is LOOSE the card takes pointers anyway (the is-mon-loose
+ *    rule below) and the grip stops being the only way in — by then it is a
+ *    floating window the player parked on purpose, and exec/fx.css's .gg-vwin is
+ *    grabbable all over for the same reason. */
+.gg-mon-grip {
+  cursor: grab;
+  touch-action: none;              /* a finger's first 6px is ours, not a page pan */
+  min-height: 20px;
+  padding: 2px 0;
+  /* VERTICAL ONLY. A negative inline margin would make the titlebar wider than
+     the card it sits on, and this column is the right-hand EDGE of the desk —
+     4px of overflow there is 4px off the screen on a phone. */
+  margin: -2px 0;
+  border-radius: 7px;
+  transition: background .18s ease;
+}
+.gg-mon-grip:hover { background: rgba(var(--gg-pink-rgb), 0.1); }
+.gg-mon.is-grabbed .gg-mon-grip { cursor: grabbing; }
+/* the affordance: six dots, the universal "this is a handle". Flex-frozen so it
+   never gives the name row its width back under pressure. */
+.gg-mon-grip-dots {
+  flex: 0 0 auto;
+  width: 9px; height: 13px;
+  background-image: radial-gradient(circle, rgba(var(--gg-pink-rgb), 0.85) 1px, transparent 1.3px);
+  background-size: 4.5px 4.5px;
+  background-position: center;
+  opacity: 0.5;
+  transition: opacity .18s ease;
+}
+.gg-mon-grip:hover .gg-mon-grip-dots,
+.gg-mon.is-loose .gg-mon-grip-dots { opacity: 1; }
+/* THE HOLE IT LEFT. ui/opponent.js writes a measured `min-height` on this host
+   so the receipts under it do not jump up the frame the monitor detaches. The
+   placeholder is an empty box over the desk, so it stops taking clicks — and the
+   monitor, which is still its CHILD in the DOM (no re-parenting, ever: a
+   re-append would release the drag's pointer capture), opts straight back in. */
+.gg-mon-host.is-mon-loose { pointer-events: none; }
+.gg-mon-host.is-mon-loose > .gg-mon { pointer-events: auto; }
+
+.gg-mon-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; min-width: 0; }
+.gg-mon-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.8);
+}
+.gg-mon-dot.is-wobbly { background: var(--gg-amber); box-shadow: 0 0 10px rgba(255, 180, 84, 0.7); }
+.gg-mon-dot.is-gone { background: #6d6d78; box-shadow: none; }
+/* `min-width: 0` is what lets the ellipsis actually happen: without it a
+   nowrap name is a flex item that refuses to be narrower than its own text, and
+   it pushes the score off the end of the head row. */
+.gg-mon-name { color: var(--gg-text-1); font-weight: 600; max-width: 9rem; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-mon-score { margin-left: auto; padding-left: 0.3rem; font-variant-numeric: tabular-nums; color: var(--gg-text-2); flex: 0 0 auto; }
+/* `.gg-mon-charges` stood here — their charge count, in words for one morning
+   and as `.gg-mon-pips` (five 12px diamonds) before that. Deleted the same
+   evening with the requirement itself; the score above is now the last item in
+   this row. See the tombstone up at the top bar. */
+
+/* THE MONITOR FRAME, AND THE FOUR NUMBERS EVERYTHING INSIDE IT IS MEASURED FROM.
+ *
+ * assets/monitor_frame.png is 935x667 with a TRANSPARENT SURROUND (2026-08-04 —
+ * it used to be 1376x768 fully opaque, with a painted city behind the set). What
+ * is in it, in the art's own pixels:
+ *
+ *     the television   x 148..786   y 114..568    (638 x 454, 1.405:1)
+ *     the CRT face     x 230..705   y 178..473    (475 x 295, 1.610:1)
+ *
+ * THE FRAME KEEPS ITS 16/9 BOX and the art is fitted INSIDE it, rather than the
+ * box being re-cut to the art. Two reasons, both load-bearing: the frame is the
+ * payload DROP TARGET (ui/arsenal.js hit-tests this exact rect), and it is a row
+ * in the HUD's right-hand column — a 1.405:1 frame is 27% taller and reflows the
+ * desk. So the <img> below is scaled and offset so the TELEVISION fills the
+ * frame's height and centres in its width, which costs only transparent gutters
+ * either side (0-10.5% and 89.5-100%) and distorts nothing: 115.8/146.9 of a
+ * 16/9 box is 1.4018:1, the art's own aspect to four figures.
+ *
+ * --gg-mon-face-* is then the CRT FACE in % of the frame, derived from those two
+ * rectangles, and it is the SINGLE SOURCE OF TRUTH: the projection rect and the
+ * glass backing both consume it, and .is-nobezel re-declares it instead of
+ * overriding four properties twice. RE-CUT THE ART -> re-measure the two
+ * rectangles above, redo the <img> box, redo these four. Nothing else moves.
+ */
+.gg-mon-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  /* the CRT face, in % of this box — see the derivation above */
+  --gg-mon-face-x: 20.6%;
+  --gg-mon-face-y: 14.1%;
+  --gg-mon-face-w: 58.9%;
+  --gg-mon-face-h: 65.0%;
+  /* …and the gutter either side of the television, for anything that wants to
+     hug the SET rather than the box (the targeting ring, the throw flare). */
+  --gg-mon-tv-gutter: 10.5%;
+}
+/* The drop-target ring hugs the TELEVISION, not the frame: with a transparent
+   surround a rectangle drawn on the box would be a glowing outline around empty
+   space. ::after so the frame's own box-shadow stays free — and the ring is an
+   INSET shadow, because the set fills the frame's height exactly and an outward
+   one would be clipped away top and bottom by the frame's own overflow:hidden,
+   leaving two vertical bars and no ring at all. */
+.gg-mon-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0 var(--gg-mon-tv-gutter);
+  z-index: 5;
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 0 2px var(--gg-pink), 0 0 28px rgba(var(--gg-pink-rgb), 0.5);
+  transition: opacity .2s ease;
+}
+.gg-mon.is-targeted .gg-mon-frame::after { opacity: 1; }
+/* No art loaded (the PNG 404'd): the dark glass IS the screen, there is no
+   television to hug, and the projection rect can have almost all of the box. One
+   place, four numbers, and everything downstream follows. */
+.gg-mon-frame.is-nobezel {
+  --gg-mon-tv-gutter: 0%;
+  --gg-mon-face-x: 9%;
+  --gg-mon-face-y: 9%;
+  --gg-mon-face-w: 82%;
+  --gg-mon-face-h: 82%;
+}
+/* NOT `inset: 0` and NOT `object-fit`. See the frame's banner: the box is 16/9,
+   the art is 1.402:1, and the television inside the art is what has to fill the
+   height. `fill` is exact here because the box below already has the art's own
+   aspect ratio — it is a placement, not a stretch. */
+.gg-mon-bezel {
+  position: absolute;
+  left: -7.9%;
+  top: -25.1%;
+  width: 115.8%;
+  height: 146.9%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 2;
+}
+/* The dark glass BEHIND the painted face. The art's surround is a cutout now, so
+   this is cut to the face exactly: at its old 7%/6% inset it poked out either
+   side of the television as two dark slabs floating on the desk. It is invisible
+   while the art loads (the face is painted opaque black over it) and it is the
+   whole screen when the art does not. */
+.gg-mon-screen {
+  position: absolute;
+  left: var(--gg-mon-face-x);
+  top: var(--gg-mon-face-y);
+  width: var(--gg-mon-face-w);
+  height: var(--gg-mon-face-h);
+  overflow: hidden;
+  border-radius: 4px;
+  background: radial-gradient(120% 120% at 50% 0%, #241033 0%, #100720 70%, #08040e 100%);
+  z-index: 1;
+}
+.gg-mon-frame.is-nobezel .gg-mon-screen {
+  left: 0; top: 0; width: 100%; height: 100%;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.35);
+  border-radius: 10px;
+}
+
+/* THE PROJECTION RECT — the little screen inside their little screen. Every
+   miniature plays in here and nothing else does.
+
+   z-index: 3 IS THE WHOLE FEATURE. monitor_frame.png (z2) has a transparent
+   SURROUND since 2026-08-04, but its CRT face is still painted opaque black, so
+   the rect still has to sit ON TOP of it — it is a sibling of the <img>,
+   appended after it in ui/opponent.js, and it is the only thing in this block
+   that must not be "tidied" back inside .gg-mon-screen (that element's
+   z-index:1 opens a stacking context the minis can never climb out of).
+
+   The geometry is the --gg-mon-face-* set declared on .gg-mon-frame — that is
+   where the numbers and their derivation live, and .is-nobezel re-declares them
+   rather than overriding anything here. No aspect-ratio: the face is 1.61:1, not
+   16/9, and an explicit height is one fewer thing to keep in sync. */
+.gg-mon-proj {
+  position: absolute;
+  z-index: 3;
+  /* THE MONITOR IS INFORMATION, NOT DECORATION — and this one line is why it
+     moves at all past the first minute of a duel.
+
+     goon.css parks decorative motion by flipping --gg-deco-play to `paused` at
+     html[data-gg-fx="hot"], and exec/layers.js calls "hot" at THREE concurrent
+     local effects. A normal draft is three sustained elements, so the local
+     stack is hot for most of a match with no payload in flight at all: every
+     mini froze mid-keyframe and the little screen read as dead. ("The
+     animations on the little opponent screen seemed to work then stopped.")
+
+     Re-declaring the custom property here re-runs everything inside the rect
+     and NOTHING else — custom properties inherit, so the whole subtree sees
+     `running` while the rest of the HUD keeps the armor. The cost is nine
+     sub-100px boxes; the mercy button's frame budget never notices them.
+     The hard off switches (prefers-reduced-motion, .is-calm) use
+     `animation: none !important` and still win over this. */
+  --gg-deco-play: running;
+  left: var(--gg-mon-face-x);
+  top: var(--gg-mon-face-y);
+  width: var(--gg-mon-face-w);
+  height: var(--gg-mon-face-h);
+  overflow: hidden;
+  border-radius: 3px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.35));
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.22),
+    inset 0 0 18px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(var(--gg-violet-rgb), 0.18);
+}
+/* (The no-art case is handled where the numbers are: .gg-mon-frame.is-nobezel
+   re-declares --gg-mon-face-*, and this rect follows without a second rule.) */
+
+.gg-mini-idle {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 0.62rem; letter-spacing: 0.2em; text-transform: lowercase;
+  color: var(--gg-text-4);
+}
+
+/* the stylized miniature of their screen ---------------------------------- */
+.gg-mini { position: absolute; inset: 0; display: none; pointer-events: none; }
+.gg-mini.is-on { display: block; }
+/* a mini WE are driving with a payload of our own runs a touch hotter */
+.gg-mini.is-yours { filter: saturate(1.3); }
+
+/* flashes: a strobing wash + tiny shards thrown across the rect ------------ */
+.gg-mini-flash::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 100% at 50% 40%, #fff 0%, rgba(255, 190, 226, 0.9) 60%, rgba(255, 120, 190, 0.7) 100%);
+  opacity: 0.12;
+}
+.gg-mini-flash.is-anim::before { animation: ggMiniFlash .7s steps(2, end) infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniFlash { 0%, 60% { opacity: 0; } 70%, 80% { opacity: 0.6; } 100% { opacity: 0; } }
+.gg-mini-flash .gg-mini-shard {
+  position: absolute;
+  width: 13px; height: 4px; border-radius: 1px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.9);
+  opacity: 0;
+}
+.gg-mini-flash .gg-mini-shard:nth-child(1) { left: 12%; top: 22%; }
+.gg-mini-flash .gg-mini-shard:nth-child(2) { left: 62%; top: 34%; width: 9px; }
+.gg-mini-flash .gg-mini-shard:nth-child(3) { left: 28%; top: 66%; width: 17px; }
+.gg-mini-flash .gg-mini-shard:nth-child(4) { left: 74%; top: 74%; width: 7px; }
+.gg-mini-flash.is-anim .gg-mini-shard { animation: ggMiniShard .9s steps(3, end) infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(2) { animation-delay: .18s; }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(3) { animation-delay: .42s; }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(4) { animation-delay: .61s; }
+@keyframes ggMiniShard {
+  0%, 55% { opacity: 0; transform: scaleX(0.5); }
+  60%, 72% { opacity: 0.95; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(0.6); }
+}
+
+/* bubbles: the fake glossy pop-bubble look, now living ONLY here ----------- */
+.gg-mini-bubbles .gg-mini-bub {
+  position: absolute; bottom: -14px;
+  width: 13px; height: 13px; border-radius: 50%;
+  opacity: 0.75;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.85) 0 8%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 50% 50%,
+      rgba(var(--gg-pink-rgb), 0.05) 40%,
+      rgba(var(--gg-pink-rgb), 0.30) 72%,
+      rgba(var(--gg-violet-rgb), 0.45) 90%,
+      rgba(255, 255, 255, 0.55) 100%);
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.35);
+}
+.gg-mini-bubbles .gg-mini-bub:nth-child(1) { left: 10%; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(2) { left: 32%; width: 9px; height: 9px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(3) { left: 52%; width: 16px; height: 16px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(4) { left: 71%; width: 8px; height: 8px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(5) { left: 86%; width: 12px; height: 12px; }
+/* one animation, not two: rise and sway share the transform channel. */
+.gg-mini-bubbles.is-anim .gg-mini-bub { animation: ggMiniRise 3.4s linear infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(2) { animation-delay: .5s; animation-duration: 4.1s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(3) { animation-delay: 1.2s; animation-duration: 3.0s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(4) { animation-delay: 1.9s; animation-duration: 4.4s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(5) { animation-delay: 2.6s; animation-duration: 3.6s; }
+@keyframes ggMiniRise {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 0.85; }
+  50% { transform: translate(5px, -52px); }
+  100% { transform: translate(-4px, -112px); opacity: 0; }
+}
+
+/* video: bars + a scanline sweeping down the tiny screen ------------------- */
+.gg-mini-video {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
+    rgba(8, 4, 14, 0.9);
+}
+.gg-mini-video .gg-mini-bar {
+  position: absolute; left: 12%; right: 12%; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, rgba(var(--gg-violet-rgb), 0.5), rgba(var(--gg-pink-rgb), 0.6));
+}
+.gg-mini-video .gg-mini-bar:nth-child(1) { top: 32%; }
+.gg-mini-video .gg-mini-bar:nth-child(2) { top: 50%; right: 30%; }
+.gg-mini-video .gg-mini-bar:nth-child(3) { top: 68%; right: 46%; }
+.gg-mini-video .gg-mini-scan {
+  position: absolute; left: 0; right: 0; top: 0; height: 12px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  opacity: 0;
+}
+.gg-mini-video.is-anim .gg-mini-bar { animation: ggMiniShimmer 1.6s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-video.is-anim .gg-mini-scan { opacity: 1; animation: ggMiniScan 2.4s linear infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniShimmer { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes ggMiniScan { from { transform: translateY(-14px); } to { transform: translateY(110px); } }
+
+.gg-mini-sub .gg-mini-line {
+  position: absolute; top: 46%; left: 100%;
+  white-space: nowrap;
+  font-size: 0.6rem; letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.8);
+}
+.gg-mini-sub.is-anim .gg-mini-line { animation: ggMiniScroll 4s linear infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniScroll { from { transform: translateX(0); } to { transform: translateX(-320px); } }
+
+.gg-mini-bounce .gg-mini-word {
+  position: absolute; top: 20%; left: 10%;
+  font-size: 0.6rem; font-weight: 700; color: var(--gg-pink);
+}
+.gg-mini-bounce.is-anim .gg-mini-word { animation: ggMiniBounce 3.4s ease-in-out infinite alternate; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniBounce { from { transform: translate(0, 0); } to { transform: translate(90px, 40px); } }
+
+/* spiral: a turning disc, drawn entirely in CSS — no asset ----------------- */
+.gg-mini-spiral .gg-mini-spiral-disc {
+  position: absolute; left: 50%; top: 50%;
+  height: 150%; width: auto; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0.8;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(var(--gg-pink-rgb), 0.85) 0 13deg,
+    rgba(18, 6, 30, 0.92) 13deg 26deg);
+  -webkit-mask-image: radial-gradient(circle, #000 26%, rgba(0, 0, 0, 0.85) 55%, transparent 74%);
+  mask-image: radial-gradient(circle, #000 26%, rgba(0, 0, 0, 0.85) 55%, transparent 74%);
+}
+.gg-mini-spiral.is-anim .gg-mini-spiral-disc { animation: ggMiniSpin 7s linear infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* lock card: a tiny card of scribble lines. Passing it turns it GREEN. ----- */
+.gg-mini-lock .gg-mini-card {
+  position: absolute; left: 17%; right: 17%; top: 21%; bottom: 21%;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.85);
+  border-radius: 4px;
+  background: rgba(20, 8, 28, 0.94);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.25);
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.gg-mini-lock .gg-mini-scribble {
+  position: absolute; left: 11%; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: background .2s ease;
+}
+.gg-mini-lock .gg-mini-scribble:nth-child(1) { top: 24%; width: 66%; }
+.gg-mini-lock .gg-mini-scribble:nth-child(2) { top: 46%; width: 44%; }
+.gg-mini-lock .gg-mini-scribble:nth-child(3) { top: 68%; width: 56%; }
+.gg-mini-lock .gg-mini-caret {
+  position: absolute; left: 58%; top: 43%;
+  width: 2px; height: 9px;
+  background: var(--gg-pink);
+  box-shadow: 0 0 6px rgba(var(--gg-pink-rgb), 0.9);
+}
+.gg-mini-lock.is-pass .gg-mini-card {
+  border-color: var(--gg-green);
+  background: rgba(8, 32, 20, 0.94);
+  box-shadow: 0 0 16px rgba(var(--gg-green-rgb), 0.6);
+}
+.gg-mini-lock.is-pass .gg-mini-scribble { background: rgba(var(--gg-green-rgb), 0.85); }
+.gg-mini-lock.is-pass .gg-mini-caret { background: var(--gg-green); box-shadow: 0 0 6px rgba(var(--gg-green-rgb), 0.9); }
+
+.gg-mini-toy .gg-mini-toy-dot {
+  position: absolute; right: 8%; bottom: 10%;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--gg-violet);
+  box-shadow: 0 0 12px rgba(var(--gg-violet-rgb), 0.8);
+}
+.gg-mini-toy.is-anim .gg-mini-toy-dot { animation: ggPulse 1.1s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+
+/* brain drain: the veil. Dim, blurred, closing in from the edges. */
+.gg-mini-drain { background: rgba(30, 8, 46, 0.55); backdrop-filter: blur(1.5px) saturate(0.85); }
+.gg-mini-drain .gg-mini-drain-vig {
+  position: absolute; inset: 0;
+  background: radial-gradient(115% 100% at 50% 50%, transparent 22%, rgba(6, 2, 12, 0.88) 100%);
+}
+
+/* emote: the one mini that is not an effect at all -----------------------
+   When WE send an emote it lands on THEIR screen, so it plays in the projection
+   rect like everything else we fire. `t:'emote'` has no receipt lifecycle, so
+   the window is a fixed dwell (EMOTE_MINI_MS in ui/opponent.js) and .is-out IS
+   the terminal beat — there is no survived/rejected to answer.
+
+   .is-on carries the ARRIVAL bounce and .is-anim the sit-there breathe, and they
+   are deliberately on different elements: `animation` is a shorthand, so one
+   rule on .gg-mini-emote-bub would silently cancel the other whenever the mini
+   held both classes. The bounce rides .is-on rather than .is-anim so a spent
+   motion budget mutes the loop without swallowing the pop; the mini still takes
+   a budget slot like any other (anim: true in the MINIS table). */
+.gg-mini.gg-mini-emote.is-on { display: flex; align-items: center; justify-content: center; }
+.gg-mini-emote-bub {
+  max-width: 88%;
+  display: flex; align-items: center; gap: 0.22rem;
+  padding: 0.16rem 0.36rem;
+  border-radius: 9px 9px 9px 2px;
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.75);
+  box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.35);
+  transform-origin: 12% 100%;
+}
+.gg-mini-emote-icon { font-size: 0.72rem; line-height: 1; }
+.gg-mini-emote-text {
+  font-size: 0.54rem; line-height: 1.2; color: var(--gg-text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gg-mini.gg-mini-emote.is-on .gg-mini-emote-bub { animation: ggMiniEmotePop 380ms cubic-bezier(.2, .9, .3, 1.5) 1 both; }
+@keyframes ggMiniEmotePop {
+  0% { opacity: 0; transform: scale(0.3) translateY(6px); }
+  60% { opacity: 1; transform: scale(1.12) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.gg-mini-emote.is-anim .gg-mini-emote-icon { animation: ggMiniEmoteBreathe 1.5s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniEmoteBreathe { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.16) rotate(-6deg); } }
+/* the send is over: a tiny wiggle, then it is gone */
+.gg-mini.gg-mini-emote.is-out .gg-mini-emote-bub { animation: ggMiniEmoteOut 420ms ease-in 1 both; }
+@keyframes ggMiniEmoteOut {
+  0% { opacity: 1; transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(4deg) scale(1.04); }
+  55% { transform: rotate(-4deg) scale(1.02); }
+  100% { opacity: 0; transform: rotate(0deg) scale(0.86) translateY(4px); }
+}
+/* …and the one failure that actually exists: the peer's link is DEAD, so nobody
+   is ever going to read this. Grey, and drop it. */
+.gg-mini.gg-mini-emote.is-lost .gg-mini-emote-bub {
+  filter: grayscale(1);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: none;
+  animation: ggMiniEmoteDrop 520ms ease-in 1 both;
+}
+@keyframes ggMiniEmoteDrop {
+  0% { opacity: 0.75; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(14px) rotate(8deg); }
+}
+
+/* THEIR FLOATING VIDEO WINDOWS — the tick's `vwin`, 0..4 (2026-08-04) ---------
+   "the opponent monitor should show how many floating video windows the opponent
+   currently has."
+
+   NOT a .gg-mini, deliberately: every mini is one node that is on or off, keyed
+   by an effect name, and this is a COUNT. ui/opponent.js adds and removes one
+   .gg-mon-vwin per window, so the number of rects in here IS the number of
+   windows on their screen — which is also why nothing fades out. An out-animation
+   would hold a rect open after the window closed, and the little screen would be
+   lying.
+
+   THE SAME THREE-ELEMENT SPLIT THE REAL WINDOW USES (exec/fx.css): `animation`
+   is a shorthand, so a one-shot and a loop on one element cancel each other.
+      .gg-mon-vwin        the pop-in ONE-SHOT (and the slot — nth-child)
+      .gg-mon-vwin-body   the drift LOOP
+      .gg-mon-vwin-dot    the recording pulse LOOP
+   Nobody shares, exactly as the windows themselves don't.
+
+   GEOMETRY. Four staggered slots in the TOP band of the rect (nothing reaches
+   past ~32% down), because the emote bubble owns the middle (~34%-66%) and the
+   bezel art owns everything outside the rect. Overlapping either would put this
+   information under something else.
+
+   MOTION. They ride --gg-deco-play like every mini, so .gg-mon-proj's `running`
+   keeps them alive at data-gg-fx="hot" (the monitor is information, not chrome),
+   and the two hard off switches below still stop them dead while leaving them
+   VISIBLE — a still window is still a window you can count. */
+/* The container is always mounted and usually empty; `.is-on` is a STATE HOOK, not a style —
+   ui/opponent.js sets it while the stack has anything in it, so a play-test driver (and
+   selftest-hud) can ask the DOM "are they running windows?" without counting children. */
+.gg-mon-vwins { position: absolute; inset: 0; pointer-events: none; }
+.gg-mon-vwin {
+  position: absolute;
+  width: 26%;
+  height: 15%;
+  border-radius: 2px;
+  background: linear-gradient(160deg, rgba(38, 16, 58, 0.96), rgba(12, 5, 22, 0.96));
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.7);
+  box-shadow: 0 0 7px rgba(var(--gg-violet-rgb), 0.55), inset 0 0 4px rgba(0, 0, 0, 0.8);
+  animation: ggMonVwinIn 260ms cubic-bezier(.2, .9, .3, 1.5) 1 both;
+}
+/* the stack: each slot a little along and a little lower, so a full pool reads
+   as depth instead of as a row */
+.gg-mon-vwin:nth-child(1) { left: 4%; top: 4%; }
+.gg-mon-vwin:nth-child(2) { left: 21%; top: 12%; }
+.gg-mon-vwin:nth-child(3) { left: 38%; top: 5%; }
+.gg-mon-vwin:nth-child(4) { left: 13%; top: 17%; }
+@keyframes ggMonVwinIn {
+  0% { opacity: 0; transform: scale(0.4) translateY(4px); }
+  70% { opacity: 1; transform: scale(1.14) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.gg-mon-vwin-body {
+  position: absolute; inset: 1px;
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.11) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(var(--gg-pink-rgb), 0.3), rgba(var(--gg-violet-rgb), 0.16));
+  animation: ggMonVwinDrift 5.5s ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play);
+}
+/* …and each one wanders on its own clock, so four never move as one block */
+.gg-mon-vwin:nth-child(2) .gg-mon-vwin-body { animation-duration: 6.8s; animation-direction: alternate-reverse; }
+.gg-mon-vwin:nth-child(3) .gg-mon-vwin-body { animation-duration: 4.7s; }
+.gg-mon-vwin:nth-child(4) .gg-mon-vwin-body { animation-duration: 7.6s; animation-direction: alternate-reverse; }
+@keyframes ggMonVwinDrift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(1.5px, -1.5px); }
+}
+/* the little red recording light, in the corner the real window puts it */
+.gg-mon-vwin-dot {
+  position: absolute; right: 1px; top: 1px;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: #ff3b5c;
+  box-shadow: 0 0 4px rgba(255, 59, 92, 0.95);
+  animation: ggMonVwinBlink 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggMonVwinBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+
+/* pass feedback: green wash + checkmark. EXEMPT from the motion budget and
+   from the data-gg-fx="hot" parking rule — it answers something the player did,
+   it is not ambience, and it never rides --gg-deco-play. */
+.gg-mon-pass {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(120% 100% at 50% 50%,
+    rgba(var(--gg-green-rgb), 0.32),
+    rgba(var(--gg-green-rgb), 0.08) 68%,
+    transparent 100%);
+}
+.gg-mon-pass.is-in { animation: ggPassWash 1.2s ease-out 1; }
+@keyframes ggPassWash { 0% { opacity: 0; } 14% { opacity: 1; } 60% { opacity: 0.75; } 100% { opacity: 0; } }
+.gg-mon-check {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  font-size: 1.8rem; font-weight: 800; line-height: 1;
+  color: var(--gg-green);
+  text-shadow: 0 0 14px rgba(var(--gg-green-rgb), 0.9);
+  opacity: 0;
+  pointer-events: none;
+}
+.gg-mon-check.is-in { animation: ggCheckPop 1.2s cubic-bezier(.2, .8, .3, 1) 1 forwards; }
+@keyframes ggCheckPop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  22% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  36% { transform: translate(-50%, -50%) scale(1); }
+  76% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+/* the reduced-motion form: same green, same dwell, no travel */
+@keyframes ggCheckFade {
+  0% { opacity: 0; }
+  15%, 76% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ===========================================================================
+ * THE THROW — an inbound payload gets a sender, a flight and a landing.
+ * (ui/opponent.js markInbound, called from ui/hud.js onPayloadAccepted.)
+ *
+ * "when the opponent fires a payload at us the opponent monitor should
+ *  highlight, and the item should fly from the monitor to our field."
+ *
+ * FOUR NODES, FOUR ANIMATIONS, and that is not stylistic. `animation` is a
+ * shorthand: a second live rule on the same element replaces the first outright,
+ * silently. So the travel is split — .gg-throw carries X (linear), .gg-throw-arc
+ * carries Y (with a lob keyframe partway through, which is the entire arc), and
+ * .gg-throw-art carries the spin. The splash is a fourth node for the same
+ * reason, and the monitor's flare is a fifth on the monitor itself.
+ * The two nodes added by THE MARK (.gg-throw-mark, .gg-throw-word) take no slot
+ * at all: they fade on a TRANSITION, which is the only way to decorate a node
+ * whose animation belongs to somebody else.
+ *
+ * NOTHING HERE IS REMOVED ON animationend. A parked animation (data-gg-fx="hot"),
+ * a reduced-motion override or a re-parented node all swallow that event; every
+ * one of these nodes leaves on a timer in ui/opponent.js, and a leaked one has to
+ * be impossible rather than unlikely (exec/videos.js's ghost rule, same reason).
+ *
+ * z55: above the HUD, UNDER mercy — the tier ui/arsenal.js's drag ghost and drop
+ * spark already live in. A projectile that could cover the mercy button would be
+ * a safety bug, not a cosmetic one.
+ * ======================================================================== */
+
+/* their monitor lighting up: THEY threw this. It is INFORMATION — it re-declares
+   --gg-deco-play so a hot local stack cannot park the one flourish that explains
+   where the next sixty seconds came from — and its .is-throwing state is a
+   VISIBLE glow on its own, so the reduced-motion `animation: none` leaves a
+   static highlight rather than nothing at all. */
+.gg-mon-throw {
+  --gg-deco-play: running;
+  position: absolute;
+  inset: 0 var(--gg-mon-tv-gutter);
+  z-index: 4;
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+  /* --gg-throw-tint is written on .gg-mon by ui/opponent.js flareMonitor(), so
+     the flare wears the colour of whatever they just threw. Pink until then. */
+  background: radial-gradient(72% 58% at 50% 40%,
+    rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.42) 0%,
+    rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.12) 56%,
+    rgba(0, 0, 0, 0) 78%);
+  box-shadow: inset 0 0 26px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.5);
+}
+.gg-mon.is-throwing .gg-mon-throw {
+  opacity: 1;
+  animation: ggMonThrow .62s cubic-bezier(.2, .8, .3, 1) 1;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggMonThrow {
+  0% { opacity: 0; transform: scale(1.06); }
+  18% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* the projectile ---------------------------------------------------------- */
+.gg-throw {
+  --gg-deco-play: running;
+  --gg-throw-size: clamp(96px, 12vw, 152px);
+  --gg-throw-lift: 84px;
+  position: fixed;
+  z-index: 55;
+  width: var(--gg-throw-size);
+  height: var(--gg-throw-size);
+  /* centred on its own point with MARGINS, never a transform: the transform is
+     the animation's, and a translate here would be overwritten by frame one. */
+  margin: calc(var(--gg-throw-size) / -2) 0 0 calc(var(--gg-throw-size) / -2);
+  pointer-events: none;
+  animation: ggThrowX var(--gg-throw-ms, 760ms) linear 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-throw-arc {
+  position: absolute; inset: 0;
+  animation: ggThrowY var(--gg-throw-ms, 760ms) cubic-bezier(.35, .1, .5, 1) 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+/* The item cutout, revealed by `is-art` once it has DECODED — see the mark
+   below for why it cannot be trusted to be the floor on its own. A live preview
+   (if there is one) then fades in over it. */
+.gg-throw-art {
+  position: absolute; inset: 0;
+  background-image: var(--gg-throw-sticker, none);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.7))
+          drop-shadow(0 0 18px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.55));
+  animation: ggThrowSpin var(--gg-throw-ms, 760ms) ease-out 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+/* Neither a live clip nor a phrase tumbles — you are meant to be able to READ
+   what is coming. Mutually exclusive with the rule above (one shorthand, one
+   winner), which is also why both states share the one keyframe. */
+.gg-throw.is-live .gg-throw-art,
+.gg-throw.is-word .gg-throw-art {
+  animation: ggThrowSwell var(--gg-throw-ms, 760ms) ease-out 1 forwards;
+}
+.gg-throw-live {
+  position: absolute; inset: 6%;
+  width: 88%; height: 88%;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.75), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;                       /* the first decoded frame lifts this */
+  transition: opacity .18s ease;    /* a transition, not an animation: no slot taken */
+}
+.gg-throw-live.is-ready { opacity: 1; }
+
+/* THE MARK — the floor UNDER the sticker, and the reason every kind now reads.
+   The item cutouts are ~650 KB each and their fetch used to start when the
+   projectile did, so the six kinds with no live preview routinely flew as an
+   empty box: nothing on screen, i.e. "the throw did not fire". This glyph is
+   text — it is on screen in frame one, for every kind, with no network in the
+   path — and it steps aside the moment something better has actually decoded.
+   Colour comes from the kind's tint, written inline by ui/opponent.js. */
+.gg-throw-mark {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-style: normal;
+  font-size: calc(var(--gg-throw-size, 128px) * 0.52);
+  line-height: 1;
+  color: rgb(var(--gg-throw-tint, var(--gg-pink-rgb)));
+  text-shadow: 0 0 12px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.85),
+               0 2px 10px rgba(0, 0, 0, 0.8);
+  opacity: 1;
+  transition: opacity .18s ease;    /* a transition — the art's one animation slot is taken */
+}
+.gg-throw.is-art .gg-throw-mark,
+.gg-throw.is-live .gg-throw-mark { opacity: 0; }
+
+/* THEIR WORDS, for the two payloads that ARE text (LockCard, SubliminalStorm).
+   A child of the ARC and never of the art: the art tumbles. Remote text, always
+   written with textContent — ui/opponent.js's TRUST rule. */
+.gg-throw-word {
+  position: absolute;
+  left: 50%; top: 94%;
+  transform: translateX(-50%);
+  max-width: 15rem;
+  padding: 3px 10px;
+  border-radius: var(--gg-radius-pill, 999px);
+  font-size: .74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gg-text, #fff);
+  background: rgba(12, 6, 20, 0.86);
+  border: 1px solid rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.8);
+  box-shadow: 0 0 14px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.4);
+  pointer-events: none;
+}
+@keyframes ggThrowX {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--gg-throw-dx, 0px)); }
+}
+@keyframes ggThrowY {
+  0% { transform: translateY(0); }
+  42% { transform: translateY(calc(var(--gg-throw-dy, 0px) * 0.3 - var(--gg-throw-lift))); }
+  100% { transform: translateY(var(--gg-throw-dy, 0px)); }
+}
+@keyframes ggThrowSpin {
+  0% { transform: rotate(0deg) scale(0.4); opacity: 0; }
+  14% { opacity: 1; }
+  100% { transform: rotate(var(--gg-throw-spin, 210deg)) scale(1.1); opacity: 1; }
+}
+@keyframes ggThrowSwell {
+  0% { transform: rotate(calc(var(--gg-throw-spin, 210deg) * 0.06)) scale(0.45); opacity: 0; }
+  14% { opacity: 1; }
+  100% { transform: rotate(0deg) scale(1.1); opacity: 1; }
+}
+
+/* …and where it hits. Its own node so the flight's animation slot is untouched. */
+.gg-throw-hit {
+  --gg-deco-play: running;
+  position: fixed;
+  z-index: 55;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.9),
+              0 0 34px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.75);
+  animation: ggThrowHit .42s cubic-bezier(.2, .8, .3, 1) 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggThrowHit {
+  0% { opacity: 0.95; transform: scale(0.3); }
+  60% { opacity: 0.5; }
+  100% { opacity: 0; transform: scale(4.6); }
+}
+
+/* the OUTBOUND half: the arsenal's drag ghost, upgraded to the same preview
+   (ui/throwPreview.js dressGhost). Same class as the sticker ghost so
+   moveGhost()/killGhost() keep working on it unchanged. */
+.gg-item-ghost--live {
+  object-fit: cover;
+  border-radius: 10px;
+  background-image: var(--gg-ghost-sticker, none);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.75), 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+
+/* emote bubble + drop hint ------------------------------------------------ */
+.gg-mon-bubble {
+  position: absolute; left: 8%; bottom: 12%;
+  max-width: 78%;
+  z-index: 3;
+  display: flex; gap: 0.35rem; align-items: baseline;
+  padding: 0.35rem 0.7rem;
+  border-radius: 12px 12px 12px 2px;
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.6);
+  font-size: 0.72rem;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.gg-mon-bubble.is-in { opacity: 1; transform: translateY(0); }
+.gg-mon-bubble-text { color: var(--gg-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-mon-hint {
+  position: absolute; inset: auto 0 0 0;
+  z-index: 3;
+  text-align: center;
+  font-size: 0.64rem; letter-spacing: 0.14em;
+  color: var(--gg-pink);
+  background: rgba(12, 6, 20, 0.8);
+  padding: 0.2rem 0;
+}
+
+/* their attention + the closeness they claim ------------------------------ */
+.gg-mon-att { width: 100%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.gg-mon-att-fill { display: block; height: 100%; width: 100%; background: var(--gg-pink); transition: width .4s ease; }
+.gg-mon-att.is-low .gg-mon-att-fill { background: var(--gg-amber); }
+.gg-mon-att-label { font-size: 0.64rem; color: var(--gg-text-4); align-self: flex-end; }
+
+.gg-mon-close {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(12, 6, 20, 0.55);
+  transition: border-color .3s ease, box-shadow .3s ease;
+}
+.gg-mon-close-label { font-size: 0.6rem; letter-spacing: 0.16em; text-transform: lowercase; color: var(--gg-text-4); }
+.gg-mon-close-segs { display: flex; gap: 3px; margin: 0.25rem 0; }
+.gg-mon-close-seg { flex: 1 1 0; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .3s ease; }
+.gg-mon-close[data-gg-close="0"] .gg-mon-close-seg.is-lit { background: var(--gg-pink); }
+.gg-mon-close[data-gg-close="1"] .gg-mon-close-seg.is-lit { background: #ff8ec9; }
+.gg-mon-close[data-gg-close="2"] .gg-mon-close-seg.is-lit { background: var(--gg-gold); }
+.gg-mon-close[data-gg-close="3"] .gg-mon-close-seg.is-lit { background: var(--gg-hot); }
+.gg-mon-close-word { font-size: 0.74rem; font-weight: 700; color: var(--gg-text-1); }
+.gg-mon-close.is-sweep { border-color: var(--gg-pink); box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.4); }
+.gg-mon-close.is-edge { border-color: var(--gg-hot); animation: ggBreathe 2s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggBreathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 20, 147, 0.25); }
+  50% { box-shadow: 0 0 26px rgba(255, 20, 147, 0.55); }
+}
+
+.gg-mon-foot { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--gg-text-4); }
+.gg-mon-abandon { color: var(--gg-amber); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------------
+ * BOTTOM DECK — own effects (left) · closeness dial (right)
+ * ------------------------------------------------------------------------ */
+.gg-hud-bottom {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--gg-hud-gap);
+  padding-bottom: 4.6rem;      /* mercy owns the strip below this */
+}
+.gg-fxrail { display: flex; flex-direction: column; gap: 4px; max-width: 40vw; }
+.gg-fxchip {
+  position: relative;
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.72);
+  border-left: 3px solid var(--gg-pink);
+  font-size: 0.68rem; color: var(--gg-text-2);
+  overflow: hidden;
+}
+.gg-fxchip.is-incoming { border-left-color: var(--gg-violet); }
+.gg-fxchip-glyph { color: var(--gg-pink); }
+.gg-fxchip.is-incoming .gg-fxchip-glyph { color: var(--gg-violet); }
+.gg-fxchip-bar {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: rgba(var(--gg-pink-rgb), 0.6);
+}
+.gg-fxchip.is-incoming .gg-fxchip-bar { background: rgba(var(--gg-violet-rgb), 0.7); }
+
+/* SIZE (owner, 2026-08-04: "both are too big, especially on mobile"). The dial
+   lost a third of its width and most of its padding; it did NOT lose its touch
+   targets — the four stops keep their 48px, which is what the tier rule is
+   about, and the plate simply stopped padding them out. */
+/* THE DIAL'S COLUMN — the objective caption, then the dial (ui/hud.js THE
+   OBJECTIVE LINE). The bottom bar is still a two-child flex row, so the dial is
+   still hard right at every breakpoint; this only stacks a caption over it.
+   `align-items: flex-end` rather than a width, so the caption is as wide as its
+   own text wants to be and the dial keeps its own min/max. */
+.gg-dial-col { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-width: 0; }
+.gg-coach-goal {
+  max-width: min(22rem, 46vw);
+  text-align: right;
+  font-size: 0.6rem; line-height: 1.35;
+  color: var(--gg-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);   /* it floats over the stage, not a plate */
+  /* NOT a .gg-plate: a plate would re-enable pointer events at 0,2,0 and park a
+     dead box over the field the player is popping bubbles in. It is a caption. */
+  pointer-events: none;
+  transition: opacity .8s ease;
+}
+/* Its own exit, so nothing has to remove a node mid-match. */
+.gg-coach-goal.is-gone { opacity: 0; }
+/* Zen takes the dial; the caption over it goes at the same time, or the desk
+   keeps a line explaining a readout that is no longer on it. */
+.gg-hud-frame.gg-hud--zen .gg-coach-goal { display: none; }
+@media (orientation: portrait), (max-width: 720px) {
+  /* A phone has no room for a second sentence beside the fx chips. */
+  .gg-coach-goal { max-width: 60vw; font-size: 0.56rem; }
+}
+
+.gg-dial-host { display: flex; justify-content: flex-end; }
+.gg-dial { min-width: 10.5rem; max-width: 14rem; padding: 0.3rem 0.5rem 0.35rem; }
+.gg-dial-label { font-size: 0.56rem; letter-spacing: 0.14em; color: var(--gg-text-4); }
+.gg-dial-stops { display: flex; gap: 4px; margin: 0.25rem 0 0.2rem; }
+.gg-dial-stop {
+  flex: 1 1 0;
+  min-height: 48px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--gg-text-4);
+  font-size: 0.62rem;
+  padding: 0;
+}
+/* THE DIAL HAS NO YELLOW (owner, 2026-08-05). At `close` the four lit bars used
+   to turn `--gg-gold`, and in a mid-match screenshot that row of short gold
+   blocks was the SECOND thing the owner pointed at as "the little yellow
+   squares" — the same complaint that took the risk pips and then the charge
+   pips off this HUD. Every other gold on this desk means a specific thing that
+   is about to bite — the timer running out, a flagged receipt, the last notch
+   of the sudden-death track — and none of them is "you are enjoying yourself",
+   so the dial had no business borrowing the hue: a warning colour spliced into
+   the middle of an otherwise monotone pink ramp is exactly what made a
+   self-report row read as an alarm.
+
+   THE RAMP IS PINK ALL THE WAY UP NOW, and it still has four distinguishable
+   rungs, by INTENSITY rather than hue:
+
+     none   the track's own white 12% — nothing claimed yet
+     0 / 1  flat --gg-pink, no glow      (steady, warm)
+     2      --gg-pink-deep + a soft glow (close)
+     3      --gg-hot + a hard glow       (edge)
+
+   COLOUR IS STILL NOT THE ONLY CHANNEL, which is what makes an intensity ramp
+   legal here: ui/closeness.js prints a WORD under every bar ("steady / warm /
+   close / edge") and marks the chosen one `.is-head`, which is 16px tall against
+   10px and brightens its label. Someone who cannot separate #ff479f from
+   #ff69b4 still reads the dial off the words and the tall bar, exactly as
+   before — the hue was never carrying the meaning, only the alarm.
+
+   This is a restyle and nothing else — the stops, the 48px targets, the
+   350ms write cooldown and the data-gg-close contract are all untouched. */
+.gg-dial-bar { width: 100%; height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .25s ease, box-shadow .25s ease, height .25s ease; }
+.gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-pink); }
+.gg-dial[data-gg-close="2"] .gg-dial-stop.is-on .gg-dial-bar {
+  background: var(--gg-pink-deep);
+  box-shadow: 0 0 9px rgba(var(--gg-pink-rgb), 0.6);
+}
+.gg-dial[data-gg-close="3"] .gg-dial-stop.is-on .gg-dial-bar {
+  background: var(--gg-hot);
+  box-shadow: 0 0 15px rgba(var(--gg-pink-rgb), 0.95);
+}
+.gg-dial-stop.is-head { color: var(--gg-text); }
+.gg-dial-stop.is-head .gg-dial-bar { height: 16px; }
+.gg-dial-fine { font-size: 0.54rem; line-height: 1.2; color: var(--gg-text-4); }
+
+/* ---------------------------------------------------------------------------
+ * EMOTE SHEET
+ * ------------------------------------------------------------------------ */
+.gg-emotes {
+  position: absolute;
+  right: calc(var(--gg-mon-w) + 1.2rem);
+  bottom: 6rem;
+  width: min(19rem, 80vw);
+  z-index: 4;
+}
+.gg-emotes-title { font-size: 0.62rem; letter-spacing: 0.16em; color: var(--gg-text-4); margin-bottom: 0.4rem; }
+.gg-emotes-lines { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.gg-emote-line {
+  min-height: 48px;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 12, 28, 0.8);
+  color: var(--gg-text-1);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.gg-emote-line:hover { border-color: var(--gg-pink); }
+.gg-emotes-icons { display: flex; gap: 4px; margin-top: 6px; }
+.gg-emote-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 12, 28, 0.8);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.gg-emotes.is-cooling { opacity: 0.55; }
+.gg-emotes-cool { margin-top: 0.35rem; font-size: 0.62rem; color: var(--gg-text-4); min-height: 0.9em; }
+
+/* ---------------------------------------------------------------------------
+ * MERCY CHROME — the button itself is styled in goon.css (DO NOT TOUCH block).
+ * Everything here is around it, and never on top of it.
+ * ------------------------------------------------------------------------ */
+.gg-mercy-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+/* SIZE (owner, 2026-08-04: the button was eating the bottom of a phone). It is
+   smaller, not weaker: still the widest single control on the desk, still well
+   past a 48px finger in both axes, still the only uppercase word on the page,
+   and every line of the isolation contract in goon.css is untouched. */
+.gg-mercy-btn {
+  position: relative;
+  width: min(300px, 46vw);
+  height: 56px;
+  font-size: 0.86rem;
+}
+.gg-mercy-btn.is-arming { pointer-events: none; opacity: 1; }
+.gg-mercy-arm {
+  position: absolute; inset: -3px;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(255, 20, 147, 0.65);
+  clip-path: inset(0 100% 0 0);
+  animation: ggArm 700ms linear forwards;
+}
+@keyframes ggArm { to { clip-path: inset(0 0 0 0); } }
+.gg-mercy-fine { font-size: 0.58rem; letter-spacing: 0.08em; color: var(--gg-text-4); }
+
+/* NOT children of #gg-mercy: that layer carries `transform: translateX(-50%)`,
+   which makes it the containing block for any fixed-position descendant — a
+   full-bleed scrim inside it would size to the button. ui/mercy.js appends
+   these to <body>; the z-index keeps them above the HUD and the toasts. */
+.gg-mercy-takeover {
+  position: fixed; inset: 0;
+  z-index: 65;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem;
+  background: rgba(8, 4, 14, 0.92);
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.gg-mercy-takeover.is-in { opacity: 1; }
+.gg-mercy-takeover-title { margin: 0; font-size: clamp(1.6rem, 5vw, 2.6rem); font-weight: 800; color: #fff; }
+.gg-mercy-takeover-line { margin: 0; font-size: 0.95rem; color: var(--gg-text-3); }
+/* the visible way off the scrim; it also auto-dismisses (ui/mercy.js) */
+.gg-mercy-takeover-hint { margin: 1.2rem 0 0; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: lowercase; color: var(--gg-text-4); }
+
+.gg-mercy-sting {
+  position: fixed; left: 50%; bottom: 8.5rem;
+  z-index: 65;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--gg-radius-card);
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.55);
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+.gg-mercy-sting.is-in { opacity: 1; }
+.gg-mercy-sting-them { font-size: 0.9rem; color: var(--gg-text-1); }
+.gg-mercy-sting-you { font-size: 1.1rem; font-weight: 800; color: var(--gg-pink); }
+
+/* ===========================================================================
+ * SUDDEN DEATH
+ * ======================================================================== */
+.gg-sd {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem;
+  /* clears the HUD top bar: the desk contracts on sudden death but the score,
+     charge count and timer plate stay, and the ladder must not land on them. */
+  padding-top: clamp(4.6rem, 11vh, 6.4rem);
+  pointer-events: none;
+}
+.gg-sd > * { pointer-events: auto; }
+.gg-sd-round { font-size: 0.72rem; letter-spacing: 0.2em; color: var(--gg-text-3); }
+.gg-sd-track {
+  position: relative;
+  width: min(340px, 76vw);
+  height: 26px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px;
+}
+.gg-sd-track::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%;
+  height: 2px; background: rgba(255, 255, 255, 0.14);
+}
+.gg-sd-notch {
+  position: relative;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+.gg-sd-notch.is-end { width: 12px; height: 12px; background: rgba(255, 255, 255, 0.3); }
+.gg-sd-notch.is-lit { background: var(--gg-pink); }
+.gg-sd-track.is-edge .gg-sd-notch.is-end { background: var(--gg-gold); box-shadow: 0 0 14px rgba(255, 212, 94, 0.7); }
+.gg-sd-track.is-close .gg-sd-notch.is-end { animation: ggPulse 1s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+.gg-sd-marker {
+  position: absolute; top: 50%; left: 50%;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.9);
+  transition: left .4s cubic-bezier(.2, .7, .3, 1);
+}
+.gg-sd-track-label { font-size: 0.6rem; letter-spacing: 0.14em; color: var(--gg-text-4); }
+
+.gg-sd-stage { position: absolute; inset: 0; display: block; }
+
+/* intro ------------------------------------------------------------------ */
+.gg-sd-intro {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  opacity: 0; transition: opacity .2s ease;
+  z-index: 3;
+}
+.gg-sd-intro.is-in { opacity: 1; }
+.gg-sd-intro-card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: clamp(1rem, 3vw, 2rem) clamp(1.4rem, 5vw, 3rem);
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card);
+  text-align: center;
+}
+.gg-sd-intro-title { margin: 0; font-size: clamp(1.5rem, 4.4vw, 2.4rem); font-weight: 800; }
+.gg-sd-intro-rule { margin: 0; font-size: 0.95rem; color: var(--gg-text-2); }
+.gg-sd-chip {
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  font-size: 0.66rem; letter-spacing: 0.12em; color: var(--gg-text-3);
+}
+.gg-sd-count { font-size: clamp(2.4rem, 9vw, 4.4rem); font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; }
+.gg-sd-count.is-beat { text-shadow: 0 0 30px rgba(var(--gg-pink-rgb), 0.7); }
+
+/* verdict ---------------------------------------------------------------- */
+.gg-sd-verdict {
+  position: fixed; left: 50%; top: 26%;
+  transform: translateX(-50%);
+  opacity: 0; transition: opacity .2s ease;
+  z-index: 3;
+}
+.gg-sd-verdict.is-in { opacity: 1; }
+.gg-sd-verdict-card { text-align: center; min-width: min(22rem, 84vw); padding: 0.9rem 1.4rem; }
+.gg-sd-verdict-head { margin: 0 0 0.3rem; font-size: 1.2rem; font-weight: 800; }
+.gg-sd-verdict.is-win .gg-sd-verdict-head { color: var(--gg-pink); }
+.gg-sd-verdict.is-loss .gg-sd-verdict-head { color: var(--gg-amber); }
+.gg-sd-verdict.is-draw .gg-sd-verdict-head,
+.gg-sd-verdict.is-abort .gg-sd-verdict-head { color: var(--gg-text-2); }
+.gg-sd-verdict-line { margin: 0; font-size: 0.82rem; color: var(--gg-text-2); font-variant-numeric: tabular-nums; }
+.gg-sd-suspect {
+  display: inline-block; margin-top: 0.4rem;
+  padding: 0.16rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid var(--gg-amber);
+  color: var(--gg-amber);
+  font-size: 0.64rem;
+}
+.gg-sd-verdict-note { margin: 0.25rem 0 0; font-size: 0.68rem; color: var(--gg-text-4); }
+
+/* quick draw ------------------------------------------------------------- */
+.gg-sd-card {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(34rem, 92vw);
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+  padding: clamp(1rem, 3vw, 1.8rem);
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card);
+  opacity: 0; transition: opacity .2s ease;
+}
+.gg-sd-card.is-in { opacity: 1; }
+.gg-sd-card.is-slip { animation: ggShake .16s linear 1; }
+.gg-sd-card-slot { width: 100%; }
+.gg-sd-card-dots { display: flex; align-items: center; gap: 6px; }
+.gg-sd-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.gg-sd-dot.is-on { background: var(--gg-pink); box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.7); }
+.gg-sd-dot-label { font-size: 0.66rem; color: var(--gg-text-4); margin-left: 0.3rem; font-variant-numeric: tabular-nums; }
+.gg-sd-card-slips { font-size: 0.66rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; }
+
+.gg-lc-kicker { font-size: 0.62rem; letter-spacing: 0.2em; color: var(--gg-text-4); text-align: center; }
+.gg-lc-phrase { margin: 0.5rem 0; font-size: clamp(1.05rem, 3vw, 1.5rem); font-weight: 700; text-align: center; color: #fff; }
+.gg-lc-input {
+  width: 100%; min-height: 48px;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  background: rgba(10, 5, 17, 0.9);
+  color: #fff; font-size: 1rem; font-family: var(--gg-font);
+}
+.gg-lc-input:focus { outline: none; border-color: var(--gg-pink); box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.3); }
+.gg-lc-hint { margin-top: 0.35rem; font-size: 0.64rem; color: var(--gg-text-4); text-align: center; }
+.gg-lc-give {
+  margin-top: 0.6rem; min-height: 48px;
+  background: transparent; border: 0;
+  color: var(--gg-text-4); font-size: 0.7rem; text-decoration: underline; cursor: pointer;
+}
+
+/* staring swap ----------------------------------------------------------- */
+.gg-sd-swap {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(26rem, 90vw);
+  text-align: center;
+  opacity: 0; transition: opacity .2s ease;
+}
+.gg-sd-swap.is-in { opacity: 1; }
+.gg-sd-swap-head { margin: 0 0 0.3rem; font-size: 1.05rem; }
+.gg-sd-swap-line { margin: 0 0 0.6rem; font-size: 0.78rem; color: var(--gg-text-3); }
+.gg-sd-swap-bar { display: block; height: 2px; width: 100%; background: var(--gg-pink); }
+
+/* reaction duel ---------------------------------------------------------- */
+.gg-sd-react {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(30rem, 86vw);
+  height: min(30rem, 46vh);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem;
+  border-radius: var(--gg-radius-card);
+  background: #2a2740;
+  border: 2px solid rgba(255, 255, 255, 0.10);
+  color: var(--gg-text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s ease, background .05s linear, border-color .05s linear, color .05s linear;
+  touch-action: none;
+}
+.gg-sd-react.is-in { opacity: 1; }
+.gg-sd-react-word { font-size: clamp(1.1rem, 4vw, 1.8rem); font-weight: 800; letter-spacing: 0.12em; }
+.gg-sd-react-glyph { font-size: clamp(2.4rem, 9vw, 4.5rem); line-height: 1; }
+.gg-sd-react.is-decoy { background: #fff3d8; border-color: var(--gg-amber); color: #2a2740; }
+.gg-sd-react.is-real { background: var(--gg-pink); border-color: #fff; color: #fff; box-shadow: 0 0 60px rgba(var(--gg-pink-rgb), 0.6); }
+
+/* bubble race ------------------------------------------------------------ */
+.gg-sd-bubbles { position: absolute; inset: 0; opacity: 0; transition: opacity .2s ease; }
+.gg-sd-bubbles.is-in { opacity: 1; }
+.gg-sd-bub-head {
+  position: absolute; left: 50%; top: 1.2rem;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 0.8rem;
+  font-size: 0.78rem; font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+.gg-sd-bub-them { color: var(--gg-text-4); }
+.gg-sd-bub-ring {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: conic-gradient(var(--gg-pink) var(--gg-ring, 100%), rgba(255, 255, 255, 0.12) 0);
+}
+.gg-sd-bub-field { position: absolute; inset: 12% 4% 16% 4%; }
+.gg-bub {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.85);
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), rgba(var(--gg-pink-rgb), 0.22) 45%, rgba(var(--gg-pink-rgb), 0.08) 100%);
+  box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity .18s ease, transform .18s ease;
+  touch-action: none;
+}
+.gg-bub.is-in { opacity: 1; transform: scale(1); }
+.gg-bub.is-pop { opacity: 0; transform: scale(1.6); transition: opacity .2s ease, transform .2s ease; }
+.gg-bub-shine {
+  position: absolute; left: 22%; top: 18%;
+  width: 22%; height: 22%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+}
+.gg-bub-plus {
+  position: absolute;
+  font-size: 0.86rem; font-weight: 800; color: var(--gg-pink);
+  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.8);
+  pointer-events: none;
+  animation: ggFloatUp .7s ease-out forwards;
+}
+
+/* ===========================================================================
+ * PORTRAIT / NARROW — the phone pass (owner, 2026-08-04: "this mess is waaaaay
+ * too cluttered, we need space to see the animations and effects").
+ *
+ * THE BUDGET, from the floor up, on a 428pt phone. Everything below is written
+ * against these five bands and nothing may be added without taking a band away:
+ *
+ *   0.0 - 5.5rem   MERCY (its own fixed layer) + its fineprint
+ *   6.0 - 11.2rem  the closeness dial, right-anchored in the bottom deck.
+ *   6.0rem up      the ARSENAL DRAWER, left-anchored and SHUT by default: while
+ *                  it is shut this band is a single 48px handle, and while it is
+ *                  open it is an overlay ON the stage, not a slice out of it.
+ *   7.2rem (top)   the live-effect chips, moved OUT of the bottom deck to under
+ *                  the score column: they are a status readout, and they were
+ *                  the third thing competing for the bottom-left corner.
+ *   everything else  is #gg-stage, which is the entire point of the screen.
+ *
+ * THE TWO RAIL BANDS ARE GONE (2026-08-04, the sidebar). They held eight tiles
+ * in two absolutely-placed strips at 6rem and 11.6rem and took ~9rem of stage
+ * height on every phone, permanently. The same eight tiles now live in the
+ * drawer, which starts collapsed here and hands all of it back.
+ *
+ * WHAT IS NOT NEGOTIABLE HERE: every tile, every dial stop, the drawer handle
+ * and both round buttons keep a >= 48px hit area. The tiles got SHORTER (the
+ * icon and the words shrank, the "locked" line stopped taking a row of its
+ * own), never narrower than a finger.
+ * ======================================================================== */
+@media (orientation: portrait), (max-width: 720px) {
+  :root { --gg-mon-w: min(42vw, 190px); --gg-item: 48px; }
+
+  /* ---- top bar: it must not be able to overflow ------------------------
+   * `1fr auto 1fr` gives both side tracks a min-content floor, and those floors
+   * (the score column + timer min-width + the attention plate and two 48px
+   * buttons) came to ~442px on a 428px phone — 34px more than the frame has.
+   * The score column is
+   * the only compressible one of the three (its text can wrap or ellipsise), so
+   * it is the one that gets minmax(0, …) and the other two are content-sized.
+   * The pieces below are also just plain smaller, so the row FITS rather than
+   * merely failing quietly: ~49 + 92 + ~200 + gaps ≈ 356px at 428, and it still
+   * fits a 375px phone. */
+  .gg-hud-top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; }
+  .gg-hud-top > * { min-width: 0; }
+  .gg-scorebox { min-width: 0; }
+  .gg-me { overflow-wrap: anywhere; }
+  /* (`.gg-charges` and `.gg-mon-charges` each dropped to 0.64rem here. Both
+     readouts were deleted on 2026-08-05 — the score column is simply narrower
+     than the measurements above assume now, which is slack, not a problem.) */
+  .gg-timer { min-width: 92px; padding: 0.35rem 0.6rem 0.45rem; }
+  .gg-hud-topright { gap: 0.35rem; }
+  .gg-att { gap: 0.4rem; padding: 0.3rem 0.45rem; }
+  .gg-att-ring { width: 34px; height: 34px; }
+  .gg-att-ring::after { inset: 3px; }
+  .gg-att-label { font-size: 0.62rem; }
+  .gg-att-dot { width: 6px; height: 6px; }
+  .gg-att-dots { gap: 3px; }
+
+  /* ---- body: the monitor column, and nothing else ---------------------- */
+  .gg-hud-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; }
+  .gg-rightcol { width: 100%; align-items: flex-end; order: -1; }
+  .gg-well { display: none; }
+  /* the head row of a 190px monitor: the name gives way, the score and the
+     charge count never do */
+  .gg-mon-name { max-width: 100%; }
+  /* …and the grip, which is that same row, has to survive the squeeze AND be a
+     finger target: 26px is the whole drag surface on a phone, where there is no
+     wheel and no hover to find it with. The dots narrow rather than leave —
+     they are the only thing that says the row can be dragged at all. */
+  .gg-mon-head { gap: 0.3rem; }
+  .gg-mon-grip { min-height: 26px; }
+  .gg-mon-grip-dots { width: 7px; background-size: 3.5px 4.5px; }
+  .gg-mon-att-label { font-size: 0.6rem; }
+  /* a receipt is right-aligned in a 190px column, so a long one has to wrap
+     rather than reach back across the stage */
+  .gg-receipt { max-width: 100%; flex-wrap: wrap; font-size: 0.6rem; }
+
+  /* ---- the arsenal: a slide-in DRAWER, not a squeeze --------------------- */
+  /* The two absolute rail bands that used to live down here are gone (2026-08-04,
+     with the sidebar). They cost the stage 9rem of its height on every phone,
+     permanently, for eight controls a player touches a handful of times a match.
+     The drawer costs the handle's 48px and nothing else, and it is SHUT by
+     default here (ui/prefs.js resolveArsenalOpen: 'auto' -> narrow means shut).
+
+     IT IS AN OVERLAY, NOT A COLUMN. position: fixed, so the play area keeps its
+     full width instead of being squeezed into whatever the panel leaves —
+     "space to see the animations and effects" is what this whole phone pass is
+     for. It floats over the field; it does NOT dim it, gate it, or scrim it
+     (rule 2), and #gg-hud's own z40 keeps it under MERCY no matter what. */
+  .gg-arsenal {
+    position: fixed;
+    left: calc(0.4rem + env(safe-area-inset-left, 0px));
+    right: auto;
+    /* 6rem is the deck floor, i.e. the top of MERCY's keep-out: the drawer grows
+       UPWARD from there and can never reach the button. */
+    bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+  .gg-arsenal-panel {
+    /* Fits without scrolling by construction — see the short-viewport rule at
+       the end of this file. It may not become a scroller: a scrollable box needs
+       pointer events, and rule 1 (the panel is pointer-transparent so bubbles
+       stay poppable through it) outranks the convenience. */
+    max-height: calc(100vh - 13rem);
+    padding: 0.4rem 0.35rem;
+    gap: 0.35rem;
+  }
+  .gg-arsenal.is-open .gg-arsenal-panel { animation: ggDrawerIn .22s ease-out 1; }
+  @keyframes ggDrawerIn {
+    from { transform: translateX(-108%); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+  .gg-arsenal-rails { gap: 0.3rem; }
+  .gg-arsenal-tab { min-height: 64px; }
+
+  /* A tile is 48px wide and about 62px tall instead of ~90: the art is smaller,
+     the words are smaller, and the state line no longer reserves a row when it
+     has nothing to say. */
+  .gg-item { padding: 0 0 0.1rem; gap: 0; }
+  .gg-item-img, .gg-item-fallback { width: 92%; max-width: 42px; }
+  .gg-item-name { font-size: 0.5rem; letter-spacing: 0.01em; line-height: 1.15; }
+  .gg-item-state { font-size: 0.5rem; min-height: 0; line-height: 1.15; }
+  /* (`.gg-cost-pip` shrank to 5px here; the price row was deleted 2026-08-05.) */
+  .gg-item-lock { font-size: 0.95rem; }
+  /* "locked" was a full text line under five of the nine tiles. On a phone the
+     lock is the "?" badge and the full desaturation instead — but the WORD is
+     still in the DOM and still read out, because the tier rule is that colour
+     never travels alone. This is the sr-only recipe from goon.css, applied by
+     state rather than by class so ui/arsenal.js needs no change. */
+  .gg-item.is-locked .gg-item-state {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0; border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* ---- the bottom deck: the dial alone, in BAND A ----------------------- */
+  /* padding-bottom clears MERCY, measured not guessed: 1.4rem off the floor +
+     a 50px button + a 0.25rem gap + an 11px fineprint = 5.46rem, so 6rem. */
+  .gg-hud-bottom { flex-direction: row; align-items: flex-end; justify-content: flex-end; gap: 0.4rem; padding-bottom: 6rem; }
+  /* The dial's column takes the `flex: 0 0 auto` the host used to carry here —
+     it is the bottom deck's child now, and a stretched column would drag the
+     dial off the right edge it is pinned to. */
+  .gg-dial-col { flex: 0 0 auto; }
+  .gg-dial-host { justify-content: flex-end; flex: 0 0 auto; }
+  .gg-dial { min-width: 0; width: min(46vw, 11.5rem); max-width: none; padding: 0.28rem 0.4rem 0.32rem; }
+  .gg-dial-label { font-size: 0.54rem; }
+  .gg-dial-stops { gap: 3px; margin: 0.2rem 0 0.15rem; }
+  .gg-dial-stop { font-size: 0.56rem; }
+  .gg-dial-fine { font-size: 0.5rem; }
+
+  /* THE LIVE-EFFECT CHIPS LEAVE THE BOTTOM. They narrate what is already
+     playing on the stage, so they belong beside the score and not in the third
+     corner of the mercy strip. Absolutely placed against the frame like the
+     rails: clear of the announcer ribbon (which stops around 5.5rem) above and
+     of the monitor column (which starts past 55% width) to the right. They stay
+     a DESCENDANT of .gg-hud-bottom, so `.is-sd` still takes them away with the
+     rest of the deck and zen still hides them by name. */
+  .gg-fxrail {
+    position: absolute;
+    left: calc(0.4rem + env(safe-area-inset-left, 0px));
+    top: 7.2rem;
+    bottom: auto;
+    max-width: 48vw;
+    align-items: flex-start;
+  }
+  .gg-fxchip { font-size: 0.62rem; padding: 0.18rem 0.5rem; max-width: 100%; }
+  .gg-fxchip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* The sheet used to span the full width above the upper rail band. The bands
+     are gone and the arsenal DRAWER is what opens on the left now — and it is
+     open whenever this sheet is, because the emote tile that opens it lives
+     inside it — so the sheet gives up the left half rather than landing on top
+     of the thing that summoned it. */
+  .gg-emotes { right: 0.6rem; left: auto; width: min(60vw, 17rem); bottom: 12rem; }
+
+  /* SIZE, again (owner, 2026-08-04: it is STILL too big on this phone). The old
+     portrait rule was the bug — `min(100vw - 1.6rem, 20rem)` INFLATED the
+     button back to 320px on a 428pt screen, undoing the base rule's
+     `min(300px, 46vw)`. It now shrinks on a phone like it says it does, and it
+     is still the widest control on the desk by a mile. */
+  .gg-mercy-btn { width: min(52vw, 14rem); height: 50px; font-size: 0.8rem; }
+  .gg-sd-react { width: 92vw; height: 40vh; }
+
+  /* ZEN on a phone: the dial, the effect chips and the mercy strip are gone, so
+     the arsenal drops to the floor instead of hovering over a hole where the
+     deck used to be. That is ~4.5rem of stage handed back on top of whatever the
+     drawer being shut already gave — which is the whole point of the toggle.
+     The drawer is fixed, so this is the only way it can follow the reflow at
+     all, and zen still NEVER takes the arsenal away: it moves it. */
+  .gg-hud-frame.gg-hud--zen .gg-arsenal { bottom: calc(1.6rem + env(safe-area-inset-bottom, 0px)); }
+  .gg-hud-frame.gg-hud--zen .gg-arsenal-panel { max-height: calc(100vh - 8.6rem); }
+}
+
+/* ---------------------------------------------------------------------------
+ * SHORT VIEWPORTS — a landscape phone, or a small window on a laptop. The drawer
+ * is TALL by design (two columns of four tiles, ~360px on a desk), and a 360px
+ * viewport has nowhere to put that. Rather than grow a scroller — which would
+ * need pointer events and break rule 1, the thing that keeps bubbles poppable
+ * through the panel — the rails simply turn ninety degrees: two rows of four
+ * instead of two columns of four, ~2 tiles tall instead of 4.
+ * ------------------------------------------------------------------------ */
+@media (max-height: 560px) {
+  .gg-arsenal-rails { flex-direction: column; gap: 0.3rem; }
+  .gg-rail { flex-direction: row; align-items: flex-start; gap: 0.3rem; }
+}
+
+/* ---------------------------------------------------------------------------
+ * MOTION — every decorative animation above already rides --gg-deco-play; this
+ * is the hard off switch for people who asked for it.
+ * ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  /* the emote bubble animates off .is-on/.is-out as well as .is-anim, so it is
+     listed on its own — .is-anim alone would leave the pop and the wiggle up. */
+  .gg-mini.is-anim,
+  .gg-mini.is-anim *,
+  .gg-mini.is-anim::before,
+  .gg-mini-emote *,
+  .gg-mon-close.is-edge,
+  .gg-sd-track.is-close .gg-sd-notch.is-end,
+  .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
+  /* `.gg-pip.is-pop` used to head this list — the charge pips' 1.55x scale
+     bounce. It went with the pips themselves on 2026-08-05, and the `.gg-plus1`
+     chip that briefly replaced it went the same evening with the whole charge
+     readout. Neither was ever listed in this block: a chip that floats 22px and
+     deletes itself is the feedback, not decoration on top of it. */
+  .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
+  /* the drawer still ARRIVES and the handle still lights — they just stop
+     moving. Neither animation has a fill-mode, so removing it lands both nodes
+     on their finished state rather than on the off-screen keyframe. */
+  .gg-arsenal.is-open .gg-arsenal-panel,
+  .gg-arsenal-tab.is-bump { animation: none !important; }
+  /* a drop still READS as a drop (the ×N badge, the word) — it just stops moving */
+  .gg-item.is-dropped .gg-item-img,
+  .gg-item.is-dropped .gg-item-fallback { animation: none !important; }
+  .gg-drop-fly { transition: none !important; opacity: 0; }
+  .gg-sd-marker, .gg-timer-fill, .gg-mon-att-fill { transition: none !important; }
+  /* the pass still lands — it just stops travelling */
+  .gg-mon-check.is-in { animation: ggCheckFade 1.2s linear 1 forwards !important; transform: translate(-50%, -50%) scale(1); }
+  .gg-item:hover:not(:disabled), .gg-item:focus-visible, .gg-item.is-armed { transform: none; }
+  /* the opponent's window stack animates off its own PRESENCE, not off .is-anim,
+     so it is stopped by name — in its own rule, because the list above is pinned
+     character-for-character by selftest-hud. It stays DRAWN either way: four
+     still rects are still four windows you can count. */
+  .gg-mon-vwin, .gg-mon-vwin * { animation: none !important; }
+  /* THE THROW: keep the highlight, lose the flight. The monitor's flare is a
+     visible glow in its own .is-throwing state, so stopping its animation leaves
+     a STATIC highlight — the cause is still shown, it just does not pulse. The
+     projectile has no static reading (a sticker parked over the desk for 760 ms
+     is litter, not information), so it does not spawn at all: it is hidden here
+     for the OS-level preference, and ui/opponent.js's isCalm() skips building it
+     for the in-app one, because the node lives on <body> where the HUD's
+     .is-calm class cannot reach it. */
+  .gg-mon.is-throwing .gg-mon-throw { animation: none !important; }
+  .gg-throw, .gg-throw *, .gg-throw-hit { animation: none !important; }
+  .gg-throw, .gg-throw-hit { display: none !important; }
+}
+.gg-hud-frame.is-calm .gg-mon.is-throwing .gg-mon-throw { animation: none !important; }
+.gg-hud-frame.is-calm .gg-mini.is-anim,
+.gg-hud-frame.is-calm .gg-mini.is-anim::before,
+.gg-hud-frame.is-calm .gg-mini.is-anim *,
+.gg-hud-frame.is-calm .gg-mini-emote * { animation: none !important; }
+.gg-hud-frame.is-calm .gg-mon-vwin,
+.gg-hud-frame.is-calm .gg-mon-vwin * { animation: none !important; }
+
+/* ===========================================================================
+ * VOICE NOTES — the held mic and the incoming chip (ui/voice/micHud.js).
+ *
+ * PLACEMENT IS FLOW, NOT COORDINATES, and that is the whole safety argument.
+ * Both slots are ordinary flow children — the MIC is the last child of
+ * `.gg-arsenal-panel`, directly under the two rails whose last right-hand tile
+ * is the emote (2026-08-05: the owner looked for it "right under the Emote
+ * icon" three play-tests running, and holding a mic is a thing you DO, so it
+ * belongs with the other things you do); the CHIP stays in `.gg-rightcol` under
+ * their bezel, because it is about THEIR voice. Neither can reach MERCY's
+ * bottom-centre gutter, the closeness dial, the announcer ribbon or the bezel
+ * itself, because neither is positioned against the frame — unlike the emote
+ * sheet and the portrait rails, there is no band here to measure and nothing to
+ * re-measure when the phone pass moves one. Sudden death takes them away with
+ * the rest of the body (.gg-hud-frame.is-sd .gg-hud-body), for free.
+ *
+ * THE STRIP GROWS INSIDE ITS OWN SLOT, AND IT GROWS AWAY FROM ITS EDGE OF THE
+ * SCREEN. `.gg-voice-host` is a fixed 48px row and the strip is absolutely
+ * placed against it, so a recording expands over the (pointer-transparent) well
+ * and NOTHING on the desk moves while a button is being held — a layout shift
+ * under a live pointer capture is how a hold gets dropped half way through a
+ * sentence. The DIRECTION follows the slot's home: the arsenal drawer is on the
+ * LEFT of the desk, so the strip is anchored left and grows RIGHTWARDS, with
+ * the button first in the reading order via `row-reverse` (the DOM order is
+ * meta-then-button and micHud must never re-append a node — see its header — so
+ * this is a paint-order flip, not a re-parent). The right-anchored variant is
+ * kept below for `.gg-rightcol`, which is where the chip lives and where a
+ * future slot would land.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP, for the third time in this file. `.gg-hud-
+ * frame .gg-plate { pointer-events: auto }` near the top is specificity 0,2,0,
+ * and the strip wears .gg-plate while it is recording (for goon.css's
+ * html[data-gg-fx="hot"] hardening). The opt-out below is therefore written at
+ * 0,2,0 as well and LATER in the file, with the one control that must stay
+ * clickable re-opting in at the same weight: a transparent pill lying across
+ * the stage would eat clicks meant for #gg-stage.
+ *
+ * ONE ANIMATION SLOT PER ELEMENT. The pulse is on `.gg-voice-dot` and the level
+ * bars on `.gg-voice-bar` — leaves that animate and do nothing else. The strip
+ * and the chip carry state classes instead, so no `animation` shorthand can
+ * cancel another. Both animations opt into --gg-deco-play: their BASE state (a
+ * solid red dot, three standing bars) is the state that carries the meaning, so
+ * parking them at heat costs no information.
+ *
+ * ZEN takes both away by name, like the dial and the effect chips: it exists to
+ * hand the stage back, and a mic you are not holding is chrome. THE RULE BELOW
+ * IS HALF THE FEATURE — ui/hud.js also pushes the bit into micHud
+ * (`setHudHidden`), because pointer capture bypasses hit testing and a
+ * `display:none` over a live hold would otherwise leave a recording running with
+ * no strip on screen. The stylesheet hides it; the module closes the microphone.
+ * ======================================================================== */
+.gg-voice-host {
+  position: relative;
+  width: 100%;
+  height: 48px;
+  flex: 0 0 auto;
+}
+.gg-voice-chiphost { width: 100%; display: flex; justify-content: flex-end; }
+
+.gg-voice {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  max-width: min(22rem, 62vw);
+  border-radius: var(--gg-radius-pill);
+  /* the plate's own padding would push the button off the column's right edge;
+     .gg-plate is added by CLASS while recording, so this comes later and wins */
+  padding: 0 0 0 0.85rem;
+}
+/* idle: no plate, no box — just the round button, exactly like the gear */
+.gg-voice:not(.gg-plate) { background: none; border: 0; backdrop-filter: none; padding-left: 0; }
+
+/* ---- THE ARSENAL-DRAWER VARIANT: anchored LEFT, growing RIGHT --------------
+ * Same nodes, same classes, same machine — only the edge it is pinned to and
+ * the direction the strip unfolds. The drawer sits on the left gutter, so a
+ * strip that grew leftwards out of it would run off the screen inside two
+ * words. `row-reverse` puts the button back on the outside edge (nearest the
+ * finger, where a 48px target belongs) without touching the DOM order micHud
+ * relies on. The host is width:100% of a two-tile-wide panel, so the strip is
+ * allowed to overhang it — the panel is pointer-transparent (sidebar rule 1)
+ * and only `.gg-voice-btn` re-opts in, so nothing under the overhang is ever
+ * swallowed. */
+.gg-arsenal-panel > .gg-voice-host { margin-top: 0.15rem; }
+.gg-arsenal-panel .gg-voice {
+  right: auto;
+  left: 0;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  padding: 0 0.85rem 0 0;
+}
+.gg-arsenal-panel .gg-voice:not(.gg-plate) { padding-right: 0; }
+/* …and the hint, which is a flow child of the host rather than of the strip:
+   it reads from the same edge the strip now grows from. */
+.gg-arsenal-panel .gg-voice-hint { right: auto; left: 0; text-align: left; }
+
+/* THE 0,2,0 OPT-OUT (see the header) + the one re-opt-in. */
+.gg-hud-frame .gg-voice,
+.gg-hud-frame .gg-voice-hint,
+.gg-hud-frame .gg-voice-chip { pointer-events: none; }
+.gg-hud-frame .gg-voice-btn { pointer-events: auto; }
+
+.gg-voice-btn {
+  flex: 0 0 auto;
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+  touch-action: none;             /* a long press must not scroll the page away */
+  user-select: none;
+  transition: color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.gg-voice-btn:hover { color: #fff; border-color: var(--gg-pink); }
+.gg-voice.is-rec .gg-voice-btn {
+  color: #fff;
+  border-color: var(--gg-hot);
+  box-shadow: 0 0 18px rgba(255, 20, 147, 0.55);
+}
+/* past the slide threshold the BUTTON says so too, not only the words */
+.gg-voice.is-cancel .gg-voice-btn { color: var(--gg-text-4); border-color: var(--gg-text-4); box-shadow: none; }
+
+/* the strip's contents exist only while there is something to say */
+.gg-voice-meta { display: none; align-items: center; gap: 0.5rem; min-width: 0; }
+.gg-voice[data-gg-voice="rec"] .gg-voice-meta,
+.gg-voice[data-gg-voice="send"] .gg-voice-meta,
+.gg-voice[data-gg-voice="flash"] .gg-voice-meta { display: flex; }
+
+.gg-voice-dot {
+  flex: 0 0 auto;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--gg-hot);
+  box-shadow: 0 0 10px rgba(255, 20, 147, 0.8);
+  animation: ggVoicePulse 1.1s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggVoicePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.72); } }
+/* nothing is being recorded in these two, so the red light goes out */
+.gg-voice[data-gg-voice="send"] .gg-voice-dot,
+.gg-voice[data-gg-voice="flash"] .gg-voice-dot { display: none; }
+
+.gg-voice-time {
+  font-size: 0.72rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--gg-text-1);
+  white-space: nowrap;
+}
+/* THE LAST THREE SECONDS. The words already changed ("2s left" — ui/strings.js
+   voice.recordCountdown); this is the colour half of the same fact, and it is a
+   COLOUR and not an animation on purpose: the strip carries state classes and
+   the section's animation budget is spent on the dot (see the header). Cancel
+   wins over ending — a note that is about to be thrown away has nothing left to
+   be running out of. */
+.gg-voice.is-ending .gg-voice-time { color: var(--gg-hot); }
+.gg-voice.is-cancel .gg-voice-time { color: var(--gg-text-4); }
+
+.gg-voice-slide {
+  font-size: 0.62rem; letter-spacing: 0.08em;
+  color: var(--gg-text-4);
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.gg-voice.is-cancel .gg-voice-slide { color: var(--gg-hot); }
+
+/* The hint caption: a tap, a refused mic, a send that came back too soon. Sits
+   ABOVE the strip so the finger on the button never covers the answer. */
+.gg-voice-hint {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.3rem);
+  max-width: min(18rem, 70vw);
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.62rem; letter-spacing: 0.04em;
+  color: var(--gg-text-2);
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- their note, playing (the chip under the bezel) --------------------- */
+.gg-voice-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.72);
+  border-left: 3px solid var(--gg-violet);
+  font-size: 0.62rem; color: var(--gg-text-2);
+  max-width: 100%;
+}
+.gg-voice-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-voice-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px; }
+.gg-voice-bar {
+  width: 3px; height: 11px;
+  border-radius: 2px;
+  background: var(--gg-violet);
+  transform-origin: 50% 100%;
+  animation: ggVoiceBar .9s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-voice-bar:nth-child(2) { animation-delay: .15s; }
+.gg-voice-bar:nth-child(3) { animation-delay: .3s; }
+@keyframes ggVoiceBar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+
+/* ---- zen: both go, like the dial and the effect chips ------------------- */
+.gg-hud-frame.gg-hud--zen .gg-voice-host,
+.gg-hud-frame.gg-hud--zen .gg-voice-chiphost { display: none; }
+
+/* ---- hot: the round button and the two captions harden like every plate -- */
+html[data-gg-fx="hot"] .gg-voice-btn { background: rgba(10, 5, 17, 0.90); }
+html[data-gg-fx="hot"] .gg-voice-hint,
+html[data-gg-fx="hot"] .gg-voice-chip { background: rgba(10, 5, 17, 0.92); }
+
+/* ---- motion off: the words and the red dot stay, they just stop moving --- */
+.gg-hud-frame.is-calm .gg-voice-dot,
+.gg-hud-frame.is-calm .gg-voice-bar { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-voice-dot, .gg-voice-bar { animation: none !important; }
+}
+
+@media (orientation: portrait), (max-width: 720px) {
+  /* The column is 190px wide here and sits at the TOP of the body, so the strip
+     leans further out over the stage while it is held — 78vw is the widest it
+     may be, which still clears the frame's own padding on a 375pt phone. */
+  .gg-voice-host { height: 44px; }
+  .gg-voice { height: 44px; max-width: 78vw; }
+  .gg-voice-btn { width: 44px; height: 44px; font-size: 0.98rem; }
+  .gg-voice-time { font-size: 0.68rem; }
+  .gg-voice-slide { font-size: 0.56rem; }
+  .gg-voice-chip { font-size: 0.58rem; }
+}
+
+/* ===========================================================================
+ * ANNOUNCER — the top-centre ribbon (ui/announcer.js), added 2026-08-03.
+ *
+ * "we should announce briefly on the top of the screen whats going on (the
+ *  effects that happen to both player, like Get ready to watch! or Get ready to
+ *  type, etc and Video on, and Lock Card, etc)"
+ *
+ * PLACEMENT. Top-centre, but UNDER the timer plate, which owns the middle of the
+ * top bar (.gg-timer { justify-self: center }). It is absolutely placed so it
+ * takes no row in the frame's grid, narrow so it never reaches the opponent
+ * monitor in the right corner, and nowhere near MERCY's bottom-centre keep-out.
+ *
+ * POINTER-EVENTS. `.gg-hud-frame .gg-plate { pointer-events: auto }` above is
+ * specificity 0,2,0 and the ribbon wears .gg-plate for the data-gg-fx="hot"
+ * hardening — so the opt-out below is written at 0,2,0 as well, later in the
+ * file, or a banner would eat a click meant for #gg-stage.
+ *
+ * MOTION. Two one-shots on mutually exclusive classes (`animation` is a
+ * shorthand; two live rules on one element cancel each other) plus one
+ * decorative sheen on its own child. No loops at all: the ribbon costs the
+ * two-animation chrome budget nothing to leave on screen. With motion off the
+ * banner still APPEARS — the base state is visible and ui/announcer.js removes
+ * the node on a JS timer, never on animation-fill-mode.
+ * ======================================================================== */
+.gg-announce {
+  position: absolute;
+  top: clamp(4.4rem, 8vh, 6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  width: max-content;
+  max-width: min(24rem, 52vw);
+}
+.gg-hud-frame .gg-announce,
+.gg-hud-frame .gg-announce-slot { pointer-events: none; }
+
+.gg-announce-slot {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.36rem 0.95rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  opacity: 1;                       /* the base state is VISIBLE — see MOTION above */
+  text-shadow: 0 0 14px rgba(var(--gg-pink-rgb), 0.5), 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+/* the pink/violet accent, on ::after so goon.css's hot rule may still flatten
+   the plate background underneath it */
+.gg-announce-slot::after {
+  content: '';
+  position: absolute;
+  left: 14%; right: 14%; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gg-pink), var(--gg-violet), transparent);
+}
+.gg-announce-glyph {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--gg-pink);
+  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.8);
+}
+.gg-announce-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the warning is softer than the fact — and the two never look alike */
+.gg-announce-slot.is-pre { border-color: rgba(var(--gg-violet-rgb), 0.45); }
+.gg-announce-slot.is-pre .gg-announce-glyph { color: var(--gg-violet); text-shadow: 0 0 12px rgba(var(--gg-violet-rgb), 0.7); }
+.gg-announce-slot.is-now { box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.28); }
+
+.gg-announce-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(-120%);
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.16) 50%, transparent 68%);
+}
+
+@keyframes ggAnnounceIn { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes ggAnnounceOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-6px); } }
+@keyframes ggAnnounceSheen { to { transform: translateX(120%); } }
+.gg-announce-slot.is-in { animation: ggAnnounceIn .22s ease-out 1; }
+.gg-announce-slot.is-in > .gg-announce-sheen { animation: ggAnnounceSheen .5s ease-out 1 forwards; }
+/* .is-out is set only after .is-in is removed, and it is written last so that a
+   frame where both somehow overlap resolves to the outro. */
+.gg-announce-slot.is-out { animation: ggAnnounceOut .26s ease-in 1 forwards; }
+
+/* hot: the plate hardens like every other one (goon.css flattens the backdrop
+   filter), and the purely decorative sheen stops being drawn at all. */
+html[data-gg-fx="hot"] .gg-announce-slot { backdrop-filter: none; background: rgba(10, 5, 17, 0.92); }
+html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
+
+/* the hard off switches — the words still land, they just stop moving */
+.gg-hud-frame.is-calm .gg-announce-slot.is-in,
+.gg-hud-frame.is-calm .gg-announce-slot.is-out,
+.gg-hud-frame.is-calm .gg-announce-sheen { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-announce-slot.is-in,
+  .gg-announce-slot.is-out,
+  .gg-announce-sheen { animation: none !important; }
+}
+
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-announce { top: clamp(3.8rem, 7vh, 5rem); max-width: min(20rem, 84vw); }
+  .gg-announce-slot { font-size: 0.76rem; padding: 0.3rem 0.8rem 0.36rem; }
+}
+
+/* ===========================================================================
+ * THE PERSISTENT AVATAR MINIS (docs/GOON_DISCORD_CONTRACT.md §6)
+ *
+ * Two 40px bubbles that stay up for the whole of Live: yours at the head of the
+ * score column, theirs directly above their monitor miniature. The `.gg-ava`
+ * kit itself (box, tile, hue) lives in ui/screens.css — the lobby, the splash
+ * and the recap plates all use it, so it cannot live in the HUD tier. Only the
+ * PLACEMENT is here.
+ *
+ * THE TWO KEEP-OUTS. MERCY owns the bottom-centre strip (.gg-hud-bottom already
+ * reserves 4.6rem for it) and the announcer ribbon owns the top-centre band
+ * (top: clamp(4.4rem, 8vh, 6rem), width max-content, centred). Both minis are
+ * in edge-anchored grid cells the desk already owned, so neither can reach
+ * either band at any viewport — which is why this block adds no positioning of
+ * its own beyond a flex alignment.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP. `.gg-hud-frame .gg-plate { pointer-events:
+ * auto }` near the top of this file is specificity 0,2,0, and the ribbon's
+ * opt-out block above documents the same trap. The minis do not wear .gg-plate
+ * today, but a future hardening pass would reach for it exactly as the ribbon
+ * did — so the opt-out is written here at 0,2,0 as well, LATER in the file, and
+ * the one control that must stay clickable re-opts in at the same weight. A
+ * bubble that ate a click meant for #gg-stage would be a very quiet bug.
+ * ======================================================================== */
+.gg-ava-minibox { display: flex; align-items: center; gap: 0.4rem; }
+.gg-ava-minibox--you { margin-top: 0.15rem; }
+.gg-ava-minibox--opp { width: 100%; justify-content: flex-end; }
+
+.gg-hud-frame .gg-ava-minibox,
+.gg-hud-frame .gg-ava { pointer-events: none; }
+.gg-hud-frame .gg-ava-dm { pointer-events: auto; }
+
+/* Their DM affordance. Blurple, tiny, and present ONLY when they shared DMs —
+   ui/hud.js does not build a disabled variant, because a button that cannot
+   work is worse than no button. */
+.gg-ava-dm {
+  min-width: 34px; height: 26px;
+  padding: 0 0.5rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--gg-font);
+  font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em;
+  color: #fff;
+  background: rgba(88, 101, 242, 0.85);
+  border: 1px solid rgba(120, 132, 255, 0.9);
+  border-radius: var(--gg-radius-pill);
+  box-shadow: 0 2px 10px rgba(88, 101, 242, 0.45);
+  cursor: pointer;
+  transition: background .18s, box-shadow .18s;
+}
+.gg-ava-dm:hover { background: rgba(110, 122, 255, 0.95); box-shadow: 0 2px 16px rgba(88, 101, 242, 0.7); }
+
+/* Sudden death contracts the desk and the body goes with it; the score column
+   keeps yours, which is the one that never moves. */
+.gg-hud-frame.is-sd .gg-ava-minibox--opp { opacity: 0; }
+
+@media (orientation: portrait), (max-width: 720px) {
+  /* Narrow: the monitor column is tight, so their bubble tucks in beside the
+     head instead of sitting over it, and both drop a size. */
+  .gg-hud-frame .gg-ava[data-size="mini"] { --gg-ava-size: 32px; }
+  .gg-ava-dm { min-width: 30px; height: 24px; font-size: 0.58rem; }
+}
+

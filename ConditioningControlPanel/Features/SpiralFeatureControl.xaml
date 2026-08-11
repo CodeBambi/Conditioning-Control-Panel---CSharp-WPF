@@ -119,10 +119,10 @@
                                    FontWeight="SemiBold"/>
                     </Grid>
                     <Slider x:Name="SliderOpacity"
-                            Minimum="5" Maximum="50" Value="15"
+                            Minimum="5" Maximum="100" Value="15"
                             feat:SessionLock.Owned="True"
                             ValueChanged="SliderOpacity_Changed"/>
-                    <TextBlock Text="{loc:Str tooltip_spiral_opacity_5_50}"
+                    <TextBlock Text="{loc:Str tooltip_spiral_opacity_5_100}"
                                Foreground="{DynamicResource TextMutedBrush}"
                                FontSize="10"
                                TextWrapping="Wrap"

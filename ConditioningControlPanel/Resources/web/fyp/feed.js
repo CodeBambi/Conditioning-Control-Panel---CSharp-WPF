@@ -30,6 +30,13 @@ const RING_CAP = 128;
 let surfaceSeq = 0;
 const nextSurfaceKey = () => `s${surfaceSeq++}`;
 
+// Mixed-source share: the probability that any given pick draws from the ONLINE
+// candidate bucket instead of the local one (0 = library only, 1 = online only).
+// Applied at pick time — not by rationing the pool — because local videos expand
+// into many segments while online clips are one each, so pool-entry ratios would
+// not match what the user actually sees. Module-level: one feed per page.
+let mixRemoteShare = 0;
+
 function weightFor(id) {
   return W_BASE + W_BOOST_MAX * stats.segmentScore(id) + W_EXPLORE_BONUS / (1 + stats.segmentPlays(id));
 }
@@ -48,21 +55,22 @@ function enumerateSegments(assets) {
   const out = [];
   for (const a of assets) {
     const landscape = isLandscapeDims(a.width, a.height);
+    const remote = a.origin === 'online';
     if (a.type === 'gif') {
       // A GIF is one whole-item segment: no timeline, no grid.
-      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: true, landscape });
+      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: true, landscape, remote });
       continue;
     }
     const durSec = a.durationMs != null ? a.durationMs / 1000 : undefined;
     if (durSec == null) {
       // Cold: duration not probed yet — one placeholder segment, seed-window start.
-      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: false, landscape });
+      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: false, landscape, remote });
     } else if (durSec <= WHOLE_VIDEO_MAX_SEC) {
-      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: true, landscape });
+      out.push({ asset: a, assetId: a.id, k: 0, segId: segId(a.id, 0), durKnown: true, landscape, remote });
     } else {
       const n = segmentCount(durSec);
       for (let k = 0; k < n; k++) {
-        out.push({ asset: a, assetId: a.id, k, segId: segId(a.id, k), durKnown: true, landscape });
+        out.push({ asset: a, assetId: a.id, k, segId: segId(a.id, k), durKnown: true, landscape, remote });
       }
     }
   }
@@ -112,6 +120,24 @@ function weightedPick(pool, ring, segCooldown, exclude) {
   }
   const usable = exclude ? pool.filter((c) => !exclude.has(c.segId)) : pool;
   return usable.length ? leastRecentlyUsed(usable, ring) : null;
+}
+
+/**
+ * A weighted pick that honours the source mix: roll which bucket (online/local)
+ * this pick should come from, try there first, and fall back to the whole pool
+ * so a starved bucket (online buffer still loading, tiny library) never blanks
+ * a tile. Every fresh-pick site routes through here.
+ */
+function pickWithMix(pool, ring, segCooldown, exclude) {
+  if (mixRemoteShare > 0 && mixRemoteShare < 1) {
+    const wantRemote = Math.random() < mixRemoteShare;
+    const bucket = pool.filter((c) => c.remote === wantRemote);
+    if (bucket.length) {
+      const pick = weightedPick(bucket, ring, segCooldown, exclude);
+      if (pick) return pick;
+    }
+  }
+  return weightedPick(pool, ring, segCooldown, exclude);
 }
 
 function toCut(pick) {
@@ -175,7 +201,7 @@ function buildLeadTiles(lead, rows, landscapePool, ring, segCooldown) {
   const picks = [lead];
   const exclude = new Set([lead.segId]);
   for (let r = 1; r < rows; r++) {
-    const mate = weightedPick(landscapePool, ring, segCooldown, exclude);
+    const mate = pickWithMix(landscapePool, ring, segCooldown, exclude);
     if (!mate) break;
     picks.push(mate);
     exclude.add(mate.segId);
@@ -207,7 +233,7 @@ function buildMosaicTiles(candidates, ring, segCooldown, aspect) {
     // Prefer fresh + orientation-matched; widen to the full pool; only for a pack
     // too small to fill every cell, allow a repeat rather than a black gap.
     const pick =
-      weightedPick(pool, ring, segCooldown, exclude) ??
+      pickWithMix(pool, ring, segCooldown, exclude) ??
       weightedPick(candidates, ring, segCooldown, exclude) ??
       weightedPick(candidates, ring, segCooldown, null);
     if (!pick) continue;
@@ -266,7 +292,7 @@ export function createFeed(getAspect) {
       if (layout === 'random') {
         tiles = buildMosaicTiles(candidates, recent.ring, segCooldown, aspect);
       } else {
-        const lead = weightedPick(candidates, recent.ring, segCooldown, null);
+        const lead = pickWithMix(candidates, recent.ring, segCooldown, null);
         if (!lead) break;
         remember(recent.ring, lead.segId);
         tiles = buildLeadTiles(lead, layout === 'trio' ? 3 : 2, landscapePool, recent.ring, segCooldown);
@@ -293,7 +319,7 @@ export function createFeed(getAspect) {
     if (!stacked && pickPool.length < 2) pickPool = candidates;
     const exclude = new Set(comp.tiles.map((t) => t.cut.segId)); // no dupes on the page
     exclude.add(tile.cut.segId);
-    const pick = weightedPick(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
+    const pick = pickWithMix(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
     if (!pick) return null;
 
     let stack = history.get(hKey);
@@ -322,10 +348,12 @@ export function createFeed(getAspect) {
     get historySize() { return history.size; },
 
     /** Returns true when the feed must reset to the top (pool identity or layout
-     *  changed). Duration/dimension backfills keep the feed exactly where it is. */
-    configure(nextAssets, nextIncludeGifs, nextLayout) {
+     *  changed). Duration/dimension backfills keep the feed exactly where it is —
+     *  and so does a remoteShare change (it only biases future picks). */
+    configure(nextAssets, nextIncludeGifs, nextLayout, nextRemoteShare = 0) {
       assets = nextAssets;
       includeGifs = nextIncludeGifs;
+      mixRemoteShare = Math.max(0, Math.min(1, Number(nextRemoteShare) || 0));
       rebuildCandidates();
       const nextKey = computePoolKey();
       const reset = nextKey !== poolKey || nextLayout !== layout;
@@ -335,9 +363,32 @@ export function createFeed(getAspect) {
         recent.ring = [];
         history.clear();
         comps = makeCompositions(PAGE_SIZE);
-        stats.pruneToAssets(new Set(assets.map((a) => a.id)));
+        // Online ids churn every session and never enter stats (see main.js report),
+        // so pruning against LOCAL ids only keeps library stats intact in online mode.
+        stats.pruneToAssets(new Set(assets.filter((a) => a.origin !== 'online').map((a) => a.id)));
       }
       return reset;
+    },
+
+    /**
+     * Grow the pool WITHOUT resetting — the online path's whole point. configure()
+     * yanks the feed to the top whenever the pool identity changes, which would be
+     * catastrophic mid-scroll every time a remote batch lands; append extends the
+     * pool in place and updates the identity key so the next configure() (layout
+     * toggle etc.) doesn't read the growth as a brand-new pool. If the feed was
+     * empty (online mode waiting on its first batch), the first pages are built
+     * here; the caller mounts them.
+     */
+    append(newAssets) {
+      if (!Array.isArray(newAssets) || newAssets.length === 0) return 0;
+      const known = new Set(assets.map((a) => a.id));
+      const fresh = newAssets.filter((a) => a && a.id && !known.has(a.id));
+      if (fresh.length === 0) return 0;
+      assets = assets.concat(fresh);
+      rebuildCandidates();
+      poolKey = computePoolKey();
+      if (comps.length === 0) comps = makeCompositions(PAGE_SIZE);
+      return fresh.length;
     },
 
     /** A playback probe filled in duration/dims: refresh candidates in place. */

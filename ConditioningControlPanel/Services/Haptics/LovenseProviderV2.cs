@@ -53,6 +53,12 @@ namespace ConditioningControlPanel.Services.Haptics
         private static readonly TimeSpan ToyPollInterval = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(25);
         private const int MaxConsecutiveFailures = 3;
+        /// <summary>How many extra latched targets one completing send may drive before handing
+        /// the rest back to the 1 Hz drain. Bounds how long the per-device gate can be held across
+        /// HTTP awaits (and bounds re-entrancy onto the completing call's context).</summary>
+        private const int MaxPendingDrainsPerSend = 1;
+        /// <summary>Retry ladder after the connection failed out (never after a user Disconnect).</summary>
+        private static readonly int[] ReconnectBackoffSeconds = { 5, 10, 30 };
 
         // --- state --------------------------------------------------------
         private readonly object _lock = new();
@@ -67,6 +73,12 @@ namespace ConditioningControlPanel.Services.Haptics
         private DateTime _lastPollUtc = DateTime.MinValue;
         private volatile bool _connected;
         private volatile bool _disposed;
+        /// <summary>True after an explicit <see cref="DisconnectAsync"/> - "the user turned it
+        /// off" must never auto-reconnect, unlike "we failed out".</summary>
+        private volatile bool _userDisconnected;
+        private DateTime _nextReconnectUtc = DateTime.MinValue;   // MinValue = no retry armed
+        private int _reconnectAttempt;
+        private int _pollFailures;
 
         public string Key => "lovense";
         public string DisplayName => "Lovense (Game Mode)";
@@ -92,15 +104,25 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var handler = new HttpClientHandler
             {
-                // LAN-only target. Certificate errors are tolerated for loopback and for the
-                // *.lovense.club alias (which resolves to a private LAN address); everything
-                // else is validated normally.
+                // LAN-only target, and EXACTLY ONE defect is forgiven: a hostname mismatch, and only
+                // when the address we dialled is loopback, the *.lovense.club alias (which resolves
+                // to a private LAN address) or a private LAN IP typed directly. Lovense Connect
+                // serves the certificate issued for the *.lovense.club alias on the phone itself, so
+                // reaching it at https://<ip>:30010 (the #858 fallback for networks where the alias
+                // cannot resolve) presents a cert whose name never matches the IP we asked for.
+                //
+                // Everything else still fails: an untrusted/expired chain, a revoked cert, a missing
+                // cert, and any name mismatch that arrives BIT-ORed with a chain error - hence the
+                // exact equality rather than a HasFlag test. Any routable address is validated in
+                // full, name mismatch included.
                 ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) =>
                 {
                     if (errors == System.Net.Security.SslPolicyErrors.None) return true;
+                    if (errors != System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch) return false;
                     var host = msg.RequestUri?.Host ?? "";
                     return IsLoopback(host) ||
-                           host.EndsWith(".lovense.club", StringComparison.OrdinalIgnoreCase);
+                           host.EndsWith(".lovense.club", StringComparison.OrdinalIgnoreCase) ||
+                           IsPrivateLanAddress(host);
                 }
             };
 
@@ -121,6 +143,9 @@ namespace ConditioningControlPanel.Services.Haptics
         public async Task<bool> ConnectAsync(CancellationToken ct)
         {
             if (_disposed) return false;
+
+            _userDisconnected = false;
+            lock (_lock) { _reconnectAttempt = 0; _nextReconnectUtc = DateTime.MinValue; _pollFailures = 0; }
 
             var configured = ResolveConfiguredUrl();
             var candidates = BuildCandidateBases(configured);
@@ -149,7 +174,11 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
+                    // Information, not Debug (#858): "could not reach Lovense Remote" was the ONLY
+                    // thing a failed connect left behind, with every per-candidate reason invisible
+                    // at the default level - so nobody could tell a refused port from a TLS
+                    // rejection from a DNS failure on the alias.
+                    App.Logger?.Information("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
                 }
             }
 
@@ -164,7 +193,18 @@ namespace ConditioningControlPanel.Services.Haptics
             _baseUrl = winner;
             _connected = true;
 
-            var count = ApplyToys(ParseToysResponse(body), raiseIfChanged: false);
+            var count = 0;
+            if (TryParseToysResponse(body, out var firstToys))
+            {
+                count = ApplyToys(firstToys, raiseIfChanged: false);
+            }
+            else
+            {
+                // Reachable, but GetToys answered with something we cannot read (error envelope /
+                // foreign firmware). Never treat that as "no toys" - the 20 s poll retries.
+                App.Logger?.Debug("Lovense: GetToys answered unintelligibly at connect: {Body}",
+                                  Truncate(body));
+            }
             _lastPollUtc = DateTime.UtcNow;
             RaiseDevicesChanged();
 
@@ -185,7 +225,11 @@ namespace ConditioningControlPanel.Services.Haptics
 
         public async Task DisconnectAsync()
         {
+            // Explicit user action: this is NOT a failure, so the maintenance loop must not
+            // resurrect the connection behind their back.
+            _userDisconnected = true;
             _connected = false;
+            lock (_lock) { _nextReconnectUtc = DateTime.MinValue; _reconnectAttempt = 0; _pollFailures = 0; }
 
             try { await StopAllAsync().ConfigureAwait(false); } catch { }
             await StopMaintenanceLoopAsync().ConfigureAwait(false);
@@ -229,14 +273,25 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 var body = await PostToAsync(_baseUrl, LovensePatterns.BuildGetToysPayload(),
                                              CommandTimeout, ct).ConfigureAwait(false);
-                ApplyToys(ParseToysResponse(body), raiseIfChanged: true);
                 _lastPollUtc = DateTime.UtcNow;
+
+                // An unreadable body (typically an HTTP-200 error envelope) is an IO FAILURE, not
+                // an empty toy list: applying it would remove every toy and dispose its state
+                // while the hardware keeps running on its timeSec:0 command.
+                if (!TryParseToysResponse(body, out var fresh))
+                {
+                    NotePollFailure("GetToys returned an unreadable body: " + Truncate(body));
+                    return false;
+                }
+
+                ApplyToys(fresh, raiseIfChanged: true);
+                NotePollSuccess();
                 return true;
             }
             catch (OperationCanceledException) { return false; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Lovense GetToys poll failed: {Reason}", ex.Message);
+                NotePollFailure("GetToys poll failed: " + ex.Message);
                 return false;
             }
         }
@@ -313,42 +368,123 @@ namespace ConditioningControlPanel.Services.Haptics
 
             lock (_lock)
             {
-                if (st.Matches(target)) return;   // unchanged -> suppress the send entirely
+                // Unchanged -> suppress the send entirely. Only while nothing is in flight,
+                // though: an in-flight send is about to overwrite the remembered levels, so a
+                // target matching the PREVIOUS state would be dropped and never re-issued (the
+                // mixer suppresses unchanged targets on its side too). Falling through instead
+                // latches it as pending, which the completing send drains.
+                if (st.Gate.CurrentCount > 0 && st.Satisfies(target)) return;
             }
 
             await SendLevelsAsync(toy, st, target, ct).ConfigureAwait(false);
         }
 
-        /// <summary>Builds the comma-combined action string and posts it. Different action verbs
-        /// legitimately combine in ONE Function call ("Vibrate:5,Rotate:10").</summary>
+        /// <summary>
+        /// Drives one device towards <paramref name="target"/>, with LATEST-PENDING semantics.
+        /// Only one request per device may be on the wire (CommandTimeout is 4 s and the mixer
+        /// ticks at 10 Hz, so overlaps are routine), but a superseded target is LATCHED rather
+        /// than dropped: dropping one silently lost go-to-zero commands, and since every command
+        /// goes out with <c>timeSec:0</c> (no server-side watchdog) the keep-alive then re-armed
+        /// the stale non-zero level every 25 s forever. The completing send drains the latch
+        /// (bounded, so it cannot hold the gate indefinitely); anything still latched is picked
+        /// up by the next mixer tick or by the 1 Hz maintenance drain.
+        /// </summary>
         private async Task SendLevelsAsync(LovenseToy toy, DeviceState st,
-                                           SortedDictionary<string, int> target, CancellationToken ct)
+                                           SortedDictionary<string, int> target, CancellationToken ct,
+                                           bool keepAlive = false)
         {
-            // Only one send in flight per device: level-set semantics mean a skipped tick is
-            // harmless (the next one carries the newer value) and a queue would only add latency.
-            if (!st.Gate.Wait(0)) return;
+            if (!st.Gate.Wait(0))
+            {
+                // Newest wins - these are level SETS, so an older pending target is worthless.
+                lock (_lock) st.Pending = target;
+                return;
+            }
+
             try
             {
-                var sb = new StringBuilder();
-                foreach (var kv in target)
+                var current = target;
+                var sends = 0;
+                while (true)
                 {
-                    var fragment = LovensePatterns.FormatActionFragment(kv.Key, kv.Value);
-                    if (fragment == null) continue;
-                    if (sb.Length > 0) sb.Append(',');
-                    sb.Append(fragment);
-                }
-                if (sb.Length == 0)
-                {
-                    lock (_lock) st.Remember(target);   // nothing sendable; don't retry every tick
-                    return;
-                }
+                    if (_disposed) return;
+                    await SendOneAsync(toy, st, current, keepAlive, ct).ConfigureAwait(false);
 
-                var payload = LovensePatterns.BuildFunctionPayload(toy.Id, sb.ToString(), 0, stopPrevious: true);
-                await PostToAsync(_baseUrl!, payload, CommandTimeout, ct).ConfigureAwait(false);
+                    if (_disposed || ct.IsCancellationRequested || !toy.Online) return;
+                    if (++sends > MaxPendingDrainsPerSend) return;   // leave it latched; 1 Hz drain has it
+
+                    SortedDictionary<string, int>? next;
+                    lock (_lock)
+                    {
+                        next = st.Pending;
+                        st.Pending = null;
+                        if (next != null && st.Satisfies(next)) next = null;   // the send already delivered it
+                    }
+                    if (next == null) return;
+
+                    current = next;
+                    keepAlive = false;   // a real target supersedes a refresh
+                }
+            }
+            finally
+            {
+                try { st.Gate.Release(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Composes and posts ONE Function command. The action string always restates the toy's
+        /// whole known level set ("Vibrate:5,Rotate:10,Position:40"), not just the caller's slice:
+        /// <c>stopPrevious:1</c> cancels everything else the toy was doing, so a Position-only
+        /// write used to kill the mixer's Thrusting/Vibrate and the next mixer tick used to kill
+        /// the position move (~20 cut-outs/s on a Solace Pro playing a .funscript).
+        /// </summary>
+        private async Task SendOneAsync(LovenseToy toy, DeviceState st,
+                                        SortedDictionary<string, int> target, bool keepAlive,
+                                        CancellationToken ct)
+        {
+            var baseUrl = _baseUrl;
+            if (baseUrl == null) return;
+
+            SortedDictionary<string, int> levels;
+            lock (_lock) levels = st.Compose(target, includeMotion: !keepAlive);
+
+            var sb = new StringBuilder();
+            var delivered = new HashSet<string>(StringComparer.Ordinal);
+            List<string>? unsendable = null;
+
+            foreach (var kv in levels)
+            {
+                var fragment = LovensePatterns.FormatActionFragment(kv.Key, kv.Value);
+                if (fragment == null)
+                {
+                    (unsendable ??= new List<string>()).Add(kv.Key);
+                    continue;
+                }
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(fragment);
+                delivered.Add(kv.Key);
+            }
+
+            if (unsendable != null) LogUnsendable(toy, st, unsendable);
+
+            if (sb.Length == 0)
+            {
+                // Nothing this toy can actually be told (e.g. a Constrict-only target). Record it
+                // as seen-but-undelivered: it dedupes so the 10 Hz mixer does not spin, but it
+                // never counts as running and is never restated.
+                lock (_lock) st.Remember(levels, delivered);
+                return;
+            }
+
+            var payload = LovensePatterns.BuildFunctionPayload(toy.Id, sb.ToString(), 0, stopPrevious: true);
+
+            try
+            {
+                await PostToAsync(baseUrl, payload, CommandTimeout, ct).ConfigureAwait(false);
 
                 lock (_lock)
                 {
-                    st.Remember(target);
+                    st.Remember(levels, delivered);
                     st.LastSendUtc = DateTime.UtcNow;
                     st.ConsecutiveFailures = 0;
                 }
@@ -362,9 +498,54 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 HandleIoFailure(toy, st, ex);
             }
-            finally
+        }
+
+        /// <summary>One Debug line per toy+actuator verb for actuators the LAN API cannot express,
+        /// so the silence is diagnosable without spamming the log at tick rate.</summary>
+        private void LogUnsendable(LovenseToy toy, DeviceState st, List<string> verbs)
+        {
+            List<string>? fresh = null;
+            lock (_lock)
             {
-                try { st.Gate.Release(); } catch { }
+                foreach (var verb in verbs)
+                    if (st.ShouldLogUnsendable(verb)) (fresh ??= new List<string>()).Add(verb);
+            }
+            if (fresh == null) return;
+
+            App.Logger?.Debug("Lovense: {Toy} actuator(s) {Verbs} have no LAN action fragment - " +
+                              "those channels stay silent.", toy.Id, string.Join(",", fresh));
+        }
+
+        /// <summary>Drives targets that were latched while a send was in flight and that the
+        /// completing send did not get to (bounded drain, or the gate was still busy). Runs at
+        /// 1 Hz so a go-to-zero can never be stranded even if the mixer stops calling.</summary>
+        private async Task DrainPendingAsync(CancellationToken ct)
+        {
+            List<(LovenseToy Toy, DeviceState State, SortedDictionary<string, int> Levels)>? due = null;
+
+            lock (_lock)
+            {
+                foreach (var kv in _state)
+                {
+                    var st = kv.Value;
+                    if (st.Gate.CurrentCount == 0) continue;   // a send is in flight; it drains its own latch
+
+                    var pending = st.Pending;
+                    if (pending == null) continue;
+                    st.Pending = null;
+
+                    if (!_toys.TryGetValue(kv.Key, out var toy) || !toy.Online) continue;
+                    if (st.Satisfies(pending)) continue;
+
+                    (due ??= new()).Add((toy, st, pending));
+                }
+            }
+            if (due == null) return;
+
+            foreach (var item in due)
+            {
+                if (ct.IsCancellationRequested) return;
+                await SendLevelsAsync(item.Toy, item.State, item.Levels, ct).ConfigureAwait(false);
             }
         }
 
@@ -422,14 +603,24 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 var body = await PostToAsync(baseUrl, LovensePatterns.BuildGetToysPayload(),
                                              PingTimeout, CancellationToken.None).ConfigureAwait(false);
-                // The cheapest liveness check already carries the registry, so use it.
-                ApplyToys(ParseToysResponse(body), raiseIfChanged: true);
                 _lastPollUtc = DateTime.UtcNow;
+
+                // An error envelope answers with HTTP 200 but is NOT liveness: reporting true
+                // here (and wiping the registry on the way) is what hid a broken Remote.
+                if (!TryParseToysResponse(body, out var fresh))
+                {
+                    NotePollFailure("ping got an unreadable body: " + Truncate(body));
+                    return false;
+                }
+
+                // The cheapest liveness check already carries the registry, so use it.
+                ApplyToys(fresh, raiseIfChanged: true);
+                NotePollSuccess();
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Lovense ping failed: {Reason}", ex.Message);
+                NotePollFailure("ping failed: " + ex.Message);
                 return false;
             }
         }
@@ -536,7 +727,8 @@ namespace ConditioningControlPanel.Services.Haptics
         }
 
         // ==================================================================
-        // Maintenance loop: 20 s toy poll + 25 s keep-alive refresh
+        // Maintenance loop: 20 s toy poll + latched-target drain + 25 s keep-alive refresh,
+        // and - while disconnected by FAILURE (never by the user) - the reconnect ladder.
         // ==================================================================
 
         private void StartMaintenanceLoop()
@@ -571,12 +763,30 @@ namespace ConditioningControlPanel.Services.Haptics
                 try { await Task.Delay(1000, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
 
-                if (ct.IsCancellationRequested || !_connected || _baseUrl == null) continue;
+                if (ct.IsCancellationRequested) continue;
+
+                if (!_connected)
+                {
+                    // Failed out (a WiFi blip / phone screen-off used to kill Lovense for the rest
+                    // of the session). Retry on a backoff - but never after a user Disconnect.
+                    try { await TryAutoReconnectAsync(ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Lovense reconnect attempt failed: {Reason}", ex.Message);
+                    }
+                    continue;
+                }
+
+                if (_baseUrl == null) continue;
 
                 try
                 {
                     if (DateTime.UtcNow - _lastPollUtc >= ToyPollInterval)
                         await RefreshDevicesAsync(ct).ConfigureAwait(false);
+
+                    // Anything latched while a send was in flight must land, zeros above all.
+                    await DrainPendingAsync(ct).ConfigureAwait(false);
 
                     await RunKeepAliveAsync(ct).ConfigureAwait(false);
                 }
@@ -590,7 +800,8 @@ namespace ConditioningControlPanel.Services.Haptics
 
         /// <summary>Re-sends the current non-zero state every 25 s. <c>timeSec:0</c> means the toy
         /// keeps running on its own, but a refresh survives a Remote restart / brief network drop
-        /// without the user noticing a dead toy.</summary>
+        /// without the user noticing a dead toy. Position/Stroke are deliberately EXCLUDED: they
+        /// are motion, not a level, and re-asserting a 25 s old position would jerk a stroker.</summary>
         private async Task RunKeepAliveAsync(CancellationToken ct)
         {
             var now = DateTime.UtcNow;
@@ -604,14 +815,78 @@ namespace ConditioningControlPanel.Services.Haptics
                     var st = kv.Value;
                     if (!st.HasNonZero) continue;                       // nothing running -> nothing to refresh
                     if (now - st.LastSendUtc < KeepAliveInterval) continue;
-                    due.Add((toy, st, st.Snapshot()));
+                    var levels = st.KeepAliveSnapshot();
+                    if (levels.Count == 0) continue;
+                    due.Add((toy, st, levels));
                 }
             }
 
             foreach (var item in due)
             {
                 if (ct.IsCancellationRequested) return;
-                await SendLevelsAsync(item.Toy, item.State, item.Levels, ct).ConfigureAwait(false);
+                await SendLevelsAsync(item.Toy, item.State, item.Levels, ct, keepAlive: true)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Periodic recovery probe while disconnected-due-to-failures. The base URL that answered
+        /// this session is still known, so a transient outage (phone screen-off, WiFi roam) heals
+        /// itself instead of requiring a manual reconnect. Explicit user disconnects are excluded.
+        /// </summary>
+        private async Task TryAutoReconnectAsync(CancellationToken ct)
+        {
+            if (_disposed || _userDisconnected) return;
+
+            var baseUrl = _baseUrl;
+            if (baseUrl == null) return;
+
+            DateTime due;
+            lock (_lock) due = _nextReconnectUtc;
+            if (due == DateTime.MinValue || DateTime.UtcNow < due) return;
+
+            try
+            {
+                var body = await PostToAsync(baseUrl, LovensePatterns.BuildGetToysPayload(),
+                                             PingTimeout, ct).ConfigureAwait(false);
+
+                if (TryParseToysResponse(body, out var fresh))
+                {
+                    lock (_lock)
+                    {
+                        _reconnectAttempt = 0;
+                        _nextReconnectUtc = DateTime.MinValue;
+                        _pollFailures = 0;
+                        // The toys' levels are unknown after an outage - forget them so the next
+                        // mixer tick is not suppressed against a stale "we already sent that".
+                        foreach (var st in _state.Values) { st.Clear(); st.ConsecutiveFailures = 0; }
+                    }
+                    _connected = true;
+
+                    ApplyToys(fresh, raiseIfChanged: false);
+                    _lastPollUtc = DateTime.UtcNow;
+
+                    App.Logger?.Information("Lovense: reconnected to {Base} after an outage.", baseUrl);
+                    RaiseDevicesChanged();   // the manager recomputes IsConnected from this
+
+                    try { _events.Start(baseUrl, ExtractHost(baseUrl)); }
+                    catch (Exception ex) { App.Logger?.Debug("Lovense Toy Events restart failed: {Reason}", ex.Message); }
+                    return;
+                }
+
+                App.Logger?.Debug("Lovense: reconnect probe answered unintelligibly: {Body}", Truncate(body));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Lovense: reconnect probe to {Base} failed ({Reason})", baseUrl, ex.Message);
+            }
+
+            lock (_lock)
+            {
+                var idx = Math.Min(_reconnectAttempt, ReconnectBackoffSeconds.Length - 1);
+                _nextReconnectUtc = DateTime.UtcNow.AddSeconds(ReconnectBackoffSeconds[idx]);
+                if (_reconnectAttempt < ReconnectBackoffSeconds.Length) _reconnectAttempt++;
             }
         }
 
@@ -655,8 +930,14 @@ namespace ConditioningControlPanel.Services.Haptics
 
         /// <summary>
         /// Probe order, per the LAN cheat-sheet: the documented HTTPS alias first, then plain HTTP
-        /// (routers with DNS-rebinding protection break the alias), then whatever authority the
-        /// user literally typed if it adds anything new.
+        /// (routers with DNS-rebinding protection break the alias), then the Game Mode port on the
+        /// address itself, then whatever authority the user literally typed if it adds anything new.
+        ///
+        /// <para>#858: the phone's own <c>&lt;ip&gt;:30010</c> was never probed at all - only the
+        /// lovense.club alias carried that port - so a user whose network breaks the alias (DNS
+        /// rebinding protection, a DNS-filtering resolver, no internet at all) could never connect
+        /// no matter what they typed. Both schemes are tried there: Lovense Connect serves HTTPS on
+        /// 30010, some builds/relays answer plain HTTP.</para>
         /// </summary>
         internal static IReadOnlyList<string> BuildCandidateBases(string? configured)
         {
@@ -686,6 +967,8 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 Add($"https://{dotted.Replace('.', '-')}.lovense.club:30010");
                 Add($"http://{dotted}:20010");
+                Add($"https://{dotted}:30010");
+                Add($"http://{dotted}:30010");
             }
 
             Add(NormalizeAuthority(configured));
@@ -722,17 +1005,41 @@ namespace ConditioningControlPanel.Services.Haptics
             return host.StartsWith("127.", StringComparison.Ordinal);
         }
 
-        /// <summary>Returns the scheme+host+port the user typed, but only when it carried its own
-        /// port (a bare host adds nothing beyond the two standard candidates).</summary>
+        /// <summary>True for an IPv4 literal on a private / link-local range - a device on the same
+        /// LAN, which is the only thing this provider ever talks to over a raw IP.</summary>
+        internal static bool IsPrivateLanAddress(string? host)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return false;
+            if (!IPAddress.TryParse(host, out var ip)) return false;
+            if (IPAddress.IsLoopback(ip)) return true;
+            var b = ip.GetAddressBytes();
+            if (b.Length != 4) return false;
+            return b[0] == 10                                   // 10.0.0.0/8
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)    // 172.16.0.0/12
+                || (b[0] == 192 && b[1] == 168)                 // 192.168.0.0/16
+                || (b[0] == 169 && b[1] == 254);                // 169.254.0.0/16 link-local
+        }
+
+        /// <summary>
+        /// The scheme+host+port to probe for whatever the user literally typed, so their own input is
+        /// never thrown away. A bare host used to return null (#858) - "192.168.1.42" produced no
+        /// candidate of its own at all - and a typed scheme with no port produced a port 80/443 probe,
+        /// which on a LAN is a router admin page, not Lovense. Both now resolve to the Game Mode port
+        /// for the scheme: 20010 for http, 30010 for https.
+        /// </summary>
         private static string? NormalizeAuthority(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
             var s = raw.Trim();
             var hadScheme = s.Contains("://");
             if (!hadScheme) s = "http://" + s;
-            if (!Uri.TryCreate(s, UriKind.Absolute, out var u)) return null;
-            if (!hadScheme && u.IsDefaultPort) return null;
-            return u.GetLeftPart(UriPartial.Authority);
+            if (!Uri.TryCreate(s, UriKind.Absolute, out var u) || string.IsNullOrEmpty(u.Host)) return null;
+            if (!u.IsDefaultPort) return u.GetLeftPart(UriPartial.Authority);
+
+            // No port of their own: fill in the Game Mode port that goes with the scheme. The
+            // duplicate this often produces is dropped by the caller's dedupe.
+            var port = string.Equals(u.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 30010 : 20010;
+            return $"{u.Scheme}://{u.Host}:{port}";
         }
 
         // ==================================================================
@@ -743,18 +1050,30 @@ namespace ConditioningControlPanel.Services.Haptics
         /// Parses a GetToys response. <c>data.toys</c> arrives as an ESCAPED JSON STRING on some
         /// firmware/app combinations and as a plain object on others (and a few builds hand back an
         /// array) - all three are accepted, plus the bare toy map that Lovense Connect returns.
+        ///
+        /// <para>Returns FALSE when the body is not a toy container at all: unparseable, or an
+        /// error envelope such as <c>{"code":400,"type":"error"}</c> (which Remote serves with
+        /// HTTP 200). That distinction matters: an empty-but-VALID container legitimately removes
+        /// toys, whereas returning "no toys" for an error used to drop the whole registry - and
+        /// with it every DeviceState - while the hardware kept running on its timeSec:0 command.
+        /// A valid container that happens to be empty still returns true.</para>
         /// </summary>
-        internal static Dictionary<string, LovenseToy> ParseToysResponse(string? body)
+        internal static bool TryParseToysResponse(string? body, out Dictionary<string, LovenseToy> toysOut)
         {
             var result = new Dictionary<string, LovenseToy>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(body)) return result;
+            toysOut = result;
+            if (string.IsNullOrWhiteSpace(body)) return false;
 
             JsonDocument? nested = null;
             try
             {
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
-                if (root.ValueKind != JsonValueKind.Object) return result;
+                if (root.ValueKind != JsonValueKind.Object) return false;
+
+                // Error envelope: Lovense answers HTTP 200 with a non-200 "code" (400 invalid
+                // command, 401 toy not found, 403 unsupported, 500/506 server) and/or type "error".
+                if (IsErrorEnvelope(root)) return false;
 
                 JsonElement toys = default;
                 var have = false;
@@ -813,18 +1132,30 @@ namespace ConditioningControlPanel.Services.Haptics
                     have = true;
                 }
 
-                if (have) CollectToys(toys, result);
+                if (!have) return false;   // structurally not a toy container - do NOT remove toys
+
+                CollectToys(toys, result);
+                return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Lovense GetToys parse failed: {Reason}", ex.Message);
+                return false;
             }
             finally
             {
                 nested?.Dispose();
             }
+        }
 
-            return result;
+        /// <summary>Recognises the HTTP-200 error envelope Remote returns for a rejected command.</summary>
+        private static bool IsErrorEnvelope(JsonElement root)
+        {
+            var type = ReadString(root, "type");
+            if (type != null && type.Equals("error", StringComparison.OrdinalIgnoreCase)) return true;
+
+            var code = ReadInt(root, "code");
+            return code.HasValue && code.Value != 200;
         }
 
         private static void CollectToys(JsonElement toys, Dictionary<string, LovenseToy> into)
@@ -1017,8 +1348,54 @@ namespace ConditioningControlPanel.Services.Haptics
             if (allGone)
             {
                 _connected = false;
-                RaiseError("Lovense Remote is no longer reachable.");
+                lock (_lock) ArmReconnectNoLock();
+                RaiseError("Lovense Remote is no longer reachable. Retrying in the background.");
             }
+        }
+
+        /// <summary>Arms the recovery ladder. Caller holds <c>_lock</c>.</summary>
+        private void ArmReconnectNoLock()
+        {
+            if (_userDisconnected || _baseUrl == null) return;
+            _reconnectAttempt = 0;
+            _nextReconnectUtc = DateTime.UtcNow.AddSeconds(ReconnectBackoffSeconds[0]);
+        }
+
+        private void NotePollSuccess()
+        {
+            lock (_lock) _pollFailures = 0;
+        }
+
+        /// <summary>Registry-poll / ping failure (including an HTTP-200 error envelope). After
+        /// <see cref="MaxConsecutiveFailures"/> in a row the connection is marked down and the
+        /// recovery ladder takes over - it is never silently ignored, and it never wipes toys.</summary>
+        private void NotePollFailure(string reason)
+        {
+            lock (_lock)
+            {
+                if (!_connected) return;
+                if (++_pollFailures < MaxConsecutiveFailures)
+                {
+                    App.Logger?.Debug("Lovense: {Reason}", reason);
+                    return;
+                }
+                _pollFailures = 0;
+                _connected = false;
+                ArmReconnectNoLock();
+            }
+
+            App.Logger?.Warning("Lovense: {Reason} - marking the connection down, retrying in the background.",
+                                reason);
+            RaiseError("Lovense Remote stopped answering. Retrying in the background.");
+            RaiseDevicesChanged();
+        }
+
+        /// <summary>Keeps a diagnostic body short enough for the log.</summary>
+        private static string Truncate(string? body)
+        {
+            if (string.IsNullOrEmpty(body)) return "(empty)";
+            var s = body.Replace("\r", " ").Replace("\n", " ");
+            return s.Length <= 200 ? s : s.Substring(0, 200) + "...";
         }
 
         private void MarkOnline(LovenseToy toy)
@@ -1179,56 +1556,117 @@ namespace ConditioningControlPanel.Services.Haptics
             }
         }
 
-        /// <summary>Per-device send state: the last quantized levels (for unchanged-suppression),
-        /// the keep-alive clock, the failure counter, and a 1-slot gate so only one request per
-        /// device is ever in flight.</summary>
+        /// <summary>Per-device send state: the last quantized level PER ACTUATOR VERB (for
+        /// unchanged-suppression and for composing a complete action string), the newest target
+        /// that arrived while a send was in flight, the keep-alive clock, the failure counter, and
+        /// a 1-slot gate so only one request per device is ever on the wire.
+        ///
+        /// <para>The map is merged per verb, never replaced: the mixer and the FunScript position
+        /// stream write DISJOINT verb sets for the same toy, and a replace made each one erase the
+        /// other's remembered levels (which also poisoned the keep-alive).</para></summary>
         private sealed class DeviceState : IDisposable
         {
-            private readonly Dictionary<string, int> _last = new(StringComparer.Ordinal);
+            private readonly Dictionary<string, LevelEntry> _last = new(StringComparer.Ordinal);
+            private readonly HashSet<string> _loggedUnsendable = new(StringComparer.Ordinal);
 
             public readonly SemaphoreSlim Gate = new(1, 1);
             public DateTime LastSendUtc = DateTime.MinValue;
             public int ConsecutiveFailures;
 
+            /// <summary>Newest target latched while the gate was busy - only the latest matters
+            /// (these are level SETS), but it must never be dropped.</summary>
+            public SortedDictionary<string, int>? Pending;
+
+            /// <summary>Position/Stroke shape a motion rather than hold a level: they are never
+            /// re-asserted by the keep-alive (a stale re-assert would jerk a stroker).</summary>
+            public static bool IsMotionVerb(string verb)
+                => verb.StartsWith("Position", StringComparison.Ordinal) ||
+                   verb.StartsWith("Stroke", StringComparison.Ordinal);
+
             public bool HasNonZero
             {
                 get
                 {
-                    foreach (var v in _last.Values) if (v > 0) return true;
+                    foreach (var kv in _last)
+                        if (kv.Value.Delivered && kv.Value.Step > 0 && !IsMotionVerb(kv.Key)) return true;
                     return false;
                 }
             }
 
-            public bool Matches(SortedDictionary<string, int> target)
+            /// <summary>True when every verb in <paramref name="target"/> is already at that level.
+            /// Deliberately a SUBSET test, not an equality test: a Position-only write must dedupe
+            /// against the position alone and not against the whole remembered map.</summary>
+            public bool Satisfies(SortedDictionary<string, int> target)
             {
-                if (_last.Count != target.Count) return false;
                 foreach (var kv in target)
-                    if (!_last.TryGetValue(kv.Key, out var v) || v != kv.Value) return false;
+                    if (!_last.TryGetValue(kv.Key, out var v) || v.Step != kv.Value) return false;
                 return true;
             }
 
-            public void Remember(SortedDictionary<string, int> target)
+            /// <summary>Builds the level set that one Function command must carry: the fresh
+            /// target on top of every level already known to be running. Because the LAN API's
+            /// <c>stopPrevious:1</c> cancels whatever the toy was doing, a partial command would
+            /// kill the other stream (mixer vibe vs. FunScript position) - so every command
+            /// restates everything.</summary>
+            public SortedDictionary<string, int> Compose(SortedDictionary<string, int> target,
+                                                         bool includeMotion)
             {
-                _last.Clear();
-                foreach (var kv in target) _last[kv.Key] = kv.Value;
+                var merged = new SortedDictionary<string, int>(StringComparer.Ordinal);
+                foreach (var kv in _last)
+                {
+                    if (!kv.Value.Delivered) continue;              // never restate what the wire refused
+                    if (!includeMotion && IsMotionVerb(kv.Key)) continue;
+                    merged[kv.Key] = kv.Value.Step;
+                }
+                foreach (var kv in target) merged[kv.Key] = kv.Value;   // the fresh target always wins
+                return merged;
             }
 
-            public SortedDictionary<string, int> Snapshot()
+            /// <summary>Records what a command actually carried. Verbs that produced no action
+            /// fragment (Constrict, a zero Stroke range) are remembered as NOT delivered: they
+            /// still dedupe, so the 10 Hz mixer does not spin retrying them, but they never count
+            /// as running and are never restated.</summary>
+            public void Remember(SortedDictionary<string, int> levels, HashSet<string> deliveredVerbs)
+            {
+                foreach (var kv in levels)
+                    _last[kv.Key] = new LevelEntry(kv.Value, deliveredVerbs.Contains(kv.Key));
+            }
+
+            /// <summary>Levels the keep-alive may safely restate (delivered, non-motion).</summary>
+            public SortedDictionary<string, int> KeepAliveSnapshot()
             {
                 var copy = new SortedDictionary<string, int>(StringComparer.Ordinal);
-                foreach (var kv in _last) copy[kv.Key] = kv.Value;
+                foreach (var kv in _last)
+                {
+                    if (!kv.Value.Delivered || IsMotionVerb(kv.Key)) continue;
+                    copy[kv.Key] = kv.Value.Step;
+                }
                 return copy;
             }
+
+            /// <summary>One Debug line per toy+actuator verb, so a silent actuator is diagnosable
+            /// without spamming the log at tick rate.</summary>
+            public bool ShouldLogUnsendable(string verb) => _loggedUnsendable.Add(verb);
 
             public void Clear()
             {
                 _last.Clear();
+                Pending = null;
                 LastSendUtc = DateTime.MinValue;
             }
 
             public void Dispose()
             {
                 try { Gate.Dispose(); } catch { }
+            }
+
+            private readonly struct LevelEntry
+            {
+                public readonly int Step;
+                /// <summary>False when the verb has no LAN action fragment (see
+                /// <see cref="LovensePatterns.FormatActionFragment"/>).</summary>
+                public readonly bool Delivered;
+                public LevelEntry(int step, bool delivered) { Step = step; Delivered = delivered; }
             }
         }
     }

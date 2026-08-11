@@ -83,11 +83,28 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         public const double MinPerceptibleIntensity = 0.06;
         /// <summary>After a panic stop, refuse to output anything at all for this long.</summary>
         private const int PanicMuteMs = 400;
-        /// <summary>Re-send an UNCHANGED non-zero target at most this often, so providers that
-        /// use short-timeSec repeats get a heartbeat. Zero targets are never re-sent.</summary>
+        /// <summary>Re-send an UNCHANGED target at most this often, so providers that use
+        /// short-timeSec repeats get a heartbeat. ZEROS ARE INCLUDED: a Lovense level has no
+        /// server-side watchdog, so a zero that never lands leaves the toy running forever and the
+        /// provider's 25 s keep-alive re-arms the stale level. A periodic zero costs nothing on the
+        /// wire (every provider suppresses unchanged sends itself) and is the only thing that
+        /// self-heals a dropped, reordered or IO-failed zero.</summary>
         private const int RefreshMs = 1000;
+        /// <summary>Immediately after a device's target falls to zero (or a stop/panic invalidates
+        /// its cache) the zero is re-asserted EVERY tick for this long, not just at
+        /// <see cref="RefreshMs"/>. Covers the window where the Lovense per-device gate drops
+        /// commands because an earlier POST is still in flight.</summary>
+        private const int ZeroReassertMs = 2000;
         /// <summary>A wedged provider must not wedge the loop.</summary>
         private const int ProviderCallTimeoutMs = 500;
+        /// <summary>Per-provider budget for an all-stop (panic / gate close / shutdown).</summary>
+        private static readonly TimeSpan ProviderStopTimeout = TimeSpan.FromMilliseconds(1500);
+        /// <summary>How many times a panic all-stop is fired. ONE best-effort POST is not a safety
+        /// net: the provider swallows its own failures, and a stale in-flight level command can land
+        /// AFTER the stop and re-arm the toy (they are concurrent).</summary>
+        private const int PanicStopAttempts = 3;
+        /// <summary>Gap between panic all-stop attempts.</summary>
+        private const int PanicStopRetryMs = 150;
         /// <summary>Hard cap on the best-effort all-stop during shutdown.</summary>
         public static readonly TimeSpan ShutdownFlushCap = TimeSpan.FromSeconds(2);
 
@@ -106,6 +123,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// Arrays are replaced wholesale, never mutated, so the loop may read them unlocked.</summary>
         private readonly double[]?[] _layerSplits = new double[]?[LayerCount];
         private volatile bool _anySplit;
+        /// <summary>Per-layer role override owned by the RUNNING envelope on that layer: while it
+        /// plays, it routes instead of the layer rule's Target. Null for every layer in the normal
+        /// case, and dies with the envelope — a layer rule must never inherit it.</summary>
+        private readonly ToyRole?[] _layerTargets = new ToyRole?[LayerCount];
+        private volatile bool _anyLayerTarget;
         /// <summary>Phase F: continuous layers are muted until this tick (user turned the toy up or
         /// down themselves — see <see cref="SuppressLayersUntil"/>). Transients still fire.</summary>
         private long _layersSuppressedUntil;
@@ -116,10 +138,21 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         private readonly Dictionary<long, SeqState> _sequences = new();
         private long _nextSeqId = 1;
 
-        // Per-device output state. Concurrent because the loop thread ADDS entries outside
-        // _gate (in BuildOutputs) while panic/stop paths enumerate them under _gate.
+        // Per-device output state. SINGLE-WRITER DISCIPLINE (M3): every field of DeviceState is
+        // written by the OUTPUT LOOP THREAD ONLY (the sole exception being SafeSendAsync's
+        // completion, which publishes ONE reference — the quantized array it was handed — and
+        // nothing else), and entries are only ever added there. Other threads (panic, gate close,
+        // shutdown, the UI) never touch it: they bump _resyncGeneration instead and the loop
+        // consumes that at the top of the next tick. The dictionary stays concurrent because those
+        // threads may still read it.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DeviceState> _deviceState =
             new(StringComparer.Ordinal);
+        /// <summary>Bumped by any path that invalidates what we believe the toys are doing (panic,
+        /// all-stop, gate close, ClearAll). The loop compares it against <see cref="_resyncSeen"/>
+        /// and then re-stamps every device from scratch.</summary>
+        private long _resyncGeneration;
+        /// <summary>Loop-thread only.</summary>
+        private long _resyncSeen;
 
         private long _panicMutedUntil;
         private long _testGateUntil;
@@ -132,6 +165,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         private CancellationTokenSource? _loopCts;
         private Task? _loopTask;
         private bool _disposed;
+        /// <summary>One-shot latch for <see cref="ShutdownStopBlocking"/> so the deterministic
+        /// shutdown stop cannot burn its budget twice (App.OnExit calls it, then Dispose does).</summary>
+        private int _shutdownStopped;
 
         /// <summary>Fires on the loop thread with a short human string ("FlashClick 55%") for the
         /// UI's activity readout. Subscribers MUST marshal to the dispatcher themselves.</summary>
@@ -153,7 +189,13 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             get
             {
                 if (!_settings.Enabled && Environment.TickCount64 > Interlocked.Read(ref _testGateUntil)) return false;
-                try { return App.Patreon?.HasPremiumAccess ?? false; }
+                // The ? box's free day opens this gate too, or the rail chip would flip the
+                // toggle while the mixer stayed silent (DailyFreeService).
+                try
+                {
+                    return (App.Patreon?.HasPremiumAccess ?? false)
+                           || App.DailyFree?.IsFreeToday("haptics") == true;
+                }
                 catch { return false; }
             }
         }
@@ -224,10 +266,18 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             }
             _gateWasOpen = true;
 
+            // H2: the gate can be open for TWO reasons. When it is open only because a Test window
+            // is running (the master toggle is still off), the test's own transients may drive the
+            // toy but the accumulated CONTINUOUS layers may not — Video/AudioSync/Dtrh/Pattern hold
+            // their last value while the master is off, and letting a 4-10 s test re-open the gate
+            // for all of them started the toy on a stale video floor.
+            var testWindowOnly = !_settings.Enabled;
+
             bool anythingLive;
             List<PulseSample>? pulseSamples;
             double[] layerSnapshot;
             double[]?[]? splitSnapshot = null;
+            ToyRole?[]? targetSnapshot = null;
 
             lock (_gate)
             {
@@ -246,10 +296,23 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 {
                     for (int i = 0; i < LayerCount; i++) layerSnapshot[i] = 0;
                 }
+                else if (testWindowOnly)
+                {
+                    // H2, with one hole: an envelope SUBMITTED during the test window is the thing
+                    // the user asked to hear. Everything else — held Video/AudioSync/Dtrh floors,
+                    // splits, envelopes from before the master toggle went off — stays muted,
+                    // because a stale floor restarting the toy is what H2 exists to stop.
+                    for (int i = 0; i < LayerCount; i++)
+                        if (_layerEnvelopes[i]?.TestEligible != true) layerSnapshot[i] = 0;
+                }
                 else if (_anySplit)
                 {
                     splitSnapshot = (double[]?[])_layerSplits.Clone();
                 }
+
+                // Snapshotted under the same lock as the layers it routes; BuildOutputs runs
+                // outside it.
+                if (_anyLayerTarget) targetSnapshot = (ToyRole?[])_layerTargets.Clone();
 
                 pulseSamples = _active.Count == 0 ? null : new List<PulseSample>(_active.Count);
                 if (pulseSamples != null)
@@ -268,17 +331,43 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (now < _panicMutedUntil) { layerSnapshot = new double[LayerCount]; pulseSamples = null; anythingLive = true; }
             }
 
+            // Consume any pending invalidation (panic / all-stop / gate close) BEFORE building this
+            // tick's outputs, so the first thing we do after a stop is re-stamp the real target.
+            ConsumeResync(now);
+
             var devices = _devices.Devices;
             if (devices.Count == 0) return anythingLive;
 
             List<Task>? sends = null;
             foreach (var device in devices)
             {
-                if (!device.Enabled || !device.IsConnected) continue;
-                var outputs = BuildOutputs(device, layerSnapshot, splitSnapshot, pulseSamples, now, out var changed);
+                IReadOnlyList<ActuatorOutput>? outputs;
+                bool changed;
+                int[]? pending;
+
+                if (!device.Enabled || !device.IsConnected)
+                {
+                    // H1: a toy that leaves the drive set (the user disabled it, or it fell off the
+                    // air) must not keep running its last level — Lovense's keep-alive would refresh
+                    // it forever. Drive it to zero exactly like any other target; if it is already
+                    // unreachable the send is a swallowed no-op and the zero re-assert keeps trying
+                    // for as long as the device stays registered.
+                    var st = GetDeviceState(device.DeviceKey);
+                    if (!device.IsConnected) st.Offline = true;
+                    outputs = BuildOutputs(device, ZeroLayers, null, null, null, now, out changed, out pending);
+                }
+                else
+                {
+                    var st = GetDeviceState(device.DeviceKey);
+                    // Back from the dead: whatever this toy is doing now, we did not put it there
+                    // (our zeros went nowhere while it was off the air), so forget the cache.
+                    if (st.Offline) { st.Offline = false; Invalidate(st, now); }
+                    outputs = BuildOutputs(device, layerSnapshot, splitSnapshot, targetSnapshot, pulseSamples, now, out changed, out pending);
+                }
+
                 if (outputs == null || !changed) continue;
                 sends ??= new List<Task>(devices.Count);
-                sends.Add(SafeSendAsync(device, outputs, ct));
+                sends.Add(SafeSendAsync(device, outputs, pending, ct));
             }
 
             if (sends != null && sends.Count > 0)
@@ -292,21 +381,35 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         }
 
         /// <summary>Providers must not throw per the contract, but a broken one must never fault the
-        /// mixer's WhenAll (which we may abandon on timeout -> UnobservedTaskException).</summary>
-        private async Task SafeSendAsync(HapticDevice device, IReadOnlyList<ActuatorOutput> outputs, CancellationToken ct)
+        /// mixer's WhenAll (which we may abandon on timeout -> UnobservedTaskException).
+        ///
+        /// The quantized cache is committed HERE, only after the send came back clean: writing it
+        /// at build time meant a failed send was never retried, and for a zero that is the
+        /// difference between "the toy stops" and "the toy buzzes until it is unplugged".</summary>
+        private async Task SafeSendAsync(HapticDevice device, IReadOnlyList<ActuatorOutput> outputs,
+                                         int[]? pending, CancellationToken ct)
         {
-            try { await _devices.SendAsync(device, outputs, ct).ConfigureAwait(false); }
+            try
+            {
+                await _devices.SendAsync(device, outputs, ct).ConfigureAwait(false);
+                // A late commit (this send was overtaken by a newer tick) can only ever cause a
+                // redundant re-send next tick, never a missed one: we only ever record levels the
+                // provider actually accepted.
+                if (pending != null) GetDeviceState(device.DeviceKey).Quantized = pending;
+            }
             catch (OperationCanceledException) { }
             catch (Exception ex) { App.Logger?.Debug("Haptic send to {Device} failed: {E}", device.DeviceKey, ex.Message); }
         }
 
         /// <summary>Combine floor + transients for one device and turn them into actuator outputs.
-        /// Returns null when there is nothing to send.</summary>
+        /// Returns null when there is nothing to send. <paramref name="pending"/> is the quantized
+        /// cache the caller must commit once (and only once) the send succeeds.</summary>
         private IReadOnlyList<ActuatorOutput>? BuildOutputs(
-            HapticDevice device, double[] layers, double[]?[]? splits,
-            List<PulseSample>? pulses, long now, out bool changed)
+            HapticDevice device, double[] layers, double[]?[]? splits, ToyRole?[]? layerTargets,
+            List<PulseSample>? pulses, long now, out bool changed, out int[]? pending)
         {
             changed = false;
+            pending = null;
             var v2 = _settings.V2;
             // Phase F temperament: applied AFTER the routing row's intensity and BEFORE Finish()
             // (master multiplier + master cap + per-device trim), so the cap always wins.
@@ -329,7 +432,8 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (value <= 0) continue;
                 var rule = v2.Rule((HapticLayer)i);
                 if (!rule.Enabled) continue;
-                if (!RoleMatches(rule.Target, device.Role)) continue;
+                // A running envelope may route itself; everything else about the rule still applies.
+                if (!RoleMatches(layerTargets?[i] ?? rule.Target, device.Role)) continue;
                 var layerScale = Math.Clamp(rule.Intensity, 0, 1) * temperament.ContinuousScale;
                 var scaled = value * layerScale;
                 if (scaled > floorTarget) floorTarget = scaled;
@@ -379,8 +483,12 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             // --- master multiplier, hard cap, per-device trim ---
             double Finish(double rawLevel)
             {
-                var v = Math.Min(rawLevel * MasterIntensity, MasterCap);
+                // The perceptible floor is applied BEFORE the cap: the cap is a SAFETY ceiling and
+                // must be inviolable (a 0.05 MasterCap used to emit 0.06). #516 asked for a faint
+                // buzz to survive quantization, not for the ceiling to leak.
+                var v = rawLevel * MasterIntensity;
                 if (rawLevel > 0) v = Math.Max(v, MinPerceptibleIntensity);
+                v = Math.Min(v, MasterCap);
                 return Math.Clamp(v * Math.Clamp(device.IntensityTrim, 0, 1), 0, 1);
             }
 
@@ -405,11 +513,17 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             var actuators = device.Actuators;
             if (actuators.Count == 0) return null;
 
-            if (state.Quantized == null || state.Quantized.Length != actuators.Count)
+            var previous = state.Quantized;
+            if (previous == null || previous.Length != actuators.Count)
             {
-                state.Quantized = new int[actuators.Count];
-                for (int i = 0; i < state.Quantized.Length; i++) state.Quantized[i] = -1;
+                previous = new int[actuators.Count];
+                for (int i = 0; i < previous.Length; i++) previous[i] = -1;   // -1 = unknown
+                state.Quantized = previous;
             }
+            // Cloned, never mutated in place: this array is published to the cache only once the
+            // provider has accepted it (SafeSendAsync). Skipped actuators keep their old entry so
+            // they can never look "changed".
+            var next = (int[])previous.Clone();
 
             List<ActuatorOutput>? outputs = null;
             bool allZero = true;
@@ -430,7 +544,8 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 var steps = Math.Max(1, a.Steps);
                 var q = (int)Math.Round(level * steps);
                 if (q != 0) allZero = false;
-                if (state.Quantized[i] != q) { changed = true; state.Quantized[i] = q; }
+                if (previous[i] != q) changed = true;
+                next[i] = q;
 
                 outputs ??= new List<ActuatorOutput>(actuators.Count);
                 outputs.Add(new ActuatorOutput(a.Type, a.Index, q / (double)steps));
@@ -439,18 +554,66 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
             if (outputs == null) return null;
 
+            // A target that has just FALLEN to zero opens the re-assert window: for the next couple
+            // of seconds the zero is stamped on every tick, because the Lovense per-device gate
+            // silently drops a command while an earlier POST is in flight (routine at 10 Hz vs a 4 s
+            // command timeout) and an undelivered zero means a toy that never stops.
+            if (allZero && changed) state.ZeroHoldUntil = now + ZeroReassertMs;
+
             if (!changed)
             {
-                // Unchanged: silence stays silent (zero traffic), a held level gets a slow
-                // heartbeat so short-timeSec providers can refresh.
-                if (allZero) return null;
-                if (now - state.LastSendAt < RefreshMs) return null;
-                changed = true;
+                // Unchanged. A zero is re-asserted every tick inside the window and then rides the
+                // same slow heartbeat as a held level: the heartbeat is free when it lands (every
+                // provider suppresses unchanged sends itself) and is what heals a dropped zero, a
+                // reordered send, or a provider cache invalidated by an IO failure.
+                if (allZero && now < state.ZeroHoldUntil) changed = true;
+                else if (now - state.LastSendAt < RefreshMs) return null;
+                else changed = true;
             }
 
             state.LastSendAt = now;
+            pending = next;
             return outputs;
         }
+
+        /// <summary>All-zero layer snapshot for devices that are being driven OUT of the mix
+        /// (disabled / disconnected). Never mutated.</summary>
+        private static readonly double[] ZeroLayers = new double[LayerCount];
+
+        /// <summary>Forget what we believe a device is doing, and re-assert its target hard for the
+        /// next couple of seconds. Loop thread only.</summary>
+        private static void Invalidate(DeviceState state, long now)
+        {
+            state.Floor = 0;
+            state.LastSendAt = 0;
+            state.ZeroHoldUntil = now + ZeroReassertMs;
+            var q = state.Quantized;
+            if (q != null)
+            {
+                var fresh = new int[q.Length];
+                for (int i = 0; i < fresh.Length; i++) fresh[i] = -1;
+                state.Quantized = fresh;
+            }
+        }
+
+        /// <summary>Loop thread: apply any invalidation requested by a panic / stop / gate close.</summary>
+        private void ConsumeResync(long now)
+        {
+            var gen = Interlocked.Read(ref _resyncGeneration);
+            if (gen == _resyncSeen) return;
+            _resyncSeen = gen;
+            foreach (var s in _deviceState.Values) Invalidate(s, now);
+        }
+
+        /// <summary>Tell the loop that what we believe about the toys is no longer trustworthy.
+        /// Safe from ANY thread — it never touches DeviceState itself (M3).</summary>
+        private void RequestResync() => Interlocked.Increment(ref _resyncGeneration);
+
+        /// <summary>Forget the quantized cache for every device: the next tick re-transmits each
+        /// device's real target instead of suppressing it as unchanged. Anything that drives a
+        /// provider AROUND the mixer (the per-toy Test button) must call this on the way out, or the
+        /// mixer will keep believing the toy is at the level IT last sent. Safe from any thread.</summary>
+        public void InvalidateDeviceCache() => RequestResync();
 
         private static IEnumerable<int> DistinctPriorities(List<PulseSample> pulses)
         {
@@ -484,6 +647,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerValues[i] = value;
                 _layerAutoZeroAt[i] = (value > 0 && autoZeroMs > 0) ? Environment.TickCount64 + autoZeroMs : 0;
                 if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
+                if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
             }
             if (value > 0) Start();
         }
@@ -524,6 +688,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerValues[i] = scalar;
                 _layerAutoZeroAt[i] = 0;
                 RecomputeAnySplitLocked();
+                if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
             }
             if (scalar > 0) Start();
         }
@@ -535,6 +700,15 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (_layerSplits[i] != null) { _anySplit = true; return; }
             }
             _anySplit = false;
+        }
+
+        private void RecomputeAnyLayerTargetLocked()
+        {
+            for (int i = 0; i < LayerCount; i++)
+            {
+                if (_layerTargets[i] != null) { _anyLayerTarget = true; return; }
+            }
+            _anyLayerTarget = false;
         }
 
         /// <summary>
@@ -567,6 +741,13 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// keyframe patterns). Replaces any running envelope on the same layer; the layer returns
         /// to 0 when it ends.</summary>
         public void PlayLayerEnvelope(HapticLayer layer, IReadOnlyList<double> values, int totalMs)
+            => PlayLayerEnvelope(layer, values, totalMs, null);
+
+        /// <summary>As above, but <paramref name="targetOverride"/> routes THIS envelope by role
+        /// instead of the layer rule's Target for as long as it runs. It dies with the envelope, so
+        /// whatever writes the layer next is back on the rule.</summary>
+        public void PlayLayerEnvelope(HapticLayer layer, IReadOnlyList<double> values, int totalMs,
+                                      ToyRole? targetOverride)
         {
             if (_disposed || values == null || values.Count == 0 || totalMs <= 0) return;
             var copy = new double[values.Count];
@@ -578,10 +759,15 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 {
                     Values = copy,
                     StartAt = Environment.TickCount64,
-                    TotalMs = totalMs
+                    TotalMs = totalMs,
+                    // Master toggle off AND an open test window at submit time = a preview/test
+                    // path (nothing else is audible), so this envelope alone survives the H2 mute.
+                    // An envelope submitted with no test window open stays mutable like any other.
+                    TestEligible = !_settings.Enabled && IsGateOpen
                 };
                 _layerAutoZeroAt[i] = 0;
                 if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
+                if (_layerTargets[i] != targetOverride) { _layerTargets[i] = targetOverride; RecomputeAnyLayerTargetLocked(); }
             }
             Start();
         }
@@ -598,6 +784,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     {
                         _layerEnvelopes[i] = null;
                         _layerValues[i] = 0;
+                        if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
                     }
                     else
                     {
@@ -754,7 +941,30 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _panicMutedUntil = Environment.TickCount64 + PanicMuteMs;
             }
             App.Logger?.Warning("Haptics: PANIC STOP — all layers zeroed, all providers stopped");
-            _ = SafeStopAllAsync();
+            _ = PanicStopAsync();
+        }
+
+        /// <summary>
+        /// The panic all-stop, RETRIED. One best-effort POST is not a safety-of-last-resort: the
+        /// providers swallow their own stop failures, and a level command that was already in flight
+        /// can land AFTER the stop and re-arm the toy (they are concurrent — StopAllAsync takes no
+        /// per-device gate). Every attempt also invalidates our quantized cache, so the output loop
+        /// keeps stamping real zeros on top for the whole re-assert window instead of believing the
+        /// devices are already silent.
+        /// </summary>
+        private async Task PanicStopAsync()
+        {
+            for (int attempt = 1; attempt <= PanicStopAttempts; attempt++)
+            {
+                if (attempt > 1)
+                {
+                    try { await Task.Delay(PanicStopRetryMs).ConfigureAwait(false); } catch { }
+                }
+                var ok = await SafeStopAllAsync().ConfigureAwait(false);
+                if (!ok)
+                    App.Logger?.Warning("Haptics: panic all-stop attempt {Attempt}/{Total} did not complete cleanly",
+                                        attempt, PanicStopAttempts);
+            }
         }
 
         /// <summary>Drop every transient and zero every layer WITHOUT touching the providers
@@ -774,31 +984,40 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerAutoZeroAt[i] = 0;
                 _layerEnvelopes[i] = null;
                 _layerSplits[i] = null;
+                _layerTargets[i] = null;
             }
             _anySplit = false;
-            foreach (var s in _deviceState.Values) s.Floor = 0;
+            _anyLayerTarget = false;
+            // DeviceState belongs to the loop thread (M3): ask for a resync instead of zeroing it
+            // here. That also re-opens the zero re-assert window, so the loop stamps real zeros.
+            RequestResync();
             if (!completeSequences) return;
             foreach (var s in _sequences.Values) s.Handle.Complete();
             _sequences.Clear();
         }
 
-        private async Task SafeStopAllAsync()
+        /// <summary>All-stop across every provider, in parallel and bounded. Returns true when every
+        /// connected provider reported a clean stop.</summary>
+        private async Task<bool> SafeStopAllAsync()
         {
             try
             {
-                await _devices.StopAllAsync().ConfigureAwait(false);
-                lock (_gate)
-                {
-                    foreach (var s in _deviceState.Values)
-                    {
-                        s.Floor = 0;
-                        s.LastSendAt = 0;
-                        if (s.Quantized != null)
-                            for (int i = 0; i < s.Quantized.Length; i++) s.Quantized[i] = 0;
-                    }
-                }
+                var ok = await _devices.StopAllAsync(ProviderStopTimeout).ConfigureAwait(false);
+                // Deliberately does NOT record "the devices are now at zero". If this stop was
+                // dropped — or a stale level POST lands after it — believing it would suppress every
+                // future zero and the toy would run forever. Mark the cache UNKNOWN instead: the
+                // next tick re-transmits the real target, and keeps doing so for the re-assert
+                // window. (Providers clear their own suppression cache on StopAll, so those zeros
+                // genuinely reach the wire.)
+                RequestResync();
+                return ok;
             }
-            catch (Exception ex) { App.Logger?.Debug("Haptics StopAll failed (non-fatal): {E}", ex.Message); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Haptics StopAll failed (non-fatal): {E}", ex.Message);
+                RequestResync();
+                return false;
+            }
         }
 
         /// <summary>Best-effort all-stop with a hard cap. Never blocks a caller longer than
@@ -811,6 +1030,30 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 await Task.WhenAny(stop, Task.Delay(cap)).ConfigureAwait(false);
             }
             catch { }
+        }
+
+        /// <summary>
+        /// SYNCHRONOUS, bounded all-stop for the deterministic shutdown path. This MUST run before
+        /// the device manager (and with it the providers' HttpClients) is disposed: <c>Dispose</c>
+        /// used to only SCHEDULE the flush on a background task and the very next line tore the
+        /// providers down, so the toy was essentially never told to stop. The
+        /// <c>AppDomain.ProcessExit</c> watchdog cannot cover it either — App.OnExit ends in
+        /// <c>TerminateProcess</c>, which skips ProcessExit handlers by design.
+        ///
+        /// One-shot: the second caller (App.OnExit then Dispose) is a no-op rather than a second
+        /// wait. Never throws, and never waits longer than <paramref name="cap"/> (+ a small slack).
+        /// </summary>
+        public void ShutdownStopBlocking(TimeSpan? cap = null)
+        {
+            if (Interlocked.Exchange(ref _shutdownStopped, 1) != 0) return;
+            var budget = cap ?? ShutdownFlushCap;
+            try
+            {
+                lock (_gate) ClearAllInternal(completeSequences: true);
+                // Task.Run so no continuation ever needs the (already shutting down) UI dispatcher.
+                Task.Run(() => FlushStopAsync(budget)).Wait(budget + TimeSpan.FromMilliseconds(250));
+            }
+            catch (Exception ex) { App.Logger?.Debug("Haptics shutdown stop failed (non-fatal): {E}", ex.Message); }
         }
 
         /// <summary>Shutdown watchdog. ProcessExit runs on a background thread with its own budget,
@@ -858,14 +1101,24 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _loopTask = null;
             }
             try { cts?.Cancel(); } catch { }
-            // NEVER block here — Dispose runs on the UI thread during app shutdown. The stop is a
-            // background best-effort with a hard cap; ProcessExit is the belt-and-braces path.
-            _ = Task.Run(async () =>
+
+            // C2: the all-stop has to REACH the toy before the providers (and their HttpClients)
+            // are disposed on the next line of HapticService.Dispose, so it is a bounded BLOCKING
+            // flush, not the old fire-and-forget task that disposal always outran. One-shot: when
+            // App.OnExit already flushed on the deterministic path this costs nothing.
+            ShutdownStopBlocking();
+
+            // Let the loop notice the cancel before the CTS goes away — disposing it while a
+            // Task.Delay(ct) is still pending throws ObjectDisposedException on a pool thread.
+            var doomed = cts;
+            if (doomed != null)
             {
-                try { await FlushStopAsync(ShutdownFlushCap).ConfigureAwait(false); }
-                catch { }
-                finally { try { cts?.Dispose(); } catch { } }
-            });
+                _ = Task.Run(async () =>
+                {
+                    try { await Task.Delay(1000).ConfigureAwait(false); } catch { }
+                    try { doomed.Dispose(); } catch { }
+                });
+            }
         }
 
         // ===================================================================== state types
@@ -910,13 +1163,26 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             public double[] Values = Array.Empty<double>();
             public long StartAt;
             public int TotalMs;
+            /// <summary>Submitted during an open test window while the master toggle was off —
+            /// i.e. a preview/test path. Exempts THIS envelope — and nothing else — from the H2 mute.</summary>
+            public bool TestEligible;
         }
 
+        /// <summary>Loop-thread-owned output state for one device (see the single-writer note on
+        /// <c>_deviceState</c>).</summary>
         private sealed class DeviceState
         {
             public double Floor;
+            /// <summary>Last quantized levels the provider ACCEPTED (-1 = unknown). Replaced
+            /// wholesale, never mutated, and only once a send came back clean.</summary>
             public int[]? Quantized;
             public long LastSendAt;
+            /// <summary>While <c>now</c> is below this, an all-zero target is re-sent every tick
+            /// even when it looks unchanged.</summary>
+            public long ZeroHoldUntil;
+            /// <summary>True while the device is off the air, so that its return invalidates the
+            /// cache (whatever it is doing now, we did not put it there).</summary>
+            public bool Offline;
         }
 
         private readonly struct PulseSample

@@ -209,6 +209,17 @@ public class OverlayService : IDisposable
     public bool IsRunning => _isRunning;
 
     /// <summary>
+    /// Is the spiral / pink tint ACTUALLY on screen right now, no matter who put it there — the
+    /// persistent setting, a dashboard trigger bubble, a Deeper band, or a voice command
+    /// (ShowOverlaySustained). Progress tracking gates on these so screen time earned through the
+    /// ad-hoc paths counts (#719: "turn on spiral" by voice never sets settings.SpiralEnabled, so
+    /// the setting-only gate credited nothing while the spiral spun in the user's face).
+    /// UI thread only — same affinity as the window lists / compositor layers they read.
+    /// </summary>
+    public bool IsSpiralVisible => SpiralShowing;
+    public bool IsPinkFilterVisible => PinkShowing;
+
+    /// <summary>
     /// When true, overlay level checks are bypassed (e.g. for remote control commands).
     /// </summary>
     public bool BypassLevelCheck { get; set; }
@@ -305,7 +316,7 @@ public class OverlayService : IDisposable
 
                 if (configured != null) return configured;
 
-                return ModResourceResolver.ResolveUri("spiral.gif");
+                return ModResourceResolver.ResolveSpiralUri();
             }
 
             /// <summary>

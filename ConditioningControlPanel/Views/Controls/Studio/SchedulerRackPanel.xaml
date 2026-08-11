@@ -1,0 +1,72 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Studio.SchedulerRackPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             mc:Ignorable="d" d:DesignWidth="488">
+
+    <!-- ================================================================
+         STUDIO RACK · SCHEDULER  (Phase 4)
+
+         WHY THIS IS A HOST AND NOT A REBUILD
+         The plan listed Scheduler/Ramp as a rescue from the dead
+         ProgressionTabView copy (deleted in Phase 8). That copy was NOT the
+         better one. Features/SchedulerFeatureControl.xaml has been live the whole
+         time (reachable only through the obscure "Scheduler + Ramp" button
+         on the Presets surface, MainWindow.Presets.cs:1021-1024), it owns
+         its own load/save handlers, and the ProgressionTab twin is a
+         strictly poorer subset with no handlers of its own - MainWindow
+         drives it through LoadSettings/SaveSettings. Rebuilding the poorer
+         copy here would have created a THIRD editor for the same nine
+         settings. So this panel hosts the live control and adds only what
+         the popup path never had: the help "?" that the dead ProgressionTab
+         copy carried (HelpBtnScheduler, Tag="Scheduler") and a one-line
+         statement of what the feature actually does.
+
+         PHASE 8: the ProgressionTab twin is gone, and with it MainWindow's
+         Load/SaveSettings round-trip through it. This panel's hosted control
+         is now the only editor for all nine scheduler settings.
+
+         Root MUST stay a Panel (StackPanel) and MUST stay the direct
+         UserControl content: MainWindow.SessionFeatureLock.cs:365 inserts
+         the session-lock banner with ((Panel)content.Content).Children
+         .Insert(0, banner). The rack's detail host owns the scroller and
+         the padding - do not add a ScrollViewer here or the banner insert
+         loses its Panel.
+
+         NOTHING on this panel is SessionLock.Owned, and that is deliberate
+         and unchanged from the live control: the scheduler decides when a
+         session begins, it prescribes no dose inside one.
+         ================================================================ -->
+
+    <StackPanel x:Name="StudioSchedulerPanel" x:FieldModifier="internal">
+
+        <!-- What it does + the rescued help button. HelpContentService already
+             ships a full "Scheduler" entry (Services/HelpContentService.cs:332);
+             it was unreachable from the moment the ProgressionTab went dark
+             until this button rescued it. -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{loc:Str st4_scheduler_hint}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" x:Name="HelpBtnStudioScheduler" x:FieldModifier="internal"
+                        Style="{StaticResource HelpButtonStyle}" Tag="Scheduler"
+                        VerticalAlignment="Top"/>
+            </Grid>
+        </Border>
+
+        <!-- The live control, verbatim. Its own handlers write App.Settings
+             and Save() on every edit (velvet-mosaic rule). -->
+        <feat:SchedulerFeatureControl x:Name="SchedulerHost" x:FieldModifier="internal"/>
+
+    </StackPanel>
+</UserControl>

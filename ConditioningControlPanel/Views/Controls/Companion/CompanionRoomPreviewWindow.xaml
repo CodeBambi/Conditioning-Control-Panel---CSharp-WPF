@@ -1,0 +1,95 @@
+<Window x:Class="ConditioningControlPanel.Views.Controls.Companion.CompanionRoomPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+        mc:Ignorable="d"
+        Title="Her Room — preview harness"
+        Width="1240" Height="1400"
+        MinWidth="820" MinHeight="600"
+        Background="#FF080711"
+        UseLayoutRounding="True"
+        WindowStartupLocation="CenterScreen"
+        AutomationProperties.AutomationId="CtabPreviewWindow">
+
+    <!-- ================================================================
+         DEBUG PREVIEW HARNESS for the composed Companion tab.
+
+         Nothing in the app opens this window. It exists so the redesign can
+         be looked at, screenshotted and driven before the wiring pass
+         connects the real services — the whole page, every state, no login,
+         no provider, no train.
+
+         HOW IT GETS OPENED (three ways, in order of how you will use it):
+
+           1. From the session driver / any automation, on the app's UI
+              thread:
+                  CompanionRoomPreviewWindow.Launch();          // artboard
+                  CompanionRoomPreviewWindow.Launch("freeTier");
+              Launch() returns the window, so a driver can keep driving it.
+
+           2. From a test: construct it and call ShowVariant(key) — no Show(),
+              no message loop, no Application needed. That is what
+              CompanionRoomCompositionTests does.
+
+           3. Env-gated, once MainWindow chooses to call it:
+                  CompanionRoomPreview.MaybeShow();
+              which does nothing unless CCP_CTAB_PREVIEW=1. The env var is
+              read at call time, NOT in a static constructor — a static-ctor
+              side effect that opens a window is the kind of thing that turns
+              a unit test run into a hung UI process.
+
+         The state strip is built in code from MockCompanionRoomVm.Variants
+         so it cannot drift from the page states, and every button carries an
+         AutomationId of the form CtabPreview_<key> for UIA.
+         ================================================================ -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ========== the state strip ========== -->
+        <Border Grid.Row="0" Background="#FF12101F" BorderBrush="#33B478FF"
+                BorderThickness="0,0,0,1" Padding="14,10,14,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="page state" VerticalAlignment="Center"
+                           Margin="0,0,12,0" Style="{StaticResource CmpFaintTextStyle}"/>
+
+                <!-- Filled by BuildStateStrip(). -->
+                <WrapPanel x:Name="StateStrip" Grid.Column="1" Orientation="Horizontal"
+                           AutomationProperties.AutomationId="CtabPreview_Strip"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="CurrentLabel" VerticalAlignment="Center" Margin="0,0,12,0"
+                               Style="{StaticResource CmpDimTextStyle}"
+                               AutomationProperties.AutomationId="CtabPreview_Current"/>
+                    <Button x:Name="WidthToggle" Content="narrow ⇄ wide" Click="WidthToggle_Click"
+                            Style="{StaticResource CmpChipButtonStyle}"
+                            ToolTip="flips the window across the shelf's 1100px collapse threshold"
+                            AutomationProperties.AutomationId="CtabPreview_ToggleWidth"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ========== the page under test ========== -->
+        <local:CompanionRoomView x:Name="Room" Grid.Row="1" Margin="10"
+                                 AutomationProperties.AutomationId="CtabPreview_Room"/>
+    </Grid>
+</Window>

@@ -37,14 +37,21 @@ namespace ConditioningControlPanel
             // Set up rich tooltips for all help buttons
 
             // Settings tab
-            SetHelpContent(SettingsTab.HelpBtnFlash, "FlashImages");
-            SetHelpContent(SettingsTab.HelpBtnVisuals, "Visuals");
-            SetHelpContent(SettingsTab.HelpBtnVideo, "Video");
-            SetHelpContent(SettingsTab.HelpBtnMiniGame, "MiniGame");
-            SetHelpContent(SettingsTab.HelpBtnSubliminals, "Subliminals");
-            SetHelpContent(SettingsTab.HelpBtnSystem, "System");
+            // PHASE 8: HelpBtnFlash / Visuals / Video / MiniGame / Subliminals / System went with
+            // LegacyDashboardHost. "FlashImages", "Visuals", "Video" and "Subliminals" still have a
+            // "?" - the Home mosaic's FeatureCards render one from their HelpSectionId
+            // (Features/FeatureCard.xaml.cs attaches the same popover this method does).
+            //
+            // TWO TOPICS LOST THEIR ONLY BUTTON and are reported, not silently dropped:
+            //   "System"   - CardSystem carried HelpSectionId="System" and Phase 8 deleted that
+            //                tile; FeaturePopupWindow renders no "?", so the System popup the
+            //                quick-toggle pill opens has no help affordance.
+            //   "MiniGame" - HelpBtnMiniGame sat in the Video section's attention-check sub-panel;
+            //                Features/VideoFeatureControl declares no HelpSectionId.
+            // Both entries survive in HelpContentService, so restoring either is one attribute.
             SetHelpContent(SettingsTab.HelpBtnBrowser, "Browser");
-            SetHelpContent(SettingsTab.HelpBtnAudio, "Audio");
+            // Phase 2: the Audio section (and its help button) live on the Settings door now.
+            SetHelpContent(AppSettingsTab.HelpBtnAudio, "Audio");
             SetHelpContent(SettingsTab.HelpBtnQuickLinks, "QuickLinks");
 
             // Presets tab
@@ -52,12 +59,11 @@ namespace ConditioningControlPanel
             SetHelpContent(PresetsTab.HelpBtnSessions, "Sessions");
             SetHelpContent(PresetsTab.HelpBtnSessionDetails, "SessionDetails");
 
-            // Progression tab
-            SetHelpContent(ProgressionTab.HelpBtnUnlockables, "Unlockables");
-            SetHelpContent(ProgressionTab.HelpBtnScheduler, "Scheduler");
-            SetHelpContent(ProgressionTab.HelpBtnRamp, "IntensityRamp");
-            SetHelpContent(ProgressionTab.HelpBtnCommunity, "Community");
-            SetHelpContent(ProgressionTab.HelpBtnAppInfo, "AppInfo");
+            // Progression tab: DEMOLISHED (Phase 8). Its five "?" buttons went with the view.
+            // "Scheduler" and "IntensityRamp" were rebuilt on the Studio rack panels, which attach
+            // their own popovers (SchedulerRackPanel.xaml.cs / RampRackPanel.xaml.cs). The
+            // "Unlockables", "Community" and "AppInfo" topics survive in HelpContentService but no
+            // longer have a "?" button anywhere - they were only ever reachable from the ghost tab.
 
             // Quests tab
             SetHelpContent(QuestsTab.HelpBtnQuests, "Quests");
@@ -78,12 +84,21 @@ namespace ConditioningControlPanel
             SetHelpContent(GradedIntakeTab.HelpBtnQuiz, "Quiz");
             // HelpBtnWebcamGames removed: the bundled Webcam Games card was split into
             // separate Gaze Minigame + Focus Gaze cards (each with its own ? button).
-            SetHelpContent(LabTab.HelpBtnGazeMinigame, "GazeMinigame");
-            SetHelpContent(LabTab.HelpBtnFocusGaze, "FocusGaze");
-            SetHelpContent(PatreonTab.HelpBtnKeywordTriggers, "KeywordTriggers");
-            SetHelpContent(PatreonTab.HelpBtnScreenOcr, "ScreenOcr");
+            // PHASE 6: both ? buttons moved with their cards to the Play door. Same registry
+            // entries ("GazeMinigame" / "FocusGaze"), same popovers - only the accessor path
+            // changed. Attaching them to the Lab copies would reach a view that is never shown.
+            SetHelpContent(PlayTab.HelpBtnPlayGazeMinigame, "GazeMinigame");
+            SetHelpContent(PlayTab.HelpBtnPlayFocusGaze, "FocusGaze");
+            // PHASE 5 (G3): these two ? buttons moved with their editors onto the Awareness
+            // tab's custom-trigger drawer. PHASE 8 deleted the PatreonTab twins, so these are now
+            // the only "KeywordTriggers" / "ScreenOcr" popovers in the app.
+            SetHelpContent(AwarenessTab.HelpBtnKeywordTriggers, "KeywordTriggers");
+            SetHelpContent(AwarenessTab.HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(RemoteControlTab.HelpBtnRemoteControl, "RemoteControl");
-            SetHelpContent(LabTab.HelpBtnGetBackToMe, "GetBackToMe");
+            // "Get back to me" is a permission, so its ? button went to the Companion door with the
+            // rest of the permissions card (UX restructure, Phase 5). Same registry entry, same
+            // popup — only the accessor path changed.
+            SetHelpContent(CompanionTab.HelpBtnGetBackToMe, "GetBackToMe");
 
             // Side panels + Exclusives features (Awareness / Haptics / BlinkTrainer
             // share this cluster — they're dedicated full-tab Exclusives surfaces
@@ -94,7 +109,9 @@ namespace ConditioningControlPanel
             SetHelpContent(CompanionTab.HelpBtnVideoLinks, "HypnotubeLinks");
             SetHelpContent(CompanionTab.HelpBtnCompanionSettings, "CompanionSettings");
             SetHelpContent(CompanionTab.HelpBtnQuickControls, "QuickControls");
-            SetHelpContent(PatreonTab.HelpBtnPatreon, "PatreonExclusives");
+            // PHASE 8: HelpBtnPatreon went with PatreonTabView. The "PatreonExclusives" topic stays
+            // in HelpContentService but has no "?" button - the Exclusives content it described is
+            // the Play door's Showcase shelf now, which carries its own per-card copy.
             SetHelpContent(CompanionTab.HelpBtnAiChat, "AiChat");
             SetHelpContent(CompanionTab.HelpBtnAwareness, "WindowAwareness");
             SetHelpContent(HapticsTab.HelpBtnHaptics, "Haptics");
@@ -782,75 +799,19 @@ namespace ConditioningControlPanel
 
         // --- velvet-mosaic: highlight feature cards whose feature is enabled ---
 
-        private void RefreshFeatureCardActiveStates()
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.IsActive = s.FlashEnabled;
-            if (SettingsTab.CardVideo != null) SettingsTab.CardVideo.IsActive = s.MandatoryVideosEnabled;
-            if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.IsActive = s.SubliminalEnabled;
-            if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.IsActive = s.SpiralEnabled;
-            if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.IsActive = s.PinkFilterEnabled;
-            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.IsActive = s.BubblesEnabled;
-            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.IsActive = s.LockCardEnabled;
-            if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.IsActive = s.BubbleCountEnabled;
-            if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsActive = s.BouncingTextEnabled;
-            if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsActive = s.MindWipeEnabled;
-            // Visuals and System cards have no single "enabled" toggle; they stay neutral.
-        }
-
-        // Quick-toggle: right-clicking a card flips its feature on/off. Mirrors the
-        // per-feature toggle side effects in the FeatureControl popups so the running
-        // effect actually starts/stops, not just the persisted flag.
-        private void OnFeatureCardToggleRequested(object sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource is not Features.FeatureCard card) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            // A running session owns the prescribed dose - see MainWindow.SessionFeatureLock.cs.
-            // Derived from live engine state on every click, so there is nothing to un-stick.
-            if (RefuseIfSessionFeatureLocked($"card:{card.Title}")) return;
-            var running = App.IsEngineRunning;
-            try
-            {
-                if (card == SettingsTab.CardFlash) { var on = s.FlashEnabled = !s.FlashEnabled; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } }
-                else if (card == SettingsTab.CardVideo) { var on = s.MandatoryVideosEnabled = !s.MandatoryVideosEnabled; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } }
-                else if (card == SettingsTab.CardSubliminal) { var on = s.SubliminalEnabled = !s.SubliminalEnabled; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } }
-                else if (card == SettingsTab.CardSpiral) { s.SpiralEnabled = !s.SpiralEnabled; App.Overlay?.RefreshOverlays(); }
-                else if (card == SettingsTab.CardPinkFilter) { s.PinkFilterEnabled = !s.PinkFilterEnabled; App.Overlay?.RefreshOverlays(); }
-                else if (card == SettingsTab.CardBubblePop) { var on = s.BubblesEnabled = !s.BubblesEnabled; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } }
-                else if (card == SettingsTab.CardLockCard) { var on = s.LockCardEnabled = !s.LockCardEnabled; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } }
-                else if (card == SettingsTab.CardBubbleCount) { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } }
-                else if (card == SettingsTab.CardBouncingText) { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } }
-                else if (card == SettingsTab.CardMindWipe) { s.MindWipeEnabled = !s.MindWipeEnabled; }
-                else return; // Visuals / System cards have no single on/off toggle.
-                App.Settings?.Save();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Feature card quick-toggle failed for {Card}", card.Title);
-            }
-            // Flipping the flag fires OnSettingsPropertyChangedForCards which updates the
-            // highlight; refresh explicitly too in case INPC didn't surface the change.
-            RefreshFeatureCardActiveStates();
-        }
-
-        private void OnSettingsPropertyChangedForCards(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Models.AppSettings.FlashEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.MandatoryVideosEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SubliminalEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.PinkFilterEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BubblesEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BubbleCountEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BouncingTextEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled))
-            {
-                Dispatcher.BeginInvoke(new Action(RefreshFeatureCardActiveStates));
-            }
-        }
+        // RETIRED with the FX mosaic (2026-08-11): RefreshFeatureCardActiveStates,
+        // OnFeatureCardToggleRequested and OnSettingsPropertyChangedForCards.
+        //
+        // All three existed to serve twelve FX tiles that no longer exist. The pink "this
+        // feature is on" ring and the right-click quick-toggle they drove live on where the
+        // dials do — the Studio rack paints a state dot per module from the same AppSettings
+        // flags (StudioTabView.xaml.cs, the Dot column), and the premium rail now carries the
+        // quick-toggle gesture for the features that ARE toggles.
+        //
+        // Nothing else referenced them: their only callers were each other plus the two
+        // registrations in MainWindow.xaml.cs, which went at the same time. FeatureCard keeps
+        // IsActive and still raises ToggleRequested — both are part of the control's contract
+        // and cost nothing unhandled — so a future toggleable tile needs no surgery here.
 
         // --- velvet-mosaic: dashboard feature card click dispatcher ----------
 
@@ -908,182 +869,391 @@ namespace ConditioningControlPanel
             catch { }
         }
 
-        // Popup titles go through ModAwareLabel so a mod that renames a feature retitles
-        // the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
-        // rename the tile and the in-popup section header but leave the title bar behind.
-        internal void CardFlash_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.FlashFeatureControl(),
-                ModAwareLabel("⚡ Flash Images", "section_flash_images"),
-                SettingsTab.CardFlash.Icon);
+        /// <summary>
+        /// Phase 3: a Home mosaic tile is a SHORTCUT now, not a popup host.
+        ///
+        /// <para>Phase 4 re-hosted every one of these <c>*FeatureControl</c>s as a Studio rack
+        /// entry. Opening the popup as well would give one feature two live editors — the exact
+        /// duplication this restructure exists to remove — so the tile selects the rack row and
+        /// shows the Studio door instead. Nothing is lost: the panels are the same instances with
+        /// the same handlers, and the session feature lock is re-derived by ShowTab's
+        /// <c>studio</c> case exactly as <c>ShowFeaturePopup</c> did for the popup.</para>
+        ///
+        /// <para><b>Order matters.</b> Focus first, THEN <c>ShowTab</c>: ShowTab's <c>studio</c>
+        /// case calls <c>StudioTab.OnTabShown()</c>, which re-announces whatever row is selected.
+        /// Selecting first makes that announcement the row the user actually asked for instead of
+        /// the one they left behind last time. The resulting second
+        /// <c>NotifyFeatureOpened</c> for the SAME key is swallowed by BarkService's global
+        /// min-gap; announcing the WRONG key would not have been.</para>
+        ///
+        /// <para>The bark keys are unchanged — the rack fires the same values the popup derived
+        /// from the control's type name (<c>StudioTabView.xaml.cs</c>, BarkFeature column). Rack
+        /// keys are API (<c>StudioTabView.xaml.cs:62</c>); never spell one wrong here, because
+        /// <c>FocusRackEntry</c> treats an unknown key as a quiet no-op by contract.</para>
+        ///
+        /// <para><b>Haptics is the one rack key that must NOT come through here.</b> It is the
+        /// only module that is also a ShowTab key, and everything it owns hangs off that key
+        /// rather than off the rack row: <c>NotifyTabNavigated("haptics")</c> (three voiced rules
+        /// per built-in mod, plus any third-party .ccpmod's) fires from the top of
+        /// <c>ShowTab</c> with the INCOMING key, and <c>MaybeShowFeatureIntro("haptics")</c> is
+        /// one of only five first-visit intro cards. Its rack row deliberately carries no
+        /// <c>BarkFeature</c> (<c>StudioTabView.xaml.cs:221-226</c>) precisely because the tab key
+        /// already speaks for it — so routing it as a plain module would land on the right panel
+        /// while silently saying nothing and never showing the intro. <c>ShowTab("haptics")</c>
+        /// selects the same row itself (<c>TabNavigation.cs:376-383</c>), so the landing is
+        /// identical; only the announcement differs.</para>
+        /// </summary>
+        // internal since Phase 6: the Play door's Loom card routes through here so the Spiral
+        // module keeps exactly ONE editor entry. A Play card that called LoomHostService.Launch()
+        // would be a second launcher for one feature.
+        internal void OpenStudioModule(string rackKey)
+        {
+            if (string.Equals(rackKey, "haptics", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTab("haptics");
+                return;
+            }
+            try { StudioTab?.FocusRackEntry(rackKey); }
+            catch (Exception ex) { App.Logger?.Debug("OpenStudioModule({Key}): {E}", rackKey, ex.Message); }
+            ShowTab("studio");
+        }
 
-        internal void CardVisuals_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.VisualsFeatureControl(),
-                ModAwareLabel("👁 Visuals", "section_visuals"),
-                glyph: "👁");
+        // =====================================================================================
+        //  VELVET MOSAIC - the 4x4 hybrid wall (owner redesign #2, 2026-08-11)
+        // =====================================================================================
+        //
+        // The FX handlers are BACK (the 3x3 interlude sent them home to the Studio rack and the
+        // wall starved for toggles within a day), joined by three new commercial tiles. The
+        // destination handlers (CardDtrh/CardGoon/CardFyp/CardIntake/CardRemote/CardLoom/
+        // CardDeeper) went with their tiles - every one of those features kept its Play-door
+        // card, so the count of doors per feature only fell back to one.
+        //
+        // TWO GESTURES PER FX TILE, same grammar as the rail chips: left-click OPENS the Studio
+        // module (Card*_Click / Combo*_Click* -> OpenStudioModule), right-click TOGGLES the
+        // feature (-> ToggleWallFeature below). The three diagonal tiles route per-half; A is
+        // always the top-left triangle as authored in SettingsTabView.xaml.
+        //
+        // Navigation tiles still navigate to the ONE existing entry, never launch
+        // (PlayTabView.xaml:1163-1167 rule).
 
-        internal void CardVideo_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.VideoFeatureControl(),
-                ModAwareLabel("🎬 Mandatory Video", "section_mandatory_video"),
-                SettingsTab.CardVideo.Icon);
+        internal void CardFlash_Click(object sender, RoutedEventArgs e) => OpenStudioModule("flash");
 
-        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SubliminalFeatureControl(),
-                ModAwareLabel("💭 Subliminals", "section_subliminals_2"),
-                SettingsTab.CardSubliminal.Icon);
+        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) => OpenStudioModule("subliminal");
 
-        internal void CardSpiral_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SpiralFeatureControl(),
-                ModAwareLabel("🌀 Spiral Overlay", "label_spiral_overlay"),
-                SettingsTab.CardSpiral.Icon);
+        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bouncingtext");
 
-        internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
-                ModAwareLabel("💗 Pink Filter", "label_pink_filter"),
-                SettingsTab.CardPinkFilter.Icon);
+        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubbles");
 
-        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BubblePopFeatureControl(),
-                ModAwareLabel("🫧 Bubble Pop", "label_bubble_pop"),
-                SettingsTab.CardBubblePop.Icon);
+        internal void CardLockCard_Click(object sender, RoutedEventArgs e) => OpenStudioModule("lockcard");
 
-        internal void CardLockCard_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.LockCardFeatureControl(),
-                ModAwareLabel("📐 Lock Card", "label_lock_card"),
-                SettingsTab.CardLockCard.Icon);
+        /// <summary>
+        /// The ? box: navigates to today's free premium feature. The tile is repainted by
+        /// <see cref="RefreshMysteryTile"/>; the gate stays with the destination's own handlers,
+        /// which all consult <see cref="Services.DailyFreeService"/> through TierGate's keyed
+        /// overloads - so on the day a feature is free, the same click that was refused
+        /// yesterday just works, with no special-casing here.
+        /// </summary>
+        internal void CardMystery_Click(object sender, RoutedEventArgs e)
+        {
+            var key = App.DailyFree?.TodayKey;
+            var tab = key switch
+            {
+                "takeover" => "bambitakeover",
+                "awareness" => "awareness",
+                "haptics" => "haptics",
+                "voice" => "shelistening",
+                "fyp" => "fyp",
+                "remote" => "remotecontrol",
+                // Drop days navigate to the Play door, where DtRH's hero card (and its now-open
+                // gate) lives - same destination the old DtRH mosaic tile used. Navigate, never
+                // launch: the wall's own rule.
+                "dtrh" => "play",
+                _ => null,
+            };
+            if (tab != null) ShowTab(tab);
+        }
 
-        internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
-                ModAwareLabel("🫧 Bubble Count", "label_bubble_count"),
-                SettingsTab.CardBubbleCount.Icon);
+        /// <summary>
+        /// The Vault: the Exclusives storefront. Routes through the SAME handler the nav rail's
+        /// Patreon row uses so the pulse-clearing and lazy-init side effects stay in one place.
+        /// </summary>
+        internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
-        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
-                ModAwareLabel("📺 Bouncing Text", "label_bouncing_text"),
-                SettingsTab.CardBouncingText.Icon);
+        /// <summary>
+        /// Just Drop: the session maker, not built yet (owner, 2026-08-11 — placeholder tile).
+        ///
+        /// <para>A toast and nothing else, on purpose. The tile is on the wall to announce the
+        /// feature, and there is no window to open; a tile that silently does nothing when
+        /// clicked reads as a bug, and this app has shipped that bug before. When the real
+        /// launcher lands, replace this body with it and drop the SOON badge in
+        /// <see cref="RefreshMosaicTierBadges"/> — nothing else on the wall changes.</para>
+        /// </summary>
+        internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
+        {
+            // Literal copy, like the tile's own title: naming a placeholder in nine language
+            // files buys nine rows to re-translate the day it gets its real name.
+            App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
+                                    + "future update.", NotificationType.Info, TimeSpan.FromSeconds(6));
+        }
 
-        internal void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.MindWipeFeatureControl(),
-                ModAwareLabel("🧠 Mind Wipe", "label_mind_wipe"),
-                SettingsTab.CardMindWipe.Icon);
+        /// <summary>
+        /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
+        /// deliberately carry no tag - absence is how the wall says "free".
+        ///
+        /// <para>Called from <c>RefreshPremiumRail</c>, which already carries the triggers this
+        /// needs - patron status landing or being lost, the Home door being shown, and the weekly
+        /// intake pass changing under <c>EnsureIntakePassRailHooked</c>.</para>
+        /// </summary>
+        internal void RefreshMosaicTierBadges()
+        {
+            var dash = SettingsTab;
+            if (dash == null) return;
 
+            try
+            {
+                // Nobody has Just Drop, including the owner, so this one never clears. Literal,
+                // like the tile's title - see CardJustDrop_Click.
+                SetTierBadge(dash.CardJustDrop, false, "SOON");
+
+                RefreshMysteryTile();
+                RefreshWallActiveStates();
+
+                // Opportunistic server-override check: the 6h gate inside makes this free on
+                // every repaint, and it is exactly the cadence the ? box needs to catch a
+                // same-day override without any timer of its own.
+                _ = App.DailyFree?.RefreshAsync();
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshMosaicTierBadges: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The ? box's face: the tile keeps the mystery-box art, but its title names today's
+        /// feature outright and the badge says what the box means - free users see the gift tag,
+        /// premium users (who own the whole pool) see no tag at all. Named, not teased: the box
+        /// is a daily doorbell, and a doorbell that will not say who is at the door just gets
+        /// ignored on day three.
+        /// </summary>
+        internal void RefreshMysteryTile()
+        {
+            var dash = SettingsTab;
+            if (dash?.CardMystery == null) return;
+
+            try
+            {
+                var key = App.DailyFree?.TodayKey;
+                var name = MysteryFeatureName(key);
+                dash.CardMystery.Title = name ?? Loc.Get("mosaic_daily_gift");
+                dash.CardMystery.TierBadge = App.Patreon?.HasPremiumAccess == true
+                    ? null
+                    : Loc.Get("mosaic_free_today");
+
+                // The flip plate's reveal face mirrors the box - same feature, said bigger.
+                // Painted on every repaint (not just at ceremony start) so a mid-day server
+                // override and a mod switch both land on it, exactly like the box's own title.
+                if (dash.MysteryRevealName != null)
+                    dash.MysteryRevealName.Text = name ?? Loc.Get("mosaic_daily_gift");
+                if (dash.MysteryRevealArtBrush != null && !dash.MysteryRevealArtBrush.IsFrozen)
+                {
+                    var art = LoadModImageDecoded(MysteryFeatureArtPath(key), 512)
+                              ?? ModTileVariant("mysterybox");
+                    if (art != null) dash.MysteryRevealArtBrush.ImageSource = art;
+                }
+
+                // The plate's hover flip and its gold breath are hooked/armed off the same
+                // repaint triggers this method already has (Home shown, patron status, override
+                // landing). One-shot latched, so it is safe to hammer - see DashboardFx 2c.
+                EnsureMysteryTileFx();
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshMysteryTile: {E}", ex.Message); }
+        }
+
+        /// <summary>Display name for a DailyFreeService key; null when the key is unknown.</summary>
+        private static string? MysteryFeatureName(string? key) => key switch
+        {
+            "takeover" => Loc.Get("tab_takeover"),
+            "awareness" => Loc.Get("tab_awareness"),
+            "haptics" => Loc.Get("tab_haptics"),
+            "voice" => Loc.Get("tab_shelistening"),
+            "fyp" => Loc.Get("tab_fyp"),
+            "remote" => Loc.Get("tab_remote_control"),
+            // Brand name, identical in all nine languages - a loc key would only add a row
+            // nobody translates (same call as the Play door's lockband).
+            "dtrh" => "Down the Rabbit Hole",
+            _ => null,
+        };
+
+        /// <summary>
+        /// Hero art for the reveal face, per key. Haptics/voice stay listed for server-override
+        /// days even though the wheel no longer lands on them; voice has no hero of its own, so
+        /// it (and any unknown key) falls back to the box art - a gift card is still a card.
+        /// </summary>
+        private static string MysteryFeatureArtPath(string? key) => key switch
+        {
+            "takeover" => "features/takeover.png",
+            "awareness" => "features/awareness.png",
+            "haptics" => "features/vibe.png",
+            "fyp" => "features/fyp.png",
+            "remote" => "features/remote_control.png",
+            "dtrh" => "features/dtrh.png",
+            _ => "features/mysterybox.png",
+        };
+
+        // =====================================================================================
+        //  WALL QUICK-TOGGLES - right-click flips a feature (resurrected from the 4x4 era)
+        // =====================================================================================
+
+        /// <summary>
+        /// Right-click quick-toggle for a wall tile (or a half of a diagonal tile). Mirrors the
+        /// per-feature toggle side effects of the *FeatureControl panels so the running effect
+        /// actually starts/stops, not just the persisted flag. Keys are the Studio rack's.
+        ///
+        /// <para>A running session owns the prescribed dose - derived from live engine state on
+        /// every click via <see cref="RefuseIfSessionFeatureLocked"/>, so there is nothing to
+        /// un-stick.</para>
+        /// </summary>
+        internal void ToggleWallFeature(string key)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
+            var running = App.IsEngineRunning;
+            try
+            {
+                switch (key)
+                {
+                    case "flash": { var on = s.FlashEnabled = !s.FlashEnabled; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } break; }
+                    case "video": { var on = s.MandatoryVideosEnabled = !s.MandatoryVideosEnabled; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } break; }
+                    case "subliminal": { var on = s.SubliminalEnabled = !s.SubliminalEnabled; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } break; }
+                    case "spiral": s.SpiralEnabled = !s.SpiralEnabled; App.Overlay?.RefreshOverlays(); break;
+                    case "pinkfilter": s.PinkFilterEnabled = !s.PinkFilterEnabled; App.Overlay?.RefreshOverlays(); break;
+                    case "bubbles": { var on = s.BubblesEnabled = !s.BubblesEnabled; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } break; }
+                    case "lockcard": { var on = s.LockCardEnabled = !s.LockCardEnabled; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } break; }
+                    case "bubblecount": { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } break; }
+                    case "bouncingtext": { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } break; }
+                    case "mindwipe": s.MindWipeEnabled = !s.MindWipeEnabled; break;
+                    case "braindrain": { var on = s.BrainDrainEnabled = !s.BrainDrainEnabled; if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); } break; }
+                    default: return;
+                }
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Wall quick-toggle failed for {Key}", key);
+            }
+            // The INPC hook repaints too (MainWindow.xaml.cs), but refresh explicitly in case a
+            // service mutated a second flag along the way.
+            RefreshWallActiveStates();
+        }
+
+        /// <summary>INPC tail for the wall's rings - see the subscription in MainWindow.xaml.cs.</summary>
+        private void OnSettingsPropertyChangedForWall(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(Models.AppSettings.FlashEnabled):
+                case nameof(Models.AppSettings.MandatoryVideosEnabled):
+                case nameof(Models.AppSettings.SubliminalEnabled):
+                case nameof(Models.AppSettings.SpiralEnabled):
+                case nameof(Models.AppSettings.PinkFilterEnabled):
+                case nameof(Models.AppSettings.BubblesEnabled):
+                case nameof(Models.AppSettings.LockCardEnabled):
+                case nameof(Models.AppSettings.BubbleCountEnabled):
+                case nameof(Models.AppSettings.BouncingTextEnabled):
+                case nameof(Models.AppSettings.MindWipeEnabled):
+                case nameof(Models.AppSettings.BrainDrainEnabled):
+                    Dispatcher.BeginInvoke(new Action(RefreshWallActiveStates));
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Lights the ring on every wall tile whose feature is enabled; the diagonal tiles light
+        /// per half (both halves = the whole card glows, which is the owner's spec verbatim).
+        /// </summary>
+        internal void RefreshWallActiveStates()
+        {
+            var s = App.Settings?.Current;
+            var dash = SettingsTab;
+            if (s == null || dash == null) return;
+            try
+            {
+                if (dash.CardFlash != null) dash.CardFlash.IsActive = s.FlashEnabled;
+                if (dash.CardSubliminal != null) dash.CardSubliminal.IsActive = s.SubliminalEnabled;
+                if (dash.CardBubblePop != null) dash.CardBubblePop.IsActive = s.BubblesEnabled;
+                if (dash.CardLockCard != null) dash.CardLockCard.IsActive = s.LockCardEnabled;
+                if (dash.CardBouncingText != null) dash.CardBouncingText.IsActive = s.BouncingTextEnabled;
+                if (dash.ComboVideoBubble != null)
+                {
+                    dash.ComboVideoBubble.IsActiveA = s.MandatoryVideosEnabled;
+                    dash.ComboVideoBubble.IsActiveB = s.BubbleCountEnabled;
+                }
+                if (dash.ComboSpiralPink != null)
+                {
+                    dash.ComboSpiralPink.IsActiveA = s.SpiralEnabled;
+                    dash.ComboSpiralPink.IsActiveB = s.PinkFilterEnabled;
+                }
+                if (dash.ComboMindDrain != null)
+                {
+                    dash.ComboMindDrain.IsActiveA = s.MindWipeEnabled;
+                    dash.ComboMindDrain.IsActiveB = s.BrainDrainEnabled;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshWallActiveStates: {E}", ex.Message); }
+        }
+
+        private static void SetTierBadge(Features.FeatureCard? card, bool allowed, string badge)
+        {
+            if (card == null) return;
+            card.TierBadge = allowed ? null : badge;
+        }
+
+        /// <summary>
+        /// The System popup. Still a <see cref="Features.FeaturePopupWindow"/> because System has
+        /// no Studio rack entry — it is display/video switches, not a feature. Phase 3 moved its
+        /// ENTRY POINT off the mosaic (the tile is Collapsed) onto the quick-toggles row's "System"
+        /// pill, which calls this same method: the popup, its mod-aware title and its
+        /// <c>NotifyFeatureOpened("System")</c> bark are unchanged.
+        ///
+        /// <para>Popup titles go through <c>ModAwareLabel</c> so a mod that renames a feature
+        /// retitles the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
+        /// rename the tile and the in-popup section header but leave the title bar behind.</para>
+        /// </summary>
         internal void CardSystem_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SystemFeatureControl(),
                 ModAwareLabel("⚙ System", "section_system"),
                 glyph: "⚙");
 
+        /// <summary>
+        /// Dashboard "Webcam &amp; Mic" tile. Until Phase 2 this opened a FeaturePopupWindow around
+        /// Features.WebcamFeatureControl and, pre-show, physically reparented the Lab tab's
+        /// LabWebcamEngineBar into it (DetachWebcamBarInto), putting it back on close. Both the
+        /// popup host and the reparenting are retired: the webcam and microphone controls live in
+        /// Settings -&gt; Devices, which is a real page, so this is now plain navigation. The tile
+        /// stays because it is a shortcut people know - Phase 3 re-lays the dashboard around it.
+        ///
+        /// <para><b>The bark is restored here, not inside OpenDeviceSettings.</b> Retiring the
+        /// popup took the <c>NotifyFeatureOpened("Webcam")</c> call with it, and that left the
+        /// <c>feat_webcam</c> rule - two RECORDED clips in each of the three built-in mods -
+        /// with no call site at all: a voiced line that had simply stopped existing, which is the
+        /// one thing this restructure is not allowed to do. It goes on this handler because this
+        /// pill is the surface it always fired from; the other four
+        /// <c>OpenDeviceSettings()</c> callers (Takeover, Blink Trainer, Deeper, and the Settings
+        /// mirrors) never fired it, and putting it in the shared method would make her comment on
+        /// the camera from four places she never used to.</para>
+        /// </summary>
         internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e)
         {
-            // Surface the Lab's webcam tracking controls in a popup. We borrow the
-            // same LabTab.LabWebcamEngineBar instance (reparent into the control's host
-            // pre-show) and return it to the Lab on close — mirrors the App Info
-            // account-sections pattern so every existing handler/tracker stays valid.
-            // Close any existing popup FIRST so its close handler returns whatever
-            // it borrowed (incl. a prior webcam bar) before we borrow it again.
-            _activeFeaturePopup?.Close();
-
-            var control = new Features.WebcamFeatureControl();
-            try
-            {
-                DetachWebcamBarInto(control.WebcamSettingsHost);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Webcam: failed to attach engine bar pre-show");
-            }
-
-            var popup = new Features.FeaturePopupWindow(
-                control,
-                "Webcam & Mic",
-                glyph: "📷")
-            {
-                Owner = this
-            };
-
-            popup.Closed += (_, __) =>
-            {
-                if (_activeFeaturePopup == popup)
-                    _activeFeaturePopup = null;
-                try { ReattachWebcamBar(); }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "Webcam: failed to return engine bar to Lab");
-                }
-                try
-                {
-                    if (WindowState == WindowState.Minimized)
-                        WindowState = WindowState.Normal;
-                    Activate();
-                }
-                catch { /* window may be shutting down */ }
-            };
-
-            _activeFeaturePopup = popup;
-            popup.Show();
-
-            // The camera + monitor combos are normally seeded when the Lab tab is
-            // shown. Opening this popup may be the user's first webcam touchpoint,
-            // so populate both here too — otherwise the monitor list shows up empty.
-            try { RefreshWebcamDeviceList(); } catch (Exception ex) { App.Logger?.Warning(ex, "Webcam popup: device list refresh failed"); }
-            try { RefreshWebcamMonitorList(); } catch (Exception ex) { App.Logger?.Warning(ex, "Webcam popup: monitor list refresh failed"); }
-        }
-
-        // Tracks the Lab webcam engine bar's home so it can be restored to the
-        // exact same spot after the Webcam popup closes.
-        private System.Windows.Controls.Panel? _webcamBarParent;
-        private int _webcamBarIndex = -1;
-
-        /// <summary>
-        /// Detaches the Lab webcam engine bar from its place in the Lab and parents
-        /// it into the provided popup host, remembering its original parent + index.
-        /// </summary>
-        private void DetachWebcamBarInto(System.Windows.Controls.Panel target)
-        {
-            if (target == null || LabTab.LabWebcamEngineBar == null) return;
-            if (_webcamBarParent != null) return; // already borrowed
-
-            if (LabTab.LabWebcamEngineBar.Parent is System.Windows.Controls.Panel parent)
-            {
-                _webcamBarParent = parent;
-                _webcamBarIndex = parent.Children.IndexOf(LabTab.LabWebcamEngineBar);
-                parent.Children.Remove(LabTab.LabWebcamEngineBar);
-            }
-            target.Children.Add(LabTab.LabWebcamEngineBar);
-        }
-
-        /// <summary>
-        /// Returns the Lab webcam engine bar to its original position in the Lab.
-        /// </summary>
-        private void ReattachWebcamBar()
-        {
-            if (LabTab.LabWebcamEngineBar == null || _webcamBarParent == null) return;
-
-            if (LabTab.LabWebcamEngineBar.Parent is System.Windows.Controls.Panel currentParent)
-                currentParent.Children.Remove(LabTab.LabWebcamEngineBar);
-
-            var idx = _webcamBarIndex;
-            if (idx < 0 || idx > _webcamBarParent.Children.Count)
-                idx = _webcamBarParent.Children.Count;
-            _webcamBarParent.Children.Insert(idx, LabTab.LabWebcamEngineBar);
-
-            _webcamBarParent = null;
-            _webcamBarIndex = -1;
+            try { App.Bark?.NotifyFeatureOpened("Webcam"); }
+            catch { /* a bark must never break a navigation */ }
+            OpenDeviceSettings();
         }
 
         internal void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
         {
-            // Build the UserControl and immediately reparent the account/data
-            // sections (Patreon/Discord login, Cloud Backup, Data & Privacy,
-            // Support Development) into its host BEFORE showing the popup.
-            // Doing it pre-show avoids timing issues with the Loaded event.
+            // Phase 2: no reparenting. The account/data cards live permanently in
+            // Settings · Account (AppSettingsTab), so this popup is About + support forms only
+            // and can be built and shown in one step.
             var control = new Features.AppInfoFeatureControl();
-            try
-            {
-                DetachAccountSectionsInto(control.AccountSectionsHost);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "AppInfo: failed to attach account sections pre-show");
-            }
 
             // Close any existing popup before opening a new one
             _activeFeaturePopup?.Close();
@@ -1096,18 +1266,11 @@ namespace ConditioningControlPanel
                 Owner = this
             };
 
-            // When the popup closes, return the sections to PatreonTab.PatreonTabContent
-            // so the next open can borrow them again and any MainWindow
-            // handlers that read their Text/Visibility keep working.
+            // Nothing to give back on close since Phase 2 — the popup no longer borrows anything.
             popup.Closed += (_, __) =>
             {
                 if (_activeFeaturePopup == popup)
                     _activeFeaturePopup = null;
-                try { ReattachAccountSections(); }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "AppInfo: failed to return account sections");
-                }
                 try
                 {
                     if (WindowState == WindowState.Minimized)
@@ -1121,10 +1284,16 @@ namespace ConditioningControlPanel
             popup.Show();
         }
 
+        /// <summary>
+        /// Quick-toggles row · "Scheduler + Intensity Ramp". Phase 4 gave both panels rack entries
+        /// (<c>scheduler</c> / <c>ramp</c>), so Phase 3 re-points this pill at the rack instead of
+        /// opening a second copy of them in a popup. Nothing goes quiet: both rack rows fire the
+        /// popup's single <c>"SchedulerRamp"</c> FeatureOpened key
+        /// (<c>StudioTabView.xaml.cs:229-230</c>), so the existing bark rules keep matching.
+        /// Scheduler is the landing row because it is the first of the pair in the rack.
+        /// </summary>
         internal void VelvetBtnSchedulerRamp_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SchedulerRampFeatureControl(),
-                Localization.Loc.Get("section_scheduler") + " + " + Localization.Loc.Get("section_intensity_ramp"),
-                glyph: "📅");
+            OpenStudioModule("scheduler");
 
         // Opens the web catalogue (browse/share community presets & sessions).
         // Surfaced by the dashboard "CCP Catalogue" pill.
@@ -1235,6 +1404,9 @@ namespace ConditioningControlPanel
         private void OnSessionCompleted(object? sender, SessionCompletedEventArgs e)
         {
             App.IsSessionRunning = false;
+            // Release the controller-owned-run marker (MainWindow.RemoteControl.cs). Hygiene only —
+            // IsSessionRemoteStarted already reads false once the engine stops.
+            _remoteStartedSession = null;
             Dispatcher.Invoke(() =>
             {
                 // Award XP. The completion dialog is shown from OnSessionLogReady,
@@ -1465,6 +1637,8 @@ namespace ConditioningControlPanel
         private void OnSessionStopped(object? sender, EventArgs e)
         {
             App.IsSessionRunning = false;
+            // See OnSessionCompleted — drop the reference to the controller-started run.
+            _remoteStartedSession = null;
 
             // Captured BEFORE the dispatcher work: SessionEngine nulls _currentSession at the end
             // of StopSession, and ProgramService clears its expected id when SessionCompleted
@@ -1584,62 +1758,32 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
         
+        // PHASE 8: these six SessionEngine drive-ins each used to end with a Dispatcher.Invoke that
+        // pushed the new value into the dead ProgressionTab twins (flipping _isLoading around the
+        // write so the ghost's handlers couldn't re-enter). Every one of them writes
+        // App.Settings.Current FIRST, and the live Studio panels - SpiralFeatureControl,
+        // PinkFilterFeatureControl and Views/Controls/Studio/BrainDrainFeatureControl - subscribe
+        // to AppSettings.PropertyChanged and repaint themselves, so the mirrors were redundant
+        // before they were unreachable. The settings writes and the service calls are untouched.
+
         public void UpdateSpiralOpacity(int opacity)
         {
             App.Settings.Current.SpiralOpacity = opacity;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderSpiralOpacity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderSpiralOpacity.Value = opacity;
-                    if (ProgressionTab.TxtSpiralOpacity != null) ProgressionTab.TxtSpiralOpacity.Text = $"{opacity}%";
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void EnablePinkFilter(bool enabled)
         {
             App.Settings.Current.PinkFilterEnabled = enabled;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkPinkFilterEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkPinkFilterEnabled.IsChecked = enabled;
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void EnableSpiral(bool enabled)
         {
             App.Settings.Current.SpiralEnabled = enabled;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkSpiralEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkSpiralEnabled.IsChecked = enabled;
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void UpdatePinkFilterOpacity(int opacity)
         {
             App.Settings.Current.PinkFilterOpacity = opacity;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderPinkOpacity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderPinkOpacity.Value = opacity;
-                    if (ProgressionTab.TxtPinkOpacity != null) ProgressionTab.TxtPinkOpacity.Text = $"{opacity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void EnableBrainDrain(bool enabled, int intensity = 5)
@@ -1655,35 +1799,12 @@ namespace ConditioningControlPanel
             {
                 App.BrainDrain.Stop();
             }
-
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkBrainDrainEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkBrainDrainEnabled.IsChecked = enabled;
-                    if (ProgressionTab.SliderBrainDrainIntensity != null) ProgressionTab.SliderBrainDrainIntensity.Value = intensity;
-                    if (ProgressionTab.TxtBrainDrainIntensity != null) ProgressionTab.TxtBrainDrainIntensity.Text = $"{intensity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void UpdateBrainDrainIntensity(int intensity)
         {
             App.Settings.Current.BrainDrainIntensity = intensity;
             App.BrainDrain.UpdateSettings();
-
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderBrainDrainIntensity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderBrainDrainIntensity.Value = intensity;
-                    if (ProgressionTab.TxtBrainDrainIntensity != null) ProgressionTab.TxtBrainDrainIntensity.Text = $"{intensity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void SetBubblesActive(bool active, int bubblesPerBurst = 5)
@@ -1700,6 +1821,12 @@ namespace ConditioningControlPanel
                 {
                     App.Bubbles.Start(bypassLevelCheck: true);
                     App.Logger?.Information("Bubble burst started via SetBubblesActive");
+                }
+                else
+                {
+                    // Already spawning (e.g. left running from the dashboard) - the interval is
+                    // computed inside Start(), so apply the burst frequency we just wrote
+                    App.Bubbles.RefreshFrequency();
                 }
             }
             else
@@ -1735,16 +1862,55 @@ namespace ConditioningControlPanel
 
             preset.ApplyTo(App.Settings.Current);
             App.Settings.Save();
-            
+
             _isLoading = true;
             LoadSettings();
             _isLoading = false;
-            
+
+            // Flags alone don't reach the live engine (#872).
+            ReconcileRunningServices();
+
             RefreshPresetsDropdown();
-            
+
             App.Logger?.Information("Loaded preset: {Name}", preset.Name);
             MessageBox.Show(Loc.GetF("msg_preset_0_loaded", preset.Name), Loc.Get("title_preset_loaded"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// #872: a preset writes the feature flags but nothing told the RUNNING services about it,
+        /// so a feature the preset switched off kept firing until the engine was restarted - the
+        /// bubble-count game the user watched appear after loading a preset that disables it.
+        /// Stops every service whose flag the preset cleared.
+        ///
+        /// Deliberately one-way: it never STARTS a service the preset turned on. The feature-card
+        /// quick toggles above only start a service on an explicit user click, and a preset load
+        /// should not conjure new effects onto the screen out of a settings change.
+        /// </summary>
+        private void ReconcileRunningServices()
+        {
+            var s = App.Settings?.Current;
+            if (s == null || !App.IsEngineRunning) return;
+
+            try
+            {
+                if (!s.FlashEnabled) App.Flash?.Stop();
+                if (!s.MandatoryVideosEnabled) App.Video?.Stop();
+                if (!s.SubliminalEnabled) App.Subliminal?.Stop();
+                // Bubbles are the one shared field here: a CHAOS run drives the SAME BubbleService,
+                // and BubbleService.Stop() ends with PopAllBubbles() over the shared list — so
+                // honouring the preset's ambient-bubbles flag mid-chaos would wipe the chaos run's
+                // own bubbles out from under it. The ambient flag is re-applied at the next start;
+                // chaos owns the field while it is running.
+                if (!s.BubblesEnabled && App.Chaos?.IsRunning != true) App.Bubbles?.Stop();
+                if (!s.BubbleCountEnabled) App.BubbleCount?.Stop();
+                if (!s.LockCardEnabled) App.LockCard?.Stop();
+                if (!s.BouncingTextEnabled) App.BouncingText?.Stop();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Preset apply: reconciling running services failed");
+            }
         }
 
         internal void BtnLoadPreset_Click(object sender, RoutedEventArgs e)

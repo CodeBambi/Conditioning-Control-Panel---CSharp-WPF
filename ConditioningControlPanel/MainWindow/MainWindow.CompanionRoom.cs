@@ -1,0 +1,395 @@
+using System;
+using System.Windows;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Views.Controls.Companion;
+using ConditioningControlPanel.Views.Controls.Companion.Runtime;
+
+namespace ConditioningControlPanel
+{
+    /// <summary>
+    /// The Companion tab's write surface after the "Her Room" redesign.
+    ///
+    /// <para>The old tab was driven by poking named controls: <c>ChkSlutMode.IsChecked = …</c>, and
+    /// a <c>Checked</c> handler that read the checkbox back out. Those controls are gone, so the
+    /// operations they carried live here as plain methods that take a value — which is what they
+    /// always were underneath. Every one of them keeps the side effects the handler had (the
+    /// content gates, the service start/stop, the settings save), because the redesign moves where
+    /// a thing is ASKED FOR, never what it does.</para>
+    /// </summary>
+    public partial class MainWindow
+    {
+        /// <summary>The room's viewmodel, or null before the tab has been constructed.</summary>
+        private CompanionRoomRuntimeVm? CompanionRoom => CompanionTab?.Vm;
+
+        /// <summary>Re-reads the whole Companion page from settings and services.</summary>
+        internal void SyncCompanionRoom() => CompanionRoom?.Sync();
+
+        /// <summary>Asked at most once per process — a declined dialog must not become a nag.</summary>
+        private bool _awarenessV2ConsentAsked;
+
+        /// <summary>
+        /// Raises the v2 consent dialog for an UPGRADER: someone whose awareness was already on before
+        /// this version, so the dial they would otherwise have to touch is already in the "on"
+        /// position and <see cref="AwarenessConsentDialog.EnsureConsent"/> would never run.
+        ///
+        /// <para>Until they accept, <see cref="Services.Awareness.AwarenessObserver.IsEnabled"/> is
+        /// false and v2 is dormant — the legacy pipeline behaves exactly as it did on the previous
+        /// version and no ledger is written. Accepting is what starts the observer, which is why this
+        /// restarts the awareness service rather than waiting for a relaunch.</para>
+        ///
+        /// <para>Declining leaves them on the legacy pipeline they already consented to, and is not
+        /// asked again this session. Turning the dial off remains the way to say no permanently.</para>
+        /// </summary>
+        internal void EnsureAwarenessV2Consent()
+        {
+            if (_awarenessV2ConsentAsked || _isLoading) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (!settings.UseAwarenessV2) return;                  // kill switch down: v2 has nothing to ask
+            if (settings.AwarenessConsentShownV2) return;          // already accepted
+            if (!settings.AwarenessModeEnabled || !settings.AwarenessConsentGiven) return;   // off: the dial asks
+
+            _awarenessV2ConsentAsked = true;
+
+            if (!AwarenessConsentDialog.EnsureConsent(this, settings))
+            {
+                App.Logger?.Information("Awareness: v2 consent declined by an upgrader — staying on the legacy pipeline");
+                return;
+            }
+
+            // The observer refused to start while consent was missing; restart the one on/off call
+            // site so v2 engages now instead of on the next launch.
+            try
+            {
+                App.WindowAwareness?.Stop();
+                App.WindowAwareness?.Start();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Awareness: restart after v2 consent failed"); }
+
+            CompanionRoom?.AwarenessVm.Sync();
+        }
+
+        // =====================================================================================
+        //  quick actions (Z1)
+        // =====================================================================================
+
+        /// <summary>
+        /// Show/hide the avatar tube. The old <c>ChkAvatarEnabled_Changed</c> body, with the
+        /// checkbox read replaced by the caller's value.
+        /// </summary>
+        internal void SetAvatarEnabled(bool enabled)
+        {
+            if (_isLoading) return;
+            if (App.Settings?.Current == null) return;
+
+            App.Settings.Current.AvatarEnabled = enabled;
+            if (enabled) ShowAvatarTube();
+            else HideAvatarTube();
+            App.Settings.Save();
+        }
+
+        /// <summary>Mute/unmute her voice. The old <c>ChkMuteAvatar_Changed</c> body.</summary>
+        internal void SetAvatarMuted(bool muted)
+        {
+            if (_isLoading) return;
+            _avatarTubeWindow?.SetMuteAvatar(muted);
+            if (App.Settings?.Current == null) return;
+            App.Settings.Current.AvatarMuted = muted;
+            App.Settings.Save();
+        }
+
+        // =====================================================================================
+        //  personality (Z4)
+        // =====================================================================================
+
+        /// <summary>
+        /// Slut Mode, with the CCBill explicit-content acknowledgement gate intact.
+        ///
+        /// <para>Returns the value that actually took effect — the acknowledgement dialog is
+        /// cancellable, and the caller has to be able to show what happened rather than what was
+        /// clicked. The old handler expressed the same thing by reverting the checkbox.</para>
+        /// </summary>
+        internal bool SetSlutMode(bool enabled)
+        {
+            if (_isLoading) return App.Settings?.Current?.SlutModeEnabled == true;
+
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (s.SlutModeEnabled == enabled) return enabled;
+
+            if (enabled)
+            {
+                var activePreset = App.Personality?.GetActivePreset();
+                if (Services.ExplicitContentGate.RequiresAcknowledgement(activePreset, slutModeOn: true) &&
+                    !Services.ExplicitContentGate.IsAlreadyAcknowledged(s.CompanionPrompt))
+                {
+                    var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                    if (dlg.ShowDialog() != true) return s.SlutModeEnabled;
+                    Services.ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
+                }
+            }
+
+            s.SlutModeEnabled = enabled;
+            App.Settings?.Save();
+            return enabled;
+        }
+
+        /// <summary>
+        /// Activates a personality preset from Z4's chip row, behind the same explicit-content gate
+        /// the avatar's right-click menu uses.
+        ///
+        /// <para>The gate is the reason this is a MainWindow method and not two lines in the
+        /// viewmodel: a second activation path that skipped the acknowledgement would be a
+        /// compliance hole rather than a shortcut.</para>
+        /// </summary>
+        internal bool ActivatePersonalityPreset(string? presetId)
+        {
+            if (string.IsNullOrEmpty(presetId)) return false;
+
+            var preset = App.Personality?.GetPresetById(presetId);
+            if (preset == null) return false;
+
+            var slutModeOn = App.Settings?.Current?.SlutModeEnabled == true;
+            if (Services.ExplicitContentGate.RequiresAcknowledgement(preset, slutModeOn))
+            {
+                var promptSettings = App.Settings?.Current?.CompanionPrompt;
+                if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(promptSettings))
+                {
+                    var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                    if (dlg.ShowDialog() != true) return false;
+                    if (promptSettings != null)
+                    {
+                        Services.ExplicitContentGate.MarkAcknowledged(promptSettings);
+                        App.Settings?.Save();
+                    }
+                }
+            }
+
+            if (App.Personality?.SetActivePreset(presetId) != true) return false;
+
+            var shownName = App.Mods?.GetPersonalityDisplayName(preset.Name) ?? preset.Name;
+            App.Logger?.Information("Companion room: personality preset switched to {Name}", shownName);
+            return true;
+        }
+
+        // =====================================================================================
+        //  awareness (Z5)
+        // =====================================================================================
+
+        /// <summary>
+        /// The awareness capability, driven by Z5's dial instead of the old checkbox.
+        ///
+        /// <para><b>Consent is no longer silent.</b> The auto-consent this method used to perform —
+        /// "turning it on IS the consent" — is replaced by the one-time plain-language dialog
+        /// (<see cref="AwarenessConsentDialog"/>, doc 02 §6.3). Declining leaves awareness OFF and
+        /// returns false; the caller re-reads and the dial snaps back. Returning users keep the
+        /// one-click toggle, because <c>AwarenessConsentShownV2</c> makes the dialog a once-ever
+        /// interruption rather than a confirmation prompt.</para>
+        ///
+        /// <para>This is the only place <c>AwarenessModeEnabled</c> / <c>AwarenessConsentGiven</c> are
+        /// written outside settings load, which is what keeps "every entry point is gated" a fact:
+        /// Z5's dial, its page-titles switch and the Workshop's intensity dial all route here.</para>
+        ///
+        /// <para>Returns whether awareness is enabled after the call.</para>
+        /// </summary>
+        internal bool SetAwarenessEnabled(bool enabled)
+        {
+            if (_isLoading) return App.Settings?.Current?.AwarenessModeEnabled == true;
+            if (App.Settings?.Current == null) return false;
+
+            if (enabled && !AwarenessConsentDialog.EnsureConsent(this, App.Settings.Current))
+            {
+                // Declined (or the dialog could not open). Nothing is written, nothing starts, and the
+                // dial re-reads the unchanged setting.
+                CompanionRoom?.AwarenessVm.Sync();
+                return false;
+            }
+
+            // The legacy cooldown sliders only mean anything on the legacy pipeline; under v2 the
+            // Workshop shows the intensity dial instead. See WorkshopAwarenessCell.
+            CompanionTab.AwarenessSettingsPanel.Visibility =
+                enabled && App.Settings.Current.UseAwarenessV2 != true ? Visibility.Visible : Visibility.Collapsed;
+
+            App.Settings.Current.AwarenessModeEnabled = enabled;
+            App.Settings.Current.AwarenessConsentGiven = enabled;
+            App.Settings.Save();
+
+            // Opening her eyes lifts any running "pause for an hour": the user just said yes on purpose.
+            if (enabled) Services.Awareness.AwarenessPause.Resume();
+
+            if (enabled)
+            {
+                App.WindowAwareness?.Start();
+                App.Logger?.Information("Awareness Mode enabled via the awareness dial");
+            }
+            else
+            {
+                App.WindowAwareness?.Stop();
+                App.Logger?.Information("Awareness Mode disabled via the awareness dial");
+            }
+
+            CompanionRoom?.SyncHero();
+            CompanionRoom?.AwarenessVm.Sync();
+            return enabled;
+        }
+
+        /// <summary>
+        /// The Workshop's intensity dial (doc 02 §8): how talkative she is, not whether she watches.
+        /// Writing it never opens her eyes — that stays Z5's single gated decision — so this needs no
+        /// consent gate of its own, and the cell says as much when her eyes are closed.
+        /// </summary>
+        internal void SetAwarenessIntensity(Services.Awareness.AwarenessIntensity intensity)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (settings.AwarenessIntensity == intensity) return;
+
+            settings.AwarenessIntensity = intensity;
+            // The migration is what stops a later start-up from overwriting this choice.
+            settings.AwarenessIntensityMigrated = true;
+            App.Settings?.Save();
+
+            App.Logger?.Information("Awareness intensity set to {Intensity}", intensity);
+            CompanionRoom?.AwarenessVm.Sync();
+        }
+
+        // =====================================================================================
+        //  the engine room (Z7)
+        // =====================================================================================
+
+        /// <summary>
+        /// The provider segment. Replaces the four <c>RadioAi*_Checked</c> handlers with one call
+        /// that writes the same settings and has the same side effects.
+        /// </summary>
+        internal void SetAiProviderMode(CompanionProviderMode mode)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+
+            var (enabled, provider) = EngineRoomRuntimeVm.SettingsFor(mode);
+            s.AiChatEnabled = enabled;
+            if (enabled) s.CompanionPrompt.AiProvider = provider;
+            App.Settings?.Save();
+
+            // Off and Cloud both drop any stale Live Actions — see ClearsLiveActions for why the
+            // `enabled` flag above cannot be used to decide this.
+            if (EngineRoomRuntimeVm.ClearsLiveActions(mode)) App.AiLiveActions?.Clear();
+
+            App.Logger?.Information("Companion room: provider set to {Mode}", mode);
+            OnCompanionProviderSelected(mode);
+            CompanionRoom?.SyncBrain();
+        }
+
+        /// <summary>
+        /// Stores the BYO API key. One-way by design: the box hands the typed value over and
+        /// nothing ever reads it back out (see the Engine Room's PasswordBox).
+        /// </summary>
+        internal void SetCustomApiKey(string? key)
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null) return;
+            // DPAPI-protected on the way in, exactly as TxtOpenAiApiKey_PasswordChanged did. The
+            // settings file must never hold a BYO key in the clear.
+            s.OpenAiCompatibleApiKey = Services.SecureStringHelper.Protect(key ?? string.Empty);
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// The daily request limit, which used to be a bare TextBox on the AI Brain card. Same
+        /// parse rules: blank or unparseable means "no limit" (0), negatives are clamped.
+        /// </summary>
+        internal void PromptForDailyRequestLimit()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null) return;
+
+            var current = s.DailyRequestLimit > 0 ? s.DailyRequestLimit.ToString() : string.Empty;
+            var dialog = new InputDialog(
+                Loc.Get("label_daily_request_limit"),
+                Loc.Get("label_daily_request_limit_hint"),
+                current)
+            { Owner = this };
+
+            if (dialog.ShowDialog() != true) return;
+
+            var text = (dialog.ResultText ?? string.Empty).Trim();
+            s.DailyRequestLimit = int.TryParse(text, out var value) && value > 0 ? value : 0;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// Cloud has no local endpoint to probe, so "Test connection" reports the client's own view
+        /// of availability rather than pretending to have made a round trip. It is the same fact the
+        /// status line carries; the button exists because the segment has one for every provider.
+        /// </summary>
+        internal void TestCloudConnection()
+        {
+            var vm = CompanionRoom?.EngineVm;
+            if (vm == null) return;
+
+            bool available = App.Ai?.IsAvailable == true;
+            vm.SetStatus(available
+                ? Loc.Get("label_status_connected")
+                : Loc.Get("label_login_required"), available);
+        }
+
+        /// <summary>
+        /// "Clear conversation" — the legacy <c>BtnResetCompanionMemory</c> scope, now in the Engine
+        /// Room. Doc 01 §2.4 gives the diary's "Forget everything" the all-or-nothing wipe; this one
+        /// drops the thread and leaves the durable memory alone, which is what the old button's own
+        /// copy promised ("she'll start fresh on the next message").
+        /// </summary>
+        internal void ClearCompanionConversation()
+        {
+            try { App.Bark?.NotifyUiAction("reset_memory"); } catch { }
+
+            // Three loc keys joined here rather than one multi-paragraph string: the house rule
+            // bans literal line breaks in language files, and a translated value carrying its own
+            // paragraph breaks is the exact shape that broke eight of the nine files once already.
+            var message = string.Join(Environment.NewLine + Environment.NewLine,
+                Loc.Get("companion_engine_clear_conversation_confirm"),
+                Loc.Get("companion_engine_clear_conversation_confirm_body"),
+                Loc.Get("companion_engine_clear_conversation_confirm_warn"));
+
+            var confirm = MessageBox.Show(
+                this,
+                message,
+                Loc.Get("companion_engine_clear_conversation"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                // ForgetThread, not ForgetConversation: the confirmation above promises in nine
+                // languages that "what she knows about you is untouched", and ForgetConversation
+                // also runs MemoryStore.ForgetChatDerived, whose RemoveAll ignores IsProtected and
+                // would take pinned and Boundary facts with it. The wider scope belongs to the
+                // diary's "Forget everything", which says so. ForgetThread clears the live turn log
+                // (the load-bearing half — deleting session.json alone is undone by the very next
+                // reply) plus the legacy local-Ollama transcript.
+                App.Brain?.ForgetThread();
+
+                // Backstop for the no-brain case: with App.Brain null nothing above ran, and the
+                // legacy LocalAiService transcript would survive a button that says it won't.
+                if (App.Brain == null)
+                    (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+
+                // And the on-screen bubble log, which is a separate store.
+                _avatarTubeWindow?.ChatHistory.Clear();
+
+                App.Logger?.Information("Companion conversation cleared from the Engine Room");
+                CompanionRoom?.SyncBrain();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to clear companion conversation");
+            }
+        }
+    }
+}

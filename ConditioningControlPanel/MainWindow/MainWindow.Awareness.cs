@@ -98,6 +98,9 @@ namespace ConditioningControlPanel
 
             RefreshAwarenessPulseFeed();
             RefreshAwarenessPresetCards();
+            // PHASE 5 (G3): seed the rescued custom-trigger / OCR drawer. Manages _isLoading
+            // itself, so it deliberately sits outside the block above.
+            SyncKeywordRescuePanelUi();
             // Outside the _isLoading block above because it manages that flag itself, and the
             // seen-app chips have to be rebuilt on every open - the list of apps the user has
             // touched grows while they are on other tabs.
@@ -431,7 +434,6 @@ namespace ConditioningControlPanel
             finally { _isLoading = false; }
 
             UpdateAwarenessStatusIndicator(on);
-            UpdateKeywordTriggersButtonState();
             App.Settings?.Save();
         }
 
@@ -462,13 +464,12 @@ namespace ConditioningControlPanel
             else
                 App.ScreenOcr?.Stop();
 
-            // Mirror into the legacy Exclusives OCR checkbox so both screens agree.
-            if (PatreonTab.ChkScreenOcrEnabled != null && PatreonTab.ChkScreenOcrEnabled.IsChecked != on)
-            {
-                _isLoading = true;
-                try { PatreonTab.ChkScreenOcrEnabled.IsChecked = on; }
-                finally { _isLoading = false; }
-            }
+            // PHASE 8: the legacy Exclusives OCR checkbox this used to mirror into went with
+            // PatreonTabView. This toggle is the only editor of ScreenOcrEnabled now.
+
+            // PHASE 5 (G3): this toggle is the master for the rescued scan-interval /
+            // confirmation editors further down the page - show or hide them to match.
+            SyncKeywordRescuePanelUi();
 
             App.Settings?.Save();
         }
@@ -717,9 +718,12 @@ namespace ConditioningControlPanel
             settings.KeywordHighlightEnabled = AwarenessTab.ChkAwarenessHighlight?.IsChecked == true;
             App.Settings?.Save();
 
-            // Keep the Exclusives-tab mirror checkbox in sync so both UIs agree.
-            if (PatreonTab.ChkKeywordHighlightEnabled != null && PatreonTab.ChkKeywordHighlightEnabled.IsChecked != settings.KeywordHighlightEnabled)
-                PatreonTab.ChkKeywordHighlightEnabled.IsChecked = settings.KeywordHighlightEnabled;
+            // PHASE 8: the Exclusives-tab mirror checkbox went with PatreonTabView. This toggle is
+            // the only editor of KeywordHighlightEnabled now.
+
+            // PHASE 5 (G3): this toggle is the master for the rescued highlight mode +
+            // duration editors further down the page.
+            SyncKeywordRescuePanelUi();
 
             SyncAwarenessHighlightSwatchUi();
         }
@@ -735,9 +739,8 @@ namespace ConditioningControlPanel
             // Flip display affinity on all existing overlay windows immediately.
             App.KeywordHighlight?.RefreshCaptureVisibility();
 
-            // Mirror the Exclusives-tab checkbox so both stay in agreement.
-            if (PatreonTab.ChkHighlightVisibleInCapture != null && PatreonTab.ChkHighlightVisibleInCapture.IsChecked != settings.OcrHighlightVisibleInCapture)
-                PatreonTab.ChkHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
+            // PHASE 8: the Exclusives-tab mirror checkbox went with PatreonTabView. This toggle is
+            // the only editor of OcrHighlightVisibleInCapture now.
         }
 
         internal void AwarenessHighlightSwatch_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1147,14 +1150,14 @@ namespace ConditioningControlPanel
         /// The "Customize individual triggers" hyperlink relabels itself based on
         /// whether any built-in preset is installed: "Customize installed presets →"
         /// when at least one is installed, or the plain "advanced editor" fallback
-        /// when none are, which also flips the click target to the Exclusives tab.
+        /// when none are, which flips the click target to the custom-trigger drawer.
         /// </summary>
         private void UpdateAwarenessAdvancedLinkText()
         {
             if (AwarenessTab.LnkAwarenessAdvancedText == null) return;
             AwarenessTab.LnkAwarenessAdvancedText.Text = GetMostRecentlyInstalledPreset() != null
-                ? "Customize installed presets →"
-                : "Advanced editor →";
+                ? Loc.Get("cp5_awareness_advanced_link_presets")
+                : Loc.Get("cp5_awareness_advanced_link_editor");
         }
 
         /// <summary>
@@ -1182,10 +1185,10 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // No preset installed — the Exclusives tab is gone, so just open the
-            // dashboard's App Info popup as a safe landing point. In practice the
-            // Awareness tab handles the full customization flow now.
-            ShowAppInfoPopup();
+            // No preset installed. Before Phase 5 this dead-ended in the App Info popup
+            // because the custom-trigger editor was stranded on the Collapsed PatreonTab
+            // (G3). It now lives one row above this link, so open it and scroll to it.
+            AwarenessTab.KeywordPanel?.RevealTriggerEditor();
         }
 
         #endregion

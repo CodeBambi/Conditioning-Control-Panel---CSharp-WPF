@@ -225,7 +225,12 @@
     if (!force && ms === lastTimeMs) return;
     lastTimeMs = ms;
     lastTimePostAt = now;
-    post({ type: 'time', ms: ms });
+    // Every position carries the pause state with it. A forced post travels WHILE paused
+    // (doPause, 'seeked', 'ended'), so the host must never infer "a time message means the
+    // clip is playing" — that made IsPrimaryMediaPlaying report true one message-hop after
+    // the host paused, which broke Deeper's speak-holds. hostPaused covers a host-requested
+    // hold; fg.paused also covers a pause the page itself is sitting in. (#874)
+    post({ type: 'time', ms: ms, paused: !!(cur.hostPaused || fg.paused) });
   }
 
   // ---------- ticker: 10 Hz time + stall watchdogs + backdrop resync ----------
@@ -471,15 +476,14 @@
     text.style.fontSize = size + 'px';
     text.style.fontFamily = '"' + String(d.font || 'Segoe UI') + '","Segoe UI",Arial,sans-serif';
 
-    const out = document.createElement('span');
-    out.className = 'out';
-    out.textContent = label;      // textContent, never innerHTML: the trigger is user data
+    // One span, outlined by paint-order (see .attn-text .fill). The second,
+    // absolutely-positioned stroke-only span this used to build painted over
+    // the fill and ate the glyph interiors (#873).
     const fill = document.createElement('span');
     fill.className = 'fill';
-    fill.textContent = label;
+    fill.textContent = label;     // textContent, never innerHTML: the trigger is user data
     fill.style.color = d.textColor || '#FF1493';
 
-    text.appendChild(out);
     text.appendChild(fill);
     box.appendChild(text);
     el.appendChild(box);

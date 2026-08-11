@@ -285,9 +285,10 @@ PERSONALITY:
 - Topics: Makeup, pink things, looking plastic, empty heads.
 
 [SUGGESTION RULES]
-- AUDIO: Bambi Files & PlatinumPuppets. Say ""Listen to..."".
-- VIDEO: Hypnotube/Shorts. Say ""Watch..."".
-- NEVER say ""File 1"". Just say the Name (e.g. ""Rapid Induction"").",
+- AUDIO: only names from the clickable media list. Say ""Listen to..."".
+- VIDEO: only EXACT titles from the clickable media list. Say ""Watch..."".
+- NEVER say ""File 1"". Just say the Name (e.g. ""Rapid Induction"").
+- NEVER attribute a video to an uploader or creator (never ""from X"") — say the title alone.",
 
                 ExplicitReaction = @"[FEIGNED INNOCENCE PROTOCOL]
 - IF User mentions 'cock', 'cum', 'sex':
@@ -311,7 +312,7 @@ TOPICS:
                 KnowledgeBase = @"AUDIO FILES (say ""Listen to [name]!""):
 Rapid Induction, Bubble Induction, Bubble Acceptance, Bambi Named and Drained, Bambi IQ Lock, Bambi Body Lock, Bambi Attitude Lock, Bambi Uniformed, Bambi Takeover, Bambi Cockslut, Bambi Awakens
 
-Creator to recommend: PlatinumPuppets
+Creator to credit if asked: PlatinumPuppets - never invent titles ""by"" them, never say a video is ""from"" them
 
 VIDEOS - Say the EXACT name when suggesting:
 Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7
@@ -417,7 +418,16 @@ FREQUENCY RULE:
                 KnowledgeBase = KnowledgeBase,
                 ContextReactions = ContextReactions,
                 OutputRules = OutputRules,
-                CustomDomains = new Dictionary<string, string>(CustomDomains)
+                CustomDomains = new Dictionary<string, string>(CustomDomains),
+                // The CCBill acknowledgement audit trail must survive a clone. Callers
+                // (PersonalityService.MigrateFromLegacy, CommunityPrompt) copy settings and
+                // write the clone back, so dropping these silently re-prompted the user and
+                // erased the recorded ack timestamp/locale.
+                ExplicitContentAcknowledged = ExplicitContentAcknowledged,
+                ExplicitAcknowledgedVersion = ExplicitAcknowledgedVersion,
+                ExplicitAcknowledgedAt = ExplicitAcknowledgedAt,
+                ExplicitAcknowledgedLocale = ExplicitAcknowledgedLocale,
+                PromptEditorDisclaimerAcknowledged = PromptEditorDisclaimerAcknowledged
             };
         }
     }

@@ -35,6 +35,10 @@ internal static class FypAssetManifest
         [Newtonsoft.Json.JsonProperty("durationMs")] public long? DurationMs { get; set; }
         [Newtonsoft.Json.JsonProperty("width")] public int? Width { get; set; }
         [Newtonsoft.Json.JsonProperty("height")] public int? Height { get; set; }
+        /// <summary>"online" for remote entries (Scrolller et al.); absent for library files.
+        /// The page uses it for the source-mix pick and to keep remote ids out of stats.</summary>
+        [Newtonsoft.Json.JsonProperty("origin", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string? Origin { get; init; }
     }
 
     /// <summary>Build the asset list for the current EffectiveAssetsPath. Never throws.</summary>
@@ -50,6 +54,15 @@ internal static class FypAssetManifest
 
             Collect(Path.Combine(root, "videos"), root, isVideo: true, entries, disabled);
             Collect(Path.Combine(root, "images"), root, isVideo: false, entries, disabled);
+
+            // Files the page repeatedly failed to decode (HEVC re-encodes Chromium can't play,
+            // corrupt downloads) stay out of the feed instead of rendering as dead tiles (#562).
+            // Logged so a "my feed is missing clips" report explains itself.
+            int failedOut = entries.RemoveAll(e => (meta.Get(e.Id)?.FailStrikes ?? 0) >= FypMetaStore.FailStrikeLimit);
+            if (failedOut > 0)
+                App.Logger?.Information(
+                    "FypAssetManifest: excluded {N} asset(s) that repeatedly failed to load/decode (fyp_meta.json FailStrikes)",
+                    failedOut);
 
             if (entries.Count > MaxEntries)
             {

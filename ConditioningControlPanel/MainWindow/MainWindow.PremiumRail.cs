@@ -1,5 +1,7 @@
 using System;
 using System.Windows;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
@@ -7,7 +9,7 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>Features surfaced as quick-toggle chips on the dashboard premium rail.</summary>
-    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake }
+    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake, Fyp }
 
     // Dashboard premium quick-toggle rail (left of the feature grid).
     public partial class MainWindow
@@ -18,6 +20,7 @@ namespace ConditioningControlPanel
         private bool _lockdownEventsBound;
         private int _railLockdownMinutes = 15;
         private bool _blinkEventsBound;
+        private bool _railIntakePassBound;
         private DispatcherTimer? _blinkCountdownTimer;
 
         private static Brush CreateFrozenBrush(Color c)
@@ -48,7 +51,40 @@ namespace ConditioningControlPanel
                 App.BlinkTrainer.StateChanged += () => Dispatcher.BeginInvoke(new Action(() => SetBlinkActiveUi(App.BlinkTrainer?.IsRunning == true)));
                 _blinkEventsBound = true;
             }
+            EnsureIntakePassRailHooked();
             RefreshPremiumRail();
+        }
+
+        /// <summary>
+        /// The Graded Intake lockband follows the weekly pass, not the tier, so it has to repaint
+        /// when the pass is spent or reissued - otherwise a band claiming "patron only" would sit
+        /// over a chip a free account may legitimately open (or vanish a week late).
+        ///
+        /// Hooked lazily and idempotently rather than once at startup, the same way
+        /// <c>EnsureIntakePassHooked</c> (MainWindow.Lab.cs) does: <see cref="InitPremiumRail"/>
+        /// may run before App.IntakePass exists, and a rail refresh is the natural retry. This is a
+        /// second, independent subscriber to that event - the Lab one repaints the intake page's
+        /// four-state gate, this one repaints the band; neither owns the other.
+        /// </summary>
+        private void EnsureIntakePassRailHooked()
+        {
+            var pass = App.IntakePass;
+            if (_railIntakePassBound || pass == null) return;
+            _railIntakePassBound = true;
+            try
+            {
+                pass.PassStateChanged += (_, __) =>
+                {
+                    try
+                    {
+                        if (Application.Current?.Dispatcher == null) return;
+                        if (Dispatcher.HasShutdownStarted) return;
+                        Dispatcher.BeginInvoke(new Action(RefreshRailLockbands));
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("Rail intake-pass repaint: {E}", ex.Message); }
+                };
+            }
+            catch (Exception ex) { App.Logger?.Debug("EnsureIntakePassRailHooked: {E}", ex.Message); }
         }
 
         // --- Blink Trainer chip: +/- duration, consent-gated start/stop, countdown ---
@@ -57,6 +93,12 @@ namespace ConditioningControlPanel
         {
             var s = App.Settings?.Current;
             if (s == null) return;
+            // Silently inert behind the lockband. The whole rail used to be IsEnabled=false for
+            // non-patrons, so these +/- buttons were unreachable; now that the card is live under a
+            // band, the guard has to live here or a locked account could still write the setting.
+            // Deliberately silent rather than a TierGate toast: the band already says why, and a
+            // stepper is the one control people click five times in a row.
+            if (!TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Blink)).Allowed) return;
             s.BlinkTrainerDurationMinutes = Math.Clamp(s.BlinkTrainerDurationMinutes + deltaMinutes, 1, 120);
             App.Settings?.Save();
             if (SettingsTab?.TxtBlinkMins != null)
@@ -71,6 +113,12 @@ namespace ConditioningControlPanel
                 App.BlinkTrainer.Stop();
                 return;
             }
+
+            // Start is the premium half, and only the start half: stopping something that is
+            // already running must never be gated (the same rule ToggleVoiceMic follows for the
+            // mic). The Blink tab gates by disabling its panel behind the gate overlay; this rail
+            // entry reaches App.BlinkTrainer.Start() directly, so it needs its own bar.
+            if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Blink))) return;
 
             // Webcam consent first — same flow the Blink tab uses.
             if (!WebcamTrackingService.IsConsentCurrent())
@@ -139,6 +187,11 @@ namespace ConditioningControlPanel
                 RefreshPremiumRail();
                 return;
             }
+            // Refuse before the flyout, not after: letting a locked account pick a difficulty,
+            // write a listing message and tag it, only to be told no by ChkRemoteControlEnabled's
+            // own gate at the end, is the worst version of this. Turning Remote OFF above stays
+            // free for the same reason stopping Blink does.
+            if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Remote), "remote")) return;
             if (SettingsTab?.RemoteFlyout != null) SettingsTab.RemoteFlyout.IsOpen = true;
         }
 
@@ -203,6 +256,8 @@ namespace ConditioningControlPanel
 
         internal void PremiumLockdownAdjust(int deltaMinutes)
         {
+            // Same silent guard as PremiumBlinkAdjust - see the note there.
+            if (!TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Lockdown)).Allowed) return;
             _railLockdownMinutes = Math.Clamp(_railLockdownMinutes + deltaMinutes, 5, 180);
             if (SettingsTab?.TxtLockdownMins != null)
                 SettingsTab.TxtLockdownMins.Text = _railLockdownMinutes + "m";
@@ -211,6 +266,10 @@ namespace ConditioningControlPanel
         internal void PremiumLockdownActivate()
         {
             if (App.Lockdown == null || App.Lockdown.IsActive) return;
+            // The same bar BtnActivateLockdown_Click applies on the Lockdown tab, and the same
+            // feature name so both refusals read identically. This handler is the other one that
+            // takes the keys away for an hour.
+            if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Lockdown))) return;
             var minutes = _railLockdownMinutes;
             var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
                 "- You will be LOCKED IN for " + minutes + " minutes\n" +
@@ -243,21 +302,80 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Quick-toggle handler for the simple on/off premium chips. Each mirrors its
-        /// tab checkbox so the existing consent / patreon-gating / service-start logic
-        /// runs unchanged — we just flip it and read the result back into the dots.
+        /// LEFT-click: open the chip's feature where it actually lives.
+        ///
+        /// <para><b>This inverted on 2026-08-11 (owner call).</b> Left-click used to flip the
+        /// feature on or off, which left the rail with no route to any of these pages at all —
+        /// you armed Awareness or the mic blind and then went hunting through the doors for its
+        /// settings. The two navigation chips (the intake and For You) already behaved this way,
+        /// so the rail was also inconsistent with itself. Now every chip reads the same:
+        /// <b>left opens, right turns on</b> — which is also the mirror of the contract the
+        /// dashboard mosaic taught, where a tile's left-click has always been navigation.</para>
+        ///
+        /// <para>Navigation is never tier-gated, deliberately. Reading a page is not using the
+        /// feature, the destination pages carry their own upsell, and a padlock between someone
+        /// and the description of a thing they might buy is a strange way to sell it — the same
+        /// argument the Play door's hit-test-invisible lockbands make. The refusal lives on the
+        /// toggle half, in <see cref="PremiumChip_Toggle"/>.</para>
         /// </summary>
         internal void PremiumChip_Click(PremiumFeature feature)
         {
-            // A running session owns the prescribed dose (MainWindow.SessionFeatureLock.cs).
-            // Takeover / Awareness / Haptics are part of that mix, so the rail cannot flip them
-            // mid-session. Deliberately NOT gated: Voice (the mic is a privacy control - the user
-            // must always be able to disarm it) and Graded Intake (navigation, not a toggle).
+            switch (feature)
+            {
+                // Each of these is the SAME key its door uses, so the arrival is byte-for-byte
+                // what a click through the sidebar produces - including the per-tab bark that
+                // ShowTab fires from NotifyTabNavigated and the first-visit intro cards. Calling
+                // a view method directly here would land on the right panel and say nothing.
+                case PremiumFeature.Takeover: ShowTab("bambitakeover"); break;
+                case PremiumFeature.Awareness: ShowTab("awareness"); break;
+                case PremiumFeature.Haptics: ShowTab("haptics"); break;
+                case PremiumFeature.Voice: ShowTab("shelistening"); break;
+                case PremiumFeature.GradedIntake: ShowTab("gradedintake"); break;
+                // ShowTab intercepts "fyp" and calls OpenFypFeed, which owns the premium gate.
+                case PremiumFeature.Fyp: ShowTab("fyp"); break;
+            }
+            RefreshPremiumRail();
+        }
+
+        /// <summary>
+        /// RIGHT-click: turn the chip's feature on or off with whatever settings it already
+        /// carries — the quick-toggle that used to be left-click, unchanged in every respect
+        /// that matters (same tier bar, same session-lock refusal, same write through the tab's
+        /// own checkbox so its consent and service-start logic runs).
+        ///
+        /// <para>The intake and For You fall through to <see cref="PremiumChip_Click"/>: they are
+        /// destinations, not switches, and there is no "on" to turn them to. Opening them is the
+        /// nearest honest thing a right-click can mean, and it beats a gesture that silently does
+        /// nothing on two of the eight chips.</para>
+        /// </summary>
+        internal void PremiumChip_Toggle(PremiumFeature feature)
+        {
+            // The tier bar comes FIRST, and it is a real check now. Until Phase 3 the gate was
+            // PremiumRailContent.IsEnabled = false under a blanket overlay: nothing here refused
+            // anything, the rail was simply dead to the mouse. The per-card lockbands replaced the
+            // blanket, so each chip is live again and this is where a locked account is told why -
+            // through TierGate, whose toast carries the "See tiers" button into the App Info popup.
+            //
+            // Three deliberate absences:
+            //  * Voice - ToggleVoiceMic demands premium on the ARM half only. Disarming a live mic
+            //    is a privacy control and must never be gated.
+            //  * GradedIntake and Fyp - navigation shortcuts whose destinations own the gate
+            //    (IntakePassService's four states / OpenFypFeed, which already opens the same
+            //    upsell). Gating the chip would refuse a free weekly pass the logo tile just
+            //    handed out, and would double the refusal for For You.
+            //
+            // Then the session lock: a running session owns the prescribed dose
+            // (MainWindow.SessionFeatureLock.cs), and Takeover / Awareness / Haptics are part of
+            // that mix, so the rail cannot flip them mid-session. Tier first on purpose - telling
+            // a locked account "not during a session" would answer the wrong question.
             switch (feature)
             {
                 case PremiumFeature.Takeover:
                 case PremiumFeature.Awareness:
                 case PremiumFeature.Haptics:
+                    // Keyed overload: on the day the ? box rotates this feature in, the demand
+                    // passes for free accounts too (DailyFreeService).
+                    if (!TierGate.DemandPremium(RailFeatureName(feature), RailDailyKey(feature)!)) return;
                     if (RefuseIfSessionFeatureLocked($"chip:{feature}")) return;
                     break;
             }
@@ -279,11 +397,48 @@ namespace ConditioningControlPanel
                     ToggleVoiceMic();
                     break;
                 case PremiumFeature.GradedIntake:
-                    // Navigation shortcut, not a toggle — the intake starts from its own page.
-                    ShowTab("gradedintake");
-                    break;
+                case PremiumFeature.Fyp:
+                    // Not switches. Open them instead - see the summary above.
+                    PremiumChip_Click(feature);
+                    return;
             }
             RefreshPremiumRail();
+        }
+
+        /// <summary>
+        /// The rail's right-click router. One handler on the chip stack rather than a
+        /// MouseRightButtonUp on each of the six buttons: right-button events bubble, and six
+        /// XAML attributes plus six forwarding shims is six chances to add a chip and forget one.
+        ///
+        /// <para>Chips are matched by reference against the named controls, the same idiom the
+        /// dashboard's quick-toggle used. Anything that is not one of the six — the Lockdown and
+        /// Blink launcher cards, the "PREMIUM" caption, the gaps — falls through unmatched and
+        /// the right-click does nothing, which is correct: those two are launchers with their own
+        /// +/- controls and a Lock In button, not switches.</para>
+        /// </summary>
+        internal void PremiumRail_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            var dash = SettingsTab;
+            if (dash == null || e.OriginalSource is not DependencyObject src) return;
+
+            // Walk up from whatever glyph or caption took the hit to the chip that owns it.
+            var node = src;
+            while (node != null && node is not ButtonBase)
+                node = VisualTreeHelper.GetParent(node);
+            if (node is not ButtonBase chip) return;
+
+            PremiumFeature? feature =
+                chip == dash.ChipTakeover ? PremiumFeature.Takeover :
+                chip == dash.ChipAwareness ? PremiumFeature.Awareness :
+                chip == dash.ChipHaptics ? PremiumFeature.Haptics :
+                chip == dash.ChipVoice ? PremiumFeature.Voice :
+                chip == dash.ChipGradedIntake ? PremiumFeature.GradedIntake :
+                chip == dash.ChipFyp ? PremiumFeature.Fyp :
+                null;
+            if (feature == null) return;
+
+            PremiumChip_Toggle(feature.Value);
+            e.Handled = true;
         }
 
         private static void ToggleTabCheckBox(System.Windows.Controls.CheckBox? cb)
@@ -292,20 +447,32 @@ namespace ConditioningControlPanel
             cb.IsChecked = !(cb.IsChecked ?? false);
         }
 
-        /// <summary>Repaints the rail: chip state dots + the patron lock overlay (ad).</summary>
+        /// <summary>Repaints the rail: per-card lockbands + chip state dots.</summary>
         internal void RefreshPremiumRail()
         {
             if (SettingsTab == null) return;
 
-            var premium = App.Patreon?.HasPremiumAccess == true;
-            if (SettingsTab.PremiumRailLock != null)
-                SettingsTab.PremiumRailLock.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            EnsureIntakePassRailHooked();
+            RefreshRailLockbands();
+            // The mosaic's price tags ride along: they answer the same three questions this
+            // method already gets woken for (patron status changed, the Home door was shown, the
+            // weekly intake pass moved) and reading them from a second set of hooks is how one
+            // surface ends up a release out of date. See MainWindow.Presets.cs.
+            RefreshMosaicTierBadges();
 
-            // Block the chips when not entitled. The lighter lock overlay provides the
-            // greyed/locked visual (and ghosts the feature images through); disabling the
-            // content makes it non-clickable even if the overlay hit-test is ever bypassed.
+            // Tombstone. The rail used to be gated by ONE blanket: PremiumRailLock draped over
+            // everything with PremiumRailContent.IsEnabled = false underneath it. That answered
+            // "no" for eight different features with one padlock, and clicking it did nothing at
+            // all - an ad with no destination. Phase 3 replaced it with per-card lockbands that
+            // name their own bar and route the click into TierGate's upsell.
+            //
+            // The Border and the StackPanel keep their names because live code still reads them
+            // (and Phase 8 owns deleting dead dashboard chrome). The overlay is force-collapsed
+            // here rather than deleted so a stale visibility from an older state cannot survive.
+            if (SettingsTab.PremiumRailLock != null)
+                SettingsTab.PremiumRailLock.Visibility = Visibility.Collapsed;
             if (SettingsTab.PremiumRailContent != null)
-                SettingsTab.PremiumRailContent.IsEnabled = premium;
+                SettingsTab.PremiumRailContent.IsEnabled = true;
 
             SetDot(SettingsTab.DotTakeover, BambiTakeoverTab?.ChkAutonomyEnabled?.IsChecked == true);
             SetDot(SettingsTab.DotAwareness, AwarenessTab?.ChkAwarenessMaster?.IsChecked == true);
@@ -333,6 +500,107 @@ namespace ConditioningControlPanel
             if (dot == null) return;
             dot.Fill = on ? PremiumDotOn : PremiumDotOff;
             ApplyRailDotPulse(dot, on);
+        }
+
+        // --- Lockbands: the rail as a strip of honest ads -------------------------------
+
+        /// <summary>
+        /// Display names handed to <see cref="TierGate"/>. They end up inside the refusal copy
+        /// ("{0} is for supporters..."), so they are the names as the user sees them on the card,
+        /// and the two that already exist elsewhere - "Lockdown Mode" (BtnActivateLockdown_Click)
+        /// and "Remote Control" (ChkRemoteControlEnabled_Changed) - resolve through the SAME loc
+        /// keys, so the dashboard and the tab never phrase the same refusal two ways.
+        ///
+        /// Resolved, not literal: the refusal template is translated into nine languages, so a
+        /// hardcoded English subject left every non-English toast half-English. Each name is the
+        /// key the card itself renders, which is why no new translation rows were needed.
+        /// </summary>
+        private static string RailFeatureName(PremiumFeature feature) => Localization.Loc.Get(feature switch
+        {
+            PremiumFeature.Takeover => "tab_takeover",
+            PremiumFeature.Awareness => "tab_awareness",
+            PremiumFeature.Haptics => "tab_haptics",
+            PremiumFeature.Voice => "tab_shelistening",
+            PremiumFeature.Lockdown => "tab_lockdown_mode",
+            PremiumFeature.Blink => "tab_blink_trainer",
+            PremiumFeature.Remote => "tab_remote_control",
+            PremiumFeature.GradedIntake => "tab_gradedintake",
+            PremiumFeature.Fyp => "tab_fyp",
+            _ => "rf_feature_generic",
+        });
+
+        /// <summary>
+        /// The rail feature's <see cref="Services.DailyFreeService"/> pool key, or null for the
+        /// entries the daily rotation never touches (Lockdown, Blink, GradedIntake). These keys
+        /// are API shared with the server override - never rename one side alone.
+        /// </summary>
+        private static string? RailDailyKey(PremiumFeature feature) => feature switch
+        {
+            PremiumFeature.Takeover => "takeover",
+            PremiumFeature.Awareness => "awareness",
+            PremiumFeature.Haptics => "haptics",
+            PremiumFeature.Voice => "voice",
+            PremiumFeature.Fyp => "fyp",
+            PremiumFeature.Remote => "remote",
+            _ => null,
+        };
+
+        /// <summary>
+        /// Paints the per-card lockbands: one <see cref="TierVerdict"/> per rail entry, so the band
+        /// on the card, the refusal the click produces and the copy in the toast cannot drift apart
+        /// the way the Lab smokescreen and the launch handlers once did.
+        ///
+        /// Bands are pure decoration - <c>IsHitTestVisible="False"</c> in the view - so the card
+        /// underneath stays live: hover lift and art nudge still run (a dead ad is a worse ad), and
+        /// the click lands on the normal handler, which is where TierGate refuses and offers the
+        /// tiers. Nothing here starts a clock: a lockband is a static state, and a new Forever loop
+        /// would have to be threaded into the motion kill-switch to stay legal.
+        ///
+        /// Every rail entry is a tier-1 bar today, so every band is the gold padlock. A Lab-only
+        /// card joining the strip swaps two attributes in the view (flask glyph + the violet
+        /// brush the rail already defines) and calls <see cref="TierGate.RequiresLab"/> here.
+        /// </summary>
+        private void RefreshRailLockbands()
+        {
+            var tab = SettingsTab;
+            if (tab == null) return;
+            try
+            {
+                // Keyed overloads for the six pool features: on their free day the band hides,
+                // which is the ? box's promise made visible everywhere at once.
+                SetLockband(tab.LockBandTakeover, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Takeover), "takeover"));
+                SetLockband(tab.LockBandAwareness, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Awareness), "awareness"));
+                SetLockband(tab.LockBandHaptics, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Haptics), "haptics"));
+                SetLockband(tab.LockBandVoice, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Voice), "voice"));
+                SetLockband(tab.LockBandFyp, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Fyp), "fyp"));
+                SetLockband(tab.LockBandLockdown, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Lockdown)));
+                SetLockband(tab.LockBandBlink, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Blink)));
+                SetLockband(tab.LockBandRemote, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Remote), "remote"));
+
+                // Graded Intake is the one entry that is not a straight tier question: a free
+                // account holding this week's pass may take it, and the pass is exactly what the
+                // logo tile's flip ceremony hands out. IntakePassService is the same truth the
+                // intake page's four-state gate reads, so the band and the page agree. Fail
+                // CLOSED-ish on a missing service, mirroring RefreshGradedIntakeGate's fallback:
+                // premium keeps its open chip, everyone else sees the band.
+                var intakeOpen = App.IntakePass?.CanStartIntake
+                                 ?? (App.Patreon?.HasPremiumAccess == true);
+                SetLockbandVisible(tab.LockBandIntake, !intakeOpen);
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshRailLockbands: {E}", ex.Message); }
+        }
+
+        // internal rather than private since Phase 6: the Play door's wall paints the same bands
+        // from the same TierVerdicts (MainWindow.PlayTab.cs). Widened rather than duplicated on
+        // purpose - two copies of "locked means Visible" is how a band ends up inverted on one
+        // surface and nobody notices for a release.
+        internal static void SetLockband(FrameworkElement? band, in TierVerdict verdict)
+            => SetLockbandVisible(band, !verdict.Allowed);
+
+        internal static void SetLockbandVisible(FrameworkElement? band, bool locked)
+        {
+            if (band == null) return;
+            band.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

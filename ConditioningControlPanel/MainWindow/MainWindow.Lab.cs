@@ -46,6 +46,11 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown == null) return;
 
+            // Hard gate. RefreshPremiumGate only collapses a Border over this card, so the button
+            // stays reachable by keyboard focus and by automation - and this handler is the one
+            // that takes the keys away for an hour.
+            if (!TierGate.DemandPremium(Loc.Get("tab_lockdown_mode"))) return;
+
             // Get duration from combo box
             var selectedItem = LockdownTab.CmbLockdownDuration.SelectedItem as ComboBoxItem;
             if (selectedItem?.Tag is not string minutesStr || !int.TryParse(minutesStr, out var minutes))
@@ -125,8 +130,17 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
-                        // Free and already ran this week - the upsell is the honest answer.
-                        ShowAppInfoPopup();
+                        // Free and already ran this week - the upsell is the honest answer, but SAY
+                        // it: ShowAppInfoPopup() is a tab switch now, so on its own it just moves
+                        // the user to Settings · Account with no explanation. Same copy the gate
+                        // card carries, same "See tiers" destination, now with a reason attached.
+                        var days = Services.IntakePassService.DaysUntilNextPass;
+                        var body = days == 1
+                            ? Loc.Get("intake_gate_spent_body_one_day")
+                            : Loc.GetF("intake_gate_spent_body", days);
+                        App.Notifications?.Show(body, Services.NotificationType.Warning,
+                            TimeSpan.FromSeconds(8), Loc.Get("intake_gate_spent_cta"),
+                            () => ShowAppInfoPopup());
                     }
                     return;
                 }
@@ -173,6 +187,29 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Lab → "Goon Game" card. Opens the 1v1 duel client (Resources/web/goon) in a WebView2
+        /// window via <see cref="Services.GoonGame.GoonHostService"/>, which supplies identity, the
+        /// server bridge and the asset manifest. No entitlement check here on purpose: the card is
+        /// an unconditional door, and the lobby/server do the gating (the transfer-your-own-media
+        /// half is the only premium part, and GoonHostService advertises that capability itself).
+        /// Launch() is idempotent — a live duel is re-focused rather than relaunched — so there is
+        /// no IsActive guard to duplicate.
+        /// </summary>
+        internal void BtnStartGoon_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.GoonGame.GoonHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartGoon_Click failed");
+                MessageBox.Show("Couldn't open the Goon Game:\n\n" + ex.Message,
+                    Services.GoonGame.GoonHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Lab → Chaos Mode hero card. Opens the setup/lobby window where the user
         /// configures the run; BEGIN CHAOS there persists settings and launches via
         /// <see cref="App.Chaos"/> (which owns the countdown, HUD and loop).
@@ -183,6 +220,13 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Tier 2 door, checked here rather than left to the Lab smokescreen: the overlay
+                // covers one tab, and the descent is reachable from the hero card, Quick Start and
+                // (Phase 6) a Play card that will not have an overlay at all. Keyed: on a
+                // server-declared DtRH drop day (DailyFreeService, off-pool override) the door
+                // opens for everyone.
+                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
+
                 // DtRH browser game (default ON since M6): the whole experience lives in the web
                 // page — hub, run and all. The legacy WPF path below stays for the Lab toggle and
                 // as the automatic fallback when the page reported a WebGL boot-error this session.
@@ -236,11 +280,16 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (App.Patreon?.HasPremiumAccess != true)
-                {
-                    ShowAppInfoPopup();
-                    return;
-                }
+                // Say no out loud. ShowAppInfoPopup() is a tab switch since Phase 8 (Settings ·
+                // Account), not a popup over the page, so a bare call here teleported a free
+                // account off the Play door with no dialog, no toast and nothing tying the jump
+                // to the card they clicked. TierGate raises the 8s refusal naming the feature and
+                // its "See tiers" action lands on the same page - on purpose, and after being told.
+                // Same feature name the card's own lockband paints, read from the same key
+                // (MainWindow.PlayTab.cs: RequiresPremium(Loc.Get("tab_fyp"))), so band and
+                // refusal cannot drift apart or disagree in a translated UI.
+                if (!TierGate.DemandPremium(Loc.Get("tab_fyp"), "fyp")) return;
+
                 Services.Fyp.FypHostService.Launch();
             }
             catch (Exception ex)
@@ -260,6 +309,9 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Same tier-2 door as the hero card - Quick Start skips the picker, not the gate.
+                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
+
                 // DtRH browser game: same surface as the hero card — see BtnStartChaos_Click.
                 // Quick Start skips the save picker by design (that's the "quick" part) and reuses
                 // the last-chosen slot, already live in ChaosMeta.State.
@@ -424,6 +476,12 @@ namespace ConditioningControlPanel
                 {
                     try { RefreshGradedIntakeGate(); }
                     catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged repaint: {E}", ex.Message); }
+                    // PHASE 6: the Play door's Graded Intake card carries the same four states, so
+                    // a pass consumed by a run finishing in another window has to repaint the card
+                    // too - otherwise the wall keeps offering a week that is already spent.
+                    // Separate try so a card failure cannot cost the page its repaint.
+                    try { RefreshPlayCards(); }
+                    catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged play repaint: {E}", ex.Message); }
                 }));
             }
             catch (Exception ex)
@@ -584,18 +642,26 @@ namespace ConditioningControlPanel
                             App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
                     }
 
-                    // Gray out strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
+                    // Gray out strict lock and panic key toggles.
+                    // PHASE 8: re-pointed from the deleted LegacyDashboardHost twin
+                    // (SettingsTab.ChkStrictLock) to the LIVE editor - the Studio rack's Video
+                    // panel. This is not cosmetic: LockdownService forces StrictLockEnabled true on
+                    // activate and restores it on exit, but VideoFeatureControl.ChkStrict_Changed
+                    // writes the setting directly, so a reachable toggle would let the user turn
+                    // strict lock back off mid-lockdown. Greying the twin nobody could see never
+                    // stopped that; greying this one does.
+                    var strictChk = StudioTab?.PanelVideo?.ChkStrict;
+                    if (strictChk != null)
                     {
-                        SettingsTab.ChkStrictLock.IsEnabled = false;
-                        SettingsTab.ChkStrictLock.Opacity = 0.4;
-                        SettingsTab.ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        strictChk.IsEnabled = false;
+                        strictChk.Opacity = 0.4;
+                        strictChk.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
-                    if (SettingsTab.ChkNoPanic != null)
+                    if (AppSettingsTab.ChkNoPanic != null)
                     {
-                        SettingsTab.ChkNoPanic.IsEnabled = false;
-                        SettingsTab.ChkNoPanic.Opacity = 0.4;
-                        SettingsTab.ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        AppSettingsTab.ChkNoPanic.IsEnabled = false;
+                        AppSettingsTab.ChkNoPanic.Opacity = 0.4;
+                        AppSettingsTab.ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
 
                     // Swap UI panels
@@ -643,18 +709,20 @@ namespace ConditioningControlPanel
                             _keyboardHook.Stop();
                     }
 
-                    // Restore strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
+                    // Restore strict lock and panic key toggles (PHASE 8: re-pointed to the live
+                    // Studio rack editor - see OnLockdownActivated above).
+                    var strictChk = StudioTab?.PanelVideo?.ChkStrict;
+                    if (strictChk != null)
                     {
-                        SettingsTab.ChkStrictLock.IsEnabled = true;
-                        SettingsTab.ChkStrictLock.Opacity = 1.0;
-                        SettingsTab.ChkStrictLock.ToolTip = null;
+                        strictChk.IsEnabled = true;
+                        strictChk.Opacity = 1.0;
+                        strictChk.ToolTip = null;
                     }
-                    if (SettingsTab.ChkNoPanic != null)
+                    if (AppSettingsTab.ChkNoPanic != null)
                     {
-                        SettingsTab.ChkNoPanic.IsEnabled = true;
-                        SettingsTab.ChkNoPanic.Opacity = 1.0;
-                        SettingsTab.ChkNoPanic.ToolTip = null;
+                        AppSettingsTab.ChkNoPanic.IsEnabled = true;
+                        AppSettingsTab.ChkNoPanic.Opacity = 1.0;
+                        AppSettingsTab.ChkNoPanic.ToolTip = null;
                     }
 
                     // Swap UI panels back

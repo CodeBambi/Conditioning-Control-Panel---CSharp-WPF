@@ -1,0 +1,73 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Studio.RampRackPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             mc:Ignorable="d" d:DesignWidth="488">
+
+    <!-- ================================================================
+         STUDIO RACK · INTENSITY RAMP  (Phase 4)
+
+         Host, not a rebuild - same reasoning as SchedulerRackPanel.xaml,
+         plus one extra reason that mattered: the dead ProgressionTab twin
+         (deleted in Phase 8) was missing CmbRampCurve
+         entirely. The curve is the single control on this feature that
+         reshapes a RUNNING session (SessionEngine.cs:526 resolves
+         `settings.RampCurve ?? App.Settings.Current.RampCurve` on every
+         tick, and per-session RampCurve is usually unset), so "rescuing"
+         the ProgressionTab copy would have shipped the one variant of this
+         panel that cannot reach the running session.
+
+         That is also why CmbRampCurve is the ONLY SessionLock.Owned
+         control here while the other dials stay live mid-session: the
+         global ramp deliberately stands down during a session
+         (RampTimer_Tick gates each visual link on !sessionActive,
+         MainWindow.StartStop.cs:485/493/501), so its sliders are already
+         inert and locking them would buy nothing. The full argument is
+         written out at Features/IntensityRampFeatureControl.xaml:63-73;
+         st4_ramp_session_note says the same thing to the user, because a
+         dial that quietly does nothing mid-session is exactly the kind of
+         lie the session-lock rules exist to prevent.
+
+         Root MUST stay a Panel and the direct UserControl content - the
+         session-lock banner is inserted with
+         ((Panel)content.Content).Children.Insert(0, banner)
+         (MainWindow.SessionFeatureLock.cs:365). The rack's detail host
+         owns the scroller and padding.
+         ================================================================ -->
+
+    <StackPanel x:Name="StudioRampPanel" x:FieldModifier="internal">
+
+        <!-- What it does + the rescued help button (HelpContentService
+             ships an "IntensityRamp" entry at Services/HelpContentService.cs:354;
+             its only button died with the ProgressionTab). -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str st4_ramp_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{loc:Str st4_ramp_session_note}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="HelpBtnStudioRamp" x:FieldModifier="internal"
+                        Style="{StaticResource HelpButtonStyle}" Tag="IntensityRamp"
+                        VerticalAlignment="Top"/>
+            </Grid>
+        </Border>
+
+        <!-- The live control, verbatim: enable, duration, multiplier, curve,
+             end-at-complete, and the five ramp links. -->
+        <feat:IntensityRampFeatureControl x:Name="RampHost" x:FieldModifier="internal"/>
+
+    </StackPanel>
+</UserControl>

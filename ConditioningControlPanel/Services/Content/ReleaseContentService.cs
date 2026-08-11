@@ -92,6 +92,24 @@ namespace ConditioningControlPanel.Services
         private const int MaxDownloadAttempts = 10;
 
         /// <summary>
+        /// Extract+merge passes before a pack install is called lost. Two, because the usual reason a
+        /// download that arrived intact still fails to install is a real-time antivirus scanner
+        /// holding freshly written files open — which clears on its own within seconds. The rollback
+        /// only runs after the LAST attempt, so the retry keeps whatever the first pass landed.
+        /// </summary>
+        private const int MaxInstallAttempts = 2;
+
+        private static readonly TimeSpan InstallRetryDelay = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Multiple of a pack's advertised size that must be free before an install starts: the
+        /// <c>.partial</c> zip, the extract staging tree and the merged copies all coexist on the
+        /// same drive at peak. Running out mid-merge is the other half of the wedge story — it is
+        /// what leaves a part-copied payload behind.
+        /// </summary>
+        private const int InstallFreeSpaceFactor = 3;
+
+        /// <summary>
         /// Bound on the (tiny) manifest GET. <see cref="HttpClient.Timeout"/> is sized for a 380 MB
         /// pack, so without this a black-holing network would leave the picker "not offline yet" for
         /// half an hour. Downloads keep the long timeout — they have their own retry ladder.
@@ -367,12 +385,18 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>Accepts both the envelope form ({ packs: [...] }) and a bare array.</summary>
-        private static List<ContentPackInfo>? ParseManifest(string json)
+        internal static List<ContentPackInfo>? ParseManifest(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
             try
             {
-                var token = JToken.Parse(json);
+                // The published manifest carries a UTF-8 BOM. ReadAsStringAsync strips it today, but
+                // JToken.Parse rejects a leading U+FEFF outright, so whether every user's content
+                // packs resolve must not hinge on how the bytes happened to be decoded.
+                var trimmed = json.TrimStart('\uFEFF', '\u200B', ' ', '\t', '\r', '\n');
+                if (trimmed.Length == 0) return null;
+
+                var token = JToken.Parse(trimmed);
                 if (token is JArray array)
                     return array.ToObject<List<ContentPackInfo>>();
 
@@ -623,6 +647,12 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("ReleaseContentService: offline mode — pack {Pack} download skipped", packId);
                 return false;
             }
+            if (!HasRoomForPack(info))
+            {
+                // Fail here, not 380 MB in: a merge that runs out of disk is precisely the failure
+                // that strands a half-copied payload in the live content tree.
+                return false;
+            }
 
             var baseUrl = _resolvedBaseUrl ?? BaseUrl;
             var url = baseUrl + Uri.EscapeDataString(info.File);
@@ -668,10 +698,6 @@ namespace ConditioningControlPanel.Services
                 // ---- install: extract to a temp sibling, then merge into content\{targetRoot} ----
                 SetState(ReleaseContentState.Installing, packId, 100);
 
-                TryDeleteDirectory(extractPath);
-                await Task.Run(() => ZipFile.ExtractToDirectory(partialPath, extractPath, overwriteFiles: true), ct)
-                    .ConfigureAwait(false);
-
                 var target = ResolveTargetDirectory(info);
                 if (target == null)
                 {
@@ -683,7 +709,42 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
-                await Task.Run(() => MergeDirectory(extractPath, target), ct).ConfigureAwait(false);
+                // One journal across BOTH attempts: the retry merges on top of whatever the first
+                // attempt already wrote, so only a journal that spans them can take the whole failed
+                // install back out.
+                var journal = new MergeJournal();
+
+                for (var attempt = 1; attempt <= MaxInstallAttempts; attempt++)
+                {
+                    try
+                    {
+                        TryDeleteDirectory(extractPath);
+                        await Task.Run(() => ZipFile.ExtractToDirectory(partialPath, extractPath, overwriteFiles: true), ct)
+                            .ConfigureAwait(false);
+                        await Task.Run(() => MergeDirectory(extractPath, target, journal), ct).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex) when (attempt < MaxInstallAttempts)
+                    {
+                        // Real-time antivirus holds freshly written files open for a beat, which is
+                        // the common way a download that arrived intact still fails to install.
+                        App.Logger?.Warning(
+                            "ReleaseContentService: install of {Pack} failed on attempt {Attempt}/{Max} ({Error}) — retrying in {Seconds}s",
+                            packId, attempt, MaxInstallAttempts, ex.Message, (int)InstallRetryDelay.TotalSeconds);
+                        await Task.Delay(InstallRetryDelay, ct).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Out of attempts: pull this merge's files back out so the pack reads as
+                        // clearly missing next launch instead of "present" over half a payload.
+                        RollbackMerge(journal, packId);
+                        throw;
+                    }
+                }
 
                 TryDeleteDirectory(extractPath);
                 TryDeleteFile(partialPath);
@@ -921,21 +982,29 @@ namespace ConditioningControlPanel.Services
         /// <see cref="Directory.Move"/> when the target does not exist (both live under LOCALAPPDATA,
         /// so it is a same-volume rename); otherwise a recursive file-by-file overwrite so an update
         /// replaces changed files without orphaning the rest.
+        ///
+        /// Everything it writes goes into <paramref name="journal"/> so a failure part-way through
+        /// can be taken back out — see <see cref="MergeJournal"/>.
         /// </summary>
-        private static void MergeDirectory(string source, string target)
+        private static void MergeDirectory(string source, string target, MergeJournal journal)
         {
             if (!Directory.Exists(target))
             {
                 var parent = Path.GetDirectoryName(target);
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                if (!string.IsNullOrEmpty(parent)) CreateDirectoryTracked(parent, journal);
+
                 Directory.Move(source, target);
+                // Recorded AFTER the rename: a failed same-volume rename leaves nothing at the
+                // target to undo, while recording first would let a concurrent pack populate
+                // the tree in the retry window and lose its files to the recursive rollback.
+                journal.RecordTree(target);
                 return;
             }
 
             foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(source, dir);
-                Directory.CreateDirectory(Path.Combine(target, rel));
+                CreateDirectoryTracked(Path.Combine(target, rel), journal);
             }
 
             foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
@@ -943,8 +1012,94 @@ namespace ConditioningControlPanel.Services
                 var rel = Path.GetRelativePath(source, file);
                 var dest = Path.Combine(target, rel);
                 var destDir = Path.GetDirectoryName(dest);
-                if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                if (!string.IsNullOrEmpty(destDir)) CreateDirectoryTracked(destDir, journal);
                 File.Copy(file, dest, overwrite: true);
+                journal.RecordFile(dest);
+            }
+        }
+
+        /// <summary>
+        /// <see cref="Directory.CreateDirectory"/> that tells <paramref name="journal"/> about every
+        /// folder it actually had to create, so a rollback removes only the ones this merge
+        /// introduced and never a shared folder that was already there.
+        /// </summary>
+        private static void CreateDirectoryTracked(string path, MergeJournal journal)
+        {
+            if (string.IsNullOrEmpty(path) || Directory.Exists(path)) return;
+
+            // The missing ancestors count too: CreateDirectory makes the whole chain in one call,
+            // and a rollback that only knew the leaf would leave the empty chain above it behind.
+            var parent = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(parent)) CreateDirectoryTracked(parent, journal);
+
+            Directory.CreateDirectory(path);
+            journal.RecordDirectory(path);
+        }
+
+        /// <summary>
+        /// Undoes a merge that threw part-way, so the pack converges back to "clearly missing" and
+        /// the next launch's floor probe re-fetches it. Never throws.
+        /// </summary>
+        private static void RollbackMerge(MergeJournal journal, string packId)
+        {
+            try
+            {
+                if (journal.IsEmpty) return;
+
+                var removed = journal.Rollback();
+                // A failed UPDATE can roll back files the merge overwrote — i.e. a previously
+                // WORKING install. The old stamp would then keep IsInstalled answering true
+                // (and HasInstalledPayload sees a shared content root other packs populated),
+                // hiding the gutted pack from ResolveMissingActiveModPack's media probe. Drop
+                // the stamp so the rolled-back state reads as what it is: not installed.
+                DropInstallStamp(packId);
+                App.Logger?.Warning(
+                    "ReleaseContentService: rolled back the failed {Pack} install — removed {Removed} merged file(s) so the next launch re-fetches",
+                    packId, removed);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ReleaseContentService: rollback of the failed {Pack} install did not complete", packId);
+            }
+        }
+
+        /// <summary>
+        /// Removes a pack's install stamp after a rollback. Same UI-thread marshalling contract
+        /// as <see cref="RecordInstalled"/> (plain Dictionary + UI-thread Save assumption).
+        /// On dispatcher shutdown the stamp survives — acceptable: rollback already removed the
+        /// files, so the next launch's media probe still triggers the re-fetch for the active
+        /// mod, and the Mod Manager path re-verifies via NeedsUpdate.
+        /// </summary>
+        private static void DropInstallStamp(string packId)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                void Apply()
+                {
+                    try
+                    {
+                        if (settings.InstalledContentPacks.Remove(packId))
+                            App.Settings?.Save();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
+                    }
+                }
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null) { Apply(); return; }
+                if (dispatcher.HasShutdownStarted) return;
+
+                if (dispatcher.CheckAccess()) Apply();
+                else dispatcher.Invoke(Apply);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
             }
         }
 
@@ -1007,6 +1162,55 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
+            }
+        }
+
+        /// <summary>
+        /// Peak bytes an install of this size occupies on the content drive — see
+        /// <see cref="InstallFreeSpaceFactor"/>. Zero for a manifest entry with no size, which the
+        /// caller reads as "cannot judge, proceed".
+        /// </summary>
+        internal static long RequiredFreeBytes(long sizeBytes)
+        {
+            if (sizeBytes <= 0) return 0;
+            // A tampered manifest must not overflow this into a negative "plenty of room".
+            if (sizeBytes > long.MaxValue / InstallFreeSpaceFactor) return long.MaxValue;
+            return sizeBytes * InstallFreeSpaceFactor;
+        }
+
+        /// <summary>False only when the drive demonstrably cannot hold the install.</summary>
+        internal static bool HasEnoughFreeSpace(long sizeBytes, long availableBytes)
+            => availableBytes >= RequiredFreeBytes(sizeBytes);
+
+        /// <summary>
+        /// Free-space gate for a pack install. A probe that cannot answer (unknown size, network
+        /// path, drive not ready) says yes — a wrong "no space" would lock a user out of content
+        /// they have the disk for, which is worse than the disk error it was trying to pre-empt.
+        /// </summary>
+        private static bool HasRoomForPack(ContentPackInfo info)
+        {
+            try
+            {
+                if (info.SizeBytes <= 0) return true;
+
+                var driveRoot = Path.GetPathRoot(Path.GetFullPath(ContentRoot));
+                if (string.IsNullOrEmpty(driveRoot)) return true;
+
+                var drive = new DriveInfo(driveRoot);
+                if (!drive.IsReady) return true;
+
+                var available = drive.AvailableFreeSpace;
+                if (HasEnoughFreeSpace(info.SizeBytes, available)) return true;
+
+                App.Logger?.Error(
+                    "ReleaseContentService: not enough free space for pack {Pack} on {Drive} — needs {Required} bytes ({Factor}x its {Size}-byte zip for partial + extract + merged copies), {Available} available",
+                    info.Id, drive.Name, RequiredFreeBytes(info.SizeBytes), InstallFreeSpaceFactor, info.SizeBytes, available);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: free-space probe for {Pack} failed: {Error}", info.Id, ex.Message);
+                return true;
             }
         }
 
@@ -1143,37 +1347,108 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Extensions that count as pack-delivered media. PNG is in deliberately: the packs carry
+        /// portrait/pose art as well as voice (builtin-sissyhypno ships 312 PNGs next to its ~1,700
+        /// audio files) and a mod whose art did not survive is just as broken to the user as a
+        /// silent one. The <c>.json</c> manifests in these folders stay in the installer, so they
+        /// must never count — that is what let a stripped install read as fully stocked.
+        /// </summary>
+        private static readonly string[] MediaExtensions = { ".mp3", ".wav", ".ogg", ".m4a", ".png" };
+
+        /// <summary>
+        /// How many media files a mod's own subtree must hold before <see cref="HasModMediaOnDisk"/>
+        /// calls it present.
+        ///
+        /// "Any .mp3 at all" is what wedged v6.6.4: ONE file surviving a half-merged install
+        /// satisfied the probe forever, so the pack was never re-fetched and the user stayed
+        /// voiceless. Healthy trees are nowhere near this line — an extracted built-in mod runs 390+
+        /// media files and the loose companion audio 1,400-2,000 — so any floor between "a handful"
+        /// and "a hundred" separates clearly-present from clearly-broken. 50 is chosen at the low end
+        /// on purpose: this number decides whether to spend a user's bandwidth, and a hand-trimmed
+        /// but working install must not be dragged into a re-download.
+        /// </summary>
+        internal const int MinModMediaFiles = 50;
+
+        /// <summary>
+        /// Media files among <paramref name="paths"/>, counting no further than
+        /// <paramref name="stopAt"/> — callers only ever compare against a floor, and these
+        /// enumerations run over thousands of files during startup.
+        /// </summary>
+        internal static int CountMediaFiles(IEnumerable<string>? paths, int stopAt = int.MaxValue)
+        {
+            if (paths == null || stopAt <= 0) return 0;
+
+            var count = 0;
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                var ext = Path.GetExtension(path);
+                if (string.IsNullOrEmpty(ext)) continue;
+
+                foreach (var known in MediaExtensions)
+                {
+                    if (!ext.Equals(known, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (++count >= stopAt) return count;
+                    break;
+                }
+            }
+            return count;
+        }
+
+        /// <summary>
         /// True when a built-in mod's media is present WITHOUT its pack being stamped — the surviving
-        /// state of an in-place upgrade. Two shapes to probe, matching the two shapes the packs take:
-        /// an extracted <c>.ccpmod</c> tree (drone, locked) and loose companion audio (bambi, sissy,
-        /// locked). Any failure answers "present" so a bad probe can never trigger a download.
+        /// state of an in-place upgrade. The packs take two shapes — an extracted <c>.ccpmod</c> tree
+        /// (drone, locked) and loose companion audio (bambi, sissy, locked) — and each shape must
+        /// clear <see cref="MinModMediaFiles"/> ON ITS OWN: summing them would let two half-merged
+        /// debris trees vote "present" together (healthy installs clear the floor 7-40× in whichever
+        /// shape they actually ship).
+        ///
+        /// A probe failure answers "missing": a needless re-download costs bandwidth once, a probe
+        /// that answers "present" whenever it breaks wedges the user voiceless forever.
         /// </summary>
         private static bool HasModMediaOnDisk(string modId)
         {
+            var count = 0;
             try
             {
-                // 1) Extracted .ccpmod payload — the exact probes ModService.PrepareBuiltInMod uses
-                //    (mod.json for a full package, resources\ for a resources-only one).
+                // 1) Extracted .ccpmod payload, under the root ModService.PrepareBuiltInMod fills.
                 var extractDir = Path.Combine(App.UserDataPath, "builtin_mods", modId);
-                if (File.Exists(Path.Combine(extractDir, "mod.json"))) return true;
-                if (Directory.Exists(Path.Combine(extractDir, "resources"))) return true;
-
-                // 2) Loose companion audio. Deliberately audio-only patterns: the .json manifests in
-                //    this folder STAY in the installer, so "any file here" would report a stripped
-                //    install as fully stocked. ContentLocator covers both roots.
-                var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
-                foreach (var pattern in new[] { "*.mp3", "*.wav" })
+                if (Directory.Exists(extractDir))
                 {
-                    if (ContentLocator.EnumerateFiles(relAudio, pattern, SearchOption.AllDirectories).Any())
-                        return true;
+                    count = CountMediaFiles(SafeEnumerateFiles(extractDir), MinModMediaFiles);
+                    if (count >= MinModMediaFiles) return true;
                 }
 
-                return false;
+                // 2) Loose companion audio. ContentLocator covers both roots.
+                var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
+                var audioCount = CountMediaFiles(
+                    ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories),
+                    MinModMediaFiles);
+                if (audioCount >= MinModMediaFiles) return true;
+
+                count = Math.Max(count, audioCount);   // for the log line below
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: mod-media probe for {Mod} failed: {Error}", modId, ex.Message);
-                return true;
+                App.Logger?.Information(
+                    "ReleaseContentService: mod-media probe for {Mod} failed ({Error}) — treating it as missing so the pack re-fetches",
+                    modId, ex.Message);
+                return false;
+            }
+
+            App.Logger?.Information(
+                "ReleaseContentService: mod {Mod} has only {Count} media file(s) on disk (floor {Floor}) — queueing a pack re-fetch",
+                modId, count, MinModMediaFiles);
+            return false;
+        }
+
+        private static IEnumerable<string> SafeEnumerateFiles(string dir)
+        {
+            try { return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: could not enumerate {Dir}: {Error}", dir, ex.Message);
+                return Array.Empty<string>();
             }
         }
 

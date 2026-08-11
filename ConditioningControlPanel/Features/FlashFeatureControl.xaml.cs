@@ -5,7 +5,7 @@ using System.Windows.Controls;
 
 namespace ConditioningControlPanel.Features
 {
-    public partial class FlashFeatureControl : UserControl
+    public partial class FlashFeatureControl : UserControl, ISettingsRebindable
     {
         private bool _isLoading = true;
 
@@ -16,17 +16,20 @@ namespace ConditioningControlPanel.Features
             Unloaded += OnUnloaded;
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            LoadFromSettings();
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
-        }
+        // Tracks WHICH AppSettings instance the hook is attached to, so a cloud restore - which
+        // SWAPS the instance - can be followed instead of leaving this permanently-mounted rack
+        // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
+        private SettingsHook? _settingsHook;
 
-        private void OnUnloaded(object sender, RoutedEventArgs e)
+        private void OnLoaded(object sender, RoutedEventArgs e) => RebindToCurrentSettings();
+
+        private void OnUnloaded(object sender, RoutedEventArgs e) => _settingsHook?.Unhook();
+
+        /// <inheritdoc/>
+        public void RebindToCurrentSettings()
         {
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
+            LoadFromSettings();
         }
 
         private void LoadFromSettings()
@@ -52,6 +55,9 @@ namespace ConditioningControlPanel.Features
                 ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
                 SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
                 TxtFlashLingerMs.Text = $"{s.FlashGazeLingerExtensionMs} ms";
+                ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
+                SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
+                TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
             }
             finally { _isLoading = false; }
         }
@@ -70,7 +76,9 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs))
+                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashAvoidCenter) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -102,6 +110,38 @@ namespace ConditioningControlPanel.Features
             var v = (int)e.NewValue;
             TxtFlashLingerMs.Text = $"{v} ms";
             s.FlashGazeLingerExtensionMs = v;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// #770/#859 — keeps flashes out of a centered square on every monitor so they never
+        /// cover a game's crosshair. Global user preference: sessions and presets never touch
+        /// it, and this control is its only UI surface.
+        /// </summary>
+        private void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var on = ChkFlashAvoidCenter.IsChecked ?? false;
+            s.FlashAvoidCenter = on;
+            App.Logger?.Information("Flash avoid-center toggled: {Enabled} ({Pct}%)",
+                on, s.FlashCenterExclusionPercent);
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// #770 — size of the centered no-flash square, as a % of the shorter monitor edge.
+        /// AppSettings clamps to 5-60; the slider carries the same range.
+        /// </summary>
+        private void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtCenterExclusion.Text = $"{v}%";
+            s.FlashCenterExclusionPercent = v;
             App.Settings?.Save();
         }
 

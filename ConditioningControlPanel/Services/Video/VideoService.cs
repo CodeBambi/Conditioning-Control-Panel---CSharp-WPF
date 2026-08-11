@@ -227,6 +227,9 @@ namespace ConditioningControlPanel.Services
         // bound the safety timer switches from a duration guillotine to a progress-based stall
         // watch (see StartSafetyTimer) so real playback isn't cut "after the original time is over".
         private volatile bool _enhancementDriving;
+        // Last KNOWN primary playback position seen by the stall watch (-1 = none seen yet). An
+        // unknown reading never overwrites it, so the watch keeps measuring against the real last
+        // position instead of treating "no clock" as a fresh sample (#874).
         private long _lastSafetyTimeMs = -1;
         private DateTime _lastSafetyProgressUtc = DateTime.MinValue;
         // Recheck cadence + no-progress grace used only while an enhancement is driving.
@@ -383,6 +386,57 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Duration of the current primary clip in seconds, or 0 if unknown — whichever engine owns
+        /// it. A browser session reports the page's <c>meta</c> duration (0 until it arrives, and for
+        /// streams that never learn it); a LibVLC session reports the primary player's Length. (#874)
+        ///
+        /// After teardown BOTH engines are gone (CloseAll clears <c>_browserActive</c> and nulls
+        /// <c>_primaryMediaPlayer</c> before Cleanup raises <c>VideoEnded</c>), so the last known
+        /// <c>_duration</c> answers instead of 0. That ordering is load-bearing for Deeper: the
+        /// EnhancementEngine's duration-less completion fallback credits PlaybackCompleted for any run
+        /// past 60s when this returns 0, which on skip / panic / attention-fail is FALSE credit for a
+        /// video the user did not finish. <c>_duration</c> survives teardown by design — only the
+        /// PlayVideo prologue and the browser→LibVLC handoff reset it — so it is the honest answer.
+        /// </summary>
+        public double GetPrimaryDurationSeconds()
+        {
+            try
+            {
+                // A live LibVLC player is the freshest source; a browser session has none by design.
+                if (!_browserActive)
+                {
+                    var len = _primaryMediaPlayer?.Length ?? 0;
+                    if (len > 0) return len / 1000.0;
+                }
+                // Browser session, or no live engine at all: the last duration this service was told
+                // about (page `meta` / LengthChanged / MediaOpened). Still 0 for a genuinely
+                // duration-less clip — the one case the engine's fallback completion is meant for.
+                return _duration > 0 ? _duration : 0;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// Whether the primary clip is actually advancing, whichever engine owns it. The browser answer
+        /// is host-side bookkeeping: playing has been confirmed, and neither a PausePrimary hold nor a
+        /// grace pause is in force. <c>_browserPaused</c> follows the PausePrimary/PlayPrimary edges and
+        /// the `paused` flag the page stamps on every `time` post (a pause/seek/end forces a post WHILE
+        /// paused, so the arrival of a position never implies playback). (#874)
+        /// </summary>
+        public bool IsPrimaryMediaPlaying
+        {
+            get
+            {
+                try
+                {
+                    if (_browserActive) return _browserStartedFired && !_browserPaused && !_gracePaused;
+                    return _primaryMediaPlayer?.IsPlaying ?? false;
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
         /// Seek the primary player to the given absolute time. No-op if no
         /// video is active or the player rejects the seek (LibVLC will silently
         /// ignore for non-seekable streams).
@@ -412,7 +466,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
-            if (_browserActive) _browser?.Pause();
+            // The pause edge is remembered because the page goes silent while paused — this flag is
+            // the only way IsPrimaryMediaPlaying can answer for a browser session. (#874)
+            if (_browserActive) { _browserPaused = true; _browser?.Pause(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(true); }
@@ -429,7 +485,7 @@ namespace ConditioningControlPanel.Services
             // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
             if (_gracePaused) return;
 
-            if (_browserActive) _browser?.Resume();
+            if (_browserActive) { _browserPaused = false; _browser?.Resume(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -1362,6 +1418,12 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer = null;
             StopWedgeWatchdog();
 
+            // Release any #871 cascade defer. The parked action re-checks _isRunning and bails on
+            // its own, but the LATCH must go too: left set, it makes every later trigger think a
+            // replay is already pending and coalesce into a defer that will never fire.
+            _cascadeDeferPending = false;
+            _cascadeDeferDeadlineUtc = DateTime.MinValue;
+
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
             catch { }
             try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
@@ -1458,6 +1520,77 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>True while a trigger is parked waiting for a chaos gif cascade to finish (#871).
+        /// One pending replay at a time — a cascade that swallows several triggers replays one video,
+        /// not a backlog of them. Cleared by <see cref="Stop"/> so a defer that outlived the service
+        /// cannot coalesce (and therefore swallow) every future trigger.</summary>
+        private bool _cascadeDeferPending;
+
+        /// <summary>Longest a trigger will wait out a cascade before it is given up on. Cascades are
+        /// seconds long; anything past this is a stuck overlay and the stale video is not worth firing.</summary>
+        private static readonly TimeSpan CascadeDeferMaxWait = TimeSpan.FromSeconds(90);
+
+        /// <summary>Absolute expiry of the CURRENT defer chain, set on its first defer.
+        /// <see cref="DateTime.MinValue"/> = no chain in flight.</summary>
+        private DateTime _cascadeDeferDeadlineUtc = DateTime.MinValue;
+
+        /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride)
+        {
+            if (_cascadeDeferPending)
+            {
+                App.Logger?.Information("VideoService: cascade replay already pending - trigger coalesced");
+                return;
+            }
+
+            // The ceiling is measured from the FIRST defer of the chain, not per-hop. A replay that
+            // lands in a second cascade re-enters here, and a fresh CascadeDeferMaxWait each time
+            // would let back-to-back cascades hold one trigger far past the documented 90s.
+            var now = DateTime.UtcNow;
+            if (_cascadeDeferDeadlineUtc == DateTime.MinValue)
+                _cascadeDeferDeadlineUtc = now + CascadeDeferMaxWait;
+
+            var remaining = _cascadeDeferDeadlineUtc - now;
+            if (remaining <= TimeSpan.Zero)
+            {
+                App.Logger?.Information("VideoService: cascade replay dropped - past the {Sec:F0}s defer ceiling",
+                    CascadeDeferMaxWait.TotalSeconds);
+                _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                return;
+            }
+
+            _cascadeDeferPending = true;
+            ChaosGifCascadeOverlay.RunWhenClear(
+                () =>
+                {
+                    _cascadeDeferPending = false;
+
+                    // Re-assert the preconditions at FIRE time. The defer can easily outlive the
+                    // thing that justified it — the engine stopped, the user turned mandatory
+                    // videos off — and replaying then pops a fullscreen video out of a feature
+                    // that is switched off. Same guard the scheduler uses (see ScheduleNext).
+                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    {
+                        App.Logger?.Information("VideoService: cascade replay abandoned - mandatory videos no longer running");
+                        _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                        return;
+                    }
+
+                    TriggerVideo(silentIfEmpty, strictOverride);
+
+                    // TriggerVideo may have parked itself again (a new cascade). Only release the
+                    // ceiling when the chain really ended, so the re-defer above inherits it.
+                    if (!_cascadeDeferPending) _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                },
+                remaining,
+                "mandatory video",
+                onExpired: () =>
+                {
+                    _cascadeDeferPending = false;
+                    _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                });
+        }
+
         /// <param name="silentIfEmpty">
         /// When true, an empty videos folder is logged and ignored instead of popping the
         /// "no videos found" dialog. Used for the auto-played startup video (#333) so a user
@@ -1496,21 +1629,24 @@ namespace ConditioningControlPanel.Services
             }
 
             // Chaos gif rain in flight: a mandatory video opening over a falling cascade is the
-            // proven UI-thread killer (AppHangB1 2026-06-10). Drop the trigger outright — never
-            // queue it. Chaos's own video bubbles are already gated upstream while the rain
-            // falls, so this only ever drops ambient/scheduler triggers.
+            // proven UI-thread killer (AppHangB1 2026-06-10), so it must not open NOW. It used to
+            // be dropped outright, which silently ate videos the user had popped a bubble to earn
+            // (#871) — bubble payloads reach this method too, the old "already gated upstream"
+            // note was wrong. Instead the trigger is held and replayed once the rain stops.
             if (ChaosGifCascadeOverlay.IsRaining)
             {
-                App.Logger?.Information("VideoService: TriggerVideo dropped - chaos gif cascade in flight");
+                App.Logger?.Information("VideoService: TriggerVideo deferred - chaos gif cascade in flight");
                 // When this trigger was DEQUEUED, the queue already claimed the Video slot for
-                // us — dropping without releasing would block every interaction for the
-                // 5-minute stuck window. Safe on non-dequeue paths: current==Video with no
-                // video playing only happens right after a dequeue.
+                // us — holding it across the cascade would block every interaction for the
+                // 5-minute stuck window, so release it and let the replay re-enter the queue
+                // normally. Safe on non-dequeue paths: current==Video with no video playing
+                // only happens right after a dequeue.
                 if (!_videoPlaying &&
                     App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride);
                 return;
             }
 
@@ -2780,6 +2916,14 @@ namespace ConditioningControlPanel.Services
                     {
                         var tracks = aspectPlayer.Media?.Tracks;
                         if (tracks == null) return;
+                        // Pick the BIGGEST video ES, not the first one that parses. A container can
+                        // carry an attached cover-art/thumbnail video track, and since #786 the sharp
+                        // layer is Stretch.Fill inside the rect this aspect produces — so sizing it
+                        // from a thumbnail is a STRETCH, the exact failure #786 removed, re-entered
+                        // through a different door. The real picture is always the larger track.
+                        double bestAspect = 0;
+                        long bestArea = 0;
+                        string bestSource = string.Empty;
                         foreach (var track in tracks)
                         {
                             if (track.TrackType != TrackType.Video) continue;
@@ -2789,12 +2933,15 @@ namespace ConditioningControlPanel.Services
                                 or VideoOrientation.RightTop
                                 or VideoOrientation.RightBottom;
                             double aspect = DisplayAspectFrom(v.Width, v.Height, v.SarNum, v.SarDen, transposed);
-                            if (aspect > 0)
-                            {
-                                aspectTarget.SetSourceAspect(aspect, $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}");
-                                return;
-                            }
+                            if (aspect <= 0) continue;
+                            long area = (long)v.Width * v.Height;
+                            if (area <= bestArea) continue;
+                            bestArea = area;
+                            bestAspect = aspect;
+                            bestSource = $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}";
                         }
+                        if (bestAspect > 0)
+                            aspectTarget.SetSourceAspect(bestAspect, bestSource);
                     }
                     catch (Exception ex)
                     {
@@ -3413,6 +3560,18 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
+                    // #786 follow-up: the LAYOUT does not depend on the bitmap, so stamp the aspect and
+                    // re-fit BEFORE the droppable swap below. Every early-return under this point (lock
+                    // timeout, stale-at-swap, exception) used to take the layout down with it, and the
+                    // "nothing known yet" layout is a full-screen Fill rect — i.e. the edge-to-edge
+                    // stretch users report. Nothing here can block or throw on the bitmap's behalf.
+                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
+                    {
+                        Volatile.Write(ref _bufferAspect, bufferAspect);
+                        _geometryLogged = false; // the reported shape moved - trace the new fit once
+                    }
+                    ApplyGeometry();
+
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
                     bool applied;
                     // BOUNDED, like the per-frame blit (:TryEnter 8ms) and Dispose (:TryEnter 250ms):
@@ -3443,16 +3602,6 @@ namespace ConditioningControlPanel.Services
 
                     _foreground.Source = bmp;
 
-                    // #786: re-stamp the buffer aspect from THIS callback and re-derive both the blur
-                    // decision and the fit rect. Every callback lands a complete layout; nothing is
-                    // carried over from the previous geometry.
-                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
-                    {
-                        Volatile.Write(ref _bufferAspect, bufferAspect);
-                        _geometryLogged = false; // the reported shape moved - trace the new fit once
-                    }
-                    ApplyGeometry();
-
                     // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
                     // old snapshot so the next frame rebuilds it at the new geometry immediately.
                     _snapW = 0;
@@ -3468,15 +3617,28 @@ namespace ConditioningControlPanel.Services
             /// <summary>
             /// The aspect the picture must actually be drawn at: the track's SAR-corrected display
             /// aspect when it is known, else the buffer's own pixel aspect, else the screen's (so a
-            /// surface with no information yet is never sized to nonsense). Callable from any thread.
+            /// LOG LINE for a surface with no information yet never prints nonsense). Callable from
+            /// any thread. Layout must use <see cref="KnownAspect"/>, never this.
             /// </summary>
             private double EffectiveAspect(double bufferAspect)
+            {
+                double known = KnownAspect(bufferAspect);
+                return known > 0 ? known : _screenAspect;
+            }
+
+            /// <summary>
+            /// The display aspect when it is actually KNOWN, else 0. ApplyGeometry must never pin a
+            /// Fill rect from a guess: guessing the SCREEN's own aspect produces exactly the reported
+            /// failure — a portrait clip drawn edge-to-edge and sharp, with the blurred fill disarmed
+            /// because a "screen-shaped" video needs no bars. Unknown means "stay on the harmless
+            /// Uniform fallback until a format callback or a track probe says otherwise".
+            /// </summary>
+            private double KnownAspect(double bufferAspect)
             {
                 double t = Volatile.Read(ref _trueAspect);
                 if (t > 0) return t;
                 if (bufferAspect > 0) return bufferAspect;
-                double b = Volatile.Read(ref _bufferAspect);
-                return b > 0 ? b : _screenAspect;
+                return Volatile.Read(ref _bufferAspect);
             }
 
             /// <summary>
@@ -3518,7 +3680,11 @@ namespace ConditioningControlPanel.Services
                 if (_disposed) return;
                 try
                 {
-                    double aspect = EffectiveAspect(0);
+                    // KnownAspect, NOT EffectiveAspect: 0 here means "no aspect information yet", and
+                    // FitToAspect(_, _, 0) returns (0,0) so we fall through to the Uniform fallback
+                    // below instead of pinning a full-screen Fill rect. NeedsBlurFill(0, _) is false,
+                    // which is also correct — nothing is on screen to put bars around yet.
+                    double aspect = KnownAspect(0);
                     bool needsBlur = NeedsBlurFill(aspect, _screenAspect);
 
                     _needsBlur = needsBlur;
@@ -5144,7 +5310,10 @@ namespace ConditioningControlPanel.Services
         {
             _safetyTimer?.Stop();
 
-            // Stop the fallback timer since we now have accurate duration
+            // Stop the fallback timer since we now have accurate duration. NOTE: from here on this
+            // timer IS the only guillotine — while an enhancement drives the clip the tick below
+            // becomes a stall watch, and that stall watch is the sole thing standing between a wedged
+            // renderer/decoder and a fullscreen video that never goes away. Keep it reachable (#874).
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
@@ -5180,12 +5349,25 @@ namespace ConditioningControlPanel.Services
 
                 if (_enhancementDriving)
                 {
-                    long curMs = -1;
-                    try { curMs = _primaryMediaPlayer?.Time ?? -1; } catch { curMs = -1; }
+                    // Engine-agnostic clock (#874). Reading _primaryMediaPlayer directly made this
+                    // branch blind on the browser engine, where that player is null BY DESIGN: curMs
+                    // was permanently -1, and the old "_lastSafetyTimeMs < 0" arm below read that as
+                    // PROGRESS on every 15s pass, so the force-close could never be reached. This is
+                    // the only guillotine left by then — StartSafetyTimer nulls the 10-minute fallback
+                    // timer the moment a duration is known — so a hung WebView2 renderer (no
+                    // ProcessFailed, page watchdog dead with it) held the screen forever.
+                    long curMs;
+                    try { curMs = GetCurrentPlaybackTimeMs(); } catch { curMs = -1; }
 
                     var now = DateTime.UtcNow;
-                    bool advancing = curMs >= 0 && curMs != _lastSafetyTimeMs;
-                    if (advancing || _lastSafetyTimeMs < 0)
+                    bool clockKnown = curMs >= 0;
+                    // Only a CHANGED, known position counts as progress. An unknown clock (-1) is not
+                    // progress: it leaves the last known position and the stall clock both standing, so
+                    // a clock that never reports still reaches the force-close after the grace window
+                    // instead of resetting it forever. The first known reading seeds the baseline for
+                    // free (_lastSafetyTimeMs starts at -1, so it never equals a real position).
+                    bool advancing = clockKnown && curMs != _lastSafetyTimeMs;
+                    if (advancing)
                     {
                         _lastSafetyTimeMs = curMs;
                         _lastSafetyProgressUtc = now;
@@ -5200,11 +5382,16 @@ namespace ConditioningControlPanel.Services
                     if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
                     {
                         SetSafetyInterval(EnhancementRecheckInterval);
-                        return; // paused (e.g. speak-hold) but within grace — not a wedge
+                        // Paused (e.g. speak-hold), or the clock has not reported a position yet
+                        // (pre-roll, a seek in flight) — within grace either way, so not a wedge.
+                        return;
                     }
 
                     _safetyTimer?.Stop();
-                    App.Logger?.Warning("VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress. Forcing cleanup.", EnhancementStallGraceSeconds);
+                    App.Logger?.Warning(
+                        "VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress ({Clock}). Forcing cleanup.",
+                        EnhancementStallGraceSeconds,
+                        clockKnown ? $"held at {curMs}ms" : "playback clock never reported a position");
                     Cleanup();
                     return;
                 }

@@ -39,6 +39,15 @@ namespace ConditioningControlPanel.Models
         /// <summary>Pack-relative art path (e.g. "Resources/features/vibe.png").</summary>
         public required string ArtResource { get; init; }
 
+        /// <summary>
+        /// Optional pack-relative art cut for the ultra-wide spotlight band (~5:1).
+        /// Only the spotlight uses it; shelf cards always use <see cref="ArtResource"/>.
+        /// If it is missing or fails to load, the spotlight silently falls back to
+        /// <see cref="ArtResource"/> - so a feature may be promoted to hero before its
+        /// banner art exists.
+        /// </summary>
+        public string? BannerArtResource { get; init; }
+
         /// <summary>Optional badge loc key ("exclusives_badge_new" / "exclusives_badge_beta").</summary>
         public string? BadgeLocKey { get; init; }
 
@@ -69,8 +78,9 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// The roster, in shelf order. The first entry is the spotlight (newest
-        /// exclusive, big hero card); the rest fill the collection grid.
+        /// The roster, in shelf order. The first entry is additionally the spotlight
+        /// (newest exclusive, big hero card) - but every entry, spotlight included,
+        /// also gets a card in the collection grid so the shelf is never missing one.
         /// </summary>
         public static readonly IReadOnlyList<ExclusiveFeature> All = new List<ExclusiveFeature>
         {
@@ -80,6 +90,8 @@ namespace ConditioningControlPanel.Models
                 Key = "fyp", Emoji = "📱",
                 TitleLocKey = "tab_fyp", TaglineLocKey = "exclusives_tag_fyp",
                 ArtResource = "Resources/features/fyp.png",
+                // Wide cut for the hero band; the card keeps the 16:9 art above.
+                BannerArtResource = "Resources/features/fyp_banner.png",
                 BadgeLocKey = "exclusives_badge_new",
                 // The art's glowing phone sits left of center, low.
                 FocalX = 0.33, FocalY = 0.60,

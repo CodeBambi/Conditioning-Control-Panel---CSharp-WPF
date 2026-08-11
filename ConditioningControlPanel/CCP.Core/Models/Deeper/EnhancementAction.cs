@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConditioningControlPanel.Services.Haptics.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
@@ -112,6 +113,11 @@ namespace ConditioningControlPanel.Models.Deeper
 
         [JsonProperty("duration_ms")]
         public int DurationMs { get; set; } = 1000;
+
+        // Null = All (every toy). Absent in old files, so they keep routing to all roles.
+        [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public ToyRole? Target { get; set; }
 
         // Runtime-only routing for band-mode haptics. Engine sets Phase + EffectId
         // when dispatching Start/Stop/Restart so the dispatcher can keep per-band

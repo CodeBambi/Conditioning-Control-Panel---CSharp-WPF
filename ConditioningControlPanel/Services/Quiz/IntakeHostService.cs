@@ -42,6 +42,15 @@ namespace ConditioningControlPanel.Services.Quiz
 
         private const int Protocol = 1;
 
+        /// <summary>
+        /// "Top marks" bar for the graded-intake achievements (#870), as a percentage of the run's
+        /// compliance score. Deliberately NOT full marks and deliberately the same 90 the classic
+        /// quiz used (<c>QuizWindow.PerfectScorePercent</c>): a banded descent scores partly on
+        /// pacing, so 100% is not a thing a real run reaches and a 100% bar would leave these
+        /// achievements exactly as dead as the collapsed quiz launcher left them.
+        /// </summary>
+        private const double TopMarksPercent = 90.0;
+
         /// <summary>AI server proxy base. MUST match <c>AiService.ProxyBaseUrl</c> — the server's
         /// <c>POST /intake/ai</c> gate (Agent H) expects the same Patreon bearer the app already
         /// uses for <c>/ai/chat</c>. Kept as a local constant to avoid taking a dependency on the
@@ -384,6 +393,37 @@ namespace ConditioningControlPanel.Services.Quiz
             if (disp == null || disp.HasShutdownStarted) return;
             disp.BeginInvoke(() =>
             {
+                // EMIT hook for GamificationBridge's graded achievements (#870). The classic AI
+                // quiz launcher is Collapsed - Graded Intake replaced it - so QuizWindow's raise
+                // is unreachable for everyone and top_of_the_class / teachers_pet / honor_roll
+                // had no live source at all. The intake IS the graded run now, and it carries
+                // everything the bridge asks for: a grade (the run's compliance score,
+                // totalScore/maxScore, the same ratio the certificate prints) and a category
+                // (the niche the run was themed for). Reaching quiz-result at all is the pass -
+                // the page only emits it when a run genuinely finishes, and abort/crash paths
+                // emit nothing.
+                //
+                // held_back is deliberately left unwired (product decision): an intake has no
+                // fail state to be held back by, so `passed` is always true here and the bridge's
+                // fail streak is never incremented from this path.
+                //
+                // Inside the dispatcher block on purpose - an unlock can raise the achievement
+                // popup, which is UI.
+                try
+                {
+                    var pct = run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;
+                    var niche = string.IsNullOrWhiteSpace(run.Niche)
+                        ? IntakeNiche.Fallback
+                        : run.Niche.Trim().ToLowerInvariant();
+
+                    QuizService.RaiseQuizCompleted(
+                        (int)Math.Round(run.TotalScore),
+                        passed: true,
+                        perfect: run.MaxScore > 0 && pct >= TopMarksPercent,
+                        category: niche);
+                }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: RaiseQuizCompleted failed: {E}", ex.Message); }
+
                 // Completing an intake earns XP (mirrors PopQuiz's 25-base): deeper descent and
                 // affirmed mantras pay more, capped so endless laps can't farm it.
                 try
@@ -392,6 +432,13 @@ namespace ConditioningControlPanel.Services.Quiz
                         + (int)Math.Round(Math.Clamp(run.PeakDepth, 0, 1) * 50)
                         + Math.Min(run.AffirmedMantras?.Count ?? 0, 5) * 5;
                     App.Progression?.AddXP(Math.Min(xp, 100), XPSource.Other);
+
+                    // Affirmed mantras also feed the mantra quest/program verifier, same cap
+                    // as the XP above so endless laps can't farm program days. XP was already
+                    // granted in the sum - this is credit only.
+                    var affirmed = Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
+                    for (var i = 0; i < affirmed; i++)
+                        App.Quests?.TrackMantraCompleted();
                 }
                 catch (Exception ex) { App.Logger?.Debug("IntakeHostService: XP grant failed: {E}", ex.Message); }
 
@@ -721,23 +768,53 @@ namespace ConditioningControlPanel.Services.Quiz
             catch { return string.Empty; }
         }
 
+        /// <summary>
+        /// Deselected-asset lookup set, built from <c>AppSettings.DisabledAssetPaths</c> (the blacklist
+        /// the Assets tree writes: paths relative to EffectiveAssetsPath). Normalized exactly like
+        /// <c>FlashService.GetMediaFiles</c> — separator-agnostic and case-insensitive — so the same
+        /// uncheck that hides an image from the flashes hides it from the intake page too.
+        /// </summary>
+        internal static HashSet<string> BuildDisabledAssetSet(IEnumerable<string>? disabledPaths) => new(
+            (disabledPaths ?? Enumerable.Empty<string>()).Select(p => (p ?? "").Replace('\\', '/')),
+            StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>True when <paramref name="fullPath"/> is still enabled for the user's preset.
+        /// Empty set = nothing deselected = everything active (identical to the pre-fix behavior).</summary>
+        internal static bool IsAssetActive(HashSet<string> disabled, string root, string fullPath)
+        {
+            if (disabled.Count == 0) return true;
+            string rel;
+            try { rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/'); }
+            catch { return true; }   // unrelatable path: never silently drop content over a path quirk
+            return !disabled.Contains(rel);
+        }
+
         /// <summary>MediaManifest (contracts.js): a small random sample of the user's flash images,
         /// split gifs/stills, as ccp.assets URLs. Null on any failure — the page's effect layer
-        /// falls back to its particle stand-ins.</summary>
+        /// falls back to its particle stand-ins.
+        ///
+        /// #762/#798/#619: this walk used to list the images folder RAW, so anything the user
+        /// unchecked in the Assets tree still rode the manifest and showed up in the intake page's
+        /// effect layer / captcha grid. It now applies the same DisabledAssetPaths filter the flash
+        /// pool uses; users with nothing deselected see exactly what they saw before.</summary>
         private static object? BuildMediaManifest()
         {
             try
             {
                 var gifs = new List<string>();
                 var stills = new List<string>();
-                var imagesRoot = Path.Combine(App.EffectiveAssetsPath, "images");
+                var assetsRoot = App.EffectiveAssetsPath;
+                var imagesRoot = Path.Combine(assetsRoot, "images");
+                var disabled = BuildDisabledAssetSet(App.Settings?.Current?.DisabledAssetPaths);
                 if (Directory.Exists(imagesRoot))
                 {
                     foreach (var file in Directory.EnumerateFiles(imagesRoot, "*", SearchOption.AllDirectories))
                     {
                         var ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (ext != ".gif" && ext is not (".png" or ".jpg" or ".jpeg" or ".webp")) continue;
+                        if (!IsAssetActive(disabled, assetsRoot, file)) continue;   // unchecked in the Assets tree
                         if (ext == ".gif") gifs.Add(file);
-                        else if (ext is ".png" or ".jpg" or ".jpeg" or ".webp") stills.Add(file);
+                        else stills.Add(file);
                     }
                 }
 

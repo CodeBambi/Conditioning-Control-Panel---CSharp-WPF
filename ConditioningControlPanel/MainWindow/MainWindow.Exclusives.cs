@@ -36,6 +36,7 @@ namespace ConditioningControlPanel
         }
 
         private readonly List<ExclusiveCardUi> _exclusiveCards = new();
+        private readonly List<TextBlock> _exclusiveTeaserMarks = new();
         private bool _exclusivesBuilt;
         private bool _exclusivesSheenRetryQueued;
 
@@ -55,7 +56,7 @@ namespace ConditioningControlPanel
             try
             {
                 var spot = ExclusiveFeature.All[0];
-                ExclusivesTab.SpotArtImage.Source = LoadPackImage(spot.ArtResource);
+                ApplySpotlightArt(spot);
                 ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
                 ExclusivesTab.TxtSpotTagline.Text = Loc.Get(spot.TaglineLocKey);
                 if (spot.BadgeLocKey != null)
@@ -63,8 +64,18 @@ namespace ConditioningControlPanel
                 else
                     ExclusivesTab.SpotBadge.Visibility = Visibility.Collapsed;
 
-                foreach (var feature in ExclusiveFeature.All.Skip(1))
+                // EVERY feature gets a card - the spotlight is a highlight on top of
+                // the collection, not a hole in it. (The hero and its card share the
+                // same registry entry, so chips/veils/titles refresh identically.)
+                foreach (var feature in ExclusiveFeature.All)
                     ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
+
+                // The shelf never just ends: three teaser silhouettes close it out,
+                // one per unannounced feature. They are deliberately NOT registry
+                // entries - no ShowTab key, no gate, no refresh contract - because
+                // the features behind them don't exist yet.
+                for (int i = 1; i <= 3; i++)
+                    ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(i));
 
                 // Parks/resumes with tab switches like every other ambient canvas.
                 RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
@@ -72,6 +83,50 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Exclusives shelf build failed");
+            }
+        }
+
+        /// <summary>
+        /// Paints the hero band's art. The band is roughly 5:1, so a card-aspect PNG
+        /// would have to be cropped hard: features may ship a wide
+        /// <see cref="ExclusiveFeature.BannerArtResource"/> cut for it. That banner is
+        /// optional and may not exist yet (art lands after code), so a failed load
+        /// falls back to the card art instead of leaving the band empty.
+        /// Stretch stays UniformToFill - crop, never skew - under SpotArtHost's
+        /// rounded clip.
+        /// </summary>
+        private void ApplySpotlightArt(ExclusiveFeature spot)
+        {
+            try
+            {
+                var img = ExclusivesTab.SpotArtImage;
+                ImageSource? art = null;
+                bool banner = false;
+
+                if (!string.IsNullOrWhiteSpace(spot.BannerArtResource))
+                {
+                    // Hero band spans the whole tab (~1400 DIP) and Ken-Burns-zooms
+                    // to 1.07, so it gets a wider decode cap than a 336-wide card
+                    // (the shipped banner is 1376 wide, i.e. essentially native).
+                    art = LoadPackImage(spot.BannerArtResource!, 1400);
+                    banner = art != null;
+                }
+
+                art ??= LoadPackImage(spot.ArtResource);
+                img.Source = art;
+
+                // UniformToFill centres its crop, which is exactly right for banner
+                // art composed around the central horizontal band. Card art used as a
+                // fallback is not, so the zoom origin follows the feature's focal
+                // point and the drift pushes the subject back into view.
+                img.Stretch = Stretch.UniformToFill;
+                img.RenderTransformOrigin = banner
+                    ? new Point(0.5, 0.5)
+                    : new Point(spot.FocalX, spot.FocalY);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Exclusives spotlight art failed");
             }
         }
 
@@ -245,6 +300,131 @@ namespace ConditioningControlPanel
             return card;
         }
 
+        /// <summary>
+        /// A "coming soon" teaser: same card geometry as the collection, but a dark
+        /// silhouette - big breathing "?" instead of art, SOON badge, "???" title.
+        /// Not clickable (arrow cursor, no navigation) and kept out of
+        /// _exclusiveCards so the entitlement refresh never touches it; only the
+        /// breathing mark is re-painted (see RefreshExclusivesTab) so it obeys the
+        /// same motion/perf gates as the veil padlocks.
+        /// </summary>
+        private Border BuildComingSoonCard(int ordinal)
+        {
+            var host = new Grid();
+
+            var mark = new TextBlock
+            {
+                Text = "?",
+                FontFamily = FredokaFont,
+                FontSize = 64,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromArgb(0x8C, 0xFF, 0x69, 0xB4)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                // Sit in the open area above the title plate, like the art focal.
+                Margin = new Thickness(0, 0, 0, 34),
+            };
+            host.Children.Add(mark);
+            _exclusiveTeaserMarks.Add(mark);
+            ApplyVeilLockBreath(mark, true);
+
+            var title = new TextBlock
+            {
+                Text = $"{TeaserEmoji(ordinal)} ???",
+                FontFamily = FredokaFont,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 15,
+                Foreground = Brushes.White,
+                Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.7,
+                },
+            };
+            var tagline = new TextBlock
+            {
+                Text = Loc.Get($"exclusives_soon_tag_{ordinal}"),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0x93, 0xB8)),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxHeight = 30,
+                Margin = new Thickness(0, 2, 0, 0),
+            };
+            host.Children.Add(new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Padding = new Thickness(12, 26, 12, 10),
+                Child = new StackPanel { Children = { title, tagline } },
+                Background = new LinearGradientBrush(
+                    new GradientStopCollection
+                    {
+                        new(Color.FromArgb(0x00, 0x0C, 0x0A, 0x18), 0.0),
+                        new(Color.FromArgb(0xE0, 0x0C, 0x0A, 0x18), 0.55),
+                        new(Color.FromArgb(0xF2, 0x0C, 0x0A, 0x18), 1.0),
+                    },
+                    new Point(0.5, 0), new Point(0.5, 1)),
+            });
+
+            // SOON badge, top-left, same brand gradient as NEW/BETA.
+            host.Children.Add(new Border
+            {
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(8, 8, 0, 0),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 2, 8, 2),
+                Background = new LinearGradientBrush(
+                    Color.FromRgb(0xFF, 0x69, 0xB4), Color.FromRgb(0xB4, 0x78, 0xFF), 45),
+                Child = new TextBlock
+                {
+                    Text = Loc.Get("exclusives_badge_soon"),
+                    Foreground = Brushes.White,
+                    FontSize = 9,
+                    FontWeight = FontWeights.Bold,
+                },
+            });
+
+            // Rounded clip so the vault-glow backdrop and plate respect the corner
+            // radius (same helper the art and veil use on real cards).
+            var fill = new Border
+            {
+                Child = host,
+                Background = new RadialGradientBrush(
+                    Color.FromArgb(0x5C, 0x2A, 0x1E, 0x46),
+                    Color.FromArgb(0xFF, 0x11, 0x0E, 0x20)),
+            };
+            Views.Tabs.ExclusivesTabView.RoundClipOnResize(fill, 12);
+
+            var card = new Border
+            {
+                Width = 336,
+                Height = 200,
+                Margin = new Thickness(0, 0, 16, 16),
+                CornerRadius = new CornerRadius(12),
+                Background = new SolidColorBrush(Color.FromRgb(0x14, 0x11, 0x26)),
+                // Dimmer edge than a live card: present, but clearly not open yet.
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xB4, 0x78, 0xFF)),
+                BorderThickness = new Thickness(1),
+                Child = fill,
+            };
+
+            // Alive to the touch but honest about it: lifts on hover, arrow cursor,
+            // no navigation - there is nowhere to go yet.
+            card.MouseEnter += (_, _) => { try { MotionFx.HoverLift(card, true); } catch { } };
+            card.MouseLeave += (_, _) => { try { MotionFx.HoverLift(card, false); } catch { } };
+            return card;
+        }
+
+        private static string TeaserEmoji(int ordinal) => ordinal switch
+        {
+            1 => "🔮",
+            2 => "💗",
+            _ => "🤫",
+        };
+
         private static void OnExclusiveCardHover(Border card, Image art, bool on)
         {
             try
@@ -303,6 +483,11 @@ namespace ConditioningControlPanel
                     ui.Title.Text = $"{ui.Feature.Emoji} {ExclusiveTitle(ui.Feature)}";
                     ApplyExclusiveCardState(ui, ui.Feature.GateState());
                 }
+
+                // Teaser "?" marks breathe under the same motion/perf gates as the
+                // veil padlocks, so a tier change repaints them here too.
+                foreach (var mark in _exclusiveTeaserMarks)
+                    ApplyVeilLockBreath(mark, true);
 
                 // Spotlight veil follows the same probe.
                 var spot = ExclusiveFeature.All[0];
@@ -534,7 +719,18 @@ namespace ConditioningControlPanel
                 ? App.Mods?.GetTakeoverLabel() ?? Loc.Get(feature.TitleLocKey)
                 : Loc.Get(feature.TitleLocKey);
 
-        private static ImageSource? LoadPackImage(string relativePath)
+        /// <summary>
+        /// Loads pack-embedded art, or null if the resource is absent/undecodable -
+        /// callers rely on that null to fall back (see <see cref="ApplySpotlightArt"/>),
+        /// so this must never throw. OnLoad caching means a missing resource throws
+        /// inside EndInit, right here, and not later on the render thread.
+        /// </summary>
+        /// <param name="decodePixelWidth">
+        /// Bounded decode width. Card art renders at ~340 wide inside the Viewbox; a
+        /// bounded decode keeps nine 1376x768 sources from costing ~32 MB of bitmaps.
+        /// The hero band passes a larger value because it is drawn much wider.
+        /// </param>
+        private static ImageSource? LoadPackImage(string relativePath, int decodePixelWidth = 700)
         {
             try
             {
@@ -542,10 +738,11 @@ namespace ConditioningControlPanel
                 bmp.BeginInit();
                 bmp.UriSource = new Uri("pack://application:,,,/" + relativePath, UriKind.Absolute);
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
-                // Card art renders at ~340 wide inside the Viewbox; a bounded decode
-                // keeps eight 1376x768 sources from costing ~32 MB of bitmaps.
-                bmp.DecodePixelWidth = 700;
+                bmp.DecodePixelWidth = decodePixelWidth;
                 bmp.EndInit();
+                // Touching PixelWidth forces any deferred decode failure to surface
+                // here, inside the catch, rather than as an empty Image later.
+                if (bmp.PixelWidth <= 0) return null;
                 bmp.Freeze();
                 return bmp;
             }

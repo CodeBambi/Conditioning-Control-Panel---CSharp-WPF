@@ -1,0 +1,146 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.PerformanceSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="620">
+
+    <!-- ================================================================
+         SETTINGS ▸ PERFORMANCE  (UX restructure, Phase 2)
+
+         These four controls existed only inside the permanently-Collapsed
+         LegacyDashboardHost (Views/Tabs/SettingsTabView.xaml:1332-1384), so
+         they were unreachable, not merely hidden. gap-report G12: "All four
+         perf controls are currently unreachable and must be REBUILT, not
+         moved." That is what this is — the dead copies stay where they are
+         until Phase 8 deletes the whole block, and they keep round-tripping
+         through LoadSettings/SaveSettings in the meantime (MainWindow.
+         Settings.cs:90-94 / :445-450). This section is the LIVE editor.
+
+         CmbMotionLevel is the motion kill-switch. Two contracts on it:
+           1. Item order IS the MotionLevel enum ordinal (Full=0, Reduced=1,
+              Off=2) — MainWindow.Settings.cs:92/:447-448 cast SelectedIndex
+              straight to the enum. Never reorder these three items.
+           2. Its SelectionChanged must reach MainWindow.CmbMotionLevel_
+              SelectionChanged (MainWindow.UiUpdates.cs:2863) — that method is
+              what stops every running ambient loop when motion drops to
+              Reduced/Off. A rebuilt combo with no shim is a rebuilt dead
+              switch, so the shims live in the code-behind, not here.
+
+         Quiet surface (PLAN §5 / ground rule 8): no animation, no ambient
+         canvas, no hover choreography beyond what the shared styles do.
+         ================================================================ -->
+
+    <Border x:Name="PerformanceSectionCard" CornerRadius="12" Padding="14,12" Margin="0,0,0,10"
+            Background="{DynamicResource ElevatedSurfaceBrush}"
+            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+        <StackPanel>
+
+            <!-- header -->
+            <StackPanel Orientation="Horizontal">
+                <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                       Source="{Binding Source='⚡', Converter={StaticResource EmojiToImageSource}}"/>
+                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_section_performance}"
+                           FontSize="13" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="{loc:Str set2_section_performance_hint}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,3,0,0"/>
+
+            <!-- Performance mode -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str set2_tooltip_performance_mode}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str set2_setting_performance_mode}"/>
+                    <TextBlock Text="{loc:Str set2_tooltip_performance_mode}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkPerformanceMode" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkPerformanceMode_Changed" Unchecked="ChkPerformanceMode_Changed"/>
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+            <!-- Auto performance -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str set2_tooltip_auto_performance}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str set2_setting_auto_performance}"/>
+                    <TextBlock Text="{loc:Str set2_tooltip_auto_performance}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkAutoPerformance" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                          Checked="ChkAutoPerformance_Changed" Unchecked="ChkAutoPerformance_Changed"/>
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+            <!-- Unified overlay renderer -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str set2_tooltip_unified_overlay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str set2_setting_unified_overlay}"/>
+                    <TextBlock Text="{loc:Str set2_tooltip_unified_overlay}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkUnifiedOverlay" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                          Checked="ChkUnifiedOverlay_Changed" Unchecked="ChkUnifiedOverlay_Changed"/>
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+            <!-- Force video GPU decode. Phase-3 rescue: this toggle only ever existed inside the
+                 Collapsed LegacyDashboardHost, so it has been unreachable since velvet-mosaic. -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str set2_tooltip_video_hw_decode}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str set2_setting_video_hw_decode}"/>
+                    <TextBlock Text="{loc:Str set2_tooltip_video_hw_decode}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkVideoHwDecode" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkVideoHwDecode_Changed" Unchecked="ChkVideoHwDecode_Changed"/>
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+            <!-- Motion (accessibility). The three items ARE the enum ordinals — never reorder. -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_motion_level}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_motion_level}"/>
+                    <TextBlock Text="{loc:Str tooltip_motion_level}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <ComboBox Grid.Column="1" x:Name="CmbMotionLevel" x:FieldModifier="internal"
+                          Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                          Width="110" Height="24" VerticalAlignment="Center"
+                          SelectionChanged="CmbMotionLevel_SelectionChanged">
+                    <ComboBoxItem Content="{loc:Str label_motion_full}"/>
+                    <ComboBoxItem Content="{loc:Str label_motion_reduced}"/>
+                    <ComboBoxItem Content="{loc:Str label_motion_off}"/>
+                </ComboBox>
+            </Grid>
+
+        </StackPanel>
+    </Border>
+</UserControl>

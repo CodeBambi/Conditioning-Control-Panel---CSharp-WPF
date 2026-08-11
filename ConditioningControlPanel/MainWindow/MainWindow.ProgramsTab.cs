@@ -44,6 +44,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StartProgramsTabPulse()
         {
+            // Phase 1 moved BtnPrograms into DoorPanelYou, a ClipToBounds panel parked at Height 0
+            // unless the You door is the open one - and the rail opens on Home, so on a first launch
+            // this scale would play entirely inside the clip. When the owning door is shut the
+            // announcement escalates to that door's header instead (see StartNavDoorHeaderPulse).
+            if (StartNavDoorHeaderPulse("programs")) return;
+
             if (BtnProgramsScale == null || _programsPulseRunning) return;
             _programsPulseRunning = true;
             var anim = new DoubleAnimation
@@ -75,6 +81,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StopProgramsTabPulse()
         {
+            // The announcement may be riding the You door's header rather than this button.
+            StopNavDoorHeaderPulse("programs");
+
             if (!_programsPulseRunning && BtnProgramsScale == null) return;
             _programsPulseRunning = false;
             if (BtnProgramsScale != null)
@@ -268,6 +277,46 @@ namespace ConditioningControlPanel
                 Models.QuestCategory.Spiral => "features/spiral_overlay.png",
                 _ => null
             };
+        }
+
+        /// <summary>
+        /// The literal mechanics line for a task card: which feature the verifier draws credit
+        /// from and what has to happen for the task to tick, formatted with the target count or
+        /// minutes. The authored Description carries the program's fiction; support reports showed
+        /// users guessing wrong about what actually satisfies a task (e.g. spoken vs typed
+        /// mantras), so this line spells it out. OutsideSession tasks get an extra sentence
+        /// saying the day's own session will not produce the credit.
+        /// </summary>
+        private static string? ProgramTaskHowTo(ProgramTask task)
+        {
+            if (task.Kind == ProgramTaskKind.Ritual)
+                return Loc.Get("programs_howto_ritual");
+
+            if (task.Kind != ProgramTaskKind.AutoVerified || task.Verifier == null) return null;
+
+            var key = task.Verifier switch
+            {
+                Models.QuestCategory.Flash          => "programs_howto_flash",
+                Models.QuestCategory.Bubbles        => "programs_howto_bubbles",
+                Models.QuestCategory.BubbleCount    => "programs_howto_bubblecount",
+                Models.QuestCategory.LockCard       => "programs_howto_lockcard",
+                Models.QuestCategory.Video          => "programs_howto_video",
+                Models.QuestCategory.PinkFilter     => "programs_howto_pinkfilter",
+                Models.QuestCategory.Spiral         => "programs_howto_spiral",
+                Models.QuestCategory.Mantra         => "programs_howto_mantra",
+                Models.QuestCategory.Autonomy       => "programs_howto_autonomy",
+                Models.QuestCategory.KeywordTrigger => "programs_howto_keyword",
+                Models.QuestCategory.Lockdown       => "programs_howto_lockdown",
+                Models.QuestCategory.Remote         => "programs_howto_remote",
+                Models.QuestCategory.BlinkTrainer   => "programs_howto_blink",
+                _ => null
+            };
+            if (key == null) return null;
+
+            var text = Loc.GetF(key, Math.Max(1, task.TargetValue));
+            if (task.OutsideSession)
+                text += " " + Loc.Get("programs_howto_outside_suffix");
+            return text;
         }
 
         /// <summary>
@@ -820,10 +869,17 @@ namespace ConditioningControlPanel
                 var isRitual = task.Kind == ProgramTaskKind.Ritual;
                 if (isRitual) hasRitual = true;
 
+                // The literal mechanics line under the authored flavour text - which feature the
+                // verifier draws from and what has to happen. Hidden once the task is complete,
+                // a settled card doesn't need instructions.
+                var howTo = complete ? null : ProgramTaskHowTo(task);
+
                 var item = new ProgramTaskItem
                 {
                     TaskId = task.Id,
                     Description = task.Description,
+                    HowTo = howTo ?? "",
+                    HowToVisibility = string.IsNullOrWhiteSpace(howTo) ? Visibility.Collapsed : Visibility.Visible,
                     StatusGlyph = complete ? "✓" : "○",
                     StatusBrush = complete ? accent : mutedBrush,
                     TextBrush = complete ? mutedBrush : lightBrush,

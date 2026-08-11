@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" data-gg-screen="boot" data-gg-phase="none" data-gg-fx="idle">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Goon Game</title>
+    <!-- The in-app "Goon Game" page (1v1 endurance duel). Served by the WebView2
+         GoonHostService from https://ccp.game/goon/index.html; also boots
+         standalone in a plain browser for dev (?solo=1 — see bridge.js).
+         Self-contained: DOM/canvas/WebAudio own every effect. No importmap, no
+         three.js, no remote fonts — offline by construction. -->
+    <!-- PWA chrome for the STANDALONE phone client (cclabs.app/goon-beta/).
+         Add-to-home-screen keeps working after the tokenized query is dropped
+         because bridge.js adopts ?server/&token/&uid into localStorage on first
+         launch. Deliberately NO service worker: the page deploys often and a
+         stale offline cache is worse than a plain reload (it is offline-by-
+         construction for assets anyway — no CDN, no remote fonts). Hosted
+         (WebView2) all of this is inert. -->
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Goon Game">
+    <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
+    <link rel="stylesheet" href="./goon.css">
+    <link rel="stylesheet" href="./ui/screens.css">
+    <link rel="stylesheet" href="./ui/hud.css">
+    <link rel="stylesheet" href="./ui/avatarfx.css">
+    <link rel="stylesheet" href="./exec/fx.css">
+</head>
+<body>
+    <!-- z0 — canvas backdrop (gradient/particles; boot leaves it blank). -->
+    <canvas id="gg-bg" aria-hidden="true"></canvas>
+
+    <!-- z10 — the screen stack. Exactly one section is unhidden at a time and
+         html[data-gg-screen] names it. The UI wave fills these in. -->
+    <div id="gg-screens">
+        <section id="scr-title"     class="gg-screen" hidden></section>
+        <section id="scr-host"      class="gg-screen" hidden></section>
+        <section id="scr-join"      class="gg-screen" hidden></section>
+        <!-- Not a match phase either: the first-run media step a joiner with an
+             empty deck passes through on the way to the lobby. -->
+        <section id="scr-media-setup" class="gg-screen" hidden></section>
+        <section id="scr-lobby"     class="gg-screen" hidden></section>
+        <section id="scr-draft"     class="gg-screen" hidden></section>
+        <section id="scr-countdown" class="gg-screen" hidden></section>
+        <section id="scr-sd"        class="gg-screen" hidden></section>
+        <section id="scr-recap"     class="gg-screen" hidden></section>
+        <!-- Not a match phase: reached from the title menu (actions.goAssets). -->
+        <section id="scr-assets"    class="gg-screen" hidden></section>
+        <!-- Nor is this one: the voice-note library (actions.goVoice). -->
+        <section id="scr-voice"     class="gg-screen" hidden></section>
+    </div>
+
+    <!-- z20 — centre stage: mandatory videos and anything that must take input. -->
+    <div id="gg-stage"></div>
+
+    <!-- z30 — effect layers (exec/layers.js owns these; pointer-events:none.
+         The opt-ins are .gg-bubble (poppable), .gg-flash--hydra (splittable) and
+         .gg-vwin (the floating video windows); see exec/fx.css.
+         #gg-fx-vwin is LAST so the windows paint over the scenery — DOM order,
+         never a z-index (fx.css rule 1). -->
+    <div id="gg-fx" aria-hidden="true">
+        <div id="gg-fx-flash"></div>
+        <div id="gg-fx-sub"></div>
+        <div id="gg-fx-bubbles"></div>
+        <div id="gg-fx-spiral"></div>
+        <div id="gg-fx-bounce"></div>
+        <div id="gg-fx-drain"></div>
+        <div id="gg-fx-vwin"></div>
+    </div>
+
+    <!-- z40 — in-match HUD (clock, score, heat gauge, opponent plate). -->
+    <div id="gg-hud" hidden></div>
+
+    <!-- z50 — transient toasts (payload landed, peer wobbly, item dropped). -->
+    <div id="gg-toasts" aria-live="polite"></div>
+
+    <!-- z60 — MERCY. Its own layer on purpose: never dimmed, filtered or
+         animated by anything else. See the isolation banner in goon.css. -->
+    <div id="gg-mercy" hidden></div>
+
+    <!-- z70 — chrome above the match: side drawer + modal dialogs. -->
+    <aside id="gg-drawer" hidden></aside>
+    <div id="gg-modal" hidden></div>
+
+    <!-- z90 — loader; covers everything until boot settles. -->
+    <div id="gg-loader" class="gg-loader">
+        <div class="gg-loader-ring" aria-hidden="true"></div>
+        <p class="gg-loader-caption">Opening <span class="gg-grad">Goon Game</span>&#8230;</p>
+        <p id="gg-loader-note" class="gg-loader-note"></p>
+    </div>
+
+    <script type="module" src="./boot.js"></script>
+</body>
+</html>

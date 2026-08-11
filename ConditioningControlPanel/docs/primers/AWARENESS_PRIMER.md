@@ -33,6 +33,45 @@ category/name). It is **free for all users** (no Patreon gate) but requires an e
 flag. **Do not confuse it with the "Awareness Engine" tab (§1), which is the entirely separate
 premium keyword-trigger + Screen-OCR + preset system** that also wears the "Awareness" name.
 
+### 0a. Awareness v2 (Train 2, 2026-08-06) — what the rest of this doc no longer describes
+
+Everything below §2 describes System A **as it behaves with `UseAwarenessV2` off**. With that setting
+on (the shipped default) `Services/Awareness/AwarenessObserver.cs` (`App.Awareness`) owns the
+pipeline instead, and the differences that matter when reading the rest of this file are:
+
+- `WindowAwarenessService` **still polls** — its `CurrentServiceName` / `CurrentActivityDuration`
+  readouts are consumed elsewhere — but it **stops raising `ActivityChanged` / `StillOnActivity`**.
+  Every consumer described in §5b/§5c/§5d is therefore dormant under v2, by design: one pipeline at a
+  time, one mouth (the `ReactionArbiter`).
+- The `{1, 5, 10}`-minute still-on nag (§2b) is gone; cumulative-dwell milestones at 30m/1h/2h/3h
+  replace it, and a title flicker no longer resets the clock.
+- A candidate must hold the foreground for **20 seconds** before a frame is cut, so alt-tab
+  pass-throughs produce nothing and sustained churn produces exactly one `RapidCycling` event.
+- Idle is **real input idle** (`GetLastInputInfo`), not "the title stopped changing", and there is a
+  do-not-disturb layer (fullscreen with recent input, meeting app + live mic, typing burst, CCP's own
+  mandatory-video / lock-card / DtRH surfaces).
+- **The privacy posture inverts.** Private-browsing titles are a hard drop; a user deny list drops a
+  window before anything is written; page titles are withheld from the frame unless the user
+  allow-listed that app (the shipped allow list is empty); adult-cluster frames send only the cluster
+  id. All of it runs *before* the `ActivityLedger` write, not after.
+- **One privacy implementation, not two.** `AwarenessPrivacyRules.Evaluate` is the only place these
+  rules live; `AwarenessObserverPolicy.EvaluatePrivacy` resolves the app's *identity* and then asks
+  it. That matters because the shipped deny protection is three **group tokens** (`@passwords`,
+  `@banking`, `@email-titles`) which mean nothing until that class expands them — a second matcher
+  comparing them literally would show the user active chips that blocked nothing.
+- **Pause is a real drop**, not a mute: while `AwarenessPause.IsPaused`, nothing is recorded and
+  nothing is said. Process-lifetime only; it does not survive a restart.
+- **The LLM leg has its own prompt.** Awareness does *not* go through `CompanionBrain.ReactAsync` or
+  the multi-thousand-token chat prompt; `AwarenessReactionService` builds a dedicated ~800-token
+  reaction prompt (persona digest + angle cards + frame projection + ban list) and sends it with
+  `AiCallOptions.Reaction`, so `[AI-METER]` shows `purpose=reaction`. Moderation is unchanged — the
+  full spine runs inside `IAiService.SendAsync` exactly as it does for chat. One consequence worth
+  knowing: an awareness line does **not** enter the chat turn log.
+
+`UseAwarenessV2 = false` restores every line of the legacy behaviour documented below — and so does
+"v2 is configured but its observer failed to construct", because the legacy suppression asks
+`AwarenessV2Routing.IsActive` (an arbiter is attached *and* v2 is enabled), never the setting alone.
+
 ---
 
 ## 1. DISAMBIGUATION — "Awareness" is two unrelated systems (read this first)
@@ -226,6 +265,34 @@ Per-mod `bark_rules.json` files carry rules with `"setting_eq": "AwarenessModeEn
 (e.g. `builtin-*/bark_rules.json:3707`/`:3751`) — so some companion barks only arm while Awareness
 Mode is on. The `AppCluster`/`AppId` ids from §3a are the fine-grained hook these rules can key on.
 This is the only place System A's output flows outside AvatarTube's direct reaction.
+
+### 5d-v2. Who is allowed to speak (Awareness v2's arbiter)
+Everything in §5b–§5d describes the **legacy** path, which is still exactly what runs today. Awareness
+v2 adds a single owner of ambient speech, `ReactionArbiter`
+(`Services/Companion/Brain/ReactionArbiter.cs`, namespace `Services.Awareness`), because the two
+paths above can *both* fire on one window change — a canned bark and an LLM quip about the same tab,
+on independent cooldowns. That is the "two mouths" bug.
+
+- **The switch is `AwarenessV2Routing.IsActive`**, and it is true only when an arbiter has been
+  `Attach`ed *and* `AwarenessObserver.IsEnabled` (`UseAwarenessV2` + `AwarenessModeEnabled` +
+  `AwarenessConsentGiven`). Configured-but-unwired deliberately means "legacy, unchanged" — the
+  alternative would be a companion that goes silent instead of one that double-speaks.
+- While it is active, `BarkService`'s `ActivityChanged`/`StillOnActivity` subscriptions and
+  `AvatarTubeWindow`'s `OnActivityChanged`/`OnStillOnActivity` handlers **return immediately**. The
+  arbiter re-raises the same bark triggers via `BarkService.RaiseAwarenessBark(frame)` (same trigger
+  names, same context keys, so authored `bark_rules.json` rules are untouched) and delivers model
+  lines via `AvatarTubeWindow.SpeakAwarenessLine`.
+- **One shared cooldown ledger** across barks, LLM lines and System B's keyword `AvatarComment`
+  (which reports itself with `RecordExternalLine`): 60s between any two lines, 90s between two LLM
+  lines, 10 min between two lines about the same app, plus an hourly line budget from the intensity
+  dial. Keyword lines are exempt from the LLM floor and the budget — the user configured them — but
+  not from the 60s gap.
+- **Cooldowns burn on delivery only.** A timeout (>8s), a provider failure, an empty or moderated
+  reply, a `[PASS]`, or a line dropped for arriving after the user moved on all leave the budget
+  untouched. An LLM leg that produces nothing falls back to a bark exactly once, so a frame yields at
+  most one line, ever.
+- Every submitted frame writes one `[AWARE] app=… score=… tier=… verdict=… gate=… lines_hr=…` line,
+  the same way bark decisions write `[BARK]`.
 
 ### 5e. Patreon gating (the asymmetry)
 - **System A (Awareness Mode): FREE.** `MainWindow.Patreon.cs:870-871` hard-codes

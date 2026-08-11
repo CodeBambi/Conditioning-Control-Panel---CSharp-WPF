@@ -224,10 +224,16 @@ public class CompositorEngine : IDisposable
 
         bool anyMainActive = false, anyExcludedActive = false;
         // Dirty-gated invalidation (#550): a surface only re-rasters when one of its active layers
-        // reports changed output this frame. The tick still runs at 60fps (cheap Update()s), but a
-        // ~10fps spiral / static pink tint no longer forces a fullscreen software raster + layered
-        // composite on the UI thread every frame. Layers default Dirty=true, so continuously-
-        // animating ones (bubbles/chaos FX/flash/subliminal) keep repainting every frame.
+        // reports changed output this frame. The tick still runs at refresh rate (cheap Update()s),
+        // but a ~10fps spiral / static pink tint no longer forces a fullscreen software raster +
+        // layered composite on the UI thread every frame.
+        //
+        // This fold is per SURFACE, not per layer, so it is only ever as good as the WORST layer on
+        // that surface: until #853 every layer except pink/spiral inherited the Dirty=true default,
+        // which meant one bubble or one held subliminal re-rastered the fullscreen pink+spiral with
+        // it at refresh rate and the #550 throttle collapsed. Every layer now reports honestly, at
+        // the cadence its owning service actually steps it. Clean layers are still DRAWN into every
+        // present below (DrawLayers ignores Dirty) - they just don't cause one.
         bool anyMainDirty = false, anyExcludedDirty = false;
 
         IWpfLayer[] layers = _layerSnapshot;

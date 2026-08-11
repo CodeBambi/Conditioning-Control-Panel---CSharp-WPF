@@ -1,22 +1,30 @@
 /* ============================================================================
  * ai.js — askAI() interface for "Graded Intake".
  *
- * Transport policy (LOCKED, BUILD_PLAN.md §0): AI goes through the CCP-Server
- * proxy `POST /intake/ai` (Agent H). The key, the entitlement gate, and BOTH
- * input+output moderation live SERVER-SIDE. The page never holds a model key
- * and never talks to OpenRouter directly.
+ * ACCENTS ARE NOT AI (2026-08-11, owner decision: "no ai on those accents").
+ * Every want='accent' request is answered locally from the curated per-niche,
+ * depth-banded pools in core/accents.js — no network, no model, in EITHER
+ * mode. The model had been writing over-long third-person narration that the
+ * 160-char clip guards then cut mid-word onto the question card.
+ *
+ * Transport policy for what REMAINS remote (LOCKED, BUILD_PLAN.md §0): AI goes
+ * through the CCP-Server proxy `POST /intake/ai` (Agent H). The key, the
+ * entitlement gate, and BOTH input+output moderation live SERVER-SIDE. The
+ * page never holds a model key and never talks to OpenRouter directly. Today
+ * that path serves only want='synthesis', which has no client call sites — it
+ * exists for older shipped desktop builds and any future synthesis use.
  *
  * Requests are COMPACT (route/depth/band/last-3-answers/tag-tallies) — never
  * the full transcript. contracts.js `AiRequest` is the schema; the server
  * rejects anything larger.
  *
- * Phase 0 ships a deterministic OFFLINE STUB so the whole page is runnable with
- * no network and before Agent H exists. `createAI(null)` -> stub. `createAI({
- * serverBase, authToken })` -> real proxy fetch, with the stub as the fallback
- * on any transport/gate error (a dead endpoint must never wedge the run).
+ * `createAI(null)` -> stub. `createAI({serverBase, authToken})` -> proxy for
+ * synthesis with the stub as fallback on any transport/gate error (a dead
+ * endpoint must never wedge the run). Accents behave identically in both.
  * ==========================================================================*/
 
 import { AiWant, hash01, NICHES } from './contracts.js';
+import { createAccentPicker } from './accents.js';
 
 const AI_PATH = '/intake/ai';
 const TIMEOUT_MS = 8000;
@@ -52,6 +60,8 @@ export function createAI(config) {
   let inFlight = false;
 
   async function askAI(req) {
+    // Accents never leave the page — the stub owns them (pool-driven).
+    if (!req || req.want !== AiWant.Synthesis) return await stub.askAI(req);
     if (halted || inFlight) return await stub.askAI(req);
 
     const body = compact(req);
@@ -145,12 +155,38 @@ function compact(req) {
   };
 }
 
+/* A usable accent/synthesis line is short PROSE — the engine hands it to the
+ * renderer verbatim (beats.js appends `(flavor)` to the question text). A line
+ * that reads as STRUCTURE is the model failing the server's JSON contract, most
+ * commonly by echoing the format spec back ({"beats":[{"flavor":"<line>"},...]}),
+ * and on 2026-08-06 exactly that string reached players' question cards through
+ * the server's raw-text fallback. The server now drops such lines at the source
+ * (proxy intake-ai.js pickLine/looksLikeStructure — keep the two regexes in
+ * sync); this is the belt-and-suspenders copy so a server regression cannot put
+ * garbage on a card again. Dropping is always safe: the engine only replaces
+ * its previous accent on a truthy line (kickAccent), so fewer beats just means
+ * the accent recolors later. */
+const STRUCTURE_RE = /[{}[\]]|<[^<>]{1,60}>|```|"?(?:beats|flavor|synthesis|profile)"?\s*:/i;
+function usableLine(v) {
+  if (typeof v !== 'string') return undefined;
+  const s = v.replace(/\s+/g, ' ').trim();
+  return s && !STRUCTURE_RE.test(s) ? s.slice(0, 160) : undefined;
+}
+
 /** Coerce a server payload to the AiResponse shape. */
 function normalize(data) {
   const out = {};
-  if (Array.isArray(data.beats)) out.beats = data.beats;
+  if (Array.isArray(data.beats)) {
+    out.beats = data.beats.map((b) => {
+      const flavor = usableLine(b && b.flavor);
+      const text = usableLine(b && b.text);
+      return (flavor || text) ? { beatId: b && b.beatId, flavor, text } : null;
+    }).filter(Boolean);
+  }
   if (data.profile && typeof data.profile === 'object') out.profile = data.profile;
-  if (typeof data.synthesis === 'string') out.synthesis = data.synthesis;
+  if (typeof data.synthesis === 'string' && !STRUCTURE_RE.test(data.synthesis)) {
+    out.synthesis = data.synthesis;
+  }
   if (data.moderated != null) out.moderated = !!data.moderated;
   return out;
 }
@@ -158,11 +194,13 @@ function normalize(data) {
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : (n || 0));
 
 /* ----------------------------------------------------------------------------
- * OFFLINE STUB — deterministic, no network. Good enough to develop render/engine
- * against and to keep a run alive when the proxy is unreachable. It never claims
- * to be moderated (there is no model behind it); it just recolors copy in-voice.
+ * OFFLINE STUB — no network, ever. Accents draw from the curated pools in
+ * accents.js via a per-run shuffle bag (the PRODUCTION accent path, not a
+ * fallback); synthesis keeps the short deterministic in-voice line. It never
+ * claims to be moderated (there is no model behind any of it).
  * -------------------------------------------------------------------------- */
 export function createStubAI() {
+  // Synthesis-tail voice only — accents live in accents.js now.
   const VOICE = {
     bambi: ['good girl', 'so soft now', 'let it get bubbly', 'thinking is hard, dropping is easy'],
     drone: ['compliance is calm', 'the pattern is clear', 'obey and quiet', 'unit accepts input'],
@@ -172,22 +210,19 @@ export function createStubAI() {
     // bambi's giggle here - that mismatch is jarring enough to read as a bug.
     circe: ['noted', 'that was expected of you', 'restraint suits you', 'the record is clear'],
   };
+  const accents = createAccentPicker();
   async function askAI(req) {
-    const niche = NICHES.includes(req.niche) ? req.niche : NICHES[0];
-    const pool = VOICE[niche] || VOICE.bambi;
-    if (req.want === AiWant.Synthesis) {
+    const niche = NICHES.includes(req && req.niche) ? req.niche : NICHES[0];
+    if (req && req.want === AiWant.Synthesis) {
+      const pool = VOICE[niche] || VOICE.bambi;
       const arche = req.route && req.route.primaryArchetypeId ? req.route.primaryArchetypeId : niche;
       return {
         synthesis: `You read as ${arche}. ${pool[Math.floor(hash01(arche) * pool.length)]}.`,
         profile: { primary: arche, note: 'offline-stub' },
       };
     }
-    // Accent: return one in-voice flavor keyed deterministically to the last answer.
-    const seed = (req.lastAnswers && req.lastAnswers.length)
-      ? req.lastAnswers[req.lastAnswers.length - 1].promptId
-      : String(req.depth);
-    const line = pool[Math.floor(hash01(seed + niche) * pool.length)];
-    return { beats: [{ flavor: line }] };
+    // Accent: one curated in-voice line for the niche at this depth.
+    return { beats: [{ flavor: accents.next(niche, req && req.depth) }] };
   }
   return { askAI };
 }

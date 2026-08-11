@@ -13,7 +13,7 @@
 ; - Store install path in registry for Velopack updates
 
 #define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "6.6.3"
+#define MyAppVersion "6.7.4"
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"
@@ -104,6 +104,16 @@ Name: "fileassoc"; Description: "Add 'Open with CCP' to right-click menu for med
 ; the runtime is actually missing (see VCRedistNeeded). build-installer.bat
 ; downloads this into redist\ before compiling.
 Source: "redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: VCRedistNeeded
+
+; Microsoft Edge WebView2 Evergreen runtime bootstrapper (~1.6 MB; it downloads the
+; real runtime itself). WebView2 is no longer optional: the FYP feed, the Exclusives
+; tab, DtRH, the Goon Game and — from 6.7 — the default video engine all render in
+; WebView2. It is preinstalled on Windows 11 and on Windows 10 machines with modern
+; Edge, so most installs skip this entirely (see WebView2RuntimeNeeded). Committed in
+; redist\ rather than downloaded at build time because a silent skip here costs half
+; the app's content. Official Microsoft fwlink for refreshes:
+;   https://go.microsoft.com/fwlink/p/?LinkId=2124703
+Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: WebView2RuntimeNeeded
 
 ; Main executable
 Source: "{#PublishDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -223,6 +233,12 @@ Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; 
 ; can load on first launch. Self-elevates via UAC; /norestart keeps setup flowing.
 Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ Runtime (required for webcam features)..."; Check: VCRedistNeeded
 
+; Then the WebView2 Evergreen runtime (only if missing) - the browser-backed features
+; (FYP feed, Exclusives, DtRH, Goon Game, the default video engine) have no fallback
+; renderer without it. The bootstrapper pulls the runtime down itself and self-elevates
+; via UAC; if it fails, setup continues and the app degrades exactly as it does today.
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime (required for video and web features)..."; Check: WebView2RuntimeNeeded
+
 ; Option to launch app after interactive installation (shows checkbox)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 ; NOTE: No silent-install self-launch here. The in-app updater's external helper
@@ -256,6 +272,40 @@ begin
     if Installed = 1 then
       Result := False;
   end;
+end;
+
+// Returns True when the Edge WebView2 Evergreen runtime is NOT installed, so the
+// bundled bootstrapper only runs on machines that need it (Windows 11 and any
+// Windows 10 with modern Edge already have it).
+//
+// Detection follows Microsoft's documented method: the Evergreen runtime's client
+// key carries a 'pv' version value, and "present and not 0.0.0.0" is the install
+// signal - EdgeUpdate leaves the key behind with pv=0.0.0.0 after an uninstall.
+// Per-machine installs land in the 32-bit hive (EdgeUpdate is a 32-bit component)
+// which this 64-bit setup has to reach through WOW6432Node explicitly; per-user
+// installs land in HKCU without it. Check both, plus the native 64-bit path for
+// good measure - any hit means "already there, skip".
+function WebView2VersionPresent(const RootKey: Integer; const SubKey: String): Boolean;
+var
+  Version: String;
+begin
+  Result := False;
+  if RegQueryStringValue(RootKey, SubKey, 'pv', Version) then
+  begin
+    if (Version <> '') and (Version <> '0.0.0.0') then
+      Result := True;
+  end;
+end;
+
+function WebView2RuntimeNeeded(): Boolean;
+begin
+  Result := not (
+    WebView2VersionPresent(HKEY_LOCAL_MACHINE,
+      'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') or
+    WebView2VersionPresent(HKEY_LOCAL_MACHINE,
+      'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') or
+    WebView2VersionPresent(HKEY_CURRENT_USER,
+      'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'));
 end;
 
 var

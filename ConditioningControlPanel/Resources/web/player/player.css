@@ -133,13 +133,13 @@ body.attn-paused .attn { pointer-events: none; }
 }
 
 /* Stroke underneath, fill on top: the same two-pass outline the WPF target
-   draws with a stroked and a filled copy of the glyph geometry. The stroked
-   copy is out of flow so the filled one alone defines the box size. */
-.attn-text .out {
-  position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  color: transparent;
+   draws (AttentionTargets.cs - stroked path first, filled path over it).
+   `paint-order: stroke fill` gets that from a single span, so the centred
+   7.5px stroke can only eat into the glyph's outer half and the fill always
+   covers the inner half. Two spans used to be used here and the stroked one
+   was absolutely positioned ON TOP of the fill, which hollowed the glyphs
+   out and made the trigger unreadable (#873). */
+.attn-text .fill {
+  paint-order: stroke fill;
   -webkit-text-stroke: 7.5px #000;
 }

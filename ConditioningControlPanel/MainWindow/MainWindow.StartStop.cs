@@ -331,7 +331,7 @@ namespace ConditioningControlPanel
             // Stop other services
             App.Subliminal.Stop();
             App.Overlay.Stop();
-            App.LockCard.Stop();
+            App.LockCard.Stop();   // scheduler only — the visible card is dropped by ForceCloseAll below
             App.BubbleCount.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
@@ -427,32 +427,30 @@ namespace ConditioningControlPanel
                 
                 if (_rampBaseValues.TryGetValue("FlashOpacity", out var flashOp))
                 {
-                    SettingsTab.SliderOpacity.Value = flashOp;
-                    SettingsTab.TxtOpacity.Text = $"{(int)flashOp}%";
                     settings.FlashOpacity = (int)flashOp;
                 }
+                // Phase 8: the settings write is the whole job now. VisualsFeatureControl,
+                // SubliminalFeatureControl, SpiralFeatureControl and PinkFilterFeatureControl all
+                // listen on AppSettings.PropertyChanged and repaint their own slider + label; the
+                // ProgressionTab and LegacyDashboardHost twins that used to be pushed here died
+                // with their views. The AppSettingsTab master-volume pair below is a LIVE Settings
+                // door control and is still driven by hand.
                 if (_rampBaseValues.TryGetValue("SpiralOpacity", out var spiralOp))
                 {
-                    ProgressionTab.SliderSpiralOpacity.Value = spiralOp;
-                    ProgressionTab.TxtSpiralOpacity.Text = $"{(int)spiralOp}%";
                     settings.SpiralOpacity = (int)spiralOp;
                 }
                 if (_rampBaseValues.TryGetValue("PinkFilterOpacity", out var pinkOp))
                 {
-                    ProgressionTab.SliderPinkOpacity.Value = pinkOp;
-                    ProgressionTab.TxtPinkOpacity.Text = $"{(int)pinkOp}%";
                     settings.PinkFilterOpacity = (int)pinkOp;
                 }
                 if (_rampBaseValues.TryGetValue("MasterVolume", out var masterVol))
                 {
-                    SettingsTab.SliderMaster.Value = masterVol;
-                    SettingsTab.TxtMaster.Text = $"{(int)masterVol}%";
+                    AppSettingsTab.SliderMaster.Value = masterVol;
+                    AppSettingsTab.TxtMaster.Text = $"{(int)masterVol}%";
                     settings.MasterVolume = (int)masterVol;
                 }
                 if (_rampBaseValues.TryGetValue("SubAudioVolume", out var subVol))
                 {
-                    SettingsTab.SliderWhisperVol.Value = subVol;
-                    SettingsTab.TxtWhisperVol.Text = $"{(int)subVol}%";
                     settings.SubAudioVolume = (int)subVol;
                 }
                 
@@ -490,40 +488,34 @@ namespace ConditioningControlPanel
                 if (!sessionActive && settings.RampLinkFlashOpacity && _rampBaseValues.TryGetValue("FlashOpacity", out var flashBase))
                 {
                     var newVal = (int)Math.Min(flashBase * currentMult, 100);
-                    SettingsTab.SliderOpacity.Value = newVal;
-                    SettingsTab.TxtOpacity.Text = $"{newVal}%";
                     settings.FlashOpacity = newVal;
                 }
 
                 if (!sessionActive && settings.RampLinkSpiralOpacity && _rampBaseValues.TryGetValue("SpiralOpacity", out var spiralBase))
                 {
-                    var newVal = (int)Math.Min(spiralBase * currentMult, 50);
-                    ProgressionTab.SliderSpiralOpacity.Value = newVal;
-                    ProgressionTab.TxtSpiralOpacity.Text = $"{newVal}%";
+                    // Cap matches the spiral opacity slider's own max, raised 50 -> 100 in f56eaaf9c (#866).
+                    // Phase 8: settings-only. The Studio panels repaint off PropertyChanged.
+                    var newVal = (int)Math.Min(spiralBase * currentMult, 100);
                     settings.SpiralOpacity = newVal;
                 }
-                
+
                 if (!sessionActive && settings.RampLinkPinkFilterOpacity && _rampBaseValues.TryGetValue("PinkFilterOpacity", out var pinkBase))
                 {
                     var newVal = (int)Math.Min(pinkBase * currentMult, 50);
-                    ProgressionTab.SliderPinkOpacity.Value = newVal;
-                    ProgressionTab.TxtPinkOpacity.Text = $"{newVal}%";
                     settings.PinkFilterOpacity = newVal;
                 }
                 
                 if (settings.RampLinkMasterAudio && _rampBaseValues.TryGetValue("MasterVolume", out var masterBase))
                 {
                     var newVal = (int)Math.Min(masterBase * currentMult, 100);
-                    SettingsTab.SliderMaster.Value = newVal;
-                    SettingsTab.TxtMaster.Text = $"{newVal}%";
+                    AppSettingsTab.SliderMaster.Value = newVal;
+                    AppSettingsTab.TxtMaster.Text = $"{newVal}%";
                     settings.MasterVolume = newVal;
                 }
                 
                 if (settings.RampLinkSubliminalAudio && _rampBaseValues.TryGetValue("SubAudioVolume", out var subBase))
                 {
                     var newVal = (int)Math.Min(subBase * currentMult, 100);
-                    SettingsTab.SliderWhisperVol.Value = newVal;
-                    SettingsTab.TxtWhisperVol.Text = $"{newVal}%";
                     settings.SubAudioVolume = newVal;
                 }
             });
@@ -691,7 +683,21 @@ namespace ConditioningControlPanel
         #region Engine Helpers
 
         /// <summary>
-        /// Apply current UI values to settings immediately (for live updates)
+        /// Applies the LIVE Settings-door audio controls to settings immediately, then refreshes
+        /// running overlays and saves. Four callers, all in Settings ▸ Audio: SliderMaster,
+        /// SliderDuck, ChkAudioDuck and ChkExcludeBambiCloudDucking.
+        ///
+        /// <para><b>PHASE 8 removed ~30 reads of the Collapsed twins from this method, and that was
+        /// a live BUG fix, not just dead weight.</b> Unlike <c>SaveSettings</c>, this method never
+        /// had a <c>LoadSettings()</c> preamble, so those reads were NOT identity operations: they
+        /// pushed the ghost controls' stale load-time values back over Flash / Video / Subliminal /
+        /// Spiral / PinkFilter settings. Editing flash frequency (or spiral opacity, or subliminal
+        /// count) in the Studio rack and then dragging master volume in Settings silently reverted
+        /// the Studio edit. Every one of those properties is now written only by its own
+        /// FeatureControl.</para>
+        ///
+        /// <para><b>Never add a read of a control the user cannot see to this method.</b> That is
+        /// exactly how the bug above happened, and there is no re-sync here to hide it.</para>
         /// </summary>
         private void ApplySettingsLive()
         {
@@ -699,94 +705,23 @@ namespace ConditioningControlPanel
 
             var s = App.Settings.Current;
 
-            // Track previous values to detect changes
-            var oldFlashFreq = s.FlashFrequency;
-            var wasFlashEnabled = s.FlashEnabled;
-            var wasVideoEnabled = s.MandatoryVideosEnabled;
-            var wasSubliminalEnabled = s.SubliminalEnabled;
+            // Audio settings (Phase 2: Settings door owns these controls)
+            s.MasterVolume = (int)AppSettingsTab.SliderMaster.Value;
+            s.AudioDuckingEnabled = AppSettingsTab.ChkAudioDuck.IsChecked ?? true;
+            s.DuckingLevel = (int)AppSettingsTab.SliderDuck.Value;
+            s.ExcludeBambiCloudFromDucking = AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
 
-            // Flash settings
-            s.FlashEnabled = SettingsTab.ChkFlashEnabled.IsChecked ?? true;
-            s.FlashClickable = SettingsTab.ChkClickable.IsChecked ?? true;
-            s.CorruptionMode = SettingsTab.ChkCorruption.IsChecked ?? false;
-            s.HydraLinkedTiming = SettingsTab.ChkHydraLinked.IsChecked ?? true;
-            s.FlashGlowEnabled = SettingsTab.ChkFlashGlow.IsChecked ?? true;
-            s.FlashFrequency = (int)SettingsTab.SliderPerMin.Value;
-            s.SimultaneousImages = (int)SettingsTab.SliderImages.Value;
-            s.HydraLimit = (int)SettingsTab.SliderMaxOnScreen.Value;
-            s.ImageScale = (int)SettingsTab.SliderSize.Value;
-            s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
-            s.FadeDuration = (int)SettingsTab.SliderFade.Value;
-            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
-            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
-
-            // Video settings
-            s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;
-            s.VideosPerHour = (int)SettingsTab.SliderPerHour.Value;
-            s.StrictLockEnabled = SettingsTab.ChkStrictLock.IsChecked ?? false;
-            s.AttentionChecksEnabled = SettingsTab.ChkMiniGameEnabled.IsChecked ?? false;
-            s.AttentionDensity = (int)SettingsTab.SliderTargets.Value;
-            s.RandomizeAttentionTargets = SettingsTab.ChkRandomizeTargets.IsChecked ?? false;
-            s.AttentionLifespan = (int)SettingsTab.SliderDuration.Value;
-            s.AttentionSize = (int)SettingsTab.SliderTargetSize.Value;
-
-            // Subliminal settings
-            s.SubliminalEnabled = SettingsTab.ChkSubliminalEnabled.IsChecked ?? false;
-            s.SubliminalFrequency = (int)SettingsTab.SliderSubPerMin.Value;
-            s.SubliminalDuration = (int)SettingsTab.SliderFrames.Value;
-            s.SubliminalOpacity = (int)SettingsTab.SliderSubOpacity.Value;
-            s.SubAudioEnabled = SettingsTab.ChkAudioWhispers.IsChecked ?? false;
-            s.SubAudioVolume = (int)SettingsTab.SliderWhisperVol.Value;
-
-            // Audio settings
-            s.MasterVolume = (int)SettingsTab.SliderMaster.Value;
-            s.AudioDuckingEnabled = SettingsTab.ChkAudioDuck.IsChecked ?? true;
-            s.DuckingLevel = (int)SettingsTab.SliderDuck.Value;
-            s.ExcludeBambiCloudFromDucking = SettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
-
-            // Overlay settings
-            s.SpiralOpacity = (int)ProgressionTab.SliderSpiralOpacity.Value;
-            s.PinkFilterOpacity = (int)ProgressionTab.SliderPinkOpacity.Value;
-
-            // Refresh services if running
+            // PHASE 8: the Flash / Video / Subliminal service start-stop branches that used to sit
+            // here went with the reads that drove them - they compared a "was" snapshot against a
+            // value this method had just written from a ghost control, so with the ghosts gone they
+            // could only ever have compared a value against itself. Those services are started and
+            // stopped by their own editors: Features/FlashFeatureControl, VideoFeatureControl and
+            // SubliminalFeatureControl (the last via App.Subliminal.SetEnabled, the single
+            // authority), plus the Home mosaic's right-click quick-toggles.
             if (_isRunning)
             {
-                // Handle Flash service toggle
-                if (s.FlashEnabled != wasFlashEnabled)
-                {
-                    if (s.FlashEnabled)
-                        App.Flash.Start();
-                    else
-                        App.Flash.Stop();
-                    App.Logger?.Information("Flash images toggled via ApplySettingsLive: {Enabled}", s.FlashEnabled);
-                }
-                // Reschedule flash timer if frequency changed
-                else if (s.FlashFrequency != oldFlashFreq)
-                {
-                    App.Flash.RefreshSchedule();
-                }
-
-                // Handle Video service toggle
-                if (s.MandatoryVideosEnabled != wasVideoEnabled)
-                {
-                    if (s.MandatoryVideosEnabled)
-                        App.Video.Start();
-                    else
-                        App.Video.Stop();
-                    App.Logger?.Information("Mandatory videos toggled via ApplySettingsLive: {Enabled}", s.MandatoryVideosEnabled);
-                }
-
-                // Handle Subliminal service toggle
-                if (s.SubliminalEnabled != wasSubliminalEnabled)
-                {
-                    if (s.SubliminalEnabled)
-                        App.Subliminal.Start();
-                    else
-                        App.Subliminal.Stop();
-                    App.Logger?.Information("Subliminals toggled via ApplySettingsLive: {Enabled}", s.SubliminalEnabled);
-                }
-
-                // Refresh overlays (spiral, pink filter)
+                // Overlays still repaint here: a master-volume or ducking change can alter what the
+                // overlay layer is compositing, and this is cheap and idempotent.
                 App.Overlay.RefreshOverlays();
             }
 

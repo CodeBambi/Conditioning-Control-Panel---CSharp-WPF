@@ -32,7 +32,11 @@ namespace ConditioningControlPanel
     {
         #region Deeper Tab
 
-        private void BtnDeeper_Click(object sender, RoutedEventArgs e)
+        // internal since Phase 6: the Play door's Deeper card forwards here rather than calling
+        // ShowTab("deeper"), because the first-visit pulse stop, the HasSeenDeeperTab save, the
+        // welcome-card refresh and the lazy hub init all live in this method. A card that only
+        // navigated would leave the rail entry breathing forever.
+        internal void BtnDeeper_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("deeper");
             if (App.Settings?.Current is { } s && !s.HasSeenDeeperTab)
@@ -127,7 +131,7 @@ namespace ConditioningControlPanel
         internal void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            var enabled = SettingsTab.ChkEnableDeeper.IsChecked ?? true;
+            var enabled = AppSettingsTab.ChkEnableDeeper.IsChecked ?? true;
             if (App.Settings?.Current is { } s) s.EnableDeeper = enabled;
             if (BtnDeeper != null) BtnDeeper.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             // If the user just disabled Deeper while it's the active tab, fall back to Settings.
@@ -139,6 +143,11 @@ namespace ConditioningControlPanel
 
         private void StartDeeperTabPulse()
         {
+            // Same story as the Programs pulse: Phase 1 moved BtnDeeper into DoorPanelPlay, which is
+            // ClipToBounds at Height 0 unless the Play door is open, so on a first launch (rail opens
+            // on Home) this scale would be invisible. Escalate to the door header when it is shut.
+            if (StartNavDoorHeaderPulse("deeper")) return;
+
             if (BtnDeeperScale == null || _deeperPulseRunning) return;
             _deeperPulseRunning = true;
             var anim = new System.Windows.Media.Animation.DoubleAnimation
@@ -168,6 +177,9 @@ namespace ConditioningControlPanel
 
         private void StopDeeperTabPulse()
         {
+            // The announcement may be riding the Play door's header rather than this button.
+            StopNavDoorHeaderPulse("deeper");
+
             if (!_deeperPulseRunning && BtnDeeperScale == null) return;
             _deeperPulseRunning = false;
             if (BtnDeeperScale != null)
@@ -549,8 +561,14 @@ namespace ConditioningControlPanel
                 var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
                 var showBambiCloud = modWantsBambiCloud || newValue;
                 SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-                if (!modWantsBambiCloud && !newValue)
-                    SettingsTab.RbHypnoTube.IsChecked = true;
+
+                // The selection rule lives in ONE place. This used to be a third hand-rolled copy
+                // of it, and when the site radios moved from Checked to Click in #867 that copy
+                // quietly lost its navigation: setting RbHypnoTube.IsChecked used to navigate as
+                // a side effect, and afterwards it only moved the dot - leaving the radio on
+                // HypnoTube over the BambiCloud page the user had just hidden the button for.
+                // navigateIfChanged puts the navigation back, explicitly.
+                SyncSiteRadiosToActiveMod(navigateIfChanged: true);
 
                 RefreshBrowserLoadingText();
             }

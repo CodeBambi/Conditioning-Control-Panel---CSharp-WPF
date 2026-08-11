@@ -58,6 +58,11 @@ namespace ConditioningControlPanel.Services.AIService
         private int _dailyRequestCount;
         private DateTime _lastResetDate;
 
+        // One moderation spine for BOTH entry points (legacy one-shots and the Train 1 multi-turn
+        // SendAsync). This provider shipped a whole release with NO moderation at all; a second,
+        // hand-copied spine for the new path is exactly how that happens again.
+        private readonly TransportModeration _moderation = CreateModeration();
+
         private static CompanionPromptSettings? Settings => App.Settings?.Current?.CompanionPrompt;
 
         public bool IsAvailable
@@ -167,6 +172,24 @@ namespace ConditioningControlPanel.Services.AIService
 
             return model;
         }
+
+        /// <summary>
+        /// Model identifier recorded in moderation.log. Mirrors the "local:{model}" shape the
+        /// Ollama provider uses so the compliance record says which endpoint produced the hit.
+        /// </summary>
+        private static string ModelHint()
+        {
+            var model = GetConfiguredModel();
+            return "openai_compat:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
+        }
+
+        /// <summary>
+        /// This provider's moderation spine, pre-wired with its log prefix, counter source and
+        /// <c>openai_compat:{model}</c> hint. Static so a test can exercise the real,
+        /// provider-configured spine without a live endpoint.
+        /// </summary>
+        internal static TransportModeration CreateModeration() =>
+            new("OpenAiCompatibleService", "openai_compat", ModelHint);
 
         private static string? GetApiKey()
         {
@@ -362,12 +385,54 @@ namespace ConditioningControlPanel.Services.AIService
             _dailyRequestCount++;
         }
 
-        private async Task<string?> SendChatAsync(string systemPrompt, string userInput)
+        /// <summary>
+        /// Core request path.
+        ///
+        /// Moderation: if <paramref name="returnRefusalSentinel"/> is true and the input or
+        /// output trips <see cref="App.ModerationGuard"/>, returns the appropriate
+        /// <see cref="ModerationRefusal"/> sentinel string so the chat UI can render the
+        /// refusal bubble + POLICY badge. When false (awareness, keyword, lockscreen, video
+        /// paths) a moderation hit returns null and the caller silently drops the reaction —
+        /// surfacing a refusal there would be jarring (user didn't actively prompt).
+        /// </summary>
+        private Task<string?> SendChatAsync(string systemPrompt, string userInput, bool returnRefusalSentinel = false,
+            string purpose = AiMeter.PurposeChat)
+            => SendChatCoreAsync(BuildMessages(systemPrompt, userInput), userInput, returnRefusalSentinel, purpose);
+
+        /// <summary>
+        /// The one request path, shared by the legacy single-shot wrapper above and the Train 1
+        /// multi-turn <see cref="SendAsync"/>. Everything that must not fork lives here: offline gate,
+        /// input moderation, key/limit gates, retry-with-backoff, response parsing, output moderation
+        /// and effect execution, and the single [AI-METER] line.
+        ///
+        /// <paramref name="newestUserInput"/> is the only text handed to <c>CheckInput</c> — earlier
+        /// turns in <paramref name="messages"/> already passed the guard when they were first sent.
+        /// </summary>
+        private async Task<string?> SendChatCoreAsync(List<MessageDto> messages, string? newestUserInput,
+            bool returnRefusalSentinel, string purpose, CancellationToken cancellationToken = default)
         {
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
                 return null;
+            }
+
+            // [AI-METER] — log-only sizing, one line per request attempt (plus refused input,
+            // a request we deliberately didn't make). Missing-key and daily-limit bails never
+            // reach the wire and stay silent. Refined to the real message list below.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = messages.Sum(m => m.Content?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderOpenAiCompatible, purpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
+
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Runs BEFORE the
+            // HTTP request so prohibited inputs never leave the client. Same semantics as the
+            // cloud and local providers; shared with SendAsync through _moderation.
+            if (_moderation.CheckInput(newestUserInput, escalate: returnRefusalSentinel).HasValue)
+            {
+                Meter(AiMeter.OutcomeRefusedInput);
+                return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
             }
 
             var apiKey = GetApiKey();
@@ -386,7 +451,6 @@ namespace ConditioningControlPanel.Services.AIService
             }
 
             var model = GetConfiguredModel();
-            var messages = BuildMessages(systemPrompt, userInput);
 
             var payload = new Dictionary<string, object>
             {
@@ -412,8 +476,8 @@ namespace ConditioningControlPanel.Services.AIService
 
                     App.Logger?.Debug("OpenAiCompatibleService: request to {Url} (attempt {Attempt})", request.RequestUri, attempt + 1);
 
-                    using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
-                    var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -422,7 +486,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                         if (attempt == 0 && retryableStatus)
                         {
-                            await Task.Delay(1200).ConfigureAwait(false);
+                            await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                             continue;
                         }
 
@@ -430,6 +494,7 @@ namespace ConditioningControlPanel.Services.AIService
                             status,
                             endpointUri,
                             json);
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
@@ -437,36 +502,57 @@ namespace ConditioningControlPanel.Services.AIService
                     if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
                     {
                         App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
                     var first = choices[0];
+                    if (first.TryGetProperty("finish_reason", out var fr)
+                        && fr.ValueKind == JsonValueKind.String
+                        && string.Equals(fr.GetString(), "length", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Truncation was invisible in logs until the guillotined effects
+                        // envelope leaked as raw JSON in the bubble - make it loud.
+                        App.Logger?.Warning("[AI] reply truncated at the token cap (finish_reason=length) - parser salvage will run");
+                    }
                     if (!first.TryGetProperty("message", out var message) ||
                         !message.TryGetProperty("content", out var contentElement))
                     {
                         App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
-                    return ProcessResponse(content);
+                    var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked);
+                    Meter(outputBlocked ? AiMeter.OutcomeRefusedOutput
+                            : string.IsNullOrWhiteSpace(processed) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk,
+                        content?.Length ?? 0);
+                    return processed;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Caller-driven cancellation, not a transport failure: leave the meter alone.
+                    return null;
                 }
                 catch (HttpRequestException) when (attempt == 0)
                 {
-                    await Task.Delay(1200).ConfigureAwait(false);
+                    await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                 }
                 catch (TaskCanceledException) when (attempt == 0)
                 {
-                    await Task.Delay(1200).ConfigureAwait(false);
+                    await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                    Meter(AiMeter.OutcomeError);
                     return null;
                 }
             }
 
             App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+            Meter(AiMeter.OutcomeError);
             return null;
         }
 
@@ -477,31 +563,87 @@ namespace ConditioningControlPanel.Services.AIService
                 new("system", systemPrompt),
                 new("user", userInput)
             };
+            InsertEnrichmentIfEnabled(messages);
+            return messages;
+        }
 
-            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
-            if (effectsEnabled)
+        /// <summary>
+        /// Splices the effects "[CONTEXT BLOCK — NOT DIALOGUE]" message in immediately after the
+        /// leading system message(s) — index 1 for the legacy two-message shape, which is where it
+        /// always went, and the equivalent position for a multi-turn window. Best-effort: a knowledge
+        /// or prompt failure means "no effects this turn", never a dead reply.
+        /// </summary>
+        private void InsertEnrichmentIfEnabled(List<MessageDto> messages)
+        {
+            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true) return;
+
+            try
             {
                 var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
                 var facts = _knowledgeService.GetKnowledge("");
                 var factsJson = JsonSerializer.Serialize(facts);
                 var enrichment = _promptService.BuildEnrichmentMessage(factsJson, currentTime);
-                messages.Insert(1, enrichment);
-            }
 
-            return messages;
+                var insertAt = 0;
+                while (insertAt < messages.Count && messages[insertAt].Role == "system") insertAt++;
+                messages.Insert(insertAt, enrichment);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("OpenAiCompatibleService: enrichment block build failed: {Error}", ex.Message);
+            }
         }
 
-        private string? ProcessResponse(string? content)
+        /// <summary>
+        /// OUTPUT MODERATION (Layer 1). Returns true when <paramref name="text"/> is safe to
+        /// show. On a block, <paramref name="refusal"/> carries the value the caller must
+        /// return — the sentinel on the interactive chat path, null everywhere else.
+        /// </summary>
+        private bool PassesOutputModeration(string? text, bool returnRefusalSentinel, out string? refusal)
         {
+            refusal = null;
+
+            // Model OUTPUT that trips the filter is never the user's doing, so it does NOT escalate
+            // the Content Policy Notice — TransportModeration.CheckOutput never touches the counter.
+            // The hit is still recorded for the CCBill compliance log.
+            if (_moderation.CheckOutput(text) == null) return true;
+
+            refusal = returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+            return false;
+        }
+
+        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked)
+        {
+            outputBlocked = false;
+
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
             var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
             if (!effectsEnabled)
-                return content;
+            {
+                // Strip context-tag echoes BEFORE moderation, matching the cloud path's
+                // ordering (AiService.SanitizeResponse): an echoed awareness tag carries the
+                // user's raw tab title, which must not be able to trip the output guard and
+                // write a false model-output hit into the compliance log. The effects branch
+                // below gets this for free — Parse() sanitizes CleanText.
+                var visible = _parser.SanitizeVisibleText(content);
+                if (PassesOutputModeration(visible, returnRefusalSentinel, out var plainRefusal)) return visible;
+                outputBlocked = true;
+                return plainRefusal;
+            }
 
             var parsed = _parser.Parse(content);
             var commands = parsed.Commands;
+
+            // Moderate the user-visible text (JSON effects wrapper already stripped) BEFORE
+            // executing anything, as the local provider does: a blocked turn fires no effects
+            // and shows no text.
+            if (!PassesOutputModeration(parsed.CleanText, returnRefusalSentinel, out var blockedRefusal))
+            {
+                outputBlocked = true;
+                return blockedRefusal;
+            }
 
             if (commands.Count > 0)
             {
@@ -524,9 +666,12 @@ namespace ConditioningControlPanel.Services.AIService
             return "...";
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+#pragma warning disable CS0618 // legacy internals: the adapter layer is one level up, in AiServiceStrategy
             var result = await GetBambiReplyExAsync(userInput, isUserMessage).ConfigureAwait(false);
+#pragma warning restore CS0618
             if (result.Refusal != null)
             {
                 return result.Refusal.Source == ModerationSource.Input
@@ -536,6 +681,7 @@ namespace ConditioningControlPanel.Services.AIService
             return result.Text;
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
             _ = isUserMessage; // queueing semantics are local-only
@@ -544,78 +690,125 @@ namespace ConditioningControlPanel.Services.AIService
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             var prompt = _bambiSprite.GetSystemPrompt();
-            var reply = await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            // Interactive path: a moderation block must surface as a POLICY bubble, not a
+            // silent drop, so ask for the refusal sentinel here (and only here).
+            var reply = await SendChatAsync(prompt, userInput, returnRefusalSentinel: true, purpose: AiMeter.PurposeChat).ConfigureAwait(false);
+
+            var refusalSource = ModerationRefusal.GetSource(reply);
+            if (refusalSource.HasValue)
+            {
+                // Category was already logged inside SendChatAsync; the sentinel string can't
+                // carry it, so we surface only the source here.
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
             if (string.IsNullOrWhiteSpace(reply))
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
         }
 
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        /// <summary>
+        /// Train 1 transport seam. See <see cref="IAiService.SendAsync"/> for the contract.
+        ///
+        /// <para><paramref name="messages"/> is forwarded verbatim, in order — OpenAI-compatible
+        /// endpoints are natively multi-turn, so the whole window reaches the model. The effects
+        /// context block is spliced in after the system message exactly as on the legacy path.</para>
+        ///
+        /// <para><b>Deliberately not sent:</b> <c>max_tokens</c> and <c>temperature</c> from
+        /// <paramref name="options"/>. This is a bring-your-own endpoint whose sampler is configured by
+        /// the user (<c>OpenAiCompatibleUseCustomSamplerSettings</c>); the legacy path has never sent a
+        /// cap, and imposing the cloud provider's 100-token ceiling here would silently truncate
+        /// replies that work today.</para>
+        /// </summary>
+        public async Task<AiReplyResult> SendAsync(IReadOnlyList<ChatMessage> messages, AiCallOptions options,
+            CancellationToken cancellationToken = default)
         {
-            var prompt = _bambiSprite.GetSystemPrompt();
+            options ??= AiCallOptions.Chat;
+            var list = messages ?? (IReadOnlyList<ChatMessage>)Array.Empty<ChatMessage>();
 
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
+            if (App.Settings?.Current?.OfflineMode == true)
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
+            var dtos = new List<MessageDto>(list.Count + 1);
+            foreach (var m in list) dtos.Add(new MessageDto(m.Role, m.Content ?? string.Empty));
+            InsertEnrichmentIfEnabled(dtos);
 
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            var newestUser = NewestUserText(list);
+
+            var reply = await SendChatCoreAsync(dtos, newestUser,
+                returnRefusalSentinel: options.Interactive, purpose: options.MeterPurpose,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            var refusalSource = ModerationRefusal.GetSource(reply);
+            if (refusalSource.HasValue)
+            {
+                return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            if (string.IsNullOrWhiteSpace(reply))
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
         }
 
+        /// <summary>
+        /// The newest user-authored message in a transport window — the only text handed to
+        /// <c>CheckInput</c>. Earlier turns already passed the guard when they were first sent, and
+        /// re-checking them would double-write the compliance log.
+        /// </summary>
+        internal static string NewestUserText(IReadOnlyList<ChatMessage> messages)
+        {
+            if (messages == null) return string.Empty;
+            for (int i = messages.Count - 1; i >= 0; i--)
+            {
+                if (messages[i].Role == ChatMessage.RoleUser) return messages[i].Content ?? string.Empty;
+            }
+            return string.Empty;
+        }
+
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
+        {
+            var prompt = _bambiSprite.GetSystemPrompt();
+            var userInput = FrameFormatter.AwarenessFrame(detectedName, category, serviceName, pageTitle, duration);
+            return await SendChatAsync(prompt, userInput, purpose: AiMeter.PurposeAwareness).ConfigureAwait(false);
+        }
+
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
-
-            string durationText;
-            if (duration.TotalMinutes < 1)
-                durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60)
-                durationText = $"{(int)duration.TotalMinutes}m";
-            else
-                durationText = $"{(int)duration.TotalHours}h";
-
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
-
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            var userInput = FrameFormatter.StillOnFrame(displayName, category, duration);
+            return await SendChatAsync(prompt, userInput, purpose: AiMeter.PurposeStillOn).ConfigureAwait(false);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            var userInput = FrameFormatter.KeywordFrame(keyword, promptTemplate);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeKeyword).ConfigureAwait(false);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
-            {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
-            }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            var userInput = FrameFormatter.LockScreenFrame(sentance, mistakes, amount, promptTemplate);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeLockScreen).ConfigureAwait(false);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            var userInput = FrameFormatter.VideoDoneFrame(title, promptTemplate);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeVideoDone).ConfigureAwait(false);
         }
 
         public void Dispose()

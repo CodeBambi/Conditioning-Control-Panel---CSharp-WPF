@@ -55,9 +55,34 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Service that monitors the user's active window and categorizes their activity.
     /// Privacy-focused: only categorizes, never logs or stores window titles.
+    ///
+    /// <para><b>Awareness v2 (<c>UseAwarenessV2</c>, default on).</b> When v2 is live this service
+    /// keeps polling — its <see cref="CurrentServiceName"/> / <see cref="CurrentActivityDuration"/>
+    /// readouts are consumed by BarkService's bark context and by the Companion tab — but it stops
+    /// RAISING <see cref="ActivityChanged"/> and <see cref="StillOnActivity"/>. Those two events are
+    /// what the avatar's LLM reaction path and the awareness-gated bark rules hang off, so muting them
+    /// is what guarantees one reaction pipeline at a time: v2's <see cref="AwarenessObserver"/> owns
+    /// the moment, and its arbiter owns the mouth. Flip <c>UseAwarenessV2</c> off and every line below
+    /// behaves exactly as it shipped.</para>
     /// </summary>
     public class WindowAwarenessService : IDisposable
     {
+        /// <summary>
+        /// True while Awareness v2 owns the reaction pipeline, in which case this service's events are
+        /// suppressed. Read per raise rather than latched: the kill switch is a live setting and a user
+        /// flipping it mid-session must not need a relaunch to get the legacy path back.
+        ///
+        /// <para><b>This asks whether v2 has a MOUTH, not whether it is configured.</b>
+        /// <c>AwarenessV2Routing.IsActive</c> is <c>AwarenessObserver.IsEnabled</c> AND an attached
+        /// arbiter — the same predicate every legacy self-firing path already checks. Reading
+        /// <c>IsEnabled</c> alone here silently muted awareness completely whenever the observer failed
+        /// to construct: the settings still said v2 was on, so these events stayed suppressed, while
+        /// there was no arbiter on the other side to say anything. That is the one case the
+        /// construction's catch block exists to survive, and it claims in its log line to fall back to
+        /// legacy awareness — so it has to actually do it.</para>
+        /// </summary>
+        private static bool V2OwnsReactions => Services.Awareness.AwarenessV2Routing.IsActive;
+
         // P/Invoke declarations
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
@@ -355,7 +380,13 @@ namespace ConditioningControlPanel.Services
             _pollTimer.Start();
             _isRunning = true;
 
-            App.Logger?.Information("WindowAwareness: Started monitoring");
+            // v2 rides the same on/off switch. This is the one call site every caller already uses
+            // (the avatar tube on load, the Companion tab's awareness dial), so starting the observer
+            // here is what makes the toggle take effect without a relaunch — and the observer's own
+            // Start() is what loads and PRUNES the ledger, which must never sit behind a UI surface.
+            try { App.Awareness?.Start(); } catch (Exception ex) { App.Logger?.Warning(ex, "WindowAwareness: v2 observer failed to start"); }
+
+            App.Logger?.Information("WindowAwareness: Started monitoring (v2 owns reactions: {V2})", V2OwnsReactions);
         }
 
         /// <summary>
@@ -372,6 +403,8 @@ namespace ConditioningControlPanel.Services
             _isRunning = false;
             _currentCategory = ActivityCategory.Unknown;
             _currentDetectedName = "";
+
+            try { App.Awareness?.Stop(); } catch (Exception ex) { App.Logger?.Warning(ex, "WindowAwareness: v2 observer failed to stop"); }
 
             App.Logger?.Information("WindowAwareness: Stopped monitoring");
         }
@@ -484,8 +517,17 @@ namespace ConditioningControlPanel.Services
         {
             _stillOnTimer?.Stop();
 
-            // Fire the StillOnActivity event if we're still on the same activity
-            if (_currentCategory != ActivityCategory.Unknown && _currentCategory != ActivityCategory.Idle)
+            // Fire the StillOnActivity event if we're still on the same activity. Under v2 the whole
+            // {1, 5, 10}-minute nag is replaced by cumulative-dwell LongHaul milestones (doc 02 §4.4),
+            // so the event is suppressed alongside ActivityChanged.
+            //
+            // The pause is tested here as well as in OnPollTick because this timer reschedules itself
+            // and speaks WITHOUT going through the poll. While the pause was enforced by stopping the
+            // service that did not matter - Stop() disposed this timer too. Now that a pause only
+            // gates the readers, an unguarded milestone would let her nag straight through it, which
+            // is the exact promise the pause button makes.
+            if (!V2OwnsReactions && !Services.Awareness.AwarenessPause.IsPaused() &&
+                _currentCategory != ActivityCategory.Unknown && _currentCategory != ActivityCategory.Idle)
             {
                 if (IsCategoryEnabled(_currentCategory))
                 {
@@ -507,6 +549,27 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // "Not right now." Tested BEFORE the window title is read, so a pause observes
+                // nothing rather than observing and discarding.
+                //
+                // This guard is what lets the pause be a CHECK instead of a shutdown. The privacy
+                // panel used to enforce it by calling Stop(), which tore down this timer and left
+                // nothing to start it again when the hour lapsed, so she never came back.
+                // AwarenessPause expires on its own, so simply returning here means the hour ends and
+                // she resumes.
+                //
+                // It also makes AwarenessPause's own summary true. That summary says it is read "from
+                // the poll, from the panel and from the legacy service"; in fact
+                // AwarenessPrivacyRules.Evaluate was the only enforcement point and it is v2-only, so
+                // on the legacy pipeline a pause did nothing at all beyond stopping the timer.
+                if (Services.Awareness.AwarenessPause.IsPaused())
+                {
+                    // Keep the idle clock fresh while paused, or the first tick after the hour would
+                    // find IdleThresholdMinutes already banked and announce her as idle on return.
+                    _lastActivityChange = DateTime.Now;
+                    return;
+                }
+
                 var windowTitle = GetActiveWindowTitle();
 
                 // Debug: Log what we're seeing
@@ -568,8 +631,13 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
                 detectedName, newCategory, serviceName, isNewService);
 
-            ActivityChanged?.Invoke(this, new ActivityChangedEventArgs(
-                newCategory, previousCategory, detectedName, serviceName, pageTitle, isNewService, previousServiceName, appCluster, appId));
+            // v2 owns the moment: the state above stays current for the readouts that consume it, but
+            // the reaction/bark wiring hangs off this event and must not fire a second pipeline.
+            if (!V2OwnsReactions)
+            {
+                ActivityChanged?.Invoke(this, new ActivityChangedEventArgs(
+                    newCategory, previousCategory, detectedName, serviceName, pageTitle, isNewService, previousServiceName, appCluster, appId));
+            }
 
             // Restart the still-on timer for periodic comments
             RestartStillOnTimer();
@@ -588,8 +656,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Categorize a window based on its title and detect specific app/service.
         /// Returns: (Category, DetectedName for display, ServiceName, PageTitle)
+        ///
+        /// <para>Internal + static so Awareness v2's <c>AwarenessObserverPolicy</c> can reuse the one
+        /// copy of these ~230 dictionary entries instead of growing a second, drifting one. It reads
+        /// no instance state and never has; the visibility change is the whole edit.</para>
         /// </summary>
-        private (ActivityCategory Category, string DetectedName, string ServiceName, string PageTitle) CategorizeWindow(string title)
+        internal static (ActivityCategory Category, string DetectedName, string ServiceName, string PageTitle) CategorizeWindow(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
                 return (ActivityCategory.Unknown, "something", "", "");
@@ -671,7 +743,7 @@ namespace ConditioningControlPanel.Services
         /// Extract the page/tab name from a window title
         /// Browser titles are usually: "Page Title - Browser Name" or "Page Title — Browser Name"
         /// </summary>
-        private string ExtractBrowserTabName(string windowTitle)
+        private static string ExtractBrowserTabName(string windowTitle)
         {
             // Common browser suffixes to remove
             var browserSuffixes = new[] {
@@ -711,7 +783,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Extract a meaningful name from window title, with fallback to known app name
         /// </summary>
-        private string ExtractPageName(string windowTitle, string fallbackName)
+        private static string ExtractPageName(string windowTitle, string fallbackName)
         {
             var (displayName, _) = ExtractPageNameWithService(windowTitle, fallbackName);
             return displayName;
@@ -721,7 +793,7 @@ namespace ConditioningControlPanel.Services
         /// Extract both the display name and the raw page title from a window title.
         /// Returns: (DisplayName like "CodeBambi on Throne", PageTitle like "CodeBambi")
         /// </summary>
-        private (string DisplayName, string PageTitle) ExtractPageNameWithService(string windowTitle, string serviceName)
+        private static (string DisplayName, string PageTitle) ExtractPageNameWithService(string windowTitle, string serviceName)
         {
             // For apps like VS Code: "filename.cs - ProjectName - Visual Studio Code"
             // For browsers: "Page Title - Site Name - Browser"

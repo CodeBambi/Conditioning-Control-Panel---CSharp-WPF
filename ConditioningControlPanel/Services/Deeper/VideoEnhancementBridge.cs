@@ -70,14 +70,16 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
                 if (!resolved.Found) return;
 
-                // Acceptance #6: when LibVLC is unavailable the MediaElement
-                // fallback window never sets PrimaryMediaPlayer, so the engine
-                // has no playback clock to attach to. Log loudly rather than
-                // failing silent (and don't bind a dead source).
-                if (_video.PrimaryMediaPlayer == null)
+                // Acceptance #6: the engine needs a playback clock. LibVLC exposes one via
+                // PrimaryMediaPlayer; a browser (WebView2) session feeds the SAME shared surface from
+                // the page's `time` messages, so it must bind too — requiring a native player here is
+                // what kept every mp4/webm enhancement silently dead while the browser engine was the
+                // default (#874). Only the MediaElement fallback window (LibVLC unavailable) has
+                // neither clock: log loudly rather than failing silent (and don't bind a dead source).
+                if (_video.PrimaryMediaPlayer == null && !_video.IsBrowserSessionActive)
                 {
                     App.Logger?.Warning(
-                        "VideoEnhancementBridge: matched enhancement ({Source}) for {File} but no primary LibVLC player is active (MediaElement fallback?) — enhancement engine cannot attach.",
+                        "VideoEnhancementBridge: matched enhancement ({Source}) for {File} but no playback clock is active (MediaElement fallback?) — enhancement engine cannot attach.",
                         resolved.Source, Path.GetFileName(path));
                     return;
                 }

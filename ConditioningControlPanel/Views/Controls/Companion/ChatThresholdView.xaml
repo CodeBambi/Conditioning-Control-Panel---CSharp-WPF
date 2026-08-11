@@ -1,0 +1,301 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.ChatThresholdView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignWidth="660" d:DesignHeight="420"
+             d:DataContext="{d:DesignInstance Type=local:MockChatThresholdVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         Z2 — TALK TO HER (the threshold surface).
+         Not a chat app on the tab: the last few turns, one input row, and
+         a hand-off to the tube chat.
+
+         States (mutually exclusive, all four ship copy):
+           Live      thread + enabled input
+           Dormant   pre-T1 honesty card ("she forgets every conversation…"),
+                     rendered as designed content — dashed violet outline plus
+                     a ONE-SHOT shimmer sweep on load, never a gray box
+           Disabled  provider Off — dimmed input + Engine Room jump link
+           Locked    free tier — the flagship teaser: a BLURRED STATIC mock
+                     thread under the Velvet-Vault veil. The blur runs on
+                     a handful of fake bubbles only, never over live or
+                     scrolling content, and the veil is IsHitTestVisible
+                     =False so the card never blocks tab navigation. The
+                     CTA chip is the one hit-testable thing in it, and the
+                     input row stands down entirely — there is nothing to
+                     type into behind a lock.
+
+         The pink AI badge rides IsAiGenerated and nothing else — never a
+         bark, never a canned line, never a BarkEcho. The echo bubble is
+         styled as a dashed italic whisper precisely so a spoken line can
+         never be mistaken for something she typed at you.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- The send box used to live here as a 33-line copy of CmpChatInputStyle whose only
+                 change was a numeric corner radius, because the theme's pill token (999) drew the
+                 input as a lens. The diagnosis was right and the theme's comment claiming WPF
+                 clamps was wrong — see CompanionCapsule, which now fixes it at the source for
+                 every chip on the page. The override is gone; the theme style is used directly. -->
+
+            <!-- One bubble. Her / you / echo are picked by DataTriggers so a single template
+                 serves the live thread and the staged teaser alike.
+
+                 The wrapper Grid is what carries the alignment and the width cap, NOT the
+                 bubble Border: the badge is positioned against the wrapper, so anchoring the
+                 wrapper to the bubble's own width is what keeps "✨ AI" pinned to the corner of
+                 her line instead of floating off at the card's edge. -->
+            <DataTemplate x:Key="CmpSurfChatBubbleTemplate">
+                <Grid x:Name="Row" HorizontalAlignment="Left" MaxWidth="420"
+                      ToolTip="{Binding Timestamp}">
+                    <Border x:Name="Bubble" Style="{StaticResource CmpBubbleHerStyle}"
+                            HorizontalAlignment="Stretch">
+                        <StackPanel>
+                            <TextBlock x:Name="BubbleText" Text="{Binding Text}"
+                                       Style="{StaticResource CmpBubbleTextStyle}"/>
+
+                            <!-- She names a title; the app owns the link. Collapsed unless the
+                                 title she named resolves to something we can actually open, so an
+                                 ordinary line keeps exactly the layout it had. -->
+                            <Button x:Name="WatchChip" Style="{StaticResource CmpWatchChipStyle}"
+                                    Command="{Binding OpenLinkCommand}"
+                                    Content="{Binding LinkTitle}"
+                                    Visibility="{Binding LinkTitle, Converter={StaticResource CmpHasContentToVis}}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- her signature rail. The CSS is a faint outline PLUS a solid 3px pink
+                         left border; one BorderBrush cannot be both, so the rail is its own
+                         Rectangle (exactly as the fact wall paints its kind rail). -->
+                    <Rectangle x:Name="HerRail" Style="{StaticResource CmpBubbleHerRailStyle}"/>
+
+                    <!-- the echo's dashed outline: Border cannot dash. -->
+                    <Rectangle x:Name="EchoOutline" Style="{StaticResource CmpBubbleEchoOutlineStyle}"
+                               Visibility="Collapsed"/>
+
+                    <!-- the AI badge floats on the bubble's top-right corner -->
+                    <Border x:Name="Badge" Style="{StaticResource CmpAiBadgeStyle}" Visibility="Collapsed">
+                        <TextBlock Text="{loc:Str companion_chat_ai_badge}" Style="{StaticResource CmpAiBadgeTextStyle}"/>
+                    </Border>
+                </Grid>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Kind}" Value="You">
+                        <Setter TargetName="Row" Property="HorizontalAlignment" Value="Right"/>
+                        <Setter TargetName="Bubble" Property="Style" Value="{StaticResource CmpBubbleYouStyle}"/>
+                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch"/>
+                        <Setter TargetName="BubbleText" Property="Foreground" Value="#FFDCD4F2"/>
+                        <Setter TargetName="HerRail" Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Kind}" Value="Echo">
+                        <Setter TargetName="Row" Property="MaxWidth" Value="440"/>
+                        <Setter TargetName="Bubble" Property="Style" Value="{StaticResource CmpBubbleEchoStyle}"/>
+                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch"/>
+                        <Setter TargetName="BubbleText" Property="Style"
+                                Value="{StaticResource CmpBubbleEchoTextStyle}"/>
+                        <Setter TargetName="HerRail" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="EchoOutline" Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsAiGenerated}" Value="True">
+                        <Setter TargetName="Badge" Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource CmpCardStyle}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ========== header ========== -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
+                           Source="{Binding Source='💬', Converter={StaticResource CmpEmojiToImage}}"/>
+                    <TextBlock Text="{loc:Str companion_chat_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding LastHeardCopy}"
+                           Style="{StaticResource CmpSectionHintStyle}"/>
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== the thread (live / dormant / disabled) ========== -->
+            <Grid Grid.Row="1" Margin="0,14,0,0">
+                <ItemsControl x:Name="ThreadList" ItemsSource="{Binding Turns}"
+                              ItemTemplate="{StaticResource CmpSurfChatBubbleTemplate}"
+                              Style="{StaticResource CmpVirtualizedItemsControlStyle}"
+                              MaxHeight="260" Padding="0,9,0,0"
+                              Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
+                                                   ConverterParameter=Locked}"/>
+
+                <!-- ===== the locked teaser ===== -->
+                <Grid Visibility="{Binding State, Converter={StaticResource CmpEnumToVis},
+                                           ConverterParameter=Locked}" MinHeight="150">
+                    <Border CornerRadius="{StaticResource CmpRadiusInner}" ClipToBounds="True"
+                            Background="{StaticResource CmpCardBrush}" Padding="10">
+                        <!-- static mock bubbles only. Small, non-scrolling, cheap to blur. -->
+                        <ItemsControl ItemsSource="{Binding TeaserTurns}"
+                                      ItemTemplate="{StaticResource CmpSurfChatBubbleTemplate}"
+                                      IsHitTestVisible="False">
+                            <ItemsControl.Effect>
+                                <BlurEffect Radius="6"/>
+                            </ItemsControl.Effect>
+                        </ItemsControl>
+                    </Border>
+
+                    <!-- the veil: decoration, so it takes no clicks -->
+                    <Border Style="{StaticResource CmpVeilStyle}"/>
+
+                    <!-- …and the one thing in it that does -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Image Style="{StaticResource CmpLockGlyphStyle}" HorizontalAlignment="Center"
+                               Source="{Binding Source='🔒', Converter={StaticResource CmpEmojiToImage}}"/>
+                        <TextBlock Text="{Binding LockCopy}" Style="{StaticResource CmpVeilCopyStyle}"/>
+                        <Button Content="{Binding LockCtaLabel}" Style="{StaticResource CmpCtaPillStyle}"
+                                HorizontalAlignment="Center" Command="{Binding UnlockCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- ========== the non-live states' copy ==========
+                 Its own row rather than an overlay, so a dormant thread and its promise cannot
+                 print on top of each other. -->
+            <Grid Grid.Row="2">
+                <!-- pre-Train 1: designed content — dashed outline + a one-shot shimmer -->
+                <Grid Visibility="{Binding State, Converter={StaticResource CmpEnumToVis},
+                                           ConverterParameter=Dormant}" Margin="0,12,0,0">
+                    <Border x:Name="DormantHost" Style="{StaticResource CmpDormantBlockStyle}">
+                        <Grid>
+                            <TextBlock Text="{Binding StateCopy}" Style="{StaticResource CmpDormantCopyStyle}"/>
+                            <!-- the sweep band; its X is animated once by the code-behind -->
+                            <Border x:Name="DormantShimmer" Width="46" HorizontalAlignment="Left"
+                                    Background="{StaticResource CmpShimmerSoftBrush}"
+                                    IsHitTestVisible="False" Opacity="0">
+                                <Border.RenderTransform>
+                                    <TransformGroup>
+                                        <SkewTransform AngleX="-18"/>
+                                        <TranslateTransform x:Name="DormantShimmerShift" X="-70"/>
+                                    </TransformGroup>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <Rectangle Style="{StaticResource CmpDashedOutlineStyle}"/>
+                </Grid>
+
+                <!-- provider Off: one honest line and the jump link into the Engine Room -->
+                <StackPanel Margin="0,12,0,0"
+                            Visibility="{Binding State, Converter={StaticResource CmpEnumToVis},
+                                                 ConverterParameter=Disabled}">
+                    <TextBlock Text="{Binding StateCopy}" Style="{StaticResource CmpFlavorTextStyle}"/>
+                    <Button HorizontalAlignment="Left" Margin="0,4,0,0"
+                            Content="{loc:Str companion_chat_open_engine}"
+                            Style="{StaticResource CmpLinkButtonStyle}"
+                            Command="{Binding OpenEngineRoomCommand}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ========== input row ==========
+                 Stands down entirely behind the lock: a disabled box under a veil reads as a
+                 broken card, and there is nothing to say into a thread you cannot have yet.
+
+                 Dormant stands it down for the same reason, not a related one: with the brain off
+                 (UseCompanionBrain=false, or a brain that failed to construct) the app is on the
+                 legacy stateless path and this card has no thread to add a line to. A send box that
+                 accepted a line and showed nothing back would be worse than no send box. -->
+            <Grid Grid.Row="3" Margin="0,12,0,0"
+                  Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
+                                       ConverterParameter=Locked|Dormant}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Margin="0,0,9,0">
+                    <TextBox x:Name="DraftBox" Style="{StaticResource CmpChatInputStyle}" MinHeight="41"
+                             Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                             IsEnabled="{Binding CanSend}"
+                             KeyDown="DraftBox_KeyDown"/>
+                    <!-- placeholder: shown only while the box is empty -->
+                    <TextBlock Text="{Binding InputPlaceholder}" IsHitTestVisible="False"
+                               Foreground="{StaticResource CmpFaintBrush}" FontSize="13"
+                               Margin="19,0,0,0" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Opacity="{Binding CanSend, Converter={StaticResource CmpBoolToOpacity},
+                                                 ConverterParameter=1.0|0.45}"
+                               Visibility="{Binding Draft, Converter={StaticResource CmpEmptyToVis}}"/>
+                </Grid>
+
+                <Button Grid.Column="1" Style="{StaticResource CmpSendButtonStyle}"
+                        Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}"
+                        ToolTip="{loc:Str companion_chat_send_tip}">
+                    <TextBlock Text="♥" FontSize="16" Foreground="White"/>
+                </Button>
+            </Grid>
+
+            <!-- ========== footer ========== -->
+            <Grid Grid.Row="4" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- both hand-offs lead somewhere a locked user cannot go, so behind the veil the
+                     CTA chip is the only thing left to press -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
+                                                 ConverterParameter=Locked}">
+                    <Button Content="{loc:Str companion_chat_open_full}"
+                            Style="{StaticResource CmpChipButtonStyle}"
+                            Command="{Binding OpenFullChatCommand}"/>
+                    <!-- History: the read-only transcript viewer over the persisted session.json -->
+                    <Button Content="{loc:Str companion_chat_history}"
+                            Style="{StaticResource CmpChipButtonStyle}"
+                            Command="{Binding HistoryCommand}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <!-- "she's thinking" — a triggered pulse, never a Forever loop on the page -->
+                    <StackPanel x:Name="ThinkingDots" Orientation="Horizontal" Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                ToolTip="{loc:Str companion_chat_thinking}"
+                                Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVis}}">
+                        <Ellipse x:Name="Dot1" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                        <Ellipse x:Name="Dot2" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                        <Ellipse x:Name="Dot3" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str companion_chat_thinking}" FontSize="10.5" FontStyle="Italic"
+                               Foreground="{StaticResource CmpMutedBrush}" VerticalAlignment="Center"
+                               Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVis}}"/>
+                    <TextBlock Text="{Binding FooterCopy}" FontSize="10.5" FontStyle="Italic"
+                               Foreground="{StaticResource CmpFaintBrush}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVisInverse}}"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

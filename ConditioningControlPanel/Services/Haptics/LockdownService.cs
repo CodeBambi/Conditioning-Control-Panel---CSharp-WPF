@@ -77,6 +77,10 @@ public class LockdownService : IDisposable
         // Force lockdown settings — do NOT call Save() so these are never persisted
         settings.StrictLockEnabled = true;
         settings.PanicKeyEnabled = false;
+        // Move the keyboard hook and the Settings ▸ Devices checkbox with the flag. Without this
+        // the hook stays armed (the panic key still works during lockdown) and the stale checkbox
+        // is what SaveSettings used to read back on START, undoing the lockdown.
+        SyncPanicKeyUi();
 
         _duration = duration;
         _activatedAt = DateTime.Now;
@@ -112,6 +116,7 @@ public class LockdownService : IDisposable
             settings.StrictLockEnabled = _preStrictLock;
             settings.PanicKeyEnabled = _prePanicKeyEnabled;
             try { App.Settings?.SaveImmediate(); } catch { /* best-effort */ }
+            SyncPanicKeyUi();
         }
 
         DeleteRecoveryFile();
@@ -144,6 +149,7 @@ public class LockdownService : IDisposable
                 App.Settings.Current.StrictLockEnabled = state.StrictLockEnabled;
                 App.Settings.Current.PanicKeyEnabled = state.PanicKeyEnabled;
                 App.Settings.SaveImmediate();
+                SyncPanicKeyUi();
                 App.Logger?.Information(
                     "Lockdown recovery: restored PanicKeyEnabled={Panic}, StrictLockEnabled={Strict} from prior interrupted lockdown",
                     state.PanicKeyEnabled, state.StrictLockEnabled);
@@ -157,6 +163,20 @@ public class LockdownService : IDisposable
         {
             DeleteRecoveryFile();
         }
+    }
+
+    /// <summary>
+    /// Pushes a PanicKeyEnabled change made from here into the UI layer: the global keyboard hook
+    /// and the Settings ▸ Devices checkbox. MainWindow.SyncNoPanicState touches WPF controls, so it
+    /// must run on the UI thread; it is a no-op before MainWindow exists (startup recovery).
+    /// </summary>
+    private static void SyncPanicKeyUi()
+    {
+        Helpers.DispatcherHelper.RunOnUI(() =>
+        {
+            try { App.MainWindowRef?.SyncNoPanicState(); }
+            catch (Exception ex) { App.Logger?.Warning("Lockdown panic-key UI sync failed: {Error}", ex.Message); }
+        });
     }
 
     private static void WriteRecoveryFile(bool strictLock, bool panicKey)

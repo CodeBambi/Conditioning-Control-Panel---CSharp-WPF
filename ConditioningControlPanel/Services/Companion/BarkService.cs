@@ -83,6 +83,29 @@ namespace ConditioningControlPanel.Services
         /// <summary>After rendering a bark, mute its line this long so it can't re-trigger awareness/OCR.</summary>
         private const int SelfEchoMuteMs = 8000;
 
+        /// <summary>
+        /// Raised immediately AFTER a bark line has been handed to the avatar (Giggle /
+        /// GigglePriority) with the final, substituted text. Fires for every bark that actually
+        /// spoke — including the silent mute-egg path — and never for one that a gate suppressed.
+        ///
+        /// <para>Exists so <c>CompanionBrain</c> can record a <c>BarkEcho</c> turn: the LLM needs to
+        /// know what her recorded voice just said, or it will cheerfully repeat it. Combined with the
+        /// existing self-echo mute (which stops OCR/keyword triggers hearing her own bubble) this
+        /// closes both directions between the two mouths.</para>
+        ///
+        /// <para>Purely observational — subscribers must not block or throw; the raiser swallows
+        /// exceptions so a bad subscriber can never mute a bark.</para>
+        /// </summary>
+        public event Action<BarkRule, string>? BarkSpoken;
+
+        private void RaiseBarkSpoken(BarkRule rule, string line)
+        {
+            var handler = BarkSpoken;
+            if (handler == null) return;
+            try { handler(rule, line); }
+            catch (Exception ex) { App.Logger?.Debug("[BARK] BarkSpoken subscriber error: {Error}", ex.Message); }
+        }
+
         /// <summary>How long a safety bark holds the floor (no non-safety bark may fire). Approximate — we have no speech-duration callback.</summary>
         private const int SafetyHoldMs = 6000;
 
@@ -197,6 +220,69 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void NotifyStreakMilestone(int days)
             => Raise("StreakMilestone", c => c.Set("streak_days", (double)days), guaranteed: true);
+
+        /// <summary>
+        /// Awareness v2's bark entry point: the arbiter has decided this moment is worth the free,
+        /// instant, voiced tier and asks for a line.
+        ///
+        /// <para>This raises exactly the same <c>ActivityChanged</c>/<c>StillOnActivity</c> triggers the
+        /// direct subscriptions used to, with the same context keys, so every authored rule in
+        /// <c>bark_rules.json</c> keeps working untouched — the only change is WHO decides. The bark
+        /// system's own gates (per-rule cooldown, the 60s global min-gap, chat suppression, safety
+        /// hold) still apply on top of the arbiter's, because they are the outer floor for non-safety
+        /// lines and v2 tightens pacing, never loosens it.</para>
+        ///
+        /// <para>Nothing about the frame reaches disk or the network here: bark context values are
+        /// substituted into a local, authored line and spoken.</para>
+        /// </summary>
+        /// <returns>True only when a line actually spoke, so the arbiter records one delivery or none.</returns>
+        public bool RaiseAwarenessBark(Awareness.ContextFrame frame)
+        {
+            if (frame == null) return false;
+
+            // The arbiter records THIS delivery itself (cooldown ledger first, pacing state second),
+            // so CommitFire must not also report it as an external bark — one line, one charge.
+            _inAwarenessBark = true;
+            try
+            {
+                if (frame.Transition == Awareness.TransitionKind.Milestone)
+                {
+                    return Raise("StillOnActivity", c => c
+                        .Set("activity", frame.ServiceName ?? "")
+                        .Set("still_minutes", Math.Floor(Math.Max(0, frame.DwellSeconds) / 60.0))
+                        .Set("app_cluster", frame.AppCluster ?? "")
+                        .Set("app", frame.AppId ?? ""));
+                }
+
+                return Raise("ActivityChanged", c => c
+                    .Set("activity", frame.ServiceName ?? "")
+                    .Set("category", frame.Category.ToString())
+                    .Set("app_cluster", frame.AppCluster ?? "")
+                    .Set("app", frame.AppId ?? ""));
+            }
+            finally { _inAwarenessBark = false; }
+        }
+
+        /// <summary>
+        /// Re-entrancy guard for the one place a bark is fired ON BEHALF of the arbiter. See
+        /// <see cref="CommitFire"/>: every other bark reports itself to the arbiter's shared ledger,
+        /// this one is already accounted for there.
+        /// </summary>
+        private bool _inAwarenessBark;
+
+        /// <summary>
+        /// Tells this service that the companion just spoke a line it did not fire — today, an
+        /// awareness quip written by the model and delivered straight to the speech bubble.
+        ///
+        /// <para>The 60s <see cref="GlobalMinGapMs"/> floor is only a floor if it moves for every
+        /// ambient line, not just the ones this class produced: without this the next bark trigger
+        /// after the awareness bubble closes fires against a stale gap, and a preempting bark can
+        /// speak over the bubble outright.</para>
+        /// </summary>
+        public void NotifyExternalLineSpoken()
+        {
+            lock (_gate) _globalLastFireUtc = DateTime.UtcNow;
+        }
 
         /// <summary>A dashboard feature popup was opened (feature = control type name w/o "FeatureControl", e.g. "Flash").</summary>
         public void NotifyFeatureOpened(string? feature)
@@ -535,18 +621,32 @@ namespace ConditioningControlPanel.Services
                         .Set("kw_effect", kt?.VisualEffect.ToString() ?? "")));
             if (App.WindowAwareness != null)
             {
+                // Awareness v2: when the arbiter is driving, these two must NOT fire. They are one of
+                // the two legacy mouths (doc 02 §1.5) — the other is AvatarTubeWindow's reaction
+                // handlers — and both firing on one window change is the double-reaction bug. The
+                // arbiter re-raises the same triggers through RaiseAwarenessBark once it has decided
+                // the moment is worth a bark, so nothing is lost, it is just gated. With v2 off (or
+                // unwired) this is byte-for-byte today's behaviour.
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.ActivityChanged += h, h => App.WindowAwareness.ActivityChanged -= h,
-                    (_, a) => Raise("ActivityChanged", c => c
-                        .Set("activity", a?.ServiceName ?? "")
-                        .Set("category", a?.Category.ToString() ?? "")
-                        // Fine-grained awareness (item G) — populated only when AppClusterMap matched the
-                        // title; empty otherwise so app_cluster_eq/app_eq rules simply don't match.
-                        .Set("app_cluster", a?.AppCluster ?? "")
-                        .Set("app", a?.AppId ?? "")));
+                    (_, a) =>
+                    {
+                        if (Awareness.AwarenessV2Routing.IsActive) return;
+                        Raise("ActivityChanged", c => c
+                            .Set("activity", a?.ServiceName ?? "")
+                            .Set("category", a?.Category.ToString() ?? "")
+                            // Fine-grained awareness (item G) — populated only when AppClusterMap matched the
+                            // title; empty otherwise so app_cluster_eq/app_eq rules simply don't match.
+                            .Set("app_cluster", a?.AppCluster ?? "")
+                            .Set("app", a?.AppId ?? ""));
+                    });
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.StillOnActivity += h, h => App.WindowAwareness.StillOnActivity -= h,
-                    (_, a) => Raise("StillOnActivity", c => c
-                        .Set("activity", a?.ServiceName ?? "")
-                        .Set("still_minutes", App.WindowAwareness?.CurrentActivityDuration.TotalMinutes ?? 0)));
+                    (_, a) =>
+                    {
+                        if (Awareness.AwarenessV2Routing.IsActive) return;
+                        Raise("StillOnActivity", c => c
+                            .Set("activity", a?.ServiceName ?? "")
+                            .Set("still_minutes", App.WindowAwareness?.CurrentActivityDuration.TotalMinutes ?? 0));
+                    });
             }
 
             // ---- Progression / companion / skills ----
@@ -601,7 +701,32 @@ namespace ConditioningControlPanel.Services
             }
             // QuizCompleted is a STATIC event — must unsubscribe in Stop() to avoid a dangling handler.
             {
-                EventHandler<QuizCompletedEventArgs> h = (_, e) => Raise("QuizCompleted", c => c.Set("passed", e.Passed).Set("perfect", e.Perfect));
+                EventHandler<QuizCompletedEventArgs> h = (_, e) =>
+                {
+                    // TWO gates, both deliberate. The `quiz_done` pool is written for a run that
+                    // went WELL ("passed the quiz", "good girl, all correct", "aced it") and every
+                    // built-in mod declares it with cooldown 0, repeatable, and NO conditions — so
+                    // the only place the content can be matched to the outcome is here, in C#. Mod
+                    // manifests are content and third-party mods can't be patched, so the gate has
+                    // to live in the subscription layer.
+                    //
+                    // 1. CONTENT — since #870 the graded intake is a live raiser, and it reports
+                    //    passed:true for EVERY finished run (an intake has no fail state). Without
+                    //    a gate a 30%-compliance run gets told it aced it. Speak only for a run
+                    //    that genuinely earned the line: `perfect` (both surfaces set it at the
+                    //    same 90% top-marks bar) or a real pass — from the classic quiz `passed`
+                    //    IS the honest >= 60% bar it has always used.
+                    // 2. TIMING — while the intake host window is up the run is mid-outro, its own
+                    //    voiced ceremony. A bark there talks over it. Stay quiet and let the
+                    //    ceremony land; the run is still credited (the bridge's own subscription
+                    //    is separate and unaffected).
+                    //
+                    // Net effect: quiz_done is classic-quiz-only, which is what it was before #870
+                    // wired the intake into the same event.
+                    if (!e.Perfect && !e.Passed) return;
+                    if (Quiz.IntakeHostService.IsActive) return;
+                    Raise("QuizCompleted", c => c.Set("passed", e.Passed).Set("perfect", e.Perfect));
+                };
                 QuizService.QuizCompleted += h;
                 _unsubscribe.Add(() => QuizService.QuizCompleted -= h);
             }
@@ -1449,6 +1574,23 @@ namespace ConditioningControlPanel.Services
             _lastFiredUtc[rule.Id] = now;
             _globalLastFireUtc = now;
 
+            // One mouth, in BOTH directions (doc 02 §5.1). The arbiter's cooldown ledger is the shared
+            // "when did anything last speak", so every non-safety bark this service fires on its own —
+            // achievement, level-up, video-done, flash, idle chatter — has to land in it. Without this
+            // an achievement bark at T is followed by an awareness quip at T+5s, because the arbiter's
+            // last-spoke-at was still null. Safety barks are exempt for the same reason they bypass
+            // every other floor. The awareness bark path is excluded because the arbiter records that
+            // one itself, and recording it twice would double-charge the hourly budget.
+            // IsActive, not "an arbiter exists": with the v2 kill switch down the flag's contract is
+            // that no v2 state has any effect, and writing into a ledger nothing reads is how that
+            // quietly stops being true (the keyword path had the same bug).
+            if (!_inAwarenessBark && !DryRun && rule.Class != BarkClass.Safety &&
+                Awareness.AwarenessV2Routing.IsActive)
+            {
+                try { Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Bark); }
+                catch (Exception ex) { App.Logger?.Debug("BarkService: arbiter report failed: {Error}", ex.Message); }
+            }
+
             // Feed the global recency window so the NEXT pick (any rule) avoids this exact line.
             if (variantIndex >= 0 && variantIndex < pool.Count)
                 RememberSpoken(pool[variantIndex].Audio);
@@ -1597,6 +1739,7 @@ namespace ConditioningControlPanel.Services
             {
                 avatar.Giggle(line, mood: rule.Mood);
                 App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+                RaiseBarkSpoken(rule, line);
                 return;
             }
 
@@ -1626,6 +1769,9 @@ namespace ConditioningControlPanel.Services
 
             // Self-echo guard so the bubble text can't trip awareness/OCR off its own output.
             App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+
+            // Post-fire hook: the LLM half of the character learns what the voiced half just said.
+            RaiseBarkSpoken(rule, line);
         }
 
         /// <summary>Substitute {0} (focused app) and {key} tokens (from the per-fire context).</summary>
