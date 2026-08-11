@@ -1036,23 +1036,58 @@ namespace ConditioningControlPanel
 
             try
             {
-                var name = App.DailyFree?.TodayKey switch
-                {
-                    "takeover" => Loc.Get("tab_takeover"),
-                    "awareness" => Loc.Get("tab_awareness"),
-                    "haptics" => Loc.Get("tab_haptics"),
-                    "voice" => Loc.Get("tab_shelistening"),
-                    "fyp" => Loc.Get("tab_fyp"),
-                    "remote" => Loc.Get("tab_remote_control"),
-                    _ => null,
-                };
+                var key = App.DailyFree?.TodayKey;
+                var name = MysteryFeatureName(key);
                 dash.CardMystery.Title = name ?? Loc.Get("mosaic_daily_gift");
                 dash.CardMystery.TierBadge = App.Patreon?.HasPremiumAccess == true
                     ? null
                     : Loc.Get("mosaic_free_today");
+
+                // The flip plate's reveal face mirrors the box - same feature, said bigger.
+                // Painted on every repaint (not just at ceremony start) so a mid-day server
+                // override and a mod switch both land on it, exactly like the box's own title.
+                if (dash.MysteryRevealName != null)
+                    dash.MysteryRevealName.Text = name ?? Loc.Get("mosaic_daily_gift");
+                if (dash.MysteryRevealArtBrush != null && !dash.MysteryRevealArtBrush.IsFrozen)
+                {
+                    var art = LoadModImageDecoded(MysteryFeatureArtPath(key), 512)
+                              ?? ModTileVariant("mysterybox");
+                    if (art != null) dash.MysteryRevealArtBrush.ImageSource = art;
+                }
+
+                // The daily flip-reveal rides the same repaint triggers this method already has
+                // (Home shown, patron status, override landing). Idempotent - see DashboardFx.
+                MaybeRunMysteryReveal();
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshMysteryTile: {E}", ex.Message); }
         }
+
+        /// <summary>Display name for a DailyFreeService key; null when the key is unknown.</summary>
+        private static string? MysteryFeatureName(string? key) => key switch
+        {
+            "takeover" => Loc.Get("tab_takeover"),
+            "awareness" => Loc.Get("tab_awareness"),
+            "haptics" => Loc.Get("tab_haptics"),
+            "voice" => Loc.Get("tab_shelistening"),
+            "fyp" => Loc.Get("tab_fyp"),
+            "remote" => Loc.Get("tab_remote_control"),
+            _ => null,
+        };
+
+        /// <summary>
+        /// Hero art for the reveal face, per key. Haptics/voice stay listed for server-override
+        /// days even though the wheel no longer lands on them; voice has no hero of its own, so
+        /// it (and any unknown key) falls back to the box art - a gift card is still a card.
+        /// </summary>
+        private static string MysteryFeatureArtPath(string? key) => key switch
+        {
+            "takeover" => "features/takeover.png",
+            "awareness" => "features/awareness.png",
+            "haptics" => "features/vibe.png",
+            "fyp" => "features/fyp.png",
+            "remote" => "features/remote_control.png",
+            _ => "features/mysterybox.png",
+        };
 
         // =====================================================================================
         //  WALL QUICK-TOGGLES - right-click flips a feature (resurrected from the 4x4 era)

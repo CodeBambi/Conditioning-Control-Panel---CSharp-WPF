@@ -1573,6 +1573,19 @@ namespace ConditioningControlPanel.Models
             set { _firstRunAssetsPromptShown = value; OnPropertyChanged(); }
         }
 
+        private string _dailyGiftLastRevealDate = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") of the last day the Dashboard's ? box played its
+        /// flip-reveal ceremony. One turn per day: latched when the reveal face lands (the
+        /// "they saw it" moment), so a ceremony cancelled mid-spin is owed again on the next
+        /// visit rather than lost. See MainWindow.DashboardFx.cs, MaybeRunMysteryReveal.
+        /// </summary>
+        public string DailyGiftLastRevealDate
+        {
+            get => _dailyGiftLastRevealDate;
+            set { _dailyGiftLastRevealDate = value ?? ""; OnPropertyChanged(); }
+        }
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();

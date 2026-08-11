@@ -219,6 +219,7 @@ namespace ConditioningControlPanel
                 foreach (var card in DashboardFeatureCards) card.RefreshFx();
                 foreach (var combo in DashboardSplitCards) combo.RefreshFx();
                 ApplyVaultCtaBreath();
+                ApplyMysteryFx();
 
                 ApplyLogoDrift();
                 ApplyLogoSheenTimer();
@@ -266,6 +267,319 @@ namespace ConditioningControlPanel
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, breath);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyVaultCtaBreath: {E}", ex.Message); }
+        }
+
+        // ============================== 2c. the ? box ==============================
+        //
+        // Two owner specs (2026-08-11 #3) live here:
+        //
+        //  * THE POP - the gold badge + the gold ring around the tile breathe together for the
+        //    first few seconds of the day's first look at the Dashboard, then rest at their
+        //    static XAML values. Finite by construction (RepeatBehavior counts, FillBehavior
+        //    .Stop), so there is nothing to park later - reduced-motion/perf users simply keep
+        //    the static gold, which still pops against a wall that only glows in Fx colours.
+        //
+        //  * THE REVEAL - once a day, the first time the Dashboard is seen, the tile turns
+        //    (the intake plate's ScaleX fake-spin, same half-turn tempo) to a full-art card of
+        //    today's feature, holds, and turns back. The date latch (AppSettings
+        //    .DailyGiftLastRevealDate) is written when the reveal face LANDS - the "they saw
+        //    it" moment - so a ceremony cancelled mid-spin is owed again, not lost. Reduced
+        //    motion latches without turning: the box's title already names the feature.
+        //
+        // Same house rules as the intake plate: BeginAnimation only (Storyboards no-op across
+        // the SettingsTabView namescope), a monotonic generation token orphans every stale
+        // Completed callback, and the hold is a 1->1 animation on the same property the spin
+        // uses so ONE teardown path covers both.
+
+        private const double MysteryGlowRestOpacity = 0.55;   // must match MysteryGlow's XAML Opacity
+        private const double MysteryPopGlowMax = 0.95;
+        private const double MysteryPopBadgeTo = 1.12;
+        private static readonly TimeSpan MysteryPopHalfCycle = TimeSpan.FromMilliseconds(900);
+        private const int MysteryPopCycles = 4;               // 4 in-and-outs ~= 7s of "look here"
+
+        private const int MysteryOpeningDwellMs = 1200;
+        private const int MysteryRevealHoldMs = 6000;
+        /// <summary>Same widening tempo as the intake plate; the COUNT MUST STAY ODD so each
+        /// spin lands on the opposite face from the one it started on.</summary>
+        private static readonly int[] MysteryHalfTurnMs = { 105, 115, 130, 150, 560 };
+        private const double MysterySkewDeg = 6.0;
+
+        private int _mysterySpinGen;
+        private bool _mysteryCeremonyRunning;
+        private bool _mysteryShowingReveal;
+        /// <summary>Local date the pop last played - in-memory on purpose, so each day's first
+        /// look per app session gets one, and a restart on the same day gets one more.</summary>
+        private string? _mysteryPopDate;
+        private bool _mysteryVisHooked;
+        private bool _mysteryPopPlaying;
+
+        /// <summary>The MotionLevel/focus funnel's view of the ? box. The pop and the spin are
+        /// finite and event-driven, so this only ever tears down (and retries the reveal when
+        /// conditions came back).</summary>
+        private void ApplyMysteryFx()
+        {
+            try
+            {
+                if (!ChromeAmbientAllowed) StopMysteryPop();
+                if (!MotionFx.AllowTransitions) CancelMysteryReveal();
+                else MaybeRunMysteryReveal();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyMysteryFx: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The daily ceremony's front door. Hammer-safe: called from RefreshMysteryTile (every
+        /// rail repaint), from the FX funnel above, and from the tile becoming visible - the
+        /// date latch, the running flag and the pop date make every extra call a no-op.
+        /// </summary>
+        internal void MaybeRunMysteryReveal()
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                    return;
+
+                var tab = SettingsTab;
+                if (tab?.MysteryFlipHost == null || tab.MysteryFlipScale == null || tab.MysteryFlipSkew == null
+                    || tab.CardMystery == null || tab.MysteryRevealFace == null)
+                    return;
+
+                // A hidden plate must not keep turning (and must not spend the day's ceremony
+                // off screen). Cancelling before the reveal landed leaves the date unlatched,
+                // so the turn is owed again on the next visit.
+                if (!_mysteryVisHooked)
+                {
+                    _mysteryVisHooked = true;
+                    tab.IsVisibleChanged += (_, args) =>
+                    {
+                        if (args.NewValue is bool visible && !visible)
+                        {
+                            CancelMysteryReveal();
+                            StopMysteryPop();
+                        }
+                    };
+                }
+
+                if (!tab.IsLoaded || !tab.IsVisible) return;
+
+                var today = DateTime.Now.ToString("yyyy-MM-dd");
+
+                // The pop rides along with the day's first look whether or not the reveal is
+                // still owed - it is the box's doorbell, not the ceremony's.
+                if (_mysteryPopDate != today && ChromeAmbientAllowed)
+                {
+                    _mysteryPopDate = today;
+                    StartMysteryPop();
+                }
+
+                var settings = App.Settings?.Current;
+                if (settings == null || settings.DailyGiftLastRevealDate == today) return;
+
+                if (!MotionFx.AllowTransitions)
+                {
+                    // Reduced motion: no turn, and no debt - the tile's title already names
+                    // today's feature, so nothing was withheld.
+                    settings.DailyGiftLastRevealDate = today;
+                    App.Settings?.Save();
+                    return;
+                }
+
+                if (_mysteryCeremonyRunning) return;
+                _mysteryCeremonyRunning = true;
+                _mysterySpinGen++;
+                var gen = _mysterySpinGen;
+
+                SetMysteryFace(showReveal: false);
+
+                // Dwell on the ? so the turn is an event, then: turn, latch, hold, turn back.
+                RunMysteryHold(gen, MysteryOpeningDwellMs, () =>
+                    RunMysterySpinPhase(gen, 0, () =>
+                    {
+                        try
+                        {
+                            var s = App.Settings?.Current;
+                            if (s != null)
+                            {
+                                s.DailyGiftLastRevealDate = DateTime.Now.ToString("yyyy-MM-dd");
+                                App.Settings?.Save();
+                            }
+                        }
+                        catch (Exception ex) { App.Logger?.Debug("Mystery reveal latch: {E}", ex.Message); }
+
+                        RunMysteryHold(gen, MysteryRevealHoldMs, () =>
+                            RunMysterySpinPhase(gen, 0, () =>
+                            {
+                                if (gen != _mysterySpinGen) return;
+                                _mysteryCeremonyRunning = false;   // landed back on the ?
+                            }));
+                    }));
+            }
+            catch (Exception ex) { App.Logger?.Debug("MaybeRunMysteryReveal: {E}", ex.Message); }
+        }
+
+        /// <summary>Which face of the plate is up. The spin toggles off the tracked bool, so the
+        /// same phase chain drives both directions - intake plate rules.</summary>
+        private void SetMysteryFace(bool showReveal)
+        {
+            var tab = SettingsTab;
+            if (tab?.CardMystery == null || tab.MysteryRevealFace == null) return;
+            tab.MysteryRevealFace.Visibility = showReveal ? Visibility.Visible : Visibility.Collapsed;
+            tab.CardMystery.Visibility = showReveal ? Visibility.Collapsed : Visibility.Visible;
+            _mysteryShowingReveal = showReveal;
+        }
+
+        /// <summary>A 1-&gt;1 no-op animation as the dwell clock, on the SAME property the spin
+        /// animates - so CancelMysteryReveal's one BeginAnimation(null) tears off whichever of
+        /// the two is live. A DispatcherTimer would need its own teardown path.</summary>
+        private void RunMysteryHold(int gen, int ms, Action then)
+        {
+            if (gen != _mysterySpinGen) return;
+            var scale = SettingsTab?.MysteryFlipScale;
+            if (scale == null) { _mysteryCeremonyRunning = false; return; }
+
+            var hold = new DoubleAnimation(1.0, 1.0, TimeSpan.FromMilliseconds(ms));
+            hold.Completed += (_, _) =>
+            {
+                if (gen != _mysterySpinGen) return;
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+                then();
+            };
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, hold);
+        }
+
+        /// <summary>
+        /// One ScaleX ramp of a turn; chains itself through Completed. Even phases close
+        /// (1-&gt;0), odd phases open (0-&gt;1), the face swaps at each zero crossing, and the odd
+        /// half-turn count guarantees the spin lands on the opposite face. When the last
+        /// half-turn settles the transform is torn down and <paramref name="done"/> runs.
+        /// </summary>
+        private void RunMysterySpinPhase(int gen, int phase, Action done)
+        {
+            if (gen != _mysterySpinGen) return;
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            var tab = SettingsTab;
+            if (tab?.MysteryFlipScale == null || tab.MysteryFlipSkew == null) { _mysteryCeremonyRunning = false; return; }
+
+            var halfTurn = phase / 2;
+            var closing = (phase % 2) == 0;
+
+            if (halfTurn >= MysteryHalfTurnMs.Length)
+            {
+                // Settle: a held animation pins the render target, so base values only stick
+                // after BeginAnimation(prop, null).
+                tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
+                tab.MysteryFlipScale.ScaleX = 1;
+                tab.MysteryFlipSkew.AngleY = 0;
+                done();
+                return;
+            }
+
+            var ms = Math.Max(1, MysteryHalfTurnMs[halfTurn] / 2);
+            var duration = TimeSpan.FromMilliseconds(ms);
+
+            var scaleAnim = new DoubleAnimation(closing ? 1.0 : 0.0, closing ? 0.0 : 1.0, duration);
+            var skewAnim = closing
+                ? new DoubleAnimation(0.0, MysterySkewDeg, duration)
+                : new DoubleAnimation(-MysterySkewDeg, 0.0, duration);
+
+            // Ease only the final slow half-turn - the quick ones are over before the eye can
+            // resolve an easing curve, and easing them reads as stalling (intake plate note).
+            if (halfTurn >= MysteryHalfTurnMs.Length - 1)
+            {
+                var ease = new CubicEase { EasingMode = closing ? EasingMode.EaseIn : EasingMode.EaseOut };
+                scaleAnim.EasingFunction = ease;
+                skewAnim.EasingFunction = ease;
+            }
+
+            scaleAnim.Completed += (_, _) =>
+            {
+                if (gen != _mysterySpinGen) return;
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+                if (closing) SetMysteryFace(!_mysteryShowingReveal);
+                RunMysterySpinPhase(gen, phase + 1, done);
+            };
+
+            tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+            tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, skewAnim);
+        }
+
+        /// <summary>Kills an in-flight ceremony and puts the plate back on the ? face at rest.
+        /// Does NOT latch the date - an unseen reveal is owed, not spent.</summary>
+        private void CancelMysteryReveal()
+        {
+            var tab = SettingsTab;
+            _mysterySpinGen++;                    // orphans every pending Completed callback
+            _mysteryCeremonyRunning = false;
+
+            if (tab?.MysteryFlipScale == null || tab.MysteryFlipSkew == null) return;
+            tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
+            tab.MysteryFlipScale.ScaleX = 1;
+            tab.MysteryFlipSkew.AngleY = 0;
+            SetMysteryFace(showReveal: false);
+        }
+
+        /// <summary>
+        /// The finite gold breath: ring opacity and badge scale swell together, four times, then
+        /// FillBehavior.Stop snaps both back to their XAML resting values with no teardown owed.
+        /// The badge's two scale axes share ONE clock - two BeginAnimation calls would mint two
+        /// clocks that drift, and on text that reads as shearing (intake CTA lesson).
+        /// </summary>
+        private void StartMysteryPop()
+        {
+            try
+            {
+                var tab = SettingsTab;
+                if (tab?.MysteryGlow == null || tab.MysteryBadgeScale == null || tab.MysteryBadgeScale.IsFrozen) return;
+                if (_mysteryPopPlaying) return;
+                _mysteryPopPlaying = true;
+
+                var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+                var repeats = new RepeatBehavior(MysteryPopCycles);
+
+                var glow = new DoubleAnimation(MysteryGlowRestOpacity, MysteryPopGlowMax, MysteryPopHalfCycle)
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = repeats,
+                    FillBehavior = FillBehavior.Stop,
+                    EasingFunction = ease,
+                };
+                glow.Completed += (_, _) => _mysteryPopPlaying = false;
+
+                var swell = new DoubleAnimation(1.0, MysteryPopBadgeTo, MysteryPopHalfCycle)
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = repeats,
+                    FillBehavior = FillBehavior.Stop,
+                    EasingFunction = ease,
+                };
+
+                var swellClock = swell.CreateClock();
+                tab.MysteryBadgeScale.ApplyAnimationClock(ScaleTransform.ScaleXProperty, swellClock);
+                tab.MysteryBadgeScale.ApplyAnimationClock(ScaleTransform.ScaleYProperty, swellClock);
+                tab.MysteryGlow.BeginAnimation(UIElement.OpacityProperty, glow);
+            }
+            catch (Exception ex) { App.Logger?.Debug("StartMysteryPop: {E}", ex.Message); }
+        }
+
+        /// <summary>Idempotent teardown to the static gold. Matches how each animation was
+        /// attached (clock vs BeginAnimation - the two detach paths are not interchangeable).</summary>
+        private void StopMysteryPop()
+        {
+            _mysteryPopPlaying = false;
+            var tab = SettingsTab;
+            if (tab?.MysteryGlow == null || tab.MysteryBadgeScale == null || tab.MysteryBadgeScale.IsFrozen) return;
+            try
+            {
+                tab.MysteryBadgeScale.ApplyAnimationClock(ScaleTransform.ScaleXProperty, null);
+                tab.MysteryBadgeScale.ApplyAnimationClock(ScaleTransform.ScaleYProperty, null);
+                tab.MysteryGlow.BeginAnimation(UIElement.OpacityProperty, null);
+                tab.MysteryBadgeScale.ScaleX = tab.MysteryBadgeScale.ScaleY = 1;
+                tab.MysteryGlow.Opacity = MysteryGlowRestOpacity;
+            }
+            catch (Exception ex) { App.Logger?.Debug("StopMysteryPop: {E}", ex.Message); }
         }
 
         // ============================== 3. centre logo ==============================

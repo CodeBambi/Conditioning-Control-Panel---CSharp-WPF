@@ -298,6 +298,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardMystery_Click(sender, e);
         }
+        /// <summary>Clicking the revealed face is clicking the box - one navigation, two faces.</summary>
+        private void MysteryRevealFace_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardMystery_Click(sender, e);
+        }
         private void CardVault_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardVault_Click(sender, e);

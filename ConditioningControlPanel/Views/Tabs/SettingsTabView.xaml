@@ -1054,11 +1054,108 @@
             <!-- The ? BOX: today's premium feature, free for the day (DailyFreeService).
                  Title and the FREE TODAY badge are painted by MainWindow.RefreshMysteryTile()
                  on every rail repaint; the literals below are design-time fallbacks. Click
-                 navigates to today's feature - the tile never launches anything itself. -->
-            <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardMystery" x:FieldModifier="internal"
-                                  Title="Daily Gift"
-                                  Icon="pack://application:,,,/Resources/features/mysterybox.png"
-                                  Click="CardMystery_Click"/>
+                 navigates to today's feature - the tile never launches anything itself.
+
+                 The tile is a TWO-SIDED PLATE (owner spec 2026-08-11 #2): once a day, the first
+                 time the Dashboard is seen, it turns - same ScaleX fake-spin as the intake pass
+                 card on the logo tile - and reveals today's feature (art + name), holds, and
+                 turns back. The spin transform lives on THIS host so both faces share it; the
+                 ceremony itself is MainWindow.DashboardFx.cs (MaybeRunMysteryReveal), never a
+                 Storyboard (SetTargetName no-ops across this UserControl's namescope). -->
+            <Grid Grid.Row="2" Grid.Column="0" x:Name="MysteryFlipHost" x:FieldModifier="internal"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="MysteryFlipScale" x:FieldModifier="internal" ScaleX="1" ScaleY="1"/>
+                        <SkewTransform x:Name="MysteryFlipSkew" x:FieldModifier="internal" AngleY="0"/>
+                    </TransformGroup>
+                </Grid.RenderTransform>
+
+                <features:FeatureCard x:Name="CardMystery" x:FieldModifier="internal"
+                                      Title="Daily Gift"
+                                      Icon="pack://application:,,,/Resources/features/mysterybox.png"
+                                      Click="CardMystery_Click"/>
+
+                <!-- The reveal face: today's feature, full-bleed. Art + name are painted by
+                     RefreshMysteryTile; clicking it is clicking the box (same navigation). The
+                     6px margin mirrors FeatureCard's own RootBorder margin so the two faces are
+                     the same plate, not two sizes of plate. -->
+                <Border x:Name="MysteryRevealFace" x:FieldModifier="internal"
+                        Visibility="Collapsed" Margin="6" CornerRadius="12" ClipToBounds="True"
+                        Background="{DynamicResource ElevatedSurfaceBrush}"
+                        BorderBrush="#FFD54A" BorderThickness="1.5"
+                        Cursor="Hand" MouseLeftButtonUp="MysteryRevealFace_Click">
+                    <Grid>
+                        <Border CornerRadius="11" RenderOptions.BitmapScalingMode="HighQuality">
+                            <Border.Background>
+                                <ImageBrush x:Name="MysteryRevealArtBrush" x:FieldModifier="internal"
+                                            Stretch="UniformToFill"/>
+                            </Border.Background>
+                        </Border>
+                        <Border CornerRadius="0,0,11,11" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#B3000000" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <StackPanel Margin="8,20,8,8">
+                                <TextBlock Text="{loc:Str mosaic_daily_gift}"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           Foreground="#FFD54A" FontSize="9" FontWeight="Bold"/>
+                                <TextBlock x:Name="MysteryRevealName" x:FieldModifier="internal"
+                                           Text="Feature"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           TextWrapping="Wrap" Foreground="White"
+                                           FontSize="15" FontWeight="Black"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- The gold highlight ring (owner spec: "an highlight around it so it pops...
+                     probably in yelloish"). Inside the flip host so it turns with the plate.
+                     Opacity is the animated property - MainWindow.DashboardFx breathes it for
+                     the first few seconds of the day's first Dashboard look, then it rests at
+                     the value below. Gold on purpose: everything else on this wall glows in the
+                     mod's Fx colour, so the one gold ring cannot be mistaken for an active
+                     state. -->
+                <Border x:Name="MysteryGlow" x:FieldModifier="internal"
+                        Margin="6" CornerRadius="12" IsHitTestVisible="False"
+                        BorderBrush="#FFD54A" BorderThickness="2.5" Opacity="0.55">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#FFD54A" BlurRadius="16" ShadowDepth="0" Opacity="0.8"/>
+                    </Border.Effect>
+                </Border>
+            </Grid>
+
+            <!-- The badge sits OUTSIDE the flip host so it stays legible while the plate is
+                 edge-on mid-turn. Top-right because the FREE TODAY price tag (TierBadge) owns
+                 the card's top-left. Breath is driven by MainWindow.DashboardFx on the same
+                 finite clock as the ring above. -->
+            <Border x:Name="MysteryBadge" x:FieldModifier="internal"
+                    Grid.Row="2" Grid.Column="0" Panel.ZIndex="12" IsHitTestVisible="False"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,2,2,0" Padding="8,3,8,4" CornerRadius="8"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#FFE082" Offset="0"/>
+                        <GradientStop Color="#FFB300" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="MysteryBadgeScale" x:FieldModifier="internal" ScaleX="1" ScaleY="1"/>
+                        <RotateTransform Angle="8"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="#FFD54A" BlurRadius="10" ShadowDepth="0" Opacity="0.85"/>
+                </Border.Effect>
+                <TextBlock Text="{loc:Str mosaic_new_today}"
+                           Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
+            </Border>
             <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
                                        TitleA="Mind Wipe" TitleB="Brain Drain"
                                        IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
