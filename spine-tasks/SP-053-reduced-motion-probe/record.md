@@ -180,21 +180,21 @@ no DevTools emulation in the harness run. The Holds claim is attributable to OS 
 (two-run protocol is the primary evidence; the `change` listener fired in neither run — nothing claimed either way).
 
 **Both runs measured the Windows WebView2 surface** (load-bearing quote, `grep -n "surface" evidence/motion-run-*.log`):
-`dtrh: NavigationCompleted success=True (surface embedded)` � baseline log :24, off log :23. No dialog/unsupported
-fallback was in play. Harness/product equivalence: the probe ran in the SAME `DtrhHostWindow` the product flow uses �
-same surface selection, same environment-creation path; only the `page` ctor argument differs (`_dtrh.PageUrl(_page)`) �
+`dtrh: NavigationCompleted success=True (surface embedded)` — baseline log :24, off log :23. No dialog/unsupported
+fallback was in play. Harness/product equivalence: the probe ran in the SAME `DtrhHostWindow` the product flow uses —
+same surface selection, same environment-creation path; only the `page` ctor argument differs (`_dtrh.PageUrl(_page)`) —
 so the probe measured the product's engine, not a different host (consult fix 3).
 
 **The page consumes the query exactly ONCE, at boot** (payload call-site grep, consult fix 2iii): `detectMode` is
-imported and called at `boot.js:19,77` ONLY � a boot-time decision. State-at-page-load is therefore the only thing
+imported and called at `boot.js:19,77` ONLY — a boot-time decision. State-at-page-load is therefore the only thing
 the page can consume, which makes the two-run protocol provably sufficient and retires the live-`change` question as
 IRRELEVANT (not merely unmeasured): no run observed a `phase:'change'` message and none was needed.
 
 **User-observable consequence: none.** The pre-existing obligation is DISCHARGED for WebView2 151.0.4129.72 on Windows:
 the embedded engine inherits the OS/user motion preference, so the page's own probe (`capability.js:35`) is never
-silently betrayed. A WebView2 runtime regression re-opens the row; Linux (WebKitGTK) stays unproven � WSL
+silently betrayed. A WebView2 runtime regression re-opens the row; Linux (WebKitGTK) stays unproven — WSL
 zero-distros named limit (never faked). The verbatim probe-motion bodies carry only a boolean, a phase string and a
-fixed query literal � no user content, �4.8-safe.
+fixed query literal — no user content, §4.8-safe.
 
 ### Mechanism: NOT BUILT (contingent on a Fails verdict)
 
@@ -217,15 +217,15 @@ NOT surfaced by the consult tool response (recorded honestly, same discipline as
 verdict TRUNCATED mid-(b) (the Step-1 truncation class); the second (terse-completion request) delivered the remainder
 in full.
 
-**Verdict: the work is sound and the Holds call is right � do NOT build the mechanism. Four concrete fixes before
+**Verdict: the work is sound and the Holds call is right — do NOT build the mechanism. Four concrete fixes before
 `.DONE`, then run the contract properly.** (a) the record's "engine read SPI at browser-process start" was an
 unmeasured claim (fix 1); run B reporting the CHANGED value after the flip empirically rules out caching (fix 2i);
 quote the `surface embedded` NavigationCompleted line from BOTH transcripts (fix 2ii); grep the payload's detectMode
-call sites � boot-time-only consumption makes the two-run protocol provably sufficient (fix 2iii); state the
-harness/product window equivalence in one line (fix 3). (b) diff scope clean; one convention gap �
-`[SupportedOSPlatform("windows")]` on the extern matching `DtrhCapabilityProbes.cs` (fix 4); logging �4.8-safe.
+call sites — boot-time-only consumption makes the two-run protocol provably sufficient (fix 2iii); state the
+harness/product window equivalence in one line (fix 3). (b) diff scope clean; one convention gap —
+`[SupportedOSPlatform("windows")]` on the extern matching `DtrhCapabilityProbes.cs` (fix 4); logging §4.8-safe.
 (c) mechanism-not-built CONFIRMED: Holds in the only direction that matters; any mechanism would be unfalsifiable
-code (the engine already honors � nothing could prove the mechanism does anything); the Step-1 sketch + binary
+code (the engine already honors — nothing could prove the mechanism does anything); the Step-1 sketch + binary
 evidence is the correct deliverable. Contract discipline: exact testCommand, warnings measured on `-t:Rebuild`, TRX
 loggers landed under evidence/, counts vs the >=669/33 floor, `git diff --check`, File-Scope-only `git status`, final
 `-Get` proof the box is not left reduced.
@@ -233,5 +233,46 @@ loggers landed under evidence/, counts vs the >=669/33 floor, `git diff --check`
 **Fix application:** fixes 1-4 applied in this record and the code (extern annotated); contract run per the consult's
 concrete list in Step 4 below.
 
-**Engine-review presence (Step 3):** plan review requested via `spine_review_step` after the step commit � recorded
+**Engine-review presence (Step 3):** plan review requested via `spine_review_step` after the step commit — recorded
 in Step 4's summary line (same SP-195 skip class as Steps 1-2 if skipped).
+
+## Step 4 — testing & verification (contract testCommand, one pass from the worktree root)
+
+- `node .spine/patches/verify.mjs` → first run FAIL (8 project patches missing — "reinstall removed it", environment
+  state, not this diff; the script's own remediation applied: `node .spine/patches/apply.mjs` → "OK — 8 applied across
+  2 root(s)") → re-run **verify.mjs: OK — all patches applied on all roots, exit 0**.
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → 0E; warnings measured on **`-t:Rebuild`** per the consult's
+  contract list: **0 Warning(s) 0 Error(s)** verbatim.
+- `dotnet test client/tests/CcpClient.Tests/… --logger "trx;LogFileName=sp053-tests.trx" --results-directory
+  spine-tasks/SP-053-reduced-motion-probe/evidence` → **Passed! Failed: 0, Passed: 683, Skipped: 0, Total: 683**
+  (≥ the 669 floor; +11 new DtrhMotionPreferenceTests facts inside).
+- `dotnet test client/tests/CcpClient.HeadlessTests/… --logger "trx;LogFileName=sp053-headless.trx" …` →
+  **Passed! Failed: 0, Passed: 33, Total: 33** (≥ the 33 floor). TRX artifacts landed under `evidence/` on disk
+  (git-ignored `*.trx`, .gitignore:90 — SP-050 precedent: attached via logger, not tracked).
+- `git diff --check` → clean.
+- `git status --short` → File Scope paths only (`client/src/CcpClient.Desktop/Features/Dtrh/**`,
+  `client/tests/CcpClient.Tests/DtrhMotionPreferenceTests.cs`, `spine-tasks/SP-053-reduced-motion-probe/**`).
+  `fileScopeMustNotChange` untouched (payload/WPF READ-ONLY throughout; no `task-board.md`/`port-lessons.md` —
+  enabler 2; no `Ai/**`, `Companion/**`, sln, spikes, `.spine/**` edits).
+- **Final OS-state proof:** `motion-toggle.ps1 -Get` → `ClientAreaAnimation=1` — the box is NOT left reduced.
+
+## Durable-lesson candidates (orchestrator reconciles at land — enabler 2)
+
+- WebView2 (runtime 151.0.4129.72, Windows) DOES inherit the OS "Animation effects" state for
+  `prefers-reduced-motion` — the embedded engine answered reduce=true under OS-off / reduce=false under OS-on
+  (two-run, OS-verified). The DTRH page's own `capability.js:35` probe is not betrayed on Windows; the obligation is
+  discharged engine-version-scoped. If a future runtime regresses, the ready shape is Chromium-native
+  `--force-prefers-reduced-motion` via the 12.0.1-binary-verified `AdditionalBrowserArguments` environment seam
+  (applied only when the host-read OS state says animations off).
+- The page consumes the motion query ONCE at boot (`detectMode`, boot.js:19,77) — state-at-page-load is the only
+  consumable; per-launch probing is the sufficient evidence class for this family.
+- Linux (WebKitGTK) `prefers-reduced-motion` inheritance remains UNPROVEN (WSL zero-distros named limit).
+- Tooling: the consult tool truncates long verdicts mid-sentence (SP-027/SP-050 class) — terse-completion follow-ups
+  recover them; verify.mjs patch-missing is environment state remediated by apply.mjs, not a task defect.
+
+**Engine-review presence (all steps):** plan reviews requested via `spine_review_step` (type=plan) after each step
+commit — Step 1 (17b9ad45, artifact .reviews/1-20260811T152704.md), Step 2 (4261c9b6, .reviews/2-20260811T153450.md),
+Step 3 (3f51289a, .reviews/3-20260811T153931.md), Step 4 (after the final commit — recorded in the step-4 artifact).
+ALL returned verdict null, SKIPPED by design ("Nested reviewer spawn blocked inside pi worker session — the batch
+engine runs reviews after worker success (SP-195)"; spawnFailed=false every call). No engine reviewer ran in-worker;
+code + final reviews are the engine's post-.DONE phases.
