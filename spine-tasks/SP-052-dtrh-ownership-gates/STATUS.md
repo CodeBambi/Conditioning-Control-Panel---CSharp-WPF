@@ -1,5 +1,5 @@
 ## STATUS: SP-052 — DTRH run-setup ownership gates (b4 parity defects)
-**Current Step:** Step 4 — Testing & Verification
+**Current Step:** DONE (all steps complete; .DONE created)
 **Last Updated:** 2026-08-05 (worker)
 **Blockers:** none
 
@@ -21,7 +21,7 @@
 - [x] Pre-completion solo consult (verdict + actual model in record.md)
 - [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification (IN PROGRESS)
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥669/33 floor; TRX logger)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 4: Testing & Verification (COMPLETE)
+- [x] Contract testCommand passes (verify.mjs exit 0; Rebuild 0W/0E; 672/672 unit + 33/33 headless, floor 669/33; TRX sp052-unit-final/sp052-headless-final)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

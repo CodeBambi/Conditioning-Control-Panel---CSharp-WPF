@@ -213,6 +213,9 @@ transcript line in `DtrhMeta.OnRequestRun` (diff/dur/endless/scripted).
 - Step 2 (`spine_review_step --step 2 --type plan`): **engine review ABSENT** — nested
   reviewer spawn blocked inside pi worker session (SP-195); `spawnFailed=false`.
   Artifact: `.reviews/2-20260811T142022.md`.
+- Step 3 (`spine_review_step --step 3 --type plan`): **engine review ABSENT** — same
+  SP-195 skip; `spawnFailed=false`. Artifact: `.reviews/3-20260811T144031.md`.
+  (Step 4 is the contract gate; code/final review runs on the engine after `.DONE`.)
 
 ## Budgets
 
