@@ -271,68 +271,123 @@ namespace ConditioningControlPanel
 
         // ============================== 2c. the ? box ==============================
         //
-        // Two owner specs (2026-08-11 #3) live here:
+        // Two owner specs (2026-08-11 #3, revised the same day) live here:
         //
-        //  * THE POP - the gold badge + the gold ring around the tile breathe together for the
-        //    first few seconds of the day's first look at the Dashboard, then rest at their
-        //    static XAML values. Finite by construction (RepeatBehavior counts, FillBehavior
-        //    .Stop), so there is nothing to park later - reduced-motion/perf users simply keep
-        //    the static gold, which still pops against a wall that only glows in Fx colours.
+        //  * THE BREATH - the gold badge + the gold ring around the tile breathe together, and
+        //    they keep breathing for as long as today's gift is UNOPENED. It is the box's
+        //    doorbell, so it rings until somebody answers it: the first HOVER of the day latches
+        //    AppSettings.DailyGiftLastRevealDate and stops the breath for good until tomorrow,
+        //    when the settings date stops matching and it re-arms by itself. Reduced-motion and
+        //    low-perf users never get the loop and keep the static gold, which still pops
+        //    against a wall that only glows in Fx colours.
         //
-        //  * THE REVEAL - once a day, the first time the Dashboard is seen, the tile turns
-        //    (the intake plate's ScaleX fake-spin, same half-turn tempo) to a full-art card of
-        //    today's feature, holds, and turns back. The date latch (AppSettings
-        //    .DailyGiftLastRevealDate) is written when the reveal face LANDS - the "they saw
-        //    it" moment - so a ceremony cancelled mid-spin is owed again, not lost. Reduced
-        //    motion latches without turning: the box's title already names the feature.
+        //  * THE HOVER FLIP - the tile is a two-sided plate. Hovering it turns the plate on its
+        //    axis (the intake plate's ScaleX fake-spin: 1 -> 0, swap the visible face at the
+        //    zero crossing, 0 -> 1) onto a full-art card of today's feature; unhovering turns it
+        //    back to the ?. ONE quick half-turn per direction at interaction tempo, not the old
+        //    once-a-day ceremony - the surprise is now a thing you do, so it can neither be
+        //    missed by looking away nor spent off screen while the tab is hidden.
         //
-        // Same house rules as the intake plate: BeginAnimation only (Storyboards no-op across
-        // the SettingsTabView namescope), a monotonic generation token orphans every stale
-        // Completed callback, and the hold is a 1->1 animation on the same property the spin
-        // uses so ONE teardown path covers both.
+        // Rapid enter/leave is the interesting case, and the rule is: never snap, never stick
+        // edge-on. Every hover state change bumps the monotonic generation token (which orphans
+        // the stale chain's Completed callbacks) and starts the new turn FROM the transform's
+        // current animated value, over a duration scaled to the travel that is actually left.
+        // The wanted face (_mysteryWantReveal) and the shown face (_mysteryShowingReveal) are
+        // tracked separately, so a reversal mid-turn is resolved against both rather than
+        // assuming the plate started flat. The other half of "robust to a twitchy pointer" is
+        // the PHANTOM LEAVE an edge-on plate provokes out of WPF's hit testing - see the hover
+        // hooks in EnsureMysteryTileFx and ReconcileMysteryHover.
+        //
+        // Same house rules as the intake plate: BeginAnimation only (Storyboard.SetTargetName
+        // silently no-ops across the SettingsTabView namescope), every callback wrapped, and the
+        // badge's two scale axes share ONE clock so the pill's text cannot shear.
 
         private const double MysteryGlowRestOpacity = 0.55;   // must match MysteryGlow's XAML Opacity
         private const double MysteryPopGlowMax = 0.95;
         private const double MysteryPopBadgeTo = 1.12;
         private static readonly TimeSpan MysteryPopHalfCycle = TimeSpan.FromMilliseconds(900);
-        private const int MysteryPopCycles = 4;               // 4 in-and-outs ~= 7s of "look here"
 
-        private const int MysteryOpeningDwellMs = 1200;
-        private const int MysteryRevealHoldMs = 6000;
-        /// <summary>Same widening tempo as the intake plate; the COUNT MUST STAY ODD so each
-        /// spin lands on the opposite face from the one it started on.</summary>
-        private static readonly int[] MysteryHalfTurnMs = { 105, 115, 130, 150, 560 };
+        /// <summary>One half of the hover flip (the close, or the open) at full travel. A turn
+        /// that begins part-way through a reversal gets a proportional slice of this instead, so
+        /// a flick of the pointer costs a flick of animation. Interaction tempo by the FX plan's
+        /// two-clock rule - the plate has to be done before the pointer has moved on.</summary>
+        private const int MysteryFlipHalfMs = 150;
+        /// <summary>Skew (degrees) at the thin point of the turn. Purely cosmetic fake
+        /// perspective - it always animates back to 0 and is torn down with the flip.</summary>
         private const double MysterySkewDeg = 6.0;
 
+        /// <summary>Monotonic flip token. Every chained Completed callback re-checks it, so a
+        /// reversal (or a teardown) mid-turn can be certain the stale tail of the old chain will
+        /// not repaint a superseded face or leave the plate half-scaled.</summary>
         private int _mysterySpinGen;
-        private bool _mysteryCeremonyRunning;
+        /// <summary>Which face is actually on screen right now.</summary>
         private bool _mysteryShowingReveal;
-        /// <summary>Local date the pop last played - in-memory on purpose, so each day's first
-        /// look per app session gets one, and a restart on the same day gets one more.</summary>
-        private string? _mysteryPopDate;
+        /// <summary>Which face the pointer says SHOULD be on screen. It diverges from the line
+        /// above for the length of one turn - closing that gap is the whole job of the flip.</summary>
+        private bool _mysteryWantReveal;
+        /// <summary>One-shot latches for the subscriptions below (the entry point is called on
+        /// every rail repaint and every FX re-evaluation, so it has to be safe to hammer).</summary>
         private bool _mysteryVisHooked;
+        private bool _mysteryHoverHooked;
+        /// <summary>True from the first frame of a turn until the plate is flat again. Only
+        /// consulted to spot the PHANTOM MouseLeave the turn causes - see the hover hooks.</summary>
+        private bool _mysteryFlipping;
+        /// <summary>True while the breath's clocks are attached, so teardown stays idempotent.</summary>
         private bool _mysteryPopPlaying;
 
-        /// <summary>The MotionLevel/focus funnel's view of the ? box. The pop and the spin are
-        /// finite and event-driven, so this only ever tears down (and retries the reveal when
-        /// conditions came back).</summary>
+        /// <summary>Is today's gift still unopened? The settings date is the ONLY latch now -
+        /// there is no in-memory "played this session" flag, so the breath survives a tab bounce
+        /// and a restart, and stops the moment the user hovers the box.</summary>
+        private bool MysteryGiftUnopened
+        {
+            get
+            {
+                var s = App.Settings?.Current;
+                return s != null && s.DailyGiftLastRevealDate != DateTime.Now.ToString("yyyy-MM-dd");
+            }
+        }
+
+        /// <summary>The MotionLevel/focus funnel's view of the ? box: it arms or parks the
+        /// breath, and settles an in-flight turn when transitions get switched off underneath
+        /// it. The flip itself is pointer-driven, so there is nothing here to start.</summary>
         private void ApplyMysteryFx()
         {
             try
             {
-                if (!ChromeAmbientAllowed) StopMysteryPop();
-                if (!MotionFx.AllowTransitions) CancelMysteryReveal();
-                else MaybeRunMysteryReveal();
+                // Transitions switched off mid-turn: end the turn now, on the face the pointer
+                // last asked for - not on the ?, which would read as the tile fighting the mouse.
+                if (!MotionFx.AllowTransitions) SettleMysteryPlate(_mysteryWantReveal);
+
+                EnsureMysteryTileFx();   // hooks + the breath's own gate
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyMysteryFx: {E}", ex.Message); }
         }
 
+        /// <summary>The breath's single gate, re-asked on every pass through either entry point.
+        /// Start/Stop are both idempotent, so this is a pure function of the four conditions.</summary>
+        private void ApplyMysteryBreath()
+        {
+            var tab = SettingsTab;
+            if (tab == null) return;
+
+            // A forever loop on a hidden tile burns a composition slot for the rest of the
+            // session with nothing on screen to show for it (intake CTA lesson), so visibility
+            // gates the breath as hard as the motion setting and the date latch do.
+            if (!ChromeAmbientAllowed || !tab.IsLoaded || !tab.IsVisible || !MysteryGiftUnopened)
+                StopMysteryPop();
+            else
+                StartMysteryPop();
+        }
+
         /// <summary>
-        /// The daily ceremony's front door. Hammer-safe: called from RefreshMysteryTile (every
-        /// rail repaint), from the FX funnel above, and from the tile becoming visible - the
-        /// date latch, the running flag and the pop date make every extra call a no-op.
+        /// The tile's front door: installs the two hooks it needs (hover flip, tab-hide
+        /// teardown) and re-asks the breath's gate. Hammer-safe - called from RefreshMysteryTile
+        /// (every rail repaint), from the FX funnel above and from the tile becoming visible;
+        /// the one-shot latches and the idempotent Start/Stop pair make every extra call free.
+        /// It arms the breath itself rather than leaving that to the funnel, because the rail
+        /// repaint is the one entry point that fires on a plain tab switch.
         /// </summary>
-        internal void MaybeRunMysteryReveal()
+        internal void EnsureMysteryTileFx()
         {
             try
             {
@@ -344,81 +399,260 @@ namespace ConditioningControlPanel
                     || tab.CardMystery == null || tab.MysteryRevealFace == null)
                     return;
 
-                // A hidden plate must not keep turning (and must not spend the day's ceremony
-                // off screen). Cancelling before the reveal landed leaves the date unlatched,
-                // so the turn is owed again on the next visit.
+                // Hover lives on the HOST, not on either face: the faces swap Visibility at every
+                // zero crossing, and a handler on a control that is about to be Collapsed would
+                // hand us a MouseLeave that the pointer never performed. Neither handler marks
+                // the event handled, so both faces' click paths (CardMystery_Click /
+                // MysteryRevealFace_Click) go on working exactly as before.
+                //
+                // THE PHANTOM LEAVE: WPF hit-tests against the render-transformed visual, so a
+                // plate turning edge-on stops being hit-testable UNDER A STATIONARY POINTER and
+                // WPF raises a MouseLeave nobody performed. Acting on it would start a turn
+                // back, which reopens the plate, which raises a MouseEnter... i.e. a flip loop
+                // for as long as the mouse rests on the tile. So a leave arriving mid-turn is
+                // believed only if the pointer really has left the tile's layout box, and the
+                // truth is re-established from scratch (ReconcileMysteryHover) once the plate is
+                // flat again and hit testing means something.
+                if (!_mysteryHoverHooked)
+                {
+                    _mysteryHoverHooked = true;
+                    tab.MysteryFlipHost.MouseEnter += (_, _) => RequestMysteryFace(showReveal: true);
+                    tab.MysteryFlipHost.MouseLeave += (_, _) =>
+                    {
+                        if (_mysteryFlipping && MysteryPointerOverPlate()) return;
+                        RequestMysteryFace(showReveal: false);
+                    };
+                }
+
+                // A hidden plate must not be left mid-turn and a hidden badge must not keep
+                // breathing; coming back is just another pass through the funnel, which is
+                // idempotent. This also catches the window being minimised, where IsVisible goes
+                // false without a tab change.
                 if (!_mysteryVisHooked)
                 {
                     _mysteryVisHooked = true;
                     tab.IsVisibleChanged += (_, args) =>
                     {
-                        if (args.NewValue is bool visible && !visible)
+                        try
                         {
-                            CancelMysteryReveal();
-                            StopMysteryPop();
+                            if (args.NewValue is bool visible && !visible)
+                            {
+                                CancelMysteryReveal();
+                                StopMysteryPop();
+                                return;
+                            }
+                            ApplyMysteryFx();
                         }
+                        catch (Exception ex) { App.Logger?.Debug("Mystery visibility: {E}", ex.Message); }
                     };
                 }
 
-                if (!tab.IsLoaded || !tab.IsVisible) return;
-
-                var today = DateTime.Now.ToString("yyyy-MM-dd");
-
-                // The pop rides along with the day's first look whether or not the reveal is
-                // still owed - it is the box's doorbell, not the ceremony's.
-                if (_mysteryPopDate != today && ChromeAmbientAllowed)
-                {
-                    _mysteryPopDate = today;
-                    StartMysteryPop();
-                }
-
-                var settings = App.Settings?.Current;
-                if (settings == null || settings.DailyGiftLastRevealDate == today) return;
-
-                if (!MotionFx.AllowTransitions)
-                {
-                    // Reduced motion: no turn, and no debt - the tile's title already names
-                    // today's feature, so nothing was withheld.
-                    settings.DailyGiftLastRevealDate = today;
-                    App.Settings?.Save();
-                    return;
-                }
-
-                if (_mysteryCeremonyRunning) return;
-                _mysteryCeremonyRunning = true;
-                _mysterySpinGen++;
-                var gen = _mysterySpinGen;
-
-                SetMysteryFace(showReveal: false);
-
-                // Dwell on the ? so the turn is an event, then: turn, latch, hold, turn back.
-                RunMysteryHold(gen, MysteryOpeningDwellMs, () =>
-                    RunMysterySpinPhase(gen, 0, () =>
-                    {
-                        try
-                        {
-                            var s = App.Settings?.Current;
-                            if (s != null)
-                            {
-                                s.DailyGiftLastRevealDate = DateTime.Now.ToString("yyyy-MM-dd");
-                                App.Settings?.Save();
-                            }
-                        }
-                        catch (Exception ex) { App.Logger?.Debug("Mystery reveal latch: {E}", ex.Message); }
-
-                        RunMysteryHold(gen, MysteryRevealHoldMs, () =>
-                            RunMysterySpinPhase(gen, 0, () =>
-                            {
-                                if (gen != _mysterySpinGen) return;
-                                _mysteryCeremonyRunning = false;   // landed back on the ?
-                            }));
-                    }));
+                ApplyMysteryBreath();
             }
-            catch (Exception ex) { App.Logger?.Debug("MaybeRunMysteryReveal: {E}", ex.Message); }
+            catch (Exception ex) { App.Logger?.Debug("EnsureMysteryTileFx: {E}", ex.Message); }
         }
 
-        /// <summary>Which face of the plate is up. The spin toggles off the tracked bool, so the
-        /// same phase chain drives both directions - intake plate rules.</summary>
+        /// <summary>
+        /// The pointer's request for a face. Hover-in is ALSO the moment the gift counts as
+        /// opened: the date latch and the end of the breath happen here and nowhere else, so a
+        /// plate that turned for a teardown, a repaint or a reduced-motion swap can never spend
+        /// the day's surprise on the user's behalf.
+        /// </summary>
+        private void RequestMysteryFace(bool showReveal)
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                    return;
+
+                _mysteryWantReveal = showReveal;
+
+                if (showReveal)
+                {
+                    var s = App.Settings?.Current;
+                    var today = DateTime.Now.ToString("yyyy-MM-dd");
+                    if (s != null && s.DailyGiftLastRevealDate != today)
+                    {
+                        s.DailyGiftLastRevealDate = today;
+                        App.Settings?.Save();
+                    }
+                    StopMysteryPop();   // doorbell answered
+                }
+
+                // Reduced motion still reveals - it just does not turn. The swap is the content;
+                // the flip was only ever the flourish around it.
+                if (!MotionFx.AllowTransitions) { SettleMysteryPlate(showReveal); return; }
+
+                _mysterySpinGen++;
+                RunMysteryFlip(_mysterySpinGen);
+            }
+            catch (Exception ex) { App.Logger?.Debug("RequestMysteryFace: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The closing half of a turn, started from wherever the plate happens to be. Three
+        /// cases, and none of them may snap: already flat on the wanted face (settle and stop),
+        /// mid-turn but on the wanted face already (just open back up - this is the reversal
+        /// caught before the zero crossing), or the wrong face is up (finish closing, swap at
+        /// zero, then open on the other side).
+        /// </summary>
+        private void RunMysteryFlip(int gen)
+        {
+            if (gen != _mysterySpinGen) return;
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            var tab = SettingsTab;
+            var scale = tab?.MysteryFlipScale;
+            var skew = tab?.MysteryFlipSkew;
+            if (scale == null || skew == null) return;
+
+            // GetValue on an animated property returns the CURRENT animated value, which is the
+            // whole trick: every reversal starts from where the eye last saw the plate.
+            var at = Math.Max(0.0, Math.Min(1.0, scale.ScaleX));
+
+            if (_mysteryShowingReveal == _mysteryWantReveal)
+            {
+                if (at >= 0.999) SettleMysteryPlate(_mysteryWantReveal);
+                else OpenMysteryPlate(gen, at);
+                return;
+            }
+
+            var ms = Math.Max(1, (int)Math.Round(MysteryFlipHalfMs * at));
+            var duration = TimeSpan.FromMilliseconds(ms);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+            _mysteryFlipping = true;
+
+            var close = new DoubleAnimation(at, 0.0, duration) { EasingFunction = ease };
+            var lean = new DoubleAnimation(skew.AngleY, MysterySkewDeg, duration) { EasingFunction = ease };
+
+            close.Completed += (_, _) =>
+            {
+                try
+                {
+                    if (gen != _mysterySpinGen) return;
+                    if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+                    SetMysteryFace(_mysteryWantReveal);   // the zero crossing
+                    OpenMysteryPlate(gen, 0.0);
+                }
+                catch (Exception ex) { App.Logger?.Debug("Mystery flip close: {E}", ex.Message); }
+            };
+
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, close);
+            skew.BeginAnimation(SkewTransform.AngleYProperty, lean);
+        }
+
+        /// <summary>The opening half: widen back out to a flat plate and unwind the skew. Coming
+        /// off a zero crossing the lean starts on the FAR side (-deg) so the two halves read as
+        /// one continuous turn; coming off an interrupted close it just carries on from
+        /// wherever the skew already is.</summary>
+        private void OpenMysteryPlate(int gen, double from)
+        {
+            if (gen != _mysterySpinGen) return;
+
+            var tab = SettingsTab;
+            var scale = tab?.MysteryFlipScale;
+            var skew = tab?.MysteryFlipSkew;
+            if (scale == null || skew == null) return;
+
+            var ms = Math.Max(1, (int)Math.Round(MysteryFlipHalfMs * (1.0 - from)));
+            var duration = TimeSpan.FromMilliseconds(ms);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            _mysteryFlipping = true;
+
+            var open = new DoubleAnimation(from, 1.0, duration) { EasingFunction = ease };
+            var unlean = new DoubleAnimation(from <= 0.001 ? -MysterySkewDeg : skew.AngleY, 0.0, duration)
+            {
+                EasingFunction = ease,
+            };
+
+            open.Completed += (_, _) =>
+            {
+                try
+                {
+                    if (gen != _mysterySpinGen) return;
+                    if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+                    SettleMysteryPlate(_mysteryShowingReveal);
+                    ReconcileMysteryHover();
+                }
+                catch (Exception ex) { App.Logger?.Debug("Mystery flip open: {E}", ex.Message); }
+            };
+
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, open);
+            skew.BeginAnimation(SkewTransform.AngleYProperty, unlean);
+        }
+
+        /// <summary>Ends any turn immediately and parks the plate flat on the given face. Bumps
+        /// the token FIRST so the in-flight chain's callbacks are orphaned, and writes the base
+        /// values only AFTER BeginAnimation(prop, null) - a held animation pins its target, so a
+        /// base value written before the detach never sticks.</summary>
+        private void SettleMysteryPlate(bool showReveal)
+        {
+            _mysterySpinGen++;
+            _mysteryFlipping = false;
+
+            var tab = SettingsTab;
+            if (tab?.MysteryFlipScale == null || tab.MysteryFlipSkew == null) return;
+            tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
+            tab.MysteryFlipScale.ScaleX = 1;
+            tab.MysteryFlipSkew.AngleY = 0;
+            SetMysteryFace(showReveal);
+        }
+
+        /// <summary>
+        /// Is the pointer inside the tile, GEOMETRICALLY? Deliberately not IsMouseOver: this is
+        /// asked exactly when the plate is edge-on and therefore not hit-testable, which is the
+        /// state that makes IsMouseOver lie. The layout SLOT is measured in the parent grid's
+        /// coordinate space, which the plate's own flip transform cannot distort (asking
+        /// Mouse.GetPosition of the host itself would divide the answer by a ScaleX heading for
+        /// zero). Errs toward "inside": the slot is the whole cell, the card only its 6px-inset
+        /// middle - and a false "inside" only ever suppresses a phantom leave that the settle
+        /// reconcile re-decides a few frames later.
+        /// </summary>
+        private bool MysteryPointerOverPlate()
+        {
+            try
+            {
+                var host = SettingsTab?.MysteryFlipHost;
+                if (host == null || !host.IsVisible) return false;
+                if (host.Parent is not UIElement parent) return false;
+
+                var slot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(host);
+                if (slot.IsEmpty) return false;
+                return slot.Contains(Mouse.GetPosition(parent));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("MysteryPointerOverPlate: {E}", ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Re-establishes the truth about the pointer once the plate is flat again. Two things
+        /// can have gone stale while it was edge-on: WPF's own mouse-over tracking (nothing was
+        /// hit-testable, and a pointer that never moves again would never be re-tested), and our
+        /// wanted face (the pointer may have walked off during the turn, silently). Mouse
+        /// .Synchronize re-runs the hit test - it may raise the enter/leave we missed, in which
+        /// case the handlers above have already fixed things and the comparison below is a
+        /// no-op. Convergent: it only acts on a disagreement, and each turn it starts ends here.
+        /// </summary>
+        private void ReconcileMysteryHover()
+        {
+            try
+            {
+                var host = SettingsTab?.MysteryFlipHost;
+                if (host == null || !host.IsVisible) return;
+
+                Mouse.Synchronize();
+                var over = host.IsMouseOver;    // authoritative again: the plate is flat
+                if (over != _mysteryWantReveal) RequestMysteryFace(over);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ReconcileMysteryHover: {E}", ex.Message); }
+        }
+
+        /// <summary>Which face of the plate is up. Called at the zero crossing and by every
+        /// settle path, and it is the only place <see cref="_mysteryShowingReveal"/> moves.</summary>
         private void SetMysteryFace(bool showReveal)
         {
             var tab = SettingsTab;
@@ -428,103 +662,20 @@ namespace ConditioningControlPanel
             _mysteryShowingReveal = showReveal;
         }
 
-        /// <summary>A 1-&gt;1 no-op animation as the dwell clock, on the SAME property the spin
-        /// animates - so CancelMysteryReveal's one BeginAnimation(null) tears off whichever of
-        /// the two is live. A DispatcherTimer would need its own teardown path.</summary>
-        private void RunMysteryHold(int gen, int ms, Action then)
-        {
-            if (gen != _mysterySpinGen) return;
-            var scale = SettingsTab?.MysteryFlipScale;
-            if (scale == null) { _mysteryCeremonyRunning = false; return; }
-
-            var hold = new DoubleAnimation(1.0, 1.0, TimeSpan.FromMilliseconds(ms));
-            hold.Completed += (_, _) =>
-            {
-                if (gen != _mysterySpinGen) return;
-                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
-                then();
-            };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, hold);
-        }
-
-        /// <summary>
-        /// One ScaleX ramp of a turn; chains itself through Completed. Even phases close
-        /// (1-&gt;0), odd phases open (0-&gt;1), the face swaps at each zero crossing, and the odd
-        /// half-turn count guarantees the spin lands on the opposite face. When the last
-        /// half-turn settles the transform is torn down and <paramref name="done"/> runs.
-        /// </summary>
-        private void RunMysterySpinPhase(int gen, int phase, Action done)
-        {
-            if (gen != _mysterySpinGen) return;
-            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
-
-            var tab = SettingsTab;
-            if (tab?.MysteryFlipScale == null || tab.MysteryFlipSkew == null) { _mysteryCeremonyRunning = false; return; }
-
-            var halfTurn = phase / 2;
-            var closing = (phase % 2) == 0;
-
-            if (halfTurn >= MysteryHalfTurnMs.Length)
-            {
-                // Settle: a held animation pins the render target, so base values only stick
-                // after BeginAnimation(prop, null).
-                tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
-                tab.MysteryFlipScale.ScaleX = 1;
-                tab.MysteryFlipSkew.AngleY = 0;
-                done();
-                return;
-            }
-
-            var ms = Math.Max(1, MysteryHalfTurnMs[halfTurn] / 2);
-            var duration = TimeSpan.FromMilliseconds(ms);
-
-            var scaleAnim = new DoubleAnimation(closing ? 1.0 : 0.0, closing ? 0.0 : 1.0, duration);
-            var skewAnim = closing
-                ? new DoubleAnimation(0.0, MysterySkewDeg, duration)
-                : new DoubleAnimation(-MysterySkewDeg, 0.0, duration);
-
-            // Ease only the final slow half-turn - the quick ones are over before the eye can
-            // resolve an easing curve, and easing them reads as stalling (intake plate note).
-            if (halfTurn >= MysteryHalfTurnMs.Length - 1)
-            {
-                var ease = new CubicEase { EasingMode = closing ? EasingMode.EaseIn : EasingMode.EaseOut };
-                scaleAnim.EasingFunction = ease;
-                skewAnim.EasingFunction = ease;
-            }
-
-            scaleAnim.Completed += (_, _) =>
-            {
-                if (gen != _mysterySpinGen) return;
-                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
-                if (closing) SetMysteryFace(!_mysteryShowingReveal);
-                RunMysterySpinPhase(gen, phase + 1, done);
-            };
-
-            tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
-            tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, skewAnim);
-        }
-
-        /// <summary>Kills an in-flight ceremony and puts the plate back on the ? face at rest.
-        /// Does NOT latch the date - an unseen reveal is owed, not spent.</summary>
+        /// <summary>Teardown for the plate: kills an in-flight turn, forgets the hover, and puts
+        /// the ? face back at rest. Does NOT touch the date latch - that belongs to hover-in
+        /// alone, so a plate closed by a tab switch owes nothing and spends nothing.</summary>
         private void CancelMysteryReveal()
         {
-            var tab = SettingsTab;
-            _mysterySpinGen++;                    // orphans every pending Completed callback
-            _mysteryCeremonyRunning = false;
-
-            if (tab?.MysteryFlipScale == null || tab.MysteryFlipSkew == null) return;
-            tab.MysteryFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            tab.MysteryFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
-            tab.MysteryFlipScale.ScaleX = 1;
-            tab.MysteryFlipSkew.AngleY = 0;
-            SetMysteryFace(showReveal: false);
+            _mysteryWantReveal = false;
+            SettleMysteryPlate(showReveal: false);
         }
 
         /// <summary>
-        /// The finite gold breath: ring opacity and badge scale swell together, four times, then
-        /// FillBehavior.Stop snaps both back to their XAML resting values with no teardown owed.
-        /// The badge's two scale axes share ONE clock - two BeginAnimation calls would mint two
+        /// The gold breath: ring opacity and badge scale swell together, forever, until the gift
+        /// is opened (hover) or the tile goes away - <see cref="StopMysteryPop"/> is the only
+        /// exit, which is why it detaches exactly the way each animation was attached. The
+        /// badge's two scale axes share ONE clock - two BeginAnimation calls would mint two
         /// clocks that drift, and on text that reads as shearing (intake CTA lesson).
         /// </summary>
         private void StartMysteryPop()
@@ -533,26 +684,25 @@ namespace ConditioningControlPanel
             {
                 var tab = SettingsTab;
                 if (tab?.MysteryGlow == null || tab.MysteryBadgeScale == null || tab.MysteryBadgeScale.IsFrozen) return;
-                if (_mysteryPopPlaying) return;
+                if (_mysteryPopPlaying) return;   // already breathing; restarting only resets phase
                 _mysteryPopPlaying = true;
 
                 var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-                var repeats = new RepeatBehavior(MysteryPopCycles);
 
+                // FillBehavior stays at its default: a forever animation never completes, so
+                // .Stop would only describe a moment that never arrives, and the teardown path
+                // below is the thing that actually restores the resting values.
                 var glow = new DoubleAnimation(MysteryGlowRestOpacity, MysteryPopGlowMax, MysteryPopHalfCycle)
                 {
                     AutoReverse = true,
-                    RepeatBehavior = repeats,
-                    FillBehavior = FillBehavior.Stop,
+                    RepeatBehavior = RepeatBehavior.Forever,
                     EasingFunction = ease,
                 };
-                glow.Completed += (_, _) => _mysteryPopPlaying = false;
 
                 var swell = new DoubleAnimation(1.0, MysteryPopBadgeTo, MysteryPopHalfCycle)
                 {
                     AutoReverse = true,
-                    RepeatBehavior = repeats,
-                    FillBehavior = FillBehavior.Stop,
+                    RepeatBehavior = RepeatBehavior.Forever,
                     EasingFunction = ease,
                 };
 

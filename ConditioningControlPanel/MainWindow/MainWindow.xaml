@@ -8,8 +8,8 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         Title="Conditioning Control Panel"
-        Height="943" Width="1524"
-        MinHeight="620" MinWidth="1102"
+        Height="943" Width="1563"
+        MinHeight="620" MinWidth="1131"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -156,10 +156,26 @@
              instead of widening it; see MainWindow.NavRail.cs for why that is mandatory
              rather than merely convenient. Window Width/MinWidth moved by the same 1545/1679
              factor so Stretch="Fill" keeps the aspect it was tuned at (1656 -> 1524,
-             1198 -> 1102) - change one of these four numbers and you must change all four. -->
-        <Grid x:Name="DesignCanvas" Width="1545" Height="901">
+             1198 -> 1102) - change one of these four numbers and you must change all four.
+
+             2026-08-11 (later, owner: "hovering the menu opens it correctly, but it covers
+             the UI - leave some empty space on the side and shrink the menu a little, half
+             and half"). Column 0 is now 96 = the 56px collapsed rail + a 40px PERMANENT
+             GUTTER of bare canvas. The rail Border still hard-pins itself to 56 and sits
+             left-aligned, so the gutter is dead space the flyout can grow into before it
+             touches a single pixel of page. Paired with the flyout dropping 190 -> 176
+             (MainWindow.NavRail.cs), the true overlay over live UI falls 134px -> 80px.
+
+             The gutter is paid for by GROWING the canvas (1545 -> 1585), never by shrinking
+             column 1: it stays exactly 1489, because that is the width every tab was
+             authored against and they clip silently with no scrollbar if it moves
+             (fx-inventory §12.8). Same rule Phase 1 followed. And because the canvas grew,
+             the two Window widths at the top of this file move by the same 1585/1679 factor
+             (1656 -> 1563, 1198 -> 1131) to hold the aspect Stretch="Fill" was tuned at. -->
+        <Grid x:Name="DesignCanvas" Width="1585" Height="901">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56"/>
+                <!-- 56 rail + 40 gutter. The rail does NOT stretch into the gutter. -->
+                <ColumnDefinition Width="96"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -312,7 +328,11 @@
              OVER the page rather than a column that shoves it. ZIndex lifts it above the page
              content; ClipToBounds keeps the labels inside the 56px strip while it is shut.
              The Width here is the COLLAPSED width and is owned by MainWindow.NavRail.cs from
-             the first Loaded onwards. -->
+             the first Loaded onwards.
+
+             HorizontalAlignment=Left is also what creates the 40px gutter: column 0 is 96
+             wide now, and this Border refuses to fill it, so the first 40px the flyout grows
+             land on dead canvas instead of on the page. Do NOT switch this to Stretch. -->
         <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
                 HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
                 BorderBrush="#2A2A46" BorderThickness="0,0,1,0">

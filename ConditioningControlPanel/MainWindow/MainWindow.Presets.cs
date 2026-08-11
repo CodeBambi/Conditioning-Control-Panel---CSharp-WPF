@@ -1059,9 +1059,10 @@ namespace ConditioningControlPanel
                     if (art != null) dash.MysteryRevealArtBrush.ImageSource = art;
                 }
 
-                // The daily flip-reveal rides the same repaint triggers this method already has
-                // (Home shown, patron status, override landing). Idempotent - see DashboardFx.
-                MaybeRunMysteryReveal();
+                // The plate's hover flip and its gold breath are hooked/armed off the same
+                // repaint triggers this method already has (Home shown, patron status, override
+                // landing). One-shot latched, so it is safe to hammer - see DashboardFx 2c.
+                EnsureMysteryTileFx();
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshMysteryTile: {E}", ex.Message); }
         }

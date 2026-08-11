@@ -1056,12 +1056,14 @@
                  on every rail repaint; the literals below are design-time fallbacks. Click
                  navigates to today's feature - the tile never launches anything itself.
 
-                 The tile is a TWO-SIDED PLATE (owner spec 2026-08-11 #2): once a day, the first
-                 time the Dashboard is seen, it turns - same ScaleX fake-spin as the intake pass
-                 card on the logo tile - and reveals today's feature (art + name), holds, and
-                 turns back. The spin transform lives on THIS host so both faces share it; the
-                 ceremony itself is MainWindow.DashboardFx.cs (MaybeRunMysteryReveal), never a
-                 Storyboard (SetTargetName no-ops across this UserControl's namescope). -->
+                 The tile is a TWO-SIDED PLATE (owner spec 2026-08-11 #2, revised): HOVER turns
+                 it - same ScaleX fake-spin as the intake pass card on the logo tile, one quick
+                 half-turn - onto today's feature (art + name), and unhovering turns it back to
+                 the box. The flip transform lives on THIS host so both faces share it, and the
+                 MouseEnter/MouseLeave hooks are on the host too (the faces swap Visibility
+                 mid-turn, so a handler on a face would see leaves the pointer never made). The
+                 turn itself is MainWindow.DashboardFx.cs region 2c, never a Storyboard
+                 (SetTargetName no-ops across this UserControl's namescope). -->
             <Grid Grid.Row="2" Grid.Column="0" x:Name="MysteryFlipHost" x:FieldModifier="internal"
                   RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
@@ -1116,8 +1118,8 @@
                 <!-- The gold highlight ring (owner spec: "an highlight around it so it pops...
                      probably in yelloish"). Inside the flip host so it turns with the plate.
                      Opacity is the animated property - MainWindow.DashboardFx breathes it for
-                     the first few seconds of the day's first Dashboard look, then it rests at
-                     the value below. Gold on purpose: everything else on this wall glows in the
+                     as long as today's gift is unopened, and rests it at the value below once
+                     the user hovers the tile. Gold on purpose: everything else on this wall glows in the
                      mod's Fx colour, so the one gold ring cannot be mistaken for an active
                      state. -->
                 <Border x:Name="MysteryGlow" x:FieldModifier="internal"
@@ -1131,8 +1133,8 @@
 
             <!-- The badge sits OUTSIDE the flip host so it stays legible while the plate is
                  edge-on mid-turn. Top-right because the FREE TODAY price tag (TierBadge) owns
-                 the card's top-left. Breath is driven by MainWindow.DashboardFx on the same
-                 finite clock as the ring above. -->
+                 the card's top-left. Breath is driven by MainWindow.DashboardFx alongside the
+                 ring above, and stops with it on the day's first hover. -->
             <Border x:Name="MysteryBadge" x:FieldModifier="internal"
                     Grid.Row="2" Grid.Column="0" Panel.ZIndex="12" IsHitTestVisible="False"
                     HorizontalAlignment="Right" VerticalAlignment="Top"

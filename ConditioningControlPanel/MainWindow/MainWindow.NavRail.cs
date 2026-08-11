@@ -21,9 +21,16 @@ namespace ConditioningControlPanel
     /// content column is deliberately pinned at the width every tab was authored against (Phase 1
     /// grew the canvas rather than shrinking that column, because the layouts clip silently
     /// otherwise - fx-inventory §12.8). If the rail widened the canvas on hover, the Viewbox would
-    /// re-scale EVERY tab by 190/56 on each mouse-over: the whole app would visibly breathe. So the
+    /// re-scale EVERY tab by 176/56 on each mouse-over: the whole app would visibly breathe. So the
     /// rail is sized for the collapsed 56px in the grid and spans both columns, painting over the
     /// page when it opens. Nothing below it ever relayouts.</para>
+    ///
+    /// <para><b>Why the page still is not buried.</b> Overlaying is mandatory, but it does not have
+    /// to be free of charge to the page. Canvas column 0 reserves 96px - the 56px rail plus a 40px
+    /// permanent gutter of bare canvas that the left-aligned rail Border refuses to fill - and the
+    /// open width is 176 rather than the 190 the rows were authored at. The flyout therefore spends
+    /// its first 40px on dead space and only the last 80 on the page, down from 134.
+    /// <see cref="NavRailExpandedWidth"/> carries the arithmetic and the label floor.</para>
     ///
     /// <para>Collapsing also shuts the accordion. Seven door icons read as a rail; seven door icons
     /// with four unlabelled child icons wedged among them reads as noise, and the child rows are
@@ -32,12 +39,31 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>Icon-only width. Matches the DesignCanvas column-0 width in MainWindow.xaml -
-        /// the two MUST stay in step or the page sits under the collapsed rail.</summary>
+        /// <summary>Icon-only width. Also the width the rail rows' left paddings centre their
+        /// icons in (door 17+22+17, entry 21+14+21 - MainWindow.xaml), so it cannot move without
+        /// re-centring both. DesignCanvas column 0 is WIDER than this on purpose (see below);
+        /// what must stay in step is that the column is never NARROWER, or the page slides
+        /// under the collapsed rail.</summary>
         private const double NavRailCollapsedWidth = 56;
 
-        /// <summary>Open width. This is the width the rail rows were authored against.</summary>
-        private const double NavRailExpandedWidth = 190;
+        /// <summary>
+        /// Open width. Was 190 - the width the rail rows were originally authored against - until
+        /// the owner flagged (2026-08-11) that the flyout buries the left edge of the page it is
+        /// opened on top of. The fix is split in two, per the owner's own "half and half": canvas
+        /// column 0 grew to 96 so the first 40px of the flyout land on a permanent empty gutter
+        /// (MainWindow.xaml, DesignCanvas), and the flyout itself gives back 14px here. True
+        /// overlay over live UI: 190-56 = 134px before, 176-96 = 80px now.
+        ///
+        /// <para>176 is a floor, not a preference. The rail must fully show its longest ENTRY
+        /// label in every shipped language, and the entry row spends 21 (left padding) + 14 (icon)
+        /// + 6 (icon margin) + 8 (right padding) = 49px before the text starts. The worst string
+        /// is es "Entrenador de Parpadeo" at 122px (fr and ru sit at 120), so 171px is the true
+        /// minimum and 176 is that plus a font-fallback cushion. Shrink this further only by
+        /// buying label room first - the labels live in a horizontal StackPanel, which measures
+        /// children at infinite width, so TextTrimming cannot save an over-long row here: it just
+        /// runs into the Border's ClipToBounds and gets cut with no ellipsis.</para>
+        /// </summary>
+        private const double NavRailExpandedWidth = 176;
 
         private const int NavRailAnimMs = 150;
 

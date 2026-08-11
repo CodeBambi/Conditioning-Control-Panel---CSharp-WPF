@@ -1575,10 +1575,11 @@ namespace ConditioningControlPanel.Models
 
         private string _dailyGiftLastRevealDate = "";
         /// <summary>
-        /// Local date stamp ("yyyy-MM-dd") of the last day the Dashboard's ? box played its
-        /// flip-reveal ceremony. One turn per day: latched when the reveal face lands (the
-        /// "they saw it" moment), so a ceremony cancelled mid-spin is owed again on the next
-        /// visit rather than lost. See MainWindow.DashboardFx.cs, MaybeRunMysteryReveal.
+        /// Local date stamp ("yyyy-MM-dd") of the last day the Dashboard's ? box was opened -
+        /// i.e. the first time the user HOVERED the tile that day and turned it to the reveal
+        /// face. It is only ever written from that hover, and it is what the tile's gold breath
+        /// is gated on: unopened today = the badge and ring keep breathing, opened = they rest
+        /// until tomorrow. See MainWindow.DashboardFx.cs, region 2c (RequestMysteryFace).
         /// </summary>
         public string DailyGiftLastRevealDate
         {
