@@ -52,6 +52,15 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <!-- SP-054 intake payload serving (the SAME copied-asset convention + trust-anchor
+         discipline as the dtrh glob above; flagged scope expansion — record.md glue bundle).
+         The intake tree serves overlay-first on the intake host's §4 server; the dtrh
+         tree below it is the borrow fallback (vendor/three, chime mp3s). READ-ONLY. -->
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\intake\**\*">
+      <Link>payload\intake\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <!-- Product-owned overlay (served overlay-first; exactly ONE payload shadow:
          bridge.js = blob 13af3f4d + the §3.1 transport diff). -->
     <Content Include="Features\Dtrh\overlay\**\*">

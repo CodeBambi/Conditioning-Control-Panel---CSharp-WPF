@@ -1,0 +1,74 @@
+{
+  "runnable": false,
+  "runnableReason": "no-session-engine (degraded-delivery contract)",
+  "id": "076fbdd0-9b58-41c0-a5de-248949c8ef4d",
+  "name": "Intense Bambi Intake - Hers Entirely",
+  "description": "A Hard session drafted from your Bambi Intake \u2014 Hers Entirely route.",
+  "niche": "bambi",
+  "difficulty": "Hard",
+  "durationMinutes": 60,
+  "draftedUtc": "2026-08-11T22:12:36.0283417+00:00",
+  "xpComputed": 63,
+  "profile": {
+    "blankness": {
+      "value": 0.5,
+      "itemCount": 0,
+      "underSampled": true
+    },
+    "service": {
+      "value": 0.8571428571428571,
+      "itemCount": 4,
+      "underSampled": false
+    },
+    "arousal": {
+      "value": 0.35714285714285715,
+      "itemCount": 4,
+      "underSampled": false
+    },
+    "presentation": {
+      "value": 0.5,
+      "itemCount": 0,
+      "underSampled": true
+    },
+    "autonomy": {
+      "value": 0.5,
+      "itemCount": 0,
+      "underSampled": true
+    },
+    "scoreableRecords": 9
+  },
+  "knobs": {
+    "flashPerHour": 66,
+    "flashPerHourEnd": 141,
+    "flashOpacity": 68,
+    "flashOpacityEnd": 86,
+    "flashHydra": true,
+    "bubblesEnabled": true,
+    "bubblesIntermittent": false,
+    "mindWipeBaseMultiplier": 3,
+    "subliminalOpacity": 70,
+    "subliminalPerMin": 4,
+    "spiralEnabled": true,
+    "spiralOpacity": 10,
+    "spiralOpacityEnd": 25,
+    "lockCardEnabled": true,
+    "lockCardFrequency": 3,
+    "lockCardStartMinute": 10,
+    "mandatoryVideosEnabled": true,
+    "videosPerHour": 3,
+    "pinkFilterStartOpacity": 10,
+    "pinkFilterEndOpacity": 45
+  },
+  "subliminalPhrases": [
+    "i am hers entirely",
+    "good girls drop"
+  ],
+  "bouncingTextPhrases": [
+    "i am hers entirely",
+    "good girls drop"
+  ],
+  "lockCardPhrases": [
+    "i am hers entirely",
+    "good girls drop"
+  ]
+}
