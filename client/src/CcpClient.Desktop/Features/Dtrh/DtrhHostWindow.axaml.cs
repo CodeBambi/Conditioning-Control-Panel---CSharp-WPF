@@ -666,6 +666,13 @@ public partial class DtrhHostWindow : Window
             return;
         }
 
+        // SP-053: host-side OS read at probe start — the exact API WPF's OS cap wraps
+        // (SystemParametersInfo GET; null = named limit / GET failure, never defaulted).
+        // Paired with the engine's probe-motion messages (re-read at each arrival below).
+        var osAtNav = DtrhMotionPreference.ReadOsClientAreaAnimation();
+        _host.LogDiagnostic($"dtrh-motion: host OS ClientAreaAnimation={(osAtNav?.ToString() ?? "null")} " +
+            $"source={(OperatingSystem.IsWindows() ? "SystemParametersInfo(GET)" : "named-limit")}");
+
         // Ported spike probe sequence (SP-011 W4/W6), driven identically on both surfaces:
         // probe-h2p AFTER the page's module registered its handler; probe-buffered BEFORE
         // the +4s late registration — bridge.js must buffer and replay it. Results mirror
@@ -897,6 +904,10 @@ public partial class DtrhHostWindow : Window
                 if (unknown.Type.StartsWith("probe-", StringComparison.Ordinal))
                 {
                     _host.LogDiagnostic($"dtrh: {body}");
+                    if (unknown.Type == "probe-motion")
+                    {
+                        LogMotionPairing(body);
+                    }
                 }
                 else
                 {
@@ -912,6 +923,40 @@ public partial class DtrhHostWindow : Window
                 _host.LogDiagnostic($"dtrh: malformed page message ({malformed.Reason}) — tolerated");
                 return;
         }
+    }
+
+    /// <summary>SP-053: pair the engine's probe-motion answer with a FRESH host-side OS
+    /// read at message arrival (OS state verified immediately before the engine reading
+    /// is interpreted) and log the typed verdict. Tolerant parse — a malformed motion
+    /// frame degrades to Unknown, never crashes the probe run.</summary>
+    private void LogMotionPairing(string body)
+    {
+        bool? engineReduced = null;
+        string phase = "?";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("reduced", out var r) &&
+                (r.ValueKind == JsonValueKind.True || r.ValueKind == JsonValueKind.False))
+            {
+                engineReduced = r.GetBoolean();
+            }
+
+            if (doc.RootElement.TryGetProperty("phase", out var p) && p.ValueKind == JsonValueKind.String)
+            {
+                phase = p.GetString() ?? "?";
+            }
+        }
+        catch (JsonException)
+        {
+            // degraded to Unknown below
+        }
+
+        var osNow = DtrhMotionPreference.ReadOsClientAreaAnimation();
+        var verdict = DtrhMotionPreference.Evaluate(osNow, engineReduced);
+        _host.LogDiagnostic($"dtrh-motion: verdict={verdict} phase={phase} " +
+            $"osAnimation={(osNow?.ToString() ?? "null")} engineReduced={(engineReduced?.ToString() ?? "null")} " +
+            $"query={DtrhMotionPreference.ProbeQuery}");
     }
 
     private void DispatchPageMessage(DtrhProtocol.DtrhPageMessage message)

@@ -1,17 +1,17 @@
 ## STATUS: SP-053 — Webview prefers-reduced-motion inheritance probe
-**Current Step:** Step 1 — probe design + pre-approach consult (IN PROGRESS)
+**Current Step:** Step 2 — the probe + measurement (IN PROGRESS)
 **Last Updated:** 2026-08-05 (worker)
 **Blockers:** none
 
-### Step 1: probe design + pre-approach consult
+### Step 1: probe design + pre-approach consult — COMPLETE (plan review: skipped-by-design SP-195)
 - [x] Update STATUS.md before starting work
 - [x] Measurement design (page-side probe + host OS read + toggle mechanism + restore)
 - [x] Failure-contingent mechanism sketch (built only if inheritance fails)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: the probe + measurement
-- [ ] Probe seam (unit-testable; asserts the measurement PATH)
-- [ ] Headed measurement run: engine matchMedia vs OS setting OFF and ON (transcripts)
+- [x] Probe seam (unit-testable; asserts the measurement PATH)
+- [x] Headed measurement run: engine matchMedia vs OS setting OFF and ON (transcripts)
 
 ### Step 3: verdict + mechanism (if needed) + evidence + pre-completion consult
 - [ ] Verdict recorded with transcripts

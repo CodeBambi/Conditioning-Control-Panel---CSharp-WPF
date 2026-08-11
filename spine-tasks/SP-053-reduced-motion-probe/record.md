@@ -110,5 +110,51 @@ navigation can land after `capability.js:35` already ran — a silent non-fix. D
   `shared/capability.js:35` (the probe) + `:40` (pointer: coarse, unrelated) + `:57` (the 2D consequence). One consumer
   to honor — a mechanism, if built, covers all of them.
 
-**Engine-review presence:** none so far (Step 1 plan review requested after this step's commit — presence/absence
-recorded there).
+**Engine-review presence:** Step 1 plan review requested via `spine_review_step` (type=plan) after commit 17b9ad45 →
+verdict null, SKIPPED by design ("Nested reviewer spawn blocked inside pi worker session — the batch engine runs
+reviews after worker success (SP-195)"; artifact `.reviews/1-20260811T152704.md`; spawnFailed=false). No engine
+reviewer ran in-worker on any call so far; recorded per the T-2 heading discipline.
+
+## Step 2 — the probe + measurement
+
+### Seam (unit-testable — asserts the measurement PATH, never the OS inheritance)
+
+- `client/src/CcpClient.Desktop/Features/Dtrh/DtrhMotionPreference.cs` (NEW): `ProbeQuery` const (the exact
+  `capability.js:35` literal), pure `Evaluate(bool?, bool?) -> Holds/Fails/Unknown` (Unknown on any null — never a
+  defaulted boolean), `ReadOsClientAreaAnimation()` — GET-only `SystemParametersInfoW(0x1042)` on Windows (the exact
+  API `SystemParameters.ClientAreaAnimation` wraps; GET failure -> null), null off-Windows (named limit).
+- `overlay/probe.html` (harness page, in scope): motion block evaluates the EXACT query at module eval and posts
+  `{type:'probe-motion', phase, query, reduced}` via the native page->host transport + bridge.log mirror; a
+  MediaQueryList `change` listener re-posts `phase:'change'` (bonus live-tracking fact; absence proves nothing).
+- `DtrhHostWindow.axaml.cs`: probe-page `NavigationCompleted` logs the host OS read; the existing `probe-*`
+  UnknownType branch pairs each `probe-motion` arrival with a FRESH OS read and logs the typed verdict line
+  (`LogMotionPairing` — tolerant parse, malformed -> Unknown).
+- `client/tests/CcpClient.Tests/DtrhMotionPreferenceTests.cs` (NEW): 11 facts — the query literal == capability.js:35,
+  the 4-cell known-sides mapping, the 5 null-combination Unknown cases, the host-read smoke fact. 11/11 green.
+
+### Headed measurement run (Windows, 2026-08-05; WebView2 runtime HKLM pv=151.0.4129.72 — engine-version-scoped)
+
+Protocol per run (consult-hardened): baseline GET -> (SET -> GET-verify -> 1.5 s settle for SENDCHANGE) -> launch ->
+engine read -> close -> restore SET -> GET-verify. Toggle via `evidence/motion-toggle.ps1` (the exact
+`SystemParametersInfo(0x1043, by-value, SPIF_UPDATEINIFILE|SPIF_SENDCHANGE)` call Settings makes; baseline captured
+first, restored after, re-verified).
+
+**Run A — baseline (OS Animation effects ON; GET ClientAreaAnimation=1):** `evidence/motion-run-baseline.log`, app exit 0.
+
+    dtrh-motion: host OS ClientAreaAnimation=True source=SystemParametersInfo(GET)
+    dtrh: {"type":"probe-motion","phase":"initial","query":"(prefers-reduced-motion: reduce)","reduced":false}
+    dtrh-motion: verdict=Holds phase=initial osAnimation=True engineReduced=False query=(prefers-reduced-motion: reduce)
+
+**SET 0 -> `set=0 verify ClientAreaAnimation=0` (OS-side verified before the engine read).**
+
+**Run B — OS Animation effects OFF:** `evidence/motion-run-off.log`, app exit 0.
+
+    dtrh-motion: host OS ClientAreaAnimation=False source=SystemParametersInfo(GET)
+    dtrh: {"type":"probe-motion","phase":"initial","query":"(prefers-reduced-motion: reduce)","reduced":true}
+    dtrh-motion: verdict=Holds phase=initial osAnimation=False engineReduced=True query=(prefers-reduced-motion: reduce)
+
+**Restore: SET 1 -> `set=1 verify ClientAreaAnimation=1`; final `-Get` -> `ClientAreaAnimation=1`. The box is back at
+its baseline.** No `phase:'change'` messages in either run (each run launched after the state settled — the
+live-tracking bonus question is outside the two-run protocol; absence recorded, nothing claimed).
+
+**Engine-review presence (Step 2):** plan review requested after the step commit — recorded there.
