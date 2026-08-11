@@ -1,6 +1,6 @@
 ## STATUS: SP-054 — Graded Intake web-core host
-**Current Step:** Step 3 — serving + loom-share + headed evidence + pre-completion consult
-**Last Updated:** 2026-08-11 (Step 2 complete — 795/795 + 33/33 green)
+**Current Step:** Step 4 — Testing & Verification
+**Last Updated:** 2026-08-11 (Step 3 complete — 6 headed runs, consult discharges executed, 795/795 + 33/33 green)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -29,12 +29,13 @@
 - [x] Unit tests (bridge, pass-week, punch card, profiler matrix, stores, degraded typings)
 
 ### Step 3: serving + loom-share + headed evidence + pre-completion consult
-- [ ] Intake tree serving through the §4 contract class (audio borrow proven)
-- [ ] loom-save against the shared b4 store (file-content proof)
-- [ ] Headed evidence (boot, init provisions, quiz-result → drafting + spend + stamp, abort = no spend, fullscreen, watchdog)
-- [ ] record.md (archaeology, design, consults, review presence, evidence index)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+**Status:** complete (plan review SKIPPED — engine class, see Step 1 note; artifact `.reviews/3-20260811T222515.md`)
+- [x] Intake tree serving through the §4 contract class (audio borrow proven)
+- [x] loom-save against the shared b4 store (file-content proof)
+- [x] Headed evidence (boot, init provisions, quiz-result → drafting + spend + stamp, abort = no spend, fullscreen, watchdog)
+- [x] record.md (archaeology, design, consults, review presence, evidence index)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥683/33 floor; TRX logger)
