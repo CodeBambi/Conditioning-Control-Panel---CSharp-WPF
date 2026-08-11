@@ -151,6 +151,11 @@ public sealed class DtrhSlotIndex
 
     public int DurationSec { get; set; } = 180;
 
+    /// <summary>The Bottomless Fall toggle (WPF ChaosEndless; SP-052 additive member —
+    /// absent in pre-SP-052 index docs = false, neutral default, no schema bump). Persist
+    /// is ownership-gated (endless_mode); deal re-checks ownership (ChaosModels.cs:206).</summary>
+    public bool Endless { get; set; } = false;
+
     public int WaveCount { get; set; } = 5;
 
     public string Motion { get; set; } = "Mixed";

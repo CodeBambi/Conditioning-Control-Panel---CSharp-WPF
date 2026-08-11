@@ -222,6 +222,8 @@ public static class DtrhProtocol
     public sealed record DtrhRunSetup(
         string Difficulty,
         int DurationSec,
+        // The Bottomless Fall (DtrhHostService.cs:509 — init carries the saved toggle raw).
+        bool Endless,
         int WaveCount,
         string Motion,
         IReadOnlyList<string>? EnabledVariants,

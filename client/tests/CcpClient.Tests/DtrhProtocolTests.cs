@@ -161,7 +161,7 @@ public class DtrhProtocolTests
     public void BuildInit_ShapeMatches_BootJsHandler_AndWpfPost()
     {
         var setup = new DtrhProtocol.DtrhRunSetup(
-            "Easy", 180, 5, "Mixed", null, 0.85, true, true, true, true, "Q", "E");
+            "Easy", 180, false, 5, "Mixed", null, 0.85, true, true, true, true, "Q", "E");
         var root = RoundTrip(DtrhProtocol.BuildInit(80, "builtin-sissyhypno", null, setup, false));
 
         Assert.Equal("init", root.GetProperty("type").GetString());
@@ -173,6 +173,7 @@ public class DtrhProtocolTests
         var rs = root.GetProperty("runSetup");
         Assert.Equal("Easy", rs.GetProperty("difficulty").GetString());
         Assert.Equal(180, rs.GetProperty("durationSec").GetInt32());
+        Assert.False(rs.GetProperty("endless").GetBoolean()); // the Bottomless Fall toggle (DtrhHostService.cs:509)
         Assert.Equal(5, rs.GetProperty("waveCount").GetInt32());
         Assert.Equal("Mixed", rs.GetProperty("motion").GetString());
         Assert.Equal(JsonValueKind.Null, rs.GetProperty("enabledVariants").ValueKind);

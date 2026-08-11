@@ -1,0 +1,19 @@
+{
+  "_provenance": "verbatim %APPDATA%/CcpClient/dtrh_slots.json after wh-runA-owner.log (real-mode owner persist, 2026-08-11) — captured in-session before Run B2 overwrote the file; the same shape was re-persisted by wh-runA2 (test-mode owner clone).",
+  "activeSlot": 1,
+  "difficulty": "Easy",
+  "durationSec": 7200,
+  "endless": true,
+  "waveCount": 4,
+  "motion": "Mixed",
+  "enabledVariants": null,
+  "effectIntensity": 0.85,
+  "colorFlashes": true,
+  "boonDraftEnabled": true,
+  "allowCurses": true,
+  "dartersEnabled": true,
+  "key1": "Q",
+  "key2": "E",
+  "schemaVersion": 1,
+  "migrationJournal": []
+}
