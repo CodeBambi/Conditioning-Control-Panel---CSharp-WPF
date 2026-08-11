@@ -79,12 +79,16 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work (land-consult ordering):** SP-052 = **the b4 defect row** (P0, silent data loss: Hourglass ownership-gated ceiling at persist + deal + the `endless` knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) + SP-053 = **reduced-motion inheritance probe** (S, no deps) as lane-mate. The Graded Intake host (L) wants a wave to itself after these. Next unused task ID: SP-052.
 
-### Wave 13 (staged 2026-08-05)
+### Wave 13 (LANDED 2026-08-11, `6507361b`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-052-dtrh-ownership-gates | Row: DTRH run-setup ownership gates (P0 b4 parity defects — Hourglass ownership-gated ceiling at persist + deal; endless knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) | Authored 2026-08-05 | SP-050 |
-| SP-053-reduced-motion-probe | Row: Webview prefers-reduced-motion inheritance probe (pre-existing DTRH host obligation; measure matchMedia inside the embedded engine vs OS animation states; typed honoring mechanism only if inheritance fails; Linux unproven named limit) | Authored 2026-08-05 | SP-050 |
+| SP-052-dtrh-ownership-gates | Row: DTRH run-setup ownership gates (P0 b4 parity defects — Hourglass ownership-gated ceiling at persist + deal; endless knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) | **Done 2026-08-11** (landed `6507361b`; batch `20260805T102230` resumed after the kimi-403 kill — FULL review chain: code APPROVE + final PASS; both gates restore main's exact shape (durMax 7200/1200 both points; Endless end-to-end); clamp matrix + five-point endless green; b4 tests updated+strengthened; headed round-trips per behavior; APPDATA incident remediated (isolation row filed); 683/683 + 33/33; row WIP — owner ratifies) | SP-050 |
+| SP-053-reduced-motion-probe | Row: Webview prefers-reduced-motion inheritance probe (pre-existing DTRH host obligation; measure matchMedia inside the embedded engine vs OS animation states; typed honoring mechanism only if inheritance fails; Linux unproven named limit) | **Done 2026-08-11** (landed `6507361b`; batch `20260805T102230` — FULL review chain: code APPROVE + final PASS; VERDICT = INHERITANCE HOLDS on Windows WebView2 151.0.4129.72 (engine-version-scoped; per-OS-state table, confounder discipline, boot-time-only consumption); honoring mechanism not built (contingent design stays in record); re-check trigger = runtime version change; Linux unproven named limit; row DONE-with-named-limits) | SP-050 |
+
+### Wave 14 (next)
+
+**Next claimable work:** SP-054 = **Graded Intake web-core host** (P1, size L — gets a wave to itself per the wave-12 land consult): the window class (ChaosWebViewHost parity) + the full bridge vocabulary (6 out / 12 in; ping/payload-state authoring obligation) + 3 stores + profiler + session drafting sink + loom-save against the shared b4 store; degraded-delivery contract verbatim in the row; privacy boundaries as listed. Next unused task ID: SP-054.
 
 ### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 13 in flight)
 

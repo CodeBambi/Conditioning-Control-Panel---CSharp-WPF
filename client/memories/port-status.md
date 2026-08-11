@@ -117,3 +117,10 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **SP-049 (Loom studio promotion, first v6.6.3 delta):** DtrhLoomWindow (WPF LoomHostService sibling); loom-reveal end-to-end; gifenc save round trip (byte-deterministic ×8); rack-pane limit DISCHARGED AS DRIVEN (painted screenshot = residual laptop-scale limit, zero-code-change discharge condition on a matched-scale machine); boon_pick chain fix (b3 text corrected; ChaosSfx audit row filed — full cue→chain map unaudited); dashboard entry-points row filed (reachability debt).
 - **Next: SP-050 = host-obligation audit** across remaining v6.6.3 deltas (Brain Drain + Brain Melt, FX overhaul, Hourglass, Bottomless Fall, NUX, Weekly Intake Pass) — enumerate per-delta client obligations instead of blind feature packets.
 - Ten consecutive auto-gate lands; four consecutive zero-recovery waves.
+
+## Wave 13 (2026-08-11, integrate 6507361b; floor now 683/683 + 33/33)
+
+- **SP-052 (b4 ownership-gate defects FIXED):** durMax 7200/1200 at persist AND deal (main's exact shape); Endless knob complete end-to-end; clamp matrix + five-point round-trips green; b4 tests updated+strengthened. Row WIP. Recovery: kimi-403 kill → days-parked → retry/resume both tasks (stale-failure-blocks-merge lesson).
+- **SP-053 (reduced-motion probe): VERDICT = INHERITANCE HOLDS on Windows WebView2 151.0.4129.72** (engine-version-scoped; honoring mechanism not built; re-check = runtime version change). Row DONE-with-named-limits. Linux unproven.
+- **OWNER INCIDENT: Run A wrote the real %APPDATA%/CcpClient profile** (APPDATA= doesn't redirect .NET GetFolderPath) — slot-1 index restored to WPF fallback defaults, purchases to []; post-run file showed the slot was unused (0 runs/0 sparks). P1 isolation row filed (real seam or backup/restore + m2test declared-fixture discipline); interim rule = backup-before-run.
+- Next: SP-054 = Graded Intake web-core host (L, wave to itself).
