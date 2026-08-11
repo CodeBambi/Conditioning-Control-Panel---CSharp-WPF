@@ -1,14 +1,14 @@
 ## STATUS: SP-055 — One active-pool definition (asset deselection parity)
-**Current Step:** Step 1 — archaeology + seam design + pre-approach consult
-**Last Updated:** 2026-08-11 (authored)
+**Current Step:** Step 1 — archaeology + seam design + pre-approach consult (design drafted, consult pending)
+**Last Updated:** 2026-08-11 (Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: archaeology + seam design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (EnumerateActive/BuildDisabledSet/Scan/ScanItem, IsAssetActive, DisabledAssetPaths + UseAssetWhitelist)
-- [ ] Consumer inventory (grep every user-media consumer in the client)
-- [ ] Seam design + fixture matrix
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (EnumerateActive/BuildDisabledSet/Scan/ScanItem, IsAssetActive, DisabledAssetPaths + UseAssetWhitelist, FlashService.GetMediaFiles normalization)
+- [x] Consumer inventory (grep every user-media consumer in the client)
+- [x] Seam design + fixture matrix (in record.md Step 1)
+- [x] Pre-approach solo consult (verdict + actual model in record.md — APPROVED with 6 corrections, all adopted)
 
 ### Step 2: the seam + both consumers + tests
 - [ ] Single active-pool definition with upstream's exact semantics
