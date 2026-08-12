@@ -1,15 +1,15 @@
 ## STATUS: SP-060 — Her Room + Awareness divergence audit (zero product code)
-**Current Step:** not started
-**Last Updated:** 2026-08-12 (orchestrator, authored — wave-17 lane-2)
+**Current Step:** Step 2 — port-side inventory
+**Last Updated:** 2026-08-12 (worker, in progress)
 **Blockers:** none
 
-### Step 1: upstream enumeration from the tree + pre-approach consult — NOT STARTED
-- [ ] Update STATUS.md before starting work
-- [ ] Enumerate upstream Companion/Awareness/Views/asset semantics with `File.cs:line`
-- [ ] Privacy surface named with upstream defaults as cited facts
-- [ ] Pre-approach solo consult (verdict + ACTUAL model in record.md)
+### Step 1: upstream enumeration from the tree + pre-approach consult — COMPLETE
+- [x] Update STATUS.md before starting work
+- [x] Enumerate upstream Companion/Awareness/Views/asset semantics with `File.cs:line`
+- [x] Privacy surface named with upstream defaults as cited facts
+- [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
-### Step 2: port-side inventory (what c1–c7 landed) — NOT STARTED
+### Step 2: port-side inventory (what c1–c7 landed) — IN PROGRESS
 - [ ] Per-element port counterpart with contract section + `File.cs:line`, or explicit "no counterpart"
 - [ ] Port defaults + named limits recorded as facts (consent placeholder, cooldown families, memory read-gating)
 - [ ] Already-decided divergences flagged with their decision citation
