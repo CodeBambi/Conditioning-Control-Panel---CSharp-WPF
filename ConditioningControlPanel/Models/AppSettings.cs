@@ -5295,6 +5295,31 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Descent — Spiral rail
+
+        private bool _descentSpiralRailEnabled = false;
+        /// <summary>
+        /// Shows the Spiral Track miniature in the nav rail (CONTRACTS-0812-FINISH §9).
+        ///
+        /// FALSE IN EVERY SHIPPED BUILD, and deliberately without a settings editor: the
+        /// `/embed/spiral` route it hosts has not deployed, and a visible toggle for a
+        /// surface that cannot draw yet is worse than no toggle. Flip it by hand in
+        /// settings.json to exercise the host. When the Spiral goes public this becomes a
+        /// normal preference with a normal editor — or disappears, if the rail ends up
+        /// always-on.
+        ///
+        /// Even set true the rail stays dark unless the server has shipped this account a
+        /// descent block (SpiralRailHost.Arm), so turning it on cannot conjure a spiral
+        /// for an account outside the rollout dial.
+        /// </summary>
+        public bool DescentSpiralRailEnabled
+        {
+            get => _descentSpiralRailEnabled;
+            set { _descentSpiralRailEnabled = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Web XP claim (claim-on-sync handshake)
 
         private string? _lastWebXpClaimId = null;

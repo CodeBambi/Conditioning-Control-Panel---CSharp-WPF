@@ -343,7 +343,21 @@ public class QuestService : IDisposable
             .Where(q => q.Id != excludeId)
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(IsQuestAvailableForTier)
+            .Where(IsQuestInDateWindow)
             .ToList();
+
+        // THE WINDOW MUST NEVER STARVE THE PLAYER. If a date window emptied the pool,
+        // fall back to the undated pool rather than leaving the day questless: an event
+        // that ends at midnight UTC-somewhere must not be able to take the daily quest
+        // with it. See IsQuestInDateWindow.
+        if (availableQuests.Count == 0)
+        {
+            availableQuests = questPool
+                .Where(q => q.Id != excludeId)
+                .Where(q => IsQuestAvailableForLevel(q.Category))
+                .Where(IsQuestAvailableForTier)
+                .ToList();
+        }
 
         if (availableQuests.Count == 0) return;
 
@@ -364,7 +378,18 @@ public class QuestService : IDisposable
             .Where(q => q.Id != excludeId)
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(IsQuestAvailableForTier)
+            .Where(IsQuestInDateWindow)
             .ToList();
+
+        // Same starvation guard as the daily generator — see the note there.
+        if (availableQuests.Count == 0)
+        {
+            availableQuests = questPool
+                .Where(q => q.Id != excludeId)
+                .Where(q => IsQuestAvailableForLevel(q.Category))
+                .Where(IsQuestAvailableForTier)
+                .ToList();
+        }
 
         if (availableQuests.Count == 0) return;
 
@@ -393,6 +418,52 @@ public class QuestService : IDisposable
     private static bool IsQuestAvailableForTier(QuestDefinition quest)
     {
         return !quest.RequiresPremium || App.Patreon?.HasPremiumAccess == true;
+    }
+
+    /// <summary>
+    /// THE DATE WINDOW, finally read. QuestDefinitionService has parsed, cached and
+    /// refreshed `activeFrom`/`activeUntil` since the definitions channel shipped, and
+    /// nothing has ever looked at them — a seasonal quest went live the moment it was
+    /// published and stayed live forever. This predicate is that missing read, and it
+    /// doubles as the channel's kill switch: publishing a quest with an `activeUntil`
+    /// in the past retires it on the next roll without a client update.
+    ///
+    /// NO-OP BY CONSTRUCTION FOR EVERYTHING THAT SHIPS TODAY. Both fields are null on
+    /// every embedded quest (QuestDefinition's ctor never sets them) and on every quest
+    /// the live channel currently publishes, and a null/blank/unparseable bound is
+    /// treated as "no constraint". A quest can only be hidden by a bound that is both
+    /// present and a valid yyyy-MM-dd — anything else fails OPEN, because a server typo
+    /// must cost a scheduling window, never the player's daily quest.
+    ///
+    /// LOCAL DATES, DELIBERATELY. The rest of quest scheduling turns over on
+    /// DateTime.Today (QuestProgress.IsDailyExpired, GetStartOfWeek), so the window
+    /// uses the same boundary — a quest that appears at "the start of the day" must
+    /// appear at the start of the day the player's other quests reset on, not eight
+    /// hours off it. `activeUntil` is INCLUSIVE: the last day named is a day it runs.
+    /// </summary>
+    private static bool IsQuestInDateWindow(QuestDefinition quest)
+        => IsQuestInDateWindow(quest.ActiveFrom, quest.ActiveUntil, DateTime.Today);
+
+    /// <summary>Pure form of the window test, split out so it is testable without a live App.</summary>
+    internal static bool IsQuestInDateWindow(string? activeFrom, string? activeUntil, DateTime today)
+    {
+        if (TryParseQuestDate(activeFrom, out var from) && today.Date < from) return false;
+        if (TryParseQuestDate(activeUntil, out var until) && today.Date > until) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Strict yyyy-MM-dd only. The channel is hand-authored JSON, so a loose parse would
+    /// read "03/04" differently depending on the machine's culture and retire a quest on
+    /// the wrong continent. False means "no usable bound" — the caller then ignores it.
+    /// </summary>
+    private static bool TryParseQuestDate(string? value, out DateTime date)
+    {
+        date = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        return DateTime.TryParseExact(value.Trim(), "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out date);
     }
 
     /// <summary>

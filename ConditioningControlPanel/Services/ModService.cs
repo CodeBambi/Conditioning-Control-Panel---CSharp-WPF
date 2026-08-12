@@ -859,9 +859,35 @@ namespace ConditioningControlPanel.Services
             return baseFallback(_baseMod.Manifest);
         }
 
+        // ---- The event override, consulted FIRST -------------------------------
+        //
+        // A world event dresses EVERY mod, which is why it sits above the mod chain
+        // rather than inside it: Snowglobe has to turn the drone's cyan cold too, and
+        // a per-mod implementation would mean shipping an event palette per mod
+        // forever. One link at the top of the chain does it once.
+        //
+        // DORMANT IN THIS BUILD. Nothing arms LiveEventService, so EventAccentHex is
+        // always null here and every getter below resolves exactly as it did before
+        // this seam existed — same string, same call count, same brushes.
+        //
+        // Deliberately NOT overridden: background/panel/surface. Those are the app's
+        // structural darks; an event tints the accents that read as "the app's
+        // colour", it does not repaint the chrome out from under the user's mod.
+
+        /// <summary>The active event's accent, or null. Already validated as #RRGGBB(AA).</summary>
+        private static string? EventAccentHex => App.LiveEvent?.AccentHex;
+
+        /// <summary>
+        /// Event first, then whatever the mod chain would have said. Split out and
+        /// pure so the precedence is testable without a live ModService or an event.
+        /// </summary>
+        internal static string ResolveEventThemeHex(string? eventHex, string modHex)
+            => string.IsNullOrWhiteSpace(eventHex) ? modHex : eventHex!;
+
         // Theme colors
         public string GetAccentColorHex() =>
-            GetStringValue(m => m.Theme?.AccentColor, m => m.Theme!.AccentColor!);
+            ResolveEventThemeHex(EventAccentHex,
+                GetStringValue(m => m.Theme?.AccentColor, m => m.Theme!.AccentColor!));
 
         public (byte R, byte G, byte B) GetAccentColorRgb()
         {
@@ -869,11 +895,20 @@ namespace ConditioningControlPanel.Services
             return ParseHexColor(hex);
         }
 
+        // The light/dark rims are DERIVED from the event accent rather than taken from
+        // the mod, because a half-applied palette is worse than none: the mod's hot-pink
+        // hover rim around an event's cold-blue button is the exact incoherence this
+        // override exists to avoid. Shade factors match the ±18% the app's own
+        // LightenColor/DarkenColor use for the same pair.
         public string GetAccentLightColorHex() =>
-            GetStringValue(m => m.Theme?.AccentLightColor, m => m.Theme!.AccentLightColor!);
+            EventAccentHex is { } ev
+                ? ShadeHex(ev, 1.18)
+                : GetStringValue(m => m.Theme?.AccentLightColor, m => m.Theme!.AccentLightColor!);
 
         public string GetAccentDarkColorHex() =>
-            GetStringValue(m => m.Theme?.AccentDarkColor, m => m.Theme!.AccentDarkColor!);
+            EventAccentHex is { } ev
+                ? ShadeHex(ev, 0.82)
+                : GetStringValue(m => m.Theme?.AccentDarkColor, m => m.Theme!.AccentDarkColor!);
 
         // Background colors
         public string GetBackgroundColorHex() =>
@@ -886,7 +921,8 @@ namespace ConditioningControlPanel.Services
             GetStringValue(m => m.Theme?.SurfaceColor, m => m.Theme?.SurfaceColor ?? "#1E1E3A");
 
         public string GetFilterColorHex() =>
-            GetStringValue(m => m.Theme?.FilterColor, m => m.Theme?.FilterColor ?? m.Theme!.AccentColor!);
+            ResolveEventThemeHex(EventAccentHex,
+                GetStringValue(m => m.Theme?.FilterColor, m => m.Theme?.FilterColor ?? m.Theme!.AccentColor!));
 
         public (byte R, byte G, byte B) GetFilterColorRgb()
         {
@@ -911,10 +947,28 @@ namespace ConditioningControlPanel.Services
             return FxDefaultHex;
         }
 
+        /// <summary>
+        /// Chain: EVENT accent → fxPalette slot → theme.filterColor → theme.accentColor
+        /// → app default. The event link is the only addition; the four behind it are
+        /// untouched, and with no event running this is the old three-link resolve.
+        /// </summary>
         private string GetFxSlotHex(Func<ModManifest, string?> slot)
         {
             var m = _activeMod.Manifest;
-            return ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor);
+            return ResolveEventThemeHex(EventAccentHex,
+                ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor));
+        }
+
+        /// <summary>
+        /// Scale a #RRGGBB toward white (factor &gt; 1) or black (factor &lt; 1), clamped per
+        /// channel. Same shape as MainWindow's LightenColor/DarkenColor, kept here so the
+        /// event rims can be derived without ModService reaching into the window.
+        /// </summary>
+        internal static string ShadeHex(string hex, double factor)
+        {
+            var (r, g, b) = ParseHexColor(hex);
+            static byte Scale(byte c, double f) => (byte)Math.Clamp(Math.Round(c * f), 0, 255);
+            return $"#{Scale(r, factor):X2}{Scale(g, factor):X2}{Scale(b, factor):X2}";
         }
 
         public string GetMistColorHex() => GetFxSlotHex(m => m.FxPalette?.MistColor);

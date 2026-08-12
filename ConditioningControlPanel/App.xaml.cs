@@ -495,6 +495,14 @@ namespace ConditioningControlPanel
         /// reads it renders nothing at all when it is absent.
         /// </summary>
         public static Services.Descent.DescentService? Descent { get; private set; }
+
+        /// <summary>
+        /// LIVE EVENTS — the world event switchboard (themed bubble skin, accent
+        /// override, capped XP boost). Constructed dark and never armed in this
+        /// build: nothing calls Apply(), so every consumer falls through to the
+        /// behaviour it had before the seam existed. See LiveEventService.
+        /// </summary>
+        public static Services.Events.LiveEventService? LiveEvent { get; private set; }
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -1547,6 +1555,12 @@ namespace ConditioningControlPanel
             // Initialize localization (must be after settings, before UI)
             LocalizationManager.Instance.Initialize(Settings?.Current?.Language ?? "en");
 
+            // The world-event switchboard, constructed DARK and never armed in this build.
+            // It goes up before ModService because the mod palette + resource chains both
+            // consult it on their very first resolve; constructed-but-empty is the state
+            // they are written against, and a null App.LiveEvent resolves identically.
+            LiveEvent = new Services.Events.LiveEventService();
+
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();
             Mods.Initialize(Settings?.Current?.ActiveModId);
@@ -1566,6 +1580,26 @@ namespace ConditioningControlPanel
             {
                 void Recolor()
                 {
+                    Services.RecapTheme.ApplyForActiveMod();
+                    Services.FxTheme.ApplyForActiveMod();
+                    foreach (Window w in Current.Windows)
+                        Services.WindowChromeHelper.ApplyDarkTitleBar(w);
+                }
+                if (Current?.Dispatcher?.CheckAccess() == true) Recolor();
+                else Current?.Dispatcher?.Invoke(Recolor);
+            };
+
+            // An event starting or ending is the same repaint as a mod switch — the accent
+            // chain and the sprite chain both changed answer — with one addition: the
+            // resource cache is keyed on the event skin id, so stale entries must go or
+            // the old bubble would outlive the event. NEVER FIRES IN THIS BUILD; nothing
+            // calls LiveEventService.Apply/Clear. It is wired now so the day it does, the
+            // repaint is already correct instead of being discovered live.
+            LiveEvent.EventChanged += (_, __) =>
+            {
+                void Recolor()
+                {
+                    Services.ModResourceResolver.ClearCache();
                     Services.RecapTheme.ApplyForActiveMod();
                     Services.FxTheme.ApplyForActiveMod();
                     foreach (Window w in Current.Windows)

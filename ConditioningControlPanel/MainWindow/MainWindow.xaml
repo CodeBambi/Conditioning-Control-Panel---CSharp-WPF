@@ -7,6 +7,7 @@
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
+        xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
         Title="Conditioning Control Panel"
         Height="943" Width="1563"
         MinHeight="620" MinWidth="1131"
@@ -752,6 +753,13 @@
                 <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
                      it at the Dashboard; Phase 2 gives it its own view (key "appsettings"). -->
                 <StackPanel Grid.Row="1">
+                    <!-- THE SPIRAL RAIL (CONTRACTS-0812-FINISH §9). Collapsed in every shipped
+                         build: AppSettings.DescentSpiralRailEnabled is false and has no editor,
+                         and even with it set the control stays collapsed until the server ships
+                         this account a descent block. Collapsed measures as zero, so the rail's
+                         layout is identical to the build before this element existed.
+                         See Controls/SpiralRailHost.cs - especially the airspace note. -->
+                    <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="#2A2A46" Margin="10,8,10,6"/>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
