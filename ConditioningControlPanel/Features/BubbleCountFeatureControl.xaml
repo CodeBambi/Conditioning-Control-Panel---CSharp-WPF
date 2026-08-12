@@ -14,7 +14,7 @@
              (tooltip_count_the_bubbles_challenge_memory_and_attent) is three lines long and
              would overflow the 72px strip, so it rides the enable pill as a ToolTip instead. -->
         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
             <Grid>
                 <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                     <Border.Background>

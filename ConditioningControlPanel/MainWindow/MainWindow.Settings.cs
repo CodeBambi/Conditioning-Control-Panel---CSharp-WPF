@@ -368,6 +368,10 @@ namespace ConditioningControlPanel
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
+            // Velvet Kit 2 (FX lane B): the "absorbed" tick + ripple. Decoration only, wrapped end
+            // to end, and it runs its own 1.6s clock - the save path below is untouched.
+            FlashSaveAbsorb();
+
             // First, apply current settings to the settings object
             SaveSettings();
 

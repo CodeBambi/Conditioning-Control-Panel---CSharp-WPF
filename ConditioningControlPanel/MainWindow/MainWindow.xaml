@@ -1676,8 +1676,19 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- Velvet Kit 2 (FX lane B): the LVL chip owns a scale+rotate rig so a level-up
+                         can pop it. Named transforms, animated from MainWindow.HeroFx.cs via
+                         BeginAnimation - nothing else drives this TextBlock's RenderTransform. -->
                     <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
-                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="LevelChipScale"/>
+                                <RotateTransform x:Name="LevelChipRotate"/>
+                            </TransformGroup>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
                     <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
                          sits, and after a level-up the fill has already wrapped back to a sliver. -->
                     <Border x:Name="XPBarTrack" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
@@ -1709,6 +1720,26 @@
                                 <Border.Effect>
                                     <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.95"/>
                                 </Border.Effect>
+                            </Border>
+                            <!-- Velvet Kit 2 (FX lane B): the meniscus - a small radial glow dot that
+                                 rides the tip of the fill, so the bar reads as liquid with a surface
+                                 rather than a rectangle. Pre-built and parked at Opacity 0; its X is
+                                 tweened on the fill's own clock from AnimateXpDisplay, and the pulse
+                                 is an ambient loop owned by MainWindow.HeroFx.cs. No Effect: the
+                                 halo IS the gradient, so nothing here needs an intermediate surface. -->
+                            <Border x:Name="XPMeniscus" Width="12" Height="12" CornerRadius="6"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Opacity="0" IsHitTestVisible="False">
+                                <Border.Background>
+                                    <RadialGradientBrush>
+                                        <GradientStop Offset="0" Color="#FFFFFFFF"/>
+                                        <GradientStop Offset="0.35" Color="#CCFFFFFF"/>
+                                        <GradientStop Offset="1" Color="#00FFFFFF"/>
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="XPMeniscusSlide"/>
+                                </Border.RenderTransform>
                             </Border>
                         </Grid>
                     </Border>
@@ -1959,11 +1990,48 @@
                     </Border.Effect>
                 </Border>
 
+                <!-- START ring layer (Velvet Kit 2, FX lane B). Three pre-built 2px rings sharing the
+                     button's cell, CornerRadius and height, BEHIND the button so only the part that
+                     has travelled past its edge is ever visible. One breathes on the idle clock; the
+                     other two are the ignition burst. Everything is Opacity + RenderTransform, so no
+                     ring has ever cost a layout pass or an Effect; MainWindow.HeroFx.cs owns them and
+                     parks them invisible whenever motion, focus or the running state say so. -->
+                <Grid x:Name="StartRingHost" Grid.Column="1" Height="50" IsHitTestVisible="False">
+                    <Border x:Name="StartRingExhale" CornerRadius="8" BorderThickness="2"
+                            BorderBrush="{DynamicResource FxGlowBrush}" Opacity="0"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="StartRingExhaleScale"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border x:Name="StartRingBurstA" CornerRadius="8" BorderThickness="2"
+                            BorderBrush="{DynamicResource FxGlowBrush}" Opacity="0"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="StartRingBurstAScale"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border x:Name="StartRingBurstB" CornerRadius="8" BorderThickness="2"
+                            BorderBrush="{DynamicResource FxGlowBrush}" Opacity="0"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="StartRingBurstBScale"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+
                 <!-- START Button (with session timer display) -->
+                <!-- StartPressScale is the ignition dip (Velvet Kit 2). It is the button's only
+                     RenderTransform and nothing else may claim it - HoverPop deliberately refuses
+                     named transforms, so this stays a lane-B-only surface. -->
                 <Button x:Name="BtnStart" Grid.Column="1" Style="{StaticResource PinkButton}"
                         Background="{DynamicResource AccentGradientBrush}"
                         Height="50" FontSize="18" Click="BtnStart_Click"
+                        RenderTransformOrigin="0.5,0.5"
                         ToolTip="{loc:Str tooltip_start_stop_the_conditioning_engine}">
+                    <Button.RenderTransform>
+                        <ScaleTransform x:Name="StartPressScale"/>
+                    </Button.RenderTransform>
                     <StackPanel x:Name="StartButtonContent" Orientation="Horizontal" Height="24" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtStartIcon" Text="▶" FontSize="16" Width="20" Margin="0,0,10,0" VerticalAlignment="Center" TextAlignment="Center"/>
                         <TextBlock x:Name="TxtStartLabel" Text="{loc:Str label_start}" FontSize="18" VerticalAlignment="Center"/>
@@ -1997,6 +2065,12 @@
                         </Border.RenderTransform>
                     </Border>
                 </Grid>
+
+                <!-- START ignition flash (Velvet Kit 2, FX lane B). A white wash over the button for
+                     300ms on press - the "it caught" frame. Sits ABOVE the button (later sibling) and
+                     is hit-test invisible, so the click it decorates always lands on the button. -->
+                <Border x:Name="StartIgnitionFlash" Grid.Column="1" Height="50" CornerRadius="8"
+                        Background="White" Opacity="0" IsHitTestVisible="False"/>
 
                 <!-- Start options caret (Start normally / Jump right in). Its own independent
                      button: a real width and a gap from START so it doesn't read as a split-button
@@ -2043,9 +2117,27 @@
                      2026-08-11: Save was PinkButton, i.e. the same saturated mass as START sitting
                      right next to it, so the action bar had two primaries and no hierarchy. It is
                      the house SecondaryButton now; START is the only filled pink on the bar. -->
-                <Button Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnSaveAll" Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource SecondaryButton}"
                         Height="50" FontSize="16" Margin="0,0,10,0" Click="BtnSave_Click"
                         ToolTip="{loc:Str tooltip_save_all_settings_to_disk}"/>
+                <!-- Save "absorb" (Velvet Kit 2, FX lane B): one ripple ring off the button's edge and
+                     a tick that draws itself, both purely decorative and hit-test invisible. The save
+                     itself is untouched - BtnSave_Click just fires these on its way in. The tick is
+                     drawn with an animated StrokeDashOffset, so it costs one Path and no Effect. -->
+                <Grid x:Name="SaveAbsorbHost" Grid.Column="5" Height="50" Margin="0,0,10,0" IsHitTestVisible="False">
+                    <Border x:Name="SaveRipple" CornerRadius="8" BorderThickness="2"
+                            BorderBrush="#00FF88" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SaveRippleScale"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Path x:Name="SaveTick" Data="M 0,6 L 5,11 L 14,1"
+                          Stroke="#00FF88" StrokeThickness="2.5"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                          StrokeDashArray="9 9" StrokeDashOffset="9"
+                          Width="16" Height="14" Opacity="0"
+                          HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                </Grid>
                 <!-- 2026-08-11: Exit was a hand-rolled #FF6B6B slab as wide and loud as START -
                      a coral that matched neither the Danger token nor the DangerButton style the
                      rest of the app uses for destructive actions (PANIC STOP does use the real

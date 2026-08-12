@@ -52,7 +52,7 @@
              with the ProgressionTab). -->
         <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
                 Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1">
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2">
             <Grid ClipToBounds="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

@@ -13,7 +13,7 @@
              the one module with no master toggle at all - StudioTabView deliberately gives its
              rack row no state dot for the same reason. Title only. -->
         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
             <Grid>
                 <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
                     <helpers:EmojiTextBlock Text="{loc:Str section_visuals}" FontSize="17" FontWeight="Bold"

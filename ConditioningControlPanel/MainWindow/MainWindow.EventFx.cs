@@ -235,6 +235,10 @@ namespace ConditioningControlPanel
             {
                 if (!MotionFx.AllowTransitions) return;
                 FlashOverlay(XPBarFlashOverlay);
+                // Velvet Kit 2 (FX lane B): the number that changed is the one thing the burst does
+                // not point at, so the LVL chip pops with it. Added to this moment rather than
+                // shipped as a second one. See MainWindow.HeroFx.cs.
+                PopLevelChip();
                 // The track, not the fill: the cap is where the bar ENDS, and after a level-up the
                 // fill has wrapped back to a sliver near the left.
                 FireBurstAt(XPBarTrack, FxBurstSpot.RightEdge, count: LevelUpBurstCount);

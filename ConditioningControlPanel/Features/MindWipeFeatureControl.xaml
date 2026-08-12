@@ -14,7 +14,7 @@
                  therefore exempt from the mod repaint map. -->
             <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
                     Background="{DynamicResource SurfaceBgBrush}"
-                    BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1"
+                    BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2"
                     ToolTip="{loc:Str tooltip_random_mind_wipe_audio_effects_escalates_in_f}">
                 <Grid ClipToBounds="True">
                     <Border Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0">

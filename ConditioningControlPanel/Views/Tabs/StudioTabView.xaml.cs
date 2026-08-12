@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
@@ -42,10 +43,15 @@ namespace ConditioningControlPanel.Views.Tabs
     /// leave three master toggles live mid-session.
     /// (3) <see cref="HapticsPanel"/> is the new home of <c>MainWindow.HapticsTab</c>.</para>
     ///
-    /// <para><b>Quiet surface.</b> No ambient loop is registered for this view and none may be
-    /// (PLAN §2.7). The rack's selection visual is trigger-driven; the only clock is a 120ms
-    /// detail crossfade, gated on <see cref="MotionFx.AllowTransitions"/> and self-terminating,
-    /// so there is nothing for the motion kill-switch or the ShowTab teardown to reach.</para>
+    /// <para><b>Quiet surface, with exactly one exception.</b> No ambient loop is REGISTERED for
+    /// this view (PLAN §2.7) and none may be: the rack's selection visual is trigger-driven and
+    /// the detail crossfade is a 120ms self-terminating clock gated on
+    /// <see cref="MotionFx.AllowTransitions"/>. Velvet Kit 2 adds one perimeter comet on the
+    /// CHECKED row's art tile — one adorner, one clock, capped at 24fps, moved by
+    /// <see cref="SetTileComet"/> and torn off the moment the selection leaves. It is gated
+    /// twice (transitions here, ambient loops inside the adorner) and degrades to a static lit
+    /// outline rather than vanishing, so the motion kill-switch still has exactly one thing to
+    /// reach and it is reachable from <see cref="RefreshTileComets"/>.</para>
     /// </summary>
     public partial class StudioTabView : UserControl
     {
@@ -117,6 +123,11 @@ namespace ConditioningControlPanel.Views.Tabs
             public Grid? Tile;
             public TextBlock? TileLabel;
             public Ellipse? TileDot;
+
+            /// <summary>The comet lapping this row's tile outline while it is the checked row,
+            /// or null. Exactly one entry can hold one at a time — see
+            /// <see cref="SetTileComet"/>.</summary>
+            public PerimeterCometAdorner? Comet;
         }
 
         private readonly List<StudioRackEntry> _entries = new();
@@ -187,6 +198,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 RefreshRackLabels();
                 RefreshDots();
                 SelectEntry(_selected, announce: true, animate: false);
+                RefreshTileComets();
             }
             catch (Exception ex) { App.Logger?.Debug("StudioTabView.OnTabShown: {E}", ex.Message); }
         }
@@ -585,6 +597,69 @@ namespace ConditioningControlPanel.Views.Tabs
 
             if (on) e.Row.Height = ActiveTileHeight;
             else e.Row.ClearValue(FrameworkElement.HeightProperty);
+
+            SetTileComet(e, on);
+        }
+
+        // =====================================================================================
+        //  active-tile comet (Velvet Kit 2 · FX lane A)
+        // =====================================================================================
+
+        /// <summary>Corner radius the comet follows. Mirrors <see cref="BuildArtTile"/>'s
+        /// <c>CornerRadius(3, 8, 8, 3)</c> — the adorner takes one radius, and 8 is the one the
+        /// eye reads (the 3s exist only to leave the template's RowBar showing).</summary>
+        private const double ActiveTileCornerRadius = 8;
+
+        /// <summary>Lap time for the active tile. Faster than the adorner's 9s default on
+        /// purpose: this is a small tile and the ONE thing on the rack that is meant to look
+        /// live, not a large card breathing in the background.</summary>
+        private const double ActiveTileLapSeconds = 4.0;
+
+        /// <summary>
+        /// Puts the perimeter comet on the checked row's art tile and takes it off everything
+        /// else — exactly one comet exists on this surface at a time, which is the whole reason
+        /// the rack can carry an ambient FX at all (PLAN §2.7's "quiet surface" rule is about not
+        /// having eighty of them, and the tiering in the Motion Lab spec reserves animated borders
+        /// for the active/hero surface).
+        ///
+        /// <para>Gated on <see cref="MotionFx.AllowTransitions"/> here; the adorner ALSO checks
+        /// <see cref="MotionFx.AllowAmbientLoops"/> itself and degrades to a static lit outline
+        /// rather than vanishing when the tier or the motion level says no loops.</para>
+        ///
+        /// <para>A null return from <c>Attach</c> is expected, not a failure: rows are built in
+        /// the constructor, long before this control is in a visual tree with an adorner layer.
+        /// <see cref="RefreshTileComets"/> from <c>Loaded</c>/<c>OnTabShown</c> is what picks the
+        /// default selection up.</para>
+        /// </summary>
+        private static void SetTileComet(StudioRackEntry e, bool on)
+        {
+            try
+            {
+                bool allowed;
+                try { allowed = MotionFx.AllowTransitions; } catch { allowed = false; }
+
+                if (!on || e.Tile == null || !allowed)
+                {
+                    PerimeterCometAdorner.Detach(e.Comet);
+                    e.Comet = null;
+                    return;
+                }
+                if (e.Comet != null) return;                  // already lit — leave its clock alone
+                e.Comet = PerimeterCometAdorner.Attach(e.Tile, ActiveTileCornerRadius,
+                                                       ActiveTileLapSeconds);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Studio tile comet: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Re-asserts the comet for every row. Idempotent, and cheap when nothing has changed.
+        /// Called on Loaded (the adorner layer only exists from then on) and on every door open
+        /// (so a motion-level change made in Settings takes effect on the way back in).
+        /// </summary>
+        private void RefreshTileComets()
+        {
+            foreach (var entry in _entries)
+                SetTileComet(entry, entry.Row?.IsChecked == true);
         }
 
         /// <summary>
@@ -890,6 +965,8 @@ namespace ConditioningControlPanel.Views.Tabs
             HookHapticsModule();
             RefreshRackLabels();
             RefreshDots();
+            // Only now does an adorner layer exist for the rows built in the constructor.
+            RefreshTileComets();
         }
 
         /// <summary>

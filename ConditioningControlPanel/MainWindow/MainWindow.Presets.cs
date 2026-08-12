@@ -1675,6 +1675,10 @@ namespace ConditioningControlPanel
 
                 // Restore pink color
                 BtnStart.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
+                // ...and let the idle charge take it back (Velvet Kit 2, FX lane B). The ClearValue
+                // above wipes the gradient with everything else, so this is the one place outside
+                // UpdateStartButton that has to ask for it.
+                ApplyStartHeroState();
 
                 // Hide pause button
                 BtnPauseSession.Visibility = Visibility.Collapsed;

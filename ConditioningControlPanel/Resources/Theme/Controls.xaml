@@ -1,14 +1,33 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- ============================================================
+         Velvet Kit 2 · FX lane A — "make lines pop".
+         The house card outline: a 2px coral→pink diagonal instead of the 1px grey hairline
+         every card used to draw. Baseline is STATIC on purpose — 80 animated borders is a GPU
+         bill, so ambient motion is reserved for hero/active surfaces (PerimeterCometAdorner).
+
+         LITERAL COLORS, DELIBERATELY. Nothing in a Theme dictionary may resolve a
+         StaticResource that lives in ANOTHER dictionary: a fresh cross-dictionary insert here
+         trips WPF's deferred-BAML EndOfStreamException and takes the whole dictionary (and
+         therefore every styled control in the app) down with it. Literals or DynamicResource
+         only. #FF7E6B is the same coral as SectionHueStudioBorderBrush, #FF69B4 the house pink.
+         ============================================================ -->
+    <LinearGradientBrush x:Key="VelvetCardBorderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#66FF7E6B" Offset="0"/>
+        <GradientStop Color="#22FF7E6B" Offset="0.45"/>
+        <GradientStop Color="#55FF69B4" Offset="1"/>
+    </LinearGradientBrush>
+
     <!-- Velvet Kit 2: the one card chrome every dense settings block uses. Feature pages used to
          wrap EVERY individual setting in its own hand-rolled Border (Padding 16,12 / 16,14),
          which is what made a five-dial page ~890px tall. One card, many rows, one style. -->
     <Style x:Key="SettingCardStyle" TargetType="Border">
         <Setter Property="CornerRadius" Value="12"/>
         <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
+        <!-- Same-dictionary StaticResource: safe, and it must stay same-dictionary. -->
+        <Setter Property="BorderBrush" Value="{StaticResource VelvetCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Margin" Value="0,0,0,10"/>
     </Style>
@@ -156,7 +175,26 @@
 
     <!-- House pattern: iOS-style toggle is a styled CheckBox, not a ToggleButton.
          Used across every Features/* UserControl, Bambi Takeover, Focus Gaze, and
-         the Blink Trainer page. If you need a toggle: <CheckBox Style="{StaticResource ToggleStyle}"/>. -->
+         the Blink Trainer page. If you need a toggle: <CheckBox Style="{StaticResource ToggleStyle}"/>.
+
+         Velvet Kit 2 · FX lane A — micro-dopamine, TEMPLATE ONLY:
+           · the knob travels with a BackEase overshoot (340ms) instead of sliding flat;
+           · the ON colour arrives as a 280ms crossfade — the pink lives on its own "trackOn"
+             layer whose Opacity is animated, rather than as a Background Setter that snaps
+             (which is why the two IsChecked Setters on "track" are gone);
+           · flipping ON pops a one-shot white spark at the ON edge (Opacity .9→0 while a
+             ScaleTransform runs .4→3 over 450ms). Pre-built in the template, RenderTransform
+             only, IsHitTestVisible=False — no layout, no DropShadow, nothing new to hit-test.
+
+         MOTION GATE: a pure-XAML style cannot read MotionFx.AllowTransitions (it is a static
+         CLR property consumed from code-behind/behaviors — see Behaviors/HoverPopBehavior.cs
+         and MotionFx.cs). So this keeps every duration inside the app's 80-400ms INTERACTION
+         band (340/280/450ms; the spark is a decay, not a loop) and starts no ambient clock.
+         If the gate is ever wanted here, it needs an attached behaviour, not a Style tweak.
+
+         The Checked/Unchecked EVENT contract is untouched: nothing below renames a part that
+         code-behind reads, and call sites that wire Checked/Unchecked/Click (ChkWinStart)
+         are unaffected by a template-only change. -->
     <Style x:Key="ToggleStyle" TargetType="CheckBox">
         <Setter Property="Template">
             <Setter.Value>
@@ -165,40 +203,88 @@
                         <Border x:Name="track" Width="44" Height="22" CornerRadius="11" Cursor="Hand"
                                 Background="{DynamicResource PanelAccentBrush}"
                                 BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
+                        <!-- The ON skin, faded in over the OFF one. Same geometry as the track. -->
+                        <Border x:Name="trackOn" Width="44" Height="22" CornerRadius="11" Cursor="Hand"
+                                Opacity="0"
+                                Background="{DynamicResource PinkBrush}"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}" BorderThickness="1"/>
                         <Border x:Name="thumb" Width="16" Height="16" CornerRadius="8"
                                     Background="White" HorizontalAlignment="Left" Margin="3,0,0,0">
                             <Border.RenderTransform>
                                 <TranslateTransform x:Name="thumbTranslate" X="0"/>
                             </Border.RenderTransform>
                         </Border>
+                        <!-- Spark: parked invisible at the ON edge (centre x = 33, where the knob
+                             lands). Scales from its own centre, so it never moves anything. -->
+                        <Ellipse x:Name="spark" Width="12" Height="12" Fill="White"
+                                 HorizontalAlignment="Left" VerticalAlignment="Center"
+                                 Margin="27,0,0,0" Opacity="0" IsHitTestVisible="False"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform x:Name="sparkScale" ScaleX="0.4" ScaleY="0.4"/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="track" Property="Background" Value="{DynamicResource PinkBrush}"/>
-                            <Setter TargetName="track" Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
                             <Trigger.EnterActions>
-                                <BeginStoryboard>
+                                <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
                                     <Storyboard>
+                                        <!-- Knob: overshoot lands it just shy of the track's inner
+                                             edge (3 + 22 + ~2.4 + 16 = 43.4 of 44) - do not raise
+                                             the amplitude without re-checking that sum. -->
                                         <DoubleAnimation Storyboard.TargetName="thumbTranslate"
                                                          Storyboard.TargetProperty="X"
-                                                         To="22" Duration="0:0:0.15">
+                                                         To="22" Duration="0:0:0.34">
                                             <DoubleAnimation.EasingFunction>
-                                                <QuadraticEase EasingMode="EaseInOut"/>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.6"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="trackOn"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.28"/>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="spark"
+                                                                       Storyboard.TargetProperty="Opacity">
+                                            <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0"/>
+                                            <LinearDoubleKeyFrame Value="0.9" KeyTime="0:0:0.06"/>
+                                            <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0.45"/>
+                                        </DoubleAnimationUsingKeyFrames>
+                                        <DoubleAnimation Storyboard.TargetName="sparkScale"
+                                                         Storyboard.TargetProperty="ScaleX"
+                                                         From="0.4" To="3" Duration="0:0:0.45">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="sparkScale"
+                                                         Storyboard.TargetProperty="ScaleY"
+                                                         From="0.4" To="3" Duration="0:0:0.45">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut"/>
                                             </DoubleAnimation.EasingFunction>
                                         </DoubleAnimation>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.EnterActions>
                             <Trigger.ExitActions>
-                                <BeginStoryboard>
+                                <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="thumbTranslate"
                                                          Storyboard.TargetProperty="X"
-                                                         To="0" Duration="0:0:0.15">
+                                                         To="0" Duration="0:0:0.30">
                                             <DoubleAnimation.EasingFunction>
-                                                <QuadraticEase EasingMode="EaseInOut"/>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.35"/>
                                             </DoubleAnimation.EasingFunction>
                                         </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="trackOn"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.28"/>
+                                        <!-- The spark belongs to the ON edge only: cut it dead on
+                                             the way out rather than letting a decay finish over a
+                                             track that is already grey again. -->
+                                        <DoubleAnimation Storyboard.TargetName="spark"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.08"/>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
