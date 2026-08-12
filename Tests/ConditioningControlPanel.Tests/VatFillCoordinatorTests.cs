@@ -123,16 +123,35 @@ public class VatFillCoordinatorTests
     }
 
     /// <summary>
-    /// A grant that clears the threshold but moves no liquid — the vat is already
-    /// parked at the ceiling — has nothing to pour into. Overflow FX are driven by
-    /// the LEVEL, not by this decision, so the spill keeps running regardless.
+    /// LICENSE TO RUN OVER (contract ruling 2026-08-12, program-wide). A qualifying
+    /// earn POURS even when the liquid cannot move because the vat is already parked
+    /// at the ceiling — the XP delta is the whole test, and the overflow and spill
+    /// FX (driven by the LEVEL, not by this decision) are what carry it. The
+    /// alternative is that the biggest earns of a deep day are the only ones the
+    /// meter never acknowledges.
     /// </summary>
     [Fact]
-    public void BigDeltaThatMovesNoLiquid_DoesNotPour()
+    public void BigDeltaThatMovesNoLiquid_StillPours()
     {
         var c = new VatFillCoordinator();
         c.Apply(BlockWith(5000, 9000, 400));             // clamped to the brim
         var read = c.Apply(BlockWith(5000, 20000, 400));
+        Assert.Equal(VatReadKind.Pour, read.Kind);
+        Assert.Equal(11000, read.DeltaXp);
+        Assert.Equal(c.LastFill!.Value, read.Fill, 6);   // the level did not move
+    }
+
+    /// <summary>
+    /// The other half of the same ruling: a delta UNDER the threshold at the ceiling
+    /// is still not a pour. Running over is a license for qualifying earns, not a
+    /// blanket one.
+    /// </summary>
+    [Fact]
+    public void SmallDeltaAtTheCeiling_DoesNotPour()
+    {
+        var c = new VatFillCoordinator();
+        c.Apply(BlockWith(5000, 9000, 400));             // threshold = 50
+        var read = c.Apply(BlockWith(5000, 9040, 400));
         Assert.NotEqual(VatReadKind.Pour, read.Kind);
     }
 
@@ -190,5 +209,61 @@ public class VatFillCoordinatorTests
         c.Apply(BlockWith(5000, 2000, 40, lipPct: 120));
         var read = c.Apply(BlockWith(5000, 2000, 40, lipPct: 125));   // stage 4 perk landed
         Assert.True(read.ScaleChanged);
+    }
+
+    /// <summary>
+    /// A CAP CHANGE WITH NO EARN IS NEVER A POUR. Levelling up mid-session re-scales
+    /// the meter under the same XP; the host snaps to the new fraction (see
+    /// VatRead.ScaleChanged) and the faucet stays out of it — it has nothing to
+    /// announce.
+    /// </summary>
+    [Fact]
+    public void ACapChangeWithNoEarn_NeverPours()
+    {
+        var c = new VatFillCoordinator();
+        c.Apply(BlockWith(5000, 4000, 80));
+        var read = c.Apply(BlockWith(9000, 4000, 44.4));   // bigger cap, same XP
+        Assert.Equal(VatReadKind.Silent, read.Kind);
+        Assert.True(read.ScaleChanged);
+        Assert.Equal(0, read.DeltaXp);
+    }
+
+    /// <summary>
+    /// The other side of it: a cap change that arrives in the SAME reading as a
+    /// qualifying earn is still an earn. The re-scale rule exists to stop a silent
+    /// level-up drawing a drain, not to swallow XP.
+    /// </summary>
+    [Fact]
+    public void ACapChangeCarryingAQualifyingEarn_StillPours()
+    {
+        var c = new VatFillCoordinator();
+        c.Apply(BlockWith(5000, 4000, 80));
+        var read = c.Apply(BlockWith(9000, 4500, 50));     // levelled up AND earned 500
+        Assert.Equal(VatReadKind.Pour, read.Kind);
+        Assert.True(read.ScaleChanged);
+    }
+
+    // ------------------------------------------------------------- the extension
+
+    /// <summary>
+    /// THE RETRACT WINDOW. The faucet leaves 2.1s after the LAST qualifying delta —
+    /// every pour re-arms the full window inside VatGlassCanvas (<c>_pourT =
+    /// PourSeconds</c>) with the slide left where it is, so a burst of earns is one
+    /// unbroken pour rather than a faucet that swings in and out per grant.
+    ///
+    /// The canvas's own timing needs a live STA render host and a machine-dependent
+    /// MotionFx level, so what is pinned here is the constant the whole contract is
+    /// written against and the fact that back-to-back qualifying deltas each answer
+    /// Pour — which is what re-arms it.
+    /// </summary>
+    [Fact]
+    public void ConsecutiveQualifyingDeltas_EachPour_AndTheWindowIs2Point1s()
+    {
+        Assert.Equal(2.1, ConditioningControlPanel.Controls.VatGlassCanvas.PourSeconds, 6);
+
+        var c = new VatFillCoordinator();
+        c.Apply(BlockWith(5000, 1000, 20));                // threshold = 50
+        Assert.Equal(VatReadKind.Pour, c.Apply(BlockWith(5000, 1100, 22)).Kind);
+        Assert.Equal(VatReadKind.Pour, c.Apply(BlockWith(5000, 1200, 24)).Kind);
     }
 }

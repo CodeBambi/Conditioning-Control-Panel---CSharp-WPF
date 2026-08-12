@@ -36,6 +36,11 @@ namespace ConditioningControlPanel.Services.Descent
         /// True when the scale itself changed (cap or lip). The engine is scaled to
         /// the lip and captioned by the cap, so the host must re-scale rather than
         /// animate — a cap change is a different meter, not a different reading.
+        ///
+        /// THE HOST CONTRACT: on this flag the level is SNAPPED to
+        /// <see cref="Fill"/>, never eased and never poured. Levelling up shrinks
+        /// today's fraction of a bigger cap; easing that would draw a long silent
+        /// DRAIN the user did not earn, and a faucet would claim they did.
         /// </summary>
         public bool ScaleChanged { get; init; }
     }
@@ -123,11 +128,18 @@ namespace ConditioningControlPanel.Services.Descent
                 // the user banked hours ago, every single time.
                 kind = VatReadKind.Seed;
             }
-            else if (delta >= VatPourMinXp(vat.Cap) && fill > _lastFill + FillEpsilon)
+            else if (delta >= VatPourMinXp(vat.Cap))
             {
-                // Both halves are required. The XP delta is what the threshold is
-                // written against, but a delta that moves no liquid (already parked
-                // at the ceiling) has nothing to pour into.
+                // THE XP DELTA IS THE WHOLE TEST — deliberately, and the liquid does
+                // not get a vote. An earn that clears the threshold while the vat is
+                // already parked at the brim still pours: that is the mockup's
+                // "license to run over", and the overflow and spill FX (driven by the
+                // LEVEL, not by this decision) are what carry it. Suppressing the
+                // faucet there would make the biggest earns of a deep day the only
+                // ones the meter never acknowledges.
+                //
+                // Contract ruling 2026-08-12, program-wide — mobile and web enforce
+                // the same single condition.
                 kind = VatReadKind.Pour;
             }
             else if (Math.Abs(fill - _lastFill) > FillEpsilon || scaleChanged)
