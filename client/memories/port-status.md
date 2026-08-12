@@ -1,8 +1,16 @@
-# Port Status (as of 2026-08-04, second export — laptop resume session)
+# Port Status (as of 2026-08-12, third export — laptop)
 
-Branch: `feat/crossplatform` @ SP-037 land (`7e2fd5b8`) + reconcile commit. Pushed.
+Branch: `feat/crossplatform` @ wave-17 integrate `eb1f60d4`. **35+ land commits ahead of `origin/feat/crossplatform` and NOT pushed** (waves 13-17). Do not `reset --hard origin` on this machine — that would destroy them.
 
-## New since the first export
+## Live state (2026-08-12)
+
+- Waves 1-17 landed. Floor: **863 unit / 33 headless**. Next unused task ID: **SP-061**. Next work: **wave 18 = Chaos tunnel backdrop, alone** (M, product + headed; re-check MCP posture first — a UI packet must carry the A-013 advisory step).
+- **Wave 17 LANDED** — batch `20260812T115820`: **SP-059** timing discipline (waits converted + `TestWait` helper + pinned guard + 10/10 greens; **claim narrowed at land: injected timeout BUDGETS are not swept** — fourth-occurrence P1 row filed; constitution line applied by the orchestrator) and **SP-060** Her Room/Awareness audit (38-row table + 12 owner questions; **row stays OPEN — an audit is not a decree**).
+- **Standing traps learned this wave (full text in `client/docs/port-lessons.md`):** never `git clean -fdX` a lane before `contract.verified ok` (it deletes the T-14-staged `.pi/npm` and breaks `verify.mjs`); "cold" means a fresh checkout, not a rebuild in place; `spine wait` returns instantly once any lane is terminal-failed; `tasklist /FI` lies about live PIDs — use `Get-Process -Id`.
+- **Wave-17 consult correction (solo, Opus 5):** the Chaos tunnel backdrop that wave-16 queued for lane-1 was front-run by the timing row and moves to **wave 18, alone** — the tunnel lane writes the repo's most wall-clock-hungry test class, and a deadline-literal guard landing beside new deadline literals reproduces the SP-058 merge-time failure on purpose.
+- **This machine (laptop):** no `MonitorCreate`/`LoopList` tools in this pi session — the batch monitor is a background pi Agent blocking on `spine wait` instead. engram MCP not registered here; 0/3 MCP servers connected at session start (`avalonia-live` cached only).
+
+## New since the first export (2026-08-04, second export state)
 
 - **Resume reconciliation executed (laptop):** waves 1–3 verified; the desktop's parked wave-4 batch `20260722T152755` lane commits NEVER travelled (desktop-local) — wave 4 is a FRESH execution of the packets, not a resume.
 - **SP-037 authored + LANDED** (v6.6.3 manifest-drift repair, floor-repair precondition): empirical sweep +7/−1 (board hypothesis said +4 — sweep vindicated), copied-count 1538→1544, floor restored **466/466 + 29/29**; substitution-norm land (engine review chain absent — see park below); row WIP, owner ratifies. Next unused ID = **SP-038**.
