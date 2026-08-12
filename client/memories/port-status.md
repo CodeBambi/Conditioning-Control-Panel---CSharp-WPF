@@ -1,5 +1,12 @@
 # Port Status (as of 2026-08-12, third export — laptop)
 
+## Wave 20 (LANDED 2026-08-12, integrate `10c37650`; floor stays 892/35/0-skipped)
+
+- **OWNER DECREE 2026-08-12: "Just increase the amount of budgets by a lot! So it does not happen again."** It supersedes SP-059's "raising a budget is the banned fix" **for board row 49 only** (owner = authority order #1). Batch `20260812T221746` was ABORTED mid-Step-1 the moment the decree landed (its packet's central acceptance was the vetoed fix); its completed sweep was preserved as `prior-step1/` input to verify.
+- **SP-063 LANDED (row WIP):** one shared FINITE constant `TestWait.InjectedBudget = 60 s` for budgets that must not decide outcomes; the 2 timeout-SUBJECT tests keep 800 ms marked + pinned; 3 inert assignments deleted; 1 guard token + captured RED. Two deviations from a literal decree reading, both surfaced to the owner: don't raise timeout-subject budgets (fixes nothing, slows the suite); never `Timeout.InfiniteTimeSpan` (unbounded hang on a suite with no per-test timeout).
+- **Residual named on the row:** a bigger number lengthens the fuse; it does not remove the time dependence. The deterministic alternative was set aside by decree, not refuted.
+- Next: wave 21 = board row 38 (harness entry points must REFUSE to run unsealed when `CCP_DATA_ROOT` is unset). Next unused task ID: **SP-064**.
+
 ## Wave 19 (LANDED 2026-08-12, integrate `7518c6a4`; floor stays 892/35)
 
 - **SP-062 LANDED (row WIP).** Loud `Assert.SkipWhen` ×2 + positive control (`891 passed / 1 skipped`, TRX `NotExecuted`); isolation fixed by **co-location** into `ProcessEnvCollection`, probe-proven both ways (cross-collection ran concurrently in 65 ms = `DisableParallelization` is dead here; a deliberately-RED cross-class handshake deadlocked = intra-collection sequentiality is real). 20 greens at 892/0 + 35/0 across two trees, 2 cold first-ever builds. Next unused task ID: **SP-063**.

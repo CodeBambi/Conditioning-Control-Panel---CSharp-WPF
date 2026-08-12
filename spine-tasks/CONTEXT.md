@@ -1,7 +1,7 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-08-12
-**Status:** ACTIVE — wave 20 authored (SP-063, single lane); wave 19 LANDED (`7518c6a4`); floor 892 unit / 35 headless, 0 skipped
+**Status:** ACTIVE — wave 20 LANDED (`10c37650`); floor 892 unit / 35 headless, 0 skipped; next = wave 21 (board row 38: harness entry points must REFUSE to run unsealed)
 **Next Task ID:** SP-064
 
 ---
@@ -99,7 +99,11 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **WAVE 16 COMPLETE 2026-08-12 — both lanes landed (`c42d82ff`, `7bfce5ac`).** Rows filed across the two land consults: **harness entry points must refuse to run unsealed** (P1 — the SP-057 seam is opt-in, the same procedural class that failed at SP-052), **m2test expectation-model upstream ask** (P2), **wall-clock waits in tests — third occurrence of the timing-discipline class** (P1, encode-don't-fix-once: convert + sweep + guard + constitution line, 10 consecutive greens, zero assertions weakened). Unit floor now **862** with the flaky test named on its row. Next unused task ID: SP-059.
 
-### Wave 20 (authored 2026-08-12 — single lane)
+### Wave 20 (LANDED 2026-08-12, integrate `10c37650`)
+
+**WAVE 20 COMPLETE — SP-063 landed WIP under the owner decree.** Floor unchanged at **892/35/0-skipped** (no facts added). One shared finite constant `TestWait.InjectedBudget = 60 s` replaces the 800 ms budgets that could decide non-timing outcomes; the two timeout-SUBJECT tests keep short marked+pinned literals; three inert assignments deleted; one guard token with a **captured RED**. The sweep was re-verified rather than inherited — 11/13 rows confirmed, **2 corrected** (both timeout-subject tests rode the shared factories, changing the edit shape), 6 more CLEAR method-argument sites found. 10 greens incl. one fresh-checkout first-ever build; orchestrator merged-state verification 3/3 with zero `Failed` and zero `NotExecuted` per TRX, integrated tree byte-identical to the verified tree. **Residual is on the row, not hidden:** the raise lengthens the fuse, it does not remove the time dependence.
+
+### Wave 20 packet (authored + re-authored + landed 2026-08-12 — single lane)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
