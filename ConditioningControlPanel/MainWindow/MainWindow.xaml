@@ -96,18 +96,89 @@
             </Setter>
         </Style>
 
-        <!-- Door header: taller, bolder, not indented. 2026-08-11 emoji purge: door icons are
-             now painted art thumbnails (Resources/nav/door_*.png, 22px, rounded clip), so the
-             label steps back to TextLight - art carries the accent, the old all-pink column was
-             the "generic" read the owner flagged. Padding 17 centers a 22px icon in the 56px
-             collapsed strip (17 + 22 + 17 = 56). -->
+        <!-- ============ Door header: the MEDALLION row (Velvet Kit, UI polish 2) ============
+             2026-08-11 emoji purge: door icons are painted art thumbnails
+             (Resources/nav/door_*.png, 64x64 native). 2026-08-12 (CONTRACT.md "Nav rail
+             interaction spec"): the row became a medallion tile that grows with the rail -
+             44px r12 tile with a 28px icon while the rail is shut, 56px tile with a 44px icon
+             and a big bottom-aligned name once it opens. Every size in that sentence is
+             animated from MainWindow.NavRail.cs (which also says why the open tile is 56 and
+             not the contract's 64); nothing here animates itself.
+
+             The row is a FIXED 64px tall in BOTH states on purpose: only the tile inside it
+             grows. Animating the row height as well would re-layout the whole rail (and shove
+             the open accordion around) on every hover, for a change nobody can see once the
+             doors are spread out by the distribution grid below.
+
+             Template parts that are API, not decoration:
+               NavActiveBar  - 3px hue bar on the row's left edge
+               NavActiveFill - tinted row background
+             ApplyNavActiveGlow (MainWindow.ChromeFx.cs) finds BOTH by name. The bar paints
+             {TemplateBinding BorderBrush}, so a door's BorderBrush IS its hue: set it once on
+             the Button and the bar, the active tile ring, the label colour and the radial glow
+             all follow (NavRail.cs reads the same brush back to build the glow).
+
+             The ContentPresenter stretches, so the HorizontalContentAlignment flip
+             SetNavRailExpanded does is inert here - the icon is centred by the content grid's
+             fixed 56px first column instead (56 = NavRailCollapsedWidth). Same story as the
+             entry rows, which centre theirs with a 21px padding. -->
         <Style x:Key="NavDoorButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
-            <Setter Property="Height" Value="40"/>
+            <Setter Property="Height" Value="64"/>
             <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="Padding" Value="17,0,8,0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Border x:Name="NavActiveFill" Background="{TemplateBinding Background}"
+                                    CornerRadius="0,12,12,0" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="NavHover" Background="{TemplateBinding Background}"
+                                    CornerRadius="0,12,12,0" Opacity="0" IsHitTestVisible="False"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                            <!-- LAST, unlike the entry rows: the open medallion is 56px wide in a
+                                 56px column, so it sits ON the 3px bar. Behind the content the bar
+                                 would simply vanish on the one row that needs it. -->
+                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left"
+                                    Background="{TemplateBinding BorderBrush}" CornerRadius="0,2,2,0"
+                                    Visibility="Collapsed" IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavHover" Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The big door name. Width 160 = the open rail (236) minus the 56px medallion column
+             minus 8 left / 12 right, and it is FIXED so the Viewbox inside never re-scales the
+             text mid-flyout: the label slides up and fades in at a constant size while the
+             rail's own ClipToBounds reveals it. Opacity 0 is the shut state; NavRail.cs owns
+             this property (and a TranslateTransform it installs at cache time) from Loaded on.
+
+             Tag is API: CacheNavRailParts uses it to tell "a label I drive per row, with a
+             stagger" apart from "a label the global collapse fade owns" (every entry label).
+             No letter-spacing: WPF's TextBlock has no CharacterSpacing (that is a WinUI
+             property) and faking tracking by injecting hair spaces breaks CJK shaping and the
+             9 shipped locales, so the contract's ~1.5 tracking is carried by 16px/ExtraBold. -->
+        <Style x:Key="NavDoorLabelHost" TargetType="Grid">
+            <Setter Property="Tag" Value="navdoorlabel"/>
+            <Setter Property="Width" Value="160"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="Margin" Value="8,0,0,10"/>
+            <Setter Property="Opacity" Value="0"/>
+        </Style>
+
+        <Style x:Key="NavDoorLabelText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="ExtraBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
         </Style>
 
         <Style x:Key="NavEntryButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}"/>
@@ -336,15 +407,21 @@
              land on dead canvas instead of on the page. Do NOT switch this to Stretch. -->
         <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
                 HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
-                BorderBrush="#2A2A46" BorderThickness="0,0,1,0">
+                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="0,0,1,0">
             <!-- Static depth gradient (was flat PanelBgBrush): top matches the panel tone the
                  title bar hands off, sinking slightly by the bottom so the rail reads as its own
-                 column instead of a stripe of the same slab every panel uses. Not animated. -->
+                 column instead of a stripe of the same slab every panel uses. Not animated.
+
+                 2026-08-12 (Velvet Kit): the three hand-mixed hexes were #262649 / #222240 /
+                 #1C1C36 - i.e. ElevatedSurface and PanelBg with a 4-unit lift on the top stop.
+                 They are the tokens now, so a mod that repaints the palette repaints the rail
+                 too instead of leaving one lilac column behind. DynamicResource on the *Color*
+                 keys, which is how Brushes.xaml itself does it. -->
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#262649" Offset="0"/>
-                    <GradientStop Color="#222240" Offset="0.55"/>
-                    <GradientStop Color="#1C1C36" Offset="1"/>
+                    <GradientStop Color="{DynamicResource ElevatedSurface}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource ElevatedSurface}" Offset="0.55"/>
+                    <GradientStop Color="{DynamicResource PanelBg}" Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
             <Grid Margin="0,10,0,10">
@@ -353,27 +430,103 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer x:Name="NavRailScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel>
+                    <!-- ============ EVEN DISTRIBUTION (Velvet Kit, UI polish 2) ============
+                         The six doors used to be a plain StackPanel packed at the top of an
+                         800px column. They are spread down it now: seven star SPACER rows
+                         between six Auto door rows, i.e. space-evenly.
+
+                         Why spacers instead of putting the doors themselves in star rows: an
+                         Auto row is guaranteed its measured height at arrange time, a star row
+                         is not (it only keeps content that a MEASURE recorded as its minimum,
+                         which is exactly the case this grid is in the middle of when the
+                         accordion is tweening). Empty spacers cannot lose anything by being
+                         squeezed, so the degradation is trivial: slack goes to the spacers,
+                         and when the doors plus an open accordion exceed the viewport the
+                         spacers collapse to 0, the layout becomes the old top-stack, and this
+                         ScrollViewer takes over. No mode switch, no code.
+
+                         MinHeight is what makes "slack" exist at all: a ScrollViewer measures
+                         its content at infinite height, where star rows resolve to nothing, so
+                         without this the grid would always be exactly as tall as its content
+                         and the spacers would always be 0. Binding it to the viewport (never
+                         to the extent - that WOULD be a layout cycle) makes the grid fill the
+                         column when the content is short and overflow it when it is not.
+
+                         Headroom, in fixed canvas units (the whole UI is a Viewbox over a
+                         1585x901 canvas, so this NEVER changes with the window size): the
+                         column is ~760px, the six 68px door rows are 408, and the widest
+                         accordion (Play, 8 entries x NavEntryRowHeight 32) is 256 - 664 total.
+                         A door would need ~11 entries before the rail starts scrolling. -->
+                    <Grid MinHeight="{Binding ViewportHeight, ElementName=NavRailScroll}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 1: home -->
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 3: studio -->
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 5: companion -->
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 7: play -->
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 9: you -->
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>   <!-- 11: library -->
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
                         <!-- ===== HOME (default: settings) ===== -->
+                        <StackPanel Grid.Row="1">
                         <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavDoorButton}"
+                                Background="#22FF69B4" BorderBrush="#FF69B4"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
-                            <StackPanel Orientation="Horizontal">
-                                <!-- Door icons are nano-banana art (2026-08-11), NOT Twemoji: an
-                                     Image (not a rounded Border+ImageBrush) because NudgeNavIcon
-                                     finds "Image or Viewbox" inside the content Panel - the clip
-                                     supplies the rounding instead. -->
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_home.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_home}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- THE MEDALLION. Child order and TYPES are API: NavRail.cs's
+                                 CacheNavDoorRows picks the glow (Ellipse), the tile (Border),
+                                 the icon (Viewbox) and the label host (Tag="navdoorlabel") out
+                                 of this panel BY TYPE, and ChromeFx's NudgeNavIcon takes the
+                                 first "Image or Viewbox" among the direct children as the icon
+                                 to nudge on hover. So: the icon Viewbox stays a direct child,
+                                 and the label's Viewbox stays nested inside its host grid, or
+                                 the hover nudge starts scaling the door's name.
+
+                                 The icon is a Viewbox around the art at its native 64px rather
+                                 than a resized Image because a Clip does not scale with Width:
+                                 the Viewbox's own scale carries the rounded clip with it, and
+                                 it leaves the Image's RenderTransform free for the nudge.
+
+                                 BorderBrush (not Background) is the door's hue - see the style. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <!-- 56 = the collapsed rail, so the tile is centred on the
+                                         icon strip and does not move sideways when it grows. -->
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_home.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_home}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <!-- The one door open at startup, so it keeps auto height in markup. -->
                         <Border x:Name="DoorPanelHome" ClipToBounds="True">
@@ -389,19 +542,43 @@
                             </StackPanel>
                         </Border>
 
+                        </StackPanel>
+
                         <!-- ===== STUDIO (default: presets) ===== -->
+                        <StackPanel Grid.Row="3">
                         <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
+                                Background="#22FF7E6B" BorderBrush="#FF7E6B"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_studio.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_studio}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_studio.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_studio}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <Border x:Name="DoorPanelStudio" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesStudio">
@@ -434,19 +611,43 @@
                             </StackPanel>
                         </Border>
 
+                        </StackPanel>
+
                         <!-- ===== COMPANION (default: companion) ===== -->
+                        <StackPanel Grid.Row="5">
                         <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
+                                Background="#22E85CE0" BorderBrush="#E85CE0"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_companion.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_companion}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_companion.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_companion}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <Border x:Name="DoorPanelCompanion" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesCompanion">
@@ -487,19 +688,43 @@
                             </StackPanel>
                         </Border>
 
+                        </StackPanel>
+
                         <!-- ===== PLAY (default: play) ===== -->
+                        <StackPanel Grid.Row="7">
                         <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
+                                Background="#22B8E85C" BorderBrush="#B8E85C"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_play.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_play.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_play}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesPlay">
@@ -583,19 +808,43 @@
                             </StackPanel>
                         </Border>
 
+                        </StackPanel>
+
                         <!-- ===== YOU (default: discord / Profile) ===== -->
+                        <StackPanel Grid.Row="9">
                         <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
+                                Background="#225EA8FF" BorderBrush="#5EA8FF"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_you.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_you}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_you.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_you}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <Border x:Name="DoorPanelYou" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesYou">
@@ -663,19 +912,43 @@
                             </StackPanel>
                         </Border>
 
+                        </StackPanel>
+
                         <!-- ===== LIBRARY (default: assets) ===== -->
+                        <StackPanel Grid.Row="11">
                         <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
+                                Background="#225ED4E8" BorderBrush="#5ED4E8"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_library.png">
-                                    <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                    </Image.Clip>
-                                </Image>
-                                <TextBlock Text="{loc:Str nav_door_library}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_library.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                        <TextBlock Text="{loc:Str nav_door_library}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
                         </Button>
                         <Border x:Name="DoorPanelLibrary" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesLibrary">
@@ -747,7 +1020,8 @@
                                 </Button>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </ScrollViewer>
 
                 <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
@@ -760,19 +1034,40 @@
                          layout is identical to the build before this element existed.
                          See Controls/SpiralRailHost.cs - especially the airspace note. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
-                    <Border Height="1" Background="#2A2A46" Margin="10,8,10,6"/>
+                    <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
+                            Background="#225CE0A5" BorderBrush="#5CE0A5"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality"
-                                   Source="pack://application:,,,/Resources/nav/door_settings.png">
-                                <Image.Clip>
-                                    <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
-                                </Image.Clip>
-                            </Image>
-                            <TextBlock Text="{loc:Str nav_door_settings}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <!-- Medallion: see DoorHome for what the four children are for. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                     IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
+                            <Viewbox Grid.Column="0" Width="28" Height="28"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_settings.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                         HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                    <TextBlock Text="{loc:Str nav_door_settings}"
+                                               Style="{StaticResource NavDoorLabelText}"/>
+                                </Viewbox>
+                            </Grid>
+                        </Grid>
                     </Button>
                 </StackPanel>
             </Grid>

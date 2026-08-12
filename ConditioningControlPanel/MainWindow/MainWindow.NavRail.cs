@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 
@@ -27,10 +29,17 @@ namespace ConditioningControlPanel
     ///
     /// <para><b>Why the page still is not buried.</b> Overlaying is mandatory, but it does not have
     /// to be free of charge to the page. Canvas column 0 reserves 96px - the 56px rail plus a 40px
-    /// permanent gutter of bare canvas that the left-aligned rail Border refuses to fill - and the
-    /// open width is 176 rather than the 190 the rows were authored at. The flyout therefore spends
-    /// its first 40px on dead space and only the last 80 on the page, down from 134.
+    /// permanent gutter of bare canvas that the left-aligned rail Border refuses to fill - so the
+    /// flyout spends its first 40px on dead space before it touches a pixel of live UI.
     /// <see cref="NavRailExpandedWidth"/> carries the arithmetic and the label floor.</para>
+    ///
+    /// <para><b>2026-08-12, the medallion rail</b> (UI-polish-2 CONTRACT, "Nav rail interaction
+    /// spec"). Shut, the rail is a column of 44px hue tiles spread evenly down its height; open,
+    /// each tile grows to 56px with its 44px art and its name rises into place beside it, row
+    /// after row. Everything that moves is animated from this file - <see cref="ApplyNavDoorRows"/>
+    /// next to the width tween that drives it - because a stagger is per row and a Style cannot
+    /// hold seven different BeginTimes. MainWindow.xaml owns the shape and the hues; this file
+    /// owns the motion; ChromeFx keeps owning which door is active.</para>
     ///
     /// <para>Collapsing also shuts the accordion. Seven door icons read as a rail; seven door icons
     /// with four unlabelled child icons wedged among them reads as noise, and the child rows are
@@ -39,33 +48,88 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>Icon-only width. Also the width the rail rows' left paddings centre their
-        /// icons in (door 17+22+17, entry 21+14+21 - MainWindow.xaml), so it cannot move without
-        /// re-centring both. DesignCanvas column 0 is WIDER than this on purpose (see below);
-        /// what must stay in step is that the column is never NARROWER, or the page slides
-        /// under the collapsed rail.</summary>
+        /// <summary>Icon-only width. Also the width the rail rows centre their icons in - the
+        /// door rows with a 56px first grid column, the entry rows with a 21+14+21 padding
+        /// (MainWindow.xaml) - so it cannot move without re-centring both. DesignCanvas column 0
+        /// is WIDER than this on purpose (see below); what must stay in step is that the column
+        /// is never NARROWER, or the page slides under the collapsed rail.</summary>
         private const double NavRailCollapsedWidth = 56;
 
         /// <summary>
-        /// Open width. Was 190 - the width the rail rows were originally authored against - until
-        /// the owner flagged (2026-08-11) that the flyout buries the left edge of the page it is
-        /// opened on top of. The fix is split in two, per the owner's own "half and half": canvas
-        /// column 0 grew to 96 so the first 40px of the flyout land on a permanent empty gutter
-        /// (MainWindow.xaml, DesignCanvas), and the flyout itself gives back 14px here. True
-        /// overlay over live UI: 190-56 = 134px before, 176-96 = 80px now.
+        /// Open width. History: 190 (the width the rail rows were authored against) -> 176 when
+        /// the owner flagged that the flyout buried the left edge of the page it opens over, half
+        /// the fix being canvas column 0 growing to 96 so the first 40px of the flyout land on a
+        /// permanent empty gutter (MainWindow.xaml, DesignCanvas) -> 236 on 2026-08-12, which is
+        /// the number the UI-polish-2 CONTRACT froze for the medallion rail. True overlay over
+        /// live UI is back up to 236-96 = 140px, bought deliberately: the door rows carry a 16px
+        /// ExtraBold name in a 56px medallion column now, and 176 could not hold one.
         ///
-        /// <para>176 is a floor, not a preference. The rail must fully show its longest ENTRY
-        /// label in every shipped language, and the entry row spends 21 (left padding) + 14 (icon)
-        /// + 6 (icon margin) + 8 (right padding) = 49px before the text starts. The worst string
-        /// is es "Entrenador de Parpadeo" at 122px (fr and ru sit at 120), so 171px is the true
-        /// minimum and 176 is that plus a font-fallback cushion. Shrink this further only by
-        /// buying label room first - the labels live in a horizontal StackPanel, which measures
-        /// children at infinite width, so TextTrimming cannot save an over-long row here: it just
-        /// runs into the Border's ClipToBounds and gets cut with no ellipsis.</para>
+        /// <para>The floor is still set by the longest ENTRY label in the nine shipped languages,
+        /// not by the doors: an entry row spends 21 (left padding) + 14 (icon) + 6 (icon margin)
+        /// + 8 (right padding) = 49px before its text starts, and the worst string is es
+        /// "Entrenador de Parpadeo" at 122px (fr and ru sit at 120) - 171px. The door labels get
+        /// a Viewbox with StretchDirection=DownOnly instead, so a long locale shrinks the name
+        /// rather than running into the Border's ClipToBounds: the labels live in a horizontal
+        /// layout that measures at infinite width, where TextTrimming cannot save a row - it just
+        /// gets cut with no ellipsis.</para>
         /// </summary>
-        private const double NavRailExpandedWidth = 176;
+        private const double NavRailExpandedWidth = 236;
 
-        private const int NavRailAnimMs = 150;
+        /// <summary>Width tween, and the tween every medallion part rides (CONTRACT: 190ms
+        /// QuadOut). The door labels get their own, longer, staggered pair below.</summary>
+        private const int NavRailAnimMs = 190;
+
+        // ===================== medallion door rows (CONTRACT, 2026-08-12) =====================
+        // Sizes are animated between these two states; MainWindow.xaml authors the COLLAPSED
+        // value on every element, so a rail whose Loaded hook never ran still renders correctly
+        // shut. Nothing here changes the row PITCH: door rows are a fixed 64px tall in both
+        // states (see the NavDoorButton style), only what sits inside them grows.
+
+        /// <summary>The rounded (r12) tile behind the door art. Open is 56, not the CONTRACT's
+        /// 64: the tile is centred on the 56px collapsed strip (which is frozen, and moving the
+        /// centre sideways on expand is a jitter nobody asked for), so 64 would hang 4px off the
+        /// window's left edge and have its rounded corners sliced flat by the rail's clip. 56 is
+        /// the widest medallion that strip can hold whole - and it still reads as the "64px
+        /// medallion zone", because the door name starts at 64 either way.</summary>
+        private const double NavDoorTileCollapsed = 44;
+        private const double NavDoorTileExpanded = 56;
+
+        /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
+        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.</summary>
+        private const double NavDoorIconCollapsed = 28;
+        private const double NavDoorIconExpanded = 44;
+
+        /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
+        /// 4px each side where the gradient has already reached zero alpha, so the rail's
+        /// ClipToBounds cuts nothing visible; 84 open does get clipped at the window's left edge,
+        /// which is the one edge a glow is allowed to run off.</summary>
+        private const double NavDoorGlowCollapsed = 64;
+        private const double NavDoorGlowExpanded = 84;
+
+        /// <summary>Halo opacity. Idle rows show a hint once the rail is open, the active row
+        /// wears it properly, and a shut rail shows none on the idle rows at all (six haloes in
+        /// a 56px strip is soup, not a rail).</summary>
+        private const double NavDoorGlowActive = 0.50;
+        private const double NavDoorGlowOpen = 0.20;
+        private const int NavDoorGlowFadeMs = 160;
+
+        /// <summary>CONTRACT: "inactive tiles Opacity .85". On the TILE, deliberately not on the
+        /// Button - StartNavDoorHeaderPulse animates Button.Opacity and then writes a local 1.0
+        /// when it ends, which would outrank any setter of ours for the rest of the session.</summary>
+        private const double NavDoorTileIdleOpacity = 0.85;
+
+        /// <summary>Big door name: rises this far, one row after another.</summary>
+        private const double NavDoorLabelRise = 14;
+        private const int NavDoorLabelFadeMs = 220;
+        private const int NavDoorLabelSlideMs = 260;
+        private const int NavDoorLabelStaggerMs = 30;
+
+        /// <summary>Marks the label host grid in MainWindow.xaml (set by the NavDoorLabelHost
+        /// style). Two jobs: it is how <see cref="CacheNavDoorRows"/> finds the host, and how
+        /// <see cref="CacheNavRailParts"/> knows to leave the door names OUT of the global label
+        /// fade - they are driven per row, with a stagger, and two clocks on one Opacity is a
+        /// race whose winner is whichever call happened to be last.</summary>
+        private const string NavDoorLabelHostTag = "navdoorlabel";
 
         /// <summary>Owner's number: the rail stays open a beat after the pointer leaves, so a
         /// diagonal slide toward a child row does not shut it mid-reach.</summary>
@@ -91,6 +155,36 @@ namespace ConditioningControlPanel
         /// <summary>Rail buttons, so icons can centre themselves when the labels are gone.</summary>
         private readonly List<ButtonBase> _navRailButtons = new();
 
+        /// <summary>The seven door rows in rail order - the stagger index IS this order.</summary>
+        private readonly List<NavDoorRow> _navDoorRows = new();
+
+        /// <summary>Door names, excluded from <see cref="_navRailLabels"/>. See
+        /// <see cref="NavDoorLabelHostTag"/>.</summary>
+        private readonly HashSet<TextBlock> _navDoorLabelTexts = new();
+
+        /// <summary>
+        /// One door row's animatable parts, resolved once. The parts live in the Button's
+        /// CONTENT (MainWindow.xaml authors them per door, because the art and the loc key are
+        /// per door) except <see cref="ActiveBar"/>, which is the shared template's
+        /// <c>NavActiveBar</c> - the part ChromeFx's ApplyNavActiveGlow drives BY NAME.
+        /// </summary>
+        private sealed class NavDoorRow
+        {
+            internal Ellipse Glow = null!;
+            internal Border Tile = null!;
+            internal Viewbox Icon = null!;
+            internal FrameworkElement LabelHost = null!;
+            internal TranslateTransform LabelSlide = null!;
+            internal TextBlock? Label;
+
+            /// <summary>The door's hue, read straight back off the Button's BorderBrush - the
+            /// one place MainWindow.xaml states it, and already what NavActiveBar paints.</summary>
+            internal Brush Hue = Brushes.Transparent;
+
+            internal FrameworkElement? ActiveBar;
+            internal bool Active;
+        }
+
         /// <summary>
         /// Called once from the Loaded handler, after templates are applied - the label/button
         /// caches are a visual-tree walk and find nothing before that.
@@ -101,6 +195,8 @@ namespace ConditioningControlPanel
             {
                 if (_navRailReady || NavSidebar == null) return;
 
+                // Doors first: it seeds _navDoorLabelTexts, which the walk below reads.
+                CacheNavDoorRows();
                 CacheNavRailParts(NavSidebar);
 
                 _navRailCollapseTimer = new DispatcherTimer
@@ -143,9 +239,10 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                // A rail that fails to initialise stays open at its authored width, which is the
-                // pre-2026-08-11 behaviour - degraded, not broken.
-                App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays expanded");
+                // A rail that fails to initialise stays exactly as MainWindow.xaml authored it:
+                // 56px wide, 44px tiles, no door names and no hover flyout. Degraded, not
+                // broken - every door still navigates and still has its tooltip.
+                App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays as authored (shut, icon-only)");
             }
         }
 
@@ -155,10 +252,207 @@ namespace ConditioningControlPanel
             for (int i = 0; i < count; i++)
             {
                 var child = VisualTreeHelper.GetChild(root, i);
+                // The big door names are driven per row with a stagger (SetNavRailExpanded), so
+                // they must NOT also be in the global label fade - see NavDoorLabelHostTag.
+                if (child is TextBlock door && _navDoorLabelTexts.Contains(door)) continue;
                 if (child is TextBlock tb) _navRailLabels.Add(tb);
                 else if (child is ButtonBase b) _navRailButtons.Add(b);
                 CacheNavRailParts(child);
             }
+        }
+
+        /// <summary>
+        /// Resolves the seven medallion rows. The parts are found BY TYPE among the door
+        /// Button's direct content children (glow = the Ellipse, tile = the Border, icon = the
+        /// Viewbox, label host = the one tagged <see cref="NavDoorLabelHostTag"/>), which is the
+        /// same shape ChromeFx's NudgeNavIcon relies on - it takes the first Image-or-Viewbox
+        /// among those same children as the icon to nudge. Keep both contracts in mind before
+        /// adding a fifth child to a door in MainWindow.xaml.
+        ///
+        /// <para>A door whose content does not match is skipped rather than fixed up: the rail
+        /// then renders that row exactly as MainWindow.xaml authored it (collapsed sizes, no
+        /// name), which is legible, instead of throwing on the Loaded path.</para>
+        /// </summary>
+        private void CacheNavDoorRows()
+        {
+            foreach (var d in NavDoorMap)
+            {
+                var btn = NavDoorParts(d.Door).Header;
+                if (btn?.Content is not Panel content) continue;
+
+                var kids = content.Children.OfType<FrameworkElement>().ToList();
+                var glow = kids.OfType<Ellipse>().FirstOrDefault();
+                var tile = kids.OfType<Border>().FirstOrDefault();
+                // The label's own Viewbox is nested inside the host, so this is the icon's.
+                var icon = kids.OfType<Viewbox>().FirstOrDefault();
+                var host = kids.FirstOrDefault(k => (k.Tag as string) == NavDoorLabelHostTag);
+                if (glow == null || tile == null || icon == null || host is not Panel hostPanel)
+                {
+                    App.Logger?.Debug("CacheNavDoorRows: door {Door} has no medallion content", d.Door);
+                    continue;
+                }
+
+                // Built here, not in XAML: a RenderTransform declared in a Style setter is one
+                // shared (and frozen) instance across all seven rows, which is the one thing a
+                // per-row stagger cannot survive.
+                var slide = new TranslateTransform(0, NavDoorLabelRise);
+                hostPanel.RenderTransform = slide;
+
+                var row = new NavDoorRow
+                {
+                    Glow = glow,
+                    Tile = tile,
+                    Icon = icon,
+                    LabelHost = hostPanel,
+                    LabelSlide = slide,
+                    Label = hostPanel.Children.OfType<Viewbox>().FirstOrDefault()?.Child as TextBlock,
+                    Hue = btn.BorderBrush ?? Brushes.Transparent,
+                };
+                if (row.Label != null) _navDoorLabelTexts.Add(row.Label);
+                glow.Fill = BuildNavDoorGlow(btn.BorderBrush as SolidColorBrush);
+
+                // The active bar is a template part; ChromeFx flips its Visibility and nothing
+                // else, so that flip is the only signal this file has for "you are here". Watch
+                // it rather than duplicating ChromeFx's notion of the active tab.
+                btn.ApplyTemplate();
+                row.ActiveBar = btn.Template?.FindName("NavActiveBar", btn) as FrameworkElement;
+                if (row.ActiveBar != null)
+                    row.ActiveBar.IsVisibleChanged += (_, __) => RefreshNavDoorActive(row);
+
+                _navDoorRows.Add(row);
+                RefreshNavDoorActive(row);
+            }
+        }
+
+        /// <summary>The medallion's halo: the door's hue fading to fully transparent, so the
+        /// ellipse can overhang the 56px strip without a visible edge. Frozen - one brush per
+        /// door for the life of the window.</summary>
+        private static Brush? BuildNavDoorGlow(SolidColorBrush? hue)
+        {
+            if (hue == null) return null;
+            var c = hue.Color;
+            var b = new RadialGradientBrush
+            {
+                GradientOrigin = new Point(0.5, 0.5),
+                Center = new Point(0.5, 0.5),
+                RadiusX = 0.5,
+                RadiusY = 0.5,
+            };
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0xC0, c.R, c.G, c.B), 0.0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x60, c.R, c.G, c.B), 0.42));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, c.R, c.G, c.B), 1.0));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>
+        /// Repaints one row's "you are here" state from the active bar ChromeFx owns: hue ring
+        /// on the tile, hue on the name, full opacity instead of .85, and a stronger halo.
+        /// ClearValue rather than writing the idle colours back, so the style's own
+        /// DynamicResource brushes (GlassBorder / TextLight) stay live for mod repaints.
+        /// </summary>
+        private void RefreshNavDoorActive(NavDoorRow row)
+        {
+            try
+            {
+                row.Active = row.ActiveBar?.Visibility == Visibility.Visible;
+                row.Tile.Opacity = row.Active ? 1.0 : NavDoorTileIdleOpacity;
+
+                if (row.Active)
+                {
+                    row.Tile.BorderBrush = row.Hue;
+                    if (row.Label != null) row.Label.Foreground = row.Hue;
+                }
+                else
+                {
+                    row.Tile.ClearValue(Border.BorderBrushProperty);
+                    row.Label?.ClearValue(TextBlock.ForegroundProperty);
+                }
+
+                SetNavDoorGlow(row, MotionFx.AllowTransitions);
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshNavDoorActive: {E}", ex.Message); }
+        }
+
+        private void SetNavDoorGlow(NavDoorRow row, bool animate)
+        {
+            double to = row.Active ? NavDoorGlowActive : (_navRailExpanded ? NavDoorGlowOpen : 0);
+            if (!animate)
+            {
+                row.Glow.BeginAnimation(UIElement.OpacityProperty, null);
+                row.Glow.Opacity = to;
+                return;
+            }
+            row.Glow.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(to, TimeSpan.FromMilliseconds(NavDoorGlowFadeMs)));
+        }
+
+        /// <summary>
+        /// The medallion half of the flyout: tiles and art grow, haloes come up, and the door
+        /// names rise 14px into place one after the other, 30ms apart, so the rail unfolds
+        /// instead of popping. Collapsing runs the same animations backwards at half speed with
+        /// no stagger - the names have to be gone BEFORE the width tween takes their room away,
+        /// or they paint over the page for a frame.
+        /// </summary>
+        private void ApplyNavDoorRows(bool expand, bool animate)
+        {
+            double tileTo = expand ? NavDoorTileExpanded : NavDoorTileCollapsed;
+            double iconTo = expand ? NavDoorIconExpanded : NavDoorIconCollapsed;
+            double glowTo = expand ? NavDoorGlowExpanded : NavDoorGlowCollapsed;
+            double labelTo = expand ? 1 : 0;
+            double riseTo = expand ? 0 : NavDoorLabelRise;
+
+            for (int i = 0; i < _navDoorRows.Count; i++)
+            {
+                var row = _navDoorRows[i];
+                SetNavRailSize(row.Tile, tileTo, animate);
+                SetNavRailSize(row.Icon, iconTo, animate);
+                SetNavRailSize(row.Glow, glowTo, animate);
+                SetNavDoorGlow(row, animate);
+
+                if (!animate)
+                {
+                    row.LabelHost.BeginAnimation(UIElement.OpacityProperty, null);
+                    row.LabelHost.Opacity = labelTo;
+                    row.LabelSlide.BeginAnimation(TranslateTransform.YProperty, null);
+                    row.LabelSlide.Y = riseTo;
+                    continue;
+                }
+
+                var begin = TimeSpan.FromMilliseconds(expand ? i * NavDoorLabelStaggerMs : 0);
+                var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+                row.LabelHost.BeginAnimation(UIElement.OpacityProperty,
+                    new DoubleAnimation(labelTo, TimeSpan.FromMilliseconds(
+                        expand ? NavDoorLabelFadeMs : NavRailAnimMs / 2))
+                    { BeginTime = begin, EasingFunction = ease });
+
+                row.LabelSlide.BeginAnimation(TranslateTransform.YProperty,
+                    new DoubleAnimation(riseTo, TimeSpan.FromMilliseconds(
+                        expand ? NavDoorLabelSlideMs : NavRailAnimMs / 2))
+                    { BeginTime = begin, EasingFunction = ease });
+            }
+        }
+
+        /// <summary>Square-grows one part. Width and Height take the same clock on purpose: two
+        /// halves of one tween drifting apart is how a tile ends up a rectangle mid-flight.</summary>
+        private static void SetNavRailSize(FrameworkElement el, double to, bool animate)
+        {
+            if (!animate)
+            {
+                el.BeginAnimation(FrameworkElement.WidthProperty, null);
+                el.BeginAnimation(FrameworkElement.HeightProperty, null);
+                el.Width = to;
+                el.Height = to;
+                return;
+            }
+
+            var size = new DoubleAnimation(to, TimeSpan.FromMilliseconds(NavRailAnimMs))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            el.BeginAnimation(FrameworkElement.WidthProperty, size);
+            el.BeginAnimation(FrameworkElement.HeightProperty, size);
         }
 
         private void SetNavRailExpanded(bool expand, bool animate = true)
@@ -196,10 +490,15 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Icons centre themselves once the label is gone.
+            // Icons centre themselves once the label is gone. Inert for the rail's own two
+            // templates as it stands - both hard-set the ContentPresenter's alignment (doors
+            // Stretch, entries Left) and centre their icons with a fixed 56px column and a 21px
+            // padding respectively - but it is left standing for any rail button that does honour
+            // it, and it costs one property write per button.
             foreach (var b in _navRailButtons)
                 b.HorizontalContentAlignment = expand ? HorizontalAlignment.Left : HorizontalAlignment.Center;
 
+            ApplyNavDoorRows(expand, animate);
             ApplyNavRailDoorState(animate);
         }
 
