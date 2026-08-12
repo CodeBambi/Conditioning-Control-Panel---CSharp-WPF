@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Descent
 {
@@ -74,8 +75,17 @@ namespace ConditioningControlPanel.Services.Descent
                 };
                 return JObject.Load(reader);
             }
-            catch
+            catch (Exception ex)
             {
+                // The TYPE and MESSAGE only — never the payload. This parses the whole
+                // /v2/user/profile response, which carries the account's identifiers,
+                // and a log line is the one place they must not end up. Debug because
+                // an unparseable body is a server or transport problem that the caller
+                // already degrades correctly for (null block => render nothing);
+                // without this line it degraded SILENTLY, which is indistinguishable
+                // from "this account has no key".
+                Log.Debug("[Descent] wire parse failed: {Type}: {Message}",
+                    ex.GetType().Name, ex.Message);
                 return null;
             }
         }
@@ -125,15 +135,22 @@ namespace ConditioningControlPanel.Services.Descent
         // ---------------------------------------------------------------- readers
 
         /// <summary>
-        /// The vat, or null when the server shipped it dark. `cap &lt;= 0` is the
-        /// documented dark state and is NOT clamped up to something drawable.
+        /// The vat, or null when the server shipped it dark. A cap that floors to
+        /// less than 1 is the documented dark state and is NOT clamped up to
+        /// something drawable.
         /// </summary>
         internal static DescentVat? ReadVat(JToken? raw)
         {
             if (raw is not JObject v) return null;
 
-            double? cap = Num(v["cap"]);
-            if (cap is null || cap <= 0) return null;
+            // THE GUARD IS ON THE NUMBER THIS ACTUALLY SHIPS. `cap` is floored to an
+            // int below, so testing the raw double for `> 0` would let a cap of 0.4
+            // through as Cap = 0 — a "live" vat with a zero cap, which is exactly the
+            // dark state this branch exists to catch. Floor first, judge the result.
+            double? rawCap = Num(v["cap"]);
+            if (rawCap is null) return null;
+            int cap = (int)Math.Floor(rawCap.Value);
+            if (cap < 1) return null;
 
             double today = Math.Max(0, Num(v["today_xp"]) ?? 0);
             double? pct = Num(v["fill_pct"]);
@@ -147,9 +164,9 @@ namespace ConditioningControlPanel.Services.Descent
 
             return new DescentVat
             {
-                Cap = (int)Math.Floor(cap.Value),
+                Cap = cap,
                 TodayXp = (int)Math.Floor(today),
-                FillPct = pct is not null ? Math.Max(0, pct.Value) : (today / cap.Value) * 100.0,
+                FillPct = pct is not null ? Math.Max(0, pct.Value) : (today / cap) * 100.0,
                 FillLipPct = lip is not null
                     ? Math.Max(CapPct, Math.Min(MaxLipPct, lip.Value))
                     : DefaultLipPct,

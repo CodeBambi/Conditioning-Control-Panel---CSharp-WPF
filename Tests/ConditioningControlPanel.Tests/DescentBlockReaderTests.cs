@@ -119,6 +119,12 @@ public class DescentBlockReaderTests
         Assert.Null(DescentReader.Parse(Block("{ \"devotion_days\": 3, \"vat\": {} }"))!.Vat);
         Assert.Null(DescentReader.Parse(Block("{ \"devotion_days\": 3, \"vat\": { \"cap\": 0 } }"))!.Vat);
         Assert.Null(DescentReader.Parse(Block("{ \"devotion_days\": 3, \"vat\": { \"cap\": -5 } }"))!.Vat);
+
+        // The guard is on the FLOORED number, which is the one that ships: a cap of
+        // 0.4 is "> 0" but becomes Cap = 0, i.e. a live vat with a zero cap.
+        Assert.Null(DescentReader.Parse(Block("{ \"devotion_days\": 3, \"vat\": { \"cap\": 0.4 } }"))!.Vat);
+        Assert.Equal(1, DescentReader.Parse(Block(
+            "{ \"devotion_days\": 3, \"vat\": { \"cap\": 1.9 } }"))!.Vat!.Cap);
     }
 
     [Fact]
