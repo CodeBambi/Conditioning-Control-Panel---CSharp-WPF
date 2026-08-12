@@ -34,6 +34,14 @@
 
          Quiet surface (PLAN §2.8): no storyboards, no ambient canvas. The
          Danger Zone is loud in COLOUR, not in motion.
+
+         VELVET KIT / UI POLISH 2 (Lane B): the three reversible panels wear
+         the Data hue skin (edge bar + wash + hue border + hue title) and
+         their rows are one line with the description in the ToolTip. The
+         DANGER ZONE is the contract's named exception: it keeps DangerBrush
+         rather than the Data hue - a crimson card that turned cyan would stop
+         reading as a warning - and it keeps BOTH visible descriptions,
+         promoted to 11px, because they are load-bearing consequence text.
          ================================================================ -->
 
     <StackPanel>
@@ -41,107 +49,129 @@
         <TextBlock Text="{loc:Str set2_section_data}" Style="{StaticResource SectionHeader}"/>
 
         <!-- ============================ offline mode ========================== -->
-        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
-                           Source="{Binding Source='📴', Converter={StaticResource EmojiToImageSource}}"/>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_offline_title}"
-                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
-                </StackPanel>
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                               Source="{Binding Source='📴', Converter={StaticResource EmojiToImageSource}}"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_offline_title}"
+                                   Foreground="{StaticResource SectionHueDataBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
 
-                <Grid ToolTip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
+                    <Grid MinHeight="34" ToolTip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                   Text="{loc:Str setting_offline_mode}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkOfflineMode" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- =========================== phrase backup ========================== -->
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                               Source="{Binding Source='📤', Converter={StaticResource EmojiToImageSource}}"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_phrase_backup_title}"
+                                   Foreground="{StaticResource SectionHueDataBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str set2_data_phrase_backup_hint}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnExportPhrases" x:FieldModifier="internal"
+                                Content="{loc:Str set2_btn_export_phrases}"
+                                Style="{StaticResource OutlineButton}" Padding="12,5" Margin="0,0,8,0"
+                                Click="BtnExportPhrases_Click"
+                                ToolTip="{loc:Str set2_tooltip_export_phrases}"/>
+                        <Button x:Name="BtnImportPhrases" x:FieldModifier="internal"
+                                Content="{loc:Str set2_btn_import_phrases}"
+                                Style="{StaticResource OutlineButton}" Padding="12,5"
+                                Click="BtnImportPhrases_Click"
+                                ToolTip="{loc:Str set2_tooltip_import_phrases}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ====================== cloud backup signpost ======================= -->
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <Grid Margin="15,12,15,12" MinHeight="34" ToolTip="{loc:Str set2_data_cloud_signpost}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_offline_mode}"/>
-                        <TextBlock Text="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkOfflineMode" x:FieldModifier="internal"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                    <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                               Text="{loc:Str label_cloud_settings_backup}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Column="1" x:Name="BtnGoToAccountBackup"
+                            Content="{loc:Str set2_btn_open_account_section}"
+                            Style="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
+                            Click="BtnGoToAccountBackup_Click"/>
                 </Grid>
-            </StackPanel>
-        </Border>
-
-        <!-- =========================== phrase backup ========================== -->
-        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
-                           Source="{Binding Source='📤', Converter={StaticResource EmojiToImageSource}}"/>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_phrase_backup_title}"
-                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
-                </StackPanel>
-                <TextBlock Text="{loc:Str set2_data_phrase_backup_hint}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnExportPhrases" x:FieldModifier="internal"
-                            Content="{loc:Str set2_btn_export_phrases}"
-                            Style="{StaticResource OutlineButton}" Padding="12,5" Margin="0,0,8,0"
-                            Click="BtnExportPhrases_Click"
-                            ToolTip="{loc:Str set2_tooltip_export_phrases}"/>
-                    <Button x:Name="BtnImportPhrases" x:FieldModifier="internal"
-                            Content="{loc:Str set2_btn_import_phrases}"
-                            Style="{StaticResource OutlineButton}" Padding="12,5"
-                            Click="BtnImportPhrases_Click"
-                            ToolTip="{loc:Str set2_tooltip_import_phrases}"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
-
-        <!-- ====================== cloud backup signpost ======================= -->
-        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_cloud_settings_backup}"/>
-                    <TextBlock Text="{loc:Str set2_data_cloud_signpost}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
-                </StackPanel>
-                <Button Grid.Column="1" x:Name="BtnGoToAccountBackup"
-                        Content="{loc:Str set2_btn_open_account_section}"
-                        Style="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
-                        Click="BtnGoToAccountBackup_Click"/>
             </Grid>
         </Border>
 
         <!-- ============================ danger zone =========================== -->
         <!-- Visually separated on purpose: a crimson border, its own heading, and the
-             button last. Everything above this line is reversible. -->
+             button last. Everything above this line is reversible. Contract exception:
+             hue coding does NOT apply here - the warning colour outranks the section
+             colour, and both descriptions stay visible (load-bearing consequence text). -->
         <Border x:Name="DangerZoneSection" x:FieldModifier="internal"
-                CornerRadius="12" Padding="15" Margin="0,10,0,12"
+                CornerRadius="12" Padding="0" Margin="0,8,0,10"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
                 BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1">
-            <StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
-                           Source="{Binding Source='☠️', Converter={StaticResource EmojiToImageSource}}"/>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_danger_title}"
-                               Foreground="{DynamicResource DangerBrush}"
-                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{DynamicResource DangerBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                               Source="{Binding Source='☠️', Converter={StaticResource EmojiToImageSource}}"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_danger_title}"
+                                   Foreground="{DynamicResource DangerBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="{loc:Str set2_data_factory_reset_body}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextLightBrush}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str set2_data_factory_reset_keeps}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+
+                    <Button x:Name="BtnFactoryReset" x:FieldModifier="internal"
+                            Content="{loc:Str set2_btn_factory_reset}"
+                            Style="{StaticResource OutlineButton}"
+                            Foreground="{DynamicResource DangerBrush}"
+                            BorderBrush="{DynamicResource DangerBrush}"
+                            Padding="14,6" HorizontalAlignment="Left"
+                            Click="BtnFactoryReset_Click"
+                            ToolTip="{loc:Str set2_tooltip_factory_reset}"/>
                 </StackPanel>
-
-                <TextBlock Text="{loc:Str set2_data_factory_reset_body}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextLightBrush}" FontSize="11" Margin="0,0,0,6"/>
-                <TextBlock Text="{loc:Str set2_data_factory_reset_keeps}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,0,0,12"/>
-
-                <Button x:Name="BtnFactoryReset" x:FieldModifier="internal"
-                        Content="{loc:Str set2_btn_factory_reset}"
-                        Style="{StaticResource OutlineButton}"
-                        Foreground="{DynamicResource DangerBrush}"
-                        BorderBrush="{DynamicResource DangerBrush}"
-                        Padding="14,6" HorizontalAlignment="Left"
-                        Click="BtnFactoryReset_Click"
-                        ToolTip="{loc:Str set2_tooltip_factory_reset}"/>
-            </StackPanel>
+            </Grid>
         </Border>
 
     </StackPanel>

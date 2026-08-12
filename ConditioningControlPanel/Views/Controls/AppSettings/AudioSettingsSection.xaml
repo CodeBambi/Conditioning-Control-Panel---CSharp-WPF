@@ -33,221 +33,253 @@
          switch stays on the Haptics routing matrix.
 
          Quiet surface: no ambient loops, no storyboards (PLAN.md §2.9).
+
+         VELVET KIT / UI POLISH 2 (Lane B):
+           · The card wears the Audio hue skin (3px edge bar, wash, hue
+             border, hue title). The x:Name AudioSection stays on the OUTER
+             Border - TutorialService's "set_audio" step spotlights it by
+             name through FindElementByName's visual-tree walk.
+           · Both toggles are label-left / toggle-right rows at MinHeight 34;
+             ChkExcludeBambiCloudDucking stopped being a Content checkbox so
+             it matches the row grammar (same x:Name, same loc key, same
+             handlers, its old Content string is now the row label).
+           · CmbAudioOutputDevice's inline Foreground="Black"
+             Background="White" is DELETED (contract HARD RULE 4) - inline
+             values beat styles, and Lane A's implicit dark ComboBox covers it.
          ================================================================ -->
 
     <Border x:Name="AudioSection" x:FieldModifier="internal"
-            CornerRadius="12" Padding="16" Margin="0,0,0,12"
+            CornerRadius="12" Padding="0" Margin="0,0,0,12"
             Background="{DynamicResource ElevatedSurfaceBrush}"
-            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-        <StackPanel>
+            BorderBrush="{StaticResource SectionHueAudioBorderBrush}" BorderThickness="1">
+        <Grid>
+            <Border CornerRadius="11" Background="{StaticResource SectionHueAudioWashBrush}"/>
+            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                    Background="{StaticResource SectionHueAudioBrush}"/>
+            <StackPanel Margin="16,13,16,13">
 
-            <!-- Header -->
-            <Grid Margin="0,0,0,10">
-                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
-                                        Text="{loc:Str section_audio}" FontSize="14" Margin="0"/>
-                <Button x:Name="HelpBtnAudio" x:FieldModifier="internal"
-                        Style="{StaticResource HelpButtonStyle}" Tag="Audio"
-                        HorizontalAlignment="Right" VerticalAlignment="Center"/>
-            </Grid>
+                <!-- Header -->
+                <Grid Margin="0,0,0,8">
+                    <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
+                                            Foreground="{StaticResource SectionHueAudioBrush}"
+                                            Text="{loc:Str section_audio}" FontSize="14" Margin="0"/>
+                    <Button x:Name="HelpBtnAudio" x:FieldModifier="internal"
+                            Style="{StaticResource HelpButtonStyle}" Tag="Audio"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
 
-            <!-- Master volume -->
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="46"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_master}" FontSize="12"
-                           VerticalAlignment="Center"
-                           ToolTip="{loc:Str tooltip_master_volume_for_all_audio}"/>
-                <Slider Grid.Column="1" x:Name="SliderMaster" x:FieldModifier="internal"
-                        Minimum="0" Maximum="100" Value="50"
-                        Margin="6,0" VerticalAlignment="Center"
-                        ValueChanged="SliderMaster_Changed"
-                        ToolTip="{loc:Str tooltip_overall_audio_volume_level}"/>
-                <TextBlock x:Name="TxtMaster" x:FieldModifier="internal" Grid.Column="2"
-                           Style="{StaticResource ValueLabel}" Text="50%" FontSize="12"
-                           VerticalAlignment="Center"/>
-            </Grid>
+                <!-- Master volume -->
+                <Grid MinHeight="34" Margin="0,0,0,6"
+                      ToolTip="{loc:Str tooltip_master_volume_for_all_audio}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="46"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_master}" FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip="{loc:Str tooltip_master_volume_for_all_audio}"/>
+                    <Slider Grid.Column="1" x:Name="SliderMaster" x:FieldModifier="internal"
+                            Minimum="0" Maximum="100" Value="50"
+                            Margin="6,0" VerticalAlignment="Center"
+                            ValueChanged="SliderMaster_Changed"
+                            ToolTip="{loc:Str tooltip_overall_audio_volume_level}"/>
+                    <TextBlock x:Name="TxtMaster" x:FieldModifier="internal" Grid.Column="2"
+                               Style="{StaticResource ValueLabel}" Text="50%" FontSize="12"
+                               VerticalAlignment="Center"/>
+                </Grid>
 
-            <!-- Video volume -->
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="46"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_video}" FontSize="12"
-                           VerticalAlignment="Center"
-                           ToolTip="{loc:Str tooltip_volume_for_mandatory_videos}"/>
-                <Slider Grid.Column="1" x:Name="SliderVideoVolume" x:FieldModifier="internal"
-                        Minimum="0" Maximum="100" Value="50"
-                        Margin="6,0" VerticalAlignment="Center"
-                        ValueChanged="SliderVideoVolume_Changed"
-                        ToolTip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
-                <TextBlock x:Name="TxtVideoVolume" x:FieldModifier="internal" Grid.Column="2"
-                           Style="{StaticResource ValueLabel}" Text="50%" FontSize="12"
-                           VerticalAlignment="Center"/>
-            </Grid>
+                <!-- Video volume -->
+                <Grid MinHeight="34" Margin="0,0,0,6"
+                      ToolTip="{loc:Str tooltip_volume_for_mandatory_videos}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="46"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_video}" FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip="{loc:Str tooltip_volume_for_mandatory_videos}"/>
+                    <Slider Grid.Column="1" x:Name="SliderVideoVolume" x:FieldModifier="internal"
+                            Minimum="0" Maximum="100" Value="50"
+                            Margin="6,0" VerticalAlignment="Center"
+                            ValueChanged="SliderVideoVolume_Changed"
+                            ToolTip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
+                    <TextBlock x:Name="TxtVideoVolume" x:FieldModifier="internal" Grid.Column="2"
+                               Style="{StaticResource ValueLabel}" Text="50%" FontSize="12"
+                               VerticalAlignment="Center"/>
+                </Grid>
 
-            <!-- Auto-duck master switch -->
-            <Grid Margin="0,4,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="{loc:Str label_duck}" Style="{StaticResource SettingLabel}" FontSize="12"
-                           VerticalAlignment="Center"
-                           ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
-                <CheckBox Grid.Column="1" x:Name="ChkAudioDuck" x:FieldModifier="internal"
-                          Style="{StaticResource ToggleStyle}"
-                          IsChecked="True" VerticalAlignment="Center"
-                          Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
-                          ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
-            </Grid>
+                <!-- Auto-duck master switch -->
+                <Grid MinHeight="34" Margin="0,0,0,6"
+                      ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Str label_duck}" Style="{StaticResource SettingLabel}" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,14,0" TextTrimming="CharacterEllipsis"
+                               ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+                    <CheckBox Grid.Column="1" x:Name="ChkAudioDuck" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}"
+                              IsChecked="True" VerticalAlignment="Center"
+                              Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
+                              ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+                </Grid>
 
-            <!-- Duck amount -->
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="46"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_duck}" FontSize="12"
-                           VerticalAlignment="Center"
-                           ToolTip="{loc:Str tooltip_how_much_to_reduce_other_audio}"/>
-                <Slider Grid.Column="1" x:Name="SliderDuck" x:FieldModifier="internal"
-                        Minimum="0" Maximum="100" Value="80"
-                        Margin="6,0" VerticalAlignment="Center"
-                        ValueChanged="SliderDuck_Changed"
-                        ToolTip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
-                <TextBlock x:Name="TxtDuck" x:FieldModifier="internal" Grid.Column="2"
-                           Style="{StaticResource ValueLabel}" Text="80%" FontSize="12"
-                           VerticalAlignment="Center"/>
-            </Grid>
+                <!-- Duck amount -->
+                <Grid MinHeight="34" Margin="0,0,0,6"
+                      ToolTip="{loc:Str tooltip_how_much_to_reduce_other_audio}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="46"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_duck}" FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip="{loc:Str tooltip_how_much_to_reduce_other_audio}"/>
+                    <Slider Grid.Column="1" x:Name="SliderDuck" x:FieldModifier="internal"
+                            Minimum="0" Maximum="100" Value="80"
+                            Margin="6,0" VerticalAlignment="Center"
+                            ValueChanged="SliderDuck_Changed"
+                            ToolTip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
+                    <TextBlock x:Name="TxtDuck" x:FieldModifier="internal" Grid.Column="2"
+                               Style="{StaticResource ValueLabel}" Text="80%" FontSize="12"
+                               VerticalAlignment="Center"/>
+                </Grid>
 
-            <!-- Don't-duck-the-browser exception -->
-            <CheckBox x:Name="ChkExcludeBambiCloudDucking" x:FieldModifier="internal"
-                      Margin="0,0,0,10"
-                      Content="{loc:Str setting_don_t_duck_browser}"
-                      IsChecked="True"
-                      Checked="ChkExcludeBambiCloudDucking_Changed"
-                      Unchecked="ChkExcludeBambiCloudDucking_Changed"
-                      ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
-                      Foreground="{DynamicResource PinkBrush}" FontSize="11"/>
+                <!-- Don't-duck-the-browser exception -->
+                <Grid MinHeight="34" Margin="0,0,0,6"
+                      ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Str setting_don_t_duck_browser}" Style="{StaticResource SettingLabel}"
+                               FontSize="12" Foreground="{DynamicResource PinkBrush}"
+                               VerticalAlignment="Center" Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <CheckBox Grid.Column="1" x:Name="ChkExcludeBambiCloudDucking" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              IsChecked="True"
+                              Checked="ChkExcludeBambiCloudDucking_Changed"
+                              Unchecked="ChkExcludeBambiCloudDucking_Changed"
+                              ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"/>
+                </Grid>
 
-            <!-- Audio output device picker - route CCP audio to a chosen device
-                 (e.g. private headset) so streamers can use the program without
-                 their viewers hearing the audio on the system default endpoint. -->
-            <Grid Margin="0,0,0,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="150"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_output}" FontSize="12"
-                           VerticalAlignment="Center"
-                           ToolTip="{loc:Str tooltip_audio_output_device}"/>
-                <ComboBox Grid.Column="1" x:Name="CmbAudioOutputDevice" x:FieldModifier="internal"
-                          Margin="6,0" Foreground="Black" Background="White"
-                          VerticalAlignment="Center"
-                          ToolTip="{loc:Str tooltip_audio_output_device}"
-                          SelectionChanged="CmbAudioOutputDevice_SelectionChanged"/>
-                <Button Grid.Column="2" x:Name="BtnAudioOutputRefresh" x:FieldModifier="internal" Content="↻"
-                        Click="BtnAudioOutputRefresh_Click"
-                        ToolTip="{loc:Str set2_tooltip_audio_output_refresh}"
-                        Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
-                        VerticalAlignment="Center"/>
-            </Grid>
+                <!-- Audio output device picker - route CCP audio to a chosen device
+                     (e.g. private headset) so streamers can use the program without
+                     their viewers hearing the audio on the system default endpoint. -->
+                <Grid MinHeight="34" Margin="0,0,0,10" ToolTip="{loc:Str tooltip_audio_output_device}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_output}" FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip="{loc:Str tooltip_audio_output_device}"/>
+                    <ComboBox Grid.Column="1" x:Name="CmbAudioOutputDevice" x:FieldModifier="internal"
+                              Margin="6,0" VerticalAlignment="Center"
+                              ToolTip="{loc:Str tooltip_audio_output_device}"
+                              SelectionChanged="CmbAudioOutputDevice_SelectionChanged"/>
+                    <Button Grid.Column="2" x:Name="BtnAudioOutputRefresh" x:FieldModifier="internal" Content="↻"
+                            Click="BtnAudioOutputRefresh_Click"
+                            ToolTip="{loc:Str set2_tooltip_audio_output_refresh}"
+                            Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                            VerticalAlignment="Center"/>
+                </Grid>
 
-            <!-- Actions: diagnostics + the layered-audio mixer (#659) -->
-            <StackPanel Orientation="Horizontal">
-                <Button x:Name="BtnTestAudio" x:FieldModifier="internal"
-                        Content="{loc:Str set2_btn_test_audio}"
-                        Click="BtnTestAudio_Click"
-                        ToolTip="{loc:Str set2_tooltip_test_audio}"
-                        Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
-                        Margin="0,0,8,0"/>
-                <Button x:Name="BtnAudioLayers" x:FieldModifier="internal"
-                        Content="{loc:Str btn_audio_layers}"
-                        Click="BtnAudioLayers_Click"
-                        ToolTip="{loc:Str tooltip_audio_layers}"
-                        Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
-            </StackPanel>
-
-            <!-- ============================================================
-                 AUDIO SYNC — the live haptic tuning pair (Phase 3).
-
-                 Moved verbatim from the dashboard's browser card
-                 (SettingsTabView.xaml), per PLAN.md Phase 3. All four x:Names
-                 and both handler names are the ones MainWindow.Haptics.cs
-                 (:254, :941, :955, :959, :974) and MainWindow.xaml.cs
-                 (:2404-2421) already read and write; they resolve as
-                 AppSettingsTab.<Name> through AppSettingsTabView.Audio.cs now.
-
-                 The ENABLE switch is NOT here and must not be: it lives on the
-                 Haptics routing matrix (Studio - Haptics - Media > Audio sync),
-                 and this whole block is Collapsed until that layer is on -
-                 RefreshAudioSyncCardVisibility owns the Visibility, so a
-                 hard-coded Visible here would show two dials that do nothing.
-                 These are MIRRORS of the Haptics panel's own delay/power
-                 sliders; each side writes the other's Value, which is why
-                 neither may grow a second ValueChanged handler.
-                 ============================================================ -->
-            <Border x:Name="AudioSyncLatencyPanel" x:FieldModifier="internal"
-                    Visibility="Collapsed"
-                    Background="{DynamicResource PanelBgBrush}" CornerRadius="8"
-                    Padding="12,10" Margin="0,14,0,0">
-                <StackPanel>
-                    <helpers:EmojiTextBlock Text="{loc:Str hm3_audio_sync_tuning}"
-                                            Foreground="{DynamicResource PinkBrush}"
-                                            FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
-
-                    <!-- Delay -->
-                    <Grid Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="46"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_delay}" FontSize="12"
-                                   VerticalAlignment="Center"
-                                   ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
-                        <Slider Grid.Column="1" x:Name="SliderAudioSyncLatency" x:FieldModifier="internal"
-                                Minimum="-600" Maximum="600" Value="0"
-                                Margin="6,0" VerticalAlignment="Center"
-                                ValueChanged="SliderAudioSyncLatency_Changed"
-                                ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
-                        <TextBlock x:Name="TxtAudioSyncLatency" x:FieldModifier="internal" Grid.Column="2"
-                                   Style="{StaticResource ValueLabel}" Text="{loc:Str label_0ms}" FontSize="12"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-
-                    <!-- Power -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="46"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_power}" FontSize="12"
-                                   VerticalAlignment="Center"
-                                   ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
-                        <Slider Grid.Column="1" x:Name="SliderAudioSyncIntensity" x:FieldModifier="internal"
-                                Minimum="0" Maximum="100" Value="100"
-                                Margin="6,0" VerticalAlignment="Center"
-                                ValueChanged="SliderAudioSyncIntensity_Changed"
-                                ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
-                        <TextBlock x:Name="TxtAudioSyncIntensity" x:FieldModifier="internal" Grid.Column="2"
-                                   Style="{StaticResource ValueLabel}" Text="100%" FontSize="12"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
+                <!-- Actions: diagnostics + the layered-audio mixer (#659) -->
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnTestAudio" x:FieldModifier="internal"
+                            Content="{loc:Str set2_btn_test_audio}"
+                            Click="BtnTestAudio_Click"
+                            ToolTip="{loc:Str set2_tooltip_test_audio}"
+                            Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                            Margin="0,0,8,0"/>
+                    <Button x:Name="BtnAudioLayers" x:FieldModifier="internal"
+                            Content="{loc:Str btn_audio_layers}"
+                            Click="BtnAudioLayers_Click"
+                            ToolTip="{loc:Str tooltip_audio_layers}"
+                            Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
                 </StackPanel>
-            </Border>
 
-        </StackPanel>
+                <!-- ============================================================
+                     AUDIO SYNC — the live haptic tuning pair (Phase 3).
+
+                     Moved verbatim from the dashboard's browser card
+                     (SettingsTabView.xaml), per PLAN.md Phase 3. All four x:Names
+                     and both handler names are the ones MainWindow.Haptics.cs
+                     (:254, :941, :955, :959, :974) and MainWindow.xaml.cs
+                     (:2404-2421) already read and write; they resolve as
+                     AppSettingsTab.<Name> through AppSettingsTabView.Audio.cs now.
+
+                     The ENABLE switch is NOT here and must not be: it lives on the
+                     Haptics routing matrix (Studio - Haptics - Media > Audio sync),
+                     and this whole block is Collapsed until that layer is on -
+                     RefreshAudioSyncCardVisibility owns the Visibility, so a
+                     hard-coded Visible here would show two dials that do nothing.
+                     These are MIRRORS of the Haptics panel's own delay/power
+                     sliders; each side writes the other's Value, which is why
+                     neither may grow a second ValueChanged handler.
+                     ============================================================ -->
+                <Border x:Name="AudioSyncLatencyPanel" x:FieldModifier="internal"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource PanelBgBrush}" CornerRadius="8"
+                        Padding="12,10" Margin="0,12,0,0">
+                    <StackPanel>
+                        <helpers:EmojiTextBlock Text="{loc:Str hm3_audio_sync_tuning}"
+                                                Foreground="{DynamicResource PinkBrush}"
+                                                FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+
+                        <!-- Delay -->
+                        <Grid MinHeight="34" Margin="0,0,0,6"
+                              ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="46"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_delay}" FontSize="12"
+                                       VerticalAlignment="Center"
+                                       ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                            <Slider Grid.Column="1" x:Name="SliderAudioSyncLatency" x:FieldModifier="internal"
+                                    Minimum="-600" Maximum="600" Value="0"
+                                    Margin="6,0" VerticalAlignment="Center"
+                                    ValueChanged="SliderAudioSyncLatency_Changed"
+                                    ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                            <TextBlock x:Name="TxtAudioSyncLatency" x:FieldModifier="internal" Grid.Column="2"
+                                       Style="{StaticResource ValueLabel}" Text="{loc:Str label_0ms}" FontSize="12"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Power -->
+                        <Grid MinHeight="34"
+                              ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="46"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_power}" FontSize="12"
+                                       VerticalAlignment="Center"
+                                       ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                            <Slider Grid.Column="1" x:Name="SliderAudioSyncIntensity" x:FieldModifier="internal"
+                                    Minimum="0" Maximum="100" Value="100"
+                                    Margin="6,0" VerticalAlignment="Center"
+                                    ValueChanged="SliderAudioSyncIntensity_Changed"
+                                    ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                            <TextBlock x:Name="TxtAudioSyncIntensity" x:FieldModifier="internal" Grid.Column="2"
+                                       Style="{StaticResource ValueLabel}" Text="100%" FontSize="12"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

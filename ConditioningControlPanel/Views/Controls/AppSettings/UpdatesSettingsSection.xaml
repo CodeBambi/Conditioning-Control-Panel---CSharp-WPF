@@ -19,23 +19,32 @@
          AppSettings property exists and Phase 2 does not invent settings.
 
          Quiet surface (PLAN §2.9 / ground rule 8): no ambient loops here.
+
+         VELVET KIT / UI POLISH 2 (Lane B): both cards wear the Updates hue
+         skin. No row density work applies - there is not a single toggle in
+         this section, and the patch-notes box is content, not a description.
          ================================================================ -->
 
     <StackPanel>
 
         <TextBlock Text="{loc:Str set2_section_updates}" Style="{StaticResource SectionHeader}"/>
 
-        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,15">
-            <StackPanel>
-                <Grid>
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueUpdatesBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueUpdatesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueUpdatesBrush}"/>
+                <Grid Margin="15,12,15,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel VerticalAlignment="Center">
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
                         <TextBlock x:Name="TxtUpdatesVersion" x:FieldModifier="internal" Text=""
-                                   Foreground="White" FontSize="15" FontWeight="Bold"/>
+                                   Foreground="{StaticResource SectionHueUpdatesBrush}"
+                                   FontSize="15" FontWeight="Bold"/>
                         <TextBlock x:Name="TxtUpdatesProduct" x:FieldModifier="internal" Text=""
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
                     </StackPanel>
@@ -47,34 +56,40 @@
                             VerticalAlignment="Center"
                             Click="BtnCheckUpdates_Click"/>
                 </Grid>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Patch notes for the installed build (UpdateService.CurrentPatchNotes). Shown inline in
              a bounded, scrollable box so a long release never stretches the settings page, with the
              same WhatsNewDialog the post-update popup uses available for a full read. -->
-        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,15">
-            <StackPanel>
-                <Grid Margin="0,0,0,8">
-                    <TextBlock x:Name="TxtPatchNotesHeader" x:FieldModifier="internal"
-                               Text="{loc:Str set2_whats_new_header}"
-                               Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
-                    <Button x:Name="BtnViewPatchNotes" x:FieldModifier="internal"
-                            Content="{loc:Str set2_btn_view_patch_notes}"
-                            Style="{DynamicResource OutlineButton}"
-                            Padding="12,6" FontSize="12"
-                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Click="BtnViewPatchNotes_Click"/>
-                </Grid>
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueUpdatesBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueUpdatesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueUpdatesBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock x:Name="TxtPatchNotesHeader" x:FieldModifier="internal"
+                                   Text="{loc:Str set2_whats_new_header}"
+                                   Foreground="{StaticResource SectionHueUpdatesBrush}" FontSize="14" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="BtnViewPatchNotes" x:FieldModifier="internal"
+                                Content="{loc:Str set2_btn_view_patch_notes}"
+                                Style="{DynamicResource OutlineButton}"
+                                Padding="12,6" FontSize="12"
+                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Click="BtnViewPatchNotes_Click"/>
+                    </Grid>
 
-                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto"
-                              PreviewMouseWheel="InnerScrollViewer_PreviewMouseWheel">
-                    <TextBlock x:Name="TxtPatchNotes" x:FieldModifier="internal" Text=""
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap"/>
-                </ScrollViewer>
-            </StackPanel>
+                    <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto"
+                                  PreviewMouseWheel="InnerScrollViewer_PreviewMouseWheel">
+                        <TextBlock x:Name="TxtPatchNotes" x:FieldModifier="internal" Text=""
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </ScrollViewer>
+                </StackPanel>
+            </Grid>
         </Border>
 
     </StackPanel>
