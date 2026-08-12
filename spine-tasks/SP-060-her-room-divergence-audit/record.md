@@ -12,6 +12,7 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T122035.md` |
+| 2 | plan | SKIPPED BY DESIGN (same class, this session) | `.reviews/2-20260812T122245.md` |
 
 ---
 
@@ -58,3 +59,37 @@ Three privacy levels (emergent, H1), incognito hard-drop (H3), one-hour pause (H
 8. **No fifth verdict value** (packet pins four); dependency-blocked work carries the dependency in the sizing column (SP-050's lesson honored in shape, not vocabulary).
 
 **Rubric corrections applied to the table:** placeholder-pending ≠ decided (item 2); subtractive-element class added to ADOPT criteria (item 3); row-splitting rule for mixed mechanism+value rows (items 4-5).
+
+---
+
+## Step 2 — port-side inventory (what c1–c7 actually landed)
+
+**Method:** one read-only Explore agent over `client/src/CcpClient.Desktop/**` + `Features/**` + the four slice records (SP-042/044/046/047), briefed to cite contract section + `File.cs:line` per element and to list deliberate divergences with their decision citations. The worker read `client/docs/ai-operation-contract.md` and `client/docs/ai-companion-admission.md` in full directly (157 + 123 lines — the port side of every comparison) and spot-verified load-bearing claims against the tree.
+
+### Landed surface (per element — full citations in the audit doc's table)
+
+- **Typed replies** (contract §1): `AiReply.Generated/Refused/Unavailable/Fallback` (`AiOperationVocabulary.cs:208,219,230,241`).
+- **Pipeline**: SP-004 owned operations; provider switch = generation invalidation + cancel + stale-discard; panic = same machinery; offline = zero network with send-attempt-counter proof; endpoint classes `Loopback/FirstPartyCloud/RemoteHostOllama/ThirdPartyCloud` with a loopback-only admission placeholder (pre-socket rejection).
+- **Memory** (contract §5, admission §4): `AiMemoryStore` on SP-005 machinery; consent enum `AiMemoryConsent {Denied, Granted}` default **Denied** (`AiMemoryStore.cs:68`); pair cap 50 recorded as `WpfBaselinePlaceholder` (`:59`); chat pairs only — no facts store; explicit clear with file-delete proof (c4) + user-reachable control (c7); SP-047 memory→prompt wiring: consent-gated `ReadPromptContext()`, interactive always-overwrites `AiRequest.History`, awareness strips it.
+- **Awareness** (contract §4, admission §5): consent record default **NotGiven** (`AiAwarenessService.cs:32,36`), code-enforced at admission; cooldown registry 4 classes (`PerTrigger/Global/PerKeyword/LoopProtection`), extend-not-shrink, values 10/10/15/5s all `WpfBaselinePlaceholder` (`:78`); typed `Suppressed(cooldown)`; context packaging `[Category|App|Title|Duration]` (`:172`) with every field through the moderation input boundary; **window-title observation Windows-only** via P/Invoke (`:312-336`), Linux typed Unavailable; **burn-on-attempt** (`:440,472` — H7 divergence); **no awareness consumer wired** — services exist, no UI integration, no app picker/pause/dial/ledger/SMTC/scorer/arbiter.
+- **Moderation** (contract §7): boundary wired for chat input, awareness context fields, command free-text fields, output text; reserved for templates/community/quiz (no such surfaces exist); placeholder verdict-rejected-only policy; values owner-pending (§9.2 #1).
+- **Commands** (contract §8/§9, c6): strict envelope, atomic rejection, per-command verdicts; gates post-validation; master + all per-effect defaults **OFF** (deliberate conservative placeholder, `c6 record §2.1`); `NotExecuted(EffectUnavailable)` typed placeholder (no effect backends exist).
+- **UI** (c7): modeless `CompanionWindow` (button-launched, `MainWindow.axaml:67` — no tab surface, H10); chat bubbles with type-driven badge honesty; refusal bubbles; Stop = panic; awareness + memory consent checkboxes (session-scoped); 4 cooldown value boxes; clear-memory with in-window confirm modal; honesty line naming the placeholder posture.
+
+### Defaults and named limits as facts
+
+Full table in the audit doc. The load-bearing ones: memory consent **Denied** (placeholder, admission §9.2 #3); awareness consent **NotGiven** (placeholder, §9.2 #4); cooldowns 10/10/15/5 WPF-baseline placeholders; the recorded **10s-vs-dead-`?? 90`** discrepancy (`WindowAwarenessService.cs:374-388`, admission §5 rule 3 — owner question, still open); SP-047's WPF-true-vs-placeholder tension (upstream `ChatMemoryEnabled` default true vs port Denied — placeholder-pending, NOT decided).
+
+### Deliberate divergences already decided (KEEP unless new evidence; audit must not silently reopen)
+
+| Divergence | Decision citation |
+|---|---|
+| Provider switch = generation invalidation (rejects WPF live-switch) | contract §3 rules 1–4; admission §2 rules 1–2 |
+| Refusal/unavailable awareness outcomes drop BY TYPE (no canned refusal bubble) | contract §4 rule 3; c5 record §2 design rule 5 |
+| Panic cancellation via SP-004 machinery (rejects fire-and-forget) | contract §2 rule 3; admission §7 |
+| Strict envelope, atomic rejection, zero repair | contract §8 (greenfield-decision, SP-016 record) |
+| Handler exceptions propagate (rejects swallow-and-log) | c6 record §2.1 |
+| Command gates default all-OFF | c6 record §2.1 + admission §8 — recorded as the **conservative pending-owner posture**, deliberate-not-silent BUT self-declared placeholder: goes to the owner list as a question per consult item 2, while the mechanism stays KEEP |
+| Memory pairs-only model (system/enrichment/ambient never persisted) | admission §4 rule 1 |
+
+**New-evidence check:** H7 (burn-on-attempt vs upstream's v6.7 burn-on-delivery) is NOT one of these — the port's discipline was ported from old WPF (`LastTriggeredAt = now`) and upstream itself abandoned it; the table treats it as upstream drift → MERGE candidate, no boundary touched.

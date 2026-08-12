@@ -1,5 +1,5 @@
 ## STATUS: SP-060 — Her Room + Awareness divergence audit (zero product code)
-**Current Step:** Step 2 — port-side inventory
+**Current Step:** Step 3 — divergence table + privacy verdicts
 **Last Updated:** 2026-08-12 (worker, in progress)
 **Blockers:** none
 
@@ -9,12 +9,12 @@
 - [x] Privacy surface named with upstream defaults as cited facts
 - [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
-### Step 2: port-side inventory (what c1–c7 landed) — IN PROGRESS
-- [ ] Per-element port counterpart with contract section + `File.cs:line`, or explicit "no counterpart"
-- [ ] Port defaults + named limits recorded as facts (consent placeholder, cooldown families, memory read-gating)
-- [ ] Already-decided divergences flagged with their decision citation
+### Step 2: port-side inventory (what c1–c7 landed) — COMPLETE
+- [x] Per-element port counterpart with contract section + `File.cs:line`, or explicit "no counterpart"
+- [x] Port defaults + named limits recorded as facts (consent placeholder, cooldown families, memory read-gating)
+- [x] Already-decided divergences flagged with their decision citation
 
-### Step 3: divergence table + privacy verdicts — NOT STARTED
+### Step 3: divergence table + privacy verdicts — IN PROGRESS
 - [ ] One row per element with verdict ADOPT / KEEP / MERGE / BLOCKED-ON-OWNER
 - [ ] Data-boundary line per row (newly observed / retained / transmitted — "none" is an answer)
 - [ ] Owner decision list, each item a plain answerable question
