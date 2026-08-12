@@ -1,6 +1,6 @@
 ## STATUS: SP-062 — Loud skip + real process-env isolation for the SP-057 pin
-**Current Step:** 4
-**Last Updated:** 2026-08-12 (worker, Step 3 complete — 10/10 consecutive greens incl. 1 cold first-ever build)
+**Current Step:** 5 (complete — .DONE next)
+**Last Updated:** 2026-08-12 (worker, contract green on final tree 89b7fdd5)
 **Blockers:** none
 **Discoveries / File-Scope amendments:**
 - 2026-08-12 (Step 1, worker): wave-19 base was RED (891 passed / 1 failed) — land commit f3a1192b flipped `tunnel`+`vendor` to `served` in `client/docs/upstream-payload-inventory.json` WITHOUT the `evidence` field SP-056's guard requires for served trees (`UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree`). Repaired as a documented File-Scope amendment (land-defect repair, commit 59fbcf1e); field content dictated verbatim by SP-061's landed record intended filing #3. Named here per FR-WORK-06; the 10-green measurement runs on the repaired base.
@@ -66,13 +66,17 @@
 Row-49 site (`LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable`): **zero firings across all 10 runs incl. the cold first-ever build** — nothing to attribute, site untouched. Hit-rate data point for that row: 0/1 cold, 0/10 this measurement.
 Interruption named honestly: a pre-fix run (logs `run01-*`, TRX `sp062-run01-*`) went 891/1 on the AiProviderLab record-ordering race — root-caused + fixed in Step 2 before this series; the 10 above are consecutive post-fix.
 
-### Step 4: record + pre-completion consult — NOT STARTED
-- [ ] record.md complete (repro, API verification, enumeration, design, positive control, run table, limits, intended filings)
-- [ ] Honesty cell: what this task does NOT prove
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + pre-completion consult — COMPLETE
+- [x] record.md complete (repro, API verification, enumeration, design, positive control, run table, limits, intended filings)
+- [x] Honesty cell: what this task does NOT prove
+- [x] Pre-completion solo consult (verdict + ACTUAL model)
+  - solo ×1; actual model NOT surfaced by the tool (recorded honestly). Dispositions applied: checkpoint-2 skip demonstrated live (handshake replica, since deleted — sp062-cp2-replica.trx); deterministic attribute tripwire added inside the existing choke-point-guard fact (count stays 892); phantom-record sweep for the lab reorder (no observer); caveats recorded (skip exits 0 — floor-count is the enforcement; sandboxed-profile runs = 891/1 by design; cold cell's warm NuGet cache)
+- [x] STATUS.md accurate before .DONE
+  - NOTE: the consult's tripwire changed test content AFTER the first series, so the 10-green series was RE-RUN on the final tree (green11–green20, green15 = second fresh-checkout cold). Acceptance series = final-tree series; green01–green10 stand as evidence for b89b25f0.
 
-### Step 5: Testing & Verification — NOT STARTED
-- [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, 892/35, 0 skipped, TRX)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs 0, 0W/0E, 892 unit / 35 headless, 0 skipped, TRX)
+  - final tree 89b7fdd5: verify.mjs exit 0; build 0W/0E; unit 892/0/0F (sp062-contract-unit.trx); headless 35/0/0F (sp062-contract-headless.trx)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+  - client/tests/CcpClient.Tests/** (3 files) + spine-tasks/SP-062/** + the DECLARED amendment client/docs/upstream-payload-inventory.json (land-defect repair 59fbcf1e; not in fileScopeMustNotChange)

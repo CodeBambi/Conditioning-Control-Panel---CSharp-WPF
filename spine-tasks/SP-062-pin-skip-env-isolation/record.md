@@ -170,6 +170,8 @@ honestly, the standing provenance discipline).
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T205835.md` |
 | 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T210637.md` |
 | 3 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/3-20260812T212352.md` |
+| 4 | plan | (filled per call) | `.reviews/` |
+| 5 | plan | (filled per call) | `.reviews/` |
 
 ---
 
@@ -278,6 +280,50 @@ site is byte-untouched. Data point the row inherits: 0/1 cold, 0/10 overall this
 
 **Skip count across the series: 0 in every run** — the normal-run skip path was unreachable,
 exactly as designed (the tripwire fired ONLY in the deliberate positive control).
+
+### Final-tree series (green11–green20, commit `89b7fdd5` — THE acceptance series)
+
+The Step-4 consult's tripwire assertion changed test content, so the series re-ran on the
+final tree. All runs: same command shape as above; row-49 site ZERO firings again.
+
+| run | worktree | cold/warm | wall | unit | headless | TRX |
+|---|---|---|---|---|---|---|
+| green11 | in-place lane-1 | warm | 81s | 892/0 | 35/0 | sp062-green11-{unit,headless}.trx |
+| green12 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green12-* |
+| green13 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green13-* |
+| green14 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green14-* |
+| green15 | **FRESH** `C:/Code/ccp-sp062-cold2` (detached @89b7fdd5, removed after) | **COLD — first-ever build**, 0W/0E (`runs/green15-cold-build.log`); NuGet cache warm (machine-global — coldness = JIT + first compile + first test-host, the row-49 mechanism) | 108s | 892/0 | 35/0 | sp062-green15-cold-* |
+| green16 | in-place | warm | 73s | 892/0 | 35/0 | sp062-green16-* |
+| green17 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green17-* |
+| green18 | in-place | warm | 71s | 892/0 | 35/0 | sp062-green18-* |
+| green19 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green19-* |
+| green20 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green20-* |
+
+Row-49 cumulative data point: **0 firings / 2 cold first-ever builds, 0/20 total runs** across
+both series. Site byte-untouched.
+
+---
+
+## Step 5 — verification (final tree `89b7fdd5`)
+
+- `node .spine/patches/verify.mjs` — **exit 0** (`runs/contract-verify.log`: "OK — all patches applied on all roots").
+- `dotnet build client/CcpClient.sln -c Debug --nologo` — **0W/0E** (`runs/contract-build.log`).
+- `dotnet test client/tests/CcpClient.Tests` — **892 passed / 0 skipped / 0 failed**, TRX `evidence/trx/sp062-contract-unit.trx`.
+- `dotnet test client/tests/CcpClient.HeadlessTests` — **35 passed / 0 skipped / 0 failed**, TRX `evidence/trx/sp062-contract-headless.trx`.
+- `git diff --check` — clean.
+- `git status --short` — File Scope paths only: `client/tests/CcpClient.Tests/**` (3 files: DataRootOverrideTests.cs, AiProviderLab.cs, DataRootChokePointGuardTests.cs), `spine-tasks/SP-062-pin-skip-env-isolation/**`, plus the declared File-Scope amendment `client/docs/upstream-payload-inventory.json` (Step-0 land-defect repair, commit `59fbcf1e`, named in STATUS/record/commit-body; NOT in fileScopeMustNotChange).
+
+## Completion criteria ledger
+
+| Criterion | Status |
+|---|---|
+| Pin can no longer pass vacuously; vacuous path reports a skip naming the variable; floor discipline catches it | ✅ `Assert.SkipWhen` ×2; positive control 891/1 with reason (TRX NotExecuted); contrast run pre-fix 1/0 silent |
+| Process-env leak fixed by a mechanism PROVEN with a repro harness on this runner | ✅ co-location; probes 1/1b/2 (cross-collection GREEN 65ms = DisableParallelization dead; same-collection cross-class RED ×2 timeouts = sequentiality real) |
+| Committed enumeration of DisableParallelization / process-wide-state dependencies with dispositions | ✅ Step-1 table (5 categories × 2 projects; 2 real — this fix; rest cleared with reasons) |
+| Positive control 891 passed / 1 skipped — live code | ✅ `runs/positive-control.log` + `sp062-positive-control.trx`; checkpoint-2 path demonstrated via replica (`sp062-cp2-replica.trx`) |
+| 10 consecutive greens at 892/0 + 35 incl. ≥1 fresh-checkout first-ever build, TRX committed | ✅ green11–green20 on the final tree; green15 cold first-ever build; all TRX force-committed under evidence/ |
+| Zero assertions weakened; zero new deadline literals/budgets; row-49 site untouched | ✅ bound assertion byte-identical; guard allowlist unchanged (green in all 21 runs); LoopbackOllamaProviderTests.cs untouched (0 firings recorded) |
+
 
 ---
 
