@@ -1,11 +1,11 @@
 ## STATUS: SP-058 — Graded Intake v6.7.x delta
-**Current Step:** not started
-**Last Updated:** 2026-08-12 (authored, wave-16 lane-2, serial after SP-057)
-**Blockers:** none (SP-057 must land first — seam dependency)
+**Current Step:** Step 1 — delta archaeology + obligation table + pre-approach consult
+**Last Updated:** 2026-08-12 (worker, Step 1 in progress)
+**Blockers:** none (SP-057 landed c42d82ff — seam available)
 
 ### Step 1: delta archaeology + obligation table + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Enumerate the real v6.6.3 → v6.7.4 intake delta from the tree (counts, changed members)
+- [x] Update STATUS.md before starting work
+- [x] Enumerate the real v6.6.3 → v6.7.4 intake delta from the tree (counts, changed members)
 - [ ] Obligation table (SERVE/PROVISION/MESSAGE/STORE/NOTHING/BLOCKED-ON + citation + sizing)
 - [ ] Verify SP-055's existing intake `IsAssetActive` wiring; state the residual gap
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
