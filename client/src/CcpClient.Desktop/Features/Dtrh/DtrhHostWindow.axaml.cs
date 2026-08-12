@@ -39,7 +39,8 @@ public partial class DtrhHostWindow : Window
     private SoundFlowDtrhAudio? _audio;
     private DtrhVideoWindow? _videoWindow;
     // SP-026 slice b4: the meta-progression engine (ops/payout/request-run/asset-stats)
-    // bound to the descended slot; test mode (--dtrh-m2test) clones in memory.
+    // bound to the descended slot; test mode (--dtrh-m2test) runs the declared fixture
+    // in memory (SP-057 — never a clone of the live document).
     private readonly int _slot;
     private readonly bool _m2Test;
     private DtrhMeta? _meta;
@@ -106,7 +107,7 @@ public partial class DtrhHostWindow : Window
 
         if (m2Test)
         {
-            _host.LogDiagnostic("dtrh: M2 TEST MODE — meta engine clones in memory, the real save is never touched (HARNESS-ONLY)");
+            _host.LogDiagnostic("dtrh: M2 TEST MODE — meta engine runs the declared fixture in memory, the real save is never touched (HARNESS-ONLY, SP-057)");
         }
 
         Opened += (_, _) =>

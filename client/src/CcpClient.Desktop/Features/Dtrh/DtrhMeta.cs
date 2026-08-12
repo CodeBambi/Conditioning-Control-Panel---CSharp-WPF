@@ -42,9 +42,11 @@ public static class DtrhRanks
 ///
 /// Validation is integrity, not anti-cheat (WPF DtrhMetaBridge.cs:13-21): unknown ops are
 /// logged + ignored, economy ops can't drive a balance negative, seen-flags are one-way.
-/// Test mode (--dtrh-m2test) operates on a deep CLONE held in memory — WPF persists the
+/// Test mode (--dtrh-m2test) operates on a state held in memory — WPF persists the
 /// clone to chaos_meta.test.json but NOTHING ever reads it back (DtrhMetaBridge.cs:427-444),
 /// so the greenfield keeps the clone memory-only (recorded in SP-026 record Step 1).
+/// SP-057: the in-memory state starts from the DECLARED fixture
+/// (<see cref="DtrhM2TestFixture"/>) — never a clone of the live slot document.
 /// </summary>
 public sealed class DtrhMeta
 {
@@ -172,11 +174,6 @@ public sealed class DtrhMeta
         }),
     };
 
-    private static readonly JsonSerializerOptions CloneOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly PersistenceStore<DtrhSlotDocument> _slotStore;
     private readonly PersistenceStore<DtrhSlotIndex> _indexStore;
     private readonly DtrhAssetStats _stats;
@@ -207,7 +204,8 @@ public sealed class DtrhMeta
         Action<object> broadcast,
         Action<string> log,
         bool testMode,
-        string? slotFilePath = null)
+        string? slotFilePath = null,
+        DtrhSlotDocument? testFixture = null)
     {
         _slotStore = slotStore;
         _indexStore = indexStore;
@@ -217,10 +215,13 @@ public sealed class DtrhMeta
         _testMode = testMode;
         if (testMode)
         {
-            // Deep clone via serialize/deserialize — the real state is never handed out
-            // (DtrhMetaBridge.cs:44-49). Memory-only: WPF's test file is write-only.
-            _testState = JsonSerializer.Deserialize<DtrhSlotDocument>(
-                JsonSerializer.Serialize(slotStore.Current, CloneOptions), CloneOptions) ?? new DtrhSlotDocument();
+            // SP-057: the test clone starts from the DECLARED fixture (the committed
+            // sentinel document, or an explicit test-supplied document) — NEVER the live
+            // slot store. The old deep-clone of slotStore.Current let evidence inherit
+            // the owner's real profile (SP-052 Run B's confidently-wrong dealt 7200/True).
+            // Memory-only: WPF's test file is write-only. A malformed committed fixture
+            // throws typed (DtrhM2TestFixtureException) — no live-doc fallback exists.
+            _testState = testFixture ?? DtrhM2TestFixture.Load();
         }
 
         FlagAbsentProgressionMembers(slotFilePath);

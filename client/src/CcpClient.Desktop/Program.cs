@@ -85,6 +85,28 @@ public static class Program
         ILogSink log = new DebugLogSink();
         InstallPanicHooks(log);
 
+        // SP-057 HARNESS-ONLY profile isolation seam: validate CCP_DATA_ROOT pre-phase so a
+        // bad override fails HERE (bounded, exit 1) instead of mid-composition — and NEVER
+        // falls back to the real profile (framing d). The active override is logged once
+        // (the harness's own path; the real profile path is never newly logged) — the line
+        // is headed-run evidence that the seam was live (record.md Step 3 positive control).
+        var dataRootOverride = CompositionRoot.ActiveDataRootOverride();
+        if (dataRootOverride is not null)
+        {
+            string resolved;
+            try
+            {
+                resolved = CompositionRoot.ResolveDataRoot(dataRootOverride);
+            }
+            catch (DataRootOverrideException ex)
+            {
+                Console.Error.WriteLine($"usage: {CompositionRoot.DataRootOverrideVariable}=<fully-qualified absolute directory> — {ex.Message}");
+                return 1;
+            }
+
+            log.Log($"data-root override active: {CompositionRoot.DataRootOverrideVariable} -> {resolved} (HARNESS-ONLY isolation seam, SP-057)");
+        }
+
         // SP-027 slice b5 HARNESS-ONLY failure injection (parsed EARLY — the blocked-route
         // prefix threads into the composition root below; the kill flag rides into App):
         // --dtrh-kill-renderers kills the profile-matched WebView2 children once the

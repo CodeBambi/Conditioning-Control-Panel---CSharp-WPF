@@ -144,7 +144,46 @@ executed against the live profile.
 - **Real .json fixture file via scope amendment** — consult (b): not worth it; the
   in-code literal lifts to a file with a one-line change if a future row wants it.
 
-## Step 2 — implementation (pending)
+## Step 2 — implementation
+
+- `Lifecycle/CompositionRoot.cs`: `DataRootOverrideException` (typed, extends
+  `InvalidOperationException`); `CompositionRoot.DataRootOverrideVariable = "CCP_DATA_ROOT"`;
+  `DefaultSettingsPath()` reads the env per call (no cache, consult A2) and delegates to
+  `public static ResolveDataRoot(string)` (consult A1 — pure core, `IsPathFullyQualified`
+  rejects relative AND drive-relative, `GetFullPath` normalize, `CreateDirectory` probe,
+  every failure typed; NO fallback path exists); `ActiveDataRootOverride()` for Program.
+  Defaults byte-identical when unset.
+- `Program.cs`: pre-phase validation + exit 1 with usage on a bad override (the
+  `--ai-ollama-host` convention); one `data-root override active: CCP_DATA_ROOT -> <path>`
+  log line when the seam is live (headed positive control; harness path only).
+- `Features/Dtrh/DtrhM2TestFixture.cs` (new): committed verbatim-JSON fixture
+  (`DefaultFixtureJson`, sentinels sparks=777 / bestScore=4242 / runsCompleted=3),
+  `Load(string json = DefaultFixtureJson)`, `DtrhM2TestFixtureException` on malformed.
+- `Features/Dtrh/DtrhMeta.cs`: ctor gains `DtrhSlotDocument? testFixture = null`;
+  test mode is now `_testState = testFixture ?? DtrhM2TestFixture.Load()` — the live-doc
+  deep-clone is DELETED (and the now-dead `CloneOptions` with it). Class doc updated.
+- `Features/Dtrh/DtrhHostWindow.axaml.cs`: two comment/log-line accuracy updates
+  ("declared fixture", SP-057 named). No behavior change on the window path.
+- Tests (all new under `client/tests/CcpClient.Tests/`):
+  - `DataRootOverrideTests.cs` — pure validation (relative / drive-relative `C:foo` /
+    uncreatable / valid+creates) + the unset-env platform-default pin (the reasoned
+    negative demonstration).
+  - `DataRootOverrideEnvTests.cs` (same file) — `[CollectionDefinition(DisableParallelization
+    = true)]` env-mutating collection, try/finally restore: per-consumer honoring
+    (choke point, `DtrhProfileLock` statics, both `?? DefaultSettingsPath()` fallbacks),
+    a FULL real-composition boot (no `SettingsPathFactory` substitute) that mutates +
+    saves and asserts `settings.json` / `dtrh_slot1.json` / `dtrh_slots.json` land in the
+    override root, and bad-env throws typed at first path resolution.
+  - `DataRootChokePointGuardTests.cs` — scans `client/src/**/*.cs`; any
+    `SpecialFolder.ApplicationData`/`SpecialFolder.UserProfile` outside
+    `Lifecycle/CompositionRoot.cs` fails with file:line (the future-bypass catch).
+  - `DtrhM2TestFixtureTests.cs` — fixture round-trip + sentinels, malformed/null typed
+    failure, test mode sources the committed fixture (not a 99999-spark live doc),
+    explicit fixture wins.
+  - `DtrhMetaTests.cs` — `Harness.ResetMeta` gains the fixture argument; the two
+    test-mode tests declare their starting documents explicitly (same values the clone
+    used to carry, so the payout pins are unchanged).
+- Result: build 0W/0E; unit suite 846 passed / 0 failed (floor 833; +13 new).
 
 ## Step 3 — byte-identity headed evidence (pending)
 
@@ -156,4 +195,5 @@ executed against the live profile.
 
 | step | spine_review_step call | result |
 |---|---|---|
-| 1 (plan) | (to be filled) | |
+| 1 (plan) | called 2026-08-12T05:50 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
+| 2 (plan) | (to be filled) | |

@@ -37,10 +37,26 @@ public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDis
     public AsyncOperationOwner OwnerFor(string participantName) => Registry.OwnerFor(participantName);
 }
 
+/// <summary>SP-057: a data-root override value that cannot be honored (relative or
+/// drive-relative path, uncreatable/unusable directory). Typed + loud at startup — a bad
+/// override NEVER degrades silently into the real user profile (the SP-052 hazard class:
+/// APPDATA= does not move GetFolderPath(ApplicationData), so an unhonored "sandbox" writes
+/// the owner's live data).</summary>
+public sealed class DataRootOverrideException(string message, Exception? inner = null)
+    : InvalidOperationException(message, inner);
+
 public sealed class CompositionRoot
 {
     /// <summary>Flush bounded wait for teardown (persistence contract §11 rule 2): backstop only — the chained writer is the mechanism.</summary>
     public static readonly TimeSpan DefaultFlushTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>SP-057 HARNESS-ONLY isolation seam: when this environment variable names an
+    /// absolute directory, it replaces the per-user data root (%APPDATA%\CcpClient /
+    /// $XDG_CONFIG_HOME/CcpClient) for EVERY consumer — honored inside
+    /// <see cref="DefaultSettingsPath"/>, the single choke point the whole product funnels
+    /// through (census: record.md Step 1). Never a user-facing setting; defaults are
+    /// byte-identical when unset.</summary>
+    public const string DataRootOverrideVariable = "CCP_DATA_ROOT";
 
     /// <summary>Factory seam so tests can deliberately blank a registration (contract §4 test).</summary>
     public Func<ILogSink?> LogSinkFactory { get; init; } = () => new DebugLogSink();
@@ -81,9 +97,20 @@ public sealed class CompositionRoot
     /// Per-user settings path: %APPDATA%\\CcpClient on Windows; $XDG_CONFIG_HOME/CcpClient when
     /// set, else ~/.config/CcpClient on Linux (.NET's Unix ApplicationData mapping — verified
     /// SP-010: the quarantine lands under XDG_CONFIG_HOME when it is set).
+    /// SP-057: when the <see cref="DataRootOverrideVariable"/> environment variable is set,
+    /// it IS the data root (harness isolation) — validated per call by
+    /// <see cref="ResolveDataRoot"/>; an unhonorable value throws typed, never falls back.
+    /// Read per call, never cached: a cached static would freeze on whichever test/run
+    /// touched it first (consult A2).
     /// </summary>
     public static string DefaultSettingsPath()
     {
+        var overrideRoot = Environment.GetEnvironmentVariable(DataRootOverrideVariable);
+        if (!string.IsNullOrWhiteSpace(overrideRoot))
+        {
+            return Path.Combine(ResolveDataRoot(overrideRoot), "settings.json");
+        }
+
         var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         if (string.IsNullOrEmpty(root))
         {
@@ -91,6 +118,45 @@ public sealed class CompositionRoot
         }
 
         return Path.Combine(root, "CcpClient", "settings.json");
+    }
+
+    /// <summary>The override value currently in force, or null when unset/whitespace.
+    /// Program uses this for the pre-phase check + the override-active log line.</summary>
+    public static string? ActiveDataRootOverride()
+    {
+        var value = Environment.GetEnvironmentVariable(DataRootOverrideVariable);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    /// <summary>
+    /// Validate + normalize a data-root override value. Fully-qualified absolute paths only
+    /// (<see cref="Path.IsPathFullyQualified"/> rejects relative AND drive-relative
+    /// <c>C:foo</c> values, which <see cref="Path.IsPathRooted"/> wrongly accepts); the
+    /// directory is created so a harness can point at a fresh root. Every failure is a
+    /// typed <see cref="DataRootOverrideException"/> — there is NO fallback path.
+    /// </summary>
+    public static string ResolveDataRoot(string overrideValue)
+    {
+        if (!Path.IsPathFullyQualified(overrideValue))
+        {
+            throw new DataRootOverrideException(
+                $"{DataRootOverrideVariable} must be a fully-qualified absolute path, got '{overrideValue}' — "
+                + "refusing to run: an unhonored override would silently use the real user profile");
+        }
+
+        var full = Path.GetFullPath(overrideValue);
+        try
+        {
+            Directory.CreateDirectory(full);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            throw new DataRootOverrideException(
+                $"{DataRootOverrideVariable} directory '{full}' cannot be created/used ({ex.GetType().Name}: {ex.Message}) — "
+                + "refusing to run: an unhonored override would silently use the real user profile", ex);
+        }
+
+        return full;
     }
 
     private IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra)

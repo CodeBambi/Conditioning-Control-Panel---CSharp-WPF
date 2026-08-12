@@ -37,12 +37,15 @@ public class DtrhMetaTests
             ResetMeta(testMode: false);
         }
 
-        public void ResetMeta(bool testMode)
+        public void ResetMeta(bool testMode, DtrhSlotDocument? testFixture = null)
         {
+            // SP-057: test mode declares its starting document EXPLICITLY (the fixture
+            // argument); omitting it falls to the committed sentinel fixture — the live
+            // slot document is never the clone source.
             Meta = new DtrhMeta(
                 Slots.StoreFor(Slots.ActiveSlot), Slots.IndexStore, Stats,
                 msg => Broadcasts.Add(JsonSerializer.SerializeToElement(msg)),
-                m => Log.Add(m), testMode, Slots.SlotFilePath(Slots.ActiveSlot));
+                m => Log.Add(m), testMode, Slots.SlotFilePath(Slots.ActiveSlot), testFixture);
         }
 
         public void Seed(Action<DtrhSlotDocument> mutate) =>
@@ -483,7 +486,10 @@ public class DtrhMetaTests
     {
         using var h = new Harness();
         h.Seed(d => { d.Sparks = 7; d.RunsCompleted = 3; d.BestScore = 42; });
-        h.ResetMeta(testMode: true);
+        // SP-057: the test run's starting state is DECLARED (fixture argument), never the
+        // seeded live document — the values mirror the old clone so the payout math below
+        // pins the same lines.
+        h.ResetMeta(testMode: true, testFixture: new DtrhSlotDocument { Sparks = 7, RunsCompleted = 3, BestScore = 42 });
         var payout = h.Meta.OnRunEnded(Raw(
             "{\"score\":12000,\"durationSec\":180,\"elapsedSec\":180,\"difficultyMult\":1.0,\"sparkGainMult\":1.0,\"trickleDrops\":5}"));
         Assert.True(payout.DryRun);
@@ -500,7 +506,7 @@ public class DtrhMetaTests
     public void AwardRun_TestMirror_BanksOnlyThreeFields()
     {
         using var h = new Harness();
-        h.ResetMeta(testMode: true);
+        h.ResetMeta(testMode: true, testFixture: new DtrhSlotDocument()); // SP-057: declared fresh fixture
         var sparks = h.Meta.AwardRun(new DtrhMeta.RunRewardInput(
             RunDurationSec: 180, DifficultyMult: 1.0, SparkGainMult: 1.0, Score: 400,
             TrickleDrops: 0, DripFeedMaxed: false, BestCombo: 12, Defused: 7, ElapsedSec: 180));
