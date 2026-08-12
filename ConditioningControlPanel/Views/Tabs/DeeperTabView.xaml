@@ -50,8 +50,11 @@
                         </Setter>
                     </Style>
     
-                    <!-- Row icon-button style for the per-row action cluster (play/submit/delete). -->
-                    <Style x:Key="DeeperRowActionBtnStyle" TargetType="Button">
+                    <!-- Row icon-button style for the per-row action cluster (play/submit/delete).
+                         Based on the shared 6px-corner icon template so the cluster stops rendering
+                         with default WPF gray-chrome hover, which was the one square element left
+                         on an otherwise rounded tab. -->
+                    <Style x:Key="DeeperRowActionBtnStyle" TargetType="Button" BasedOn="{StaticResource DeeperRoundIconButton}">
                         <Setter Property="Width" Value="28"/>
                         <Setter Property="Height" Value="28"/>
                         <Setter Property="Padding" Value="0"/>
@@ -360,6 +363,8 @@
                                 <TextBox x:Name="TxtDeeperSearch" x:FieldModifier="internal"
                                          Background="{DynamicResource PanelBgBrush}"
                                          Foreground="{DynamicResource TextLightBrush}"
+                                         CaretBrush="{DynamicResource DeeperAccentBrush}"
+                                         SelectionBrush="{DynamicResource DeeperAccentTransparent40Brush}"
                                          BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
                                          BorderThickness="1"
                                          Padding="10,8" FontSize="12"
@@ -489,18 +494,19 @@
                                 <TextBlock Text="{loc:Str deeper_hub_sort_label}"
                                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                            VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <!-- Shared dark template (see HapticsTabView) — this was the last
+                                     stock-white ComboBox on the tab. -->
                                 <ComboBox x:Name="CmbDeeperSort" x:FieldModifier="internal"
                                           SelectionChanged="DeeperSort_SelectionChanged"
                                           ToolTip="{loc:Str deeper_hub_tip_sort}"
-                                          Background="White" Foreground="Black"
-                                          MinWidth="100" Padding="6,4">
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          FontSize="11" MinWidth="100">
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_recent}"
-                                                  Tag="recent" Foreground="Black" Background="White"
-                                                  IsSelected="True"/>
+                                                  Tag="recent" IsSelected="True"/>
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_name}"
-                                                  Tag="name" Foreground="Black" Background="White"/>
+                                                  Tag="name"/>
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_creator}"
-                                                  Tag="creator" Foreground="Black" Background="White"/>
+                                                  Tag="creator"/>
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
