@@ -1,6 +1,6 @@
 ## STATUS: SP-061 — Chaos tunnel backdrop (opaque below-Topmost web surface)
-**Current Step:** Step 5 — Testing & Verification
-**Last Updated:** 2026-08-12 (worker, Step 4 complete, pre-completion consult applied)
+**Current Step:** complete (all 5 steps done; .DONE pending final commit)
+**Last Updated:** 2026-08-12 (worker, Step 5 complete — 892/892 + 35/35, verify-assets Debug+Release, contract green)
 **Blockers:** none
 
 ### Step 1: dual-source archaeology + layering design + pre-approach consult — COMPLETE (plan review pending)
@@ -32,7 +32,7 @@
 - [x] Pre-completion solo consult (verdict + ACTUAL model)
 - [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification — NOT STARTED
-- [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥863 unit + ≥33 headless, TRX)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥863 unit + ≥33 headless, TRX) — 892/892 + 35/35; the one flake red named, base-reproduced (20542b99), fixed (DataRootOverrideTests two-checkpoint guard), 4 consecutive greens post-fix
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths (+ documented csproj amendment)

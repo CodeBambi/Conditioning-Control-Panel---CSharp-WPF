@@ -1,7 +1,7 @@
 ï»¿data-root override active: CCP_DATA_ROOT -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\sandbox-root (HARNESS-ONLY isolation seam, SP-057)
 dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
 dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
-layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 128,222
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 436,530
 chaos-tunnel-loopback: origin bound on 127.0.0.1 (ephemeral)
 chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied
 chaos-tunnel: window up (non-topmost, opaque, embedded WebView2 tunnel)
@@ -20,19 +20,19 @@ chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel: page ready (flushing 1 queued frame(s))
-chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /favicon.ico/ -> 404
 tunnel-drive: page ready ï¿½ 5 step(s) armed at 10s cadence (timed drive ï¿½ never an input claim)
 chaos-tunnel: NavigationCompleted success=True
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
 tunnel-drive: step 'topmost-show'
-tunnel-drive: topmost surface shown (DtrhVideoWindow, Topmost=True, DtrhVideoWindow.axaml:6)
+tunnel-drive: topmost surface shown (DtrhVideoWindow, Topmost=True, DtrhVideoWindow.axaml:6; harness-sized 480x270 DIP @ (200,150))
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
@@ -51,10 +51,10 @@ chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï
 tunnel-drive: step 'tunnel-show'
 chaos-tunnel-loopback: origin bound on 127.0.0.1 (ephemeral)
 chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied
-chaos-tunnel: window up (non-topmost, opaque, embedded WebView2 tunnel)
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
+chaos-tunnel: window up (non-topmost, opaque, embedded WebView2 tunnel)
 tunnel-drive: tunnel re-shown (fresh build + sink under the live Topmost surface)
-chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
+chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /tunnel/ -> 200
@@ -64,7 +64,6 @@ chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /tunnel/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
@@ -74,22 +73,22 @@ chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
 chaos-tunnel-loopback: GET /vendor/ -> 200
-chaos-tunnel-loopback: GET /favicon.ico/ -> 404
 chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /favicon.ico/ -> 404
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
-chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
-chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 tunnel-drive: step 'topmost-hide'
 tunnel-drive: topmost surface hidden
-chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
+chaos-tunnel z-guard: dashboard was above the tunnel ï¿½ demoting
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
 chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port ï¿½ greenfield content gap)
@@ -108,4 +107,4 @@ app: Exit ï¿½ teardown begin
 dtrh: participant stop begin
 dtrh: participant stop end
 app: teardown end
-[0813/033744.038:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412
+[0813/035025.863:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412
