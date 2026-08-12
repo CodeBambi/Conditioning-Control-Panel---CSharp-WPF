@@ -1,0 +1,19 @@
+Contract testCommand failure log
+Command: node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo && dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
+Exit code: 1
+Attempt: 2 of 2
+Timestamp: 2026-08-12T13:59:26.196Z
+Buffer overflow: no
+---
+verify.mjs: patches tested against 2.8.0, 2.10.0
+verify.mjs: [engine] pi-spine 2.10.0 at C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine (5 patches)
+applied  fsync-r-plus-abort [engine]
+applied  fsync-r-plus-lifecycle-archive [engine]
+applied  dotnet-evidence-allowlist [engine]
+applied  worker-tail-at-file [engine]
+applied  t5-reviews-autoclean [engine]
+
+FAIL project root missing: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\.pi\npm\node_modules\pi-spine
+Remedy: reinstall pi-spine there, or update manifest engineRoot/installRoot to the install the spine CLI actually loads.
+
+verify.mjs: FAIL — patches not all applied.
