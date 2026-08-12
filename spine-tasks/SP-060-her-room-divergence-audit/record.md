@@ -14,6 +14,7 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T122035.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260812T122245.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260812T122955.md` |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260812T123502.md` |
 
 ---
 
@@ -102,3 +103,33 @@ Full table in the audit doc. The load-bearing ones: memory consent **Denied** (p
 The table lives in `client/docs/her-room-divergence-audit.md` §3 (groups A awareness observation & privacy / B reaction pipeline / C brain & memory / D Her Room UI / E asset row). 37 element rows + 1 asset row; every row carries upstream `File.cs:line`, port counterpart or explicit "none", user-observable difference, one of the four pinned verdicts, a data-boundary line (O/R/T — "none" stated explicitly where true), and a reason. Verdict distribution: ADOPT 14 (incl. all the subtractive/transparency rows), KEEP 11 (incl. decided divergences + refuted-migration + dead-asset rows), MERGE 8, BLOCKED-ON-OWNER 17 (some rows carry split verdicts, e.g. mechanism A / values B — counts are per row-half where split). The owner decision list (audit §4) is 12 plain questions with options and consequences.
 
 **Boundary-line discipline:** every row states newly observed/retained/transmitted data. Rows A1, A7, A12-A14, B10 carry new-observation or new-retention lines and are B regardless of technical ease (hard filter, framing (b)). Rows A3/A4/A6/A8/A10/A11/A16/D12 state "none" or "narrows" explicitly — the subtractive class the pre-approach consult told the audit to hunt.
+
+---
+
+## Step 4 — sizing verdicts, audit doc, pre-completion consult
+
+**Audit doc:** `client/docs/her-room-divergence-audit.md` — self-contained: verdict vocabulary, upstream enumeration headlines U1-U10, port landed-state summary, the 38-row table (§3A-3E), the 12-question owner list (§4), sizing verdicts with named dependencies (§5), UNKNOWN rows (§6), durable-lesson candidates (§7).
+
+**Sizing:** every ADOPT/MERGE row carries S/M/L (or unsizable-with-dependency, SP-050 shape), evidence class (U/WH/WX/LAB), named dependencies, and an honest limit shape. Two standing dependencies dominate: the unfiled **dashboard-tabs row** (all Her Room UI rows — the port's companion is a button-launched modeless window, `MainWindow.axaml:67`) and **owner question O2** (app identity) for everything reading the observation pipeline.
+
+### Pre-completion consult (Step 4 gate)
+
+**Mode:** solo (same route discipline as Step 1). **Requested route:** Opus 5 main, Fable 5 fallback. **Actual answering model:** NOT surfaced by the consult tool (same provenance discipline as Step 1). **One call; the verdict TRUNCATED** near the end (SP-027 class, second occurrence this task) — but every correction arrived before the cut, and the truncated tail was mid-scan of already-covered ADOPT rows. Corrections delivered and ALL applied to the audit doc:
+
+1. **A4/A8 internal-consistency fix (applied):** the per-app title allow-list and the deny-list's app-id/display-name match arms require an app identifier; the port does not observe process names (A1 is BLOCKED). The rows now carry the explicit constraint: implementable ONLY against the caller-supplied `App` field (`AiAwarenessService.cs:172`) — implementing against an observed process name would widen the boundary A1 is blocked on. The §5 sizing row for A4 lost its "filter is independent" claim.
+2. **B4 hazard — the consult's strongest finding (applied):** burn-on-delivery is NOT a one-line flip. The port's burn-before-dispatch doubles as its anti-retry-storm gate (`AiAwarenessService.cs:472` "a failed operation still gates"); upstream tolerates delivery-only burn because its arbiter single-flight + 8s timeout + bark fallback + worthiness pacing suppress retry storms — machinery the port lacks. The table and sizing now name the hazard and require failure-class backoff (or retained attempt-gating on failure) in any packet that flips the burn point, plus a failing-provider storm test.
+3. **Dependency-blocked ADOPT rows marked inline (applied):** verdict cells now read `A (dep-blocked: O2)` / `(dep-blocked: dashboard-tabs)` / `(dep-blocked: audio/bark row)` so the verdict column cannot be misread in isolation (A9, D2, D4, D8, D9, D12, C13, A16).
+4. **E1 residual risk recorded (applied):** the zero-callers claim rests on a repo-wide grep; a reflection/DI invocation would not show — recorded, not resolved.
+5. **Owner-question wording discipline (applied):** Q12's "the audit recommends No" became "the constitution's standing posture is no broadening absent a decree — only the owner can lift it" (the audit poses questions; it does not recommend on the capture boundary). Q5's "the audit recommends adopting" became "the audit's row A4 marks that narrowing adoptable on technical grounds ... the decision stays yours".
+6. **Consistency confirmed (no change):** memory-default B and effect-gate-values B are the same posture (placeholder-pending ≠ decided); the consult explicitly re-verified this pairing.
+
+**Post-correction self-check:** verdict counts unchanged (17 B / 14 A / 11 K / 8 M; split rows counted per half); every correction narrowed claims, none widened a boundary.
+
+### Intended board filings (orchestrator writes them at land — ENABLER 2)
+
+- The "Her Room + Awareness reconcile" row: evidence pointer to `client/docs/her-room-divergence-audit.md`; row stays OPEN pending the owner's §4 answers (12 questions).
+- No new rows filed by this audit — every element that would become work is either (a) owner-blocked (awaits the decree, then rows/packets), or (b) dependency-blocked behind rows already named on the board (dashboard-tabs in SP-050's blocked inventory; audio/bark per SP-015 limit 5). The orchestrator may file one "apply the subtractive awareness adopts" row (A3/A4/A6/A8-mech/A10/A11 — six S-sized rows, one packet shape) since those need no owner answer; the audit deliberately does not set that row's state.
+
+### Durable-lesson candidates (for the contract owner to consider at land)
+
+Audit §7: (1) marketing model vs code model — enumerate the tree; (2) shipped assets can be dead (`awareness_apps.json`); (3) upstream drifted toward burn-on-delivery after the port snapshotted — not every delta is a port gap, but flips carry machinery hazards (B4); (4) the strongest adopts are subtractive.

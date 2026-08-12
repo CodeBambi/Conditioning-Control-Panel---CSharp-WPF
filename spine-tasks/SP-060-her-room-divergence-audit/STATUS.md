@@ -1,5 +1,5 @@
 ## STATUS: SP-060 — Her Room + Awareness divergence audit (zero product code)
-**Current Step:** Step 4 — sizing, audit doc, pre-completion consult
+**Current Step:** Step 5 — testing & verification
 **Last Updated:** 2026-08-12 (worker, in progress)
 **Blockers:** none
 
@@ -19,14 +19,14 @@
 - [x] Data-boundary line per row (newly observed / retained / transmitted — "none" is an answer)
 - [x] Owner decision list, each item a plain answerable question
 
-### Step 4: sizing verdicts, audit doc + pre-completion consult — IN PROGRESS
-- [ ] Sizing verdict per ADOPT/MERGE row (S/M/L, evidence class, deps, limit shape)
-- [ ] `client/docs/her-room-divergence-audit.md` written (self-contained)
-- [ ] `record.md` written (method, consults + ACTUAL models, UNKNOWNs, intended filings)
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
+### Step 4: sizing verdicts, audit doc + pre-completion consult — COMPLETE
+- [x] Sizing verdict per ADOPT/MERGE row (S/M/L, evidence class, deps, limit shape)
+- [x] `client/docs/her-room-divergence-audit.md` written (self-contained)
+- [x] `record.md` written (method, consults + ACTUAL models, UNKNOWNs, intended filings)
+- [x] Pre-completion solo consult (verdict + ACTUAL model)
 - [ ] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification — NOT STARTED
+### Step 5: Testing & Verification — IN PROGRESS
 - [ ] Contract testCommand passes — EXACTLY 862 unit / 33 headless (zero product change), TRX
 - [ ] `git diff --check` clean
 - [ ] `git status --short` shows only File Scope paths
