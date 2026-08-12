@@ -91,6 +91,28 @@
                     </Trigger>
                 </Style.Triggers>
             </Style>
+            <!-- Tier livery variants: a tiered card wears its tier's metal PERMANENTLY -
+                 gold = Tier 1, diamond = Tier 2 (Resources\Theme\Brushes.xaml) - so the
+                 wall reads free/T1/T2 at a glance even for an account that owns everything
+                 (the lockbands below only exist while locked). Own hover triggers, because
+                 a derived style's trigger outranks the base one: hover brightens the metal
+                 instead of falling back to the mod accent. -->
+            <Style x:Key="PlayCardT1" TargetType="Border" BasedOn="{StaticResource PlayCard}">
+                <Setter Property="BorderBrush" Value="{DynamicResource Tier1GoldBorderBrush}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Tier1GoldHoverBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="PlayCardT2" TargetType="Border" BasedOn="{StaticResource PlayCard}">
+                <Setter Property="BorderBrush" Value="{DynamicResource Tier2DiamondBorderBrush}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Tier2DiamondHoverBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
             <!-- The art plate every card header sits in. ONE height (138) for the whole wall now
                  that the wall is uniform - the old page ran 132 in three zones and 138 in one,
                  which read as a mistake in a row that mixed them. The negative margin cancels
@@ -272,7 +294,9 @@
                      It is the one hard-coded palette on this page, and it is still the floor the
                      artwork lays on: if features/dtrh.png ever fails to decode, the hero degrades
                      to exactly the gradient it shipped with rather than to a black hole. -->
-                <Border CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
+                <!-- Diamond frame = Tier 2 livery (Brushes.xaml), same trim as the two Eyes
+                     cards, so the wall's most expensive door wears its price openly. -->
+                <Border CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource Tier2DiamondBorderBrush}"
                         Margin="9,0,9,18" ClipToBounds="True" MinHeight="200">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -555,7 +579,7 @@
                         </Border>
                     </Grid>
                     <Grid x:Name="SlotRemoteControl" x:FieldModifier="internal">
-                        <Border Style="{StaticResource PlayCard}">
+                        <Border Style="{StaticResource PlayCardT1}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -670,7 +694,7 @@
                              (Opacity 1.0 / 0.62 + the "start tracking" band) off the tracker-state
                              event. Tracker dimming and the tier band are two independent states and
                              they stack: an unentitled account with the camera off sees both. -->
-                        <Border x:Name="PlayGazeCard" x:FieldModifier="internal" Style="{StaticResource PlayCard}">
+                        <Border x:Name="PlayGazeCard" x:FieldModifier="internal" Style="{StaticResource PlayCardT2}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -743,7 +767,7 @@
                     <!-- Focus Gaze is a separate card from the Gaze Minigame (separate handler,
                          separate art, separate needs-tracker band). It is NOT part of SlotGaze. -->
                     <Grid x:Name="SlotFocusGaze" x:FieldModifier="internal">
-                        <Border x:Name="PlayFocusCard" x:FieldModifier="internal" Style="{StaticResource PlayCard}">
+                        <Border x:Name="PlayFocusCard" x:FieldModifier="internal" Style="{StaticResource PlayCardT2}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -823,7 +847,7 @@
                          its own camera. Adding it to that method would be a behaviour change in
                          MainWindow.LabTab.cs, which this relayout does not touch. -->
                     <Grid x:Name="SlotBlinkTrainer" x:FieldModifier="internal">
-                        <Border Style="{StaticResource PlayCard}">
+                        <Border Style="{StaticResource PlayCardT1}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -990,7 +1014,7 @@
                          ShowTab intercepts into OpenFypFeed (the shared, gated launch path).
                          Never call FypHostService.Launch() from here. -->
                     <Grid x:Name="SlotFyp" x:FieldModifier="internal">
-                        <Border Style="{StaticResource PlayCard}">
+                        <Border Style="{StaticResource PlayCardT1}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -1046,7 +1070,7 @@
                          App.Lockdown.Activate stay on that page; nothing here re-implements them.
                          The lockdown pulse is that page's, and Phase 6 does not touch it. -->
                     <Grid x:Name="SlotLockdown" x:FieldModifier="internal">
-                        <Border Style="{StaticResource PlayCard}">
+                        <Border Style="{StaticResource PlayCardT1}">
                             <Grid>
                                 <Grid>
                                     <Grid.RowDefinitions>

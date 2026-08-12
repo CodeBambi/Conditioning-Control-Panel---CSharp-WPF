@@ -71,12 +71,23 @@
             <Setter Property="Focusable" Value="True"/>
             <Setter Property="Margin" Value="0,1"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <!-- Null, not the RadioButton default: TierRim below paints whatever sits in
+                 BorderBrush, and only BuildRack's tiered rows put a brush there (gold =
+                 Tier 1, diamond = Tier 2 — the tier livery, Resources\Theme\Brushes.xaml).
+                 Free rows stay rimless. -->
+            <Setter Property="BorderBrush" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Grid Background="Transparent" Height="30">
                             <Border x:Name="RowFill" CornerRadius="8" Opacity="0"
                                     Background="{DynamicResource TransparentPink20Brush}"/>
+                            <!-- The tier rim. A stroke, never a fill, and hit-test invisible so
+                                 it is pure livery: selection (RowFill/RowBar) and hover keep
+                                 their existing grammar underneath it. -->
+                            <Border x:Name="TierRim" CornerRadius="8" BorderThickness="1"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    IsHitTestVisible="False"/>
                             <Border x:Name="RowBar" Width="3" CornerRadius="2" Margin="0,5"
                                     HorizontalAlignment="Left" Visibility="Collapsed"
                                     Background="{DynamicResource PinkBrush}"/>
