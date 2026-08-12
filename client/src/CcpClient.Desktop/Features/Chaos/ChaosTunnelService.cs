@@ -71,6 +71,10 @@ public sealed class ChaosTunnelService
 
     public bool WindowLive => _window is not null;
 
+    /// <summary>Raised on each page ready (HARNESS pacing hook — the demo drive arms its
+    /// steps on the REAL boot signal, never a guessed delay).</summary>
+    public event Action? PageReady;
+
     /// <summary>Preload (WPF :66-80): build the window + start the page boot WITHOUT
     /// run-start; the page idles behind its curtain until <see cref="Show"/>.</summary>
     public void Preload()
@@ -206,6 +210,7 @@ public sealed class ChaosTunnelService
                     _window?.SendToPage(json);
                 }
 
+                PageReady?.Invoke();
                 break;
             case ChaosTunnelCore.PageOutcome.ExitDone exitDone:
                 if (exitDone.CloseNow)

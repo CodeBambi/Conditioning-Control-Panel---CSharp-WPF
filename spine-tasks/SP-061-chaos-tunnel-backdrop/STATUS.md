@@ -1,6 +1,6 @@
 ## STATUS: SP-061 — Chaos tunnel backdrop (opaque below-Topmost web surface)
-**Current Step:** Step 3 — headed layering evidence
-**Last Updated:** 2026-08-12 (worker, Step 2 complete, plan review engine-skipped)
+**Current Step:** Step 4 — record + window manifest + pre-completion consult
+**Last Updated:** 2026-08-12 (worker, Step 3 complete — layering proven in pixels both directions)
 **Blockers:** none
 
 ### Step 1: dual-source archaeology + layering design + pre-approach consult — COMPLETE (plan review pending)
@@ -18,13 +18,13 @@
 - [x] Tests obeying the timing guard (no new deadline literals or injected budgets)
 - **File-Scope amendment (documented):** `CcpClient.Desktop.csproj` — two linked Content globs (the SP-023/SP-054 wiring-only class; named in record.md Step 2 + the Step-2 commit body)
 
-### Step 3: headed layering evidence — IN PROGRESS
-- [ ] Tunnel live with the three.js page actually rendering (pixels)
-- [ ] Layering proof both directions with window rects
-- [ ] Activation/focus proof + show/hide cycles
-- [ ] Real profile byte-identical under `CCP_DATA_ROOT`
-- [ ] DISPLAY3 or a LOUD named fallback; Linux disposition honest
-- [ ] A-013 advisory re-check (MCP unreachable at authoring — record Unavailable if still down)
+### Step 3: headed layering evidence — COMPLETE (plan review pending)
+- [x] Tunnel live with the three.js page actually rendering (pixels)
+- [x] Layering proof both directions with window rects
+- [x] Activation/focus proof + show/hide cycles
+- [x] Real profile byte-identical under `CCP_DATA_ROOT`
+- [x] DISPLAY3 or a LOUD named fallback; Linux disposition honest
+- [x] A-013 advisory re-check (MCP unreachable at authoring — record Unavailable if still down)
 
 ### Step 4: record + window manifest + pre-completion consult — NOT STARTED
 - [ ] `client/docs/window-behavior-manifest.md` row(s) added

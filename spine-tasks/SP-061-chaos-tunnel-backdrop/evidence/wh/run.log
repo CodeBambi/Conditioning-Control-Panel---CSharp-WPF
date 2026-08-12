@@ -1,0 +1,111 @@
+﻿data-root override active: CCP_DATA_ROOT -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\sandbox-root (HARNESS-ONLY isolation seam, SP-057)
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 128,222
+chaos-tunnel-loopback: origin bound on 127.0.0.1 (ephemeral)
+chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied
+chaos-tunnel: window up (non-topmost, opaque, embedded WebView2 tunnel)
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+tunnel-demo: tunnel shown through the real service path (--tunnel-demo)
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel: page ready (flushing 1 queued frame(s))
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /favicon.ico/ -> 404
+tunnel-drive: page ready � 5 step(s) armed at 10s cadence (timed drive � never an input claim)
+chaos-tunnel: NavigationCompleted success=True
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+tunnel-drive: step 'topmost-show'
+tunnel-drive: topmost surface shown (DtrhVideoWindow, Topmost=True, DtrhVideoWindow.axaml:6)
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+tunnel-drive: step 'tunnel-close'
+tunnel-drive: tunnel CloseActive (graceful exit path)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: exit-done received � closing (graceful fast path)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+tunnel-drive: step 'tunnel-show'
+chaos-tunnel-loopback: origin bound on 127.0.0.1 (ephemeral)
+chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied
+chaos-tunnel: window up (non-topmost, opaque, embedded WebView2 tunnel)
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+tunnel-drive: tunnel re-shown (fresh build + sink under the live Topmost surface)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /tunnel/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel: page ready (flushing 1 queued frame(s))
+chaos-tunnel: NavigationCompleted success=True
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel-loopback: GET /favicon.ico/ -> 404
+chaos-tunnel-loopback: GET /vendor/ -> 200
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+tunnel-drive: step 'topmost-hide'
+tunnel-drive: topmost surface hidden
+chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+tunnel-drive: step 'finish'
+tunnel-drive: finishing (drive step) � CloseActive, shutdown when the window is gone
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port � greenfield content gap)
+chaos-tunnel: exit-done received � closing (graceful fast path)
+tunnel-drive: tunnel window gone � shutting down the lifetime
+app: Exit � teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+[0813/033744.038:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

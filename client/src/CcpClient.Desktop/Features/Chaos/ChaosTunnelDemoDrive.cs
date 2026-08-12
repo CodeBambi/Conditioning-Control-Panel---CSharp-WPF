@@ -29,7 +29,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// </summary>
 public static class ChaosTunnelDemoDrive
 {
-    private static readonly TimeSpan StepCadence = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan StepCadence = TimeSpan.FromSeconds(10);
 
     public static void Attach(
         ApplicationHost host, Window dashboard, IClassicDesktopStyleApplicationLifetime desktop,
@@ -76,8 +76,15 @@ public static class ChaosTunnelDemoDrive
                     if (topmost is null)
                     {
                         topmost = new DtrhVideoWindow(new NeverPlayingVideoBackend());
+                        // HARNESS sizing: a deliberate sub-screen occlusion rect (the stock
+                        // 960x540 DIPs cover nearly the whole 175%-scaled laptop screen,
+                        // which would weaken the inside/outside patch comparison).
+                        topmost.Width = 480;
+                        topmost.Height = 270;
+                        topmost.WindowStartupLocation = WindowStartupLocation.Manual;
+                        topmost.Position = new PixelPoint(200, 150);
                         topmost.Show(dashboard);
-                        host.LogDiagnostic("tunnel-drive: topmost surface shown (DtrhVideoWindow, Topmost=True, DtrhVideoWindow.axaml:6)");
+                        host.LogDiagnostic("tunnel-drive: topmost surface shown (DtrhVideoWindow, Topmost=True, DtrhVideoWindow.axaml:6; harness-sized 480x270 DIP @ (200,150))");
                     }
 
                     break;
@@ -118,8 +125,16 @@ public static class ChaosTunnelDemoDrive
             host.LogDiagnostic("tunnel-demo: tunnel shown through the real service path (--tunnel-demo)");
             if (steps.Length > 0)
             {
-                host.LogDiagnostic($"tunnel-drive: {steps.Length} step(s) armed at {StepCadence.TotalSeconds:0}s cadence (timed drive — never an input claim)");
-                stepTimer.Start();
+                // Arm the timed steps on the REAL boot signal (first page ready) — never a
+                // guessed delay that could fire a step before the tunnel renders.
+                service.PageReady += () =>
+                {
+                    if (!stepTimer.IsEnabled && stepIndex < steps.Length)
+                    {
+                        host.LogDiagnostic($"tunnel-drive: page ready — {steps.Length} step(s) armed at {StepCadence.TotalSeconds:0}s cadence (timed drive — never an input claim)");
+                        stepTimer.Start();
+                    }
+                };
             }
 
             if (autoCloseSeconds > 0)

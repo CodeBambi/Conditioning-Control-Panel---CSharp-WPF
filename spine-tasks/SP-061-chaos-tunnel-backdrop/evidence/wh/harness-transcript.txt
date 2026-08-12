@@ -1,0 +1,69 @@
+﻿[03:36:47.824] displays: \\.\DISPLAY1 {X=0,Y=0,Width=2880,Height=1800} primary=True
+[03:36:47.871] DISPLAY3 (-2576,1091) 2560x1440 ABSENT on this machine - LOUD FALLBACK to the primary display named above (never a faked rect; the standing laptop posture named in the packet)
+[03:36:50.210] profile manifest: 2677 files -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\profile-pre.txt
+[03:36:50.217] launching: --tunnel-demo --tunnel-drive topmost-show,tunnel-close,tunnel-show,topmost-hide,finish (CCP_DATA_ROOT=C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\sandbox-root)
+[03:36:52.516] marker seen (1 x): chaos-tunnel: page ready
+[03:36:52.521] marker seen (1 x): tunnel-drive: page ready
+[03:36:55.581] minimized (harness, restored later): 'Conditioning-Control-Panel---CSharp-WPF - File Explorer'
+[03:36:55.610] minimized (harness, restored later): 'git-worktree(1) and 1 more page - Personal - Microsoft​ Edge'
+[03:36:55.637] minimized (harness, restored later): 'Windows PowerShell'
+[03:36:55.680] minimized (harness, restored later): 'π - Conditioning-Control-Panel---CSharp-WPF'
+[03:36:57.203] === capture A-tunnel-only ===
+[03:36:57.224] foreground: 'Conditioning-Control-Panel---CSharp-WPF - File Explorer' hwnd=196910
+[03:36:57.271] tunnel rect: (0,0)-(2880,1800) [2880x1800]
+[03:36:57.283] video  rect: (absent)
+[03:36:57.315] dash   rect: (88,88)-(1022,1342) [934x1254]
+[03:36:57.359] z-walk from tunnel: walked=263 video-above-tunnel=False dashboard-above-tunnel=False
+[03:36:58.038] PrintWindow(A-tunnel-only-tunnel) ok=True distinct=4041 meanLuma=69.9 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\A-tunnel-only-tunnel.png
+[03:36:58.507] screen patch CENTER @(1440,900): distinct=362 meanLuma=66
+[03:36:58.523] screen patch CORNER @(1500,900): distinct=343 meanLuma=61.7
+[03:36:58.539] screen capture saved: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\A-tunnel-only-screen.png (3088715 bytes)
+[03:37:02.408] marker seen (1 x): tunnel-drive: topmost surface shown
+[03:37:03.415] === capture B-topmost-over-tunnel ===
+[03:37:03.417] foreground: 'CCP — DTRH video' hwnd=8192112
+[03:37:03.447] tunnel rect: (0,0)-(2880,1800) [2880x1800]
+[03:37:03.476] video  rect: (0,210)-(1704,1219) [1704x1009]
+[03:37:03.502] dash   rect: (88,88)-(1022,1342) [934x1254]
+[03:37:03.537] z-walk from tunnel: walked=267 video-above-tunnel=True dashboard-above-tunnel=False
+[03:37:04.076] PrintWindow(B-topmost-over-tunnel-tunnel) ok=True distinct=8287 meanLuma=51.9 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\B-topmost-over-tunnel-tunnel.png
+[03:37:04.384] screen patch INSIDE-video @(852,754): distinct=1 meanLuma=0
+[03:37:04.410] screen patch OUTSIDE-video @(1854,1319): distinct=506 meanLuma=84.2
+[03:37:04.418] screen capture saved: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\B-topmost-over-tunnel-screen.png (1731810 bytes)
+[03:37:22.453] marker seen (1 x): tunnel-drive: tunnel re-shown
+[03:37:22.920] marker seen (2 x): chaos-tunnel: page ready
+[03:37:25.931] === capture C-tunnel-reshown-under-topmost ===
+[03:37:25.931] foreground: 'CCP — DTRH video' hwnd=8192112
+[03:37:25.976] tunnel rect: (0,0)-(2880,1800) [2880x1800]
+[03:37:26.007] video  rect: (0,210)-(1704,1219) [1704x1009]
+[03:37:26.035] dash   rect: (88,88)-(1022,1342) [934x1254]
+[03:37:26.060] z-walk from tunnel: walked=275 video-above-tunnel=True dashboard-above-tunnel=False
+[03:37:26.632] PrintWindow(C-tunnel-reshown-under-topmost-tunnel) ok=True distinct=14141 meanLuma=99.7 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\C-tunnel-reshown-under-topmost-tunnel.png
+[03:37:27.092] screen patch INSIDE-video @(852,754): distinct=1 meanLuma=0
+[03:37:27.108] screen patch OUTSIDE-video @(1854,1319): distinct=847 meanLuma=139
+[03:37:27.141] screen capture saved: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\C-tunnel-reshown-under-topmost-screen.png (1851824 bytes)
+[03:37:32.617] marker seen (1 x): tunnel-drive: topmost surface hidden
+[03:37:34.130] === capture D-topmost-hidden ===
+[03:37:34.132] foreground: 'CCP Client' hwnd=28050520
+[03:37:34.166] tunnel rect: (0,0)-(2880,1800) [2880x1800]
+[03:37:34.199] video  rect: (absent)
+[03:37:34.228] dash   rect: (88,88)-(1022,1342) [934x1254]
+[03:37:34.258] z-walk from tunnel: walked=274 video-above-tunnel=False dashboard-above-tunnel=False
+[03:37:34.779] PrintWindow(D-topmost-hidden-tunnel) ok=True distinct=9005 meanLuma=54.2 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\D-topmost-hidden-tunnel.png
+[03:37:35.106] screen patch CENTER @(1440,900): distinct=352 meanLuma=43.6
+[03:37:35.121] screen patch CORNER @(1500,900): distinct=386 meanLuma=46.3
+[03:37:35.138] screen capture saved: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\D-topmost-hidden-screen.png (2307536 bytes)
+[03:37:35.644] restored 4 foreign window(s)
+[03:37:35.660] z-guard demote events in app log: 8
+[03:37:35.691]   app log line 8: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.707]   app log line 33: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.743]   app log line 36: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.776]   app log line 37: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.809]   app log line 38: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.842]   app log line 55: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.876]   app log line 82: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:35.901]   app log line 91: chaos-tunnel z-guard: dashboard was above the tunnel � demoting
+[03:37:44.089] marker seen (1 x): shutting down the lifetime
+[03:37:44.134] EXIT=0
+[03:37:46.132] profile manifest: 2677 files -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T171751\lane-1\spine-tasks\SP-061-chaos-tunnel-backdrop\scratch\evidence\wh\profile-post.txt
+[03:37:46.218] profile byte-identity: IDENTICAL (pre == post)
+[03:37:46.218] HARNESS COMPLETE

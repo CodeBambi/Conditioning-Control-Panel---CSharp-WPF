@@ -91,7 +91,7 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T174335.md` |
-| 2 | plan | (recorded post-call below) | |
+| 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T180808.md` |
 
 ---
 
@@ -117,6 +117,33 @@
 **Timing guard:** no new deadline literals, no `Task.Delay`/`Thread.Sleep` in tests (the one `longPollTimeout: 200ms` in the shared-invariant fixture mirrors the landed DTRH fixture's own injectable — wait, see record note: this constructor parameter is the LANDED LoopbackServer's existing injectable seam (DtrhLoopbackContractTests:46 precedent), not a NEW budget added by this task; named here per framing (e) so the budgets row's sweep sees it.
 
 ## Step 3 — headed layering evidence
+
+**Machine posture (all named loudly, never faked):** DISPLAY3 `(-2576,1091) 2560×1440` **ABSENT** — loud fallback to DISPLAY1 primary, physical `2880×1800` @175% (the DPI-aware harness reads physical pixels; v1 of the harness mixed virtualized `GetWindowRect` with physical `CopyFromScreen` and was corrected — the v2 transcript's rects are all physical). WSL: **zero installed distros** (`wsl -l -v`: "Windows Subsystem for Linux has no installed distributions") — the Linux run is gated exactly, no Linux claim is made. A-013: avalonia-live MCP re-checked once 2026-08-12 — still **not connectable** (`fetch failed`) → recorded **Unavailable**; it never blocks and is never v12 authority (the v12 API facts came from the pinned 12.1.1 binaries via reflection, `scratch/apiprobe`).
+
+**Run:** `scratch/headed-run.ps1` → `evidence/wh/` (transcript, run.log, 4 screen captures + 4 PrintWindow captures, profile manifests). App: Debug build, `--tunnel-demo --tunnel-drive topmost-show,tunnel-close,tunnel-show,topmost-hide,finish` under `CCP_DATA_ROOT=<sandbox>` (SP-057 isolation; the `data-root override active` seam logged). Foreign (non-CCP) windows were temporarily minimized for the captures and restored after — loud lines in the transcript.
+
+**Evidence method (the v1 lesson):** a bottom-sunk window sits below ALL non-topmost windows including other apps', so a raw screen capture of a busy desktop never shows the tunnel. Tunnel-content proof = `PrintWindow(PW_RENDERFULLCONTENT)` on the tunnel's own hwnd (z-order-independent capture of its real presented surface — probe-verified, 1801 distinct colors). Screen captures answer "what is on TOP" per region. Z-order facts = a 512-bound `GW_HWNDPREV` walk from the tunnel's hwnd comparing REAL window handles.
+
+| Phase | Rects (physical px) | z-walk | Pixels | Verdict |
+|---|---|---|---|---|
+| **A — tunnel only, desktop cleared** | tunnel `(0,0)-(2880,1800)` fullscreen; dash `(88,88)-(1022,1342)` | video-above=False, **dashboard-above=False** (demoted) | screen patches distinct=362/343 (colorful); PrintWindow tunnel distinct=4041 | **tunnel renders + is visible where nothing covers it** (A-tunnel-only-screen.png: the three.js rabbit hole full-bleed) |
+| **B — real Topmost surface over the tunnel** | video `(0,210)-(1704,1219)`; tunnel unchanged | **video-above-tunnel=True**, dashboard-above=False | screen INSIDE-video: distinct=1 luma=0 (the video's black letterbox ON TOP); screen OUTSIDE-video: distinct=506 luma=84 (**tunnel colors around the occluder**); PrintWindow tunnel distinct=8287 (**still rendering underneath**) | **occlusion proven by pixels + rects** (B-…-screen.png) |
+| **C — tunnel closed + re-shown UNDER the live Topmost surface** (the consult's strong direction) | same | **video-above-tunnel=True** on the FRESH window | inside black / outside distinct=847; PrintWindow distinct=14141 (rebooted page rendering) | **the sink lands even when the tunnel appears SECOND** |
+| **D — topmost hidden** | video absent; tunnel unchanged | both False | screen patches colorful (distinct=352/386); PrintWindow distinct=9005 | tunnel visible again after the cycle |
+
+**Show/hide cycles:** one full cycle each way — CloseActive (graceful `run-end` → real page `exit-done` → fast-path teardown, run.log line 43) then a fresh Show under the live Topmost surface (C), and the topmost surface shown (B) then hidden (D) over a continuous tunnel run.
+
+**Activation/focus proof:** foreground window per phase (transcript lines): A = File Explorer (pre-existing), B/C = the DTRH video window (an activating attention surface — its own design), D = CCP Client (dashboard inherits foreground when foreign windows minimize — OS-driven, not a show). **The tunnel NEVER held foreground or activation across show, re-show, and both cycles** (ShowActivated=false + WS_EX_NOACTIVATE doing their work; the re-show under the video in C did not move foreground off the video).
+
+**Z-guard live function:** the dashboard's activation (foreground inheritance during minimize churn) raised it above the tunnel mid-run (B's z-walk: dashboard-above=True at 03:37:03); the guard demoted it back within one 1500ms cadence (8 demote events logged; C and D: dashboard-above=False). This is the ported timer semantics correcting a real rise — WPF's no-flash `WM_WINDOWPOSCHANGING` rewrite hook remains the deliberately unported delta (filed); the correction window is one cadence.
+
+**Profile byte-identity (SP-057):** real profile `%APPDATA%\CcpClient` = 2677 files, path-hashed sha256 manifests pre/post — **IDENTICAL** (`evidence/wh/profile-pre.txt` == `profile-post.txt`; the run wrote only under the CCP_DATA_ROOT sandbox, which is NOT committed — browser profile data is never committable evidence).
+
+**Graceful exit:** `finish` → CloseActive → page `exit-done` → fast-path teardown → lifetime shutdown → **EXIT=0** (run.log tail; the `Chrome_WidgetWin_0` unregister line is the known WebView2 cosmetic noise, SP-027 consolidated limits). Non-ASCII characters in the redirected stderr render as `?`/`�` (app-side console encoding, cosmetic; markers are ASCII).
+
+**Linux disposition:** gated — WSL has zero distros (exact gate above). The Linux surface is typed Unavailable BY DESIGN this row (no page-side bridge transport + no keep-below control on the dialog toplevel — capability reason text carries both); no Linux run was possible and no Linux claim is made.
+
+## Step 4 — record + window manifest + pre-completion consult
 
 (pending)
 
