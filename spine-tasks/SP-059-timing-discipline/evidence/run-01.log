@@ -1,0 +1,51 @@
+=== RUN 01 (COLD: bin/obj cleared, full rebuild, first test-host start) ===
+verify.mjs: patches tested against 2.8.0, 2.10.0
+verify.mjs: [project] pi-spine 2.10.0 at C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\.pi\npm\node_modules\pi-spine (8 patches)
+applied  fsync-r-plus-abort [project]
+applied  fsync-r-plus-lifecycle-archive [project]
+applied  dotnet-evidence-allowlist [project]
+applied  worker-tail-at-file [project]
+applied  skill-headed-evidence-sizing [project]
+applied  t5-reviews-autoclean [project]
+applied  skill-stall-detector-probe [project]
+applied  skill-trx-failure-names [project]
+verify.mjs: [engine] pi-spine 2.10.0 at C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine (5 patches)
+applied  fsync-r-plus-abort [engine]
+applied  fsync-r-plus-lifecycle-archive [engine]
+applied  dotnet-evidence-allowlist [engine]
+applied  worker-tail-at-file [engine]
+applied  t5-reviews-autoclean [engine]
+
+verify.mjs: OK — all patches applied on all roots.
+  Determining projects to restore...
+  Restored C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\src\CcpClient.Desktop\CcpClient.Desktop.csproj (in 1,29 sec).
+  Restored C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.HeadlessTests\CcpClient.HeadlessTests.csproj (in 1,29 sec).
+  Restored C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.Tests\CcpClient.Tests.csproj (in 1,29 sec).
+  1 of 4 projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.HeadlessTests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:21.41
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   863, Skipped:     0, Total:   863, Duration: 36 s - CcpClient.Tests.dll (net10.0)
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.HeadlessTests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    33, Skipped:     0, Total:    33, Duration: 15 s - CcpClient.HeadlessTests.dll (net10.0)

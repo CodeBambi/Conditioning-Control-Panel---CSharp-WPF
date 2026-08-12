@@ -1,6 +1,6 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** Step 4
-**Last Updated:** 2026-08-12 (worker, Step 3 complete)
+**Current Step:** Step 5
+**Last Updated:** 2026-08-12 (worker, Step 4 complete — 10/10 green)
 **Blockers:** none
 
 ### Step 1: sweep, classify, design + pre-approach consult — COMPLETE
@@ -22,13 +22,13 @@
 - [x] Guard test proven red-then-green against a re-introduced literal
 - [x] Exact `docs/constitution.md` sentence DRAFTED in record.md (file not edited)
 
-### Step 4: ten consecutive full-suite green runs — IN PROGRESS
-- [ ] 10 runs, each captured to `evidence/run-NN.log`
-- [ ] Run index table in record.md (pass/fail, unit + headless counts, duration)
-- [ ] At least one cold run, with "cold" defined
-- [ ] Floor discipline honored (862/33; any red named before discussion)
+### Step 4: ten consecutive full-suite green runs — COMPLETE
+- [x] 10 runs, each captured to `evidence/run-NN.log`
+- [x] Run index table in record.md (pass/fail, unit + headless counts, duration)
+- [x] At least one cold run, with "cold" defined
+- [x] Floor discipline honored (862/33; any red named before discussion)
 
-### Step 5: record + pre-completion consult — NOT STARTED
+### Step 5: record + pre-completion consult — IN PROGRESS
 - [ ] record.md complete (incl. assertion-change proof and intended board filings)
 - [ ] Pre-completion solo consult (verdict + ACTUAL model)
 - [ ] STATUS.md accurate before .DONE

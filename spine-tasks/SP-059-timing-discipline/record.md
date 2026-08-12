@@ -363,9 +363,33 @@ conversions-only boundary. Recorded per the packet's record-why branch.
 
 **Product seam: NONE.** `client/src/**` unchanged.
 
-## 9. Ten-run index
+## 9. Ten-run index (Step 4 — full contract testCommand per run, complete output per file, never tailed)
 
-(pending Step 4)
+Each run: `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug
+--nologo && dotnet test CcpClient.Tests && dotnet test CcpClient.HeadlessTests`, complete
+stdout+stderr redirected to `evidence/run-NN.log` (the SP-058 land lesson: no tailing —
+the full command chain is in every file, verify.mjs OK line confirmed present ×10).
+
+| run | conditions | result | unit | headless | durations | build |
+|-----|-----------|--------|------|----------|-----------|-------|
+| 01 | **COLD** — `bin/`+`obj/` deleted for all three projects first; full restore+rebuild, first test-host start (the closest this environment gets to the SP-058 reds' cold/first-run correlation) | green | 863/863 | 33/33 | 36s / 15s | 0W/0E |
+| 02 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 03 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 04 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 05 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
+| 06 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 07 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 08 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
+| 09 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 10 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+
+**10/10 consecutive green, zero reds of any class** — no red to name (floor discipline
+discharged vacuously; had any red occurred it would have been named BY NAME from its
+log before any discussion, and the count restarted).
+
+**Floor note:** the row's floor is 862 unit / 33 headless. The honest count is now
+**863 unit** = 862 + the guard test (`TestTimingGuardTests`), the only new test this
+task adds. No test was removed or skipped; 33 headless unchanged.
 
 ## 8. Drafted `docs/constitution.md` line (NOT applied — orchestrator applies at land)
 
