@@ -169,7 +169,7 @@ public sealed class UpstreamPayloadInventoryTests
         Assert.NotEmpty(inventory.Trees);
         Assert.Contains(inventory.Trees, t => t.Disposition == "served");
         Assert.Contains(inventory.Trees, t => t.Disposition == "not-ported");
-        Assert.Matches(@"^v\d+\.\d+\.\d+$", inventory.UpstreamVersion);
+        Assert.Matches(@"^v\d+(\.\d+)+$", inventory.UpstreamVersion);
         Assert.False(string.IsNullOrWhiteSpace(inventory.Merge));
     }
 

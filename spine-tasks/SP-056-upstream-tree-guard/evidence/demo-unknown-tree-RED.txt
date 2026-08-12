@@ -1,0 +1,23 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.09]     CcpClient.Tests.UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree [FAIL]
+  Failed CcpClient.Tests.UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree [92 ms]
+  Error Message:
+   upstream payload-tree guard violations:
+  - upstream payload tree 'goon' (184 files) exists under ConditioningControlPanel/Resources/web but is not listed in client/docs/upstream-payload-inventory.json — a new upstream product surface must not slip past the port silently (the v6.6.3 → v6.7.4 sync added web/goon/, 184 files, with the suite green). Action: file a row in client/docs/task-board.md, add the tree to the inventory (disposition 'served' naming the serving code path, or 'not-ported' with the board-row reference), and cite it in client/docs/upstream-sync.md.
+  Stack Trace:
+     at CcpClient.Tests.UpstreamPayloadInventoryTests.RunGuard(String repoRoot, Action`1 log) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\tests\CcpClient.Tests\UpstreamPayloadInventoryTests.cs:line 156
+   at CcpClient.Tests.UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\client\tests\CcpClient.Tests\UpstreamPayloadInventoryTests.cs:line 56
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Standard Output Messages:
+ upstream reference tree reachable at C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T231738\lane-1\ConditioningControlPanel\Resources\web — full-compare branch (7 trees on disk: dtrh, fyp, goon, intake, player, tunnel, vendor)
+
+
+
+Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 131 ms - CcpClient.Tests.dll (net10.0)
