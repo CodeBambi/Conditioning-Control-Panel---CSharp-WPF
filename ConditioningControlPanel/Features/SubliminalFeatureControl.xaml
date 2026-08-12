@@ -40,7 +40,7 @@
                 <Slider x:Name="SliderPerMin" Minimum="1" Maximum="30" Value="5" feat:SessionLock.Owned="True"
                         ValueChanged="SliderPerMin_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_messages_shown_per_minute}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -58,7 +58,7 @@
                 <Slider x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2" feat:SessionLock.Owned="True"
                         ValueChanged="SliderFrames_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_display_duration_in_frames_lower_faster_flash}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -76,7 +76,7 @@
                 <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="80" feat:SessionLock.Owned="True"
                         ValueChanged="SliderOpacity_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_text_visibility_lower_more_subtle}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>

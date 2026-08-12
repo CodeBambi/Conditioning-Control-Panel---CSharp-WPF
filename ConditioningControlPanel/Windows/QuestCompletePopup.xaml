@@ -47,7 +47,7 @@
             <Button Grid.Column="1" Content="✕"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="24" Height="24" Margin="0,-5,-5,0"
-                    Background="Transparent" Foreground="#888888"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Click="BtnClose_Click">
                 <Button.Style>

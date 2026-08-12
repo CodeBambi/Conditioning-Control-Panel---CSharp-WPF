@@ -38,7 +38,7 @@
 
         <StackPanel Grid.Row="2" Margin="0,14,0,0">
             <TextBlock Text="{loc:Str label_all_sharing_is_opt_in}" Foreground="#B478FF"
-                       FontSize="10" FontStyle="Italic" Margin="0,0,0,10"/>
+                       FontSize="11" FontStyle="Italic" Margin="0,0,0,10"/>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

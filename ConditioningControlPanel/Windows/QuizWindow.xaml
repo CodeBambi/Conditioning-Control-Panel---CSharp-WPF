@@ -76,7 +76,7 @@
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="#808080"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
@@ -102,7 +102,7 @@
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="#808080"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">

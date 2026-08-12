@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
+using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -444,6 +445,11 @@ namespace ConditioningControlPanel.Features
         /// <summary>
         /// Hover: a 1.02 lift plus the rim-light. RenderTransform only, so the tile never takes
         /// layout with it - the 6px margin on RootBorder is the headroom the lift paints into.
+        ///
+        /// The art inside gets the separate 1.06 "hover pop" (scale + wobble). It is driven from
+        /// here rather than from ImgIconHost's own MouseEnter because the art sits under the
+        /// gradient/rim/locked overlays - the card's hover is the honest trigger. RootBorder's
+        /// ClipToBounds keeps the zoom inside the rounded frame, which is the intended look.
         /// </summary>
         private void ApplyHover(bool on)
         {
@@ -456,6 +462,7 @@ namespace ConditioningControlPanel.Features
                 if (IsLocked) on = false;
 
                 MotionFx.HoverLift(RootBorder, on);
+                if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);
 
                 if (RimLight == null) return;
                 double to = on ? RimLightOpacity : 0;

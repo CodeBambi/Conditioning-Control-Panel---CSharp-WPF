@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.FirstRunWizard"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
         Title="Welcome"
         Height="680" Width="900"
         WindowStartupLocation="CenterScreen"
@@ -54,11 +55,11 @@
                                Foreground="{DynamicResource PinkBrush}"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
 
-                    <TextBlock x:Name="TxtStepCounter" Grid.Column="1" Foreground="#A0A0A0"
+                    <TextBlock x:Name="TxtStepCounter" Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}"
                                FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
 
                     <Button x:Name="BtnCloseX" Grid.Column="2" Content="X" Click="BtnClose_Click"
-                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
                             BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"/>
                 </Grid>
             </Border>
@@ -99,9 +100,9 @@
                                     <TextBlock x:Name="TxtTipHelp" Foreground="{DynamicResource PinkBrush}"
                                                FontSize="12.5" TextWrapping="Wrap" TextAlignment="Center"
                                                FontWeight="SemiBold" Margin="0,9,0,0"/>
-                                    <TextBlock x:Name="TxtTipHover" Foreground="#B0B0B0" FontSize="12.5"
+                                    <TextBlock x:Name="TxtTipHover" Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
                                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,5,0,0"/>
-                                    <TextBlock x:Name="TxtTipAssets" Foreground="#B0B0B0" FontSize="12.5"
+                                    <TextBlock x:Name="TxtTipAssets" Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
                                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,5,0,0"/>
                                 </StackPanel>
                             </Border>
@@ -158,11 +159,15 @@
                                                        Foreground="{Binding AccentBrush}" FontSize="16"
                                                        VerticalAlignment="Center" Margin="2,0,12,0"/>
 
+                                            <!-- ClipToBounds added with the hover pop: without it the
+                                                 1.06 zoom paints the art over the accent border. -->
                                             <Border Grid.Column="1" Width="72" Height="72" CornerRadius="8"
                                                     BorderBrush="{Binding AccentBrush}" BorderThickness="2"
+                                                    ClipToBounds="True"
                                                     Background="#1A1A2E" Margin="0,0,14,0">
                                                 <Image Source="{Binding ArtUri}" Stretch="UniformToFill"
-                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                       hover:HoverPop.IsEnabled="True"/>
                                             </Border>
 
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -184,12 +189,12 @@
                                                                  Background="#252542" Foreground="{Binding AccentBrush}"
                                                                  BorderThickness="0"/>
                                                     <TextBlock Grid.Row="1" Text="{Binding StatusText}"
-                                                               Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,4,0,0"/>
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding StatusText}"
                                                            Visibility="{Binding StatusOnlyVisibility}"
-                                                           Foreground="#A0A0A0" FontSize="11" Margin="0,7,0,0"/>
+                                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,7,0,0"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="3" VerticalAlignment="Center"
@@ -212,7 +217,7 @@
                         </ItemsControl>
                     </ScrollViewer>
 
-                    <TextBlock x:Name="TxtModHint" Grid.Row="3" Foreground="#808080" FontSize="11"
+                    <TextBlock x:Name="TxtModHint" Grid.Row="3" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,8,0,0"/>
                 </Grid>
 
@@ -231,7 +236,7 @@
                         <StackPanel x:Name="DoorsHost"/>
                     </ScrollViewer>
 
-                    <TextBlock x:Name="TxtTourOutro" Grid.Row="2" Foreground="#909090" FontSize="11.5"
+                    <TextBlock x:Name="TxtTourOutro" Grid.Row="2" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
                                TextWrapping="Wrap" Margin="0,10,0,0"/>
                 </Grid>
             </Grid>

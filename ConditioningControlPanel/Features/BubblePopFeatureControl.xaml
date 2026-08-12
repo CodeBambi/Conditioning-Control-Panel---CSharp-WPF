@@ -38,7 +38,7 @@
                     <Slider x:Name="SliderFreq" Minimum="1" Maximum="60" Value="5" feat:SessionLock.Owned="True"
                             ValueChanged="SliderFreq_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_bubble_spawn_rate}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -55,7 +55,7 @@
                     <Slider x:Name="SliderVolume" Minimum="0" Maximum="100" Value="50"
                             ValueChanged="SliderVolume_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_bubble_pop_sound_volume}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -72,7 +72,7 @@
                     <Slider x:Name="SliderSpeed" Minimum="0" Maximum="500" Value="0" feat:SessionLock.Owned="True"
                             ValueChanged="SliderSpeed_Changed"/>
                     <TextBlock Text="How fast bubbles travel across the screen"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -137,7 +137,7 @@
                         <Slider x:Name="SliderTriggerChance" Minimum="0" Maximum="50" Value="10"
                                 ValueChanged="SliderTriggerChance_Changed"/>
                         <TextBlock Text="How often a spawned bubble carries an effect"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
@@ -157,7 +157,7 @@
                             <CheckBox x:Name="ChkTypeVideo"      Tag="video"      Content="Video"       Foreground="White" Margin="0,0,16,8" Checked="TriggerType_Changed" Unchecked="TriggerType_Changed"/>
                         </WrapPanel>
                         <TextBlock Text="Each ticked effect has an equal chance"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Border>

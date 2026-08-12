@@ -52,7 +52,7 @@
                            TextTrimming="CharacterEllipsis"/>
 
                 <TextBlock x:Name="TxtSub" Text="Wear it in Profile &gt; Customize"
-                           Foreground="#AAAAAA" FontSize="10" Margin="0,2,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"
                            TextTrimming="CharacterEllipsis"/>
             </StackPanel>
         </Grid>

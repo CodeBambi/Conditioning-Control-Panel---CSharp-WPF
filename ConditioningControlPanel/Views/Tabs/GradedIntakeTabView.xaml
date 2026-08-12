@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
@@ -18,14 +19,19 @@
                 <Border CornerRadius="14" Margin="0,0,0,24" Height="260" ClipToBounds="True"
                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                     <Grid>
-                        <Border CornerRadius="14">
+                        <!-- The pop goes on this inner art layer, not on the Height=260 host above:
+                             the host owns the ClipToBounds, and scaling a clipping element takes its
+                             clip with it. Child scales, parent clips. -->
+                        <Border CornerRadius="14" hover:HoverPop.IsEnabled="True">
                             <Border.Background>
                                 <ImageBrush x:Name="GradedIntakeHeroBrush" x:FieldModifier="internal"
                                             ImageSource="pack://application:,,,/Resources/features/lab_quiz_hero.png"
                                             Stretch="UniformToFill"/>
                             </Border.Background>
                         </Border>
-                        <Border CornerRadius="14">
+                        <!-- The scrim is decoration only; opting it out of hit testing is what lets
+                             the hover reach the art layer underneath it. -->
+                        <Border CornerRadius="14" IsHitTestVisible="False">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
                                     <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>

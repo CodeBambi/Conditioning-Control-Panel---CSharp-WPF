@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:cmp="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
@@ -26,8 +27,12 @@
                 <StackPanel Grid.Row="0">
                 <Border CornerRadius="14" Margin="0,0,0,18" ClipToBounds="True" MaxHeight="320"
                         HorizontalAlignment="Center" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                    <!-- Hover pop lives on the Image, never on the Border: the Border owns the
+                         ClipToBounds, and scaling a clipping element scales its already-clipped
+                         output straight past the rounded frame. Child scales, parent clips. -->
                     <Image x:Name="ImgAwarenessFeature" x:FieldModifier="internal" Source="pack://application:,,,/Resources/features/awareness.png"
-                           Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                           Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                           hover:HoverPop.IsEnabled="True"/>
                 </Border>
                 <Grid Margin="0,0,0,22">
                     <Grid.ColumnDefinitions>
@@ -49,7 +54,7 @@
                                 Click="BtnAwarenessTutorial_Click"
                                 ToolTip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor."/>
                         <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off" Foreground="#A0A0A0"
+                        <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off" Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
                         <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
                                   VerticalAlignment="Center"
@@ -130,7 +135,7 @@
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s.
                                                     </TextBlock>
                                                 </StackPanel>
@@ -161,7 +166,7 @@
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Max 180s.
                                                     </TextBlock>
                                                 </StackPanel>
@@ -204,7 +209,7 @@
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                 Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how she notices text inside other apps — Discord, browsers, image viewers, game UIs, anything visible.
                                             </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                 Uses modest CPU/GPU during active sessions. Turn off if you don't want screen-based triggers or want to save power.
                                             </TextBlock>
                                         </StackPanel>
@@ -216,7 +221,7 @@
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="Screen OCR" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                                         <TextBlock Text="Reads words from what's on your screen"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkAwarenessOcr" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
@@ -231,7 +236,7 @@
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                 Listens to your keystrokes and assembles a rolling buffer of recent typing. When you type a trigger keyword, it fires immediately — no OCR delay.
                                             </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                 Only trigger words are acted on; nothing else is stored or logged. Fastest signal source. Turn off if you don't want typing-based triggers.
                                             </TextBlock>
                                         </StackPanel>
@@ -242,7 +247,7 @@
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="Keyboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                                         <TextBlock Text="Catches trigger words as you type them"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkAwarenessKeyboard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
@@ -250,7 +255,7 @@
                                           Checked="ChkAwarenessKeyboard_Changed" Unchecked="ChkAwarenessKeyboard_Changed"/>
                             </Grid>
                             <TextBlock Text="More sources coming: browser URL, active window title, process"
-                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11" FontStyle="Italic"
                                        Margin="0,10,0,0"/>
                         </StackPanel>
                     </Border>
@@ -271,7 +276,7 @@
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                 OCR will skip words drawn by Control Panel itself — avatar speech bubbles, subliminal flash overlays, bouncing text, and the main window. Prevents Awareness from reacting to her own voice and creating feedback loops.
                                             </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                 Strongly recommended ON. Only turn off if you're debugging why a specific overlay isn't being detected.
                                             </TextBlock>
                                         </StackPanel>
@@ -280,7 +285,7 @@
                                 <TextBlock Text="Ignore CCP's own windows" FontWeight="SemiBold"/>
                             </CheckBox>
                             <TextBlock Text="OCR skips words inside Control Panel, avatar bubbles, and subliminal flashes — so she won't react to her own voice."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="22,0,0,10"/>
 
                             <!-- ===== Where triggers may fire =====
                                  Scopes every source (OCR, keyboard, clipboard) by the process that
@@ -296,11 +301,10 @@
                                                    FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <TextBlock Text="Triggers normally fire in whatever app you're in. Narrow that here — it applies to typing, OCR and clipboard alike."
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <ComboBox x:Name="CmbAwarenessAppScope" x:FieldModifier="internal"
                                               SelectionChanged="CmbAwarenessAppScope_SelectionChanged"
-                                              Background="White" Foreground="Black"
                                               FontSize="11" Padding="6,4" HorizontalAlignment="Left" MinWidth="210">
                                         <ComboBox.ToolTip>
                                             <ToolTip>
@@ -309,18 +313,16 @@
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Judged by the app that owns the window you're focused on, checked at the moment a keyword would fire.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Use "Everywhere except" to keep her out of work, calls and shared screens. Use "Only in" when you want her limited to one or two apps. If an app refuses to identify itself, "Only in" stays quiet and "except" still fires.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
                                         </ComboBox.ToolTip>
                                         <ComboBoxItem Content="Everywhere" Tag="Everywhere"
-                                                      Foreground="Black" Background="White" IsSelected="True"/>
-                                        <ComboBoxItem Content="Everywhere except these apps" Tag="ExceptListed"
-                                                      Foreground="Black" Background="White"/>
-                                        <ComboBoxItem Content="Only in these apps" Tag="OnlyListed"
-                                                      Foreground="Black" Background="White"/>
+                                                      IsSelected="True"/>
+                                        <ComboBoxItem Content="Everywhere except these apps" Tag="ExceptListed"/>
+                                        <ComboBoxItem Content="Only in these apps" Tag="OnlyListed"/>
                                     </ComboBox>
 
                                     <StackPanel x:Name="AwarenessAppListPanel" x:FieldModifier="internal"
@@ -332,11 +334,11 @@
                                                  LostFocus="TxtAwarenessAppList_LostFocus"
                                                  KeyDown="TxtAwarenessAppList_KeyDown"/>
                                         <TextBlock Text="Comma separated app names. The .exe is optional."
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                                    TextWrapping="Wrap" Margin="0,4,0,0"/>
                                         <TextBlock x:Name="TxtAwarenessSeenAppsLabel" x:FieldModifier="internal"
                                                    Text="Recently focused — click to add:"
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                                    Margin="0,8,0,4" Visibility="Collapsed"/>
                                         <!-- Filled at runtime from KeywordTriggerService.GetRecentForegroundApps():
                                              nobody knows offhand that Teams is "ms-teams", so the list is
@@ -355,7 +357,7 @@
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Stops a keyword firing when you type it into Control Panel itself — the trigger editor, the search box, or the companion's chat box.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Different from "Ignore CCP's own windows" above, which only filters OCR by screen position and cannot see your typing at all. Leave this off if you want her reacting to what you say to her in chat.
                                                     </TextBlock>
                                                 </StackPanel>
@@ -375,7 +377,7 @@
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                 When a trigger fires, its keyword is silenced for a few seconds. Stops a single mention on screen from firing multiple times in quick succession if OCR keeps catching it.
                                             </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                 Also works across sources — a keyword fired via Keyboard is muted for OCR detection too, and vice versa.
                                             </TextBlock>
                                         </StackPanel>
@@ -384,7 +386,7 @@
                                 <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
                             </CheckBox>
                             <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="22,0,0,10"/>
     
                             <!-- On-screen highlight: toggle + color picker. The highlight overlay
                                  draws a glowing box around OCR-matched words on your screen. -->
@@ -398,7 +400,7 @@
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                 Draws a glowing rectangle around every OCR-detected trigger word on your screen, just long enough to see it catch your eye. Gives you a visual confirmation that Awareness is watching.
                                             </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                 Only shows for OCR detections, not keyboard triggers. Pick the glow color from the swatches below.
                                             </TextBlock>
                                         </StackPanel>
@@ -407,7 +409,7 @@
                                 <TextBlock Text="Highlight matched words on screen" FontWeight="SemiBold"/>
                             </CheckBox>
                             <TextBlock Text="Draws a glowing box around OCR-detected trigger words. Pick the glow color below."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,6"/>
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="22,0,0,6"/>
                             <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0"
                                         ToolTip="Click a swatch to pick the highlight glow color, or type a custom hex in the box.">
                                 <TextBlock Text="Color:" Foreground="#A0A0B8" FontSize="10"
@@ -451,7 +453,7 @@
                             </StackPanel>
                             <CheckBox x:Name="ChkAwarenessHighlightVisibleInCapture" x:FieldModifier="internal"
                                       Content="Visible in screen capture / streams"
-                                      Foreground="#A0A0A0" FontSize="10" Margin="22,6,0,0"
+                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="22,6,0,0"
                                       Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
                                       Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed">
                                 <CheckBox.ToolTip>
@@ -507,7 +509,7 @@
                 <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                           Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                           Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                 <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                         Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                     <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>

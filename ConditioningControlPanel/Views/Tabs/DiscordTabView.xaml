@@ -6,6 +6,7 @@
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:ctrl="clr-namespace:ConditioningControlPanel.Views.Controls"
              xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="620" d:DesignWidth="1460">
@@ -204,9 +205,15 @@
                                         </Grid.RowDefinitions>
 
                                         <Grid Grid.Row="0">
+                                            <!-- Hover pop on the whole AdornedAvatar, not on its ring:
+                                                 the decoration layer is stacked 1:1 over the portrait,
+                                                 so scaling the ring alone would slide a hat off the
+                                                 head. The control deliberately does not clip, which is
+                                                 what lets the 1.06 read at all on a 104px portrait. -->
                                             <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar" x:FieldModifier="internal"
                                                                 AvatarSize="104"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                hover:HoverPop.IsEnabled="True"
                                                                 Margin="6,6,0,0"/>
 
                                             <!-- The glass goes OVER the portrait: liquid is 48%
@@ -412,7 +419,11 @@
                                         <Border x:Name="ProfilePatreonTierBanner" x:FieldModifier="internal" Visibility="Collapsed"
                                                 Width="146" Height="84" CornerRadius="8" Margin="0,12,0,0"
                                                 HorizontalAlignment="Right" ClipToBounds="True">
-                                            <Image x:Name="ImgPatreonTierBanner" x:FieldModifier="internal" Stretch="Uniform"/>
+                                            <!-- The host's ClipToBounds is the point: the zoom happens
+                                                 INSIDE the 146x84 plate, so the art crops rather than
+                                                 growing past the card edge. -->
+                                            <Image x:Name="ImgPatreonTierBanner" x:FieldModifier="internal" Stretch="Uniform"
+                                                   hover:HoverPop.IsEnabled="True"/>
                                         </Border>
 
                                     </StackPanel>
@@ -592,7 +603,7 @@
                                                Text="{loc:Str profile_showcase_title}"
                                                FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
                                                FontSize="15" Foreground="White"/>
-                                    <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="10"
+                                    <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="11"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                 </Grid>
 
@@ -613,7 +624,11 @@
                                                   MouseLeftButtonUp="ProfileAchievementTile_Click">
                                                 <Border CornerRadius="10" Background="{DynamicResource PanelAccentBrush}"
                                                         BorderBrush="#59FFD700" BorderThickness="1" ToolTip="{Binding Name}">
-                                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="7"/>
+                                                    <!-- The 7px margin is the pop's headroom: 6% of a
+                                                         74px badge is ~4px, so the zoom stays inside
+                                                         the rounded plate without needing a clip. -->
+                                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="7"
+                                                           hover:HoverPop.IsEnabled="True"/>
                                                 </Border>
                                                 <TextBlock Text="★" Foreground="#FFD700" FontSize="14"
                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -674,7 +689,8 @@
                                                             Background="{DynamicResource PanelAccentBrush}" ToolTip="{Binding Name}"
                                                             Cursor="Hand"
                                                             MouseLeftButtonUp="ProfileAchievementTile_Click">
-                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="3"/>
+                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="3"
+                                                               hover:HoverPop.IsEnabled="True"/>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -819,7 +835,7 @@
                                         <TextBlock Text="{loc:Str profile_friends_soon_title}" Foreground="#E7DEFF"
                                                    FontSize="11" FontWeight="Bold"/>
                                         <TextBlock Text="{loc:Str profile_friends_soon_body}" Foreground="#9A93B8"
-                                                   FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                                   FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Border>
 

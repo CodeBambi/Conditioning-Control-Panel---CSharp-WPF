@@ -38,7 +38,7 @@
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="#808080"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
@@ -72,7 +72,7 @@
 
                 <!-- Loading Indicator -->
                 <Grid x:Name="LoadingOverlay" Visibility="Collapsed">
-                    <TextBlock Text="{loc:Str label_loading_2}" Foreground="#808080" FontSize="14"
+                    <TextBlock Text="{loc:Str label_loading_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
             </Grid>
@@ -105,7 +105,7 @@
 
                 <!-- Time Display -->
                 <TextBlock x:Name="TxtTime" Grid.Column="2"
-                           Text="00:00 / 00:00" Foreground="#808080" FontSize="11"
+                           Text="00:00 / 00:00" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,12,0"
                            FontFamily="Consolas"/>
             </Grid>

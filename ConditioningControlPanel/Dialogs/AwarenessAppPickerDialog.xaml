@@ -79,8 +79,8 @@
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Label}" Foreground="White" FontSize="12.5"
                                                    TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource TextDimBrush}"
-                                                   FontSize="10" TextWrapping="Wrap" Margin="0,2,0,0"
+                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
                                                    Visibility="{Binding HasDetail,
                                                                 Converter={StaticResource BoolToVisibility}}"/>
                                     </StackPanel>
@@ -118,8 +118,8 @@
             <Button Grid.Column="1" Content="{loc:Str btn_add_2}" Style="{StaticResource ActionButton}"
                     Margin="8,0,0,0" Click="BtnAdd_Click"/>
         </Grid>
-        <TextBlock Grid.Row="3" x:Name="TxtAddHint" Foreground="{DynamicResource TextDimBrush}"
-                   FontSize="10" Margin="0,44,0,0" TextWrapping="Wrap"
+        <TextBlock Grid.Row="3" x:Name="TxtAddHint" Foreground="{DynamicResource TextMutedBrush}"
+                   FontSize="11" Margin="0,44,0,0" TextWrapping="Wrap"
                    Text="{loc:Str companion_awareness_picker_add_hint}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">

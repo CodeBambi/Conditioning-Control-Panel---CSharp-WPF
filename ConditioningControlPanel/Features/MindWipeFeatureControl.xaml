@@ -35,7 +35,7 @@
                     <Slider x:Name="SliderFreq" Minimum="1" Maximum="180" Value="6" feat:SessionLock.Owned="True"
                             ValueChanged="SliderFreq_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_mind_wipe_frequency_1_180_per_hour}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -52,7 +52,7 @@
                     <Slider x:Name="SliderVolume" Minimum="0" Maximum="100" Value="50"
                             ValueChanged="SliderVolume_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_volume_level_0_100}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -84,7 +84,7 @@
                 <StackPanel>
                     <TextBlock Text="CUSTOM AUDIO" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                     <TextBlock Text="Pick your own mind-wipe sound. Keep it short — about 2 seconds works best. Leave it on Default to use the built-in clips."
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,10"/>
 
                     <Border Background="{DynamicResource PanelBgBrush}"

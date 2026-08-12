@@ -33,15 +33,15 @@
             <!-- Content -->
             <StackPanel Grid.Row="1">
                 <!-- Objective -->
-                <TextBlock Text="{loc:Str label_objective_2}" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
+                <TextBlock Text="{loc:Str label_objective_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,5"/>
                 <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12" Margin="0,0,0,15">
                     <TextBlock x:Name="TxtObjective" Foreground="#E0E0E0" FontSize="13" TextWrapping="Wrap"/>
                 </Border>
 
                 <!-- Photo Requirement -->
-                <TextBlock Text="{loc:Str label_photo_required}" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
+                <TextBlock Text="{loc:Str label_photo_required}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,5"/>
                 <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
-                    <TextBlock x:Name="TxtPhotoRequirement" Foreground="#AAAAAA" FontSize="13" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtPhotoRequirement" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap"/>
                 </Border>
             </StackPanel>
 

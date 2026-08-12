@@ -15,7 +15,7 @@
                     <Button x:Name="HelpBtnAchievements" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Achievements"/>
                 </Grid>
                 <TextBlock Text="{loc:Str achv_subtitle_rewards}"
-                           Foreground="#888888" FontSize="12" Margin="0,0,0,10"/>
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
 
                 <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
                 <WrapPanel x:Name="AchievementFilters" x:FieldModifier="internal" Margin="0,0,0,8"/>
@@ -25,7 +25,7 @@
                 <WrapPanel x:Name="AchievementGrid" x:FieldModifier="internal" Margin="0,5">
                 </WrapPanel>
 
-                <TextBlock x:Name="TxtAchievementCount" x:FieldModifier="internal" Text="{loc:Str label_0_25_achievements_unlocked}" Foreground="#888888" FontSize="14"
+                <TextBlock x:Name="TxtAchievementCount" x:FieldModifier="internal" Text="{loc:Str label_0_25_achievements_unlocked}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,15,0,0"/>
 
                 <!-- Third, independent counter: wardrobe items earned through achievements.
@@ -40,13 +40,13 @@
                 <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
                            Text="{loc:Str section_patron_achievements}" Margin="0,18,0,0"/>
                 <TextBlock Text="{loc:Str label_patron_achievements_subtitle}"
-                           Foreground="#888888" FontSize="12" Margin="0,0,0,12"/>
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,12"/>
 
                 <Grid Margin="0,5,0,0">
                     <StackPanel>
                         <WrapPanel x:Name="PatronAchievementGrid" x:FieldModifier="internal" Margin="0,5">
                         </WrapPanel>
-                        <TextBlock x:Name="TxtPatronAchievementCount" x:FieldModifier="internal" Foreground="#888888" FontSize="14"
+                        <TextBlock x:Name="TxtPatronAchievementCount" x:FieldModifier="internal" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
                                    HorizontalAlignment="Center" Margin="0,15,0,0"/>
                     </StackPanel>
 
@@ -62,7 +62,7 @@
                                     <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                                 </TextBlock.Effect>
                             </TextBlock>
-                            <TextBlock Text="{loc:Str label_patron_achievements_locked}" Foreground="#AAAAAA" FontSize="14"
+                            <TextBlock Text="{loc:Str label_patron_achievements_locked}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
                                        HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380"/>
                             <Button Content="{loc:Str btn_visit_patreon}" Background="#FF424D" Foreground="White"
                                     BorderThickness="0" Padding="18,8" Margin="0,15,0,0" Cursor="Hand"

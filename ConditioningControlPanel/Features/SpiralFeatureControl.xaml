@@ -91,7 +91,7 @@
                               SelectionChanged="CmbMonitor_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_effect_monitor}"
                                Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="10"
+                               FontSize="11"
                                TextWrapping="Wrap"
                                Margin="0,4,0,0"/>
                 </StackPanel>
@@ -124,7 +124,7 @@
                             ValueChanged="SliderOpacity_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_spiral_opacity_5_100}"
                                Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="10"
+                               FontSize="11"
                                TextWrapping="Wrap"
                                Margin="0,4,0,0"/>
                 </StackPanel>
@@ -194,7 +194,7 @@
 
                     <TextBlock Text="Pick the spiral used everywhere. Drop your own .gif / image files in the folder, then Refresh."
                                Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="10"
+                               FontSize="11"
                                TextWrapping="Wrap"
                                Margin="0,0,0,10"/>
 
@@ -216,7 +216,7 @@
 
             <TextBlock Text="{loc:Str label_if_you_have_display_problems_try_setting_your}"
                        Foreground="#FFA500"
-                       FontSize="10"
+                       FontSize="11"
                        FontStyle="Italic"
                        TextWrapping="Wrap"
                        Opacity="0.8"

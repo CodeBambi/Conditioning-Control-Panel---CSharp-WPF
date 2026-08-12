@@ -19,7 +19,7 @@
                         feat:SessionLock.Owned="True"
                         ValueChanged="SliderSize_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -37,7 +37,7 @@
                         feat:SessionLock.Owned="True"
                         ValueChanged="SliderOpacity_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -54,7 +54,7 @@
                 <Slider x:Name="SliderFade" Minimum="0" Maximum="100" Value="50"
                         ValueChanged="SliderFade_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_fade_in_out_animation_speed_0_instant_appear}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -72,7 +72,7 @@
                         feat:SessionLock.Owned="True"
                         ValueChanged="SliderDuration_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>

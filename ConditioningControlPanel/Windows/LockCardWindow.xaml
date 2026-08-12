@@ -105,7 +105,7 @@
                         </Border>
                     </Border>
                     <TextBlock x:Name="TxtVoiceHeard" Text="I heard: …" FontSize="12" HorizontalAlignment="Center"
-                               Foreground="#AAAAAA" FontStyle="Italic"/>
+                               Foreground="{DynamicResource TextMutedBrush}" FontStyle="Italic"/>
                 </StackPanel>
 
                 <!-- Progress indicator -->
@@ -116,12 +116,9 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="TxtProgress" Grid.Column="0" Text="0 / 3" 
-                               FontSize="14" VerticalAlignment="Center" Margin="0,0,15,0">
-                        <TextBlock.Foreground>
-                            <SolidColorBrush Color="#888888"/>
-                        </TextBlock.Foreground>
-                    </TextBlock>
+                    <TextBlock x:Name="TxtProgress" Grid.Column="0" Text="0 / 3"
+                               FontSize="14" VerticalAlignment="Center" Margin="0,0,15,0"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
 
                     <Border x:Name="ProgressBarContainer" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" MinWidth="200">
                         <Border x:Name="ProgressBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -140,7 +141,7 @@
                     <TextBlock Text="{loc:Str label_remote_niches}" Style="{StaticResource SettingLabel}"
                                FontSize="12" Margin="0,6,0,2"/>
                     <TextBlock Text="{loc:Str label_remote_niches_shared}"
-                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,0,0,6"/>
                     <WrapPanel x:Name="RemoteNicheChips" x:FieldModifier="internal"/>
 
@@ -170,7 +171,7 @@
                                 HorizontalAlignment="Right"/>
                     </Grid>
                     <TextBlock x:Name="TxtRemoteBlocklistSummary" x:FieldModifier="internal"
-                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,0,0,6"/>
                     <WrapPanel x:Name="RemoteBlockedChips" x:FieldModifier="internal"/>
                 </StackPanel>
@@ -193,7 +194,7 @@
                         <Button x:Name="HelpBtnPacks" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
                     </StackPanel>
                     <TextBlock Text="{loc:Str label_after_downloading_a_pack_just_drag_and_drop_t}"
-                               Foreground="#888" FontSize="11" FontStyle="Italic"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
     
@@ -266,13 +267,15 @@
                                                     <!-- Rotating preview image from pack content (for installed packs with loaded previews) -->
                                                     <Image Source="{Binding CurrentPreviewImage}"
                                                            Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
+                                                           hover:HoverPop.IsEnabled="True"
                                                            Visibility="{Binding HasPreviewImages, Converter={StaticResource BoolToVisibility}}"/>
                                                     <!-- Static preview image from URL (fallback when no dynamic previews) -->
                                                     <Image Source="{Binding PreviewImageUrl, TargetNullValue={x:Null}}"
                                                            Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
+                                                           hover:HoverPop.IsEnabled="True"
                                                            Visibility="{Binding HasPreviewImages, Converter={StaticResource InverseBoolToVisibility}}"/>
                                                     <!-- "No Preview" text shows only when no dynamic or static preview exists -->
-                                                    <TextBlock Text="{loc:Str label_no_preview}" FontSize="14" Foreground="#666"
+                                                    <TextBlock Text="{loc:Str label_no_preview}" FontSize="14" Foreground="{DynamicResource TextDimBrush}"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                Visibility="{Binding HasAnyPreview, Converter={StaticResource InverseBoolToVisibility}}"/>
                                                     <!-- Size badge -->
@@ -615,10 +618,17 @@
                                                                         Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
                                                                 <Image Width="36" Height="36" HorizontalAlignment="Center"
                                                                        Source="{Binding Source='🎬', Converter={StaticResource EmojiToImageSource}}"/>
-                                                                <TextBlock Text="{loc:Str label_video}" FontSize="9" Foreground="#888" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                                                <TextBlock Text="{loc:Str label_video}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                                             </StackPanel>
-                                                            <!-- Image thumbnail (for images, or video if we had one) -->
-                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                            <!-- Image thumbnail (for images, or video if we had one).
+                                                                 This grid is NOT virtualized and is uncapped - one
+                                                                 tile per file in the folder - so the behavior's
+                                                                 transform rig is deliberately allocated on first
+                                                                 hover, not on attach. Enabling it here costs three
+                                                                 handler subscriptions per tile and nothing more,
+                                                                 and only the tile under the pointer ever animates. -->
+                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                                                   hover:HoverPop.IsEnabled="True"/>
                                                             <!-- Loading indicator -->
                                                             <TextBlock Text="⏳" FontSize="14"
                                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -633,7 +643,7 @@
                                                               Unchecked="ThumbnailCheckBox_Changed"/>
     
                                                     <!-- Filename -->
-                                                    <Border Grid.Row="1" Background="#303050" Padding="4,2">
+                                                    <Border Grid.Row="1" Background="#303050" CornerRadius="0,0,6,6" Padding="4,2">
                                                         <TextBlock Text="{Binding Name}" FontSize="9"
                                                                    Foreground="{StaticResource TextLightBrush}"
                                                                    TextTrimming="CharacterEllipsis"

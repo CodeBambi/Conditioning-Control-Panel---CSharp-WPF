@@ -86,7 +86,7 @@
                     Grid.Column="1"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="28" Height="28" Margin="0,8,12,0"
-                    Background="Transparent" Foreground="#888888"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Panel.ZIndex="1"
                     Click="BtnDismiss_Click">

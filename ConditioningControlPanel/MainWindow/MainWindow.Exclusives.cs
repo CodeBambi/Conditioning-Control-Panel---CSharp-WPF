@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
@@ -446,18 +447,13 @@ namespace ConditioningControlPanel
                     card.ClearValue(UIElement.EffectProperty);
                 }
 
-                // Gentle art zoom under the rounded clip.
-                if (MotionFx.AllowTransitions)
-                {
-                    if (art.RenderTransform is not ScaleTransform s)
-                        art.RenderTransform = s = new ScaleTransform(1, 1);
-                    var anim = new DoubleAnimation(on ? 1.05 : 1.0, TimeSpan.FromMilliseconds(220))
-                    {
-                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                    };
-                    s.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-                    s.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
-                }
+                // Gentle art zoom under the rounded clip. This is the shared "hover pop" (1.06 on
+                // a back-ease overshoot plus a two-degree wobble) rather than the bespoke flat
+                // 1.05 it used to run, so vault art settles the same way dashboard tiles, quest
+                // art and achievement badges do. Driven from the card's hover, not the Image's
+                // own, because the veil and the title band sit over the art. HoverPop keeps the
+                // reduced-motion gate for us.
+                if (on) HoverPop.Enter(art); else HoverPop.Leave(art);
             }
             catch (Exception ex) { App.Logger?.Debug("Exclusives card hover: {E}", ex.Message); }
         }

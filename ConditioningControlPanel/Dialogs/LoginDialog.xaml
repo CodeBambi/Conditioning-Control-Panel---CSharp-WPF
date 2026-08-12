@@ -23,7 +23,7 @@
                            FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Str login_choose_method}"
-                           FontSize="13" Foreground="#B0B0B0"
+                           FontSize="13" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,5,0,0"/>
             </StackPanel>
 
@@ -95,11 +95,11 @@
                 <!-- Invite code field (register mode only) -->
                 <TextBlock x:Name="LblInviteCodeHint"
                            Text="{loc:Str label_for_an_invite_code_please_ask_a_discord_mod_a}"
-                           FontSize="11" Foreground="#808080" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
                            HorizontalAlignment="Center" Margin="0,0,0,8"
                            Visibility="Collapsed"/>
                 <TextBlock x:Name="LblInviteCode" Text="{loc:Str login_invite_code}"
-                           FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtInviteCode" FontSize="14" Padding="10,8"
                          Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
@@ -108,7 +108,7 @@
 
                 <!-- Display name field (login mode only) -->
                 <TextBlock x:Name="LblDisplayName" Text="{loc:Str login_display_name}"
-                           FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtLoginDisplayName" FontSize="14" Padding="10,8"
                          Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
@@ -116,14 +116,14 @@
 
                 <!-- Password -->
                 <TextBlock x:Name="LblPassword" Text="{loc:Str login_password}"
-                           FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"/>
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,4"/>
                 <PasswordBox x:Name="TxtPassword" FontSize="14" Padding="10,8"
                              Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                              MaxLength="128"/>
 
                 <!-- Confirm password (register mode only) -->
                 <TextBlock x:Name="LblPasswordConfirm" Text="{loc:Str login_confirm_password}"
-                           FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,4"
                            Visibility="Collapsed"/>
                 <PasswordBox x:Name="TxtPasswordConfirm" FontSize="14" Padding="10,8"
                              Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
@@ -142,7 +142,7 @@
                         Click="BtnAccountSubmit_Click"/>
 
                 <TextBlock x:Name="TxtAccountToggle" Margin="0,12,0,0"
-                           FontSize="12" Foreground="#B0B0B0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="TxtAccountToggle_Click">
                     <Run Text="{loc:Str label_don_t_have_an_account}"/>
@@ -150,7 +150,7 @@
                 </TextBlock>
 
                 <TextBlock Text="{loc:Str btn_back}" Margin="0,10,0,0"
-                           FontSize="12" Foreground="#808080"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="BtnAccountBack_Click"/>
             </StackPanel>
@@ -161,7 +161,7 @@
                            FontSize="16" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,5"/>
                 <TextBlock x:Name="TxtUsernameSubtitle" Text="{loc:Str label_this_will_be_shown_on_the_leaderboard}"
-                           FontSize="12" Foreground="#B0B0B0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
                 <TextBox x:Name="TxtUsername" FontSize="18" Padding="12,10"
@@ -170,7 +170,7 @@
                          HorizontalAlignment="Stretch"/>
 
                 <TextBlock x:Name="TxtAvailability" FontSize="11" Margin="0,8,0,0"
-                           Foreground="#B0B0B0" Text="{loc:Str label_enter_a_unique_name_3_30_characters}"
+                           Foreground="{DynamicResource TextMutedBrush}" Text="{loc:Str label_enter_a_unique_name_3_30_characters}"
                            HorizontalAlignment="Center"/>
 
                 <Button x:Name="BtnConfirmUsername"
@@ -199,12 +199,12 @@
                            FontSize="18" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,8"/>
                 <TextBlock Text="We've opened your browser to finish sign-in. Complete it there, then come back to this window. It's okay to leave this open."
-                           FontSize="12" Foreground="#B0B0B0" TextWrapping="Wrap"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
                            HorizontalAlignment="Center" Margin="0,0,0,15"
                            TextAlignment="Center"/>
 
                 <TextBlock Text="Your code:"
-                           FontSize="11" Foreground="#808080"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                 <Border BorderBrush="#9333EA" BorderThickness="2" CornerRadius="6"
                         Background="{DynamicResource PanelBgBrush}" Padding="20,12"
@@ -219,11 +219,11 @@
                 <!-- Manual fallback: if Process.Start failed to open the browser, the user
                      can read this URL and open it themselves. Selectable so they can copy. -->
                 <TextBlock Text="Or open this URL manually:"
-                           FontSize="11" Foreground="#808080"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                 <TextBox x:Name="TxtVerificationUrl"
                          IsReadOnly="True"
-                         BorderThickness="0" Background="Transparent" Foreground="#B0B0B0"
+                         BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                          FontSize="12" FontFamily="Consolas, Courier New"
                          HorizontalAlignment="Center" Margin="0,0,0,12"
                          Cursor="IBeam"/>
@@ -242,7 +242,7 @@
                 </StackPanel>
 
                 <TextBlock x:Name="TxtDeviceStatus" Text="Waiting for browser confirmation..."
-                           FontSize="12" Foreground="#B0B0B0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,8"
                            TextAlignment="Center" TextWrapping="Wrap"/>
                 <ProgressBar x:Name="DeviceProgressBar" IsIndeterminate="True"
@@ -250,7 +250,7 @@
                              Foreground="#9333EA" Background="{DynamicResource AccentTintedBgBrush}"/>
 
                 <TextBlock Text="Cancel" Margin="0,0,0,0"
-                           FontSize="12" Foreground="#808080"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="BtnDeviceCodeCancel_Click"/>
             </StackPanel>
@@ -258,7 +258,7 @@
             <!-- Cancel Button -->
             <Button x:Name="BtnCancel" Grid.Row="3" Content="{loc:Str btn_cancel}"
                     Padding="20,8" HorizontalAlignment="Right"
-                    Background="Transparent" Foreground="#808080"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Click="BtnCancel_Click"/>
         </Grid>

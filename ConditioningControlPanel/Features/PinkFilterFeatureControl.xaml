@@ -40,7 +40,7 @@
                             feat:SessionLock.Owned="True"
                             ValueChanged="SliderOpacity_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_filter_opacity_5_50}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
 
                     <Grid Margin="0,14,0,0">
@@ -51,7 +51,7 @@
                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Str setting_filter_color}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                             <TextBlock Text="{loc:Str tooltip_pink_filter_color}"
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                        TextWrapping="Wrap" Margin="0,2,0,0"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -80,7 +80,7 @@
                               DropDownOpened="CmbMonitor_DropDownOpened"
                               SelectionChanged="CmbMonitor_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_effect_monitor}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>

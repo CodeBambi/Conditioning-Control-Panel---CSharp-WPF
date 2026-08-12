@@ -135,7 +135,7 @@
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{loc:Str label_gentle_subliminals_bouncing_text_with_gradual}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,6,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
@@ -179,7 +179,7 @@
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{loc:Str label_non_intrusive_conditioning_with_pink_filter_s}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,6,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
@@ -223,7 +223,7 @@
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{loc:Str label_large_visuals_for_couch_viewing_no_audio_duck}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,6,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
@@ -267,7 +267,7 @@
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{loc:Str label_denial_session_with_heavy_conditioning_and_es}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,6,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
@@ -317,7 +317,7 @@
                                 <TextBlock Text="{loc:Str label_catalogue_card_title}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
                                 <TextBlock Text="{loc:Str label_catalogue_card_sub}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
-                                           Foreground="#909090" HorizontalAlignment="Center" Margin="10,2,10,0"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" Margin="10,2,10,0"/>
                                 <TextBlock x:Name="DropZoneStatus" x:FieldModifier="internal" Text="" FontSize="10"
                                            Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,6,0,0"
                                            Visibility="Collapsed"/>
@@ -361,7 +361,7 @@
                                         <Button x:Name="BtnExportSession" x:FieldModifier="internal" Content="{loc:Str btn_export}"
                                                 Click="BtnExportSession_Click"
                                                 IsEnabled="False"
-                                                Background="#2A2A4A" Foreground="#909090"
+                                                Background="#2A2A4A" Foreground="{DynamicResource TextMutedBrush}"
                                                 BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
                                                 Padding="12,6" FontSize="11" Cursor="Hand">
                                             <Button.Style>
@@ -420,7 +420,7 @@
                         <Button x:Name="HelpBtnSessionDetails" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="SessionDetails"/>
                     </Grid>
                     <TextBlock x:Name="TxtDetailSubtitle" x:FieldModifier="internal" Text="{loc:Str label_click_on_a_preset_or_session_to_see_details}"
-                               Foreground="#909090" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     <!-- Catalogue share status badge (preset view) -->
                     <StackPanel x:Name="PresetShareStatusHost" x:FieldModifier="internal" Orientation="Horizontal" Margin="0,6,0,0"/>
                 </StackPanel>
@@ -430,22 +430,22 @@
                     <StackPanel x:Name="DetailContentPanel">
                         <!-- Preset details will show here -->
                         <helpers:EmojiTextBlock x:Name="TxtDetailFlashLabel" x:FieldModifier="internal" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailFlash" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailFlash" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
     
                         <helpers:EmojiTextBlock x:Name="TxtDetailVideoLabel" x:FieldModifier="internal" Text="{loc:Str label_mandatory_videos}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailVideo" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailVideo" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
     
                         <helpers:EmojiTextBlock x:Name="TxtDetailSubLabel" x:FieldModifier="internal" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailSubliminal" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailSubliminal" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
     
                         <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailAudio" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailAudio" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
     
                         <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailOverlays" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailOverlays" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
     
                         <helpers:EmojiTextBlock Text="{loc:Str label_advanced}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailAdvanced" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
+                        <TextBlock x:Name="TxtDetailAdvanced" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,12"/>
                     </StackPanel>
                 </ScrollViewer>
                 
@@ -460,12 +460,12 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_duration}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str label_duration}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" HorizontalAlignment="Center"/>
                                     <TextBlock x:Name="TxtSessionDuration" x:FieldModifier="internal" Text="{loc:Str label_30_minutes}" Foreground="White" 
                                                FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                    <helpers:EmojiTextBlock Text="{loc:Str label_reward}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_reward}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" HorizontalAlignment="Center"/>
                                     <TextBlock x:Name="TxtSessionXP" x:FieldModifier="internal" Text="{loc:Str label_50_xp}" Foreground="#90EE90" 
                                                FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                 </StackPanel>
@@ -496,13 +496,13 @@
                                               Unchecked="ChkCornerGifEnabled_Changed"/>
                                 </Grid>
                                 <TextBlock x:Name="TxtCornerGifDesc" x:FieldModifier="internal" Text="{loc:Str label_place_a_subtle_gif_in_a_screen_corner}" 
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 
                                 <StackPanel x:Name="CornerGifSettings" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,8,0,0">
                                     <Button x:Name="BtnSelectCornerGif" x:FieldModifier="internal" Content="{loc:Str btn_select_gif}" 
                                             Style="{StaticResource OutlineButton}" Padding="8,6" FontSize="10"
                                             Margin="0,0,0,8" Click="BtnSelectCornerGif_Click"/>
-                                    <TextBlock Text="{loc:Str label_position}" Foreground="#909090" FontSize="10" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{loc:Str label_position}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,4"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -523,7 +523,7 @@
                                     </Grid>
     
                                     <!-- Size Slider -->
-                                    <TextBlock Text="{loc:Str label_size}" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
+                                    <TextBlock Text="{loc:Str label_size}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,4"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -537,7 +537,7 @@
                                     </Grid>
     
                                     <!-- Opacity Slider -->
-                                    <TextBlock Text="{loc:Str label_opacity}" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
+                                    <TextBlock Text="{loc:Str label_opacity}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,4"/>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -578,22 +578,22 @@
                             </Border>
                             
                             <helpers:EmojiTextBlock x:Name="TxtSessionFlashLabel" x:FieldModifier="internal" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionFlash" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtSessionFlash" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
     
                             <helpers:EmojiTextBlock x:Name="TxtSessionSubLabel" x:FieldModifier="internal" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionSubliminal" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock x:Name="TxtSessionSubliminal" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
                             
                             <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionAudio" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock x:Name="TxtSessionAudio" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
                             
                             <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionOverlays" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtSessionOverlays" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                             
                             <helpers:EmojiTextBlock Text="{loc:Str label_extras}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionExtras" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtSessionExtras" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                             
                             <TextBlock Text="{loc:Str label_timeline}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionTimeline" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtSessionTimeline" x:FieldModifier="internal" Text="—" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

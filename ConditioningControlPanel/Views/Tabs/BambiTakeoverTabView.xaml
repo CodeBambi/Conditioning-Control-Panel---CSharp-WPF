@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -37,7 +38,8 @@
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" VerticalAlignment="Top">
                         <Image x:Name="ImgBambiTakeoverDesc" x:FieldModifier="internal"
                                Source="pack://application:,,,/Resources/features/bambi takeover.png"
-                               Stretch="UniformToFill"/>
+                               Stretch="UniformToFill"
+                               hover:HoverPop.IsEnabled="True"/>
                     </Border>
                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
@@ -66,7 +68,7 @@
             <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
             <StackPanel x:Name="AutonomyLocked" x:FieldModifier="internal" Visibility="Collapsed">
                 <Grid>
-                    <helpers:EmojiTextBlock x:Name="TxtTakeoverLocked" x:FieldModifier="internal" Text="{loc:Str label_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
+                    <helpers:EmojiTextBlock x:Name="TxtTakeoverLocked" x:FieldModifier="internal" Text="{loc:Str label_takeover}" Foreground="{DynamicResource TextDimBrush}" FontWeight="Bold" FontSize="13"/>
                     <helpers:EmojiTextBlock x:Name="TxtAutonomyLockStatus" x:FieldModifier="internal" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
                 </Grid>
                 <TextBlock x:Name="TxtAutonomyLockMessage" x:FieldModifier="internal" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
@@ -98,7 +100,7 @@
                                 <TextBlock x:Name="TxtTakeoverStatus" x:FieldModifier="internal" Text="○ DORMANT"
                                            Foreground="#8888A0" FontSize="18" FontWeight="Bold"/>
                                 <TextBlock x:Name="TxtTakeoverStatusSub" x:FieldModifier="internal" Text="She's not watching right now."
-                                           Foreground="#9090A8" FontSize="12" Margin="0,2,0,12"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,12"/>
                                 <Button x:Name="BtnAutonomyStartStop" x:FieldModifier="internal" Content="{loc:Str btn_start_2}"
                                         Background="#2A1A3A" Foreground="#90EE90" FontWeight="Bold" FontSize="16" Padding="24,12"
                                         HorizontalAlignment="Left" Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_takeover}"/>
@@ -158,19 +160,19 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <StackPanel Grid.Row="0" Grid.Column="0" ToolTip="{loc:Str tooltip_autonomy_interval}">
-                                    <Grid><TextBlock Text="{loc:Str setting_interval}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyInterval" x:FieldModifier="internal" Text="{loc:Str label_60s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                    <Grid><TextBlock Text="{loc:Str setting_interval}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/><TextBlock x:Name="TxtAutonomyInterval" x:FieldModifier="internal" Text="{loc:Str label_60s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                     <Slider x:Name="SliderAutonomyInterval" x:FieldModifier="internal" Minimum="30" Maximum="300" Value="60" Height="22" ValueChanged="SliderAutonomyInterval_Changed"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="0" Grid.Column="2" ToolTip="{loc:Str tooltip_autonomy_cooldown}">
-                                    <Grid><TextBlock Text="{loc:Str label_cooldown}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyCooldown" x:FieldModifier="internal" Text="{loc:Str label_30s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                    <Grid><TextBlock Text="{loc:Str label_cooldown}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/><TextBlock x:Name="TxtAutonomyCooldown" x:FieldModifier="internal" Text="{loc:Str label_30s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                     <Slider x:Name="SliderAutonomyCooldown" x:FieldModifier="internal" Minimum="10" Maximum="300" Value="30" Height="22" ValueChanged="SliderAutonomyCooldown_Changed"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="0" ToolTip="{loc:Str tooltip_autonomy_intensity}">
-                                    <Grid><TextBlock Text="{loc:Str setting_intensity}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyIntensity" x:FieldModifier="internal" Text="5" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                    <Grid><TextBlock Text="{loc:Str setting_intensity}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/><TextBlock x:Name="TxtAutonomyIntensity" x:FieldModifier="internal" Text="5" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                     <Slider x:Name="SliderAutonomyIntensity" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="5" Height="22" ValueChanged="SliderAutonomyIntensity_Changed"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="2" ToolTip="{loc:Str tooltip_autonomy_announce}">
-                                    <Grid><TextBlock Text="{loc:Str label_announce}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyAnnounce" x:FieldModifier="internal" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                    <Grid><TextBlock Text="{loc:Str label_announce}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/><TextBlock x:Name="TxtAutonomyAnnounce" x:FieldModifier="internal" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                     <Slider x:Name="SliderAutonomyAnnounce" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="50" Height="22" ValueChanged="SliderAutonomyAnnounce_Changed"/>
                                 </StackPanel>
                             </Grid>
@@ -191,9 +193,9 @@
                                     <ColumnDefinition Width="16"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_idle}"><TextBlock Text="{loc:Str label_idle}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyIdle" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
-                                <Grid Grid.Column="2" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_random}"><TextBlock Text="{loc:Str label_random_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyRandom" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
-                                <Grid Grid.Column="4" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_time_aware}"><TextBlock Text="{loc:Str label_time_aware}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyTimeAware" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
+                                <Grid Grid.Column="0" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_idle}"><TextBlock Text="{loc:Str label_idle}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyIdle" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
+                                <Grid Grid.Column="2" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_random}"><TextBlock Text="{loc:Str label_random_2}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyRandom" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
+                                <Grid Grid.Column="4" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_time_aware}"><TextBlock Text="{loc:Str label_time_aware}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyTimeAware" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -223,21 +225,21 @@
                                 </Grid.ColumnDefinitions>
                                 <!-- Basic column -->
                                 <StackPanel Grid.Column="0">
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_flash}"><TextBlock x:Name="TxtAutoFlash" x:FieldModifier="internal" Text="{loc:Str tab_flashes}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyFlash" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_video}"><TextBlock x:Name="TxtAutoVideo" x:FieldModifier="internal" Text="{loc:Str tab_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"><TextBlock Text="{loc:Str label_web_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWebVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_protect_browser_video}"><TextBlock Text="{loc:Str label_protect_browser_video}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkProtectBrowserVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_subliminal}"><TextBlock x:Name="TxtAutoSubliminal" x:FieldModifier="internal" Text="{loc:Str tab_subliminals}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomySubliminal" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_comment}"><TextBlock Text="{loc:Str label_comments}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyComment" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_flash}"><TextBlock x:Name="TxtAutoFlash" x:FieldModifier="internal" Text="{loc:Str tab_flashes}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyFlash" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_video}"><TextBlock x:Name="TxtAutoVideo" x:FieldModifier="internal" Text="{loc:Str tab_videos}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"><TextBlock Text="{loc:Str label_web_videos}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWebVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_protect_browser_video}"><TextBlock Text="{loc:Str label_protect_browser_video}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkProtectBrowserVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_subliminal}"><TextBlock x:Name="TxtAutoSubliminal" x:FieldModifier="internal" Text="{loc:Str tab_subliminals}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomySubliminal" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_comment}"><TextBlock Text="{loc:Str label_comments}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyComment" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                 </StackPanel>
                                 <!-- Advanced column -->
                                 <StackPanel Grid.Column="2">
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bubbles}"><TextBlock x:Name="TxtAutoBubbles" x:FieldModifier="internal" Text="{loc:Str label_bubbles}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBubbles" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_pink_filter}"><TextBlock x:Name="TxtAutoPinkFilter" x:FieldModifier="internal" Text="{loc:Str label_pink_filter_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyPinkFilter" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_lock_cards}"><TextBlock x:Name="TxtAutoLockCards" x:FieldModifier="internal" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bouncing_text}"><TextBlock x:Name="TxtAutoBouncing" x:FieldModifier="internal" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_mind_wipe}"><TextBlock x:Name="TxtAutoMindwipe" x:FieldModifier="internal" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_wallpaper}"><TextBlock Text="{loc:Str label_autonomy_wallpaper}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWallpaper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bubbles}"><TextBlock x:Name="TxtAutoBubbles" x:FieldModifier="internal" Text="{loc:Str label_bubbles}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBubbles" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_pink_filter}"><TextBlock x:Name="TxtAutoPinkFilter" x:FieldModifier="internal" Text="{loc:Str label_pink_filter_2}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyPinkFilter" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_lock_cards}"><TextBlock x:Name="TxtAutoLockCards" x:FieldModifier="internal" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bouncing_text}"><TextBlock x:Name="TxtAutoBouncing" x:FieldModifier="internal" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_mind_wipe}"><TextBlock x:Name="TxtAutoMindwipe" x:FieldModifier="internal" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_wallpaper}"><TextBlock Text="{loc:Str label_autonomy_wallpaper}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWallpaper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                 </StackPanel>
                             </Grid>
                             <!-- Wallpaper source folder — where she pulls desktop wallpapers from (blank = assets/wallpapers) -->
@@ -261,13 +263,13 @@
                                  pick how long the pulse lasts. -->
                             <Grid Margin="0,10,0,0" ToolTip="{loc:Str tooltip_wallpaper_keep}">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_wallpaper_keep}" FontSize="12" Foreground="#CCC"/>
-                                    <TextBlock Text="{loc:Str desc_wallpaper_keep}" FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text="{loc:Str label_wallpaper_keep}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="{loc:Str desc_wallpaper_keep}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkWallpaperKeep" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkWallpaperKeep_Changed" Unchecked="ChkWallpaperKeep_Changed"/>
                             </Grid>
                             <StackPanel x:Name="PanelWallpaperDuration" x:FieldModifier="internal" Margin="0,8,0,0" ToolTip="{loc:Str tooltip_wallpaper_duration}">
-                                <Grid><TextBlock Text="{loc:Str label_wallpaper_duration}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtWallpaperDuration" x:FieldModifier="internal" Text="30s" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                <Grid><TextBlock Text="{loc:Str label_wallpaper_duration}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/><TextBlock x:Name="TxtWallpaperDuration" x:FieldModifier="internal" Text="30s" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                 <Slider x:Name="SliderWallpaperDuration" x:FieldModifier="internal" Minimum="10" Maximum="600" Value="30" Height="22" ValueChanged="SliderWallpaperDuration_Changed"/>
                             </StackPanel>
                         </StackPanel>
@@ -284,16 +286,16 @@
                                  The on-demand mantra capability + all mic controls live in "She's Listening". -->
                             <Grid Margin="0,2" ToolTip="During Takeover she'll occasionally ask you to repeat a phrase, listen for it offline, then give a custom response. First time on asks for mic consent. (On-demand mantras + the mic live in She's Listening.)">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="🎤 Surprise me with mantras" FontSize="12" Foreground="#CCC"/>
-                                    <TextBlock x:Name="TxtAutonomyVoiceHint" x:FieldModifier="internal" Text="During Takeover she'll now and then ask you to repeat a phrase. Suppressed while you're driving the mic yourself." FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text="🎤 Surprise me with mantras" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock x:Name="TxtAutonomyVoiceHint" x:FieldModifier="internal" Text="During Takeover she'll now and then ask you to repeat a phrase. Suppressed while you're driving the mic yourself." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkAutonomyVoice" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAutonomyVoice_Changed" Unchecked="ChkAutonomyVoice_Changed"/>
                             </Grid>
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
                             <Grid Margin="0,2" ToolTip="When on, Takeover re-arms itself the next time you launch the app. Off by default — Takeover always starts off.">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="↻ Resume Takeover on startup" FontSize="12" Foreground="#CCC"/>
-                                    <TextBlock Text="Off by default — Takeover starts off every launch." FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text="↻ Resume Takeover on startup" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="Off by default — Takeover starts off every launch." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkAutonomyResumeOnStartup" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAutonomyResume_Changed" Unchecked="ChkAutonomyResume_Changed"/>
                             </Grid>
@@ -301,8 +303,8 @@
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
                             <Grid Margin="0,2" ToolTip="Shows a thin pink bar under the avatar that drains as the next surprise Takeover approaches, so you can see it coming.">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="⏳ Show next-takeover countdown bar" FontSize="12" Foreground="#CCC"/>
-                                    <TextBlock Text="A pink bar under the avatar that empties before the next random action." FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text="⏳ Show next-takeover countdown bar" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="A pink bar under the avatar that empties before the next random action." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkShowTakeoverCountdown" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShowTakeoverCountdown_Changed" Unchecked="ChkShowTakeoverCountdown_Changed"/>
                             </Grid>
@@ -313,8 +315,8 @@
                                  Self-contained here (no Takeover twin), so the handlers live in this tab's code-behind. -->
                             <Grid Margin="0,2" ToolTip="{loc:Str tooltip_mantra_chant}">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_mantra_chant}" FontSize="12" Foreground="#CCC"/>
-                                    <TextBlock x:Name="TxtMantraChantHint" Text="{loc:Str desc_mantra_chant}" FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text="{loc:Str label_mantra_chant}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <TextBlock x:Name="TxtMantraChantHint" Text="{loc:Str desc_mantra_chant}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkMantraChant" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkMantraChant_Changed" Unchecked="ChkMantraChant_Changed"/>
                             </Grid>
@@ -324,7 +326,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_volume}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_volume}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                 <Slider x:Name="SldMantraChantVolume" Grid.Column="1" Width="160" VerticalAlignment="Center"
                                         Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"
                                         ValueChanged="SldMantraChantVolume_Changed"/>
@@ -337,7 +339,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_gap}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_gap}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                 <Slider x:Name="SldMantraChantGap" Grid.Column="1" Width="160" VerticalAlignment="Center"
                                         Minimum="0" Maximum="60" SmallChange="1" LargeChange="5" TickFrequency="5"
                                         ValueChanged="SldMantraChantGap_Changed"/>
@@ -385,7 +387,7 @@
                                 <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Test triggers" Foreground="#9090A8" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="0" Text="Test triggers" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center"/>
                             <Button Grid.Column="1" Content="{loc:Str btn_test}" Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="13"
                                     Padding="14,8" Click="BtnTestAutonomy_Click" ToolTip="{loc:Str tooltip_test_action}"/>
                             <!-- Dev/test affordance for the new offline "repeat after me" voice action (pass-2 UI will relocate this). -->
@@ -413,7 +415,7 @@
                         <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                    FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                                   Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                         <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                 Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                             <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>

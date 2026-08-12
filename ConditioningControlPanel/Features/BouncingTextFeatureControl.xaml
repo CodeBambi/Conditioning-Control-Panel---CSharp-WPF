@@ -34,7 +34,7 @@
                     <Slider x:Name="SliderSpeed" Minimum="1" Maximum="10" Value="5" feat:SessionLock.Owned="True"
                             ValueChanged="SliderSpeed_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_bounce_speed_1_slow_10_fast}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -51,7 +51,7 @@
                     <Slider x:Name="SliderSize" Minimum="50" Maximum="300" Value="100" feat:SessionLock.Owned="True"
                             ValueChanged="SliderSize_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_text_size_50_small_100_normal_300_huge}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -68,7 +68,7 @@
                     <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
                             ValueChanged="SliderOpacity_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_bouncing_text_opacity_10_ghostly_100_solid}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -87,7 +87,7 @@
                         <ComboBoxItem Content="{loc:Str option_color_rainbow}"/>
                     </ComboBox>
                     <TextBlock Text="{loc:Str tooltip_random_rerolls_every_bounce_fixed_keeps_one_c}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
 
                     <Grid x:Name="PanelFixedColor" Margin="0,10,0,0" Visibility="Collapsed">
@@ -118,7 +118,7 @@
                     <TextBlock Text="{loc:Str label_effects}" Foreground="White"
                                FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
                     <TextBlock Text="{loc:Str tooltip_bouncing_text_effects_combine_freely}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <UniformGrid Columns="2">
                         <Grid Margin="0,4,10,4">

@@ -142,10 +142,10 @@
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"
                                 ToolTip="{loc:Str tooltip_mod_creator_tutorial}"/>
                         <Button Content="{loc:Str btn_text}" Click="BtnMinimize_Click"
-                                Background="Transparent" Foreground="#B0B0B0" FontSize="14"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"/>
                         <Button Content="X" Click="BtnClose_Click"
-                                Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"/>
                     </StackPanel>
                 </Grid>
@@ -175,7 +175,7 @@
             <!-- Bottom Bar -->
             <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,12,12" Padding="15,10">
                 <Grid>
-                    <TextBlock x:Name="TxtStatus" Foreground="#808080" FontSize="12"
+                    <TextBlock x:Name="TxtStatus" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                VerticalAlignment="Center" HorizontalAlignment="Left"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="{loc:Str btn_load_ccpmod}" Style="{StaticResource SecondaryButton}"

@@ -8,6 +8,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -88,6 +89,15 @@ namespace ConditioningControlPanel
         /// drawer sliding open underneath the pointer. Doubles as the "already wired" set.
         /// </summary>
         private readonly Dictionary<FrameworkElement, FrameworkElement> _achievementTiltTargets = new();
+
+        /// <summary>
+        /// Hover source (the card) → the badge ART itself, which gets the 1.06 "hover pop". A third
+        /// element again: the tilt lands on the badge HOST so the foil catches the light, and the
+        /// pop lands on the Image inside it, so the two compose instead of overwriting one
+        /// another's transform. The card's Chrome border clips, so the zoom stays inside the
+        /// rounded frame.
+        /// </summary>
+        private readonly Dictionary<FrameworkElement, FrameworkElement> _achievementPopTargets = new();
 
         /// <summary>The single gate for this file's one ambient loop.</summary>
         private bool TabFxAmbientAllowed =>
@@ -582,8 +592,13 @@ namespace ConditioningControlPanel
         /// their badge-art host: the card must stay still so the drawer can slide open under a
         /// stationary pointer.
         /// </param>
+        /// <param name="popTarget">
+        /// The badge art that gets the hover pop, when there is one. Kept separate from
+        /// <paramref name="tiltTarget"/> so the pop and the tilt never share a transform.
+        /// </param>
         internal void PrepareAchievementTileFx(FrameworkElement tile, bool unlocked,
-                                               FrameworkElement? tiltTarget = null)
+                                               FrameworkElement? tiltTarget = null,
+                                               FrameworkElement? popTarget = null)
         {
             if (tile == null) return;
             try
@@ -593,6 +608,7 @@ namespace ConditioningControlPanel
                 var target = tiltTarget ?? tile;
                 EnsureCardTransforms(target, withRotate: true);
                 _achievementTiltTargets[tile] = target;
+                if (popTarget != null) _achievementPopTargets[tile] = popTarget;
                 tile.MouseEnter += AchievementTile_MouseEnter;
                 tile.MouseLeave += AchievementTile_MouseLeave;
             }
@@ -629,6 +645,7 @@ namespace ConditioningControlPanel
                 if (tile.ActualWidth > 0) sign = p.X < tile.ActualWidth / 2 ? -1 : 1;
                 MotionFx.HoverLift(target, true);
                 TiltAchievementTile(target, sign * AchievementTiltDegrees, true);
+                if (_achievementPopTargets.TryGetValue(tile, out var art)) HoverPop.Enter(art);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseEnter: {E}", ex.Message); }
         }
@@ -641,6 +658,7 @@ namespace ConditioningControlPanel
                 var target = TiltTargetFor(tile);
                 MotionFx.HoverLift(target, false);
                 TiltAchievementTile(target, 0, true);
+                if (_achievementPopTargets.TryGetValue(tile, out var art)) HoverPop.Leave(art);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseLeave: {E}", ex.Message); }
         }

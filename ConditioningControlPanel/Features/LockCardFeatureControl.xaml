@@ -40,7 +40,7 @@
                     <Slider x:Name="SliderFreq" Minimum="1" Maximum="10" Value="2" feat:SessionLock.Owned="True"
                             ValueChanged="SliderFreq_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_lock_card_frequency_1_10_per_hour}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
@@ -58,7 +58,7 @@
                     <Slider x:Name="SliderRepeats" Minimum="1" Maximum="10" Value="3" feat:SessionLock.Owned="True"
                             ValueChanged="SliderRepeats_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>

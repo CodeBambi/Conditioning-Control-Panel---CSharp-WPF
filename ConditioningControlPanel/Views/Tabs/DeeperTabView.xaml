@@ -492,15 +492,14 @@
                                 <ComboBox x:Name="CmbDeeperSort" x:FieldModifier="internal"
                                           SelectionChanged="DeeperSort_SelectionChanged"
                                           ToolTip="{loc:Str deeper_hub_tip_sort}"
-                                          Background="White" Foreground="Black"
                                           MinWidth="100" Padding="6,4">
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_recent}"
-                                                  Tag="recent" Foreground="Black" Background="White"
+                                                  Tag="recent"
                                                   IsSelected="True"/>
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_name}"
-                                                  Tag="name" Foreground="Black" Background="White"/>
+                                                  Tag="name"/>
                                     <ComboBoxItem Content="{loc:Str deeper_hub_sort_creator}"
-                                                  Tag="creator" Foreground="Black" Background="White"/>
+                                                  Tag="creator"/>
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
@@ -588,7 +587,7 @@
                                      Phase 2; this was the fifth copy of the same bool. -->
                             </Grid>
                             <TextBlock Text="Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                        TextWrapping="Wrap" Margin="0,0,0,10"/>
     
                             <!-- Two-column layout: left = device/monitor pickers; right = consent + calibration -->
@@ -620,7 +619,7 @@
                                             </StackPanel>
                                             <TextBlock x:Name="TxtWebcamStatusChipDeeper" x:FieldModifier="internal"
                                                        Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
-                                                       FontFamily="Consolas" FontSize="10" Margin="16,2,0,0"/>
+                                                       FontFamily="Consolas" FontSize="11" Margin="16,2,0,0"/>
                                             <Button Content="{loc:Str set2_configure_in_settings}"
                                                     HorizontalAlignment="Left" Margin="16,6,0,0"
                                                     Padding="8,3" FontSize="10"
@@ -659,7 +658,7 @@
                                     <TextBlock Text="{loc:Str blink_trainer_calibration_label}" Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
                                     <TextBlock x:Name="DeeperWebcamCalibrationStatus" x:FieldModifier="internal"
                                                Text="{loc:Str blink_trainer_calibration_none}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                TextWrapping="Wrap" Margin="0,0,0,6"/>
                                     <WrapPanel Orientation="Horizontal" ItemHeight="26">
                                         <Button Content="{loc:Str blink_trainer_calibration_btn}"

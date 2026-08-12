@@ -41,7 +41,7 @@
                 <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
                         Click="BtnBgColor_Click" ToolTip="{loc:Str tooltip_click_to_change}"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str label_transparent}" Foreground="#808080" FontSize="11" 
+                    <TextBlock Text="{loc:Str label_transparent}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <CheckBox x:Name="ChkBgTransparent" Style="{StaticResource ToggleStyle}"/>
                 </StackPanel>
@@ -60,7 +60,7 @@
                         Click="BtnTextColor_Click" ToolTip="{loc:Str tooltip_click_to_change}"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center"
                             Visibility="Collapsed">
-                    <TextBlock Text="{loc:Str label_transparent}" Foreground="#808080" FontSize="11" 
+                    <TextBlock Text="{loc:Str label_transparent}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <CheckBox x:Name="ChkTextTransparent" Style="{StaticResource ToggleStyle}"/>
                 </StackPanel>
@@ -88,7 +88,7 @@
                     <TextBlock Text="{loc:Str label_steal_keyboard_focus}" Foreground="{StaticResource TextLightBrush}"
                                FontSize="14"/>
                     <TextBlock Text="{loc:Str label_forces_attention_by_stealing_keyboard_focus_w}"
-                               Foreground="#808080" FontSize="10" Margin="0,2,0,0"/>
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
                 </StackPanel>
                 <CheckBox x:Name="ChkStealsFocus" Grid.Column="1" Style="{StaticResource ToggleStyle}"
                           VerticalAlignment="Center"/>

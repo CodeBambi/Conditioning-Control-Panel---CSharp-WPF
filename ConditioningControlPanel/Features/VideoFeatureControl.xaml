@@ -40,7 +40,7 @@
                 <Slider x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2" feat:SessionLock.Owned="True"
                         ValueChanged="SliderPerHour_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_videos_per_hour}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -96,7 +96,7 @@
                         ValueChanged="SliderVideoMaxDur_Changed" Margin="0,0,0,4"/>
 
                 <TextBlock Text="Filter videos by length. 0 = no limit."
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -178,7 +178,7 @@
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="Stare to click" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                         <TextBlock Text="Look at a target for ~1s instead of clicking. Same hit, same reward."
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                     <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
