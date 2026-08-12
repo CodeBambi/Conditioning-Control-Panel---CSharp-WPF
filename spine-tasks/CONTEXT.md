@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-057
+**Next Task ID:** SP-059
 
 ---
 
@@ -89,6 +89,15 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 ### Wave 14 (next)
 
 **Next claimable work:** SP-054 = **Graded Intake web-core host** (P1, size L — gets a wave to itself per the wave-12 land consult): the window class (ChaosWebViewHost parity) + the full bridge vocabulary (6 out / 12 in; ping/payload-state authoring obligation) + 3 stores + profiler + session drafting sink + loom-save against the shared b4 store; degraded-delivery contract verbatim in the row; privacy boundaries as listed. Next unused task ID: SP-054.
+
+### Wave 16 (staged 2026-08-12 — ready v6.7 rows before the big-surface decomposition)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-057-profile-isolation-seam | Row (P1, standing hazard): real data-root override honored by product path resolution (harness-only) + m2test declared-fixture discipline; proof = real profile byte-identical after a headed run | Authored 2026-08-12 | — |
+| SP-058-graded-intake-v67-delta | Row (P1): v6.6.3 → v6.7.4 intake delta — enumerate from the tree, obligation table, serve accents/ai payload deltas, consume SP-055's `IsAssetActive` (no second definition), pin `TopMarksPercent = 90.0` with its verdict derivation, state the new baseline | Authored 2026-08-12 | SP-057 |
+
+**Wave-16 decomposition consult (solo, Opus 5 — APPROVED with three corrections):** (1) run the ready rows before decomposing the five v6.7 surfaces; (2) **serial lane, not two parallel lanes** — SP-057 and SP-058 both touch `Program.cs`, and the board's own T-9/T-12/`human_base_diverged` history says overlapping scope at land costs more than the parallelism buys; (3) prefer the **product-side data-root override over backup/restore** — the procedural rule is the mitigation that already failed at SP-052. **Wave 17 (planned, not authored):** lane-1 = Chaos tunnel backdrop (standalone M; NOT bundled with FYP — opaque-below-Topmost and transparent-click-through-above are opposite ends of the layering contract), lane-2 = **Her Room/Awareness divergence audit as zero-product-code archaeology** (SP-050 precedent: per-element ADOPT/KEEP/MERGE/BLOCKED-ON-OWNER table + sizing verdicts; adopting upstream's companion redesign over the landed c1–c7 is an OWNER decree, so a product packet now would invent scope). Goon / FYP / Trainer Card / Haptics v2 stay undecomposed until a sizing pass follows. Next unused task ID: SP-059.
 
 ### Wave 15 (staged 2026-08-11 — first work from the v6.7.4 upstream sync)
 

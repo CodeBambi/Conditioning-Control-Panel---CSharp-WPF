@@ -1,0 +1,34 @@
+## STATUS: SP-057 — Profile isolation seam (APPDATA trap + m2test fixture discipline)
+**Current Step:** not started
+**Last Updated:** 2026-08-12 (authored, wave-16 lane-1)
+**Blockers:** none
+
+### Step 1: consumer census + seam design + pre-approach consult
+- [ ] Update STATUS.md before starting work
+- [ ] Census the real `DefaultSettingsPath()`/`SpecialFolder` consumer set (file:line table, bypasses named)
+- [ ] Prove the APPDATA trap as a fact in this repo (Windows + Linux behavior recorded)
+- [ ] Design the override (name, absolute-path rule, typed loud failure, choke-point entry)
+- [ ] Design the m2test declared-fixture discipline
+- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+
+### Step 2: implement the seam + fixture discipline
+- [ ] Data-root override at the choke point; defaults unchanged both platforms
+- [ ] Typed loud failure for unusable/relative override
+- [ ] m2test clones the declared fixture, never the live doc
+- [ ] Tests: per-consumer honoring, typed failure, fixture sourcing, bypass guard
+
+### Step 3: real-profile byte-identity evidence (headed)
+- [ ] Pre-run manifest of the real user data directory
+- [ ] Headed run under the override on DISPLAY3 (DTRH host + m2test)
+- [ ] Post-run manifest + diff: byte-identical real profile, override root populated
+- [ ] Linux/WSLg disposition recorded honestly
+- [ ] Transcripts (no negative case against the live profile)
+
+### Step 4: record + pre-completion consult
+- [ ] record.md (census, trap proof, design + rejected alternatives, manifests, consults, review presence)
+- [ ] STATUS.md accurate before .DONE
+
+### Step 5: Testing & Verification
+- [ ] Contract testCommand passes (verify.mjs exit 0; build 0W/0E; ≥833 unit + ≥33 headless, TRX)
+- [ ] git diff --check clean
+- [ ] git status --short shows only File Scope paths
