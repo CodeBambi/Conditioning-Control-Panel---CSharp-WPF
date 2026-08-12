@@ -1,5 +1,5 @@
 ## STATUS: SP-063 — Raise the injected test timeout budgets (owner decree)
-**Current Step:** Step 3 — ten consecutive greens, one genuinely cold (IN PROGRESS)
+**Current Step:** Step 4 — record + pre-completion consult (IN PROGRESS)
 **Last Updated:** 2026-08-12 (orchestrator, re-authored — wave 20, single lane)
 **Blockers:** none
 
@@ -16,13 +16,13 @@
 - [x] Guard RED captured (injected unpinned budget), then removed
 - [x] No stale pins (SP-062 touched `AiProviderLab.cs`)
 
-### Step 3: ten consecutive greens, one genuinely cold — IN PROGRESS
-- [ ] 10 consecutive full-suite runs, zero reds, zero unexpected skips, TRX attached, output redirected
-- [ ] ≥1 fresh-checkout first-ever build; per-run table incl. skipped column
-- [ ] `Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` green in EVERY run incl. cold
-- [ ] Suite wall-clock not materially regressed
+### Step 3: ten consecutive greens, one genuinely cold — COMPLETE
+- [x] 10 consecutive full-suite runs, zero reds, zero unexpected skips, TRX attached, output redirected
+- [x] ≥1 fresh-checkout first-ever build; per-run table incl. skipped column
+- [x] `Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` green in EVERY run incl. cold
+- [x] Suite wall-clock not materially regressed
 
-### Step 4: record + pre-completion consult — NOT STARTED
+### Step 4: record + pre-completion consult — IN PROGRESS
 - [ ] record.md complete (decree verbatim, verified sweep, constant justification, guard RED, run table, intended filings)
 - [ ] Honesty cell: a bigger number lengthens the fuse, it does not remove the time dependence
 - [ ] Pre-completion solo consult (verdict + ACTUAL model)

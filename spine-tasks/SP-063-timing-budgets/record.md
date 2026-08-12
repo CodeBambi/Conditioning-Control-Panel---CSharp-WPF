@@ -92,5 +92,133 @@ the per-run wall-clock column in Step 3.
 
 - Step 1 plan review: **ABSENT** — `spine_review_step(step=1, type=plan)` returned `skipped: true`, `spawnFailed: false` ("Nested reviewer spawn blocked inside pi worker session … the batch engine runs reviews after worker success (SP-195)"). Artifact: `.reviews/1-20260812T224924.md`. Not a spawn failure, so no fail-closed exit; engine review runs after `.DONE`.
 - Step 2 plan review: **ABSENT** — same skip (`SP-195`), `spawnFailed: false`. Artifact: `.reviews/2-20260812T225427.md`.
+- Step 3 plan review: **ABSENT** — same skip (`SP-195`), `spawnFailed: false`. Artifact: `.reviews/3-20260812T231042.md`.
 
-<!-- Step 2/3/4 content appended below -->
+## Step 2 — what was applied
+
+**Population 1 → `TestWait.InjectedBudget` (60 s), referenced from three sites:**
+`LoopbackOllamaProviderTests.cs` shared `Provider(lab)` factory (request + probe),
+`AiProviderLabIntegrationTests.cs` shared `Harness` factory (request + probe),
+`AiMemoryPromptAssemblyTests.cs` wire-payload proof (was 10 s).
+
+**Population 2 → short, marked, pinned (two sites):**
+- `LoopbackOllamaProviderTests.cs` `Timeout_Classifier_Bounded_ExternalTokenNotCancelled`
+  now builds its OWN options block (it previously rode the shared factory — prior-sweep
+  correction): `RequestTimeout = TimeSpan.FromMilliseconds(800), // wallclock-allow: the
+  budget's elapsing IS the subject …`. Retry defaults to `Off` (as the shared factory had
+  it); the `elapsed < 800 + 2500` boundedness assertion is unchanged.
+- `AiProviderLabIntegrationTests.cs` `Harness` gains `bool timeoutSubject = false`; when
+  set, `options = options with { RequestTimeout = TimeSpan.FromMilliseconds(800) }; //
+  wallclock-allow: …` — the record-`with` keeps the guard-token-matchable option-
+  assignment shape (advisor sharpening (a)); **ProbeTimeout stays at the constant** (the
+  probe is not the subject; a cold probe timeout would flip the capability state and
+  every pipeline expectation with it).
+
+**Population 3 → deleted (three sites):** `RemoteHost_RejectedPreSocket` (request),
+`Probe_LoopbackDown` (probe), `Probe_RemoteHost_ZeroSocket` (probe). Product defaults
+(5 min request / 2 s probe) are never reached on these instant paths — verified in
+product code (`LoopbackOllamaProvider.cs:232` vs `:237`: probe-timeout and
+connection-refused both classify `HostUnreachable`).
+
+**Guard (framing f — one token, two pins, no new fact):** `TestTimingGuardTests.
+ForbiddenTokens` gains `"Timeout = TimeSpan."` (matches `RequestTimeout =`,
+`ProbeTimeout =`, any future `*Timeout = TimeSpan.` initializer); `Pins` gains the two
+population-2 entries above (path + exact trimmed code + count 1 each). Deliberately NOT
+tokenized: method-argument bounds (`FlushAsync`/`PanicAsync`), simulated-clock config,
+and the constant reference itself (honesty cell).
+
+**Guard RED captured (SP-056 red-demo discipline):** injected
+`RequestTimeout = TimeSpan.FromMilliseconds(123),` (unmarked, unpinned) into
+`RemoteHost_RejectedPreSocket`; the guard failed with
+`CcpClient.Tests/LoopbackOllamaProviderTests.cs:182: unmarked wall-clock construct — …`
+(`evidence/guard-red-injected.log`); the injection was removed and the guard re-run green
+(filter run: 1/1 passed). This also proves no stale pins: the guard's pin ledger (incl.
+the three `AiProviderLab.cs` pins SP-062 touched) matches the tree exactly.
+
+## Step 3 — run matrix (10 consecutive greens)
+
+Full output + TRX under `evidence/runs/` and `evidence/trx/` (TRX force-added — `*.trx`
+is gitignored repo-wide). Run 1 is a NEW detached worktree (`C:/Code/ccp-sp063-cold`,
+first-ever build, removed after); runs 2–10 warm in the lane.
+
+| Run | Worktree | Cold/Warm | Wall (s, unit+headless) | Unit | Unit skipped | Headless | Headless skipped | Named test |
+|---|---|---|---|---|---|---|---|---|
+| 01 | ccp-sp063-cold | **cold (first-ever build)** | 77 | 892 | 0 | 35 | 0 | green |
+| 02 | lane-1 | warm | 84 | 892 | 0 | 35 | 0 | green |
+| 03 | lane-1 | warm | 72 | 892 | 0 | 35 | 0 | green |
+| 04 | lane-1 | warm | 71 | 892 | 0 | 35 | 0 | green |
+| 05 | lane-1 | warm | 71 | 892 | 0 | 35 | 0 | green |
+| 06 | lane-1 | warm | 72 | 892 | 0 | 35 | 0 | green |
+| 07 | lane-1 | warm | 71 | 892 | 0 | 35 | 0 | green |
+| 08 | lane-1 | warm | 71 | 892 | 0 | 35 | 0 | green |
+| 09 | lane-1 | warm | 71 | 892 | 0 | 35 | 0 | green |
+| 10 | lane-1 | warm | 72 | 892 | 0 | 35 | 0 | green |
+
+TRX-verified post hoc (not the script's shorthand): `Truncated_PrefixCut_NeverSurfaced_
+TypedUnavailable` has `outcome="Passed"` in all 10 unit TRX; `outcome="Failed"` count is
+0 in all 20 TRX.
+
+**Wall-clock vs the Step-1 expectation:** unchanged within noise. Expectation was: only
+population-2's ~800 ms budgets can elapse on a green run; population-1 budgets are never
+reached. Observed: warm runs sit in a 71–84 s band with no run near any 60 s boundary —
+had any raised budget fired, that run's wall-clock would have jumped by ~60 s per firing.
+The cold first-ever-build run lands in the same band (77 s), i.e. cold-start warmup is
+seconds, and now has ~75× headroom instead of a sub-second fuse.
+
+## Honesty cell — what a bigger number does NOT fix
+
+- **The time dependence remains; the fuse is longer.** The classification/round-trip/
+  cancellation tests still inject a wall-clock deadline into product code. The cold-start
+  flake class returns if any future machine or test is ~75× slower than today (a >60 s
+  first round trip), or if someone lowers the constant. This change removes the OBSERVED
+  failure mode, not the mechanism.
+- **Population-2 tests still depend on wall time BY DESIGN** — their subject is the
+  budget's elapsing (bounded timeout classification, token-not-poisoned). They are marked
+  and pinned; a pathologically slow machine can still push their `elapsed < 800 + 2500`
+  bounds.
+- **The guard catches the option-assignment SHAPE only** (`XyzTimeout = TimeSpan.`
+  literal). A budget expressed as a named constant, a computed `TimeSpan`, a method
+  argument (`FlushAsync`/`PanicAsync` bounds — 18 sites, CLEAR in the sweep), a
+  differently-spaced assignment (`Timeout=TimeSpan.`), or a non-`TimeSpan.` factory call
+  evades the token. That is the declared smallness of the guard (framing f), not an
+  oversight to patch silently.
+- **`TestWait.cs` is guard-exempt wholesale** — the constant lives there deliberately
+  (one definition, no naming trap), which also means a future literal budget edited INTO
+  that file would not trip the guard. Accepted trade-off, named here.
+- **The deterministic alternative was set aside, not refuted.** Removing the deadline at
+  classification-subject sites entirely (lab stream-close as the only terminator — the
+  aborted run's design) would have removed the time dependence rather than lengthening
+  its fuse. The owner decree chose the budget raise; this record implements it and says
+  plainly what it does not do.
+
+## Intended board filings (ENABLER 2 — worker sets no row state; orchestrator reconciles at land)
+
+- `client/docs/task-board.md`: close the fourth-occurrence budgets row with this packet's
+  evidence (10 consecutive greens at 892/35/0 incl. one fresh-checkout first-ever build;
+  guard token + captured RED; decree quoted; honesty-cell pointer).
+- `client/docs/port-lessons.md`: one entry — owner decree 2026-08-12 supersedes the
+  "raising a budget is the banned fix" consult-derived rule FOR THAT ROW; the constant is
+  finite (60 s) by packet framing so a wedged lab still fails loudly; the guard now
+  catches the option-assignment budget shape with pins.
+- `client/docs/upstream-sync.md`: no filing — no WPF-upstream interaction in this packet.
+
+## Step 4 — pre-completion solo consult
+
+- Mode: solo (T-7).
+- **Verdict: clear to complete.** Four closing checks named, all run:
+  1. Contract `testCommand` (incl. `verify.mjs`, not yet run this session) — run as Step 5 below.
+  2. Cold worktree registration — `git worktree list` confirms `ccp-sp063-cold` removed.
+  3. Scope diff — confirmed in Step 5 (`git status --short`: File Scope paths only; zero `client/src/**` changes).
+  4. Stale `800` literals in the two edited files — grep found only the two pinned population-2 budgets, their two `elapsed < 800 + 2500` boundedness assertions (unchanged by design), and ONE now-stale COMMENT at `LoopbackOllamaProviderTests.cs:244` ("800ms request timeout would also fire" — the factory is now 60 s); comment corrected to name no number.
+- **Advisor-noted latent trade-off (adopted into the record):** the `uncooperative: true`
+  transport test (`SlowOk_LateCompletion_…`, `AiProviderLabIntegrationTests.cs:251`) is
+  bounded on the pass path by the lab's SlowOk 1.5 s-late body and the stale-discard seam
+  (plus `PanicAsync(2 s)` drain), NOT by the provider budget — verified by reading the
+  test and by ten wall-clock runs with no 60 s signature. On a FAILURE path (body never
+  arrives) that test now sits up to 60 s instead of 800 ms before failing loudly — the
+  bounded-fuse trade the decree accepts.
+- **ACTUAL answering model:** not disclosed by the consult tool's return (same as the
+  pre-approach call — worker session model is `kimi-coding/k3`; the consult's answering
+  model is unverifiable from inside the worker and is recorded as such, not guessed).
+
+<!-- Step 5 contract results appended below -->

@@ -241,7 +241,7 @@ public class LoopbackOllamaProviderTests
     public async Task MidStreamCancel_TruePartialPosition_TokenIsTheMechanism()
     {
         using var lab = new AiProviderLab();
-        var provider = Provider(lab); // 800ms request timeout would also fire — cancel must win first
+        var provider = Provider(lab); // the injected budget would also fire eventually — cancel must win first
         lab.Inject(AiLabMode.HangStream);
         using var cts = new CancellationTokenSource();
 
