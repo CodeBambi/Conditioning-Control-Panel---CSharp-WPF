@@ -40,6 +40,23 @@ namespace ConditioningControlPanel.Services.Descent
         public DescentBlock? Current { get; private set; }
 
         /// <summary>
+        /// NO KEY, NO HEARTBEAT. True once this account has been seen to carry a
+        /// descent block at least once in this app session.
+        ///
+        /// The block ships only to accounts inside the server's rollout dial, so for
+        /// everybody else a 60s poll and a post-sync refresh are a GET that can only
+        /// ever return the same "no key" answer — the overwhelming majority of
+        /// installs paying network for a feature they cannot see. Every RECURRING
+        /// caller gates on this; the one-shot on Trainer Card open deliberately does
+        /// not, because that single request is how a dark key lights up.
+        ///
+        /// In memory only, and deliberately so: persisting it would mean deciding
+        /// what to do when the dial narrows, and the cost of being wrong for one
+        /// card-open is one request.
+        /// </summary>
+        public bool HasSeenBlock { get; private set; }
+
+        /// <summary>
         /// Raised on the UI thread after every accepted fetch, including one that
         /// turned the block off (payload arrived without it). Surfaces subscribe and
         /// re-read <see cref="Current"/>.
@@ -62,11 +79,19 @@ namespace ConditioningControlPanel.Services.Descent
 
         /// <summary>
         /// Fetch and parse the block. Returns true when a fetch actually happened
-        /// (whether or not it produced a block); false when it was skipped — no
-        /// account, no auth token, a fetch already in flight, or inside the floor.
+        /// (whether or not it produced a block); false when it was skipped — offline
+        /// mode, no account, no auth token, a fetch already in flight, or inside the
+        /// floor.
         /// </summary>
         public async Task<bool> RefreshAsync(string reason, bool force = false)
         {
+            // OFFLINE MODE IS A HARD FLOOR, not a preference this feature gets to
+            // outrank. It is the same check every other network path takes
+            // (ProfileSyncService.LoadProfileAsync / SyncProfileAsync /
+            // SendHeartbeatAsync): a user who turned the app's networking off must
+            // not be able to see a request leave for a decorative meter.
+            if (App.Settings?.Current?.OfflineMode == true) return false;
+
             string? unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId)) return false;
             if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken)) return false;
@@ -91,6 +116,7 @@ namespace ConditioningControlPanel.Services.Descent
                 var block = DescentReader.ParseFromUserNode(userNode);
                 bool had = Current is not null;
                 Current = block;
+                if (block is not null) HasSeenBlock = true;   // arms the recurring callers
 
                 if (block is null && had)
                     Log.Information("[Descent] block withdrawn by server ({Reason})", reason);
@@ -104,6 +130,25 @@ namespace ConditioningControlPanel.Services.Descent
             {
                 _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// FORGET THE ACCOUNT. Called on logout (MainWindow.Login.cs, beside
+        /// ProfileSyncService.ResetLoadedProfileState).
+        ///
+        /// A shared install is the whole reason this exists: user A's vat must not
+        /// still be standing on the Trainer Card when user B signs in, and the
+        /// block-seen flag must go dark with it or B's keyless account inherits A's
+        /// 60s poll. Raising BlockChanged with a null Current is what disarms the
+        /// surface — the host's coordinator resets itself on a null block.
+        /// </summary>
+        public void Reset()
+        {
+            Current = null;
+            HasSeenBlock = false;
+            _lastFetchUtc = DateTime.MinValue;   // a re-login may ask again at once
+            Log.Debug("[Descent] state cleared (logout)");
+            RaiseBlockChanged();
         }
 
         /// <summary>

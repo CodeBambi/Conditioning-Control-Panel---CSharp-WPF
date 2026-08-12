@@ -1686,7 +1686,15 @@ namespace ConditioningControlPanel.Services
                     // floored inside the service, and it can never disturb this method:
                     // deliberately placed AFTER the catch above so nothing it does is
                     // swallowed as "could not parse server flags".
-                    App.Descent?.RequestRefresh("v2 sync accepted");
+                    //
+                    // GATED ON HasSeenBlock — no key, no heartbeat. The block ships
+                    // only inside the server's rollout dial, so for every account
+                    // outside it this second request can only ever answer "still no
+                    // key": a wasted GET on every sync, for ~all users. The Trainer
+                    // Card's one-shot on open is what lights a dark key up; this hook
+                    // only has to keep an ALREADY-lit vat current.
+                    if (App.Descent?.HasSeenBlock == true)
+                        App.Descent.RequestRefresh("v2 sync accepted");
 
                     syncSucceeded = true;
                     return true;

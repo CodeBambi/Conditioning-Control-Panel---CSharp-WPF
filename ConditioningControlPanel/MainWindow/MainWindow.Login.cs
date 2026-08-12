@@ -278,6 +278,13 @@ namespace ConditioningControlPanel
             // until a later sync repaints it. Every logout path funnels through here.
             App.ProfileSync?.ResetLoadedProfileState();
 
+            // THE VAT belongs to the account that was just signed out. On a shared
+            // install user B must not open the Trainer Card onto user A's fill, and
+            // B's keyless account must not inherit A's 60s poll — Reset drops the
+            // block, the block-seen flag and the fetch floor, and raises BlockChanged
+            // so the surface disarms (which resets the fill coordinator with it).
+            App.Descent?.Reset();
+
             // Update all UI
             UpdateQuickLoginUI();
             UpdateQuickPatreonUI();
