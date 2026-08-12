@@ -1,6 +1,18 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- Velvet Kit 2: the one card chrome every dense settings block uses. Feature pages used to
+         wrap EVERY individual setting in its own hand-rolled Border (Padding 16,12 / 16,14),
+         which is what made a five-dial page ~890px tall. One card, many rows, one style. -->
+    <Style x:Key="SettingCardStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
     <!-- Reusable button styles used across windows -->
     <Style x:Key="ActionButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>

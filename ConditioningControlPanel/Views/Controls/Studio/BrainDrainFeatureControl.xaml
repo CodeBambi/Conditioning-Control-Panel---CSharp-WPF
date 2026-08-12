@@ -47,13 +47,59 @@
          enable + intensity are prescribed dose, high-refresh is a pure
          perf knob and stays live mid-session (lock rule 4).
 
-         No feature art here on purpose: no Features/*FeatureControl panel
-         carries a hero rectangle, and adding one would owe a row in the
-         mod repaint map (MainWindow.xaml.cs:1612-1622). The rack row's
-         icon is the rack's business.
+         The hero strip's art is a static pack-URI image, so it is exempt
+         from the mod repaint map (MainWindow.xaml.cs:1612-1622).
          ================================================================ -->
 
     <StackPanel>
+
+        <!-- HERO. Absorbs the old master-enable card: the checkbox moved into the pill
+             verbatim (same name, same FieldModifier, same SessionLock marker) and its hint
+             is the subtitle. -->
+        <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1">
+            <Grid ClipToBounds="True">
+                <Border Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0">
+                    <Border.Background>
+                        <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                            <ImageBrush.ImageSource>
+                                <BitmapImage UriSource="pack://application:,,,/Resources/features/brain_drain.png"
+                                             DecodePixelWidth="480"/>
+                            </ImageBrush.ImageSource>
+                        </ImageBrush>
+                    </Border.Background>
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="Transparent" Offset="0"/>
+                            <GradientStop Color="#E6000000" Offset="0.55"/>
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+
+                <StackPanel VerticalAlignment="Center" Margin="16,0,0,0">
+                    <helpers:EmojiTextBlock Text="{loc:Str section_brain_drain}" FontSize="17" FontWeight="Bold"
+                                            Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str st4_braindrain_enable_hint}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+                        CornerRadius="9999" Padding="12,6"
+                        Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkEnable" x:FieldModifier="internal"
+                                  feat:SessionLock.Owned="True"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkEnable_Changed" Unchecked="ChkEnable_Changed"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
 
         <!-- Rework notice. Visibility is set in code from
              OverlayService.BrainDrainWithheld; Collapsed here so the
@@ -71,69 +117,52 @@
             </StackPanel>
         </Border>
 
-        <!-- Master enable -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+        <!-- ONE dense controls card: the dial, then the perf switch. Both hints moved to the
+             row ToolTips. The intensity Slider keeps its EXPLICIT 1-100 range: a WPF Slider
+             defaults to Maximum=10, which silently clamps this percent value in the settings
+             round-trip (the same warning the now-deleted ProgressionTabView markup carried). -->
+        <Border Style="{StaticResource SettingCardStyle}">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str btn_enable}" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
-                    <TextBlock Text="{loc:Str st4_braindrain_enable_hint}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,2,0,0"/>
-                </StackPanel>
-                <CheckBox Grid.Column="1" x:Name="ChkEnable" x:FieldModifier="internal"
-                          feat:SessionLock.Owned="True"
-                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                          Checked="ChkEnable_Changed" Unchecked="ChkEnable_Changed"/>
-            </Grid>
-        </Border>
+                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueStudioBrush}"/>
+                <StackPanel Margin="16,8,16,8">
 
-        <!-- Intensity. Explicit 1-100 range: a WPF Slider defaults to Maximum=10,
-             which silently clamps this percent value in the settings round-trip
-             (the same warning the now-deleted ProgressionTabView markup carried). -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Str setting_intensity}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                </Grid>
-                <Slider x:Name="SliderIntensity" x:FieldModifier="internal"
-                        feat:SessionLock.Owned="True"
-                        Minimum="1" Maximum="100" Value="50"
-                        ValueChanged="SliderIntensity_Changed"/>
-                <TextBlock Text="{loc:Str st4_braindrain_intensity_hint}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,6,0,0"/>
-            </StackPanel>
-        </Border>
+                    <Grid Height="36" ToolTip="{loc:Str st4_braindrain_intensity_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_intensity}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderIntensity" x:FieldModifier="internal"
+                                feat:SessionLock.Owned="True"
+                                Minimum="1" Maximum="100" Value="50"
+                                VerticalAlignment="Center" Margin="10,0"
+                                ValueChanged="SliderIntensity_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
 
-        <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
-             unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str st4_braindrain_high_refresh}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock Text="{loc:Str st4_braindrain_high_refresh_hint}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                    <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
+                         unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
+                    <Grid Height="34" ToolTip="{loc:Str st4_braindrain_high_refresh_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_high_refresh}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkHighRefresh" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
+                    </Grid>
+
                 </StackPanel>
-                <CheckBox Grid.Column="1" x:Name="ChkHighRefresh" x:FieldModifier="internal"
-                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                          Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
             </Grid>
         </Border>
 

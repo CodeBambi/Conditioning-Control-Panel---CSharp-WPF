@@ -5,100 +5,114 @@
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
 
+    <!-- Velvet Kit 2 density pass. The root stays a StackPanel: MainWindow.SessionFeatureLock.cs
+         inserts the session-lock banner at index 0 of this panel. -->
     <StackPanel>
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Str setting_size}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                </Grid>
-                <Slider x:Name="SliderSize" Minimum="50" Maximum="250" Value="100"
-                        feat:SessionLock.Owned="True"
-                        ValueChanged="SliderSize_Changed"/>
-                <TextBlock Text="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
 
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Str setting_opacity}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                </Grid>
-                <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
-                        feat:SessionLock.Owned="True"
-                        ValueChanged="SliderOpacity_Changed"/>
-                <TextBlock Text="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Str setting_fade}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TxtFade" Text="50%" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                </Grid>
-                <Slider x:Name="SliderFade" Minimum="0" Maximum="100" Value="50"
-                        ValueChanged="SliderFade_Changed"/>
-                <TextBlock Text="{loc:Str tooltip_fade_in_out_animation_speed_0_instant_appear}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="{loc:Str setting_duration}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TxtDuration" Text="5s" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                </Grid>
-                <Slider x:Name="SliderDuration" Minimum="1" Maximum="30" Value="5"
-                        feat:SessionLock.Owned="True"
-                        ValueChanged="SliderDuration_Changed"/>
-                <TextBlock Text="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
-
-        <!-- Link to Audio -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12">
+        <!-- HERO. No art (Resources/features has no visuals plate) and no enable pill: Visuals is
+             the one module with no master toggle at all - StudioTabView deliberately gives its
+             rack row no state dot for the same reason. Title only. -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <helpers:EmojiTextBlock Text="{loc:Str label_link_to_audio_trigger}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock Text="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                    <helpers:EmojiTextBlock Text="{loc:Str section_visuals}" FontSize="17" FontWeight="Bold"
+                                            Foreground="{StaticResource TextLightBrush}"/>
                 </StackPanel>
-                <!-- Deliberately NOT SessionLock.Owned, even though SessionSettings.FlashAudioEnabled
-                     is a session-prescribed enable. Killing sound is the one change a user most
-                     often needs to make RIGHT NOW and for reasons outside the session (someone
-                     walked in). That puts it on the safety side of the line, like volume. -->
-                <CheckBox Grid.Column="1" x:Name="ChkAudio"
-                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                          Checked="ChkAudio_Changed" Unchecked="ChkAudio_Changed"/>
+            </Grid>
+        </Border>
+
+        <!-- ONE dense card -->
+        <Border Style="{StaticResource SettingCardStyle}">
+            <Grid>
+                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueStudioBrush}"/>
+                <StackPanel Margin="16,8,16,8">
+
+                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="250" Value="100"
+                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                ValueChanged="SliderSize_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                ValueChanged="SliderOpacity_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_fade_in_out_animation_speed_0_instant_appear}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fade}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderFade" Minimum="0" Maximum="100" Value="50"
+                                VerticalAlignment="Center" Margin="14,0"
+                                ValueChanged="SliderFade_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtFade" Text="50%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="30" Value="5"
+                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                ValueChanged="SliderDuration_Changed"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5s" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                    <!-- Link to Audio.
+                         Deliberately NOT SessionLock.Owned, even though SessionSettings.FlashAudioEnabled
+                         is a session-prescribed enable. Killing sound is the one change a user most
+                         often needs to make RIGHT NOW and for reasons outside the session (someone
+                         walked in). That puts it on the safety side of the line, like volume. -->
+                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str label_link_to_audio_trigger}" FontSize="13" FontWeight="SemiBold"
+                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkAudio"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkAudio_Changed" Unchecked="ChkAudio_Changed"/>
+                    </Grid>
+                </StackPanel>
             </Grid>
         </Border>
     </StackPanel>

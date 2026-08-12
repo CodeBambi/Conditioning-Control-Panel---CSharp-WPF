@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d" d:DesignWidth="488">
 
@@ -29,6 +30,11 @@
          Load/SaveSettings round-trip through it. This panel's hosted control
          is now the only editor for all nine scheduler settings.
 
+         VELVET KIT 2: that intro card is now the page's hero strip - same
+         two things (the hint, the help button), one 72px band. There is no
+         hero ART here, and no enable pill: the master switch stays inside the
+         hosted control so the popup path keeps it (see that file's header).
+
          Root MUST stay a Panel (StackPanel) and MUST stay the direct
          UserControl content: MainWindow.SessionFeatureLock.cs:365 inserts
          the session-lock banner with ((Panel)content.Content).Children
@@ -43,24 +49,27 @@
 
     <StackPanel x:Name="StudioSchedulerPanel" x:FieldModifier="internal">
 
-        <!-- What it does + the rescued help button. HelpContentService already
-             ships a full "Scheduler" entry (Services/HelpContentService.cs:332);
-             it was unreachable from the moment the ProgressionTab went dark
-             until this button rescued it. -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
-            <Grid>
+        <!-- HERO. Carries the rescued help button - HelpContentService already ships a full
+             "Scheduler" entry (Services/HelpContentService.cs:332); it was unreachable from
+             the moment the ProgressionTab went dark until this button rescued it. -->
+        <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1">
+            <Grid ClipToBounds="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{loc:Str st4_scheduler_hint}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="16,0,10,0">
+                    <helpers:EmojiTextBlock Text="{loc:Str section_scheduler}" FontSize="17" FontWeight="Bold"
+                                            Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str st4_scheduler_hint}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
                 <Button Grid.Column="1" x:Name="HelpBtnStudioScheduler" x:FieldModifier="internal"
                         Style="{StaticResource HelpButtonStyle}" Tag="Scheduler"
-                        VerticalAlignment="Top"/>
+                        VerticalAlignment="Center" Margin="0,0,14,0"/>
             </Grid>
         </Border>
 

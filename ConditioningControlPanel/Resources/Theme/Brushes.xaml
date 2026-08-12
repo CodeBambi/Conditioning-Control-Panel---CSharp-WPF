@@ -104,6 +104,17 @@
         <GradientStop Color="{StaticResource SectionHueAudioWash}" Offset="0"/>
         <GradientStop Color="#00000000" Offset="0.55"/>
     </LinearGradientBrush>
+    <!-- Studio triad carries LITERAL colors (same values as the SectionHueStudio* keys in
+         Colors.xaml) instead of StaticResource: inserting cross-dictionary StaticResource
+         refs mid-file trips WPF's deferred-BAML offset bug and the whole dictionary dies
+         at load with EndOfStreamException ("Unable to read beyond the end of the stream").
+         Static tokens by design, so literals lose nothing. Keep it this way. -->
+    <SolidColorBrush x:Key="SectionHueStudioBrush" Color="#FFFF7E6B"/>
+    <SolidColorBrush x:Key="SectionHueStudioBorderBrush" Color="#40FF7E6B"/>
+    <LinearGradientBrush x:Key="SectionHueStudioWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="#14FF7E6B" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="SectionHueDevicesBrush" Color="{StaticResource SectionHueDevices}"/>
     <SolidColorBrush x:Key="SectionHueDevicesBorderBrush" Color="{StaticResource SectionHueDevicesBorder}"/>
     <LinearGradientBrush x:Key="SectionHueDevicesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">

@@ -62,7 +62,16 @@
              Settings door's section pills: a 3px accent bar plus a tinted fill,
              both driven by ControlTemplate triggers. Deliberately no storyboard -
              a trigger setter is not an animation, so there is nothing here for
-             MotionFx to gate or for the kill-switch to stop. -->
+             MotionFx to gate or for the kill-switch to stop.
+
+             HEIGHT IS A MINIMUM, NOT A FIXED SIZE (Velvet Kit 2). The resting row
+             is 38 - tall enough for the 28px art chip RenderRackRows now builds -
+             but the CHECKED row of a module that has feature art swaps its content
+             for a 56px full-bleed art tile, and the row has to be able to grow
+             into it. The row's own Height setter below is what the code-behind
+             overrides on Checked and ClearValue()s on Unchecked; the template's
+             MinHeight is the floor that keeps every other row honest. A fixed
+             Height here would silently letterbox the tile instead. -->
         <Style x:Key="RackEntryStyle" TargetType="RadioButton">
             <Setter Property="GroupName" Value="StudioRack"/>
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
@@ -70,11 +79,12 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="True"/>
             <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Height" Value="38"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Grid Background="Transparent" Height="30">
+                        <Grid Background="Transparent" MinHeight="38">
                             <Border x:Name="RowFill" CornerRadius="8" Opacity="0"
                                     Background="{DynamicResource TransparentPink20Brush}"/>
                             <Border x:Name="RowBar" Width="3" CornerRadius="2" Margin="0,5"
@@ -153,9 +163,17 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Stand-in for the FeaturePopupWindow title bar: same icon + title the popup
-                     showed, so a panel that used to name itself in a window chrome still does.
-                     Collapsed for modules that draw their own page header (Haptics). -->
+                <!-- RETIRED, NOT DELETED (Velvet Kit 2).
+                     This was the stand-in for the FeaturePopupWindow title bar: same icon +
+                     title the popup showed, so a panel that used to name itself in a window
+                     chrome still did. Every feature page now draws its OWN 72px in-page hero,
+                     which named the module twice - so every rack entry sets OwnHeader (see
+                     BuildRack) and RefreshDetailHeader collapses this on every selection.
+
+                     It stays in the tree, still x:Named, still repainted, and the OwnHeader
+                     machinery still works both ways: a page that ever loses its in-page hero
+                     passes ownHeader:false and gets this bar back with no new XAML. Do not
+                     delete it and do not rename TxtDetailIcon / TxtDetailTitle. -->
                 <Border x:Name="DetailHeader" Grid.Row="0" Margin="0,0,0,10" Padding="14,9"
                         Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
                         BorderThickness="1" CornerRadius="10">

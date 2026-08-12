@@ -49,14 +49,16 @@
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
-        <!-- Section card chrome, matching the Presets/Quests tabs. -->
+        <!-- Section card chrome, matching the Presets/Quests tabs.
+             Velvet Kit 2: padding/margin retuned to the kit's density (16,12 / 10) so this
+             module sits at the same rhythm as the rest of the rack. Nothing structural. -->
         <Style x:Key="HapticCard" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
             <Setter Property="BorderBrush" Value="#2E2E48"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="22,18"/>
-            <Setter Property="Margin" Value="0,0,0,14"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
 
         <!-- Segmented picker chip (temperament). One RadioButton per preset: mutual exclusion,
@@ -111,7 +113,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,-4,0,8"/>
+            <Setter Property="Margin" Value="0,-4,0,6"/>
         </Style>
 
         <!-- ============================ TIER-3 DRAWER =============================
@@ -120,8 +122,8 @@
         <Style x:Key="HapticAdvBlock" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
             <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="14,12"/>
-            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
 
         <!-- ========================= ROUTING MATRIX =========================
@@ -464,7 +466,7 @@
         <StackPanel Margin="6,2,18,22" MaxWidth="1280" HorizontalAlignment="Center">
 
             <!-- ============================ HEADER ============================ -->
-            <Grid Margin="0,0,0,16">
+            <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -722,10 +724,10 @@
                                     <TextBlock Text="{loc:Str haptics_feel}" Style="{StaticResource HapticCardTitle}"/>
                                 </StackPanel>
                                 <TextBlock Text="{loc:Str haptics_feel_sub}" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                 <!-- THE one slider on first paint -->
-                                <Grid Margin="0,0,0,16">
+                                <Grid Height="36" Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="110"/>
                                         <ColumnDefinition Width="*"/>
@@ -799,7 +801,7 @@
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Text="{loc:Str haptics_your_toys_sub}" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
                                 <ItemsControl x:Name="ToyCardsList" x:FieldModifier="internal"
                                               ItemTemplate="{StaticResource HapticToyCardTemplate}">

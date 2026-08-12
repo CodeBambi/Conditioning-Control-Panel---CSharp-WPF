@@ -325,7 +325,14 @@
             </Setter>
         </Style>
 
-        <Style TargetType="Slider" BasedOn="{StaticResource PinkSlider}" />
+        <!-- Velvet Kit 2: sliders now sit INSIDE 36px settings rows beside their label and value,
+             so they carry no vertical slack of their own. Height 18 keeps the 14px thumb centred
+             with room to spare; Margin 0 stops the implicit default re-inflating a dense row.
+             Row spacing is supplied by the row Grid, not by the control. -->
+        <Style TargetType="Slider" BasedOn="{StaticResource PinkSlider}">
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
 
         <!-- Blink Trainer page sliders. Heavier track (6px), gradient fill from
              PinkColor -> NeonPurpleColor, larger 16px thumb with pink glow.

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d" d:DesignWidth="488">
 
@@ -26,10 +27,16 @@
          (RampTimer_Tick gates each visual link on !sessionActive,
          MainWindow.StartStop.cs:485/493/501), so its sliders are already
          inert and locking them would buy nothing. The full argument is
-         written out at Features/IntensityRampFeatureControl.xaml:63-73;
-         st4_ramp_session_note says the same thing to the user, because a
-         dial that quietly does nothing mid-session is exactly the kind of
-         lie the session-lock rules exist to prevent.
+         written out in Features/IntensityRampFeatureControl.xaml above the
+         curve row; st4_ramp_session_note says the same thing to the user,
+         because a dial that quietly does nothing mid-session is exactly the
+         kind of lie the session-lock rules exist to prevent - which is why
+         that note now rides with the curve INSIDE the hosted control, where
+         the feature-popup path sees it too.
+
+         VELVET KIT 2: the old intro card is this page's 72px hero strip.
+         No hero ART (this feature has none) and no enable pill: the master
+         switch stays inside the hosted control so the popup path keeps it.
 
          Root MUST stay a Panel and the direct UserControl content - the
          session-lock banner is inserted with
@@ -40,28 +47,27 @@
 
     <StackPanel x:Name="StudioRampPanel" x:FieldModifier="internal">
 
-        <!-- What it does + the rescued help button (HelpContentService
-             ships an "IntensityRamp" entry at Services/HelpContentService.cs:354;
-             its only button died with the ProgressionTab). -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
-            <Grid>
+        <!-- HERO. Carries the rescued help button (HelpContentService ships an
+             "IntensityRamp" entry at Services/HelpContentService.cs:354; its only button died
+             with the ProgressionTab). -->
+        <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="1">
+            <Grid ClipToBounds="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str st4_ramp_hint}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap"/>
-                    <TextBlock Text="{loc:Str st4_ramp_session_note}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="16,0,10,0">
+                    <helpers:EmojiTextBlock Text="{loc:Str section_intensity_ramp}" FontSize="17" FontWeight="Bold"
+                                            Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str st4_ramp_hint}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" x:Name="HelpBtnStudioRamp" x:FieldModifier="internal"
                         Style="{StaticResource HelpButtonStyle}" Tag="IntensityRamp"
-                        VerticalAlignment="Top"/>
+                        VerticalAlignment="Center" Margin="0,0,14,0"/>
             </Grid>
         </Border>
 
