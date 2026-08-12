@@ -4730,5 +4730,15 @@
   "rf_palette_startup_video": "启动视频",
   "rf_palette_panic_key": "紧急键",
   "rf_palette_no_panic": "禁用紧急键",
-  "rf_palette_motion_level": "动效强度"
+  "rf_palette_motion_level": "动效强度",
+  "section_media_source": "媒体来源",
+  "label_media_source_hint": "还没有自己的素材？应用可以改为从 Reddit 串流图片和短片。你来选择领域，不会在硬盘上保存任何内容，也不会上传任何内容。",
+  "label_remote_mix": "远程比例",
+  "tooltip_remote_mix": "你看到的内容中，来自 Reddit 而非你自己文件夹的比例。",
+  "label_remote_niches": "领域",
+  "label_remote_niches_shared": "与 For You 信息流共用 - 选一次，两处生效。",
+  "label_remote_custom_subs": "你自己的子版块",
+  "tooltip_remote_custom_sub_add": "输入子版块名称（r/ 可省略）或粘贴其链接，然后点击添加。",
+  "label_remote_blocklist": "已屏蔽",
+  "btn_remote_clear_blocklist": "清空屏蔽列表"
 }

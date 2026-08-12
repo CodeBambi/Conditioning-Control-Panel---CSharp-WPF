@@ -368,13 +368,23 @@ export function createGoonMediaPool() {
     return null;
   }
 
+  /** Manifest entry -> display name, minus the host's "online<pct>:" stamp.
+   *
+   *  We share DtrhAssetManifest.Build() with the rabbit hole verbatim, and that builder
+   *  smuggles the app-wide remote share onto every remote entry's NAME because the frame
+   *  shape ({name,url}) is fixed. The rabbit hole parses the stamp off; goon has no use
+   *  for the share, but it must still strip it or the raw "online30:" leaks into anything
+   *  that shows an asset name. Keep this regex identical to dtrh/hostMedia.js's SHARE_RE. */
+  const HOST_SHARE_RE = /^online(?:\d{1,3}):/i;
+  const hostName = (e) => String((e && e.name) || '').replace(HOST_SHARE_RE, '');
+
   return {
     /** Swap in a manifest: {images:[{name,url}], videos:[...], skipped, truncated}. */
     setManifest(m) {
       const src = m || {};
       hostEntries = [];
-      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: e && e.name, url: e && e.url }); if (v) hostEntries.push(v); }
-      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: e && e.name, url: e && e.url }); if (v) hostEntries.push(v); }
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: hostName(e), url: e && e.url }); if (v) hostEntries.push(v); }
       skipped = src.skipped | 0;
       truncated = !!src.truncated;
       rebuildEntries();

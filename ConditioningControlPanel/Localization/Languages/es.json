@@ -4263,5 +4263,15 @@
   "rf_palette_startup_video": "Video de inicio",
   "rf_palette_panic_key": "Tecla de pánico",
   "rf_palette_no_panic": "Desactivar la tecla de pánico",
-  "rf_palette_motion_level": "Nivel de movimiento"
+  "rf_palette_motion_level": "Nivel de movimiento",
+  "section_media_source": "De dónde vienen tus medios",
+  "label_media_source_hint": "¿Aún no tienes medios propios? La app puede transmitir imágenes y clips desde Reddit. Tú eliges los nichos, no se guarda nada en tu disco y no se sube nada.",
+  "label_remote_mix": "Proporción remota",
+  "tooltip_remote_mix": "Cuánto de lo que ves viene de Reddit en lugar de tus propias carpetas.",
+  "label_remote_niches": "Nichos",
+  "label_remote_niches_shared": "Compartido con el feed For You - una sola selección, los dos sitios.",
+  "label_remote_custom_subs": "Tus propios subreddits",
+  "tooltip_remote_custom_sub_add": "Escribe el nombre de un subreddit (la r/ es opcional) o pega su enlace, y pulsa Añadir.",
+  "label_remote_blocklist": "Bloqueados",
+  "btn_remote_clear_blocklist": "Vaciar lista de bloqueo"
 }

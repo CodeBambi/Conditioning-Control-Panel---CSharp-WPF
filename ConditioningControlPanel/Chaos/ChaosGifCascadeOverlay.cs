@@ -16,7 +16,9 @@ namespace ConditioningControlPanel;
 /// <summary>
 /// Full-screen, click-through overlay for the Chaos "GifCascade" payload: images/gifs spawn at the top
 /// of the screen on a timer and fall/cascade downward, then despawn off the bottom. Sources images from
-/// the SAME pool the flash/braindrain payloads draw on (<c>EffectiveAssetsPath/images</c>). Silent no-op
+/// the SAME pool the flash/braindrain payloads draw on (<c>EffectiveAssetsPath/images</c>, content packs,
+/// and — when the user has switched the media source online — REMOTE stills, which arrive as https URLs,
+/// decode from already-downloaded bytes and never animate; see <see cref="SpawnOne"/>). Silent no-op
 /// if the pool is empty. One window, KEPT ALIVE between cascades and only closed at run teardown
 /// (<see cref="CloseActive"/>): creating/closing a layered window mid-run can wedge the shared WPF
 /// render thread (Application Hang 1002 — see ChaosEffectBannerOverlay). A new Show() restarts the
@@ -298,11 +300,22 @@ public sealed class ChaosGifCascadeOverlay : Window
         {
             string path = _files[_rng.Next(_files.Count)];
             var img = new Image { Stretch = Stretch.Uniform, Opacity = _opacity };
+            // A remote still (Phase 3 / Contract 2) is an https URL, not a file. It NEVER
+            // animates — the provider has no usable GIFs and its webp posters are static VP8
+            // with no ANIM chunk (owner decision B2) — and every file-shaped probe below has to
+            // be skipped for it: AnimatedWebp.IsAnimated opens a FileStream on the path and
+            // FileInfo(path).Length stats it, so on a URL both would throw their way to a
+            // useless answer on the UI thread, once per spawn.
+            //
+            // Losing animation costs this overlay less than it sounds: MAX_ANIMATED caps the
+            // cascade at 3 animated clips and everything past that already falls as a still, so
+            // "most clips are stills" is the cascade's normal look, not a remote-only compromise.
+            bool remote = Services.FlashService.IsRemotePath(path);
             // A gif/animated-webp only animates while the animated budget has room and it isn't
             // huge; otherwise it falls as a still (BitmapImage decodes the first frame).
             bool animate = false;
-            bool isGif = path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
-            bool isAnimatedWebp = !isGif
+            bool isGif = !remote && path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+            bool isAnimatedWebp = !remote && !isGif
                 && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
                 && Services.AnimatedWebp.IsAnimated(path);
             if ((isGif || isAnimatedWebp) && _animatedAlive < MAX_ANIMATED)
@@ -334,18 +347,37 @@ public sealed class ChaosGifCascadeOverlay : Window
                 // empty for the few frames the decode takes — invisible in the rain.
                 int decodeWidth = (int)_gifSize;
                 string file = path;
-                System.Threading.Tasks.Task.Run(() =>
+                System.Threading.Tasks.Task.Run(async () =>
                 {
                     try
                     {
-                        var bmp = new BitmapImage();
-                        bmp.BeginInit();
-                        bmp.CacheOption = BitmapCacheOption.OnLoad;
-                        bmp.DecodePixelWidth = decodeWidth;   // decode at display size — cheap
-                        bmp.UriSource = new Uri(file, UriKind.Absolute);
-                        bmp.EndInit();
-                        if (bmp.CanFreeze) bmp.Freeze();
-                        Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
+                        BitmapSource? bmp;
+                        if (remote)
+                        {
+                            // Bytes are already resident in RemoteMediaCache (the pool only hands
+                            // out warm URLs), so this is a memory read plus the same decode a local
+                            // still gets — never a network wait, and never on the UI thread. Null
+                            // means this one clip falls empty, which is invisible in the rain.
+                            bmp = await Services.FlashService
+                                .LoadRemoteStillForOverlayAsync(file, decodeWidth)
+                                .ConfigureAwait(false);
+                            if (bmp == null) return;
+                        }
+                        else
+                        {
+                            var local = new BitmapImage();
+                            local.BeginInit();
+                            local.CacheOption = BitmapCacheOption.OnLoad;
+                            local.DecodePixelWidth = decodeWidth;   // decode at display size — cheap
+                            local.UriSource = new Uri(file, UriKind.Absolute);
+                            local.EndInit();
+                            if (local.CanFreeze) local.Freeze();
+                            bmp = local;
+                        }
+
+                        var dispatcher = Application.Current?.Dispatcher;
+                        if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                        dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
                     }
                     catch (Exception ex) { App.Logger?.Debug("GifCascade decode: {E}", ex.Message); }
                 });

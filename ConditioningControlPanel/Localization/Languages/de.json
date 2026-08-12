@@ -4272,5 +4272,15 @@
   "rf_palette_startup_video": "Startvideo",
   "rf_palette_panic_key": "Panik-Taste",
   "rf_palette_no_panic": "Panik-Taste deaktivieren",
-  "rf_palette_motion_level": "Bewegungsstufe"
+  "rf_palette_motion_level": "Bewegungsstufe",
+  "section_media_source": "Woher deine Medien kommen",
+  "label_media_source_hint": "Noch keine eigenen Medien? Die App kann Bilder und Clips stattdessen von Reddit streamen. Du wählst die Nischen, nichts wird auf deiner Festplatte gespeichert und nichts wird hochgeladen.",
+  "label_remote_mix": "Anteil aus dem Netz",
+  "tooltip_remote_mix": "Wie viel von dem, was du siehst, von Reddit statt aus deinen eigenen Ordnern stammt.",
+  "label_remote_niches": "Nischen",
+  "label_remote_niches_shared": "Wird mit dem For-You-Feed geteilt - eine Auswahl, beide Orte.",
+  "label_remote_custom_subs": "Deine eigenen Subreddits",
+  "tooltip_remote_custom_sub_add": "Gib einen Subreddit-Namen ein (das r/ ist optional) oder füge den Link ein, dann drücke Hinzufügen.",
+  "label_remote_blocklist": "Blockiert",
+  "btn_remote_clear_blocklist": "Blockliste leeren"
 }

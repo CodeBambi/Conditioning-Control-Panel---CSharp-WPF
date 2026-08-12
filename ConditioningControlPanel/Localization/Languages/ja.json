@@ -4263,5 +4263,15 @@
   "rf_palette_startup_video": "起動時動画",
   "rf_palette_panic_key": "パニックキー",
   "rf_palette_no_panic": "パニックキーを無効化",
-  "rf_palette_motion_level": "モーションレベル"
+  "rf_palette_motion_level": "モーションレベル",
+  "section_media_source": "メディアの取得元",
+  "label_media_source_hint": "自分のメディアがまだない？アプリが Reddit から画像やクリップをストリーミングできます。ニッチはあなたが選び、ディスクには何も保存されず、何もアップロードされません。",
+  "label_remote_mix": "リモートの割合",
+  "tooltip_remote_mix": "表示される内容のうち、自分のフォルダーではなく Reddit から取得される割合です。",
+  "label_remote_niches": "ニッチ",
+  "label_remote_niches_shared": "For You フィードと共有されます - 選択はひとつ、どちらにも反映されます。",
+  "label_remote_custom_subs": "自分のサブレディット",
+  "tooltip_remote_custom_sub_add": "サブレディット名を入力するか（r/ は省略可）、リンクを貼り付けて「追加」を押してください。",
+  "label_remote_blocklist": "ブロック済み",
+  "btn_remote_clear_blocklist": "ブロックリストを消去"
 }

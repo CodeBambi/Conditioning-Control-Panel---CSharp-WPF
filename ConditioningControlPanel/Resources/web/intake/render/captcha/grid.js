@@ -42,6 +42,12 @@
  * filenames appear NOWHERE here (they are VerifyCustody's exclusive).
  * ==========================================================================*/
 
+/** Urls the page's own host serves (ccp.* virtual hosts, inlined data:, page-relative).
+ *  Anything else came off a third-party CDN with no CORS headers, which is the whole
+ *  reason freezeGif() has to branch — see it. */
+const LOCAL_URL_RE = /^(?:https?:\/\/ccp\.[a-z0-9-]+\/|data:|blob:|\.{0,2}\/)/i;
+const isLocalMediaUrl = (u) => typeof u === 'string' && LOCAL_URL_RE.test(u);
+
 /* ----------------------------------------------------------------------------
  * CROSS-BEAT MEMORY — Climax first-click -> Recovery frozen tile. Module-level,
  * no storage APIs. Self-resets when ctx.meta.qIndex REGRESSES (a fresh run).
@@ -300,6 +306,16 @@ export function render(ctx, helpers) {
     // Freeze a tile to a user asset's FIRST FRAME (intentional fiction) by drawing
     // it into a <canvas> laid over the tile. drawImage tolerates cross-origin
     // assets (ccp.assets vhost); we never read pixels back, so no taint problem.
+    //
+    // REMOTE ASSETS SKIP THE CANVAS ENTIRELY, and lose nothing by it. The probe below
+    // sets crossOrigin='anonymous' to keep the canvas clean, which makes the image
+    // REFUSE TO LOAD from a CDN that sends no Access-Control-Allow-Origin — every
+    // remote tile would take the onerror path and freeze nothing. Dropping the
+    // crossOrigin instead is not the fix either: that only trades a load failure for a
+    // tainted canvas. And there is nothing to freeze in the first place — remote stills
+    // are static (the provider has no usable gifs), so a plain <img> IS the frozen
+    // frame. Explicit test, not a rescued exception: a silent security error here reads
+    // as "the tiles just stopped rotting".
     function freezeGif(i, url) {
       if (!url) return;
       meta[i].kind = 'gif';
@@ -307,6 +323,7 @@ export function render(ctx, helpers) {
       meta[i].everGif = true;
       meta[i].liveGif = false;   // frozen: not an animated concurrent gif
       try {
+        if (!isLocalMediaUrl(url)) { tiles[i].setImage(url); return; }
         if (typeof Image !== 'function') { tiles[i].setImage(url); return; }
         const im = new Image();
         try { im.crossOrigin = 'anonymous'; } catch (_e) {}

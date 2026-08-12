@@ -29,7 +29,7 @@ internal static class FypAssetManifest
         // camelCase on the wire — the page reads these directly.
         [Newtonsoft.Json.JsonProperty("id")] public string Id { get; init; } = "";
         [Newtonsoft.Json.JsonProperty("url")] public string Url { get; init; } = "";
-        [Newtonsoft.Json.JsonProperty("type")] public string Type { get; init; } = "video";   // "video" | "gif"
+        [Newtonsoft.Json.JsonProperty("type")] public string Type { get; init; } = "video";   // "video" | "gif" | "image"
         [Newtonsoft.Json.JsonProperty("filename")] public string Filename { get; init; } = "";
         [Newtonsoft.Json.JsonProperty("folder")] public string Folder { get; init; } = "";
         [Newtonsoft.Json.JsonProperty("durationMs")] public long? DurationMs { get; set; }
@@ -39,6 +39,12 @@ internal static class FypAssetManifest
         /// The page uses it for the source-mix pick and to keep remote ids out of stats.</summary>
         [Newtonsoft.Json.JsonProperty("origin", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string? Origin { get; init; }
+        /// <summary>Absolute still URL for a video entry — the off-screen poster, so a tile
+        /// that hasn't been reached yet shows the frame instead of black. Remote only (the
+        /// mobile and web ports have always carried one; desktop did not). Null for library
+        /// files and for entries that are already stills.</summary>
+        [Newtonsoft.Json.JsonProperty("posterUrl", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string? PosterUrl { get; init; }
     }
 
     /// <summary>Build the asset list for the current EffectiveAssetsPath. Never throws.</summary>

@@ -687,6 +687,8 @@ export function emptyResult(niche = Niche.Bambi) {
  * @property {boolean=} m2Test       dev/harness flag
  * @property {MediaManifest=} media  host-supplied reward media (C# samples the user's assets);
  *                                    null/absent -> effects fall back to particle stand-ins
+ * @property {boolean=} remoteMedia  the host can serve REMOTE stills on request
+ *                                    (`need-remote`/`assets-append`); see web-shim.js
  * @property {string=} subjectId     stable per-install fiction id ("Subject #0007"); host supplies
  *                                    it hosted, shim persists one standalone. Used by intro/outro.
  */
@@ -717,6 +719,7 @@ export function defaultBootConfig(overrides = {}) {
     hosted: false,
     m2Test: false,
     media: null,
+    remoteMedia: false,
     subjectId: null,
   }, overrides);
 }

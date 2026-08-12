@@ -64,11 +64,24 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   let heavyGen = 0;          // bumped by cancelHeavy; a card acquired across a bump is stale
   let disposed = false;
 
-  /** Draw a URL from the user's image pool (null when the pool is empty). */
+  /* THIS LAYER IS THE GAME'S ONLY CORS-SAFE MEDIA CONSUMER, and that is why it is the
+   * only one allowed to draw REMOTE (CDN) entries. Everything here renders through a
+   * plain <img>, a plain <video> or a CSS background-image: no canvas, no
+   * createImageBitmap, no fetch, no WebGL texture — so a tainted source is merely a
+   * source. hostMedia.drawDom() is the door to the remote pool; drawKind()/draw() are
+   * the WebGL-safe local-only doors the tube uses. Keep them apart. */
+  const drawDom = (kind) => (media && media.drawDom
+    ? media.drawDom(kind)
+    : (media && media.drawKind ? media.drawKind(kind) : null));
+  const hasDomMedia = () => !!media && (media.hasDomMedia
+    ? media.hasDomMedia()
+    : !!(media.hasUserMedia && media.hasUserMedia()));
+
+  /** Draw a URL from the DOM-safe image pool (null when the pool is empty). */
   async function pickImageUrl() {
     try {
-      if (!media || !media.hasUserMedia || !media.hasUserMedia()) return null;
-      const p = media.drawKind ? media.drawKind('image') : null;
+      if (!hasDomMedia()) return null;
+      const p = drawDom('image');
       if (!p) return null;
       const got = await p.acquire();
       return got && got.url ? got.url : null;
@@ -263,8 +276,10 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   const VIDEO_HOLD_SEC = 15;
   async function videoCard() {
     if (disposed || videoCardEl) return;   // one card at a time
-    if (!media || !media.drawKind) return;
-    const pickV = media.drawKind('video');
+    if (!media) return;
+    // DOM-safe draw: this card is a bare <video> with no crossOrigin, so a remote clip
+    // plays here even though the tube's textured cards can never touch one.
+    const pickV = drawDom('video');
     if (!pickV) return;   // no user videos in the pool - silently skip
     // Snapshot the heavy generation: cancelHeavy() (room arrival / endRun) can fire while
     // we're awaiting the decrypt below, and videoCardCancel isn't wired up yet, so the card

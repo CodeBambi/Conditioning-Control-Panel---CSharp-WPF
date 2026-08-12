@@ -4272,5 +4272,15 @@
   "rf_palette_startup_video": "Vidéo de démarrage",
   "rf_palette_panic_key": "Touche panique",
   "rf_palette_no_panic": "Désactiver la touche panique",
-  "rf_palette_motion_level": "Niveau de mouvement"
+  "rf_palette_motion_level": "Niveau de mouvement",
+  "section_media_source": "D'où viennent tes médias",
+  "label_media_source_hint": "Pas encore de médias à toi ? L'appli peut diffuser des images et des clips depuis Reddit. Tu choisis les niches, rien n'est enregistré sur ton disque et rien n'est envoyé.",
+  "label_remote_mix": "Part distante",
+  "tooltip_remote_mix": "La proportion de ce que tu vois qui vient de Reddit plutôt que de tes propres dossiers.",
+  "label_remote_niches": "Niches",
+  "label_remote_niches_shared": "Partagé avec le fil For You - une seule sélection, aux deux endroits.",
+  "label_remote_custom_subs": "Tes propres subreddits",
+  "tooltip_remote_custom_sub_add": "Saisis un nom de subreddit (le r/ est facultatif) ou colle son lien, puis appuie sur Ajouter.",
+  "label_remote_blocklist": "Bloqués",
+  "btn_remote_clear_blocklist": "Vider la liste de blocage"
 }

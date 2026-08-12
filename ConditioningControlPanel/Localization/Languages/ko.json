@@ -4270,5 +4270,15 @@
   "rf_palette_startup_video": "시작 영상",
   "rf_palette_panic_key": "패닉 키",
   "rf_palette_no_panic": "패닉 키 비활성화",
-  "rf_palette_motion_level": "모션 레벨"
+  "rf_palette_motion_level": "모션 레벨",
+  "section_media_source": "미디어를 가져올 곳",
+  "label_media_source_hint": "아직 자기 미디어가 없나요? 앱이 Reddit에서 이미지와 클립을 스트리밍할 수 있습니다. 니치는 직접 고르고, 디스크에는 아무것도 저장되지 않으며, 아무것도 업로드되지 않습니다.",
+  "label_remote_mix": "원격 비율",
+  "tooltip_remote_mix": "보이는 것 중 내 폴더가 아니라 Reddit에서 가져오는 비율입니다.",
+  "label_remote_niches": "니치",
+  "label_remote_niches_shared": "For You 피드와 공유됩니다 - 선택은 하나, 두 곳 모두에 적용됩니다.",
+  "label_remote_custom_subs": "내 서브레딧",
+  "tooltip_remote_custom_sub_add": "서브레딧 이름을 입력하거나(r/ 는 생략 가능) 링크를 붙여넣은 뒤 추가를 누르세요.",
+  "label_remote_blocklist": "차단됨",
+  "btn_remote_clear_blocklist": "차단 목록 비우기"
 }

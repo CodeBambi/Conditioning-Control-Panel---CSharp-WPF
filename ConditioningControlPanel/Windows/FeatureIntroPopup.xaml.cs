@@ -381,6 +381,29 @@ namespace ConditioningControlPanel
                 Footer = "Premium feature. Auto-connect on startup is optional."
             },
 
+            // Deliberately says nothing about premium: remote media as an asset source is FREE.
+            // It is the fix for "I installed this and have no media", which is overwhelmingly a
+            // free-tier first launch - a card that hinted at a paywall here would sell against
+            // the one thing this feature exists to solve. (The For You *feed* stays premium; see
+            // the gating note in MainWindow.Assets.cs.)
+            ["remotemedia"] = new FeatureIntroContent
+            {
+                Key = "remotemedia",
+                Glyph = "🌐",
+                RailTitle = "Remote Media",
+                Title = "🌐  Remote Media",
+                Tagline = "No folder of your own? She'll bring her own.",
+                Accent = "#5EC8F2",
+                Bullets = new[]
+                {
+                    "You don't need a library to start. The app can pull images and clips straight from Reddit, through Scrolller.",
+                    "You choose the niches, and you can add any subreddit by name. Anything you never want to see again goes on the blocklist.",
+                    "It streams from your machine to your screen - nothing is saved, nothing is uploaded, and none of it passes through our servers.",
+                    "Switch back to your own assets whenever you like. The choice lives at the top of the Assets tab."
+                },
+                Footer = "Free for everyone - an empty assets folder should never be a dead end. It is adult content, so only switch it on if you want to see it."
+            },
+
             [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent
             {
                 Key = FeatureIntroPopup.CelebrationKey,

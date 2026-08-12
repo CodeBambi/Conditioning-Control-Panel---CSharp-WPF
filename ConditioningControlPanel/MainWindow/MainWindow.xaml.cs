@@ -2533,6 +2533,12 @@ namespace ConditioningControlPanel
             // Check if this is first run and prompt for assets folder
             await CheckFirstRunAssetsPromptAsync();
 
+            // Startup ran before there was any window to ask on, so a dead end it hit (a custom
+            // assets folder that has vanished — App.EffectiveAssetsPath) could only record that an
+            // offer was warranted. This is the first safe moment to surface it: a window exists,
+            // and the first-run prompt's own modals have closed. No-ops when nothing is parked.
+            App.FlushPendingRemoteMediaOffer(this);
+
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
@@ -2753,11 +2759,45 @@ namespace ConditioningControlPanel
                     // Open the assets folder selection dialog
                     BtnPickAssetsFolder_Click(this, new RoutedEventArgs());
                 }
+
+                // Best moment in the whole app to offer remote media: the user has just told us
+                // they have no library. After the modal chain above, never during it - the
+                // coaching card dispatches at Normal priority and a MessageBox / folder browser
+                // pumps its own loop, which would stack the card on top of them.
+                // Someone who pointed us at a folder that already has content is not this user,
+                // so re-check the effective path rather than trusting the pre-prompt count.
+                if (!HasAnyLocalMedia(App.EffectiveAssetsPath))
+                    App.OfferRemoteMediaSource("first-run-assets-prompt", this);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Error in first-run assets prompt");
             }
+        }
+
+        /// <summary>
+        /// Cheap "is there anything at all to play?" probe over the images/videos folders under
+        /// <paramref name="assetsRoot"/>. Deliberately looser than the first-run prompt's typed
+        /// count - this only decides whether to offer remote media, so any file at all counts and
+        /// an unreadable folder counts as empty.
+        /// </summary>
+        private static bool HasAnyLocalMedia(string assetsRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(assetsRoot)) return false;
+                foreach (var sub in new[] { "images", "videos" })
+                {
+                    var dir = System.IO.Path.Combine(assetsRoot, sub);
+                    if (System.IO.Directory.Exists(dir) && System.IO.Directory.EnumerateFiles(dir).Any())
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("HasAnyLocalMedia: probe of {Root} failed ({Error}) — treating as empty", assetsRoot, ex.Message);
+            }
+            return false;
         }
 
         private const int WM_GETMINMAXINFO = 0x0024;
