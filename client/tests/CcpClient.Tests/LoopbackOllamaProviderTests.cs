@@ -22,8 +22,8 @@ public class LoopbackOllamaProviderTests
         new(new LoopbackOllamaProviderOptions
         {
             Host = lab.Host,
-            RequestTimeout = TimeSpan.FromMilliseconds(800),
-            ProbeTimeout = TimeSpan.FromMilliseconds(800),
+            RequestTimeout = TestWait.InjectedBudget, // SP-063: never decides an outcome
+            ProbeTimeout = TestWait.InjectedBudget,
             Retry = retry ?? AiRetryPolicy.Off,
         });
 
@@ -47,7 +47,11 @@ public class LoopbackOllamaProviderTests
     public async Task Timeout_Classifier_Bounded_ExternalTokenNotCancelled()
     {
         using var lab = new AiProviderLab();
-        var provider = Provider(lab); // 800ms request bound
+        var provider = new LoopbackOllamaProvider(new LoopbackOllamaProviderOptions
+        {
+            Host = lab.Host,
+            RequestTimeout = TimeSpan.FromMilliseconds(800), // wallclock-allow: the budget's elapsing IS the subject — timeout classification must fire, bounded, without cancelling the external token
+        });
         lab.Inject(AiLabMode.Timeout);
         using var cts = new CancellationTokenSource();
 
@@ -175,7 +179,6 @@ public class LoopbackOllamaProviderTests
         var provider = new LoopbackOllamaProvider(new LoopbackOllamaProviderOptions
         {
             Host = new Uri("http://192.168.1.50:11434/"),
-            RequestTimeout = TimeSpan.FromMilliseconds(800),
         });
         Assert.Equal(AiEndpointClass.RemoteHostOllama, provider.Descriptor.EndpointClass);
 
@@ -207,7 +210,6 @@ public class LoopbackOllamaProviderTests
         var provider = new LoopbackOllamaProvider(new LoopbackOllamaProviderOptions
         {
             Host = new Uri("http://127.0.0.1:1/"), // loopback, connection refused fast
-            ProbeTimeout = TimeSpan.FromMilliseconds(800),
         });
 
         var state = await provider.Probe!(CancellationToken.None);
@@ -222,7 +224,6 @@ public class LoopbackOllamaProviderTests
         var provider = new LoopbackOllamaProvider(new LoopbackOllamaProviderOptions
         {
             Host = new Uri("http://192.168.1.50:11434/"),
-            ProbeTimeout = TimeSpan.FromMilliseconds(800),
         });
 
         var started = TestWait.MonotonicNow();

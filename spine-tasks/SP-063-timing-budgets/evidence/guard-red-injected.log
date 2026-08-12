@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T224057\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T224057\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T224057\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T224057\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.11]     CcpClient.Tests.TestTimingGuardTests.NoWallClockWaitsOutsideTheApprovedHelper [FAIL]
+  Failed CcpClient.Tests.TestTimingGuardTests.NoWallClockWaitsOutsideTheApprovedHelper [104 ms]
+  Error Message:
+   timing-discipline guard violations:
+CcpClient.Tests/LoopbackOllamaProviderTests.cs:182: unmarked wall-clock construct — use TestWait.Until/UntilSync or record the class-3 reason in a // wallclock-allow: marker AND pin it in TestTimingGuardTests (SP-059)
+  Stack Trace:
+     at CcpClient.Tests.TestTimingGuardTests.NoWallClockWaitsOutsideTheApprovedHelper() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T224057\lane-1\client\tests\CcpClient.Tests\TestTimingGuardTests.cs:line 143
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 149 ms - CcpClient.Tests.dll (net10.0)

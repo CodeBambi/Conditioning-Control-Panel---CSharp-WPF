@@ -90,6 +90,6 @@ the per-run wall-clock column in Step 3.
 
 ## T-2 review log
 
-(engine-review presence/absence recorded per call — filled as the batch proceeds)
+- Step 1 plan review: **ABSENT** — `spine_review_step(step=1, type=plan)` returned `skipped: true`, `spawnFailed: false` ("Nested reviewer spawn blocked inside pi worker session … the batch engine runs reviews after worker success (SP-195)"). Artifact: `.reviews/1-20260812T224924.md`. Not a spawn failure, so no fail-closed exit; engine review runs after `.DONE`.
 
 <!-- Step 2/3/4 content appended below -->

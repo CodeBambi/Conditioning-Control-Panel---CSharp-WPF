@@ -1,16 +1,16 @@
 ## STATUS: SP-063 — Raise the injected test timeout budgets (owner decree)
-**Current Step:** Step 1 — verify the preserved sweep, classify every site, pick the constant (IN PROGRESS)
+**Current Step:** Step 2 — apply the raise + the one guard token (IN PROGRESS)
 **Last Updated:** 2026-08-12 (orchestrator, re-authored — wave 20, single lane)
 **Blockers:** none
 
-### Step 1: verify the preserved sweep, classify every site, pick the constant — IN PROGRESS
+### Step 1: verify the preserved sweep, classify every site, pick the constant — COMPLETE
 - [x] Update STATUS.md before starting work
 - [x] Sweep greps re-run on the current tree; site table with population 1/2/3 + confirmed/corrected/new per row
 - [x] Shared constant named + value justified (60 s default; finite, never `Timeout.InfiniteTimeSpan`)
 - [x] Expected suite wall-clock impact stated (to be checked in Step 3)
 - [x] Pre-approach solo consult scoped to EXECUTION (the decree is settled) — verdict + ACTUAL model
 
-### Step 2: apply the raise + the one guard token — NOT STARTED
+### Step 2: apply the raise + the one guard token — IN PROGRESS
 - [ ] Population 1 → shared constant; population 2 → short literals + `// wallclock-allow:` marker + pin; population 3 → assignment deleted
 - [ ] `TestTimingGuardTests` gains the single option-assignment token + pins (no new fact; floor stays 892)
 - [ ] Guard RED captured (injected unpinned budget), then removed

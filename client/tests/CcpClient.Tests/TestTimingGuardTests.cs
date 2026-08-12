@@ -34,6 +34,11 @@ public class TestTimingGuardTests
         ".WaitAsync(TimeSpan",
         ".Wait(TimeSpan",
         ".WaitOne(TimeSpan",
+        // SP-063: an injected deadline BUDGET via option assignment (RequestTimeout =,
+        // ProbeTimeout =, any future *Timeout = TimeSpan. initializer). Budgets that must not
+        // decide an outcome use TestWait.InjectedBudget; budgets whose elapsing IS the subject
+        // keep a short literal with a // wallclock-allow: marker and a pin below.
+        "Timeout = TimeSpan.",
     ];
 
     /// <summary>Files exempt wholesale: the approved helper itself and this guard (which
@@ -67,6 +72,9 @@ public class TestTimingGuardTests
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "await Task.Delay(10); // let posted UI projections land", 1),
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "await Task.Delay(100);", 1),
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5));", 1),
+        // SP-063 population 2: the budget's elapsing IS the subject (timeout classification).
+        ("CcpClient.Tests/LoopbackOllamaProviderTests.cs", "RequestTimeout = TimeSpan.FromMilliseconds(800),", 1),
+        ("CcpClient.Tests/AiProviderLabIntegrationTests.cs", "options = options with { RequestTimeout = TimeSpan.FromMilliseconds(800) };", 1),
     ];
 
     [Fact]
