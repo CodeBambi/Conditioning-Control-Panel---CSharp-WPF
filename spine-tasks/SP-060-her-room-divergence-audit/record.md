@@ -133,3 +133,22 @@ The table lives in `client/docs/her-room-divergence-audit.md` §3 (groups A awar
 ### Durable-lesson candidates (for the contract owner to consider at land)
 
 Audit §7: (1) marketing model vs code model — enumerate the tree; (2) shipped assets can be dead (`awareness_apps.json`); (3) upstream drifted toward burn-on-delivery after the port snapshotted — not every delta is a port gap, but flips carry machinery hazards (B4); (4) the strongest adopts are subtractive.
+
+---
+
+## Step 5 — testing & verification
+
+- `node .spine/patches/verify.mjs` — OK, all patches applied on all roots.
+- `dotnet build client/CcpClient.sln -c Debug` — 0 errors.
+- `dotnet test client/tests/CcpClient.Tests` (TRX attached) — **Passed: 862, Failed: 0, Total: 862** — EXACTLY the floor (zero product change confirmed by count).
+- `dotnet test client/tests/CcpClient.HeadlessTests` (TRX attached) — **Passed: 33, Failed: 0, Total: 33** — EXACTLY the floor.
+- `git diff --check` — clean. `git status --short` — clean (all File Scope paths committed; lane changes touch only `spine-tasks/SP-060-her-room-divergence-audit/**` and `client/docs/her-room-divergence-audit.md`).
+
+## Completion-criteria cross-check
+
+- Every enumerated upstream element has a sourced verdict with a port-side counterpart or explicit "no counterpart" — audit §3, 38 rows, zero UNKNOWN verdicts (4 UNKNOWN citation rows, §6, none verdict-load-bearing).
+- Every row states newly observed/retained/transmitted data — the boundary column, "none" stated explicitly.
+- Single owner decision list — audit §4, 12 plain questions with options and consequences.
+- Sizing verdicts for every ADOPT/MERGE row — audit §5 with evidence classes, named dependencies, honest limit shapes.
+- `client/docs/her-room-divergence-audit.md` stands alone; `ai-operation-contract.md` untouched (also task-board/port-lessons/upstream-sync untouched — ENABLER 2).
+- Zero product change (862/33 exact); both solo consults persisted above with actual-model provenance honestly recorded as not-surfaced.
