@@ -1548,7 +1548,9 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var baseIntensity = settings.BrainDrainIntensity;
+            // Blur strength is its own setting post-rework (BrainDrainIntensity is the AUDIO
+            // half's trigger probability) - the visual pulse must ride the visual dial.
+            var baseIntensity = settings.BrainDrainBlurStrength;
             var pulseIntensity = Math.Min(100, baseIntensity + 30);
 
             // Increase intensity

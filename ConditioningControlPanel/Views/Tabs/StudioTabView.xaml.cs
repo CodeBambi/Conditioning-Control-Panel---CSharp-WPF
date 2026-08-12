@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
@@ -85,6 +86,20 @@ namespace ConditioningControlPanel.Views.Tabs
             /// <summary>Live enabled-state for the row's dot, or null for "this module has no
             /// single on/off and must not pretend to" (Visuals had no dashboard dot either).</summary>
             public Func<bool?>? Dot;
+
+            /// <summary>
+            /// RIGHT-click quick-toggle for this row's feature — the dashboard wall's gesture,
+            /// same grammar (left-click selects/opens, right-click flips). Null for a module with
+            /// no single on/off (Visuals), where the gesture must do nothing rather than guess.
+            ///
+            /// <para>Defaulted in <see cref="BuildRack"/> from the rack key itself for every
+            /// module the wall already knows: <c>MainWindow.ToggleWallFeature</c> is keyed on THESE
+            /// keys, so the two surfaces cannot drift. The three that predate it (Haptics,
+            /// Scheduler, Ramp) pass an explicit toggle that flips their panel's own master
+            /// checkbox, which is the premium rail's idiom - the checkbox's real handler runs, so
+            /// its premium gate and its Save run with it.</para>
+            /// </summary>
+            public Action? Toggle;
 
             /// <summary>True when the panel draws its own page header, so the shared detail
             /// header must hide rather than double up (Haptics).</summary>
@@ -240,21 +255,32 @@ namespace ConditioningControlPanel.Views.Tabs
             // The dot reads a nested settings object with no INPC, so it refreshes on every
             // Studio show and on every selection rather than live.
             Add("haptics", "📳", "Haptics", "tab_haptics", PanelHaptics, null, null,
-                () => App.Settings?.Current?.Haptics?.Enabled, ownHeader: true);
+                () => App.Settings?.Current?.Haptics?.Enabled, ownHeader: true,
+                // No wall key: the mosaic never carried Haptics (the premium rail chip does), and
+                // its enable lives on the nested Haptics settings object. Flip the page's own
+                // master box so MainWindow.ChkHapticsEnabled_Changed runs - including the
+                // premium gate that reverts the box for a free account.
+                toggle: () => FlipMasterCheckBox(PanelHaptics?.ChkHapticsEnabled));
 
             _layout.Add("st4_studio_group_timing");
             // Both fire the popup's single "SchedulerRamp" key so the existing rules keep firing.
+            // Neither is a wall tile either, and neither drives a service directly (the 30s
+            // SchedulerTimer_Tick and the session ramp read the flags), so the honest quick-toggle
+            // is the panel's own enable box - it writes the flag and Saves in one place.
             Add("scheduler", "📅", "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
-                () => App.Settings?.Current?.SchedulerEnabled);
+                () => App.Settings?.Current?.SchedulerEnabled,
+                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled));
             Add("ramp", "📈", "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
-                () => App.Settings?.Current?.IntensityRampEnabled);
+                () => App.Settings?.Current?.IntensityRampEnabled,
+                toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.ChkEnabled));
 
             RenderRackRows();
             RefreshRackLabels();
             RefreshDots();
 
             void Add(string key, string glyph, string english, string locKey, UIElement? host,
-                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = false)
+                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = false,
+                     Action? toggle = null)
             {
                 var entry = new StudioRackEntry
                 {
@@ -267,6 +293,10 @@ namespace ConditioningControlPanel.Views.Tabs
                     BarkFeature = bark,
                     Dot = dot,
                     OwnHeader = ownHeader,
+                    // Default: route the rack key straight into the dashboard's own quick-toggle.
+                    // Derived rather than hand-listed per row so adding a wall tile for a module
+                    // (or a module for a wall tile) cannot leave the rack behind.
+                    Toggle = toggle ?? (WallToggleKeys.Contains(key) ? () => ToggleWallFeature(key) : null),
                 };
                 _entries.Add(entry);
                 _layout.Add(entry);
@@ -386,6 +416,10 @@ namespace ConditioningControlPanel.Views.Tabs
                     Content = grid,
                 };
                 e.Row.Click += RackEntry_Click;
+                // Right-click = quick-toggle, the same second gesture the dashboard tiles carry.
+                // On the ROW, not on the dot: the dot is 7px, and the gesture belongs to the
+                // whole entry. Rows with no Toggle fall through unhandled (Visuals).
+                e.Row.MouseRightButtonUp += RackEntry_RightClick;
                 RackList.Children.Add(e.Row);
             }
         }
@@ -402,6 +436,128 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (sender is RadioButton rb && rb.Tag is string key)
                 SelectEntry(key, announce: true, animate: true);
+        }
+
+        // =====================================================================================
+        //  right-click quick-toggle — the dashboard's gesture, on the rack
+        // =====================================================================================
+
+        /// <summary>
+        /// The rack keys <c>MainWindow.ToggleWallFeature</c> handles. Its cases were written
+        /// against THESE keys ("Keys are the Studio rack's", MainWindow.Presets.cs), so the wall
+        /// tile and the rack row flip one flag through one method: there is no second state store
+        /// and no second set of service start/stop calls to fall out of step.
+        ///
+        /// <para>An unknown key is a quiet no-op over there, so a typo here costs a dead gesture,
+        /// never a wrong write.</para>
+        /// </summary>
+        private static readonly HashSet<string> WallToggleKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "flash", "video", "subliminal", "spiral", "pinkfilter", "bubbles",
+            "bubblecount", "lockcard", "bouncingtext", "mindwipe", "braindrain",
+        };
+
+        /// <summary>
+        /// Right-click on a rack row flips that module on/off without selecting it — left-click
+        /// still owns selection, exactly as left-click still owns "open" on the wall.
+        ///
+        /// <para>Selection is deliberately untouched: a quick-toggle that also yanked the detail
+        /// pane to a different module would make the gesture unusable for turning three things on
+        /// in a row, and it would fire a FeatureOpened bark for a panel nobody asked to see.</para>
+        /// </summary>
+        private void RackEntry_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not RadioButton rb || rb.Tag is not string key) return;
+            var entry = EntryFor(key);
+            if (entry?.Toggle == null) return;   // Visuals: no single on/off, so no gesture
+
+            e.Handled = true;
+
+            bool? before = SafeDotState(entry);
+            try { entry.Toggle(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Studio rack quick-toggle failed for {Key}", key); }
+
+            // One beat late, at Normal priority (never Loaded — it starves here, see BindDotListener):
+            // a refusal can undo the write (the haptics premium gate flips IsChecked back) or never
+            // make it (the session-lock refusal writes nothing at all). Reading AFTER lets the row
+            // react to what actually happened rather than to what was asked for.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+            {
+                try
+                {
+                    RefreshDots();
+                    if (SafeDotState(entry) != before) PingDot(entry.DotShape);
+                }
+                catch (Exception ex) { App.Logger?.Debug("StudioTabView rack toggle repaint: {E}", ex.Message); }
+            }));
+        }
+
+        private static bool? SafeDotState(StudioRackEntry entry)
+        {
+            if (entry.Dot == null) return null;
+            try { return entry.Dot(); } catch { return null; }
+        }
+
+        /// <summary>Routes to the dashboard wall's own quick-toggle, which owns the session-lock
+        /// refusal, the per-feature service start/stop and the Save.</summary>
+        private void ToggleWallFeature(string key)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature(key);
+        }
+
+        /// <summary>
+        /// Flips a module's own master enable box so the panel's real handler runs — the premium
+        /// rail's <c>ToggleTabCheckBox</c> idiom, with one addition: a DISABLED box is left alone.
+        /// <c>IsChecked</c> ignores <c>IsEnabled</c>, and a greyed master toggle is how the session
+        /// feature lock says "the session owns this dial" — so without the guard the rack would be
+        /// the one surface that could flip a locked switch.
+        /// </summary>
+        private static void FlipMasterCheckBox(CheckBox? cb)
+        {
+            if (cb == null || !cb.IsEnabled) return;
+            cb.IsChecked = !(cb.IsChecked ?? false);
+        }
+
+        /// <summary>
+        /// A 260ms pop on the row's state dot, fired only when the flag REALLY moved. The dot
+        /// already carries the on/off language; this just makes a change land on a row the user is
+        /// not looking straight at, since right-click never moves the selection.
+        ///
+        /// <para>Quiet-surface safe (PLAN §2.7): one-shot, gated on <see cref="MotionFx"/>,
+        /// <c>FillBehavior.Stop</c> plus an explicit clear, so no clock survives it.</para>
+        /// </summary>
+        private static void PingDot(Ellipse? dot)
+        {
+            if (dot == null || !MotionFx.AllowTransitions) return;
+            try
+            {
+                if (dot.RenderTransform is not ScaleTransform scale)
+                {
+                    scale = new ScaleTransform(1, 1);
+                    dot.RenderTransformOrigin = new Point(0.5, 0.5);
+                    dot.RenderTransform = scale;
+                }
+
+                var pop = new DoubleAnimation(2.0, 1.0, TimeSpan.FromMilliseconds(260))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
+                };
+                pop.Completed += (_, __) =>
+                {
+                    try
+                    {
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                        scale.ScaleX = 1;
+                        scale.ScaleY = 1;
+                    }
+                    catch { }
+                };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+            catch (Exception ex) { App.Logger?.Debug("StudioTabView.PingDot: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -578,6 +734,13 @@ namespace ConditioningControlPanel.Views.Tabs
                     }
                     : null;
                 e.DotShape.ToolTip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
+
+                // Same sentence on the whole row for the rows the right-click gesture can flip:
+                // the dot is 7px of hover target, and after a quick-toggle the row the cursor is
+                // already sitting on should be able to answer "did that take?" itself. Existing
+                // keys only - no new string enters the nine language files for this.
+                if (e.Row != null && e.Toggle != null)
+                    e.Row.ToolTip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
             }
         }
 

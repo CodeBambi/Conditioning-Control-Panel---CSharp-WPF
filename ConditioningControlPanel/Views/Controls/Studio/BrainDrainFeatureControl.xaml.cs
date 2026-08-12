@@ -74,6 +74,9 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 SliderIntensity.Value = s.BrainDrainIntensity;
                 TxtIntensity.Text = $"{s.BrainDrainIntensity}%";
                 ChkHighRefresh.IsChecked = s.BrainDrainHighRefresh;
+                SliderBlurStrength.Value = s.BrainDrainBlurStrength;
+                TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";
+                ChkMelt.IsChecked = s.BrainDrainMeltEnabled;
 
                 // An empty Resources/sounds/braindrain folder makes the whole feature a silent
                 // no-op (the service warns to the log and returns). Surface it instead.
@@ -93,7 +96,9 @@ namespace ConditioningControlPanel.Views.Controls.Studio
         {
             if (e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainIntensity) ||
-                e.PropertyName == nameof(Models.AppSettings.BrainDrainHighRefresh))
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainHighRefresh) ||
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainBlurStrength) ||
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainMeltEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -140,6 +145,42 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 catch (Exception ex) { App.Logger?.Warning(ex, "Brain Drain UpdateSettings failed"); }
             }
 
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// VISUAL half: the screen blur's strength (BrainDrainBlurStrength). No explicit apply
+        /// call needed - OverlayService subscribes to AppSettings.PropertyChanged and pushes the
+        /// new strength onto the live compositor layer (RefreshBrainDrainState), so writing the
+        /// setting IS the live update.
+        /// </summary>
+        private void SliderBlurStrength_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var v = (int)e.NewValue;
+            TxtBlurStrength.Text = $"{v}%";
+            s.BrainDrainBlurStrength = v;
+
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// VISUAL half: melt variant toggle (BrainDrainMeltEnabled). Same mechanism as the blur
+        /// strength slider - OverlayService's settings hook owns the live apply, including the
+        /// stop/start bounce the capture pump's per-run melt flag requires.
+        /// </summary>
+        private void ChkMelt_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.BrainDrainMeltEnabled = ChkMelt.IsChecked ?? false;
+
+            App.Logger?.Information("Brain Drain melt toggled: {Enabled}", s.BrainDrainMeltEnabled);
             App.Settings?.Save();
         }
 

@@ -255,9 +255,9 @@
 
                     <!-- NEW in Phase 4 (Views/Controls/Studio/, built by the Brain Drain agent).
                          G2 rescue: the controls existed ONLY in the dead ProgressionTabView XAML
-                         with no handlers attached. Note OverlayService.BrainDrainWithheld is still
-                         true, so the BLUR half is a no-op app-wide; the panel must not advertise
-                         a screen effect that cannot run. -->
+                         with no handlers attached. OverlayService.BrainDrainWithheld is FALSE
+                         since the rework shipped: the blur half is live on the compositor and the
+                         panel carries its blur-strength slider + melt toggle. -->
                     <ScrollViewer x:Name="HostBrainDrain" Visibility="Collapsed"
                                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Padding="2,0,14,10">

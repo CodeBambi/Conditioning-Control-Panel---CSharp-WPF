@@ -2932,9 +2932,12 @@ namespace ConditioningControlPanel.Services
                 var ct = _remoteCts.Token;
                 if (ct.IsCancellationRequested) return;
 
-                // Ask for Image, not Any: this surface can only render a still, and a video
-                // entry reaching the pool would be a black flash rather than a skipped one.
-                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.Image);
+                // GifStill, not Image and not Any: flash images fetch scrolller's GIF filter
+                // ONLY (owner decision 2026-08-12, matching the web's GalleryFilter usage) and
+                // the source maps each GIF post to its still poster — so this surface still
+                // only ever receives renderable image entries, and a video entry reaching the
+                // pool (a black flash) stays impossible.
+                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.GifStill);
                 var (entries, error) = await coordinator.FetchBatchAsync(ct).ConfigureAwait(false);
 
                 if (error != null)
