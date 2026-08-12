@@ -126,6 +126,12 @@ namespace ConditioningControlPanel.Localization
 
         /// <summary>
         /// Get a localized string by key. Falls back to English, then to the key itself.
+        ///
+        /// Descent vocabulary tokens (<c>{petname}</c>, <c>{collective}</c>) are substituted on the
+        /// way out - see <see cref="VocabTokens"/>. That happens AFTER the English fallback on
+        /// purpose: a key that only exists in en.json must still come back with the active mod's
+        /// words in it, not with raw tokens. No shipped string contains a token yet, so today this
+        /// costs one character scan per lookup.
         /// </summary>
         public string Get(string key)
         {
@@ -133,10 +139,10 @@ namespace ConditioningControlPanel.Localization
                 return string.Empty;
 
             if (_strings.TryGetValue(key, out var value))
-                return value;
+                return VocabTokens.Apply(value);
 
             if (_fallbackStrings.TryGetValue(key, out var fallback))
-                return fallback;
+                return VocabTokens.Apply(fallback);
 
             // Return key as-is so untranslated strings are visible during development
             return key;

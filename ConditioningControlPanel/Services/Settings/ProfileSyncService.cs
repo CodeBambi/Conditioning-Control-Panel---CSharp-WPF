@@ -1208,6 +1208,13 @@ namespace ConditioningControlPanel.Services
                         // Null until the first claim ever lands, which is a perfectly good "nothing
                         // applied yet" to the server.
                         web_xp_claim_ack = settings.LastWebXpClaimId,
+                        // One Descent (PLAN.md Phase A): best on-disk evidence of this install's
+                        // age, stamped once at startup (App.EnsureInstallDateRecorded). The server
+                        // stores it once as legacy_install_date and silently drops anything it
+                        // cannot parse, so a null here — every sync before the field was ever
+                        // recorded — is a no-op, not an error. Fallback data for the Year One
+                        // anchor only; nothing reads it back.
+                        install_date = string.IsNullOrWhiteSpace(settings.InstallDate) ? null : settings.InstallDate,
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,

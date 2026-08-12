@@ -1520,6 +1520,12 @@ namespace ConditioningControlPanel
                 Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
             }
 
+            // One Descent: stamp this install's age once, from whatever on-disk evidence still
+            // exists. Silent — nothing in the UI reads it. Must run after Settings so it can read
+            // and persist the field, and early enough that the first profile sync of the session
+            // (which is what ships it) already has it.
+            EnsureInstallDateRecorded();
+
             // Migrate assets from old location (install dir) to new location (user data) in background.
             // MUST run after Settings is initialized: the migration both READS the "already migrated"
             // guard and WRITES the completion flag, and if Settings.Current is still null (as it was
@@ -4031,6 +4037,117 @@ Application State:
             }
 
             return migratedCount;
+        }
+
+        /// <summary>
+        /// Earliest install date this client will ever report. Mirrors the server's
+        /// INSTALL_DATE_FLOOR (ccp-server proxy/descent.js): anything older is a broken clock or a
+        /// file-system artefact, not a real install, and the server drops it silently.
+        /// </summary>
+        private static readonly DateTime InstallDateFloorUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        /// <summary>
+        /// One Descent (PLAN.md Phase A): record this install's age ONCE, from the oldest on-disk
+        /// evidence still available. Silent — no UI reads <see cref="AppSettings.InstallDate"/>; the
+        /// only consumer is the <c>install_date</c> field on the v2 profile-sync payload, which the
+        /// server stores as <c>legacy_install_date</c> (also once) as fallback data for the Year One
+        /// anchor.
+        ///
+        /// Written once and only once, because every source of evidence decays: log files rotate,
+        /// installers rewrite the program folder, and settings.json is recreated by the corrupt-file
+        /// recovery path. A value re-derived a year from now would look NEWER than the truth, so the
+        /// first stamp — taken while the evidence is freshest — is the one that stands.
+        ///
+        /// Never throws and never blocks startup: every probe is individually guarded and the whole
+        /// thing falls back to today.
+        /// </summary>
+        private static void EnsureInstallDateRecorded()
+        {
+            try
+            {
+                var settings = Settings?.Current;
+                if (settings == null) return;
+                if (!string.IsNullOrWhiteSpace(settings.InstallDate)) return;
+
+                var resolved = ResolveInstallDateUtc();
+                settings.InstallDate = resolved.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                Settings?.Save();
+                Logger?.Information("[Descent] Recorded install date {Date} (one-shot, from on-disk evidence)", settings.InstallDate);
+            }
+            catch (Exception ex)
+            {
+                // Deliberately Debug, not Warning: this is inert fallback data. A user whose
+                // install date never gets recorded loses nothing they can see.
+                Logger?.Debug(ex, "[Descent] Install-date recording failed (non-fatal, field stays unset)");
+            }
+        }
+
+        /// <summary>
+        /// Best evidence of true install age, as the EARLIEST of, in order of trustworthiness
+        /// (they are all compared, not short-circuited — the oldest wins):
+        /// <list type="number">
+        /// <item>settings.json CreationTimeUtc — written on the first launch that ever saved settings;</item>
+        /// <item>the executable directory's CreationTimeUtc — written by the installer, but an
+        /// in-place upgrade or a move/copy of the install folder resets it, so it can read NEWER
+        /// than the truth;</item>
+        /// <item>the oldest file in the logs folder — survives reinstalls that keep user data, but
+        /// Serilog's retention window eventually eats the early ones.</item>
+        /// </list>
+        /// Falls back to today when nothing is readable, then clamps into
+        /// [<see cref="InstallDateFloorUtc"/>, today] — a future date (bad clock) would be rejected
+        /// by the server anyway, and a pre-2020 one is an artefact.
+        /// </summary>
+        private static DateTime ResolveInstallDateUtc()
+        {
+            var today = DateTime.UtcNow.Date;
+            DateTime? earliest = null;
+
+            void Consider(DateTime? candidate)
+            {
+                if (candidate is not DateTime c) return;
+                // A missing file reports 1601-01-01 rather than throwing; the floor check below
+                // would catch it, but rejecting it here keeps "earliest" honest.
+                if (c < InstallDateFloorUtc) return;
+                if (earliest == null || c < earliest) earliest = c;
+            }
+
+            // 1. settings.json
+            try
+            {
+                var settingsPath = Path.Combine(UserDataPath, "settings.json");
+                if (File.Exists(settingsPath))
+                    Consider(File.GetCreationTimeUtc(settingsPath));
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] settings.json install-date probe failed"); }
+
+            // 2. Executable directory
+            try
+            {
+                var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+                if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir))
+                    Consider(Directory.GetCreationTimeUtc(exeDir));
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] exe-dir install-date probe failed"); }
+
+            // 3. Oldest file in the logs folder
+            try
+            {
+                var logDir = Path.Combine(UserDataPath, "logs");
+                if (Directory.Exists(logDir))
+                {
+                    foreach (var file in Directory.EnumerateFiles(logDir))
+                    {
+                        try { Consider(File.GetCreationTimeUtc(file)); }
+                        catch { /* one unreadable log file must not lose the other candidates */ }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] logs install-date probe failed"); }
+
+            var result = (earliest ?? DateTime.UtcNow).Date;
+            if (result < InstallDateFloorUtc) result = InstallDateFloorUtc.Date;
+            if (result > today) result = today;
+            return result;
         }
 
         /// <summary>

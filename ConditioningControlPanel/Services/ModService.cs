@@ -609,6 +609,10 @@ namespace ConditioningControlPanel.Services
                 if (manifest.Identity.TakeoverLabel?.Length > 200) manifest.Identity.TakeoverLabel = manifest.Identity.TakeoverLabel[..200];
                 if (manifest.Identity.Affirmation?.Length > 200) manifest.Identity.Affirmation = manifest.Identity.Affirmation[..200];
                 if (manifest.Identity.RankSubject?.Length > 200) manifest.Identity.RankSubject = manifest.Identity.RankSubject[..200];
+                // Descent vocabulary. Capped shorter than the rest on purpose: these are substituted
+                // INTO sentences, so a 200-char "pet name" would blow out every layout it lands in.
+                if (manifest.Identity.PetName?.Length > 40) manifest.Identity.PetName = manifest.Identity.PetName[..40];
+                if (manifest.Identity.Collective?.Length > 40) manifest.Identity.Collective = manifest.Identity.Collective[..40];
             }
             if (manifest.Messages != null)
             {
@@ -1041,6 +1045,23 @@ namespace ConditioningControlPanel.Services
             if (!string.IsNullOrEmpty(rank)) return rank;
             return GetUserTerm();
         }
+
+        // ---- Descent vocabulary ({petname} / {collective}) ----
+        // These deliberately return NULL rather than a default, and deliberately do NOT walk the
+        // ActiveMod → BaseMod chain the other accessors use. The base mod (CCP Default) carries
+        // UserTerm "Subject", which is a UI label, not the vanilla narrative pet name — routing
+        // through it would silently make "Subject" the vanilla answer and bury the real default.
+        // The one owner of the default is Localization.VocabTokens; null here means "this mod has
+        // no opinion, use the vanilla word".
+
+        /// <summary>Active mod's <c>{petname}</c> override, or null when it sets none.</summary>
+        public string? GetPetNameOverride() => NullIfBlank(_activeMod.Manifest.Identity?.PetName);
+
+        /// <summary>Active mod's <c>{collective}</c> override, or null when it sets none.</summary>
+        public string? GetCollectiveOverride() => NullIfBlank(_activeMod.Manifest.Identity?.Collective);
+
+        private static string? NullIfBlank(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         // Pool defaults
         public Dictionary<string, bool> GetDefaultSubliminalPool() =>
