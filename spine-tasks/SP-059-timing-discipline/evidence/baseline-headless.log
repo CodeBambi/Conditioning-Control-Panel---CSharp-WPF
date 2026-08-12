@@ -1,0 +1,4 @@
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T115820\lane-1\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    33, Skipped:     0, Total:    33, Duration: 15 s - CcpClient.HeadlessTests.dll (net10.0)

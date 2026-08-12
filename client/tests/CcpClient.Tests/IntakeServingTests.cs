@@ -45,9 +45,12 @@ public sealed class IntakeServingTests : IDisposable
         _server = new LoopbackServer(_dtrhTree, _intakeTree, Path.Combine(_dtrhTree, "assets"),
             new Inbox(), "tok", new CollectingLog(), TimeSpan.FromMilliseconds(100));
         _server.Start();
+        // SP-059: registered in the T-15 leaked-listener self-check (the registry gap the row
+        // names — this fixture pre-dates the registry and was never covered).
+        LoopbackListenerRegistry.RegisterLoopbackServer(nameof(IntakeServingTests), _server);
     }
 
-    public void Dispose() { try { _server.Dispose(); Directory.Delete(_root, recursive: true); } catch { /* best-effort */ } }
+    public void Dispose() { try { _server.Dispose(); LoopbackListenerRegistry.UnregisterLoopbackServer(_server); Directory.Delete(_root, recursive: true); } catch { /* best-effort */ } }
 
     private sealed class CollectingLog : ILogSink
     {

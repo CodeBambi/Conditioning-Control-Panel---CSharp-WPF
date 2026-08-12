@@ -54,7 +54,7 @@ public class AsyncLifecycleTests
         owner.Begin();
         var op = owner.RunAsync("loop", async token =>
         {
-            await Task.Delay(Timeout.Infinite, token);
+            await Task.Delay(Timeout.Infinite, token); // wallclock-allow: never elapses — token-observed stand-in for in-flight work
             return OperationOutcome.Completed.Instance;
         });
 
@@ -122,7 +122,7 @@ public class AsyncLifecycleTests
         var heartbeat = new HeartbeatParticipant(registry.OwnerFor("Heartbeat"), boundary, TimeSpan.FromMilliseconds(10));
         var host = new ApplicationHost(log, [heartbeat], new StartupTrace(), registry, boundary, TimeSpan.FromMilliseconds(500));
         await host.StartParticipantsAsync(CancellationToken.None);
-        Assert.True(await WaitForAsync(() => heartbeat.TickCount > 0), "heartbeat should tick before teardown");
+        await TestWait.Until(() => heartbeat.TickCount > 0, "heartbeat should tick before teardown (real timer actor)", cancellationToken: TestContext.Current.CancellationToken);
 
         await host.ShutdownAsync();
 
@@ -185,36 +185,22 @@ public class AsyncLifecycleTests
 
         // Phase 3 starts the participant before phase 4 binds: ticks accumulate, no post
         // is attempted, and nothing faults (contract §5.3 skip-until-bound).
-        Assert.True(await WaitForAsync(() => heartbeat.TickCount > 1), "ticks should run before binding");
+        await TestWait.Until(() => heartbeat.TickCount > 1, "ticks should run before binding (real timer actor)", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(0, fake.Posted);
 
         var texts = new ConcurrentQueue<string>();
         boundary.Bind(fake); // phase 4
         heartbeat.TickReporter = texts.Enqueue;
 
-        Assert.True(await WaitForAsync(() => !texts.IsEmpty), "a tick should reach the reporter through the boundary");
+        // Class 2 (SP-059): a REAL 500ms heartbeat timer actor — the tolerant window with the
+        // loud classifier; the condition (a tick reached the reporter) is unchanged.
+        await TestWait.Until(() => !texts.IsEmpty, "a tick should reach the reporter through the boundary (real 500ms heartbeat)", cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(fake.Posted > 0);
         Assert.Contains(texts, t => t.StartsWith("Heartbeat: tick "));
 
         await heartbeat.StopAsync();
         Assert.NotNull(heartbeat.Completion);
         Assert.IsType<OperationOutcome.Cancelled>(await heartbeat.Completion!);
-    }
-
-    private static async Task<bool> WaitForAsync(Func<bool> condition, int timeoutMs = 2000)
-    {
-        var deadline = Environment.TickCount64 + timeoutMs;
-        while (Environment.TickCount64 < deadline)
-        {
-            if (condition())
-            {
-                return true;
-            }
-
-            await Task.Delay(10);
-        }
-
-        return condition();
     }
 
     private sealed class ResourceLostException(string message) : Exception(message);
@@ -252,7 +238,7 @@ public class AsyncLifecycleTests
             owner.Begin();
             _ = owner.RunAsync("orphan", async _ =>
             {
-                await Task.Delay(Timeout.Infinite); // never observes the token
+                await Task.Delay(Timeout.Infinite); // never observes the token // wallclock-allow: never elapses — deliberately uncooperative stand-in; the test's own token cancels the operation
                 return OperationOutcome.Completed.Instance;
             });
             return Task.CompletedTask;

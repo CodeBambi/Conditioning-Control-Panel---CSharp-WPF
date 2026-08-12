@@ -107,16 +107,13 @@ public class CompanionViewModelTests
             await probes.RunAllAsync(CancellationToken.None);
         }
 
-        /// <summary>Waits (bounded) for a dispatch post to arrive, then pumps it.</summary>
-        public void PumpEventually(int timeoutMs = 5000)
+        /// <summary>Waits (bounded) for a dispatch post to arrive, then pumps it. Class 2
+        /// (SP-059): a real running participant posts asynchronously — the tolerant window
+        /// with the loud classifier via the single approved helper (sync variant: the pump
+        /// itself must stay on this thread).</summary>
+        public void PumpEventually()
         {
-            var deadline = Environment.TickCount64 + timeoutMs;
-            while (Dispatch.Pending == 0 && Environment.TickCount64 < deadline)
-            {
-                Thread.Sleep(10);
-            }
-
-            Assert.True(Dispatch.Pending > 0, "no dispatch post arrived within the bound");
+            TestWait.UntilSync(() => Dispatch.Pending > 0, "a dispatch post arriving within the bound", () => $"pending={Dispatch.Pending}");
             Dispatch.Pump();
         }
 
@@ -260,11 +257,9 @@ public class CompanionViewModelTests
 
         h.Vm.InputText = "long operation";
         h.Vm.SendCommand.Execute(null);
-        var deadline = Environment.TickCount64 + 5000;
-        while (h.Provider.Calls == 0 && Environment.TickCount64 < deadline)
-        {
-            Thread.Sleep(10);
-        }
+        // Class 2 (SP-059): the send dispatches asynchronously through the ViewModel —
+        // the tolerant window with the loud classifier; the in-flight condition is unchanged.
+        TestWait.UntilSync(() => h.Provider.Calls > 0, "the long operation genuinely in flight (provider called)", () => $"calls={h.Provider.Calls}");
 
         Assert.Equal(1, h.Provider.Calls); // genuinely in flight
 

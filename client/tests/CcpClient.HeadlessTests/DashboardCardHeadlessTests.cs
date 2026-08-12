@@ -7,6 +7,7 @@ using CcpClient.Desktop;
 using CcpClient.Desktop.Features;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Views;
+using CcpClient.Tests;
 using Xunit;
 
 namespace CcpClient.HeadlessTests;
@@ -104,22 +105,24 @@ public class DashboardCardHeadlessTests
 
         // The #TickText.Text ElementName compiled binding resolves against a CHANGING
         // source (SP-007 consult: a constant could be a hardcoded literal).
+        // Class 2 (SP-059): the tick and the mirror land through the REAL headless
+        // dispatcher — the tolerant window with the loud classifier via the single
+        // approved helper. The triple condition (tick advanced AND mirror present AND
+        // mirror carries the CURRENT tick) is unchanged.
         var ticks = ticker.TickCount;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         string? mirror = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(600);
-            mirror = (window.Content as Control)?
-                .GetVisualDescendants()
-                .OfType<TextBlock>()
-                .FirstOrDefault(t => t.Text?.StartsWith("ElementName mirror:", StringComparison.Ordinal) == true)
-                ?.Text;
-            if (ticker.TickCount > ticks && mirror is not null && mirror.Contains($"tick {ticker.TickCount}", StringComparison.Ordinal))
+        await TestWait.Until(
+            () =>
             {
-                break;
-            }
-        }
+                mirror = (window.Content as Control)?
+                    .GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .FirstOrDefault(t => t.Text?.StartsWith("ElementName mirror:", StringComparison.Ordinal) == true)
+                    ?.Text;
+                return ticker.TickCount > ticks && mirror is not null && mirror.Contains($"tick {ticker.TickCount}", StringComparison.Ordinal);
+            },
+            "the ticker advancing AND the ElementName mirror carrying the current tick",
+            () => $"ticks={ticker.TickCount} mirror='{mirror}'");
 
         Assert.NotNull(mirror);
         Assert.Matches(@"ElementName mirror: demo\.status-ticker: tick \d+", mirror);

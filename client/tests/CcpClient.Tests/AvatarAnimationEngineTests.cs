@@ -164,9 +164,9 @@ public sealed class AvatarAnimationEngineTests
         // Gate entry parks on the resume gate (not the clock): raw advances produce NO
         // emits and NO frame change for the whole frozen window.
         clock.Advance(4400);
-        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await Task.Delay(150, TestContext.Current.CancellationToken); // wallclock-allow: negative-observation settle ("nothing happens while paused") — losing the window can only false-GREEN, never flake red
         clock.Advance(4000);
-        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await Task.Delay(150, TestContext.Current.CancellationToken); // wallclock-allow: negative-observation settle ("nothing happens while paused") — losing the window can only false-GREEN, never flake red
         Assert.Equal((SyntheticAvatarPacks.ClipPoses, 0), engine.CurrentFrame);
         Assert.Equal(emittedAtPause, emitted);
 
@@ -194,7 +194,7 @@ public sealed class AvatarAnimationEngineTests
         engine.Start();
         engine.Pause();
         engine.Stop(); // teardown while paused
-        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire — stop is token-driven; expiry means the engine never cancelled (product failure)
         Assert.IsType<OperationOutcome.Cancelled>(outcome);
         var log = new ListLogSink();
         await registry.CancelAndDrainAsync(log, TimeSpan.FromSeconds(1));
@@ -227,7 +227,7 @@ public sealed class AvatarAnimationEngineTests
         for (var cycle = 0; cycle < 10; cycle++)
         {
             participant.StopTube();
-            var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire — stop is token-driven; expiry means the participant never cancelled (product failure)
             Assert.IsType<OperationOutcome.Cancelled>(outcome);
             Assert.Equal(0, registry.OutstandingOperations);
 
@@ -239,7 +239,7 @@ public sealed class AvatarAnimationEngineTests
 
         var drainLog = new ListLogSink();
         participant.StopTube();
-        await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire — stop is token-driven; expiry means the participant never cancelled (product failure)
         await registry.CancelAndDrainAsync(drainLog, TimeSpan.FromSeconds(1));
         Assert.Equal(0, registry.UnobservedOperations);
         Assert.Equal(0, registry.OutstandingOperations);
@@ -396,25 +396,13 @@ public sealed class AvatarAnimationEngineTests
         }
     }
 
-    private static async Task WaitForAsync(Func<bool> condition, string what)
-    {
-        for (var i = 0; i < 600; i++)
-        {
-            if (condition())
-            {
-                return;
-            }
-
-            await Task.Delay(5);
-        }
-
-        throw new Xunit.Sdk.XunitException($"timeout waiting for {what}");
-    }
+    private static Task WaitForAsync(Func<bool> condition, string what) =>
+        TestWait.Until(condition, what, cancellationToken: TestContext.Current.CancellationToken);
 
     private static async Task StopAndAssertCancelledAsync(AvatarAnimationEngine engine)
     {
         engine.Stop();
-        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire — stop is token-driven; expiry means the engine never cancelled (product failure)
         Assert.IsType<OperationOutcome.Cancelled>(outcome);
     }
 

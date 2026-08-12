@@ -51,9 +51,9 @@ public class LoopbackOllamaProviderTests
         lab.Inject(AiLabMode.Timeout);
         using var cts = new CancellationTokenSource();
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var reply = await provider.CompleteAsync(Request, cts.Token);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         var unavailable = Assert.IsType<AiReply.Unavailable>(reply);
         Assert.Equal(AiReplyCodes.Timeout, unavailable.Code);
@@ -69,9 +69,9 @@ public class LoopbackOllamaProviderTests
         var provider = Provider(lab, AiRetryPolicy.WpfObservedPlaceholder);
         lab.Inject(AiLabMode.Rate429, AiLabMode.Rate429);
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var reply = await provider.CompleteAsync(Request, CancellationToken.None);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         var unavailable = Assert.IsType<AiReply.Unavailable>(reply);
         Assert.Equal(AiReplyCodes.QuotaExhausted, unavailable.Code);
@@ -179,9 +179,9 @@ public class LoopbackOllamaProviderTests
         });
         Assert.Equal(AiEndpointClass.RemoteHostOllama, provider.Descriptor.EndpointClass);
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var reply = await provider.CompleteAsync(Request, CancellationToken.None);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         var unavailable = Assert.IsType<AiReply.Unavailable>(reply);
         Assert.Equal(AiReplyCodes.EndpointNotAdmitted, unavailable.Code);
@@ -225,9 +225,9 @@ public class LoopbackOllamaProviderTests
             ProbeTimeout = TimeSpan.FromMilliseconds(800),
         });
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var state = await provider.Probe!(CancellationToken.None);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         // Classification runs BEFORE any socket: probing a remote host would itself be
         // undeclared remote traffic. The typed code only the pre-socket branch produces.
@@ -245,18 +245,20 @@ public class LoopbackOllamaProviderTests
         using var cts = new CancellationTokenSource();
 
         var task = provider.CompleteAsync(Request, cts.Token);
-        var deadline = Environment.TickCount64 + 5000;
-        while (provider.BytesReadSoFar == 0 && Environment.TickCount64 < deadline)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
+        // Class 2 (SP-059): first bytes over a REAL loopback socket — the tolerant window
+        // with the loud classifier via the single approved helper.
+        await TestWait.Until(
+            () => provider.BytesReadSoFar > 0,
+            "a TRUE mid-stream position (partial body) before cancel",
+            () => $"bytes={provider.BytesReadSoFar} sends={provider.SendAttempts} labHits={lab.HitCount}",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(provider.BytesReadSoFar > 0, "a TRUE mid-stream position (partial body) must be observed before cancel");
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
         Assert.True(elapsed < 2000, $"token cancellation must be fast (no hang), took {elapsed}ms");
         Assert.True(cts.IsCancellationRequested);
     }

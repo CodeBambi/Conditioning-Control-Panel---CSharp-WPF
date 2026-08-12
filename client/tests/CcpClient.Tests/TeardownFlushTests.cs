@@ -99,7 +99,7 @@ public class TeardownFlushTests
             WriteTempFile = (p, json) =>
             {
                 writeStarted.Set();
-                releaseWrite.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+                releaseWrite.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken); // wallclock-allow: subject instrument (a wedged writer) — the bound exists so the TEST can never hang, not to time the product
                 new AtomicWriteHooks().WriteTempFile(p, json);
             },
         };
@@ -110,7 +110,8 @@ public class TeardownFlushTests
         store.Mutate(m => m.Greeting = "wedged");
 
         var flush = store.FlushAsync(TimeSpan.FromMilliseconds(100));
-        Assert.True(writeStarted.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.True(writeStarted.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken), // wallclock-allow: deterministic signal, bounded — expiry means the wedged-write hook never fired (hook/product failure, not timing)
+            "the wedged write never started within 5s — the flush never reached the write hook (hook/product failure, not timing)");
         await flush; // returns after the bounded wait while the write is still blocked
 
         Assert.Contains(log.Messages, m => m.Contains("exceeded its bounded wait"));
