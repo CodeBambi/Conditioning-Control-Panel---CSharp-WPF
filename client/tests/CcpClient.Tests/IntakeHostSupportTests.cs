@@ -106,10 +106,20 @@ public sealed class IntakeHostSupportTests : IDisposable
         var incomplete = IntakeServingRoots.Probe(incompleteDir);
         Assert.Equal(IntakeServingRoots.IntakePayloadState.Incomplete, incomplete.State);
         Assert.Equal(1, incomplete.FileCount);
+        Assert.Equal("index.html", incomplete.MissingFile);
 
         File.WriteAllText(Path.Combine(incompleteDir, "index.html"), "<html/>");
+        // SP-058: index.html alone is no longer enough — core/accents.js is a required
+        // file (ai.js:24 imports it; a missing module kills the whole ES-module graph).
+        var noAccents = IntakeServingRoots.Probe(incompleteDir);
+        Assert.Equal(IntakeServingRoots.IntakePayloadState.Incomplete, noAccents.State);
+        Assert.Equal("core/accents.js", noAccents.MissingFile);
+
+        Directory.CreateDirectory(Path.Combine(incompleteDir, "core"));
+        File.WriteAllText(Path.Combine(incompleteDir, "core", "accents.js"), "//");
         var present = IntakeServingRoots.Probe(incompleteDir);
         Assert.Equal(IntakeServingRoots.IntakePayloadState.Present, present.State);
+        Assert.Null(present.MissingFile);
     }
 
     // ---------- niche bank clamp ----------

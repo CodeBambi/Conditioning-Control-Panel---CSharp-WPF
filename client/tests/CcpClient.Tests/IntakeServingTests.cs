@@ -27,6 +27,7 @@ public sealed class IntakeServingTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_dtrhTree, "vendor", "three"));
         Directory.CreateDirectory(Path.Combine(_dtrhTree, "assets", "bubbles", "sfx"));
         Directory.CreateDirectory(Path.Combine(_intakeTree, "render"));
+        Directory.CreateDirectory(Path.Combine(_intakeTree, "core"));
         Directory.CreateDirectory(Path.Combine(_intakeTree, "banks"));
         Directory.CreateDirectory(Path.Combine(_intakeTree, "assets", "vo"));
         File.WriteAllText(Path.Combine(_dtrhTree, "index.html"), "DTRH PAGE");
@@ -34,6 +35,7 @@ public sealed class IntakeServingTests : IDisposable
         File.WriteAllText(Path.Combine(_dtrhTree, "assets", "bubbles", "sfx", "chime1.mp3"), "CHIME");
         File.WriteAllText(Path.Combine(_intakeTree, "index.html"), "INTAKE PAGE");
         File.WriteAllText(Path.Combine(_intakeTree, "render", "audio.js"), "INTAKE AUDIO");
+        File.WriteAllText(Path.Combine(_intakeTree, "core", "accents.js"), "INTAKE ACCENTS");
         File.WriteAllText(Path.Combine(_intakeTree, "banks", "bambi.json"), "{}");
         File.WriteAllText(Path.Combine(_intakeTree, "assets", "vo", "vo_manifest.json"), "INTAKE VO");
         File.WriteAllText(Path.Combine(_intakeTree, "styles.svg"), "<svg/>"); // outside the §4.4 allowlist
@@ -95,6 +97,17 @@ public sealed class IntakeServingTests : IDisposable
         var (status, body) = await Get("/dtrh/index.html");
         Assert.Equal(200, status);
         Assert.NotEqual("DTRH PAGE", body);
+    }
+
+    [Fact]
+    public async Task The_V67_Accents_Module_Serves_From_The_Intake_Tree()
+    {
+        // SP-058: the v6.7.x delta's new payload file resolves through the §4 contract —
+        // a real 200 with the overlay tree's bytes (and the 404 discipline on an absent
+        // path is pinned in Section4_Discipline_Holds_On_The_Intake_Server).
+        var (status, body) = await Get("/dtrh/core/accents.js");
+        Assert.Equal(200, status);
+        Assert.Equal("INTAKE ACCENTS", body);
     }
 
     [Fact]

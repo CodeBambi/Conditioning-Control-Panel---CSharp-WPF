@@ -17,6 +17,11 @@ public static class IntakeHarness
         // QuizRunResult (scoreable A2/A3 records at heat ≥2, two affirmed mantras,
         // a revealed archetype route for the #614 naming path).
         "quiz-result" => QuizResultJson,
+        // SP-058: the top-marks BOUNDARY run — totalScore 9 / maxScore 10 = exactly 90.0%
+        // (IntakeHostService.cs:45-53 bar; pct >= 90.0 -> perfect). The drive transcript's
+        // graded-verdict line is the end-to-end boundary proof; the below-bar and zero-max
+        // cases are unit-pinned (IntakeGradedTests).
+        "quiz-result:topmarks" => TopMarksQuizResultJson,
         "intake-close" => "{\"type\":\"intake-close\"}",
         "fullscreen-set:on" => "{\"type\":\"fullscreen-set\",\"on\":true}",
         "fullscreen-set:off" => "{\"type\":\"fullscreen-set\",\"on\":false}",
@@ -59,6 +64,25 @@ public static class IntakeHarness
           "affirmedMantras":["i am hers entirely","good girls drop"],
           "tagTallies":{"surrender":4,"obedience":2,"arousal":2},
           "totalScore":41,"maxScore":62,"endedAtMs":91300,"endless":false
+        }}
+        """;
+
+    /// <summary>SP-058: the boundary run — 9/10 = exactly the 90.0 top-marks bar
+    /// (kept minimal; the verdict math is what this step evidences).</summary>
+    private const string TopMarksQuizResultJson = """
+        {"type":"quiz-result","result":{
+          "product":"Graded Intake","niche":"bambi",
+          "route":{"primary":"bambi","primaryArchetypeId":"hers_entirely","primaryShare":0.62,"secondaryShare":0.21},
+          "peakDepth":0.55,"deepestBand":"deepening",
+          "rewardProfile":{"chasedReward":false,"chaseMagnitude":0.0},
+          "trajectory":[
+            {"beatId":"t1","band":"establishing","promptId":"p_t1","correct":true,"chosenIndex":1,"optionCount":2,"promptHeat":3,"tags":["obedience","surrender"]},
+            {"beatId":"t2","band":"deepening","promptId":"p_t2","correct":true,"chosenIndex":0,"optionCount":2,"promptHeat":4,"tags":["service"]},
+            {"beatId":"t3","band":"deepening","promptId":"p_t3","correct":true,"chosenIndex":1,"optionCount":3,"promptHeat":5,"tags":["worship","protocol"]}
+          ],
+          "affirmedMantras":["i am hers entirely"],
+          "tagTallies":{"surrender":1,"obedience":1},
+          "totalScore":9,"maxScore":10,"endedAtMs":91200,"endless":false
         }}
         """;
 }
