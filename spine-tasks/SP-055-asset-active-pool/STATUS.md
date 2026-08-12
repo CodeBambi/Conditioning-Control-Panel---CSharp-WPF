@@ -1,6 +1,6 @@
 ## STATUS: SP-055 — One active-pool definition (asset deselection parity)
-**Current Step:** Step 4 — Testing & Verification
-**Last Updated:** 2026-08-11 (Step 3 complete; 6 headed runs + captures + pre-completion consult SOUND)
+**Current Step:** COMPLETE — all 4 steps done, contract green
+**Last Updated:** 2026-08-11 (Step 4 complete: verify.mjs 0, build 0W/0E, 814/814 + 33/33 TRX-attached, diff clean, scope clean)
 **Blockers:** none
 
 ### Step 1: archaeology + seam design + pre-approach consult — COMPLETE
@@ -23,7 +23,7 @@
 - [x] Pre-completion solo consult (SOUND; 5 discharges executed)
 - [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification — IN PROGRESS
-- [ ] Contract testCommand passes (floor = whatever SP-054 leaves)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 4: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (814/814 + 33/33 ≥ the 795/33 floor SP-054 leaves; TRX attached; one recorded flake in an untouched heartbeat test, re-run green)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
