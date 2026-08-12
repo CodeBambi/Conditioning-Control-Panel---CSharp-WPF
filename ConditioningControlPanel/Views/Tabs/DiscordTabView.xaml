@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:ctrl="clr-namespace:ConditioningControlPanel.Views.Controls"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="620" d:DesignWidth="1460">
@@ -183,9 +184,47 @@
                                          An equipped decoration is drawn at 104/0.70 = 148px, centred
                                          and unclipped - the 6px margin buys back the room a hat
                                          needs above the head before the hero card's clip. -->
-                                    <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar" x:FieldModifier="internal"
-                                                        Grid.Column="0" AvatarSize="104"
-                                                        VerticalAlignment="Top" Margin="6,6,0,0"/>
+                                    <!-- ==== THE VAT bay ====
+                                         The daily-XP meter encases the portrait: a glass specimen
+                                         jar whose mod-coloured liquid is today's server-banked XP
+                                         (planning/one-descent — the vat is the frame now).
+
+                                         ZERO FOOTPRINT WHEN DARK, and that is the safety property,
+                                         not a nicety. The server withholds the `descent` block from
+                                         every account outside the rollout dial, and with the jar and
+                                         the readout Collapsed this bay measures to exactly the
+                                         104px avatar + its 6px margin — the hero renders pixel-for-
+                                         pixel as it did before. MainWindow.ProfileVat.cs arms it,
+                                         and arming is the ONLY thing that resizes the avatar. -->
+                                    <Grid x:Name="ProfileVatBay" x:FieldModifier="internal" Grid.Column="0"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Grid Grid.Row="0">
+                                            <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar" x:FieldModifier="internal"
+                                                                AvatarSize="104"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                Margin="6,6,0,0"/>
+
+                                            <!-- The glass goes OVER the portrait: liquid is 48%
+                                                 translucent, so the avatar reads through it exactly
+                                                 as the web surface reads through its canvas. -->
+                                            <fx:VatGlassCanvas x:Name="ProfileVatGlass" x:FieldModifier="internal"
+                                                               Visibility="Collapsed"
+                                                               HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                        </Grid>
+
+                                        <!-- Percent only, deliberately wordless: loc keys for the
+                                             Descent land in ONE batch late (PLAN.md §2), and a
+                                             number needs no translation. -->
+                                        <TextBlock x:Name="ProfileVatReadout" x:FieldModifier="internal" Grid.Row="1"
+                                                   Visibility="Collapsed" HorizontalAlignment="Center"
+                                                   Margin="0,3,0,0" FontFamily="Consolas" FontSize="10"
+                                                   FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                                    </Grid>
 
                                     <!-- ==== identity ==== -->
                                     <StackPanel Grid.Column="1" Margin="16,0,14,0" VerticalAlignment="Top">
