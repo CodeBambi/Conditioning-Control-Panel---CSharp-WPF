@@ -1,14 +1,14 @@
 ## STATUS: SP-058 — Graded Intake v6.7.x delta
-**Current Step:** Step 1 — delta archaeology + obligation table + pre-approach consult
-**Last Updated:** 2026-08-12 (worker, Step 1 in progress)
+**Current Step:** Step 2 — implement the obligations
+**Last Updated:** 2026-08-12 (worker, Step 1 complete — plan review skipped:in-worker SP-195 class; Step 2 in progress)
 **Blockers:** none (SP-057 landed c42d82ff — seam available)
 
 ### Step 1: delta archaeology + obligation table + pre-approach consult
 - [x] Update STATUS.md before starting work
 - [x] Enumerate the real v6.6.3 → v6.7.4 intake delta from the tree (counts, changed members)
-- [ ] Obligation table (SERVE/PROVISION/MESSAGE/STORE/NOTHING/BLOCKED-ON + citation + sizing)
-- [ ] Verify SP-055's existing intake `IsAssetActive` wiring; state the residual gap
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Obligation table (SERVE/PROVISION/MESSAGE/STORE/NOTHING/BLOCKED-ON + citation + sizing)
+- [x] Verify SP-055's existing intake `IsAssetActive` wiring; state the residual gap
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the obligations
 - [ ] Serve new payload files through the real serving contract + typed probe

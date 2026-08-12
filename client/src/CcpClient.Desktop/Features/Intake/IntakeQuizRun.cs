@@ -119,3 +119,42 @@ public sealed class IntakeQuizAnswer
     /// <summary>Bank entry carried "freeChoice": 1 — every option is "correct"; every axis skips it.</summary>
     [JsonPropertyName("isFreeChoice")] public bool IsFreeChoice { get; set; }
 }
+
+/// <summary>
+/// SP-058: the graded-run verdict (#870) — the v6.7.x delta's host obligation, ported as a
+/// COMPUTED verdict + typed seams. Upstream emits <c>QuizService.RaiseQuizCompleted(
+/// (int)Round(TotalScore), passed: true, perfect: MaxScore > 0 && pct >= TopMarksPercent,
+/// category: niche)</c> to the GamificationBridge (IntakeHostService.cs:406-422) and loops
+/// <c>App.Quests?.TrackMantraCompleted()</c> min(affirmed, 5) times (:435-441). Greenfield has
+/// NO achievement bridge and NO quest verifier — both raises are typed seams (the SP-054
+/// "XP computed, not granted" class), evidenced by the OnQuizResult log line. held_back is
+/// deliberately unwired upstream too (an intake has no fail state; passed is always true).
+/// </summary>
+public static class IntakeGraded
+{
+    /// <summary>"Top marks" bar as a percentage of the run's compliance score
+    /// (IntakeHostService.cs:45-53): deliberately NOT full marks — a banded descent scores
+    /// partly on pacing, so 100% is unreachable and a 100% bar would dead-letter the
+    /// achievements exactly as the collapsed quiz launcher did.</summary>
+    public const double TopMarksPercent = 90.0;
+
+    /// <summary>The grade the certificate prints (:414): MaxScore-guarded percentage.</summary>
+    public static double ScorePercent(IntakeQuizRun run) =>
+        run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;
+
+    /// <summary>perfect = MaxScore > 0 && pct >= 90.0 (:417 — the guard ported verbatim; a
+    /// zero-max run is never top marks).</summary>
+    public static bool IsTopMarks(IntakeQuizRun run) =>
+        run.MaxScore > 0 && ScorePercent(run) >= TopMarksPercent;
+
+    /// <summary>category = the run's niche, normalized (:418-420 — whitespace → the bambi
+    /// fallback, trimmed, lower-invariant) so distinct-niche counting (honor_roll) can never
+    /// split on case or padding.</summary>
+    public static string Category(IntakeQuizRun run) =>
+        string.IsNullOrWhiteSpace(run.Niche) ? IntakeNiche.Fallback : run.Niche.Trim().ToLowerInvariant();
+
+    /// <summary>The mantra-program credit count (:437-438): same min(affirmed, 5) cap as the
+    /// XP formula so endless laps can't farm program days.</summary>
+    public static int MantraCreditCount(IntakeQuizRun run) =>
+        Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
+}

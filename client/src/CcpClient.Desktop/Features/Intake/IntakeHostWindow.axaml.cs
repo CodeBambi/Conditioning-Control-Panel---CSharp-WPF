@@ -172,8 +172,9 @@ public partial class IntakeHostWindow : Window
             Surface = "payload-missing";
             UnsupportedPanel.IsVisible = true;
             UnsupportedDetail.Text =
-                $"intake payload root '{probe.Root}' -> {probe.State} ({probe.FileCount} files).\n"
-                + "The intake tree serves from payload/intake beside the exe (the SP-023 copied-asset convention). "
+                $"intake payload root '{probe.Root}' -> {probe.State} ({probe.FileCount} files)"
+                + (probe.MissingFile is null ? "" : $"; required file '{probe.MissingFile}' absent")
+                + ".\nThe intake tree serves from payload/intake beside the exe (the SP-023 copied-asset convention). "
                 + "Never a silent substitute.";
             SetStatus($"intake: payload {probe.State} — honest surface");
             _host.LogDiagnostic($"intake: payload {probe.State} — honest surface shown (no substitute)");
@@ -534,6 +535,13 @@ public partial class IntakeHostWindow : Window
         var xp = IntakeDraft.ComputeCompletionXp(run);
         _host.LogDiagnostic($"intake: completion XP computed, not granted ({xp}; no XP store — typed seam)");
 
+        // 1b. The graded verdict (SP-058; #870; :45-53 const, :406-422 emit, :435-441 mantra
+        // credit) — COMPUTED, never raised: no greenfield GamificationBridge or quest verifier
+        // (typed seams, the XP-computed-not-granted class). passed is always true (an intake
+        // has no fail state — held_back deliberately unwired upstream too).
+        _host.LogDiagnostic(
+            $"intake: graded verdict — top-marks {IntakeGraded.IsTopMarks(run)} ({IntakeGraded.ScorePercent(run):0.##}% of max; category {IntakeGraded.Category(run)}; mantra credit x{IntakeGraded.MantraCreditCount(run)}) — achievement/quest raises are typed seams (no gamification/quest subsystem)");
+
         // 2. The pass spend — HERE and nowhere else (:406; completion-only).
         _context.Pass.ConsumeForCompletedIntake();
 
@@ -654,7 +662,9 @@ public partial class IntakeHostWindow : Window
 
     /// <summary>HARNESS-ONLY: a timed script of RAW page JSON fed through the REAL
     /// parse+dispatch path (headed evidence without input automation — SP-008 named
-    /// limit). Steps: <c>quiz-result@t; intake-close@t; fullscreen-set:on|off@t; exit@t;
+    /// limit). Steps: <c>quiz-result@t; quiz-result:topmarks@t; intake-close@t;
+    /// fullscreen-set:on|off@t; exit@t; serve-probe:&lt;path&gt;@t (the running host GETs a
+    /// payload-art path from its own loopback — SP-058 per-file serving proof);
     /// loom-file:&lt;name&gt;@t</c> (a staged GIF read from the shared overlay staging —
     /// the dtrh loom-file convention — sent as the REAL loom-save).</summary>
     private void ScheduleDrive()
@@ -671,6 +681,40 @@ public partial class IntakeHostWindow : Window
                 System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : index * 4.0;
             var bare = at >= 0 ? step[..at] : step;
             var json = IntakeHarness.DriveStepToJson(bare);
+            if (json is null && bare.StartsWith("serve-probe:", StringComparison.Ordinal))
+            {
+                // SP-058 HARNESS-ONLY: the RUNNING host GETs a payload-art path from its OWN
+                // loopback server and logs the real status/bytes/sha256 — per-file
+                // request/response proof through the §4 serving contract (route-class logging
+                // redacts filenames, so the page's own fetch can never name the file; payload
+                // art paths only, never user content). A 404 on a nonexistent path is the
+                // negative control proving a 200 is a real resolution, not a masked miss.
+                var probePath = bare["serve-probe:".Length..];
+                _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                    t =>
+                    {
+                        if (t.IsCanceled) return;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using var client = new HttpClient();
+                                using var response = await client.GetAsync(
+                                    $"{_context.Participant.Server.PageOrigin}/dtrh/{probePath}");
+                                var bytes = await response.Content.ReadAsByteArrayAsync();
+                                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+                                _host.LogDiagnostic(
+                                    $"intake: serve-probe GET /dtrh/{probePath} -> {(int)response.StatusCode} ({bytes.Length} bytes, sha256 {hash[..12]}…) — resolved by the RUNNING host through the §4 serving contract (HARNESS-ONLY)");
+                            }
+                            catch (Exception ex)
+                            {
+                                _host.LogDiagnostic($"intake: serve-probe /dtrh/{probePath} failed ({ex.GetType().Name}) — harness no-op");
+                            }
+                        });
+                    }, TaskScheduler.Default);
+                continue;
+            }
+
             if (json is null && bare.StartsWith("loom-file:", StringComparison.Ordinal))
             {
                 var fileName = bare["loom-file:".Length..];
