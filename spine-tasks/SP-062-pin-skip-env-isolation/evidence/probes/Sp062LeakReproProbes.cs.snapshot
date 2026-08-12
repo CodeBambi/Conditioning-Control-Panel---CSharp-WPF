@@ -1,0 +1,158 @@
+using CcpClient.Desktop.Lifecycle;
+using Xunit;
+
+namespace CcpClient.Tests;
+
+/// <summary>
+/// SP-062 TEMPORARY repro probes (Step 1) — DELETED before the final tree; they exist to
+/// PROVE runner semantics on this machine, never to guard anything long-term.
+///
+/// Probe 1 (cross-collection): an observer in the DEFAULT collection and a mutator in
+/// <see cref="ProcessEnvCollection"/> (DisableParallelization=true) handshake on static
+/// latches. If the runner honors DisableParallelization the two never overlap and BOTH
+/// time out RED (bounded via TestWait). If they overlap, the mutator's process-wide
+/// CCP_DATA_ROOT set is observed mid-flight by the observer -> GREEN = the leak crosses
+/// collections and DisableParallelization does NOT serialize on this runner.
+///
+/// Probe 2 (intra-collection): two facts in ONE class inside ProcessEnvCollection attempt
+/// the same handshake. If tests in a single collection are sequential (xUnit's fundamental
+/// collection guarantee), the handshake DEADLOCKS into bounded-timeout RED — that RED is
+/// the proof that co-locating the pin with the env mutators is a REAL serialization fix,
+/// measured on this runner rather than trusted from docs.
+/// </summary>
+public static class Sp062LeakProbeState
+{
+    public static volatile bool ObserverAlive;
+    public static volatile bool LeakSeen;
+    public static volatile bool MutatorHeld;
+    public static volatile bool IntraPing;
+    public static volatile bool IntraPong;
+    public static volatile bool SameCollObserverAlive;
+    public static volatile bool SameCollLeakSeen;
+}
+
+/// <summary>Probe 1b (the consult's hole-closure): the FIX relies on CROSS-CLASS sequentiality
+/// inside one collection (pin class vs env-mutator class), which probes 1/2 did not measure —
+/// probe 2 was two facts in ONE class. Observer + mutator here are TWO classes BOTH in
+/// ProcessEnvCollection. Sequential => the handshake deadlocks into bounded-timeout RED =
+/// co-location really serializes the pin with the mutator on this runner.</summary>
+[Collection(nameof(ProcessEnvCollection))]
+public sealed class Sp062SameCollObserverTests
+{
+    [Fact]
+    public async Task Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride()
+    {
+        Sp062LeakProbeState.SameCollObserverAlive = true;
+        await TestWait.Until(
+            () =>
+            {
+                if (CompositionRoot.ActiveDataRootOverride() is not null)
+                {
+                    Sp062LeakProbeState.SameCollLeakSeen = true;
+                }
+
+                return Sp062LeakProbeState.SameCollLeakSeen;
+            },
+            "probe1b: same-collection CROSS-CLASS leak observation (timeout RED = sequential = the fix's premise holds; GREEN = the fix does NOT serialize)",
+            cancellationToken: TestContext.Current.CancellationToken);
+    }
+}
+
+[Collection(nameof(ProcessEnvCollection))]
+public sealed class Sp062SameCollMutatorTests
+{
+    [Fact]
+    public async Task Probe1b_SameCollectionCrossClass_MutatorHoldsOverride()
+    {
+        await TestWait.Until(
+            () => Sp062LeakProbeState.SameCollObserverAlive,
+            "probe1b: same-collection observer alive (timeout RED = sequential)",
+            cancellationToken: TestContext.Current.CancellationToken);
+        var sandbox = Path.Combine(Path.GetTempPath(), "ccp-sp062-probe1b-" + Guid.NewGuid().ToString("N"));
+        var prior = Environment.GetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable);
+        Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, sandbox);
+        try
+        {
+            await TestWait.Until(
+                () => Sp062LeakProbeState.SameCollLeakSeen,
+                "probe1b: same-collection sibling class saw the held override (timeout RED = sequential = fix premise holds)",
+                cancellationToken: TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, prior);
+            try { Directory.Delete(sandbox, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+}
+
+public sealed class Sp062LeakObserverTests
+{
+    [Fact]
+    public async Task Probe1_CrossCollection_ObserverWatchesForOverride()
+    {
+        Sp062LeakProbeState.ObserverAlive = true;
+        // The poll condition latches the leak: seeing the override non-null here, while the
+        // ONLY setter is the ProcessEnvCollection mutator, proves concurrent execution.
+        await TestWait.Until(
+            () =>
+            {
+                if (CompositionRoot.ActiveDataRootOverride() is not null)
+                {
+                    Sp062LeakProbeState.LeakSeen = true;
+                }
+
+                return Sp062LeakProbeState.LeakSeen;
+            },
+            "probe1: cross-collection CCP_DATA_ROOT leak observation (GREEN = leak crossed collections; timeout RED = runner serialized)", cancellationToken: TestContext.Current.CancellationToken);
+    }
+}
+
+[Collection(nameof(ProcessEnvCollection))]
+public sealed class Sp062LeakMutatorTests
+{
+    [Fact]
+    public async Task Probe1_CrossCollection_MutatorHoldsOverrideWhileObserverWatches()
+    {
+        await TestWait.Until(
+            () => Sp062LeakProbeState.ObserverAlive,
+            "probe1: observer alive in a sibling collection (timeout RED = runner serialized before the mutator even started)", cancellationToken: TestContext.Current.CancellationToken);
+        var sandbox = Path.Combine(Path.GetTempPath(), "ccp-sp062-probe-" + Guid.NewGuid().ToString("N"));
+        var prior = Environment.GetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable);
+        Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, sandbox);
+        try
+        {
+            Sp062LeakProbeState.MutatorHeld = true;
+            await TestWait.Until(
+                () => Sp062LeakProbeState.LeakSeen,
+                "probe1: sibling observer saw the held override (GREEN = DisableParallelization did NOT isolate us)", cancellationToken: TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, prior);
+            try { Directory.Delete(sandbox, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+}
+
+[Collection(nameof(ProcessEnvCollection))]
+public sealed class Sp062IntraCollectionProbeTests
+{
+    [Fact]
+    public async Task Probe2_IntraCollection_PingWaitsForPong()
+    {
+        Sp062LeakProbeState.IntraPing = true;
+        await TestWait.Until(
+            () => Sp062LeakProbeState.IntraPong,
+            "probe2-ping: intra-collection handshake (timeout RED = sequential = co-location serializes; GREEN = intra-collection CONCURRENCY exists)", cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Probe2_IntraCollection_PongAnswersPing()
+    {
+        await TestWait.Until(
+            () => Sp062LeakProbeState.IntraPing,
+            "probe2-pong: ping observed (timeout RED = sequential)", cancellationToken: TestContext.Current.CancellationToken);
+        Sp062LeakProbeState.IntraPong = true;
+    }
+}

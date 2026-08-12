@@ -1,0 +1,19 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:03.47]     CcpClient.Tests.AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit [FAIL]
+  Failed CcpClient.Tests.AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit [13 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 1
+Actual:   0
+  Stack Trace:
+     at CcpClient.Tests.AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\AiProviderLabIntegrationTests.cs:line 212
+--- End of stack trace from previous location ---
+Results File: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\spine-tasks\SP-062-pin-skip-env-isolation\evidence\trx\sp062-run01-unit.trx
+
+Failed!  - Failed:     1, Passed:   891, Skipped:     0, Total:   892, Duration: 36 s - CcpClient.Tests.dll (net10.0)

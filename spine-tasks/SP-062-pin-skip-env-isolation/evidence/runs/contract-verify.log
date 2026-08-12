@@ -1,0 +1,18 @@
+verify.mjs: patches tested against 2.8.0, 2.10.0
+verify.mjs: [project] pi-spine 2.10.0 at C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\.pi\npm\node_modules\pi-spine (8 patches)
+applied  fsync-r-plus-abort [project]
+applied  fsync-r-plus-lifecycle-archive [project]
+applied  dotnet-evidence-allowlist [project]
+applied  worker-tail-at-file [project]
+applied  skill-headed-evidence-sizing [project]
+applied  t5-reviews-autoclean [project]
+applied  skill-stall-detector-probe [project]
+applied  skill-trx-failure-names [project]
+verify.mjs: [engine] pi-spine 2.10.0 at C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine (5 patches)
+applied  fsync-r-plus-abort [engine]
+applied  fsync-r-plus-lifecycle-archive [engine]
+applied  dotnet-evidence-allowlist [engine]
+applied  worker-tail-at-file [engine]
+applied  t5-reviews-autoclean [engine]
+
+verify.mjs: OK — all patches applied on all roots.
