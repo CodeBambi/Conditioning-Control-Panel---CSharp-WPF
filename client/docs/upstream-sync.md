@@ -72,6 +72,17 @@ filed so nothing is silently left behind.
   upstream payload tree (`web/goon/`, 184 files) produces **zero** test signal — the suite stayed
   683/683 green while an entire product surface appeared upstream. Coverage of "trees that exist
   upstream but not in the client manifest" is missing; folded into the backlog row.
+- **CLOSED 2026-08-12 (SP-056):** the blind spot is now a guard — `client/docs/upstream-payload-inventory.json`
+  lists all 7 trees with dispositions and `UpstreamPayloadInventoryTests` fails the suite on an unlisted
+  or stale tree (RED demo in the packet). Two consequences: **(1)** every future sync MUST update the
+  inventory (the suite stays red until it does — that is the guard working); **(2)** `fileCountAtBaseline`
+  is record data, not an assertion, so a *not-ported* tree can grow by hundreds of files with no signal —
+  acceptable because its owning row carries that surface, but never mistake the guard for content-drift
+  coverage on unported trees.
+- **The enumeration found what nobody was looking for:** `tunnel` (9) + `vendor` (9) — upstream's opaque
+  WebView2 three.js backdrop below every Topmost window (`Chaos/ChaosTunnelService.cs`) — were never
+  enumerated by the DTRH host row's *completed* b1–b5 slice cut. Filed as its own P1 row (after a
+  client-side grep confirmed zero handling) plus a ratification qualifier on the DTRH row.
 - **The sync's first casualty was a mid-flight packet's GENERATED manifest.** SP-054 enumerated the
   intake tree into 2137 manifest entries while this sync added a 2138th file to that same tree —
   each side's suite was green, the merged state was red (`unmanifested-copied-asset` +

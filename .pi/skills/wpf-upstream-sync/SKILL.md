@@ -54,4 +54,5 @@ the MERGED state before it lands — each side can be green alone and red togeth
 3. `dotnet build client/CcpClient.sln -c Debug --nologo` reports 0 Warning(s) 0 Error(s) and the unit suite is at or above the recorded floor.
 4. `git log -1 --format='%h %s'` shows the merge commit, and `git rev-list --count feat/crossplatform..origin/main` is 0.
 5. `client/docs/upstream-sync.md` has a new dated section whose baseline pair matches the merge, and every claim in it resolves to a real path (spot-check two).
-6. Every new board row cites code evidence (path + counts or `File.cs:line`), and any change to already-ported code is filed as a defect-class row rather than a feature row.
+6. The payload-tree guard (`UpstreamPayloadInventoryTests`) passes on the merged state — every new upstream tree is in `client/docs/upstream-payload-inventory.json` with a disposition, and every `not-ported` entry names a real board row.
+7. Every new board row cites code evidence (path + counts or `File.cs:line`), and any change to already-ported code is filed as a defect-class row rather than a feature row.
