@@ -4,7 +4,7 @@ Branch: `feat/crossplatform` @ wave-17 integrate `eb1f60d4`. **35+ land commits 
 
 ## Live state (2026-08-12)
 
-- Waves 1-17 landed. Floor: **863 unit / 33 headless**. Next unused task ID: **SP-061**. Next work: **wave 18 = Chaos tunnel backdrop, alone** (M, product + headed; re-check MCP posture first — a UI packet must carry the A-013 advisory step).
+- Waves 1-18 landed. Floor: **892 unit / 35 headless**. Next unused task ID: **SP-062**. Next work: **SP-062 = loud skip + fixture process-env isolation** (filed at the SP-061 land: the SP-057 pin can now pass vacuously).
 - **Wave 17 LANDED** — batch `20260812T115820`: **SP-059** timing discipline (waits converted + `TestWait` helper + pinned guard + 10/10 greens; **claim narrowed at land: injected timeout BUDGETS are not swept** — fourth-occurrence P1 row filed; constitution line applied by the orchestrator) and **SP-060** Her Room/Awareness audit (38-row table + 12 owner questions; **row stays OPEN — an audit is not a decree**).
 - **Standing traps learned this wave (full text in `client/docs/port-lessons.md`):** never `git clean -fdX` a lane before `contract.verified ok` (it deletes the T-14-staged `.pi/npm` and breaks `verify.mjs`); "cold" means a fresh checkout, not a rebuild in place; `spine wait` returns instantly once any lane is terminal-failed; `tasklist /FI` lies about live PIDs — use `Get-Process -Id`.
 - **Wave-17 consult correction (solo, Opus 5):** the Chaos tunnel backdrop that wave-16 queued for lane-1 was front-run by the timing row and moves to **wave 18, alone** — the tunnel lane writes the repo's most wall-clock-hungry test class, and a deadline-literal guard landing beside new deadline literals reproduces the SP-058 merge-time failure on purpose.

@@ -1,7 +1,7 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-08-12
-**Status:** ACTIVE — wave 17 LANDED (`eb1f60d4`); wave 18 AUTHORED (SP-061, single lane)
+**Status:** ACTIVE — wave 18 LANDED (`e1a4df6e`); wave 19 next = SP-062 (loud skip + fixture env isolation, filed at the SP-061 land)
 **Next Task ID:** SP-062
 
 ---
@@ -99,11 +99,15 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **WAVE 16 COMPLETE 2026-08-12 — both lanes landed (`c42d82ff`, `7bfce5ac`).** Rows filed across the two land consults: **harness entry points must refuse to run unsealed** (P1 — the SP-057 seam is opt-in, the same procedural class that failed at SP-052), **m2test expectation-model upstream ask** (P2), **wall-clock waits in tests — third occurrence of the timing-discipline class** (P1, encode-don't-fix-once: convert + sweep + guard + constitution line, 10 consecutive greens, zero assertions weakened). Unit floor now **862** with the flaky test named on its row. Next unused task ID: SP-059.
 
-### Wave 18 (AUTHORED 2026-08-12 — single lane)
+### Wave 18 (LANDED 2026-08-12, integrate `e1a4df6e`)
+
+**WAVE 18 COMPLETE — SP-061 landed WIP.** Floor now **892 unit / 35 headless**; `--verify-assets` PASS Debug+Release (3707 entries). Merged-state verification: fresh checkout + first-ever build, 3/3 green, neither known flaky site fired. Orchestrator flipped `upstream-payload-inventory.json` `tunnel`/`vendor` → `served` at land (the SP-056 guard checks well-formedness only, so a stale `not-ported` entry stays green and dishonest). **Row filed at land: the SP-057 pin test can now pass VACUOUSLY** — SP-061 fixed a base-reproduced env-isolation flake by returning early instead of `Assert.Skip`, which flips a false RED into a false GREEN reported as `892 passed / 0 skipped`. Landing was not blocked (39 files, twice reviewed, 2.25h of headed evidence at risk in a re-spawn); the constitution line is satisfied by **scheduling SP-062 immediately**, not by blocking. Causality split per the SP-058 discipline: not created by SP-061 (base 1/14), hit-rate impact **unquantified**.
+
+### Wave 18 packet (authored 2026-08-12 — single lane)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-061-chaos-tunnel-backdrop | Row (P1, size M): the opaque below-Topmost three.js backdrop (`Resources/web/tunnel/` + `vendor/three`). Load-bearing part = the LAYERING contract (opaque, own lifecycle, never above a Topmost surface, never steals activation), proven by pixels + window rects both directions — not by a property. Dual-source archaeology with the two-`ChaosTunnelService.cs` trap named (WPF = truth, first attempt = lessons only); payload served through the existing manifest + §4 loopback discipline; `CCP_DATA_ROOT` profile isolation; tests bound by SP-059's landed timing guard. Discharges (or honestly limits) the DTRH host row's ratification qualifier | Authored 2026-08-12 | — |
+| SP-061-chaos-tunnel-backdrop | **Done 2026-08-12** (landed `e1a4df6e`; batch `20260812T171751` — FULL review chain: code APPROVE + final PASS + contract ok; A/B/C/D layering matrix with rects + z-walk, `PrintWindow` labeled as the rendering CONTROL not the layering proof; first attempt's inverted z-guard REJECTED with WPF citations; 18 manifest entries from the real import-map closure; profile byte-identical 2677 files; Linux typed Unavailable; the unported no-flash hook's ~1.5s visible consequence NAMED; row WIP) — Row (P1, size M): the opaque below-Topmost three.js backdrop (`Resources/web/tunnel/` + `vendor/three`). Load-bearing part = the LAYERING contract (opaque, own lifecycle, never above a Topmost surface, never steals activation), proven by pixels + window rects both directions — not by a property. Dual-source archaeology with the two-`ChaosTunnelService.cs` trap named (WPF = truth, first attempt = lessons only); payload served through the existing manifest + §4 loopback discipline; `CCP_DATA_ROOT` profile isolation; tests bound by SP-059's landed timing guard. Discharges (or honestly limits) the DTRH host row's ratification qualifier | Authored 2026-08-12 | — |
 
 **Why alone:** the wave-16 consult sized it standalone (NOT bundled with FYP — opaque-below-Topmost and transparent-click-through-above are opposite ends of the layering contract); the wave-17 consult deferred it one wave so it would be written **under** the timing guard instead of beside it. Machine posture at authoring, all named limits with loud fallbacks: avalonia-live MCP not connectable (`fetch failed`), DISPLAY3 absent in the last two waves, WSL zero distros.
 
