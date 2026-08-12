@@ -29,6 +29,18 @@ public static class TestWait
     /// </summary>
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// SP-063 owner decree ("just increase the amount of budgets by a lot"): the ONE shared
+    /// deadline budget for tests whose subject is NOT the budget's elapsing (classification,
+    /// round-trip, payload shape, cancellation). Injected into product options so a cold
+    /// first-ever build (JIT + HttpListener warmup) can never race the assertion. 60 s is
+    /// ~75× the old 800 ms budgets and far beyond any plausible cold start, while staying
+    /// FINITE: a genuinely wedged lab or product hang fails loudly in a minute instead of
+    /// hanging the test host forever (this suite has no per-test timeout). Budgets whose
+    /// ELAPSING is the subject keep their own short, pinned literals (population 2).
+    /// </summary>
+    public static readonly TimeSpan InjectedBudget = TimeSpan.FromSeconds(60);
+
     private const int PollMs = 10;
     private const long StarvationSlipMs = 250;
 

@@ -247,7 +247,7 @@ public class AiMemoryPromptAssemblyTests
             registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance,
             new CollectingAiDiagnosticsSink(), new AiModerationBoundary(), memory);
         pipeline.RegisterProvider(new LoopbackOllamaProvider(
-            new LoopbackOllamaProviderOptions { Host = listener.Prefix, RequestTimeout = TimeSpan.FromSeconds(10) }));
+            new LoopbackOllamaProviderOptions { Host = listener.Prefix, RequestTimeout = TestWait.InjectedBudget })); // SP-063: the subject is wire shape, never time
         pipeline.SelectProvider(AiProviderId.LocalOllama);
         await new CapabilityProbeRunner(registry.OwnerFor("probes"), capabilities).RunAllAsync(CancellationToken.None);
 

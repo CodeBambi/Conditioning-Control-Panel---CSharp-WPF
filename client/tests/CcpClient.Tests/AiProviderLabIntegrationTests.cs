@@ -45,15 +45,21 @@ public class AiProviderLabIntegrationTests
         public AiOperationPipeline Pipeline { get; }
         public LoopbackOllamaProvider Provider { get; }
 
-        public Harness(AiRetryPolicy? retry = null, bool uncooperative = false, Uri? host = null)
+        public Harness(AiRetryPolicy? retry = null, bool uncooperative = false, Uri? host = null, bool timeoutSubject = false)
         {
-            Provider = new LoopbackOllamaProvider(new LoopbackOllamaProviderOptions
+            var options = new LoopbackOllamaProviderOptions
             {
                 Host = host ?? Lab.Host,
-                RequestTimeout = TimeSpan.FromMilliseconds(800),
-                ProbeTimeout = TimeSpan.FromMilliseconds(800),
+                RequestTimeout = TestWait.InjectedBudget, // SP-063: never decides an outcome
+                ProbeTimeout = TestWait.InjectedBudget,
                 Retry = retry ?? AiRetryPolicy.Off,
-            });
+            };
+            if (timeoutSubject)
+            {
+                options = options with { RequestTimeout = TimeSpan.FromMilliseconds(800) }; // wallclock-allow: the budget's elapsing IS the subject — through-pipeline timeout classification, token not poisoned (probe budget stays generous: the probe is not the subject)
+            }
+
+            Provider = new LoopbackOllamaProvider(options);
             Pipeline = new AiOperationPipeline(Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics, new AiModerationBoundary());
             Pipeline.RegisterProvider(uncooperative ? new UncooperativeTransportDecorator(Provider) : Provider);
         }
@@ -142,7 +148,7 @@ public class AiProviderLabIntegrationTests
     [Fact]
     public async Task Timeout_ThroughPipeline_TypedUnavailable_TokenNotPoisoned_LabSeesClientGone()
     {
-        using var h = new Harness();
+        using var h = new Harness(timeoutSubject: true);
         await h.SelectAndProbeAsync();
         h.Lab.Inject(AiLabMode.Timeout);
 

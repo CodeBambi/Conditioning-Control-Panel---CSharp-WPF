@@ -1,0 +1,15 @@
+  Determining projects to restore...
+  Restored C:\Code\ccp-sp063-cold\client\src\CcpClient.Desktop\CcpClient.Desktop.csproj (in 1,76 sec).
+  Restored C:\Code\ccp-sp063-cold\client\tools\verify\CcpVerify\CcpVerify.csproj (in 1,76 sec).
+  Restored C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\CcpClient.HeadlessTests.csproj (in 1,79 sec).
+  Restored C:\Code\ccp-sp063-cold\client\tests\CcpClient.Tests\CcpClient.Tests.csproj (in 1,79 sec).
+  CcpVerify -> C:\Code\ccp-sp063-cold\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\ccp-sp063-cold\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.HeadlessTests -> C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll
+  CcpClient.Tests -> C:\Code\ccp-sp063-cold\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:25.96
