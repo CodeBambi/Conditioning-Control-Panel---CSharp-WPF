@@ -1,6 +1,6 @@
 ## STATUS: SP-055 — One active-pool definition (asset deselection parity)
-**Current Step:** Step 3 — headed proof + record + pre-completion consult
-**Last Updated:** 2026-08-11 (Step 2 complete; plan reviews skipped-by-design SP-195)
+**Current Step:** Step 4 — Testing & Verification
+**Last Updated:** 2026-08-11 (Step 3 complete; 6 headed runs + captures + pre-completion consult SOUND)
 **Blockers:** none
 
 ### Step 1: archaeology + seam design + pre-approach consult — COMPLETE
@@ -17,13 +17,13 @@
 - [x] Persisted deselection set + whitelist flag (additive, SP-005 machinery)
 - [x] Fixture-matrix tests + both-consumers-agree + skip-vs-deselect + both-folders bound (+ fire-pool consumer found + routed)
 
-### Step 3: headed proof + record + pre-completion consult
-- [ ] Headed: deselected asset never reaches the page on BOTH consumers + empty-set control
-- [ ] record.md (archaeology, consumer inventory, design, consults, review presence, evidence)
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate before .DONE
+### Step 3: headed proof + record + pre-completion consult — COMPLETE
+- [x] Headed: deselected asset never reaches the page on BOTH consumers + empty-set control (+ whitelist-off cell; captures dimension-validated)
+- [x] record.md (archaeology, consumer inventory, design, consults, review presence, evidence, budgets, surprises, lessons)
+- [x] Pre-completion solo consult (SOUND; 5 discharges executed)
+- [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification
+### Step 4: Testing & Verification — IN PROGRESS
 - [ ] Contract testCommand passes (floor = whatever SP-054 leaves)
 - [ ] git diff --check clean
 - [ ] git status --short shows only File Scope paths

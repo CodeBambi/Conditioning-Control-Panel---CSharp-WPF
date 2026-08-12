@@ -110,13 +110,50 @@ Step-1 plan review call → `skipped: true, spawnFailed: false` (artifact `.revi
 
 **Grep proof (one definition, no second raw walk):** every `EnumerateFiles`/`EnumerateDirectories` touch-point of the user-media pool routes through `DtrhUserMedia` semantics — `DtrhUserMedia.Walk` (the manifest), `DtrhNativeEffects.EnumerateVideoPool` (filtered via `DtrhUserMedia.IsAssetActive`), `LoopbackServer` (serve-only route, not an enumeration). The intake consumer routes through `DtrhUserMedia.Build`.
 
-## Step 3 — headed evidence + engine-review presence (T-2)
+## Step 3 — headed evidence (Windows; avalonia-live + transcript class)
 
-(pending)
+**Staging (consult correction 4):** the real greenfield profile `%APPDATA%/CcpClient` had NO `assets/` dir and NO `asset_selection.json` pre-task (`profile-inventory-pre.txt`) — the inventory snapshot discharges the pre-stage-baseline obligation directly (a baseline run's counts would be 0/0 by construction). Staged scoped pool: `assets/images/sp055/sp055-a.gif` (65B GIF89a) + `assets/images/sp055/sp055-b.png` (64B, THE DESELECTED asset) + `assets/videos/sp055/sp055-c.mp4` (112B); seeded store `asset_selection.json` {disabledAssetPaths:["images/sp055/sp055-b.png"], useAssetWhitelist:true} (content copy: `seeded-asset_selection.json`). **Post-evidence cleanup restored the profile to a byte-identical inventory (`profile-inventory-post.txt`, diff clean)** — the SP-052 clobber class avoided by scoped names + subtree-only removal.
+
+| Run | Cell | Transcript proof (counts-only lines) | Capture |
+|---|---|---|---|
+| A `runA-dtrh-deselect.log` (EXIT=0) | DTRH, set present + whitelist ON | `dtrh-media: manifest — 1 image(s), 1 video(s), 0 skipped` — **the deselected sp055-b.png never enters the manifest** (2 staged, 1 deselected); no whitelist-off line (the store was honored) | — (seat flag missed this run; run D re-proves with the capture) |
+| B `runB-dtrh-control.log` (EXIT=0) | DTRH control, store moved aside | `2 image(s), 1 video(s), 0 skipped` — the SAME staged pool, both images present | — |
+| C `runC-dtrh-whitelist-off.log` (EXIT=0) | DTRH, set present + whitelist OFF | `deselection set present (1 entry) but the whitelist gate is OFF — all assets active` + `2 image(s), 1 video(s)` — **the flag gates the whole mechanism, headed** (AppSettings.cs:1637 contract; the consult's trap-mitigation line fired verbatim) | `runC-semantic-tree.json` |
+| D `runD-dtrh-deselect-seat.log` (EXIT=0) | A re-run WITH the live seat | `1 image(s), 1 video(s), 0 skipped` — the deselect cell re-proven on the captured run | `runD-semantic-tree.json` |
+| E `runE-intake-deselect.log` (EXIT=0) | INTAKE, set present + whitelist ON | `dtrh-media: manifest — 1 image(s)...` (the SAME seam inside the intake host) + `intake: media manifest sampled (1 gif(s), 0 still(s) from a pool of 1)` — **the deselected still never reaches intake provisioning; the pool-of-1 line is the consult-pinned discriminator** | `runE-semantic-tree.json` |
+| F `runF-intake-control.log` (EXIT=0) | INTAKE control, store aside | `2 image(s)...` + `intake: media manifest sampled (1 gif(s), 1 still(s) from a pool of 2)` — the SAME staged pool, both images provisioned | — |
+
+**Captures (the windowId quirk rule):** `list_windows` + `get_semantic_tree` WITH `handle` (the SP-054/SP-036 binding — `screenshot_window` mis-renders across handles on this machine; never used for evidence). Dimension-validated: run C/D `CCP — Down the Rabbit Hole` 1280x800 and run E `Graded Intake` 1398.86x833.14 — the REAL hosts, never the 520x680 dashboard. The live seat is opt-in (`CCP_MCP=1`, Program.cs:283-289 — the run-A miss, corrected from run C on).
+
+**Both-consumers-agree, headed:** runs A/D + E with the identical seeded store exclude the identical asset from BOTH surfaces (manifest count 1 AND intake pool-of-1); controls B + F show it present in BOTH (2 AND pool-of-2). The A/B pair alone is discriminating (same pool, only the store differs); the E/F pair repeats it on the second consumer.
+
+**Fire-pool consumer:** unit-proven (`ActivePool_DeselectedUserVideo_NeverPlays_WhitelistOff_Plays`); not separately headed-driven (the fx-drive video-file step would only re-prove the pool filter the unit test pins — recorded, not claimed).
+
+### Step 3 — engine-review presence (T-2)
+
+Step-2 plan review call → `skipped: true, spawnFailed: false` (artifact `.reviews/2-20260811T235614.md`); Step-3 plan review call → (recorded after the Step-3 commit below). Both "Nested reviewer spawn blocked inside pi worker session... (SP-195)" — engine review ABSENT in-worker by design; code + final reviews run on the engine after .DONE.
 
 ## Step 3 — pre-completion consult
 
-(pending)
+**Mode:** solo (T-7). **Requested route:** Opus 5 main. **Actual answering model:** NOT surfaced by the consult tool response (same provenance discipline as every prior packet — recorded honestly). **Verdict: SOUND — nothing blocks .DONE; five cheap discharges, all executed:**
+
+1. **Asset-stats/favorites stale-URL check (DISCHARGED — clean):** `DtrhAssetStats` deals in NAMES only (filenames, :31 — "Names are case-insensitive (they are filenames)"); the favorites seed is name-keyed and re-resolves THROUGH the manifest, so a deselected asset's name simply never resolves. No stale-URL path exists in the port.
+2. **Unfiltered enumeration sweep (DISCHARGED — recorded here, the completion criterion's grep proof):** every `EnumerateFiles`/`EnumerateDirectories`/`GetFiles` hit in `client/src/CcpClient.Desktop`, classified: `AtomicFileSystemProbe.cs:130` (temp probe files), `DtrhLoom.cs:67` (the Spirals loom store), `DtrhNativeEffects.cs:235` (SFX roots — payload/overlay only), `:359` (**the video pool — ROUTED through the seam this row**), `:400` (whisper roots — payload/overlay), `DtrhParticipant.cs:36` (payload-tree probe count), `DtrhUserMedia.cs:159/163` (**THE seam walk**), `IntakeServingRoots.cs:38` (payload-tree probe count), `Manifest/AssetManifest.cs:317/342` (the SP-009 payload manifest). **No raw user-media walk survives outside the seam.**
+3. **Budgets + durable-lesson candidates sections (DISCHARGED — below).**
+4. **Step-4 obligations (accepted):** the EXACT contract command with TRX loggers, TRX attached into evidence/; `DtrhNativeEffects.cs` explicitly mapped to its File Scope home (`Features/Dtrh/**` — the shared pool type's consumer, declared) in the hygiene section; `grep -c "Review Level" PROMPT.md` ≥ 2 pin.
+5. **Empty-string entry (recorded, harmless):** the port's `BuildDisabledSet` keeps `""` as an entry (IntakeHostService.cs:776-781 verbatim maps null→""; WPF's AppSettings setter drops empties upstream of it — the port's document is a plain list, so a hand-edited doc could carry one). A `""` entry can never match a real relative path; the only effect is cosmetic (a set containing only `""` reads non-empty → the whitelist-off diagnostic could over-report by one). Harmless, parity-verbatim, no code change.
+
+**Relaunch hygiene (verified by the worker after the consult's question):** the watchdog recovery close passes `_recoveryClosing` through the same `Closing` teardown block that calls `TeardownBarkPipeline` → the old store stops before the recreated window's `Opened` starts a fresh one; owner accumulation is bounded by relaunch-once (the `_barkStore` precedent). No store leak across relaunch.
+
+### Budgets (T-11)
+
+Each step well under 2h: Step 1 ≈ 45min (archaeology + design + consult); Step 2 ≈ 1h (implementation incl. the fire-pool discovery + 19 tests); Step 3 ≈ 35min (6 headed runs ≈ 45-60s each + captures + cleanup); Step 4 ≈ 15min (final gates). The 4h export was never approached.
+
+### Durable-lesson candidates (orchestrator picks at land; enabler 2 — the worker does NOT edit port-lessons.md)
+
+1. **Consumer-inventory greps must sweep the enumeration PRIMITIVES (`EnumerateFiles`/`EnumerateDirectories`), not path literals** — the first-pass `images/`+`videos/` grep missed the fire-payload pool because its root arrives via `DtrhUserMedia.VideosFolder(...)` (Surprise 1).
+2. **The avalonia-live seat is opt-in (`CCP_MCP=1`, Program.cs:283-289)** — a headed run without it has no seat to connect to; budget the flag into capture-run launches from the start (run A's missed capture, re-proven as run D).
+3. **A persisted-document row with no writer yet should stage its seeded document into the real profile with scoped names + a subtree-only cleanup, and prove restoration with before/after inventory diffs** — discharges the SP-052 clobber class structurally.
 
 ## Step 4 — testing & verification
 
