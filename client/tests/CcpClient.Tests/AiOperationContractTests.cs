@@ -361,7 +361,7 @@ public class AiOperationContractTests
         owner.Begin(); // generation 0: provider A selected
         var inFlight = owner.RunAsync("ai-reply", async ct =>
         {
-            await Task.Delay(TimeSpan.FromMinutes(5), ct); // in-flight network/inference work
+            await Task.Delay(TimeSpan.FromMinutes(5), ct); // in-flight network/inference work // wallclock-allow: never elapses on the pass path — the generation switch cancels the token long before 5 minutes; expiry would mean cancellation broke (product failure)
             return OperationOutcome.Completed.Instance;
         });
 

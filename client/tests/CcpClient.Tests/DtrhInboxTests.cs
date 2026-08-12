@@ -63,9 +63,11 @@ public class DtrhInboxTests
         var inbox = new Inbox();
         var poll = inbox.PollAsync(0, TimeSpan.FromSeconds(5), CancellationToken.None);
         Assert.False(poll.IsCompleted);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        // No pre-enqueue settle (SP-059): PollAsync registers the waiter SYNCHRONOUSLY on the
+        // caller's thread before its first incomplete await (Inbox.cs: the lock block captures
+        // _signal.Task before awaiting), so the enqueue below always wakes THIS poll.
         inbox.Enqueue("{\"type\":\"init\"}");
-        var messages = await poll.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var messages = await poll.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire on a must-arrive result — expiry means the poller never woke (product failure)
         Assert.Single(messages);
     }
 
@@ -73,12 +75,12 @@ public class DtrhInboxTests
     public async Task LongPoll_BoundedTimeout_ReturnsEmpty()
     {
         var inbox = new Inbox();
-        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var started = TestWait.MonotonicNow();
         var messages = await inbox.PollAsync(0, TimeSpan.FromMilliseconds(150), CancellationToken.None);
-        elapsed.Stop();
+        var elapsedMs = TestWait.MonotonicNow() - started;
         Assert.Empty(messages);
-        Assert.True(elapsed.ElapsedMilliseconds >= 100, $"long-poll returned too early: {elapsed.ElapsedMilliseconds}ms");
-        Assert.True(elapsed.ElapsedMilliseconds < 2000, $"long-poll blew its bound: {elapsed.ElapsedMilliseconds}ms");
+        Assert.True(elapsedMs >= 100, $"long-poll returned too early: {elapsedMs}ms");
+        Assert.True(elapsedMs < 2000, $"long-poll blew its bound: {elapsedMs}ms");
     }
 
     [Fact]
@@ -86,9 +88,9 @@ public class DtrhInboxTests
     {
         var inbox = new Inbox();
         var poll = inbox.PollAsync(0, TimeSpan.FromSeconds(30), CancellationToken.None);
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        // No pre-release settle (SP-059): same synchronous-registration proof as above.
         inbox.ReleaseAll();
-        var messages = await poll.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var messages = await poll.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire on a must-arrive result — expiry means ReleaseAll never reached the poller (product failure)
         Assert.Empty(messages);
     }
 }

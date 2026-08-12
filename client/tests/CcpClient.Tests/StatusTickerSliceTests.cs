@@ -55,7 +55,9 @@ public class StatusTickerSliceTests
         Assert.False(completion!.IsCompleted); // a real long-running operation
 
         var ticksBefore = ticker.TickCount;
-        await Task.Delay(1200, TestContext.Current.CancellationToken); // 500ms interval: several ticks
+        // Class 2 (SP-059): a REAL 500ms ticker — poll for the first tick via the approved
+        // helper (returns at the first tick; tolerant window) instead of a fixed 1200ms sleep.
+        await TestWait.Until(() => ticker.TickCount > ticksBefore, "the tick ADVANCES — the operation is real (500ms real interval)", () => $"ticks={ticker.TickCount}", cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(ticker.TickCount > ticksBefore); // the tick ADVANCES — the operation is real
 
         vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
@@ -146,7 +148,7 @@ public class StatusTickerSliceTests
         Assert.True(vm2.TickerLit); // the ring is lit from the operation, phase 4, no toggle needed
 
         var ticks = ticker2.TickCount;
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        await TestWait.Until(() => ticker2.TickCount > ticks, "the restored ticker advances (500ms real interval)", () => $"ticks={ticker2.TickCount}", cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(ticker2.TickCount > ticks);
 
         // Teardown mid-operation: the owned completion terminates typed Cancelled.

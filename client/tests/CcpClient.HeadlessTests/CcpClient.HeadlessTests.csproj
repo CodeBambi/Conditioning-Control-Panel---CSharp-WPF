@@ -27,4 +27,10 @@
     <ProjectReference Include="..\..\src\CcpClient.Desktop\CcpClient.Desktop.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- SP-059: the single approved wait helper, shared source (one helper or the timing
+         guard has nothing to bless). -->
+    <Compile Include="..\CcpClient.Tests\TestWait.cs" Link="TestWait.cs" />
+  </ItemGroup>
+
 </Project>

@@ -252,14 +252,33 @@ public sealed class DtrhLoopbackContractTests : IDisposable
     [Fact]
     public async Task Inbox_LongPollHangs_UntilEnqueue()
     {
-        using var client = new HttpClient();
-        var pending = client.GetStringAsync(_server.PageOrigin + $"/bridge/{Token}/inbox?after=0", TestContext.Current.CancellationToken);
-        Assert.False(pending.IsCompleted);
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        _inbox.Enqueue("{\"type\":\"init\"}");
-        var body = await pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        using var doc = JsonDocument.Parse(body);
-        Assert.Single(doc.RootElement.GetProperty("messages").EnumerateArray());
+        // SP-059 class-1: a DEDICATED server sharing the fixture's _inbox/_log (a different
+        // inbox would not be woken by the enqueue below) with a generous 5s long-poll timeout —
+        // the shared fixture's 200ms is load-bearing for the fast-empty ack-purge tests but
+        // here it created a real load race (server poll expiring before the enqueue). No
+        // pre-enqueue settle: EITHER arrival order satisfies the assertions — if the enqueue
+        // lands first the message is retained and the late poll returns it immediately; if the
+        // server's poll registers first the enqueue wakes it (Inbox registration is synchronous).
+        var server = new LoopbackServer(
+            Path.Combine(_root, "payload"), Path.Combine(_root, "overlay"), Path.Combine(_root, "payload", "assets"),
+            _inbox, Token, _log, longPollTimeout: TimeSpan.FromSeconds(5));
+        server.Start();
+        LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.long-poll", server);
+        try
+        {
+            using var client = new HttpClient();
+            var pending = client.GetStringAsync(server.PageOrigin + $"/bridge/{Token}/inbox?after=0", TestContext.Current.CancellationToken);
+            Assert.False(pending.IsCompleted);
+            _inbox.Enqueue("{\"type\":\"init\"}");
+            var body = await pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire on a must-arrive result — expiry means the enqueue never woke the poll (product failure)
+            using var doc = JsonDocument.Parse(body);
+            Assert.Single(doc.RootElement.GetProperty("messages").EnumerateArray());
+        }
+        finally
+        {
+            server.Dispose();
+            LoopbackListenerRegistry.UnregisterLoopbackServer(server); // unregister only after dispose, even on assertion failure
+        }
     }
 
     // ---------- §4.8 sensitive-logging ban ----------

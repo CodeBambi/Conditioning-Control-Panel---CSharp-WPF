@@ -10,6 +10,7 @@ using CcpClient.Desktop;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Features.AvatarTube;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Tests;
 using CcpClient.Desktop.Views;
 using Xunit;
 
@@ -65,13 +66,11 @@ public class AvatarTubeHeadlessTests
         var deadline = clock.NowMs + ms;
         while (clock.NowMs < deadline)
         {
-            for (var i = 0; i < 600 && !clock.DelayPending; i++)
-            {
-                await Task.Delay(5);
-            }
-
+            // Class 2 (SP-059): the engine's async loop must observe the advance — the
+            // tolerant window with the loud classifier via the single approved helper.
+            await TestWait.Until(() => clock.DelayPending, $"engine loop parked (clock at {clock.NowMs}ms)");
             clock.Advance(Math.Min(16, deadline - clock.NowMs));
-            await Task.Delay(10); // let posted UI projections land
+            await Task.Delay(10); // let posted UI projections land // wallclock-allow: negative-observation settle for the dispatcher — losing it can only false-GREEN, never flake red
         }
     }
 
@@ -80,11 +79,9 @@ public class AvatarTubeHeadlessTests
     {
         var (host, _, participant, tube) = await BootAsync();
         var layerA = Control<Image>(tube, "LayerAImage");
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (layerA.Source is null && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(50);
-        }
+        // Class 2 (SP-059): the first frame renders through the REAL headless dispatcher —
+        // the tolerant window with the loud classifier via the single approved helper.
+        await TestWait.Until(() => layerA.Source is not null, "the first frame rendering through the real dispatcher");
 
         Assert.IsType<WriteableBitmap>(layerA.Source);
         Assert.Equal(1.0, layerA.Opacity);
@@ -183,7 +180,7 @@ public class AvatarTubeHeadlessTests
 
         var frozen = participant.Engine.CurrentFrame;
         clock.Advance(5000); // frozen: gate parks on the resume gate, not the clock
-        await Task.Delay(100);
+        await Task.Delay(100); // wallclock-allow: negative-observation settle ("nothing happens while paused") — losing the window can only false-GREEN, never flake red
         Assert.Equal(frozen, participant.Engine.CurrentFrame);
 
         Click(pause);
@@ -203,7 +200,11 @@ public class AvatarTubeHeadlessTests
         participant.CorruptPackForDemo(SyntheticAvatarPacks.Pulse.PackId);
 
         Click(Control<Button>(tube, "PackButton"));
-        await Task.Delay(150); // capability text lands via the next projection
+        // Class 2 (SP-059): the capability text lands via the next dispatcher projection —
+        // poll the POSITIVE condition via the approved helper instead of a fixed sleep.
+        await TestWait.Until(
+            () => Control<TextBlock>(tube, "CapabilityText").Text?.Contains("Degraded", StringComparison.Ordinal) == true,
+            "the capability text projecting Degraded through the dispatcher");
 
         var degraded = Assert.IsType<CapabilityState.Degraded>(participant.AvatarCapability);
         Assert.Equal(CapabilityReasonCodes.AssetUndecodable, degraded.Reason.Code);
@@ -225,7 +226,7 @@ public class AvatarTubeHeadlessTests
         Assert.NotNull(participant.Engine);
 
         tube.Close();
-        var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5));
+        var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5)); // wallclock-allow: terminal hang tripwire — close is token-driven; expiry means the participant never cancelled (product failure)
         Assert.IsType<OperationOutcome.Cancelled>(outcome);
         Assert.Null(participant.Engine);
         Assert.Equal(0, participant.FrameSubscriberCount);

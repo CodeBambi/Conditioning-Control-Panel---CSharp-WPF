@@ -115,7 +115,7 @@ public class CapabilityTests
         registry.Register("cap", async token =>
         {
             started.SetResult();
-            await Task.Delay(Timeout.Infinite, token); // observes cancellation
+            await Task.Delay(Timeout.Infinite, token); // observes cancellation // wallclock-allow: never elapses — token-observed stand-in
             return new CapabilityState.Available("unreachable");
         });
         var operations = new OperationRegistry();

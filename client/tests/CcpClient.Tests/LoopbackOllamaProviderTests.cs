@@ -245,11 +245,13 @@ public class LoopbackOllamaProviderTests
         using var cts = new CancellationTokenSource();
 
         var task = provider.CompleteAsync(Request, cts.Token);
-        var deadline = Environment.TickCount64 + 5000;
-        while (provider.BytesReadSoFar == 0 && Environment.TickCount64 < deadline)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
+        // Class 2 (SP-059): first bytes over a REAL loopback socket — the tolerant window
+        // with the loud classifier via the single approved helper.
+        await TestWait.Until(
+            () => provider.BytesReadSoFar > 0,
+            "a TRUE mid-stream position (partial body) before cancel",
+            () => $"bytes={provider.BytesReadSoFar} sends={provider.SendAttempts} labHits={lab.HitCount}",
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(provider.BytesReadSoFar > 0, "a TRUE mid-stream position (partial body) must be observed before cancel");
         var started = TestWait.MonotonicNow();

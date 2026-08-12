@@ -34,12 +34,17 @@ public class AiOperationPipelineTests
 
         public int Calls;
 
+        /// <summary>Deterministic first-call signal (SP-059 class-1 conversion): set at
+        /// CompleteAsync entry so in-flight waits need no wall-clock poll.</summary>
+        public TaskCompletionSource FirstCall { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Func<CancellationToken, Task<CapabilityState>>? Probe { get; init; } =
             _ => Task.FromResult<CapabilityState>(new CapabilityState.Available("fake-probe"));
 
         public async Task<AiReply> CompleteAsync(AiRequest request, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref Calls);
+            FirstCall.TrySetResult();
             if (Cooperative)
             {
                 // Honors the token: blocks until cancelled, then throws OCE.
@@ -192,7 +197,7 @@ public class AiOperationPipelineTests
         await h.RunProbesAsync();
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => provider.Calls == 1);
+        await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud); // the switch IS the cancellation
 
@@ -212,7 +217,7 @@ public class AiOperationPipelineTests
         await h.RunProbesAsync();
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => provider.Calls == 1);
+        await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud);
         provider.Release(); // the LATE reply arrives after the switch
@@ -235,7 +240,7 @@ public class AiOperationPipelineTests
         await h.RunProbesAsync();
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => provider.Calls == 1);
+        await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
 
         var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromSeconds(10));
@@ -258,7 +263,7 @@ public class AiOperationPipelineTests
         await h.RunProbesAsync();
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => provider.Calls == 1);
+        await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
 
         // Panic with a SHORT bound: the uncooperative op is still blocked; drain hits the bound.
         var started = TestWait.MonotonicNow();
@@ -339,20 +344,5 @@ public class AiOperationPipelineTests
         var json = System.Text.Json.JsonSerializer.Serialize(record);
         Assert.DoesNotContain("prompt-text-never-in-diagnostics", json);
         Assert.Matches("^[a-z-]+$", record.StableCode!);
-    }
-
-    private static async Task WaitForAsync(Func<bool> condition)
-    {
-        for (var i = 0; i < 200; i++)
-        {
-            if (condition())
-            {
-                return;
-            }
-
-            await Task.Delay(10);
-        }
-
-        Assert.Fail("condition not met within 2s");
     }
 }

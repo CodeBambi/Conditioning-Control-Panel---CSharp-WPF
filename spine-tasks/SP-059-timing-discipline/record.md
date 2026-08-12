@@ -250,7 +250,7 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
 | Step | Call | Result |
 |------|------|--------|
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260812T123030.md` |
-| 2 | `spine_review_step --step 2 --type plan` | (pending) |
+| 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260812T124618.md` |
 
 ## 6. Step 2 implementation (lab conversion + registry closure)
 
@@ -282,11 +282,87 @@ DtrhLoomTests, AiMemoryPromptAssemblyTests, LoopbackOllamaProviderTests,
 AiOperationPipelineTests) — the assembly-teardown leak self-check passing on that run IS
 the registry-closure proof (any false leak report would have failed it LOUD).
 
-## 7. Assertion-change proof
+## 7. Assertion-change proof (framing c — grep-level diff summary vs lane base d5a49f7e)
 
-(pending Step 3 — grep-level diff summary of every assertion touched; expected: none)
+`git diff d5a49f7e -- client/tests` filtered to assertion-bearing lines; EVERY touched
+assertion below. **Zero assertions relaxed, deleted, tolerance-widened, or
+`Skip=`'d. Suite counts: the guard ADDS one unit test (863 unit / 33 headless after
+Step 3; the floor note is re-stated in §9).**
 
-## 7. Ten-run index
+| # | diff | verdict |
+|---|------|---------|
+| 1 | `- Assert.Fail("condition not met within 2s")` (AiOperationPipelineTests local poll) | wait-failure mechanism, not a product assertion; replaced by `TestWait.Until(provider.FirstCall.Task, …)` — a DETERMINISTIC signal with a louder classified failure on the same in-flight condition |
+| 2 | `- Assert.True(condition(), "timed out waiting for {what}")` (lab WaitForAsync tail) | wait-failure mechanism; the three call sites now `TestWait.Until` on identical conditions (`BytesReadSoFar > 0`, `SendAttempts >= 1`) |
+| 3 | 3 × `- Assert.True(await WaitForAsync(() => heartbeat…/texts…), msg)` → `+ await TestWait.Until(<same lambda>, <same msg>)` (AsyncLifecycleTests) | identical conditions AND messages; the helper throws the classified failure where the bool+Assert.True pair threw a plain one |
+| 4 | `- Assert.True(Dispatch.Pending > 0, "no dispatch post arrived within the bound")` → `TestWait.UntilSync(() => Dispatch.Pending > 0, …)` (CompanionViewModelTests) | identical condition; the pump still runs after the wait |
+| 5 | `- Assert.True(elapsed.ElapsedMilliseconds >= 100 …)` / `< 2000 …` → `+ Assert.True(elapsedMs >= 100 …)` / `< 2000 …` (DtrhInboxTests) | Stopwatch → MonotonicNow variable rename ONLY; both bounds verbatim |
+| 6 | DtrhLoopbackContractTests `Assert.False(pending.IsCompleted)` / `Assert.Single(…)` and the three blocked-route asserts | re-indented inside try (registry try/finally); text byte-identical |
+| 7 | `Assert.True(writeStarted.Wait(5s, ct))` → same call + ADDED message (TeardownFlushTests) | assertion identical; diagnosability added |
+| 8 | `AssertNoLeakedListeners` + fixture `Dispose` line | MOVED AiProviderLab → LoopbackListenerRegistry; the self-check now covers strictly MORE listeners (strengthening) |
+
+Kept verbatim at their sites (no diff): every elapsed-bound assert (`elapsed < 2000`,
+`elapsed < 800 + 2500`, `elapsed >= 900`, `elapsed < 1000`, the two 5 s drain bounds),
+`Assert.True(provider.BytesReadSoFar > 0, …)`, both ticker `TickCount > before` asserts,
+`Assert.Equal(1, h.Provider.Calls)`, all headless asserts incl. `Assert.NotNull(mirror)`.
+
+## 8. Step 3 implementation (suite-wide conversion + the guard)
+
+**Class-1 deterministic conversions:**
+- `AiOperationPipelineTests`: `FakeProvider.FirstCall` TCS set at `CompleteAsync` entry;
+  all four `provider.Calls == 1` polls → `TestWait.Until(provider.FirstCall.Task, …)`;
+  the 200×10 ms local poll DELETED.
+- `DtrhInboxTests` ×2: pre-enqueue/pre-release hedge delays DELETED with the
+  synchronous-registration proof as in-code comments (Inbox.cs lock block precedes the
+  first incomplete await).
+- `DtrhLoopbackContractTests.Inbox_LongPollHangs_UntilEnqueue`: dedicated server sharing
+  the fixture's `_inbox`/`_log` with 5 s long-poll timeout (the shared 200 ms is
+  load-bearing for the ack-purge tests — verified :211/:222/:231); 50 ms hedge DELETED;
+  the either-arrival-order proof in-code; both listeners registered (try/finally).
+- `TeardownFlushTests:113`: deterministic signal kept, classifying message added.
+
+**Class-2 conversions onto `TestWait`:** the three lab waits + `WaitForRecordAsync`
+(Step 2), `AsyncLifecycleTests` ×3, `AvatarAnimationEngineTests.WaitForAsync` (now a one-
+line delegate), `CompanionViewModelTests` ×2 (UntilSync), `LoopbackOllamaProviderTests`
+mid-stream poll, `StatusTickerSliceTests` ×2 (poll returns at the FIRST tick instead of a
+fixed 1200 ms), headless `AvatarTubeHeadlessTests` ×3 (AdvanceAsync pump, first-frame
+poll, degraded-text poll) + `DashboardCardHeadlessTests` mirror loop (triple condition
+verbatim). `TestWait.cs` linked into HeadlessTests (single source).
+
+**Class-3 kept with markers:** 23 pinned sites (elapsed-subject measurements now via
+`TestWait.MonotonicNow()` — no marker needed; terminal hang-tripwire `WaitAsync`/`Wait`
+bounds; never-elapses `Timeout.Infinite`/5 min instruments; lab instrument delays;
+teardown join tripwires; negative-observation settles — can only false-GREEN, never
+flake red).
+
+**Consult catch fixed during implementation:** the first helper build used
+`ConfigureAwait(false)`, which moved poll continuations OFF the Avalonia UI thread — 3
+headless reds (`InvalidOperationException: … a different thread owns it`), caught
+immediately. Fix: no `ConfigureAwait(false)` anywhere in the helper, with the reason
+recorded in-code. This is exactly the class of bug the 10-run chain exists to catch.
+
+**The guard (`TestTimingGuardTests`):** scans `client/tests/**/*.cs`; 11 forbidden
+tokens; unmarked → fail; marked-but-unpinned → fail; stale pin → fail. Exempt:
+`TestWait.cs`, `TestTimingGuardTests.cs`. 19 pins covering the 23 marked sites (count-
+exact). **Red-then-green transcript:**
+
+| phase | action | result |
+|-------|--------|--------|
+| red 1 | scratch file with `Environment.TickCount64 + 8000` loop + `Task.Delay(10)`, UNMARKED | guard [FAIL], naming all 3 offending lines (`unmarked wall-clock construct`) |
+| red 2 | same file, markers added but NOT pinned | guard [FAIL] (`marked wall-clock site is NOT PINNED … that edit is the review gate`) |
+| green | scratch file deleted | guard passes (1/1, 111 ms) |
+
+**xUnit1051 sweep:** 3 warnings at the new AsyncLifecycleTests call sites (missing test
+cancellation token) fixed by passing `TestContext.Current.CancellationToken`; build back
+to 0W/0E.
+
+**ManualClock duplication (packet checkbox): NOT consolidated** — the four private copies
+are the SP-043 solution shape (deterministic fakes), zero wall-clock dependency;
+consolidation would touch 4 files for zero assertion/behavior gain, outside the
+conversions-only boundary. Recorded per the packet's record-why branch.
+
+**Product seam: NONE.** `client/src/**` unchanged.
+
+## 9. Ten-run index
 
 (pending Step 4)
 

@@ -46,7 +46,7 @@ public static class TestWait
         Func<bool> condition, string what, Func<string>? state = null,
         TimeSpan? window = null, CancellationToken cancellationToken = default)
     {
-        var stats = await PumpAsync(condition, window ?? DefaultWindow, cancellationToken).ConfigureAwait(false);
+        var stats = await PumpAsync(condition, window ?? DefaultWindow, cancellationToken);
         if (stats.Met || condition())
         {
             return;
@@ -61,10 +61,13 @@ public static class TestWait
     {
         var effectiveWindow = window ?? DefaultWindow;
         var timeout = Task.Delay(effectiveWindow);
-        var winner = await Task.WhenAny(signal, timeout).ConfigureAwait(false);
+        // NO ConfigureAwait(false) anywhere in this helper: headless UI tests poll
+        // dispatcher-owned state from the UI thread — continuations must resume on the
+        // caller's context (AvaloniaFact runs the test on the dispatcher thread).
+        var winner = await Task.WhenAny(signal, timeout);
         if (winner == signal)
         {
-            await signal.ConfigureAwait(false); // surface a faulted signal as itself
+            await signal; // surface a faulted signal as itself
             return;
         }
 
@@ -108,7 +111,7 @@ public static class TestWait
         var last = started;
         while (!condition() && Environment.TickCount64 < deadline)
         {
-            await Task.Delay(PollMs, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(PollMs, cancellationToken);
             polls++;
             var now = Environment.TickCount64;
             worstSlip = Math.Max(worstSlip, now - last - PollMs);
