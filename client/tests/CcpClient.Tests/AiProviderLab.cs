@@ -2,9 +2,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 
-// T-15 leaked-listener self-check: after ALL collections finish, any undisposed lab fails the run LOUD.
-[assembly: Xunit.AssemblyFixture(typeof(CcpClient.Tests.AiLabLeakSelfCheck))]
-
 namespace CcpClient.Tests;
 
 /// <summary>Deterministic failure-injection modes for the fake Ollama loopback endpoint (SP-019 shapes, Ollama-native protocol).</summary>
@@ -59,9 +56,6 @@ public sealed record AiLabRequestRecord(
 /// </summary>
 public sealed class AiProviderLab : IDisposable
 {
-    /// <summary>Live-instance registry (T-15 self-check): port → prefix for every undisposed lab. A leaked entry at assembly teardown = a leaked listener holding a loopback port; the assembly fixture fails the run LOUD with the port/prefix named.</summary>
-    private static readonly ConcurrentDictionary<int, string> LivePrefixes = new();
-
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _loop;
@@ -106,7 +100,9 @@ public sealed class AiProviderLab : IDisposable
             }
         }
 
-        LivePrefixes[Port] = $"http://127.0.0.1:{Port}/";
+        // T-15 self-check (generalized SP-059): registered in the suite-wide loopback-listener
+        // registry; a leaked entry at assembly teardown fails the run LOUD.
+        LoopbackListenerRegistry.Register(nameof(AiProviderLab), Port, $"http://127.0.0.1:{Port}/");
         _loop = Task.Run(ServeLoop);
     }
 
@@ -233,7 +229,7 @@ public sealed class AiProviderLab : IDisposable
                     break;
 
                 case AiLabMode.SlowOk:
-                    await Task.Delay(1500);
+                    await Task.Delay(1500); // wallclock-allow: the lab instrument IS a genuinely slow reply — elapsed time is the subject under test
                     try
                     {
                         await Write(res, 200, OkBody());
@@ -262,7 +258,7 @@ public sealed class AiProviderLab : IDisposable
     {
         for (var i = 0; i < 300; i++)
         {
-            await Task.Delay(100);
+            await Task.Delay(100); // wallclock-allow: client-gone probe cadence — the loop EXITS on disconnect; the 30s lab-side cap can only be hit by a genuinely dead client
             try
             {
                 res.OutputStream.WriteByte(0); // never flushed alone; probes the connection
@@ -297,7 +293,7 @@ public sealed class AiProviderLab : IDisposable
 
         for (var i = 0; i < 300; i++)
         {
-            await Task.Delay(100);
+            await Task.Delay(100); // wallclock-allow: client-gone probe cadence — the loop EXITS on disconnect; the 30s lab-side cap can only be hit by a genuinely dead client
             try
             {
                 res.OutputStream.WriteByte(0);
@@ -327,24 +323,7 @@ public sealed class AiProviderLab : IDisposable
     {
         try { _cts.Cancel(); } catch { } // never skip the registry removal below (a false leak report would fail the suite loud on a lie)
         try { _listener.Close(); } catch { } // aborts in-flight requests; their handlers fault into their own catches (abandon-by-abort)
-        try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch { }
-        LivePrefixes.TryRemove(Port, out _);
+        try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch { } // wallclock-allow: teardown join tripwire — bounded so Dispose can never hang the suite
+        LoopbackListenerRegistry.Unregister(Port);
     }
-
-    /// <summary>The leaked-listener self-check (T-15): called by the assembly fixture at test-assembly teardown. Throws LOUD naming every leaked port/prefix. Never called from this class's own Dispose — a Dispose throw during test-failure unwinding would mask the real failure.</summary>
-    public static void AssertNoLeakedListeners()
-    {
-        if (!LivePrefixes.IsEmpty)
-        {
-            throw new InvalidOperationException(
-                "AiProviderLab leaked listener(s) holding loopback port(s): " +
-                string.Join(", ", LivePrefixes.Select(kv => $"{kv.Value} (port {kv.Key})")));
-        }
-    }
-}
-
-/// <summary>Assembly-teardown self-check (T-15): runs AFTER all collections (no parallel-lab race), adds zero test cases. Any lab still registered leaked its listener.</summary>
-public sealed class AiLabLeakSelfCheck : IDisposable
-{
-    public void Dispose() => AiProviderLab.AssertNoLeakedListeners();
 }

@@ -237,9 +237,9 @@ public class AiOperationPipelineTests
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await WaitForAsync(() => provider.Calls == 1);
 
-        var started = DateTime.UtcNow;
+        var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromSeconds(10));
-        var elapsed = DateTime.UtcNow - started;
+        var elapsed = TimeSpan.FromMilliseconds(TestWait.MonotonicNow() - started);
 
         Assert.True(elapsed < TimeSpan.FromSeconds(5), $"drain must be bounded by cancellation, not the wait bound: {elapsed}");
         var result = await inFlight;
@@ -261,9 +261,9 @@ public class AiOperationPipelineTests
         await WaitForAsync(() => provider.Calls == 1);
 
         // Panic with a SHORT bound: the uncooperative op is still blocked; drain hits the bound.
-        var started = DateTime.UtcNow;
+        var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromMilliseconds(200));
-        var elapsed = DateTime.UtcNow - started;
+        var elapsed = TimeSpan.FromMilliseconds(TestWait.MonotonicNow() - started);
         Assert.True(elapsed < TimeSpan.FromSeconds(5), $"bounded drain must not hang: {elapsed}");
 
         provider.Release(); // late reply AFTER panic: IsLive is false (cancelled) → discarded

@@ -153,9 +153,14 @@ public sealed class DtrhLoomTests : IDisposable
             Server = new LoopbackServer(payload, payload, media, new Inbox(), "tok", Log,
                 TimeSpan.FromMilliseconds(100), spiralsRoot: spiralsRoot, userMediaRoot: userMediaRoot);
             Server.Start();
+            LoopbackListenerRegistry.RegisterLoopbackServer(nameof(ServerHarness), Server); // SP-059 T-15 self-check coverage
         }
 
-        public void Dispose() => Server.Dispose();
+        public void Dispose()
+        {
+            Server.Dispose();
+            LoopbackListenerRegistry.UnregisterLoopbackServer(Server); // unregister only after the best-effort dispose
+        }
     }
 
     private sealed class CollectingLog : ILogSink

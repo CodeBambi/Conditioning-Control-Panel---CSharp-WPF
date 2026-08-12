@@ -41,9 +41,14 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         _server = new LoopbackServer(payload, overlay, media, _inbox, Token, _log,
             longPollTimeout: TimeSpan.FromMilliseconds(200));
         _server.Start();
+        LoopbackListenerRegistry.RegisterLoopbackServer(nameof(DtrhLoopbackContractTests), _server); // SP-059 T-15 self-check coverage
     }
 
-    public void Dispose() => _server.Dispose();
+    public void Dispose()
+    {
+        _server.Dispose();
+        LoopbackListenerRegistry.UnregisterLoopbackServer(_server); // Dispose is best-effort internally (never throws) — unregister only after it
+    }
 
     private sealed class CollectingLog : ILogSink
     {
@@ -285,20 +290,28 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         Directory.CreateDirectory(media);
         Directory.CreateDirectory(overlay);
         File.WriteAllText(Path.Combine(payload, "index.html"), "<html>payload</html>");
-        using var server = new LoopbackServer(payload, overlay, media, new Inbox(), Token, _log,
+        var server = new LoopbackServer(payload, overlay, media, new Inbox(), Token, _log,
             longPollTimeout: TimeSpan.FromMilliseconds(200),
             blockedRoutePrefixes: ["/media/"]);
         server.Start();
-
-        using var client = new HttpClient();
-        // The blocked media origin answers a typed 403 with CORS-on-errors (the W18
-        // diagnosable-failure shape — never a hang, never a silent drop).
-        var blocked = await client.GetAsync(server.MediaOrigin + "/media/note.json", TestContext.Current.CancellationToken);
-        Assert.Equal(System.Net.HttpStatusCode.Forbidden, blocked.StatusCode);
-        Assert.True(blocked.Headers.Contains("Access-Control-Allow-Origin"));
-        // Other routes on the SAME server are unaffected (page survives — W18).
-        var page = await client.GetAsync(server.PageOrigin + "/dtrh/index.html", TestContext.Current.CancellationToken);
-        Assert.Equal(System.Net.HttpStatusCode.OK, page.StatusCode);
+        LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.blocked-route", server); // SP-059 T-15 self-check coverage
+        try
+        {
+            using var client = new HttpClient();
+            // The blocked media origin answers a typed 403 with CORS-on-errors (the W18
+            // diagnosable-failure shape — never a hang, never a silent drop).
+            var blocked = await client.GetAsync(server.MediaOrigin + "/media/note.json", TestContext.Current.CancellationToken);
+            Assert.Equal(System.Net.HttpStatusCode.Forbidden, blocked.StatusCode);
+            Assert.True(blocked.Headers.Contains("Access-Control-Allow-Origin"));
+            // Other routes on the SAME server are unaffected (page survives — W18).
+            var page = await client.GetAsync(server.PageOrigin + "/dtrh/index.html", TestContext.Current.CancellationToken);
+            Assert.Equal(System.Net.HttpStatusCode.OK, page.StatusCode);
+        }
+        finally
+        {
+            server.Dispose();
+            LoopbackListenerRegistry.UnregisterLoopbackServer(server); // unregister only after dispose, even on assertion failure (a false leak report would fail the suite on a lie)
+        }
     }
 }
 

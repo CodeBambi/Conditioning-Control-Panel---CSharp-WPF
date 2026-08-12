@@ -250,8 +250,39 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
 | Step | Call | Result |
 |------|------|--------|
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260812T123030.md` |
+| 2 | `spine_review_step --step 2 --type plan` | (pending) |
 
-## 6. Assertion-change proof
+## 6. Step 2 implementation (lab conversion + registry closure)
+
+- New `client/tests/CcpClient.Tests/TestWait.cs` — the single approved wait helper
+  (Until/UntilSync/Task-signal + `MonotonicNow` for elapsed-subject measurement) per §4a.
+- New `client/tests/CcpClient.Tests/LoopbackListenerRegistry.cs` — the generalized T-15
+  registry + renamed assembly fixture `LoopbackListenerLeakSelfCheck` (same
+  `[assembly: AssemblyFixture]` mechanism; the ONLY assembly fixture in the assembly —
+  verified no other references to the old names).
+- `AiProviderLab.cs`: private `LivePrefixes` dict + `AssertNoLeakedListeners` + old fixture
+  REMOVED, registration routed through the shared registry; lab-internal `Task.Delay`
+  instruments carry `wallclock-allow` markers with reasons.
+- `AiProviderLabIntegrationTests.cs`: the 8000 ms literals GONE (not enlarged) —
+  `WaitForRecordAsync` and all three in-flight waits on `TestWait.Until` with actor-state
+  snapshots (`provider sends/bytes, lab hits`); the four elapsed-subject pairs moved to
+  `TestWait.MonotonicNow()` (assertions untouched).
+- Registry registrations added: `IntakeServingTests` (the named gap),
+  `DtrhLoopbackContractTests` fixture + inline blocked-route server (try/finally so an
+  assertion failure can't leave a false leak report), `DtrhLoomTests.ServerHarness`,
+  `AiMemoryPromptAssemblyTests.WireListener`. Unregister only after dispose, everywhere.
+- `AiOperationPipelineTests`/`LoopbackOllamaProviderTests`/`DtrhInboxTests` elapsed pairs
+  moved to `MonotonicNow` (Step 3 conversions continue there).
+
+**Local proof:** 6 × the flaking test (`Panic_Live_...`) green under the conversion
+(~500 ms each — the wait now returns at the first poll instead of racing an 8000 ms
+deadline); 90/90 green across every registry-touched + lab-adjacent class
+(AiProviderLabIntegrationTests, IntakeServingTests, DtrhLoopbackContractTests,
+DtrhLoomTests, AiMemoryPromptAssemblyTests, LoopbackOllamaProviderTests,
+AiOperationPipelineTests) — the assembly-teardown leak self-check passing on that run IS
+the registry-closure proof (any false leak report would have failed it LOUD).
+
+## 7. Assertion-change proof
 
 (pending Step 3 — grep-level diff summary of every assertion touched; expected: none)
 

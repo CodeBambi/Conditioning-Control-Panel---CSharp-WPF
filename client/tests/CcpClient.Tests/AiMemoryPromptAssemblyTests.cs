@@ -308,6 +308,7 @@ public class AiMemoryPromptAssemblyTests
 
             _listener = bound ?? throw new InvalidOperationException("WireListener: no loopback port available");
             Prefix = prefix!;
+            LoopbackListenerRegistry.Register(nameof(WireListener), Prefix.Port, Prefix.ToString()); // SP-059 T-15 self-check coverage
             _serve = Task.Run(ServeLoop);
         }
 
@@ -325,8 +326,9 @@ public class AiMemoryPromptAssemblyTests
         {
             _cts.Cancel();
             _listener.Close();
-            try { _serve.Wait(TimeSpan.FromSeconds(5)); } catch (AggregateException) { }
+            try { _serve.Wait(TimeSpan.FromSeconds(5)); } catch (AggregateException) { } // wallclock-allow: teardown join tripwire — bounded so Dispose can never hang the suite
             _cts.Dispose();
+            LoopbackListenerRegistry.Unregister(Prefix.Port);
         }
 
         private async Task ServeLoop()

@@ -68,33 +68,25 @@ public class AiProviderLabIntegrationTests
         public void Dispose() => Lab.Dispose();
     }
 
+    /// <summary>Waits for the lab (a real socket actor on another thread) to record a request.
+    /// Class 2 (SP-059): a real external actor — the tolerant window with the loud classifier,
+    /// via the single approved helper. No bare deadline literal.</summary>
     private static async Task<AiLabRequestRecord> WaitForRecordAsync(AiProviderLab lab, AiLabMode mode)
     {
-        var deadline = Environment.TickCount64 + 8000;
-        while (Environment.TickCount64 < deadline)
-        {
-            var record = lab.Records.LastOrDefault(r => r.Mode == mode);
-            if (record is not null)
-            {
-                return record;
-            }
-
-            await Task.Delay(25, TestContext.Current.CancellationToken);
-        }
-
-        throw new InvalidOperationException($"lab never recorded a {mode} request");
+        AiLabRequestRecord? record = null;
+        await TestWait.Until(
+            () => (record = lab.Records.LastOrDefault(r => r.Mode == mode)) is not null,
+            $"the lab recording a {mode} request",
+            () => $"lab hits={lab.HitCount} modes-recorded=[{string.Join(",", lab.Records.Select(r => r.Mode))}]",
+            cancellationToken: TestContext.Current.CancellationToken);
+        return record!;
     }
 
-    private static async Task WaitForAsync(Func<bool> condition, string what)
-    {
-        var deadline = Environment.TickCount64 + 8000;
-        while (!condition() && Environment.TickCount64 < deadline)
-        {
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
-
-        Assert.True(condition(), $"timed out waiting for {what}");
-    }
+    /// <summary>The actor-state snapshot for in-flight waits: the differential between "the
+    /// request never left the client" and "it reached the lab but no reply came" (SP-059
+    /// pre-approach consult — the evidence must travel with the verdict).</summary>
+    private static string InFlightState(Harness h) =>
+        $"provider sends={h.Provider.SendAttempts} bytes={h.Provider.BytesReadSoFar} lab hits={h.Lab.HitCount}";
 
     [Fact]
     public async Task Ok_ThroughPipeline_Completed_WithProvenance_AndContentFreeDiagnostic()
@@ -125,13 +117,17 @@ public class AiProviderLabIntegrationTests
         Assert.Equal(0, h.Pipeline.SendAttempts); // nothing sent yet
 
         var operation = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => h.Provider.BytesReadSoFar > 0, "a true mid-stream partial-body position");
+        await TestWait.Until(
+            () => h.Provider.BytesReadSoFar > 0,
+            "a true mid-stream partial-body position",
+            () => InFlightState(h),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Switch mid-stream: generation invalidation → token cancellation (contract §3 rule 2).
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         h.Pipeline.SelectProvider(null);
         var result = await operation;
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         Assert.IsType<OperationOutcome.Cancelled>(result.Outcome);
         Assert.Null(result.Reply); // zero applied
@@ -150,9 +146,9 @@ public class AiProviderLabIntegrationTests
         await h.SelectAndProbeAsync();
         h.Lab.Inject(AiLabMode.Timeout);
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var result = await h.Pipeline.RunInteractiveAsync(Request);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         Assert.IsType<OperationOutcome.Completed>(result.Outcome);
         var unavailable = Assert.IsType<AiReply.Unavailable>(result.Reply);
@@ -175,9 +171,9 @@ public class AiProviderLabIntegrationTests
         await h.SelectAndProbeAsync();
         h.Lab.Inject(AiLabMode.Rate429, AiLabMode.Rate429);
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         var result = await h.Pipeline.RunInteractiveAsync(Request);
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         var unavailable = Assert.IsType<AiReply.Unavailable>(result.Reply);
         Assert.Equal(AiReplyCodes.QuotaExhausted, unavailable.Code);
@@ -258,7 +254,11 @@ public class AiProviderLabIntegrationTests
         var operation = h.Pipeline.RunInteractiveAsync(Request);
         // The probe's GET /api/version already counts as a lab hit — wait for the PROVIDER's
         // send seam instead: the socket write has genuinely begun (request in flight).
-        await WaitForAsync(() => h.Provider.SendAttempts >= 1, "the real request reaching the wire");
+        await TestWait.Until(
+            () => h.Provider.SendAttempts >= 1,
+            "the real request reaching the wire",
+            () => InFlightState(h),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Switch while the REAL network operation is in flight; the token is swallowed by
         // the decorator, so the late body genuinely arrives — and must be discarded.
@@ -280,12 +280,16 @@ public class AiProviderLabIntegrationTests
         h.Lab.Inject(AiLabMode.HangStream);
 
         var operation = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => h.Provider.BytesReadSoFar > 0, "a real in-flight network operation");
+        await TestWait.Until(
+            () => h.Provider.BytesReadSoFar > 0,
+            "a real in-flight network operation",
+            () => InFlightState(h),
+            cancellationToken: TestContext.Current.CancellationToken);
 
-        var started = Environment.TickCount64;
+        var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromSeconds(2));
         var result = await operation;
-        var elapsed = Environment.TickCount64 - started;
+        var elapsed = TestWait.MonotonicNow() - started;
 
         Assert.IsType<OperationOutcome.Cancelled>(result.Outcome);
         Assert.Null(result.Reply);

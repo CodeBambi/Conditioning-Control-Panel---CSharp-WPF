@@ -1,6 +1,6 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** Step 2
-**Last Updated:** 2026-08-12 (worker, Step 1 complete pending review)
+**Current Step:** Step 3
+**Last Updated:** 2026-08-12 (worker, Step 2 complete)
 **Blockers:** none
 
 ### Step 1: sweep, classify, design + pre-approach consult — COMPLETE (plan review pending)
@@ -11,12 +11,12 @@
 - [x] Design the approved wait helper (loud classifier), the guard rule, and any product seam (default: none)
 - [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
-### Step 2: convert the AI lab + close SP-041's registry gap — NOT STARTED
-- [ ] `WaitForAsync`/`WaitForRecordAsync` converted; the 8000 ms literal gone (not enlarged)
-- [ ] `IntakeServingTests.LoopbackServer` registered in the leaked-listener self-check
-- [ ] Repeated local runs of the flaking test under the conversion recorded
+### Step 2: convert the AI lab + close SP-041's registry gap — COMPLETE
+- [x] `WaitForAsync`/`WaitForRecordAsync` converted; the 8000 ms literal gone (not enlarged)
+- [x] `IntakeServingTests.LoopbackServer` registered in the leaked-listener self-check
+- [x] Repeated local runs of the flaking test under the conversion recorded
 
-### Step 3: suite-wide conversion + the guard — NOT STARTED
+### Step 3: suite-wide conversion + the guard — IN PROGRESS
 - [ ] Class-1 sites converted; class-2 sites on the helper; class-3 sites justified
 - [ ] `ManualClock` duplication consolidated only if zero assertions/behavior change (else recorded why not)
 - [ ] Guard test proven red-then-green against a re-introduced literal
