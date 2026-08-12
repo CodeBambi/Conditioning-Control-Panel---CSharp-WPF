@@ -43,6 +43,7 @@
     {
       "name": "tunnel",
       "disposition": "served",
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/tunnel/** -> payload/tunnel) plus the asset-manifest 9 copied entries; served by Features/Chaos/ChaosTunnelLoopback.cs (/tunnel/* under the SP-023 section-4 origin discipline); window consumer Features/Chaos/ChaosTunnelWindow.cs (SP-061, landed e1a4df6e).",
       "fileCountAtBaseline": 9,
       "boardRow": "Chaos tunnel backdrop surface (tunnel + vendor payload trees, v6.7.x) [P1 WIP]",
       "note": "The endless three.js rabbit-hole backdrop rendered under the whole Chaos game (upstream Chaos/ChaosTunnelService.cs). The DTRH host row's b1–b5 slice cut is declared complete and never enumerated this surface — recorded in spine-tasks/SP-056-upstream-tree-guard/record.md as a board reconciliation point for the orchestrator. SERVED since SP-061 (wave 18, landed e1a4df6e): copied via the asset manifest as payload/tunnel (9) + payload/vendor/three (9 = the verified import-map resolution closure) and served by Features/Chaos/ChaosTunnelLoopback under the SP-023 section-4 origin discipline. Orchestrator-flipped at land: SP-056 guard checks well-formedness only, so a stale not-ported entry stays green and is not honest."
@@ -50,6 +51,7 @@
     {
       "name": "vendor",
       "disposition": "served",
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/vendor/** -> payload/vendor) plus the asset-manifest 9 copied entries (the verified import-map resolution closure); served by Features/Chaos/ChaosTunnelLoopback.cs (/vendor/* under the SP-023 section-4 origin discipline); consumed only by payload/tunnel/index.html's import map (SP-061, landed e1a4df6e).",
       "fileCountAtBaseline": 9,
       "boardRow": "Chaos tunnel backdrop surface (tunnel + vendor payload trees, v6.7.x) [P1 WIP]",
       "note": "Shared top-level three.js. Consumed ONLY by tunnel/index.html's import map (../vendor/three); dtrh/intake ship their own vendored three inside the dtrh tree; goon vendors internally (goon/vendor/). Rides the tunnel surface's row. SERVED since SP-061 (wave 18, landed e1a4df6e): copied via the asset manifest as payload/tunnel (9) + payload/vendor/three (9 = the verified import-map resolution closure) and served by Features/Chaos/ChaosTunnelLoopback under the SP-023 section-4 origin discipline. Orchestrator-flipped at land: SP-056 guard checks well-formedness only, so a stale not-ported entry stays green and is not honest."
