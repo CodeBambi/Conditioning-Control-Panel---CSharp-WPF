@@ -72,12 +72,12 @@
                      on EVERY tick, and per-session RampCurve is nullable and usually unset - so
                      for most sessions this dropdown reshapes the running session's own ramp. -->
                 <ComboBox x:Name="CmbRampCurve" feat:SessionLock.Owned="True"
-                          SelectionChanged="CmbRampCurve_Changed" Foreground="Black">
-                    <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear" Foreground="Black"/>
-                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn" Foreground="Black"/>
-                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_out}" Tag="EaseOut" Foreground="Black"/>
-                    <ComboBoxItem Content="{loc:Str ramp_curve_scurve}" Tag="SCurve" Foreground="Black"/>
-                    <ComboBoxItem Content="{loc:Str ramp_curve_exponential}" Tag="Exponential" Foreground="Black"/>
+                          SelectionChanged="CmbRampCurve_Changed">
+                    <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_out}" Tag="EaseOut"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_scurve}" Tag="SCurve"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_exponential}" Tag="Exponential"/>
                 </ComboBox>
             </StackPanel>
         </Border>

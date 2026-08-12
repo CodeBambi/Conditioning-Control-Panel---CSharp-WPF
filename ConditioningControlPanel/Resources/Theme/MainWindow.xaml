@@ -515,33 +515,12 @@
             <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
         </Style>
 
-        <!-- TextBox Focus Glow Style -->
-        <Style x:Key="FocusGlowTextBox" TargetType="TextBox">
-            <Setter Property="CaretBrush" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8" ShadowDepth="0" Opacity="0"/>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <EventTrigger RoutedEvent="GotKeyboardFocus">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity"
-                                             To="0.5" Duration="0:0:0.25"/>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-                <EventTrigger RoutedEvent="LostKeyboardFocus">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity"
-                                             To="0" Duration="0:0:0.3"/>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-            </Style.Triggers>
-        </Style>
+        <!-- TextBox Focus Glow Style — MOVED to Resources/Theme/Inputs.xaml (Velvet Kit).
+             The key `FocusGlowTextBox` is unchanged and still resolves app-wide; it only
+             had to relocate because it is now BasedOn the implicit TextBox style, and
+             BasedOn is a StaticResource lookup that cannot see a dictionary merged after
+             this one. Its glow recipe is now the implicit TextBox chrome, so the style is
+             a thin alias. -->
 
         <!-- Section Header Style -->
         <Style x:Key="SectionHeader" TargetType="TextBlock">
@@ -1222,77 +1201,131 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Default ComboBoxItem style: black text on dropdown so items are readable -->
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="Black"/>
-        </Style>
+        <!-- (Velvet Kit) The implicit `ComboBoxItem { Foreground=Black }` style that used to
+             sit here is GONE. It only existed because the stock ComboBox popup was WHITE, and
+             it was the reason every themed dropdown in the app read black-on-dark the moment a
+             surface fixed its own popup. Resources/Theme/Inputs.xaml now carries a dark implicit
+             ComboBoxItem (and the matching ComboBox popup); the two must always ship together. -->
 
-        <!-- Dark theme ComboBox style for code-behind usage -->
+        <!-- Dark theme ComboBox style for code-behind usage.
+             KEEP THE KEY: MainWindow.KeywordTriggers.cs and Windows/ModCreatorWindow.Barks.cs
+             both resolve it by name at runtime, and ~15 XAML call sites reference it.
+             This is the COMPACT variant of the Inputs.xaml implicit ComboBox (MinHeight 24,
+             smaller padding) for dense rows - Haptics/Features grids set Height="24"/"26" on it.
+             It cannot use BasedOn="{StaticResource {x:Type ComboBox}}": this dictionary is
+             merged BEFORE Inputs.xaml, and StaticResource cannot see a later sibling. Keep the
+             two templates in visual sync by hand. -->
         <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton"
+                        <Grid SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="18"/>
+                            </Grid.ColumnDefinitions>
+                            <ToggleButton x:Name="ToggleButton" Grid.Column="0" Grid.ColumnSpan="2"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
                                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                           Focusable="False" ClickMode="Press">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#3A3A5C" BorderThickness="1" CornerRadius="3" Cursor="Hand">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="16"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Path Grid.Column="1" Fill="#B0B0B0" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      Data="M 0 0 L 3.5 3.5 L 7 0 Z"/>
-                                            </Grid>
+                                        <Border x:Name="Chrome" CornerRadius="8" Cursor="Hand"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                SnapsToDevicePixels="True">
+                                            <Path x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Margin="0,0,7,0" Data="M 0 0 L 3.5 3.5 L 7 0"
+                                                  Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.5"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                         </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource InputHoverBorderBrush}"/>
+                                                <Setter TargetName="Arrow" Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="Arrow" Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="Chrome" Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10"
+                                                                          ShadowDepth="0" Opacity="0.35"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                             </ToggleButton>
-                            <ContentPresenter IsHitTestVisible="False"
+                            <ContentPresenter Grid.Column="0" IsHitTestVisible="False"
                                               Content="{TemplateBinding SelectionBoxItem}"
                                               ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              Margin="6,3,18,3" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                <ContentPresenter.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Style>
-                                </ContentPresenter.Resources>
-                            </ContentPresenter>
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              Margin="8,2,2,2" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                             <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
                                    Placement="Bottom" AllowsTransparency="True" Focusable="False"
                                    PopupAnimation="Slide">
-                                <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#3A3A5C" BorderThickness="1" CornerRadius="3" Margin="0,1,0,0"
+                                <Border CornerRadius="10" Padding="4" Margin="0,4,0,0"
+                                        Background="{DynamicResource ElevatedSurfaceBrush}"
+                                        BorderBrush="{DynamicResource TransparentPink20Brush}"
+                                        BorderThickness="1" SnapsToDevicePixels="True"
                                         MinWidth="{TemplateBinding ActualWidth}">
-                                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
-                                        <ItemsPresenter/>
+                                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
                         </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <!-- Kept (not dropped in favour of the implicit ComboBoxItem) because
+                 MainWindow's mod-chip ComboBox overrides only its Template and documents
+                 that it still leans on this container style. Same visuals as the implicit
+                 one, minus the selected-row dot (rows here are as narrow as 24px). -->
             <Setter Property="ItemContainerStyle">
                 <Setter.Value>
                     <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
-                        <Setter Property="Padding" Value="6,4"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Padding" Value="8,5"/>
                         <Setter Property="Cursor" Value="Hand"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                    <Border x:Name="Bd" CornerRadius="6" Margin="0,1"
+                                            Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}"
+                                            SnapsToDevicePixels="True">
                                         <ContentPresenter/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

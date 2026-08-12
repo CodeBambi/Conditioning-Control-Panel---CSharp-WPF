@@ -14,6 +14,12 @@
         <ResourceDictionary Source="Resources/Theme/MainWindow.xaml"/>
         <!-- Season Recap card palette (scoped v6 dark-violet tokens) -->
         <ResourceDictionary Source="Resources/Theme/SeasonRecapCard.xaml"/>
+        <!-- Velvet Kit: implicit (keyless) chrome for the stock Win32 controls —
+             ComboBox/ComboBoxItem/CheckBox/TextBox/ListBoxItem/ContextMenu/MenuItem/
+             Separator. MUST STAY LAST: merge order decides which implicit style wins,
+             and this one is meant to beat the older dark ComboBoxItem/etc. entries
+             carried by the dictionaries above. -->
+        <ResourceDictionary Source="Resources/Theme/Inputs.xaml"/>
 
         <!-- Keep any existing app-level dictionaries below -->
       </ResourceDictionary.MergedDictionaries>
