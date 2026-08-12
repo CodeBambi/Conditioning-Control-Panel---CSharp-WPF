@@ -432,46 +432,57 @@
 
                 <ScrollViewer x:Name="NavRailScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <!-- ============ EVEN DISTRIBUTION (Velvet Kit, UI polish 2) ============
-                         The six doors used to be a plain StackPanel packed at the top of an
-                         800px column. They are spread down it now: seven star SPACER rows
-                         between six Auto door rows, i.e. space-evenly.
+                    <!-- ============ TOP-PACKED DOORS (Velvet Kit, UI polish 2) ============
+                         Six Auto door rows with fixed SPACER rows between them, all pooled at
+                         the top: row 0 is 0, the five gaps between doors are 8, and the LAST
+                         spacer is the only star, so every bit of slack lands at the bottom.
 
-                         Why spacers instead of putting the doors themselves in star rows: an
-                         Auto row is guaranteed its measured height at arrange time, a star row
-                         is not (it only keeps content that a MEASURE recorded as its minimum,
-                         which is exactly the case this grid is in the middle of when the
-                         accordion is tweening). Empty spacers cannot lose anything by being
-                         squeezed, so the degradation is trivial: slack goes to the spacers,
-                         and when the doors plus an open accordion exceed the viewport the
-                         spacers collapse to 0, the layout becomes the old top-stack, and this
+                         This replaces the space-evenly version of this grid (seven star
+                         spacers). Owner call 2026-08-12: even distribution pushed the
+                         medallions far enough apart that the rail read as six unrelated
+                         buttons instead of one menu. Skewed to the top is explicitly fine;
+                         the doors just have to keep opening big and staying functional, which
+                         is all NavRail.cs hover work and is untouched by row heights.
+
+                         Pitch: each door carries Margin 0,2 around a 64px row = 68, plus the
+                         8px spacer = ~76px between medallion centres.
+
+                         Why the spacers are their own rows instead of margin on the doors: the
+                         doors stay Auto rows, and an Auto row is guaranteed its measured height
+                         at arrange time where a star row is not (a star row only keeps what a
+                         MEASURE recorded as its minimum - exactly the case this grid is in the
+                         middle of while an accordion tweens). Empty spacers can be squeezed
+                         without losing anything, so overflow degrades trivially: the bottom
+                         star collapses to 0, then the fixed gaps are all that is left, and when
+                         the doors plus an open accordion still exceed the viewport this
                          ScrollViewer takes over. No mode switch, no code.
 
-                         MinHeight is what makes "slack" exist at all: a ScrollViewer measures
-                         its content at infinite height, where star rows resolve to nothing, so
-                         without this the grid would always be exactly as tall as its content
-                         and the spacers would always be 0. Binding it to the viewport (never
-                         to the extent - that WOULD be a layout cycle) makes the grid fill the
-                         column when the content is short and overflow it when it is not.
+                         MinHeight is what makes the bottom star resolve to anything: a
+                         ScrollViewer measures its content at infinite height, where star rows
+                         resolve to nothing, so without this the grid would be exactly as tall
+                         as its content. Binding it to the viewport (never to the extent - that
+                         WOULD be a layout cycle) makes the grid fill the column when the
+                         content is short and overflow it when it is not.
 
                          Headroom, in fixed canvas units (the whole UI is a Viewbox over a
                          1585x901 canvas, so this NEVER changes with the window size): the
-                         column is ~760px, the six 68px door rows are 408, and the widest
-                         accordion (Play, 8 entries x NavEntryRowHeight 32) is 256 - 664 total.
-                         A door would need ~11 entries before the rail starts scrolling. -->
+                         column is ~760px, the six 68px door rows plus five 8px gaps are 448,
+                         and the widest accordion (Play, 8 entries x NavEntryRowHeight 32) is
+                         256 - 704 total. A door would need ~9 entries before the rail
+                         starts scrolling. -->
                     <Grid MinHeight="{Binding ViewportHeight, ElementName=NavRailScroll}">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="0"/>
                             <RowDefinition Height="Auto"/>   <!-- 1: home -->
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>   <!-- 3: studio -->
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>   <!-- 5: companion -->
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>   <!-- 7: play -->
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>   <!-- 9: you -->
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="8"/>
                             <RowDefinition Height="Auto"/>   <!-- 11: library -->
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>

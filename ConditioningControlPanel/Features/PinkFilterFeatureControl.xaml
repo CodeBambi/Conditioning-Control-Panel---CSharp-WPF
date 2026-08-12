@@ -49,66 +49,107 @@
             </Grid>
         </Border>
 
-        <!-- ONE dense card: opacity, colour, and the monitor picker (#639). -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
 
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_filter_opacity_5_50}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="5" Maximum="50" Value="10"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderOpacity_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="10%" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card: opacity, colour, and the monitor picker (#639). -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
 
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_filter_opacity_5_50}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="5" Maximum="50" Value="10"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderOpacity_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="10%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
 
-                    <Grid Height="40" Background="Transparent" ToolTip="{loc:Str tooltip_pink_filter_color}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_filter_color}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Border x:Name="ColorSwatch" Width="26" Height="26" CornerRadius="8"
-                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                                    Background="#FF69B4" Margin="0,0,8,0"/>
-                            <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
-                                    Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
-                            <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
-                                    Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
-                                    Margin="6,0,0,0"/>
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <Grid Height="40" Background="Transparent" ToolTip="{loc:Str tooltip_pink_filter_color}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_filter_color}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border x:Name="ColorSwatch" Width="26" Height="26" CornerRadius="8"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                            Background="#FF69B4" Margin="0,0,8,0"/>
+                                    <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
+                                            Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
+                                    <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
+                                            Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
+                                            Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_effect_monitor}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_effect_monitor}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbMonitor"
+                                          Width="180" VerticalAlignment="Center"
+                                          Style="{DynamicResource DarkComboBoxStyle}"
+                                          DropDownOpened="CmbMonitor_DropDownOpened"
+                                          SelectionChanged="CmbMonitor_Changed"/>
+                            </Grid>
                         </StackPanel>
                     </Grid>
+                </Border>
+            </StackPanel>
 
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_effect_monitor}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_effect_monitor}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" x:Name="CmbMonitor"
-                                  Width="180" VerticalAlignment="Center"
-                                  Style="{DynamicResource DarkComboBoxStyle}"
-                                  DropDownOpened="CmbMonitor_DropDownOpened"
-                                  SelectionChanged="CmbMonitor_Changed"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
+            <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                 Background to CornerRadius but does NOT clip child content, so a child Image would
+                 square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border.Background>
+                    <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush.ImageSource>
+                            <BitmapImage UriSource="pack://application:,,,/Resources/features/Pink_filter.png"
+                                         DecodePixelWidth="800"/>
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                </Border.Background>
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
+
     </StackPanel>
 </UserControl>

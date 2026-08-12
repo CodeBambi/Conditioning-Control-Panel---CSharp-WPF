@@ -47,121 +47,162 @@
             </Grid>
         </Border>
 
-        <!-- ONE dense card -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
-
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_messages_shown_per_minute}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str label_per_min}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderPerMin" Minimum="1" Maximum="30" Value="5"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderPerMin_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtPerMin" Text="5" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_display_duration_in_frames_lower_faster_flash}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str label_frames}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderFrames_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtFrames" Text="2" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_text_visibility_lower_more_subtle}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="80"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderOpacity_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="80%" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_play_whispered_audio_when_subliminal_messages}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_volume}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50"
-                                VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderWhisperVol_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtWhisperVol" Text="50%" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_play_whispered_audio_when_subliminal_messages}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_audio_whispers}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkWhispers" feat:SessionLock.Owned="True"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkWhispers_Changed" Unchecked="ChkWhispers_Changed"/>
-                    </Grid>
-
-                    <!-- Solid mode: shared-host renderer, mirrors the Flashes/Bubble Pop toggle -->
-                    <Grid Height="34" Background="Transparent" ToolTip="Draws subliminal text on one shared overlay instead of a dedicated window per screen - lighter on the renderer and friendlier to fullscreen games. Ignored while 'steal focus' is on. Applies to the next flash.">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Actions -->
-        <Grid>
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="📝 Messages"
-                    Style="{DynamicResource OutlineButton}" Click="BtnManageMessages_Click"
-                    ToolTip="{loc:Str tooltip_edit_subliminal_messages}"/>
-            <Button Grid.Column="2" Content="⚙ Advanced"
-                    Style="{DynamicResource OutlineButton}" Click="BtnAdvanced_Click"
-                    ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
+
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_messages_shown_per_minute}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_per_min}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderPerMin" Minimum="1" Maximum="30" Value="5"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderPerMin_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtPerMin" Text="5" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_display_duration_in_frames_lower_faster_flash}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_frames}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderFrames_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFrames" Text="2" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_text_visibility_lower_more_subtle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="80"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderOpacity_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="80%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_play_whispered_audio_when_subliminal_messages}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_volume}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderWhisperVol_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtWhisperVol" Text="50%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_play_whispered_audio_when_subliminal_messages}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_audio_whispers}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkWhispers" feat:SessionLock.Owned="True"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkWhispers_Changed" Unchecked="ChkWhispers_Changed"/>
+                            </Grid>
+
+                            <!-- Solid mode: shared-host renderer, mirrors the Flashes/Bubble Pop toggle -->
+                            <Grid Height="34" Background="Transparent" ToolTip="Draws subliminal text on one shared overlay instead of a dedicated window per screen - lighter on the renderer and friendlier to fullscreen games. Ignored while 'steal focus' is on. Applies to the next flash.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Actions -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="📝 Messages"
+                            Style="{DynamicResource OutlineButton}" Click="BtnManageMessages_Click"
+                            ToolTip="{loc:Str tooltip_edit_subliminal_messages}"/>
+                    <Button Grid.Column="2" Content="⚙ Advanced"
+                            Style="{DynamicResource OutlineButton}" Click="BtnAdvanced_Click"
+                            ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                 Background to CornerRadius but does NOT clip child content, so a child Image would
+                 square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border.Background>
+                    <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush.ImageSource>
+                            <BitmapImage UriSource="pack://application:,,,/Resources/features/subliminal.png"
+                                         DecodePixelWidth="800"/>
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                </Border.Background>
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
         </Grid>
+
     </StackPanel>
 </UserControl>

@@ -48,218 +48,259 @@
             </Grid>
         </Border>
 
-        <!-- ONE dense card: the dials, then the switches. Every description that used to sit
-             under its control now lives on the row's ToolTip. -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
 
-                    <Grid Height="36">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderFrequency" Minimum="1" Maximum="180" Value="10"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderFrequency_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtFrequency" Text="10" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card: the dials, then the switches. Every description that used to sit
+                     under its control now lives on the row's ToolTip. -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderFrequency" Minimum="1" Maximum="180" Value="10"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderFrequency_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFrequency" Text="10" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_images}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderImages" Minimum="1" Maximum="20" Value="5"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderImages_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtImages" Text="5" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_max_on_screen}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderMaxOnScreen" Minimum="2" Maximum="20" Value="20"
+                                        VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderMaxOnScreen_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtMaxOnScreen" Text="20" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_when_enabled_clicking_an_image_dismisses_it_w}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_click}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkClickable"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
+                            </Grid>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_hydra}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkCorruption"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
+                            </Grid>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_linked_hydra_spawns_share_the_parent_flash_ti}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_linked}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkHydraLinked"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
+                            </Grid>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_toggle_the_pink_sparkle_glow_effect_on_flash}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_glow}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkGlow"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkGlow_Changed" Unchecked="ChkGlow_Changed"/>
+                            </Grid>
+
+                            <!-- Solid mode: shared-host renderer, mirrors the Bubble Pop toggle -->
+                            <Grid Height="34" Background="Transparent" ToolTip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) — gaze pop and stare-to-keep still work. Applies to the next flash.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
+                            </Grid>
+
+                            <!-- Avoid Screen Center (#770, re-homed for #859). This used to live in the legacy
+                                 dashboard block in SettingsTabView, which has been Visibility=Collapsed since the
+                                 velvet-mosaic rewire - the engine kept honouring FlashAvoidCenter but nobody could
+                                 reach the switch. It lives HERE now and nowhere else: the checkbox and the slider
+                                 write straight to settings, and the legacy load/save round-trip that used to mirror
+                                 them was deleted with the old markup, so there is exactly one surface and no clamp.
+                                 Range stays 5-60 to match AppSettings.FlashCenterExclusionPercent's own clamp. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_avoid_screen_center}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkFlashAvoidCenter"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkFlashAvoidCenter_Changed" Unchecked="ChkFlashAvoidCenter_Changed"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderCenterExclusion" Minimum="5" Maximum="60" Value="25"
+                                        IsEnabled="{Binding IsChecked, ElementName=ChkFlashAvoidCenter}"
+                                        VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderCenterExclusion_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtCenterExclusion" Text="25%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+                        </StackPanel>
                     </Grid>
+                </Border>
 
-                    <Grid Height="36">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_images}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderImages" Minimum="1" Maximum="20" Value="5"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderImages_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtImages" Text="5" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
+                <!-- Gaze interaction (Phase 3). Its own card: it is a distinct capability with its own
+                     hardware prerequisite, not another flash dial. Placeholder copy; voice-pass at ship. -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+                            <TextBlock Text="Gaze interaction" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra).">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Stare to pop" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkFlashGazePop"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkFlashGazePop_Changed" Unchecked="ChkFlashGazePop_Changed"/>
+                            </Grid>
+
+                            <Grid Height="34" Background="Transparent" ToolTip="Keep a flash alive by looking at it. Stops boosting when you look away.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Stare to keep" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkFlashGazeLinger"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkFlashGazeLinger_Changed" Unchecked="ChkFlashGazeLinger_Changed"/>
+                            </Grid>
+
+                            <Grid Height="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Linger boost" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderFlashLingerMs" Minimum="500" Maximum="5000" Value="1500"
+                                        TickFrequency="250" IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderFlashLingerMs_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFlashLingerMs" Text="1500 ms" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+                        </StackPanel>
                     </Grid>
+                </Border>
+            </StackPanel>
 
-                    <Grid Height="36">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_max_on_screen}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderMaxOnScreen" Minimum="2" Maximum="20" Value="20"
-                                VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderMaxOnScreen_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtMaxOnScreen" Text="20" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
+            <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                 Background to CornerRadius but does NOT clip child content, so a child Image would
+                 square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border.Background>
+                    <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush.ImageSource>
+                            <BitmapImage UriSource="pack://application:,,,/Resources/features/flash.png"
+                                         DecodePixelWidth="800"/>
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                </Border.Background>
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
 
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_when_enabled_clicking_an_image_dismisses_it_w}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_click}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkClickable"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
-                    </Grid>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_hydra}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkCorruption"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
-                    </Grid>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_linked_hydra_spawns_share_the_parent_flash_ti}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_linked}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkHydraLinked"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
-                    </Grid>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_toggle_the_pink_sparkle_glow_effect_on_flash}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_glow}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkGlow"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkGlow_Changed" Unchecked="ChkGlow_Changed"/>
-                    </Grid>
-
-                    <!-- Solid mode: shared-host renderer, mirrors the Bubble Pop toggle -->
-                    <Grid Height="34" Background="Transparent" ToolTip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) — gaze pop and stare-to-keep still work. Applies to the next flash.">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
-                    </Grid>
-
-                    <!-- Avoid Screen Center (#770, re-homed for #859). This used to live in the legacy
-                         dashboard block in SettingsTabView, which has been Visibility=Collapsed since the
-                         velvet-mosaic rewire - the engine kept honouring FlashAvoidCenter but nobody could
-                         reach the switch. It lives HERE now and nowhere else: the checkbox and the slider
-                         write straight to settings, and the legacy load/save round-trip that used to mirror
-                         them was deleted with the old markup, so there is exactly one surface and no clamp.
-                         Range stays 5-60 to match AppSettings.FlashCenterExclusionPercent's own clamp. -->
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_avoid_screen_center}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkFlashAvoidCenter"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkFlashAvoidCenter_Changed" Unchecked="ChkFlashAvoidCenter_Changed"/>
-                    </Grid>
-
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderCenterExclusion" Minimum="5" Maximum="60" Value="25"
-                                IsEnabled="{Binding IsChecked, ElementName=ChkFlashAvoidCenter}"
-                                VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderCenterExclusion_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtCenterExclusion" Text="25%" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Gaze interaction (Phase 3). Its own card: it is a distinct capability with its own
-             hardware prerequisite, not another flash dial. Placeholder copy; voice-pass at ship. -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
-                    <TextBlock Text="Gaze interaction" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra).">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Stare to pop" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkFlashGazePop"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkFlashGazePop_Changed" Unchecked="ChkFlashGazePop_Changed"/>
-                    </Grid>
-
-                    <Grid Height="34" Background="Transparent" ToolTip="Keep a flash alive by looking at it. Stops boosting when you look away.">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Stare to keep" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkFlashGazeLinger"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkFlashGazeLinger_Changed" Unchecked="ChkFlashGazeLinger_Changed"/>
-                    </Grid>
-
-                    <Grid Height="36">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Linger boost" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderFlashLingerMs" Minimum="500" Maximum="5000" Value="1500"
-                                TickFrequency="250" IsSnapToTickEnabled="True"
-                                VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderFlashLingerMs_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtFlashLingerMs" Text="1500 ms" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
     </StackPanel>
 </UserControl>

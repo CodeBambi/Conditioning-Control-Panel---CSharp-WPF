@@ -58,233 +58,274 @@
                 </Grid>
             </Border>
 
-            <!-- ONE dense controls card: the three dials, the colour mode, then the switches. -->
-            <Border Style="{StaticResource SettingCardStyle}">
-                <Grid>
-                    <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                            Background="{StaticResource SectionHueStudioBrush}"/>
-                    <StackPanel Margin="16,8,16,8">
+            <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+                 slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+                 buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+                 the previous page contents moved verbatim - same names, handlers, lock markers and loc
+                 keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+                 settings retake the full width: Features/AdaptiveSideArt.cs. -->
+            <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" MaxWidth="780"/>
+                    <ColumnDefinition Width="2*"/>
+                </Grid.ColumnDefinitions>
 
-                        <!-- Speed -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_bounce_speed_1_slow_10_fast}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_speed}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderSpeed" Minimum="1" Maximum="10" Value="5"
-                                    feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderSpeed_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtSpeed" Text="5" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
-                        </Grid>
+                <StackPanel Grid.Column="0">
+                    <!-- ONE dense controls card: the three dials, the colour mode, then the switches. -->
+                    <Border Style="{StaticResource SettingCardStyle}">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,8">
 
-                        <!-- Size -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_text_size_50_small_100_normal_300_huge}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="300" Value="100"
-                                    feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderSize_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
-                        </Grid>
+                                <!-- Speed -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_bounce_speed_1_slow_10_fast}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_speed}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderSpeed" Minimum="1" Maximum="10" Value="5"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderSpeed_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtSpeed" Text="5" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
 
-                        <!-- Opacity -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_bouncing_text_opacity_10_ghostly_100_solid}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
-                                    VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderOpacity_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
-                        </Grid>
+                                <!-- Size -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_text_size_50_small_100_normal_300_huge}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="300" Value="100"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderSize_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
 
-                        <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+                                <!-- Opacity -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_bouncing_text_opacity_10_ghostly_100_solid}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                                            VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderOpacity_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
 
-                        <!-- Colour mode -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_random_rerolls_every_bounce_fixed_keeps_one_c}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_color_mode}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Column="1" x:Name="CmbColorMode" Height="26" MaxWidth="220"
-                                      HorizontalAlignment="Right" VerticalAlignment="Center"
-                                      Style="{DynamicResource DarkComboBoxStyle}"
-                                      SelectionChanged="CmbColorMode_Changed">
-                                <ComboBoxItem Content="{loc:Str option_color_random}"/>
-                                <ComboBoxItem Content="{loc:Str option_color_fixed}"/>
-                                <ComboBoxItem Content="{loc:Str option_color_rainbow}"/>
-                            </ComboBox>
-                        </Grid>
+                                <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
 
-                        <!-- Shown by code-behind only while "fixed" is the colour mode. -->
-                        <Grid x:Name="PanelFixedColor" Height="36" Visibility="Collapsed">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_text_color}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border x:Name="ColorSwatch" Width="24" Height="24" CornerRadius="6"
-                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                                        Background="#FF69B4" Margin="0,0,8,0"/>
-                                <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
-                                        Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
-                                <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
-                                        Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
-                                        Margin="6,0,0,0"/>
+                                <!-- Colour mode -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_random_rerolls_every_bounce_fixed_keeps_one_c}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_color_mode}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" x:Name="CmbColorMode" Height="26" MaxWidth="220"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Style="{DynamicResource DarkComboBoxStyle}"
+                                              SelectionChanged="CmbColorMode_Changed">
+                                        <ComboBoxItem Content="{loc:Str option_color_random}"/>
+                                        <ComboBoxItem Content="{loc:Str option_color_fixed}"/>
+                                        <ComboBoxItem Content="{loc:Str option_color_rainbow}"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- Shown by code-behind only while "fixed" is the colour mode. -->
+                                <Grid x:Name="PanelFixedColor" Height="36" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_text_color}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border x:Name="ColorSwatch" Width="24" Height="24" CornerRadius="6"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                Background="#FF69B4" Margin="0,0,8,0"/>
+                                        <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
+                                                Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
+                                        <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
+                                                Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
+                                                Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                                <!-- Second text -->
+                                <Grid Height="34" ToolTip="{loc:Str tooltip_second_independent_bouncing_text}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_second_text}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkSecondText"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkSecondText_Changed" Unchecked="ChkSecondText_Changed"/>
+                                </Grid>
+
+                                <!-- Show over videos -->
+                                <Grid Height="34" ToolTip="{loc:Str tooltip_keep_bouncing_text_visible_on_top_of_fullscre}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_show_over_videos}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkAlwaysOnTop"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkAlwaysOnTop_Changed" Unchecked="ChkAlwaysOnTop_Changed"/>
+                                </Grid>
+
                             </StackPanel>
                         </Grid>
+                    </Border>
 
-                        <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
-
-                        <!-- Second text -->
-                        <Grid Height="34" ToolTip="{loc:Str tooltip_second_independent_bouncing_text}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_second_text}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkSecondText"
-                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                      Checked="ChkSecondText_Changed" Unchecked="ChkSecondText_Changed"/>
+                    <!-- Effects: its own card, same row grammar, two columns because the seven
+                         switches are peers and none of them needs a line of prose. -->
+                    <Border Style="{StaticResource SettingCardStyle}"
+                            ToolTip="{loc:Str tooltip_bouncing_text_effects_combine_freely}">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,8">
+                                <helpers:EmojiTextBlock Text="{loc:Str label_effects}" FontSize="13" FontWeight="SemiBold"
+                                                        Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,2"/>
+                                <UniformGrid Columns="2">
+                                    <Grid Height="30" Margin="0,0,10,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_breathing}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxBreathing" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_wobble}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxWobble" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30" Margin="0,0,10,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_spin}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxSpin" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_velocity_tilt}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxVelocityTilt" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30" Margin="0,0,10,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_squash}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxSquash" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_corner_burst}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFxCornerBurst" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                                    </Grid>
+                                    <Grid Height="30" Margin="0,0,10,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_outline}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkOutline" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center" Checked="ChkOutline_Changed" Unchecked="ChkOutline_Changed"/>
+                                    </Grid>
+                                </UniformGrid>
+                            </StackPanel>
                         </Grid>
+                    </Border>
 
-                        <!-- Show over videos -->
-                        <Grid Height="34" ToolTip="{loc:Str tooltip_keep_bouncing_text_visible_on_top_of_fullscre}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_show_over_videos}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkAlwaysOnTop"
-                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                      Checked="ChkAlwaysOnTop_Changed" Unchecked="ChkAlwaysOnTop_Changed"/>
-                        </Grid>
+                    <Button Content="{loc:Str btn_edit_phrases}" Style="{DynamicResource OutlineButton}"
+                            Click="BtnEditPhrases_Click"/>
+                </StackPanel>
 
-                    </StackPanel>
-                </Grid>
-            </Border>
+                <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                     Background to CornerRadius but does NOT clip child content, so a child Image would
+                     square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                        BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                        VerticalAlignment="Stretch" MinHeight="200">
+                    <Border.Background>
+                        <ImageBrush Stretch="UniformToFill">
+                            <ImageBrush.ImageSource>
+                                <BitmapImage UriSource="pack://application:,,,/Resources/features/bouncing_text.png"
+                                             DecodePixelWidth="800"/>
+                            </ImageBrush.ImageSource>
+                        </ImageBrush>
+                    </Border.Background>
+                    <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                    <Border CornerRadius="12">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#66000000" Offset="0"/>
+                                <GradientStop Color="#00000000" Offset="0.45"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Border>
+            </Grid>
 
-            <!-- Effects: its own card, same row grammar, two columns because the seven
-                 switches are peers and none of them needs a line of prose. -->
-            <Border Style="{StaticResource SettingCardStyle}"
-                    ToolTip="{loc:Str tooltip_bouncing_text_effects_combine_freely}">
-                <Grid>
-                    <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                            Background="{StaticResource SectionHueStudioBrush}"/>
-                    <StackPanel Margin="16,8,16,8">
-                        <helpers:EmojiTextBlock Text="{loc:Str label_effects}" FontSize="13" FontWeight="SemiBold"
-                                                Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,2"/>
-                        <UniformGrid Columns="2">
-                            <Grid Height="30" Margin="0,0,10,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_breathing}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxBreathing" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_wobble}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxWobble" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30" Margin="0,0,10,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_spin}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxSpin" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_velocity_tilt}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxVelocityTilt" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30" Margin="0,0,10,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_squash}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxSquash" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_corner_burst}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkFxCornerBurst" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
-                            </Grid>
-                            <Grid Height="30" Margin="0,0,10,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_outline}"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           FontSize="12" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkOutline" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Center" Checked="ChkOutline_Changed" Unchecked="ChkOutline_Changed"/>
-                            </Grid>
-                        </UniformGrid>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <Button Content="{loc:Str btn_edit_phrases}" Style="{DynamicResource OutlineButton}"
-                    Click="BtnEditPhrases_Click"/>
         </StackPanel>
     </Grid>
 </UserControl>

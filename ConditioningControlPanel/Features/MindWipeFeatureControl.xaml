@@ -54,108 +54,149 @@
                 </Grid>
             </Border>
 
-            <!-- ONE dense controls card: the two dials, then the loop switch. -->
-            <Border Style="{StaticResource SettingCardStyle}">
-                <Grid>
-                    <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                            Background="{StaticResource SectionHueStudioBrush}"/>
-                    <StackPanel Margin="16,8,16,8">
+            <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+                 slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+                 buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+                 the previous page contents moved verbatim - same names, handlers, lock markers and loc
+                 keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+                 settings retake the full width: Features/AdaptiveSideArt.cs. -->
+            <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" MaxWidth="780"/>
+                    <ColumnDefinition Width="2*"/>
+                </Grid.ColumnDefinitions>
 
-                        <!-- Frequency -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_mind_wipe_frequency_1_180_per_hour}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_frequency}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="180" Value="6"
-                                    feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderFreq_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="6/h" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
+                <StackPanel Grid.Column="0">
+                    <!-- ONE dense controls card: the two dials, then the loop switch. -->
+                    <Border Style="{StaticResource SettingCardStyle}">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,8">
+
+                                <!-- Frequency -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_mind_wipe_frequency_1_180_per_hour}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_frequency}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="180" Value="6"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderFreq_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="6/h" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <!-- Volume -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_volume_level_0_100}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_volume}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderVolume" Minimum="0" Maximum="100" Value="50"
+                                            VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderVolume_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtVolume" Text="50%" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                                <!-- Loop in background -->
+                                <Grid Height="34" ToolTip="{loc:Str tooltip_continuously_loop_a_single_track_instead_of_r}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_loop_in_background}"
+                                                            FontSize="13" FontWeight="SemiBold"
+                                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkLoop"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkLoop_Changed" Unchecked="ChkLoop_Changed"/>
+                                </Grid>
+
+                            </StackPanel>
                         </Grid>
+                    </Border>
 
-                        <!-- Volume -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_volume_level_0_100}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_volume}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderVolume" Minimum="0" Maximum="100" Value="50"
-                                    VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderVolume_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtVolume" Text="50%" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
+                    <!-- Custom audio clip: its own card, same grammar. The guidance line that used to
+                         sit under the title is the card's ToolTip; TxtAudioFile stays visible because
+                         code-behind writes the current filename into it. -->
+                    <Border Style="{StaticResource SettingCardStyle}"
+                            ToolTip="Pick your own mind-wipe sound. Keep it short — about 2 seconds works best. Leave it on Default to use the built-in clips.">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,8">
+                                <Grid Height="34">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="CUSTOM AUDIO" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" x:Name="TxtAudioFile" Text="Default (built-in clips)"
+                                               Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
+                                </Grid>
+                                <Grid Height="36">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" x:Name="BtnSelectAudio" Content="Select audio…"
+                                            Style="{DynamicResource OutlineButton}" Padding="12,6"
+                                            Margin="0,0,6,0" Click="BtnSelectAudio_Click"/>
+                                    <Button Grid.Column="1" x:Name="BtnClearAudio" Content="Reset"
+                                            Style="{DynamicResource OutlineButton}" Padding="12,6"
+                                            Click="BtnClearAudio_Click"/>
+                                </Grid>
+                            </StackPanel>
                         </Grid>
+                    </Border>
 
-                        <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+                    <Button Content="{loc:Str btn_test_now_2}" Style="{DynamicResource OutlineButton}"
+                            Click="BtnTest_Click"/>
+                </StackPanel>
 
-                        <!-- Loop in background -->
-                        <Grid Height="34" ToolTip="{loc:Str tooltip_continuously_loop_a_single_track_instead_of_r}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_loop_in_background}"
-                                                    FontSize="13" FontWeight="SemiBold"
-                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkLoop"
-                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                      Checked="ChkLoop_Changed" Unchecked="ChkLoop_Changed"/>
-                        </Grid>
+                <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                     Background to CornerRadius but does NOT clip child content, so a child Image would
+                     square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                        BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                        VerticalAlignment="Stretch" MinHeight="200">
+                    <Border.Background>
+                        <ImageBrush Stretch="UniformToFill">
+                            <ImageBrush.ImageSource>
+                                <BitmapImage UriSource="pack://application:,,,/Resources/features/Mind_Wipers.png"
+                                             DecodePixelWidth="800"/>
+                            </ImageBrush.ImageSource>
+                        </ImageBrush>
+                    </Border.Background>
+                    <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                    <Border CornerRadius="12">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#66000000" Offset="0"/>
+                                <GradientStop Color="#00000000" Offset="0.45"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Border>
+            </Grid>
 
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- Custom audio clip: its own card, same grammar. The guidance line that used to
-                 sit under the title is the card's ToolTip; TxtAudioFile stays visible because
-                 code-behind writes the current filename into it. -->
-            <Border Style="{StaticResource SettingCardStyle}"
-                    ToolTip="Pick your own mind-wipe sound. Keep it short — about 2 seconds works best. Leave it on Default to use the built-in clips.">
-                <Grid>
-                    <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                            Background="{StaticResource SectionHueStudioBrush}"/>
-                    <StackPanel Margin="16,8,16,8">
-                        <Grid Height="34">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="CUSTOM AUDIO" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" x:Name="TxtAudioFile" Text="Default (built-in clips)"
-                                       Foreground="{DynamicResource PinkBrush}" FontSize="12"
-                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
-                        </Grid>
-                        <Grid Height="36">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" x:Name="BtnSelectAudio" Content="Select audio…"
-                                    Style="{DynamicResource OutlineButton}" Padding="12,6"
-                                    Margin="0,0,6,0" Click="BtnSelectAudio_Click"/>
-                            <Button Grid.Column="1" x:Name="BtnClearAudio" Content="Reset"
-                                    Style="{DynamicResource OutlineButton}" Padding="12,6"
-                                    Click="BtnClearAudio_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <Button Content="{loc:Str btn_test_now_2}" Style="{DynamicResource OutlineButton}"
-                    Click="BtnTest_Click"/>
         </StackPanel>
     </Grid>
 </UserControl>

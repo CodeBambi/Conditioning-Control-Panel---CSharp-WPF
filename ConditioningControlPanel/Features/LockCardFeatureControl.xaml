@@ -55,103 +55,144 @@
                 </Grid>
             </Border>
 
-            <!-- ONE dense controls card: two dials, then the two switches. Every description
-                 that used to sit under a control is now that row's ToolTip. -->
-            <Border Style="{StaticResource SettingCardStyle}">
-                <Grid>
-                    <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                            Background="{StaticResource SectionHueStudioBrush}"/>
-                    <StackPanel Margin="16,8,16,8">
-
-                        <!-- Per hour -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_lock_card_frequency_1_10_per_hour}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="10" Value="2"
-                                    feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderFreq_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="2" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
-                        </Grid>
-
-                        <!-- Repeats -->
-                        <Grid Height="36" ToolTip="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto" MinWidth="56"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_repeats}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <Slider Grid.Column="1" x:Name="SliderRepeats" Minimum="1" Maximum="10" Value="3"
-                                    feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
-                                    ValueChanged="SliderRepeats_Changed"/>
-                            <TextBlock Grid.Column="2" x:Name="TxtRepeats" Text="3x" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
-                                       Foreground="{DynamicResource PinkBrush}"/>
-                        </Grid>
-
-                        <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
-
-                        <!-- Strict lock -->
-                        <Grid Height="34" ToolTip="{loc:Str tooltip_cannot_escape_must_complete_typing}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{loc:Str setting_strict_lock}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkStrict"
-                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                      Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
-                        </Grid>
-
-                        <!-- Solve by voice. TxtVoiceHint stays VISIBLE, not a ToolTip: code-behind
-                             repaints it with "no microphone detected" / "speech model not installed",
-                             which is the difference between the switch working and silently not. -->
-                        <Grid Height="34">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="🎤 Solve by voice" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkVoiceMode"
-                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                      Checked="ChkVoiceMode_Changed" Unchecked="ChkVoiceMode_Changed"/>
-                        </Grid>
-                        <TextBlock x:Name="TxtVoiceHint"
-                                   Text="Say the phrase out loud instead of typing it (offline mic). Falls back to typing if no mic."
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" FontStyle="Italic"
-                                   TextWrapping="Wrap" Margin="0,0,0,4"/>
-
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- Actions -->
-            <Grid Margin="0,0,0,0">
+            <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+                 slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+                 buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+                 the previous page contents moved verbatim - same names, handlers, lock markers and loc
+                 keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+                 settings retake the full width: Features/AdaptiveSideArt.cs. -->
+            <Grid feat:AdaptiveSideArt.CollapseBelow="700">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="8"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="8"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="3*" MaxWidth="780"/>
+                    <ColumnDefinition Width="2*"/>
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="{loc:Str btn_manage_phrases}"
-                        Style="{DynamicResource OutlineButton}" Click="BtnManagePhrases_Click"/>
-                <Button Grid.Column="2" Content="{loc:Str btn_test_2}"
-                        Style="{DynamicResource OutlineButton}" Click="BtnTest_Click"/>
-                <Button Grid.Column="4" Content="⚙" Width="44"
-                        Style="{DynamicResource OutlineButton}" Click="BtnColorSettings_Click"/>
+
+                <StackPanel Grid.Column="0">
+                    <!-- ONE dense controls card: two dials, then the two switches. Every description
+                         that used to sit under a control is now that row's ToolTip. -->
+                    <Border Style="{StaticResource SettingCardStyle}">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,8">
+
+                                <!-- Per hour -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_lock_card_frequency_1_10_per_hour}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="10" Value="2"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderFreq_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="2" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <!-- Repeats -->
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_repeats}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderRepeats" Minimum="1" Maximum="10" Value="3"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderRepeats_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtRepeats" Text="3x" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                                <!-- Strict lock -->
+                                <Grid Height="34" ToolTip="{loc:Str tooltip_cannot_escape_must_complete_typing}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_strict_lock}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkStrict"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
+                                </Grid>
+
+                                <!-- Solve by voice. TxtVoiceHint stays VISIBLE, not a ToolTip: code-behind
+                                     repaints it with "no microphone detected" / "speech model not installed",
+                                     which is the difference between the switch working and silently not. -->
+                                <Grid Height="34">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🎤 Solve by voice" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkVoiceMode"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkVoiceMode_Changed" Unchecked="ChkVoiceMode_Changed"/>
+                                </Grid>
+                                <TextBlock x:Name="TxtVoiceHint"
+                                           Text="Say the phrase out loud instead of typing it (offline mic). Falls back to typing if no mic."
+                                           Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" FontStyle="Italic"
+                                           TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Actions -->
+                    <Grid Margin="0,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="{loc:Str btn_manage_phrases}"
+                                Style="{DynamicResource OutlineButton}" Click="BtnManagePhrases_Click"/>
+                        <Button Grid.Column="2" Content="{loc:Str btn_test_2}"
+                                Style="{DynamicResource OutlineButton}" Click="BtnTest_Click"/>
+                        <Button Grid.Column="4" Content="⚙" Width="44"
+                                Style="{DynamicResource OutlineButton}" Click="BtnColorSettings_Click"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                     Background to CornerRadius but does NOT clip child content, so a child Image would
+                     square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                        BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                        VerticalAlignment="Stretch" MinHeight="200">
+                    <Border.Background>
+                        <ImageBrush Stretch="UniformToFill">
+                            <ImageBrush.ImageSource>
+                                <BitmapImage UriSource="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                             DecodePixelWidth="800"/>
+                            </ImageBrush.ImageSource>
+                        </ImageBrush>
+                    </Border.Background>
+                    <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                    <Border CornerRadius="12">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                <GradientStop Color="#66000000" Offset="0"/>
+                                <GradientStop Color="#00000000" Offset="0.45"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Border>
             </Grid>
+
         </StackPanel>
     </Grid>
 </UserControl>

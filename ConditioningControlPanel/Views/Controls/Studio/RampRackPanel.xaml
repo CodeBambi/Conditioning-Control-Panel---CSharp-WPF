@@ -71,9 +71,35 @@
             </Grid>
         </Border>
 
-        <!-- The live control, verbatim: enable, duration, multiplier, curve,
-             end-at-complete, and the five ramp links. -->
-        <feat:IntensityRampFeatureControl x:Name="RampHost" x:FieldModifier="internal"/>
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- The live control, verbatim: enable, duration, multiplier, curve,
+                     end-at-complete, and the five ramp links. -->
+                <feat:IntensityRampFeatureControl x:Name="RampHost" x:FieldModifier="internal"/>
+            </StackPanel>
+
+            <!-- SIDE CARD, no art: this feature has no plate in Resources/features and round 3 invents
+                 no assets. The page's own glyph, huge and nearly transparent, on the section wash. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Image Width="120" Height="120" Opacity="0.18"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Source="{Binding Source='📈', Converter={StaticResource EmojiToImageSource}}"/>
+            </Border>
+        </Grid>
 
     </StackPanel>
 </UserControl>

@@ -101,80 +101,120 @@
             </Grid>
         </Border>
 
-        <!-- Rework notice. Visibility is set in code from
-             OverlayService.BrainDrainWithheld; Collapsed here so the
-             designer/harness never shows it by accident. -->
-        <Border x:Name="WithheldNotice" x:FieldModifier="internal"
-                Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
-                CornerRadius="10" Padding="16,12" Margin="0,0,0,10"
-                Visibility="Collapsed">
-            <StackPanel>
-                <helpers:EmojiTextBlock Text="{loc:Str section_rework}"
-                                        Foreground="#FFA500" FontSize="13" FontWeight="Bold"/>
-                <TextBlock Text="{loc:Str st4_braindrain_withheld_notice}"
-                           Foreground="#FFA500" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- Rework notice. Visibility is set in code from
+                     OverlayService.BrainDrainWithheld; Collapsed here so the
+                     designer/harness never shows it by accident. -->
+                <Border x:Name="WithheldNotice" x:FieldModifier="internal"
+                        Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                        CornerRadius="10" Padding="16,12" Margin="0,0,0,10"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <helpers:EmojiTextBlock Text="{loc:Str section_rework}"
+                                                Foreground="#FFA500" FontSize="13" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str st4_braindrain_withheld_notice}"
+                                   Foreground="#FFA500" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ONE dense controls card: the dial, then the perf switch. Both hints moved to the
+                     row ToolTips. The intensity Slider keeps its EXPLICIT 1-100 range: a WPF Slider
+                     defaults to Maximum=10, which silently clamps this percent value in the settings
+                     round-trip (the same warning the now-deleted ProgressionTabView markup carried). -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" ToolTip="{loc:Str st4_braindrain_intensity_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_intensity}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderIntensity" x:FieldModifier="internal"
+                                        feat:SessionLock.Owned="True"
+                                        Minimum="1" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="10,0"
+                                        ValueChanged="SliderIntensity_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
+                                 unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
+                            <Grid Height="34" ToolTip="{loc:Str st4_braindrain_high_refresh_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_high_refresh}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkHighRefresh" x:FieldModifier="internal"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
+                            </Grid>
+
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
+                     feature is a completely silent no-op with no way to tell why: the
+                     service logs a warning and returns, and the UI would look armed. -->
+                <Border x:Name="NoAudioHint" x:FieldModifier="internal"
+                        Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                        CornerRadius="10" Padding="16,12" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str st4_braindrain_no_audio_hint}"
+                               Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"/>
+                </Border>
             </StackPanel>
-        </Border>
 
-        <!-- ONE dense controls card: the dial, then the perf switch. Both hints moved to the
-             row ToolTips. The intensity Slider keeps its EXPLICIT 1-100 range: a WPF Slider
-             defaults to Maximum=10, which silently clamps this percent value in the settings
-             round-trip (the same warning the now-deleted ProgressionTabView markup carried). -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
-
-                    <Grid Height="36" ToolTip="{loc:Str st4_braindrain_intensity_hint}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_intensity}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderIntensity" x:FieldModifier="internal"
-                                feat:SessionLock.Owned="True"
-                                Minimum="1" Maximum="100" Value="50"
-                                VerticalAlignment="Center" Margin="10,0"
-                                ValueChanged="SliderIntensity_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%"
-                                   HorizontalAlignment="Right" VerticalAlignment="Center"
-                                   FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
-                    </Grid>
-
-                    <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
-
-                    <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
-                         unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
-                    <Grid Height="34" ToolTip="{loc:Str st4_braindrain_high_refresh_hint}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_high_refresh}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkHighRefresh" x:FieldModifier="internal"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
-                    </Grid>
-
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
-             feature is a completely silent no-op with no way to tell why: the
-             service logs a warning and returns, and the UI would look armed. -->
-        <Border x:Name="NoAudioHint" x:FieldModifier="internal"
-                Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
-                CornerRadius="10" Padding="16,12" Visibility="Collapsed">
-            <TextBlock Text="{loc:Str st4_braindrain_no_audio_hint}"
-                       Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"/>
-        </Border>
+            <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                 Background to CornerRadius but does NOT clip child content, so a child Image would
+                 square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border.Background>
+                    <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush.ImageSource>
+                            <BitmapImage UriSource="pack://application:,,,/Resources/features/brain_drain.png"
+                                         DecodePixelWidth="800"/>
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                </Border.Background>
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
 
     </StackPanel>
 </UserControl>

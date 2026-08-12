@@ -47,196 +47,237 @@
             </Grid>
         </Border>
 
-        <!-- ONE dense card: rate, the duration filter, then the strict switch. -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
+             the previous page contents moved verbatim - same names, handlers, lock markers and loc
+             keys. Below 700px (the 520px feature popup) the art column collapses to zero and the
+             settings retake the full width: Features/AdaptiveSideArt.cs. -->
+        <Grid feat:AdaptiveSideArt.CollapseBelow="700">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
 
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_videos_per_hour}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ValueChanged="SliderPerHour_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtPerHour" Text="2" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card: rate, the duration filter, then the strict switch. -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
 
-                    <!-- Duration filter: min -> max on one row.
-                         Owned despite being an asset-eligibility filter rather than a rate: total
-                         exposure is rate x length, so clamping max length to 10s guts a locked
-                         "2 videos per hour" prescription by ~90% without touching the locked rate.
-                         That is the opt-out this lock exists to stop. -->
-                    <Grid Height="36" Background="Transparent" ToolTip="Duration filter: min length &#x2192; max length. Filter videos by length. 0 = no limit.">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="130"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="56"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderVideoMinDur" Minimum="0" Maximum="600" Value="0"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0,8,0"
-                                ValueChanged="SliderVideoMinDur_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtVideoMinDur" Text="off" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                        <TextBlock Grid.Column="3" Text="&#x2192;" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextDimBrush}" FontSize="11"/>
-                        <Slider Grid.Column="4" x:Name="SliderVideoMaxDur" Minimum="0" Maximum="1800" Value="0"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="8,0,8,0"
-                                ValueChanged="SliderVideoMaxDur_Changed"/>
-                        <TextBlock Grid.Column="5" x:Name="TxtVideoMaxDur" Text="off" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_videos_per_hour}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderPerHour_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtPerHour" Text="2" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
 
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+                            <!-- Duration filter: min -> max on one row.
+                                 Owned despite being an asset-eligibility filter rather than a rate: total
+                                 exposure is rate x length, so clamping max length to 10s guts a locked
+                                 "2 videos per hour" prescription by ~90% without touching the locked rate.
+                                 That is the opt-out this lock exists to stop. -->
+                            <Grid Height="36" Background="Transparent" ToolTip="Duration filter: min length &#x2192; max length. Filter videos by length. 0 = no limit.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="24"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderVideoMinDur" Minimum="0" Maximum="600" Value="0"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0,8,0"
+                                        ValueChanged="SliderVideoMinDur_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtVideoMinDur" Text="off" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="3" Text="&#x2192;" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextDimBrush}" FontSize="11"/>
+                                <Slider Grid.Column="4" x:Name="SliderVideoMaxDur" Minimum="0" Maximum="1800" Value="0"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="8,0,8,0"
+                                        ValueChanged="SliderVideoMaxDur_Changed"/>
+                                <TextBlock Grid.Column="5" x:Name="TxtVideoMaxDur" Text="off" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
 
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_strict}" Foreground="#FFB347"
-                                                FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkStrict"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
-        <!-- Mini game: its own card, same row recipes, header line kept. -->
-        <Border Style="{StaticResource SettingCardStyle}">
-            <Grid>
-                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
-                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
-                        Background="{StaticResource SectionHueStudioBrush}"/>
-                <StackPanel Margin="16,8,16,8">
-
-                    <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_enable_attention_check_targets}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}"
-                                                FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkMiniGame" Style="{StaticResource ToggleStyle}"
-                                  feat:SessionLock.Owned="True"
-                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                  ToolTip="{loc:Str tooltip_enable_attention_check_targets}"
-                                  Checked="ChkMiniGame_Changed" Unchecked="ChkMiniGame_Changed"/>
-                    </Grid>
-
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
-
-                    <!-- Targets (the dice toggle randomises the count, so it rides the label) -->
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Str label_targets}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                            <CheckBox x:Name="ChkRandomize" Margin="8,0,0,0" VerticalAlignment="Center" feat:SessionLock.Owned="True"
-                                      Checked="ChkRandomize_Changed" Unchecked="ChkRandomize_Changed"
-                                      ToolTip="{loc:Str tooltip_randomize_target_count_1_to_max}">
-                                <Image Width="12" Height="12"
-                                       Source="{Binding Source='🎲', Converter={StaticResource EmojiToImageSource}}"/>
-                            </CheckBox>
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str setting_strict}" Foreground="#FFB347"
+                                                        FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkStrict"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
+                            </Grid>
                         </StackPanel>
-                        <Slider Grid.Column="1" x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}"
-                                ValueChanged="SliderTargets_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtTargets" Text="3" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
                     </Grid>
+                </Border>
 
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}"
-                                ValueChanged="SliderDuration_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
+                <!-- Mini game: its own card, same row recipes, header line kept. -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_enable_attention_check_targets}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}"
+                                                        FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkMiniGame" Style="{StaticResource ToggleStyle}"
+                                          feat:SessionLock.Owned="True"
+                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                          ToolTip="{loc:Str tooltip_enable_attention_check_targets}"
+                                          Checked="ChkMiniGame_Changed" Unchecked="ChkMiniGame_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <!-- Targets (the dice toggle randomises the count, so it rides the label) -->
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_targets}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="ChkRandomize" Margin="8,0,0,0" VerticalAlignment="Center" feat:SessionLock.Owned="True"
+                                              Checked="ChkRandomize_Changed" Unchecked="ChkRandomize_Changed"
+                                              ToolTip="{loc:Str tooltip_randomize_target_count_1_to_max}">
+                                        <Image Width="12" Height="12"
+                                               Source="{Binding Source='🎲', Converter={StaticResource EmojiToImageSource}}"/>
+                                    </CheckBox>
+                                </StackPanel>
+                                <Slider Grid.Column="1" x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}"
+                                        ValueChanged="SliderTargets_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtTargets" Text="3" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}"
+                                        ValueChanged="SliderDuration_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_target_button_size_in_pixels}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ToolTip="{loc:Str tooltip_target_button_size_in_pixels}"
+                                        ValueChanged="SliderTargetSize_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtTargetSize" Text="70" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <!-- Phase 3 placeholder copy — voice-pass at ship. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="Look at a target for ~1s instead of clicking. Same hit, same reward.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Stare to click" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkVideoGazeClick_Changed" Unchecked="ChkVideoGazeClick_Changed"/>
+                            </Grid>
+
+                            <Grid Margin="0,8,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="{loc:Str btn_phrases}"
+                                        ToolTip="{loc:Str tooltip_edit_attention_check_phrases}"
+                                        Style="{DynamicResource OutlineButton}" Click="BtnManageAttention_Click"/>
+                                <Button Grid.Column="2" Content="{loc:Str btn_style}"
+                                        ToolTip="{loc:Str tooltip_customize_target_appearance_colors_border_fon}"
+                                        Style="{DynamicResource OutlineButton}" Click="BtnAttentionStyle_Click"/>
+                            </Grid>
+                        </StackPanel>
                     </Grid>
+                </Border>
 
-                    <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_target_button_size_in_pixels}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" MinWidth="120"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" MinWidth="56"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <Slider Grid.Column="1" x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70"
-                                feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
-                                ToolTip="{loc:Str tooltip_target_button_size_in_pixels}"
-                                ValueChanged="SliderTargetSize_Changed"/>
-                        <TextBlock Grid.Column="2" x:Name="TxtTargetSize" Text="70" HorizontalAlignment="Right"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold"/>
-                    </Grid>
+                <Button Content="{loc:Str btn_test_2}" Style="{DynamicResource OutlineButton}"
+                        Click="BtnTestVideo_Click"/>
+            </StackPanel>
 
-                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+            <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its
+                 Background to CornerRadius but does NOT clip child content, so a child Image would
+                 square off the rounded corners (round-2 lesson). Same plate the hero uses. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border.Background>
+                    <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush.ImageSource>
+                            <BitmapImage UriSource="pack://application:,,,/Resources/features/mandatory_videos.png"
+                                         DecodePixelWidth="800"/>
+                        </ImageBrush.ImageSource>
+                    </ImageBrush>
+                </Border.Background>
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
 
-                    <!-- Phase 3 placeholder copy — voice-pass at ship. -->
-                    <Grid Height="34" Background="Transparent" ToolTip="Look at a target for ~1s instead of clicking. Same hit, same reward.">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Stare to click" FontSize="13" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
-                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                  Checked="ChkVideoGazeClick_Changed" Unchecked="ChkVideoGazeClick_Changed"/>
-                    </Grid>
-
-                    <Grid Margin="0,8,0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="{loc:Str btn_phrases}"
-                                ToolTip="{loc:Str tooltip_edit_attention_check_phrases}"
-                                Style="{DynamicResource OutlineButton}" Click="BtnManageAttention_Click"/>
-                        <Button Grid.Column="2" Content="{loc:Str btn_style}"
-                                ToolTip="{loc:Str tooltip_customize_target_appearance_colors_border_fon}"
-                                Style="{DynamicResource OutlineButton}" Click="BtnAttentionStyle_Click"/>
-                    </Grid>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Button Content="{loc:Str btn_test_2}" Style="{DynamicResource OutlineButton}"
-                Click="BtnTestVideo_Click"/>
     </StackPanel>
 </UserControl>
