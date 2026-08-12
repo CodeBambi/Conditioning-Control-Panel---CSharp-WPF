@@ -1,0 +1,11 @@
+run	worktree	cold	wall_s	unit	unit_skip	headless	headless_skip	named_test
+01	C:/Code/ccp-sp063-cold	cold	77	892	0	35	0	green
+02	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	84	892	0	35	0	green
+03	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	72	892	0	35	0	green
+04	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	71	892	0	35	0	green
+05	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	71	892	0	35	0	green
+06	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	72	892	0	35	0	green
+07	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	71	892	0	35	0	green
+08	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	71	892	0	35	0	green
+09	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	71	892	0	35	0	green
+10	C:/Code/Conditioning-Control-Panel---CSharp-WPF/.worktrees/spine-20260812T224057/lane-1	warm	72	892	0	35	0	green

@@ -1,5 +1,5 @@
 ## STATUS: SP-063 — Raise the injected test timeout budgets (owner decree)
-**Current Step:** Step 2 — apply the raise + the one guard token (IN PROGRESS)
+**Current Step:** Step 3 — ten consecutive greens, one genuinely cold (IN PROGRESS)
 **Last Updated:** 2026-08-12 (orchestrator, re-authored — wave 20, single lane)
 **Blockers:** none
 
@@ -10,13 +10,13 @@
 - [x] Expected suite wall-clock impact stated (to be checked in Step 3)
 - [x] Pre-approach solo consult scoped to EXECUTION (the decree is settled) — verdict + ACTUAL model
 
-### Step 2: apply the raise + the one guard token — IN PROGRESS
-- [ ] Population 1 → shared constant; population 2 → short literals + `// wallclock-allow:` marker + pin; population 3 → assignment deleted
-- [ ] `TestTimingGuardTests` gains the single option-assignment token + pins (no new fact; floor stays 892)
-- [ ] Guard RED captured (injected unpinned budget), then removed
-- [ ] No stale pins (SP-062 touched `AiProviderLab.cs`)
+### Step 2: apply the raise + the one guard token — COMPLETE
+- [x] Population 1 → shared constant; population 2 → short literals + `// wallclock-allow:` marker + pin; population 3 → assignment deleted
+- [x] `TestTimingGuardTests` gains the single option-assignment token + pins (no new fact; floor stays 892)
+- [x] Guard RED captured (injected unpinned budget), then removed
+- [x] No stale pins (SP-062 touched `AiProviderLab.cs`)
 
-### Step 3: ten consecutive greens, one genuinely cold — NOT STARTED
+### Step 3: ten consecutive greens, one genuinely cold — IN PROGRESS
 - [ ] 10 consecutive full-suite runs, zero reds, zero unexpected skips, TRX attached, output redirected
 - [ ] ≥1 fresh-checkout first-ever build; per-run table incl. skipped column
 - [ ] `Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` green in EVERY run incl. cold

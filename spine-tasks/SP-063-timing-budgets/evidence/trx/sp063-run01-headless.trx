@@ -1,0 +1,376 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="d6fd82d1-3c51-44ca-b349-24fe02d3cd85" name="Micha@MICH_S_YOGA 2026-08-13 07:57:55" runUser="MICH_S_YOGA\Micha" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-08-13T07:57:55.1061171+09:00" queuing="2026-08-13T07:57:55.1061174+09:00" start="2026-08-13T07:57:48.8769003+09:00" finish="2026-08-13T07:58:10.2231975+09:00" />
+  <TestSettings name="default" id="97a7abb2-10d0-443a-b286-a604f08b8a84">
+    <Deployment runDeploymentRoot="Micha_MICH_S_YOGA_2026-08-13_07_57_55" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="3d18afac-9055-4056-b9a5-fd9b626dbc47" testId="6fb7c6f2-f3a2-dfe7-042b-2184f863841a" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.FrameAdvance_UpdatesLayerSource_FloatTransform_AndProbe" computerName="MICH_S_YOGA" duration="00:00:01.6896793" startTime="2026-08-13T07:57:56.9303620+09:00" endTime="2026-08-13T07:57:58.6200966+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3d18afac-9055-4056-b9a5-fd9b626dbc47" />
+    <UnitTestResult executionId="1f984095-3ffc-40d7-a1e8-350fc321af8b" testId="14b650fc-8040-db5b-359b-a370ddbd4e01" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.AvatarClick_RoutesToClickEmote_DistinctFromSpeech" computerName="MICH_S_YOGA" duration="00:00:04.4849377" startTime="2026-08-13T07:57:59.7676409+09:00" endTime="2026-08-13T07:58:04.2525202+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1f984095-3ffc-40d7-a1e8-350fc321af8b" />
+    <UnitTestResult executionId="f5031f43-982c-4c8a-a61a-be986190ae06" testId="238ba288-0d2a-f0f8-67c9-2907a8eff45b" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.TallContent_CapsHeight_AndFinalControlStartsBelowFold" computerName="MICH_S_YOGA" duration="00:00:00.0869719" startTime="2026-08-13T07:58:08.2705004+09:00" endTime="2026-08-13T07:58:08.3575518+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f5031f43-982c-4c8a-a61a-be986190ae06" />
+    <UnitTestResult executionId="49a41638-69cd-4881-ad7a-4e0dfad9acba" testId="986c56e0-8acc-ae12-e8d7-2db1f41bbb30" testName="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests.DeclaredPolicy_MatchesTheLayeringContract" computerName="MICH_S_YOGA" duration="00:00:00.2370256" startTime="2026-08-13T07:57:54.7912575+09:00" endTime="2026-08-13T07:57:55.0287649+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="49a41638-69cd-4881-ad7a-4e0dfad9acba" />
+    <UnitTestResult executionId="76266c8e-936e-44b5-b654-49626f43f1a3" testId="08956036-f4f2-1429-9a73-78e58a7f9eba" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Popup_StaysInsideOwnerWorkingArea" computerName="MICH_S_YOGA" duration="00:00:01.5515034" startTime="2026-08-13T07:57:55.0748098+09:00" endTime="2026-08-13T07:57:56.6278829+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="76266c8e-936e-44b5-b654-49626f43f1a3" />
+    <UnitTestResult executionId="d2780694-b2d8-48e9-a176-509460122b26" testId="ea787ffb-5661-939f-125f-9bcd8446cada" testName="CcpClient.HeadlessTests.DashboardCardHeadlessTests.Card_Toggle_AppliesLitClass_AndStyleResolvesBorderBrush" computerName="MICH_S_YOGA" duration="00:00:00.1172699" startTime="2026-08-13T07:57:59.0799332+09:00" endTime="2026-08-13T07:57:59.1973325+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d2780694-b2d8-48e9-a176-509460122b26" />
+    <UnitTestResult executionId="67cf3ee1-0b49-4324-a8b4-4720a64e665e" testId="84091dc3-dcd5-42b7-effa-435995801602" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.AttachDetach_ViewOnlySwitch_PreservesPipeline" computerName="MICH_S_YOGA" duration="00:00:01.6109346" startTime="2026-08-13T07:58:04.8809438+09:00" endTime="2026-08-13T07:58:06.4919285+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="67cf3ee1-0b49-4324-a8b4-4720a64e665e" />
+    <UnitTestResult executionId="6010f756-e6bf-42a0-b5ab-b305d17bcc93" testId="459c8b23-ca2b-bc3e-cece-328c901fe69a" testName="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.RankName_MatchesWpfThresholds" computerName="MICH_S_YOGA" duration="00:00:00.8512686" startTime="2026-08-13T07:57:53.5530842+09:00" endTime="2026-08-13T07:57:54.4211042+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6010f756-e6bf-42a0-b5ab-b305d17bcc93" />
+    <UnitTestResult executionId="e09b295a-b903-4bd9-a9c9-da2d0c1a4864" testId="9b7eeb51-b6e0-fda3-b895-3a92638bc3c6" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.Close_DisposesEngineAndSubscriptions" computerName="MICH_S_YOGA" duration="00:00:00.1899067" startTime="2026-08-13T07:58:07.5731385+09:00" endTime="2026-08-13T07:58:07.7631303+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e09b295a-b903-4bd9-a9c9-da2d0c1a4864" />
+    <UnitTestResult executionId="873520ae-41bf-47eb-a032-3d8bb912194d" testId="fd000b05-aef9-d561-cbe2-afb871d963d1" testName="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.RightClickPress_OnCardBody_TogglesThroughStableIdPath" computerName="MICH_S_YOGA" duration="00:00:00.1072526" startTime="2026-08-13T07:58:04.7718951+09:00" endTime="2026-08-13T07:58:04.8792439+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="873520ae-41bf-47eb-a032-3d8bb912194d" />
+    <UnitTestResult executionId="39fbbddc-1c12-4b6c-b67b-9195a6abc885" testId="d97c8cc7-31db-86f6-9825-5d627aefdb34" testName="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.OpenFromDashboard_OwnedModeless_DashboardStays" computerName="MICH_S_YOGA" duration="00:00:00.1314513" startTime="2026-08-13T07:58:04.2545717+09:00" endTime="2026-08-13T07:58:04.3861434+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="39fbbddc-1c12-4b6c-b67b-9195a6abc885" />
+    <UnitTestResult executionId="d4b4d727-f059-4f18-aac5-e21afd6f3439" testId="884c55e5-78bc-61c2-fb5b-5481924264e2" testName="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.CardClick_ChangesSelection" computerName="MICH_S_YOGA" duration="00:00:00.0677736" startTime="2026-08-13T07:58:04.4849751+09:00" endTime="2026-08-13T07:58:04.5528655+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d4b4d727-f059-4f18-aac5-e21afd6f3439" />
+    <UnitTestResult executionId="37b9132c-8148-430f-9925-db9e603ae4b3" testId="13fbaada-1e8f-6535-4b37-a6230d436ec9" testName="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.TitleMutation_RendersMutatedTitle_AndRightClickStillToggles" computerName="MICH_S_YOGA" duration="00:00:00.0684238" startTime="2026-08-13T07:58:07.5028887+09:00" endTime="2026-08-13T07:58:07.5714092+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="37b9132c-8148-430f-9925-db9e603ae4b3" />
+    <UnitTestResult executionId="4e25d1f6-0d2e-4d40-8a62-3ab8e54f4540" testId="e50dfe1e-a538-f3f0-b3c2-ff1cf0b4a4c8" testName="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.UnavailableReply_RendersSubduedBubble_WithoutBadge" computerName="MICH_S_YOGA" duration="00:00:00.0854891" startTime="2026-08-13T07:58:07.7645514+09:00" endTime="2026-08-13T07:58:07.8501182+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4e25d1f6-0d2e-4d40-8a62-3ab8e54f4540" />
+    <UnitTestResult executionId="96b4e73c-b914-4c76-8868-cd2d5ff90cd8" testId="e1b0dacd-6440-c337-8c28-46623b9e28d9" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.ShortContent_Compact_NoScrollbarMetrics" computerName="MICH_S_YOGA" duration="00:00:00.1033123" startTime="2026-08-13T07:58:07.8847392+09:00" endTime="2026-08-13T07:58:07.9881313+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="96b4e73c-b914-4c76-8868-cd2d5ff90cd8" />
+    <UnitTestResult executionId="d5606d1c-9dfd-492a-a31b-6fff9b07a04d" testId="2d06b0b7-c0c9-52f8-5307-b1c1b62b0743" testName="CcpClient.HeadlessTests.DashboardCardHeadlessTests.Card_ArrangedBounds_GrowWithLoadBearingIsVisible" computerName="MICH_S_YOGA" duration="00:00:00.0913181" startTime="2026-08-13T07:58:04.3878617+09:00" endTime="2026-08-13T07:58:04.4792960+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d5606d1c-9dfd-492a-a31b-6fff9b07a04d" />
+    <UnitTestResult executionId="42d28934-c49e-4d09-8820-1f75ddd7ff51" testId="8b22e1b0-a0da-fb95-a69a-56854cd85de9" testName="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.PlainRightClick_NoContextMenu_ExistsOrOpens" computerName="MICH_S_YOGA" duration="00:00:00.1964188" startTime="2026-08-13T07:57:56.7291714+09:00" endTime="2026-08-13T07:57:56.9257236+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="42d28934-c49e-4d09-8820-1f75ddd7ff51" />
+    <UnitTestResult executionId="3e14c304-81d7-478f-8209-2f5c4451d026" testId="5a9f3e6c-c958-302e-183f-49900ac2cfa9" testName="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests.ShowAndSink_AreSafeWithoutAnAttachedSurface" computerName="MICH_S_YOGA" duration="00:00:00.0039555" startTime="2026-08-13T07:57:59.3093189+09:00" endTime="2026-08-13T07:57:59.3133825+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3e14c304-81d7-478f-8209-2f5c4451d026" />
+    <UnitTestResult executionId="45e04c69-6c4a-4ccf-9902-55cd318c67e2" testId="bd2539e4-08f5-a4ea-5fb6-ab398102e4a9" testName="CcpClient.HeadlessTests.DashboardCardHeadlessTests.ElementNameMirror_FollowsLiveTickText" computerName="MICH_S_YOGA" duration="00:00:00.6196699" startTime="2026-08-13T07:58:06.5890973+09:00" endTime="2026-08-13T07:58:07.2088382+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="45e04c69-6c4a-4ccf-9902-55cd318c67e2" />
+    <UnitTestResult executionId="eee7dfb5-bff0-4028-871a-49f3c35f7141" testId="610d0e0d-b866-7c24-e205-fb93cad7bb2b" testName="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.Commit_AndCancel_Outcomes" computerName="MICH_S_YOGA" duration="00:00:00.0846237" startTime="2026-08-13T07:57:59.2183117+09:00" endTime="2026-08-13T07:57:59.3030407+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="eee7dfb5-bff0-4028-871a-49f3c35f7141" />
+    <UnitTestResult executionId="0b97d412-04e2-47d6-ad31-1aa68f59ccec" testId="3bc9f727-7e24-a148-48eb-0b40bdb44bc6" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.CorruptPackSwitch_TypedDegraded_AndStaticFallbackVisible" computerName="MICH_S_YOGA" duration="00:00:00.1043639" startTime="2026-08-13T07:58:07.9906156+09:00" endTime="2026-08-13T07:58:08.0950603+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0b97d412-04e2-47d6-ad31-1aa68f59ccec" />
+    <UnitTestResult executionId="6d2ea4a2-ce7e-4498-9d54-0cafee01c478" testId="76b2c501-d6ac-8b03-0699-1954209f1368" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Wheel_ReachesFinalControl_OffsetChangesMonotonically" computerName="MICH_S_YOGA" duration="00:00:00.0966456" startTime="2026-08-13T07:58:09.9768708+09:00" endTime="2026-08-13T07:58:10.0736177+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6d2ea4a2-ce7e-4498-9d54-0cafee01c478" />
+    <UnitTestResult executionId="c09e36d1-d2db-43c6-923a-b37d2dc5c275" testId="4f5334a0-d625-a21e-06ae-2352e1eba052" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.PauseButton_FreezesPipeline_ResumeContinuesSuccessor" computerName="MICH_S_YOGA" duration="00:00:01.6163700" startTime="2026-08-13T07:58:08.3593136+09:00" endTime="2026-08-13T07:58:09.9757085+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c09e36d1-d2db-43c6-923a-b37d2dc5c275" />
+    <UnitTestResult executionId="b668b614-067f-49ed-b61b-c82cbb54b526" testId="b47a9bda-bde8-6271-1e08-afd135d74eac" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.LeftClick_OpensOwnedModelessPopup_WithContractChrome" computerName="MICH_S_YOGA" duration="00:00:00.0899326" startTime="2026-08-13T07:58:08.0966743+09:00" endTime="2026-08-13T07:58:08.1867818+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b668b614-067f-49ed-b61b-c82cbb54b526" />
+    <UnitTestResult executionId="5a7ac21c-27d5-414f-be68-43e2846505b0" testId="5b3c7673-1f32-73ed-e29f-ccd0feb0e236" testName="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.PopulatedSlot_ShowsRankStatsLastPlayed_AndDeleteFlow" computerName="MICH_S_YOGA" duration="00:00:00.0464754" startTime="2026-08-13T07:58:07.2102213+09:00" endTime="2026-08-13T07:58:07.2568036+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5a7ac21c-27d5-414f-be68-43e2846505b0" />
+    <UnitTestResult executionId="86d6d6c6-9c91-4759-9f60-e8f995751b94" testId="bef4ea10-aaa3-7a3d-2281-e437b9bc77e6" testName="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.Surface_Renders_ChatInput_Settings_ConfirmHidden_StatusHonest" computerName="MICH_S_YOGA" duration="00:00:00.0922343" startTime="2026-08-13T07:58:06.4934641+09:00" endTime="2026-08-13T07:58:06.5857888+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="86d6d6c6-9c91-4759-9f60-e8f995751b94" />
+    <UnitTestResult executionId="f52ed1ef-a494-420e-838f-a34dace8e8de" testId="f9f17e01-88b2-25fa-e040-afef830705d2" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.NestedList_ScrollsItself_ThenChainsToPopup" computerName="MICH_S_YOGA" duration="00:00:00.2426913" startTime="2026-08-13T07:58:07.2585748+09:00" endTime="2026-08-13T07:58:07.5013502+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f52ed1ef-a494-420e-838f-a34dace8e8de" />
+    <UnitTestResult executionId="551276c8-e363-45f8-b6a5-aa140b80f195" testId="8f5abf87-3ba1-4351-fbfd-13743ada9705" testName="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests.PresentedFrame_LandsOnTheImage" computerName="MICH_S_YOGA" duration="00:00:00.0102561" startTime="2026-08-13T07:57:59.2028603+09:00" endTime="2026-08-13T07:57:59.2132402+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="551276c8-e363-45f8-b6a5-aa140b80f195" />
+    <UnitTestResult executionId="df1a25ff-167c-4470-ac7f-4f1f9fe29f1e" testId="4e2158a0-dc01-bd49-0513-89c77ca3569b" testName="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.EnterKey_WhenFocused_TogglesSameOperation_AsRightClick" computerName="MICH_S_YOGA" duration="00:00:00.1373442" startTime="2026-08-13T07:57:59.6252955+09:00" endTime="2026-08-13T07:57:59.7627382+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="df1a25ff-167c-4470-ac7f-4f1f9fe29f1e" />
+    <UnitTestResult executionId="30be7bc8-e0d4-49ad-8a64-91618d861008" testId="d4a026cb-583e-442a-7e39-ccdca44fd3a5" testName="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.FreshProfile_ThreeCards_Slots23Locked_NewJourney" computerName="MICH_S_YOGA" duration="00:00:00.0306033" startTime="2026-08-13T07:58:07.8527267+09:00" endTime="2026-08-13T07:58:07.8834598+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="30be7bc8-e0d4-49ad-8a64-91618d861008" />
+    <UnitTestResult executionId="14315d24-bad6-423f-a7be-f64b27cddaa5" testId="71c6e9bb-bb3f-9a47-60d6-095490453f3a" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Escape_And_CloseButton_BothClose_ThroughTheOnePath" computerName="MICH_S_YOGA" duration="00:00:00.2161610" startTime="2026-08-13T07:58:04.5542658+09:00" endTime="2026-08-13T07:58:04.7705195+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="14315d24-bad6-423f-a7be-f64b27cddaa5" />
+    <UnitTestResult executionId="336abf68-a90f-4551-b3ef-f422c7c0fe4e" testId="351cd694-c7c7-fb06-d6dd-cb44478eec43" testName="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.OneAtATime_CloseExistingBeforeNew" computerName="MICH_S_YOGA" duration="00:00:00.2964441" startTime="2026-08-13T07:57:59.3195633+09:00" endTime="2026-08-13T07:57:59.6161416+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="336abf68-a90f-4551-b3ef-f422c7c0fe4e" />
+    <UnitTestResult executionId="3ad57bd8-f73f-491d-8233-0b8a5e5a1c84" testId="d5008f4d-3d3d-650f-d1af-27e2e82f107b" testName="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.Tube_Opens_LayersPresent_FirstFrameAndCapabilityRendered" computerName="MICH_S_YOGA" duration="00:00:00.0806178" startTime="2026-08-13T07:58:08.1884699+09:00" endTime="2026-08-13T07:58:08.2691902+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3ad57bd8-f73f-491d-8233-0b8a5e5a1c84" />
+    <UnitTestResult executionId="47cfbfdc-8dee-4e86-876d-30a376f552ee" testId="14f266c0-a003-fed4-703d-09b3c3e29b19" testName="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.ClearConfirm_ShowsOverlay_EscapeCancels_YesNeverDefaultPosition" computerName="MICH_S_YOGA" duration="00:00:00.4348256" startTime="2026-08-13T07:57:58.6264649+09:00" endTime="2026-08-13T07:57:59.0614056+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="47cfbfdc-8dee-4e86-876d-30a376f552ee" />
+    <UnitTestResult executionId="a91a8ddc-c6e2-47ac-b028-d40a104efec0" testId="263c2c9b-f279-afc2-1c70-01108a03192a" testName="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests.Close_Unsubscribes_NoThrowOnLateFrame" computerName="MICH_S_YOGA" duration="00:00:00.0018044" startTime="2026-08-13T07:58:04.4814547+09:00" endTime="2026-08-13T07:58:04.4833869+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a91a8ddc-c6e2-47ac-b028-d40a104efec0" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="CcpClient.HeadlessTests.DashboardCardHeadlessTests.Card_Toggle_AppliesLitClass_AndStyleResolvesBorderBrush" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="ea787ffb-5661-939f-125f-9bcd8446cada">
+      <Execution id="d2780694-b2d8-48e9-a176-509460122b26" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DashboardCardHeadlessTests" name="Card_Toggle_AppliesLitClass_AndStyleResolvesBorderBrush" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.RankName_MatchesWpfThresholds" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="459c8b23-ca2b-bc3e-cece-328c901fe69a">
+      <Execution id="6010f756-e6bf-42a0-b5ab-b305d17bcc93" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests" name="RankName_MatchesWpfThresholds" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests.DeclaredPolicy_MatchesTheLayeringContract" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="986c56e0-8acc-ae12-e8d7-2db1f41bbb30">
+      <Execution id="49a41638-69cd-4881-ad7a-4e0dfad9acba" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests" name="DeclaredPolicy_MatchesTheLayeringContract" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.PopulatedSlot_ShowsRankStatsLastPlayed_AndDeleteFlow" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="5b3c7673-1f32-73ed-e29f-ccd0feb0e236">
+      <Execution id="5a7ac21c-27d5-414f-be68-43e2846505b0" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests" name="PopulatedSlot_ShowsRankStatsLastPlayed_AndDeleteFlow" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.Surface_Renders_ChatInput_Settings_ConfirmHidden_StatusHonest" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="bef4ea10-aaa3-7a3d-2281-e437b9bc77e6">
+      <Execution id="86d6d6c6-9c91-4759-9f60-e8f995751b94" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.CompanionWindowHeadlessTests" name="Surface_Renders_ChatInput_Settings_ConfirmHidden_StatusHonest" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Wheel_ReachesFinalControl_OffsetChangesMonotonically" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="76b2c501-d6ac-8b03-0699-1954209f1368">
+      <Execution id="6d2ea4a2-ce7e-4498-9d54-0cafee01c478" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="Wheel_ReachesFinalControl_OffsetChangesMonotonically" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.RightClickPress_OnCardBody_TogglesThroughStableIdPath" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="fd000b05-aef9-d561-cbe2-afb871d963d1">
+      <Execution id="873520ae-41bf-47eb-a032-3d8bb912194d" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests" name="RightClickPress_OnCardBody_TogglesThroughStableIdPath" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests.ShowAndSink_AreSafeWithoutAnAttachedSurface" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="5a9f3e6c-c958-302e-183f-49900ac2cfa9">
+      <Execution id="3e14c304-81d7-478f-8209-2f5c4451d026" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.ChaosTunnelWindowHeadlessTests" name="ShowAndSink_AreSafeWithoutAnAttachedSurface" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.ShortContent_Compact_NoScrollbarMetrics" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="e1b0dacd-6440-c337-8c28-46623b9e28d9">
+      <Execution id="96b4e73c-b914-4c76-8868-cd2d5ff90cd8" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="ShortContent_Compact_NoScrollbarMetrics" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.AvatarClick_RoutesToClickEmote_DistinctFromSpeech" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="14b650fc-8040-db5b-359b-a370ddbd4e01">
+      <Execution id="1f984095-3ffc-40d7-a1e8-350fc321af8b" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="AvatarClick_RoutesToClickEmote_DistinctFromSpeech" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.Close_DisposesEngineAndSubscriptions" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="9b7eeb51-b6e0-fda3-b895-3a92638bc3c6">
+      <Execution id="e09b295a-b903-4bd9-a9c9-da2d0c1a4864" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="Close_DisposesEngineAndSubscriptions" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.TallContent_CapsHeight_AndFinalControlStartsBelowFold" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="238ba288-0d2a-f0f8-67c9-2907a8eff45b">
+      <Execution id="f5031f43-982c-4c8a-a61a-be986190ae06" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="TallContent_CapsHeight_AndFinalControlStartsBelowFold" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DashboardCardHeadlessTests.Card_ArrangedBounds_GrowWithLoadBearingIsVisible" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="2d06b0b7-c0c9-52f8-5307-b1c1b62b0743">
+      <Execution id="d5606d1c-9dfd-492a-a31b-6fff9b07a04d" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DashboardCardHeadlessTests" name="Card_ArrangedBounds_GrowWithLoadBearingIsVisible" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.PlainRightClick_NoContextMenu_ExistsOrOpens" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="8b22e1b0-a0da-fb95-a69a-56854cd85de9">
+      <Execution id="42d28934-c49e-4d09-8820-1f75ddd7ff51" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests" name="PlainRightClick_NoContextMenu_ExistsOrOpens" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests.PresentedFrame_LandsOnTheImage" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="8f5abf87-3ba1-4351-fbfd-13743ada9705">
+      <Execution id="551276c8-e363-45f8-b6a5-aa140b80f195" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests" name="PresentedFrame_LandsOnTheImage" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.EnterKey_WhenFocused_TogglesSameOperation_AsRightClick" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="4e2158a0-dc01-bd49-0513-89c77ca3569b">
+      <Execution id="df1a25ff-167c-4470-ac7f-4f1f9fe29f1e" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests" name="EnterKey_WhenFocused_TogglesSameOperation_AsRightClick" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.CorruptPackSwitch_TypedDegraded_AndStaticFallbackVisible" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="3bc9f727-7e24-a148-48eb-0b40bdb44bc6">
+      <Execution id="0b97d412-04e2-47d6-ad31-1aa68f59ccec" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="CorruptPackSwitch_TypedDegraded_AndStaticFallbackVisible" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.Commit_AndCancel_Outcomes" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="610d0e0d-b866-7c24-e205-fb93cad7bb2b">
+      <Execution id="eee7dfb5-bff0-4028-871a-49f3c35f7141" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests" name="Commit_AndCancel_Outcomes" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Popup_StaysInsideOwnerWorkingArea" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="08956036-f4f2-1429-9a73-78e58a7f9eba">
+      <Execution id="76266c8e-936e-44b5-b654-49626f43f1a3" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="Popup_StaysInsideOwnerWorkingArea" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.UnavailableReply_RendersSubduedBubble_WithoutBadge" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="e50dfe1e-a538-f3f0-b3c2-ff1cf0b4a4c8">
+      <Execution id="4e25d1f6-0d2e-4d40-8a62-3ab8e54f4540" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.CompanionWindowHeadlessTests" name="UnavailableReply_RendersSubduedBubble_WithoutBadge" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.LeftClick_OpensOwnedModelessPopup_WithContractChrome" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="b47a9bda-bde8-6271-1e08-afd135d74eac">
+      <Execution id="b668b614-067f-49ed-b61b-c82cbb54b526" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="LeftClick_OpensOwnedModelessPopup_WithContractChrome" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.FreshProfile_ThreeCards_Slots23Locked_NewJourney" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="d4a026cb-583e-442a-7e39-ccdca44fd3a5">
+      <Execution id="30be7bc8-e0d4-49ad-8a64-91618d861008" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests" name="FreshProfile_ThreeCards_Slots23Locked_NewJourney" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DashboardCardHeadlessTests.ElementNameMirror_FollowsLiveTickText" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="bd2539e4-08f5-a4ea-5fb6-ab398102e4a9">
+      <Execution id="45e04c69-6c4a-4ccf-9902-55cd318c67e2" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DashboardCardHeadlessTests" name="ElementNameMirror_FollowsLiveTickText" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests.CardClick_ChangesSelection" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="884c55e5-78bc-61c2-fb5b-5481924264e2">
+      <Execution id="d4b4d727-f059-4f18-aac5-e21afd6f3439" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhSlotPickerHeadlessTests" name="CardClick_ChangesSelection" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.AttachDetach_ViewOnlySwitch_PreservesPipeline" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="84091dc3-dcd5-42b7-effa-435995801602">
+      <Execution id="67cf3ee1-0b49-4324-a8b4-4720a64e665e" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="AttachDetach_ViewOnlySwitch_PreservesPipeline" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.Tube_Opens_LayersPresent_FirstFrameAndCapabilityRendered" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="d5008f4d-3d3d-650f-d1af-27e2e82f107b">
+      <Execution id="3ad57bd8-f73f-491d-8233-0b8a5e5a1c84" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="Tube_Opens_LayersPresent_FirstFrameAndCapabilityRendered" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.OneAtATime_CloseExistingBeforeNew" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="351cd694-c7c7-fb06-d6dd-cb44478eec43">
+      <Execution id="336abf68-a90f-4551-b3ef-f422c7c0fe4e" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="OneAtATime_CloseExistingBeforeNew" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests.TitleMutation_RendersMutatedTitle_AndRightClickStillToggles" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="13fbaada-1e8f-6535-4b37-a6230d436ec9">
+      <Execution id="37b9132c-8148-430f-9925-db9e603ae4b3" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.QuickToggleDispatchHeadlessTests" name="TitleMutation_RendersMutatedTitle_AndRightClickStillToggles" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.OpenFromDashboard_OwnedModeless_DashboardStays" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="d97c8cc7-31db-86f6-9825-5d627aefdb34">
+      <Execution id="39fbbddc-1c12-4b6c-b67b-9195a6abc885" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.CompanionWindowHeadlessTests" name="OpenFromDashboard_OwnedModeless_DashboardStays" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.CompanionWindowHeadlessTests.ClearConfirm_ShowsOverlay_EscapeCancels_YesNeverDefaultPosition" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="14f266c0-a003-fed4-703d-09b3c3e29b19">
+      <Execution id="47cfbfdc-8dee-4e86-876d-30a376f552ee" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.CompanionWindowHeadlessTests" name="ClearConfirm_ShowsOverlay_EscapeCancels_YesNeverDefaultPosition" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.PauseButton_FreezesPipeline_ResumeContinuesSuccessor" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="4f5334a0-d625-a21e-06ae-2352e1eba052">
+      <Execution id="c09e36d1-d2db-43c6-923a-b37d2dc5c275" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="PauseButton_FreezesPipeline_ResumeContinuesSuccessor" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.NestedList_ScrollsItself_ThenChainsToPopup" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="f9f17e01-88b2-25fa-e040-afef830705d2">
+      <Execution id="f52ed1ef-a494-420e-838f-a34dace8e8de" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="NestedList_ScrollsItself_ThenChainsToPopup" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.FeaturePopupHeadlessTests.Escape_And_CloseButton_BothClose_ThroughTheOnePath" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="71c6e9bb-bb3f-9a47-60d6-095490453f3a">
+      <Execution id="14315d24-bad6-423f-a7be-f64b27cddaa5" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.FeaturePopupHeadlessTests" name="Escape_And_CloseButton_BothClose_ThroughTheOnePath" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests.Close_Unsubscribes_NoThrowOnLateFrame" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="263c2c9b-f279-afc2-1c70-01108a03192a">
+      <Execution id="a91a8ddc-c6e2-47ac-b028-d40a104efec0" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.DtrhVideoWindowHeadlessTests" name="Close_Unsubscribes_NoThrowOnLateFrame" />
+    </UnitTest>
+    <UnitTest name="CcpClient.HeadlessTests.AvatarTubeHeadlessTests.FrameAdvance_UpdatesLayerSource_FloatTransform_AndProbe" storage="c:\code\ccp-sp063-cold\client\tests\ccpclient.headlesstests\bin\debug\net10.0\ccpclient.headlesstests.dll" id="6fb7c6f2-f3a2-dfe7-042b-2184f863841a">
+      <Execution id="3d18afac-9055-4056-b9a5-fd9b626dbc47" />
+      <TestMethod codeBase="C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\CcpClient.HeadlessTests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.HeadlessTests.AvatarTubeHeadlessTests" name="FrameAdvance_UpdatesLayerSource_FloatTransform_AndProbe" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="6fb7c6f2-f3a2-dfe7-042b-2184f863841a" executionId="3d18afac-9055-4056-b9a5-fd9b626dbc47" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="14b650fc-8040-db5b-359b-a370ddbd4e01" executionId="1f984095-3ffc-40d7-a1e8-350fc321af8b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="238ba288-0d2a-f0f8-67c9-2907a8eff45b" executionId="f5031f43-982c-4c8a-a61a-be986190ae06" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="986c56e0-8acc-ae12-e8d7-2db1f41bbb30" executionId="49a41638-69cd-4881-ad7a-4e0dfad9acba" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="08956036-f4f2-1429-9a73-78e58a7f9eba" executionId="76266c8e-936e-44b5-b654-49626f43f1a3" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ea787ffb-5661-939f-125f-9bcd8446cada" executionId="d2780694-b2d8-48e9-a176-509460122b26" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="84091dc3-dcd5-42b7-effa-435995801602" executionId="67cf3ee1-0b49-4324-a8b4-4720a64e665e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="459c8b23-ca2b-bc3e-cece-328c901fe69a" executionId="6010f756-e6bf-42a0-b5ab-b305d17bcc93" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9b7eeb51-b6e0-fda3-b895-3a92638bc3c6" executionId="e09b295a-b903-4bd9-a9c9-da2d0c1a4864" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fd000b05-aef9-d561-cbe2-afb871d963d1" executionId="873520ae-41bf-47eb-a032-3d8bb912194d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d97c8cc7-31db-86f6-9825-5d627aefdb34" executionId="39fbbddc-1c12-4b6c-b67b-9195a6abc885" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="884c55e5-78bc-61c2-fb5b-5481924264e2" executionId="d4b4d727-f059-4f18-aac5-e21afd6f3439" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="13fbaada-1e8f-6535-4b37-a6230d436ec9" executionId="37b9132c-8148-430f-9925-db9e603ae4b3" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e50dfe1e-a538-f3f0-b3c2-ff1cf0b4a4c8" executionId="4e25d1f6-0d2e-4d40-8a62-3ab8e54f4540" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e1b0dacd-6440-c337-8c28-46623b9e28d9" executionId="96b4e73c-b914-4c76-8868-cd2d5ff90cd8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2d06b0b7-c0c9-52f8-5307-b1c1b62b0743" executionId="d5606d1c-9dfd-492a-a31b-6fff9b07a04d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8b22e1b0-a0da-fb95-a69a-56854cd85de9" executionId="42d28934-c49e-4d09-8820-1f75ddd7ff51" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5a9f3e6c-c958-302e-183f-49900ac2cfa9" executionId="3e14c304-81d7-478f-8209-2f5c4451d026" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bd2539e4-08f5-a4ea-5fb6-ab398102e4a9" executionId="45e04c69-6c4a-4ccf-9902-55cd318c67e2" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="610d0e0d-b866-7c24-e205-fb93cad7bb2b" executionId="eee7dfb5-bff0-4028-871a-49f3c35f7141" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3bc9f727-7e24-a148-48eb-0b40bdb44bc6" executionId="0b97d412-04e2-47d6-ad31-1aa68f59ccec" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="76b2c501-d6ac-8b03-0699-1954209f1368" executionId="6d2ea4a2-ce7e-4498-9d54-0cafee01c478" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4f5334a0-d625-a21e-06ae-2352e1eba052" executionId="c09e36d1-d2db-43c6-923a-b37d2dc5c275" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b47a9bda-bde8-6271-1e08-afd135d74eac" executionId="b668b614-067f-49ed-b61b-c82cbb54b526" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5b3c7673-1f32-73ed-e29f-ccd0feb0e236" executionId="5a7ac21c-27d5-414f-be68-43e2846505b0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bef4ea10-aaa3-7a3d-2281-e437b9bc77e6" executionId="86d6d6c6-9c91-4759-9f60-e8f995751b94" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f9f17e01-88b2-25fa-e040-afef830705d2" executionId="f52ed1ef-a494-420e-838f-a34dace8e8de" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8f5abf87-3ba1-4351-fbfd-13743ada9705" executionId="551276c8-e363-45f8-b6a5-aa140b80f195" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4e2158a0-dc01-bd49-0513-89c77ca3569b" executionId="df1a25ff-167c-4470-ac7f-4f1f9fe29f1e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d4a026cb-583e-442a-7e39-ccdca44fd3a5" executionId="30be7bc8-e0d4-49ad-8a64-91618d861008" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="71c6e9bb-bb3f-9a47-60d6-095490453f3a" executionId="14315d24-bad6-423f-a7be-f64b27cddaa5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="351cd694-c7c7-fb06-d6dd-cb44478eec43" executionId="336abf68-a90f-4551-b3ef-f422c7c0fe4e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d5008f4d-3d3d-650f-d1af-27e2e82f107b" executionId="3ad57bd8-f73f-491d-8233-0b8a5e5a1c84" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="14f266c0-a003-fed4-703d-09b3c3e29b19" executionId="47cfbfdc-8dee-4e86-876d-30a376f552ee" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="263c2c9b-f279-afc2-1c70-01108a03192a" executionId="a91a8ddc-c6e2-47ac-b028-d40a104efec0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="35" executed="35" passed="35" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.11)&#xD;
+[xUnit.net 00:00:02.41]   Discovering: CcpClient.HeadlessTests&#xD;
+[xUnit.net 00:00:02.89]   Discovered:  CcpClient.HeadlessTests&#xD;
+[xUnit.net 00:00:03.28]   Starting:    CcpClient.HeadlessTests&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+avatar-capability: Degraded (asset-undecodable) — pack 'pulse' sheet 'Assets/avatar/pack-pulse.bmp' is undecodable: bmp: missing BM signature&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+avatar-capability: Available — pack 'circuit' decoded&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+dtrh: payload root 'C:\Code\ccp-sp063-cold\client\tests\CcpClient.HeadlessTests\bin\Debug\net10.0\payload\dtrh' -&gt; Present (1542 files)&#xD;
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)&#xD;
+layout-probe: card 488.0x92.0 DIP @ scale 1 @ screen 16,44&#xD;
+dtrh: participant stop begin&#xD;
+dtrh: participant stop end&#xD;
+[xUnit.net 00:00:19.94]   Finished:    CcpClient.HeadlessTests (ID = '03bcb41ceb7484b16db10146b76680b100860593adc3b56e4dd9667f435a5f21')&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>
