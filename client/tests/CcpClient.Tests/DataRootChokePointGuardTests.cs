@@ -54,6 +54,20 @@ public class DataRootChokePointGuardTests
 
         Assert.True(violations.Count == 0,
             "data-root choke-point guard violations:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
+
+        // SP-062: the pin's class MUST stay inside ProcessEnvCollection. The collection
+        // membership is the env-leak isolation (probe-proven intra-collection sequentiality);
+        // a future refactor dropping the attribute silently reintroduces the cross-collection
+        // race against the pin's two checkpoints. This deterministic reflection assertion backs
+        // the pin's probabilistic skip tripwire, and lives inside THIS fact so the suite count
+        // stays pinned (892) — the packet pins the floor exactly.
+        Assert.True(
+            typeof(DataRootOverrideTests)
+                .GetCustomAttributes(typeof(Xunit.CollectionAttribute), inherit: false)
+                .Cast<Xunit.CollectionAttribute>()
+                .Any(a => a.Name == nameof(ProcessEnvCollection)),
+            "DataRootOverrideTests must carry [Collection(nameof(ProcessEnvCollection))] — " +
+            "the SP-062 env-leak isolation; removing it revives the cross-collection race");
     }
 
     private static string FindRepoRoot()

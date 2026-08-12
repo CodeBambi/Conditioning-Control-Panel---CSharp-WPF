@@ -169,3 +169,237 @@ honestly, the standing provenance discipline).
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T205835.md` |
 | 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T210637.md` |
+| 3 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/3-20260812T212352.md` |
+
+---
+
+## Step 2 — implement: loud skip + co-location isolation (+ one discovered-race fix)
+
+### The pin (`DataRootOverrideTests.cs` — fileScopeMustChange)
+
+- Both silent `return`s replaced with `Assert.SkipWhen(ActiveDataRootOverride() is not null, reason)`.
+  Checkpoint 1 reason: "runner-set override in the external process environment"; checkpoint 2:
+  "cross-collection process-env leak, the SP-057 flake class". Both name `CCP_DATA_ROOT`; NEITHER
+  carries the override value (privacy: a user path, the consult's note). The `Assert.Equal` when
+  the pin binds is **byte-identical** to the pre-task code (strictness unchanged, framing h).
+- **Co-location:** `DataRootOverrideTests` now carries `[Collection(nameof(ProcessEnvCollection))]`
+  with a header comment recording WHY (probe-proven, never doc-trusted). The class's pure facts
+  ride along harmlessly. `DisableParallelization = true` stays on the collection definition as a
+  non-relied-upon hint; its summary now says so.
+- Probe harness deleted from the tree (source preserved at `evidence/probes/Sp062LeakReproProbes.cs.snapshot`).
+
+### Positive control (framing b) — the tripwire is live code
+
+Command (Windows, git-bash):
+
+```
+export CCP_DATA_ROOT="C:\\Temp\\ccp-sp062-positive-control-sandbox"
+dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo \
+  --logger "trx;LogFileName=sp062-positive-control.trx" --results-directory <evidence>/trx
+```
+
+Observed output (`evidence/runs/positive-control.log`, `evidence/trx/sp062-positive-control.trx`):
+
+```
+Skipped CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault [1 ms]
+Passed!  - Failed: 0, Passed: 891, Skipped: 1, Total: 892, Duration: 35 s
+```
+
+TRX: `outcome="NotExecuted"` ×1 with
+`<Message>CCP_DATA_ROOT override is active at the guard checkpoint (leak class: runner-set override in the external process environment) — the pin only binds with the override unset at BOTH checkpoints</Message>`.
+The suite exits 0 on a skip — by design the **exact-count floor** (892/0 expected) is what turns a
+vacuous run loud, exactly the zero-new-machinery mechanism the board row asked for. Contrast with
+the pre-fix Direction-A run: same induction, `Passed: 1, Skipped: 0` (silent).
+
+### Discovered red root-caused and fixed (run-01 interruption, named per framing f's inverse)
+
+The FIRST post-implementation full-suite run went **891 passed / 1 failed / 0 skipped** — the pin
+held (0 skips: the co-location works), but `AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit`
+failed `Assert.Equal(1, h.Lab.HitsFor(AiLabMode.Refusal))` with Actual 0
+(`evidence/trx/sp062-run01-unit.trx`). NOT the row-49 site; NOT attributable to it (framing f's
+"no other red may hide behind this name").
+
+**Root cause (proven by code read, `AiProviderLab.cs`):** every simple-mode branch did
+`await Write(res, ...)` — which `Close()`s the response, making the reply observable to the client —
+**before** `_records.Enqueue(...)`. `Handle` runs on a fire-and-forget thread-pool task
+(`ServeLoop`'s `_ = Task.Run(() => Handle(ctx))`), so a fast client can consume the reply, unwind
+the pipeline, and read `HitsFor` in the gap before the server task's enqueue executes. The
+"server-side hit count, not client-side hope" discipline (SP-041) was violated by microseconds.
+Same class in 9 sites: version endpoint, catch-all 404, Ok, Rate429, Error500, NotFound404,
+Refusal, Malformed, Truncated.
+
+**Fix (assertion-neutral harness ordering, in-scope `client/tests/**`):** the record is enqueued
+BEFORE the response becomes observable for every outcome-INDEPENDENT mode — the hit exists the
+moment the request is classified. The outcome-DEPENDENT modes (Timeout, HangStream, SlowOk) keep
+their post-outcome records — their payload ("client-gone" vs "completed") only exists after the
+outcome, and their consumers already synchronize via `WaitForRecordAsync` (deterministic signal).
+Zero assertions changed, zero waits/literals touched, `TestTimingGuardTests` pins untouched
+(verified in every green run). Filtered lab check post-fix: 12/12 green.
+
+**Causality vs this task:** the race predates SP-062 (the ordering is SP-041-era); my change did
+not touch the lab. The 10-green series below is post-fix and saw zero recurrence.
+
+### Timing discipline (framing g)
+
+No new deadline literals, no `Task.Delay`/`Thread.Sleep` outside `TestWait`, no new injected
+timeout budgets handed to product code. The probe harness used only `TestWait.Until` (bounded
+windows with the loud classifier). `TestTimingGuardTests` green with its allowlist UNCHANGED in
+every run.
+
+---
+
+## Step 3 — ten consecutive greens, one genuinely cold
+
+**Base honesty:** all runs on the repaired base (Step-0 land-defect repair `59fbcf1e`) + the
+Step-2 tree (commit `b89b25f0`). The delivered wave-19 base was red (see Step 0); the repair
+predates ALL measurement. Pre-series interruption: one 891/1 red (the lab race above),
+root-caused and fixed BEFORE the series; the 10 below are consecutive post-fix.
+
+| run | worktree | cold/warm | wall | unit | headless | TRX |
+|---|---|---|---|---|---|---|
+| green01 | in-place lane-1 | warm | 79s | **892/0** | 35/0 | sp062-green01-{unit,headless}.trx |
+| green02 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green02-* |
+| green03 | in-place | warm | 71s | 892/0 | 35/0 | sp062-green03-* |
+| green04 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green04-* |
+| green05 | **FRESH** `C:/Code/ccp-sp062-cold` (detached @b89b25f0, removed after) | **COLD — first-ever build**, 0W/0E (`runs/green05-cold-build.log`) | 106s | 892/0 | 35/0 | sp062-green05-cold-* |
+| green06 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green06-* |
+| green07 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green07-* |
+| green08 | in-place | warm | 73s | 892/0 | 35/0 | sp062-green08-* |
+| green09 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green09-* |
+| green10 | in-place | warm | 73s | 892/0 | 35/0 | sp062-green10-* |
+
+Every run: `dotnet test` unit + headless, `-c Debug --nologo`, `--logger "trx"`, stdout/stderr
+redirected to `evidence/runs/greenNN-*.log` (never tailed — failure names were read from the
+TRX, SP-058 discipline; the one red's name came from `sp062-run01-unit.trx`).
+
+**Row-49 site** (`LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable`):
+**ZERO firings in all 10 runs including the cold first-ever build.** Nothing to attribute; the
+site is byte-untouched. Data point the row inherits: 0/1 cold, 0/10 overall this measurement.
+
+**Skip count across the series: 0 in every run** — the normal-run skip path was unreachable,
+exactly as designed (the tripwire fired ONLY in the deliberate positive control).
+
+---
+
+## Step 4 — record + pre-completion consult
+
+### Honesty cell — what this task does NOT prove
+
+- **Runner-generality:** the runner semantics were measured on THIS machine, xUnit.v3 3.2.2 +
+  `xunit.runner.visualstudio` 3.1.5 via `dotnet test` (VSTest adapter over MTP v1). A different
+  runner entry point (e.g. direct `dotnet run` on the test assembly / standalone MTP mode), a
+  different xUnit version, or different parallelism settings (`-maxcpucount`, RunConfiguration)
+  were NOT measured. The co-location fix relies on intra-collection sequentiality — xUnit's
+  oldest guarantee, probe-proven here — but this record claims it only for the measured surface.
+- **Sweep exhaustiveness:** the enumeration covered the five framing-(c) categories (env vars,
+  current directory, static mutable singletons, AppContext switches, culture) across BOTH test
+  projects by token grep + per-hit adjudication. It does not claim coverage of OS-global state
+  beyond those categories (named mutexes/pipes, fixed ports — loopback servers bind ephemeral
+  ports; temp consumers use Guid-named roots, swept) nor of the HEADLESS project's UI-thread
+  dispatcher coupling beyond the token level.
+- **The lab-race fix's completeness:** the 9 outcome-independent sites were reordered; a
+  record-after-observable race in any FUTURE mode branch is possible if added in the old shape
+  (the file's comment now names the invariant). No guard test was added for that (would move
+  the pinned 892 count; the lesson is filed instead).
+- **10 greens is a sample, not a proof:** it bounds the post-fix flake rate of the measured
+  suite on this machine; it says nothing about hit rates below ~1/10 except for the named
+  row-49 site's 0/1 cold.
+- **Linux:** no WSL distribution on this machine (standing named gate). Everything here is
+  Windows evidence; nothing Linux is claimed.
+
+### Intended board filings (orchestrator reconciles at land — ENABLER 2; no row state set)
+
+1. **This row ("SP-057 pin test can pass vacuously — make the skip LOUD and fix the fixture's
+   process-env isolation"):** all four acceptance clauses met — (1) loud `Assert.SkipWhen` skip,
+   vacuous run reports 891/1 and the floor discipline catches it; (2) isolation fixed by
+   co-location, PROVEN by the probe-1b repro harness on this runner (never the docs' claim);
+   (3) sweep committed (enumeration table, Step 1) with dispositions; (4) 10 consecutive greens
+   incl. a fresh-checkout first-ever build. Named limits: the honesty cell above.
+2. **LAND-DEFECT lesson (wave-18 reconciliation):** the SP-061 land flipped
+   `upstream-payload-inventory.json` `tunnel`/`vendor` to `served` WITHOUT the guard-required
+   `evidence` field — wave-19's base was RED on arrival (891/1,
+   `UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree`). Repaired
+   in-lane (`59fbcf1e`, content dictated by SP-061's own record). Lesson for
+   `port-lessons.md`/reconciliation practice: a disposition flip must carry every field the
+   guard keys on the disposition for, and the orchestrator's post-land merged-state verification
+   should re-run the FULL suite (not only diff-touched guards) after reconciliation edits —
+   same detection-path class as the row-49 filing.
+3. **AI lab record-ordering race (fixed in passing, in-scope):** `AiProviderLab` recorded hits
+   AFTER closing the response; a fast client could read `HitsFor` before its own record existed
+   (observed 891/1, `Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit`, Expected 1 Actual 0).
+   Root-caused + reordered (record precedes the observable for all outcome-independent modes).
+   This is a FIFTH occurrence-adjacent data point for the timing/harness lesson series
+   (record-vs-observable ordering, not a wait): candidate `port-lessons.md` entry — "a
+   server-side count asserted by a client must be durable BEFORE the response that unblocks
+   the client; ordering, not waiting."
+4. **Row 38 (harness refuse-unsealed) / row 49 (timeout budgets) sequencing note:** rows 38/49
+   were named this row's natural successors at authoring; this landing makes the suite's signal
+   trustworthy for their 10-green acceptances (the pin can no longer pass vacuously; the floor
+   count now means what it says). Row-49 hit-rate data inherited: 0/1 cold, 0/10 here.
+5. **Port-lessons candidates:** (a) `DisableParallelization` on a CollectionDefinition does NOT
+   serialize cross-collection traffic under xUnit.v3 3.2.2 + this runner (probe-proven; the
+   SP-057 consult A1 premise is dead — intra-collection co-location is the serialization
+   primitive that holds). (b) A deliberately-RED handshake probe (bounded-timeout deadlock) is
+   a POSITIVE proof of runner sequentiality — measure the guarantee you rely on, in the shape
+   you rely on it (cross-class, not just intra-class). (c) xUnit.v3 3.2.2 dynamic skip:
+   `Assert.Skip/SkipWhen/SkipUnless` exist in the pinned assert assembly and report as
+   TRX `NotExecuted` + console `Skipped: N` — verify by reflection + observed run, never docs.
+
+### Pre-completion consult (Step 4)
+
+**Mode:** solo ×1. **Actual answering model:** NOT surfaced by the tool response (recorded
+honestly, the standing provenance discipline).
+
+**Verdict — three sub-questions answered + four gaps named, ALL discharged below:**
+
+1. **(a) The AiProviderLab fix belonged in this packet** — in File Scope, it red-ed the
+   measurement, assertion-neutral, root-caused. **With one required check (DONE):** moving the
+   record BEFORE the write creates a phantom-record possibility when a client abandons a
+   simple-mode response mid-write (old shape dropped that record). Swept every `HitsFor`/
+   `HitCount` assertion (`AiProviderLabIntegrationTests.cs:80,89,180,197,212,227,241,339`,
+   `LoopbackOllamaProviderTests.cs:43,78,94,109,123,139,154,169,253`): every count assertion
+   follows FULL reply consumption; no test abandons a simple-mode response mid-write (the
+   abandon-window tests use the outcome-dependent Timeout/HangStream/SlowOk modes, unchanged).
+   The phantom-record window has no observer — the reorder is behavior-neutral for the suite.
+2. **(b) The cold cell was adequate** — detached fresh worktree, no bin/obj, first-ever build
+   0W/0E at the same commit as the warm runs (identical content is REQUIRED, not a flaw).
+   **Caveat recorded:** the NuGet cache was warm (machine-global); the coldness is
+   JIT + first-ever-compile + first test-host start — exactly the row-49 mechanism
+   (JIT + HttpListener warmup), so the cell measures what that row needs. Also recorded: the
+   cold worktree ran build+test only (verify.mjs runs in-lane at the contract gate).
+3. **(c) Tripwire/positive-control gaps closed:**
+   - **Checkpoint-2 skip had never been OBSERVED firing** (the positive control exercises
+     checkpoint 1 — the override is set before the test starts). CLOSED by demonstration: a
+     scratch replica of the pin's exact two-checkpoint sequence with a handshake injected in
+     the window (`evidence/probes/Sp062Checkpoint2Replica.cs.snapshot`, since deleted) + a
+     mutator in a separate collection setting the override on demand. Observed:
+     `Passed: 1, Skipped: 1` — the replica reported SKIPPED with the checkpoint-2 reason
+     verbatim (`evidence/trx/sp062-cp2-replica.trx`: NotExecuted + "CCP_DATA_ROOT became
+     non-null between the guard and the read (leak class: cross-collection process-env
+     leak...)"). The REAL pin's checkpoint-2 firing remains unobserved by construction (the
+     pin cannot be instrumented without changing what it measures) — stated, not implied.
+   - **Skip does not fail the run** (`dotnet test` exits 0 on skips): the enforcement is the
+     exact-count floor discipline (892/0 expected), not the exit code. Recorded so a future
+     CI gate wired to exit codes alone knows it would be blind to a vacuous run. Corollary:
+     a full-suite run under a sandboxed harness profile (CCP_DATA_ROOT set, the SP-057
+     headed-evidence discipline) now reports 891/1 by DESIGN — loud and expected, not a
+     defect.
+   - **Collection-attribute tripwire upgraded from probabilistic to deterministic:** the
+     consult's earlier suggestion, rejected in Step 1 as redundant with the skip, was
+     re-adopted in its no-count-change form: ONE reflection assertion inside the EXISTING
+     `DataRootChokePointGuardTests.NoDataRootSpecialFolderUseOutsideTheChokePoint` fact
+     asserts `DataRootOverrideTests` carries `[Collection(nameof(ProcessEnvCollection))]`
+     (`CollectionAttribute.Name` binary-verified on the pinned xunit.v3.core 3.2.2 assembly).
+     A future refactor dropping the attribute now fails deterministically instead of waiting
+     for the race to fire the skip. Suite count stays 892 (assertion inside an existing fact).
+4. **Process items:** the Step-4/5 engine-review calls are logged below; the inventory-JSON
+   amendment is declared in STATUS/commit/record (it is NOT in fileScopeMustNotChange — no
+   hard-contract violation); the full contract testCommand + `git diff --check` +
+   scope-limited `git status` are Step 5 on the final tree.
+
+**Consequence of the test-content change (the tripwire assertion):** the Step-3 series
+(green01–green10) measured commit `b89b25f0`. The final tree differs by that one assertion, so
+the 10-green series was RE-RUN on the final tree (green11–green20 below, with green15 a SECOND
+fresh-checkout first-ever build at the final commit). The first series stands as recorded
+evidence for `b89b25f0`; the acceptance series is the final-tree one.
+
