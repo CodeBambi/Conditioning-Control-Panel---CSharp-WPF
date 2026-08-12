@@ -81,6 +81,75 @@ public class DtrhM2TestFixtureTests
         }
     }
 
+    /// <summary>The m2test.js meta-commands walk, verbatim from the READ-ONLY WPF payload
+    /// (m2test.js:64-90) — the exact 26 ops the headed evidence run drives.</summary>
+    private static readonly string[] M2TestOps =
+    [
+        "{\"op\":\"add-gold\",\"amount\":50}",
+        "{\"op\":\"spend-gold\",\"amount\":20}",
+        "{\"op\":\"purchase-dial\",\"id\":\"bubbleSize\",\"cost\":25}",
+        "{\"op\":\"purchase-dial\",\"id\":\"hydra\",\"cost\":99999999}",
+        "{\"op\":\"buy-pocket\",\"kind\":\"toy\",\"cost\":10}",
+        "{\"op\":\"bench-purchase\",\"id\":\"stats_panel\",\"cost\":10}",
+        "{\"op\":\"bench-buy\",\"id\":\"toy_pocket_1\",\"cost\":1}",
+        "{\"op\":\"set-flag\",\"key\":\"seenDefuseTutorial\"}",
+        "{\"op\":\"add-to-set\",\"set\":\"discoveredCodexIds\",\"id\":\"bubble:m2test\"}",
+        "{\"op\":\"lesson-progress\",\"id\":\"m2test_lesson\",\"value\":3}",
+        "{\"op\":\"set-num\",\"key\":\"lastRankSeen\",\"value\":1}",
+        "{\"op\":\"equip-boon\",\"id\":\"m2test_boon\"}",
+        "{\"op\":\"spend-gold\",\"amount\":99999999}",
+        "{\"op\":\"definitely-not-an-op\"}",
+        "{\"op\":\"material-add\",\"id\":\"chrome\",\"amount\":30}",
+        "{\"op\":\"material-add\",\"id\":\"silicone\",\"amount\":5}",
+        "{\"op\":\"material-add\",\"id\":\"pills\",\"amount\":10}",
+        "{\"op\":\"craft\",\"id\":\"the_padlock\",\"cost\":{\"chrome\":8}}",
+        "{\"op\":\"craft\",\"id\":\"the_cage\",\"cost\":{\"chrome\":8,\"silicone\":1}}",
+        "{\"op\":\"craft\",\"id\":\"sugar_cube\",\"cost\":{\"pills\":4}}",
+        "{\"op\":\"pin-boon\",\"id\":\"m2test_pin\"}",
+        "{\"op\":\"set-denial\",\"on\":true}",
+        "{\"op\":\"set-denial\",\"on\":true}",
+        "{\"op\":\"consume-crafted\",\"id\":\"sugar_cube\"}",
+        "{\"op\":\"consume-crafted\",\"id\":\"the_padlock\"}",
+        "{\"op\":\"add-to-set\",\"set\":\"paperwallSketches\",\"id\":\"m2test_sketch\"}",
+    ];
+
+    [Fact]
+    public async Task M2TestOpSequence_OffFixture_AppliesExactlyTheModeledEighteen()
+    {
+        // SP-057 pre-completion consult pin 1: the engine-side invariant behind the
+        // headed m2test 7/8 explanation. Off the committed fixture, the engine applies
+        // EXACTLY the 18 ops the payload's expectation model counts (m2test.js:97-100) —
+        // the headed run's 19th rev bump is page-originated narrative traffic (record.md
+        // Step 3), never an engine apply. If this count moves, the explanation is stale.
+        using var dir = new TempDir();
+        var slots = NewSlots(dir.Root);
+        await slots.StartAsync(CancellationToken.None);
+        try
+        {
+            var meta = new DtrhMeta(
+                slots.StoreFor(1), slots.IndexStore,
+                new DtrhAssetStats(slots.AssetStatsStore, _ => { }),
+                _ => { }, _ => { },
+                testMode: true, slots.SlotFilePath(1), DtrhM2TestFixture.Load());
+            var rev0 = meta.Rev;
+            var applied = 0;
+            foreach (var op in M2TestOps)
+            {
+                if (meta.HandleMetaCommand(System.Text.Json.JsonDocument.Parse(op).RootElement))
+                {
+                    applied++;
+                }
+            }
+
+            Assert.Equal(18, applied);
+            Assert.Equal(18, meta.Rev - rev0);
+        }
+        finally
+        {
+            await slots.StopAsync();
+        }
+    }
+
     private static System.Text.Json.JsonElement SnapshotState(DtrhMeta meta) =>
         System.Text.Json.JsonSerializer.SerializeToElement(meta.SnapshotMessage()).GetProperty("state");
 

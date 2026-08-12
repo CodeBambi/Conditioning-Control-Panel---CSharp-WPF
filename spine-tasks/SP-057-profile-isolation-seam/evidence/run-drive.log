@@ -1,13 +1,13 @@
 
 manifest: %APPDATA%\CcpClient -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\pre-manifest.json (2677 files)
-launched pid=13224 with CCP_DATA_ROOT=C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\override-root
+launched pid=21164 with CCP_DATA_ROOT=C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\override-root
 attached screens: \\.\DISPLAY1 {X=0,Y=0,Width=2880,Height=1800}
 DISPLAY3 ABSENT in this session — falling back to DISPLAY1 (100,100); the DISPLAY3 convention gate is named in record.md
 GetWindowRect: (100,100)-(2364,1564) [2264x1464]
-captured 2264x1464 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\run-host-live.png; dark=68,5% distinct-colors~321
+captured 2264x1464 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\run-host-live.png; dark=66,2% distinct-colors~334
 m2test done observed: True
 GetWindowRect: (100,100)-(2364,1564) [2264x1464]
-captured 2264x1464 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\run-after-m2test.png; dark=66,1% distinct-colors~245
+captured 2264x1464 -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\run-after-m2test.png; dark=65,9% distinct-colors~309
 EXIT=0
 manifest: %APPDATA%\CcpClient -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T053518\lane-1\spine-tasks\SP-057-profile-isolation-seam\evidence\post-manifest.json (2677 files)
 DIFF VERDICT: BYTE-IDENTICAL (2677 files, set-equal both directions, all hashes match)
@@ -18,5 +18,5 @@ positive control [True]: wv2-profile* present (1 dirs)
 positive control [True]: run.log contains 'data-root override active: CCP_DATA_ROOT'
 positive control [True]: run.log contains 'M2 TEST MODE'
 positive control [True]: run.log contains 'meta engine bound to slot'
-positive control [True]: run.log contains 'M2TEST DONE'
+positive control [True]: m2test baseline is exactly 7/8 with the single explained meta-commands +19 FAIL (1 FAIL lines)
 OVERALL VERDICT EXIT=0 (0 = byte-identical real profile + populated override root)

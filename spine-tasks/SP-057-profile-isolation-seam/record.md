@@ -271,9 +271,77 @@ live demolition against the owner's data.
 WebView2/LibVLC may write under LocalAppData/Temp outside the seam's directory —
 outside this claim, stated as a limit, not swept under.
 
-## Step 4 — final consult + budgets + surprises (pending)
+## Step 4 — final consult + budgets + surprises
 
-## Step 5 — contract verification (pending)
+### Surprises
+
+1. **The m2test FAIL was the task's own hazard surfacing.** The +19-vs-18 rev delta
+   looked like an engine regression until an op-level replay proved the engine
+   byte-for-byte consistent with the model, and a temporary instrumented headed run
+   proved the extra bump is page-originated narrative traffic that only a FRESH profile
+   produces. Prior green runs were green because they cloned the owner's completed
+   profile. Lesson: a green harness keyed to live state proves nothing about fresh
+   state — exactly why the fixture had to be declared.
+2. **DISPLAY3 absent mid-session.** The owner display convention could not be honored
+   (only DISPLAY1 attached); the first blank capture would have passed a naive
+   rect-check (off-screen SetWindowPos "verifies"). The run script now probes
+   `Screen.AllScreens` and falls back loudly. Lesson: rect-persistence is necessary
+   but not sufficient — verify the display EXISTS first.
+3. **Manifest privacy was a near-miss.** The first committed-candidate manifests
+   enumerated the owner's real profile filenames (user media names). Caught before
+   commit; paths are sha256-hashed by default in `manifest.ps1` now. Lesson: evidence
+   ABOUT the profile must not CONTAIN the profile.
+4. **Consult transcript truncation.** The first pre-approach consult returned cut off
+   mid-amendment; a compact re-ask recovered A2/(b)/(c). Recorded per T-2.
+
+### Durable-lesson candidates (orchestrator reconciles port-lessons at land)
+
+- **CCP_DATA_ROOT is now the standing rule for every headed packet.** Any headed
+  evidence run without it is unisolated by construction (the APPDATA trap proof,
+  Step 1). `evidence/run.ps1` is the reusable bracket: pre/post path-hashed manifests
+  + both-directions diff + positive controls.
+- **Fresh-profile page chatter is real and deterministic** (cheshire self-heal,
+  reveals sync/flash, first-gold narrative beat): m2test's `meta-commands` expectation
+  model counts engine ops only and reads +19/FAIL on any fresh fixture. Not an engine
+  regression; the payload model lives in the read-only WPF tree.
+- **Display-convention checks must probe attached screens** before honoring a
+  placement convention; off-screen rects verify vacuously.
+
+### Budgets
+
+- Consults: 2 (pre-approach solo + compact re-ask after truncation; pre-completion
+  below). Both solo per T-7.
+- Headed runs: 4 total (1 discarded blank-capture at the absent DISPLAY3 origin, 1
+  DISPLAY1 run, 1 instrumented diagnosis run, 1 final clean run) — each ~90s.
+- Tests: 846 unit (floor 833; +13 new) / headless suite unchanged.
+
+### Pre-completion consult
+
+| checkpoint | mode | verdict | ACTUAL answering model |
+|---|---|---|---|
+| pre-completion | solo | both judgment calls correct — land them; four pre-.DONE items | not surfaced by the tool (same T-2 note as Step 1) |
+
+Transcript truncated once more mid-pin-1; a compact re-ask recovered the rest.
+Directives, all executed:
+
+1. **Pin 1 (done):** `M2TestOpSequence_OffFixture_AppliesExactlyTheModeledEighteen` —
+   the /tmp replay committed as a unit test: exactly 18 of the 26 verbatim m2test ops
+   apply off the committed fixture (rev delta 18). If the count moves, the 7/8
+   explanation is stale and the test fails.
+2. **Pin 2 (done):** `run.ps1` asserts the exact accepted baseline —
+   `M2TEST DONE: FAILURES PRESENT (7/8)` with the ONLY FAIL line being
+   `meta-commands rev +19 (expected 18...)`; a second FAIL, a different delta, 6/8, or
+   a green 8/8 (fixture stopped being fresh) all fail the script. The final committed
+   run was produced by this pinned script (control green: "1 FAIL lines").
+3. **Guard red/green proof (done):** a temporary
+   `SpecialFolder.ApplicationData` line in `Features/Dtrh/DtrhM2TestFixture.cs` turned
+   `DataRootChokePointGuardTests` RED naming the exact file:line; revert restored GREEN.
+4. **Full contract incl. headless (done):** Step 5 numbers below.
+
+Consult also confirmed: the fresh fixture over a veteran-impersonating fixture
+(tuning evidence to agree = the SP-052 failure mode in a different hat), and the
+DISPLAY1 fallback disposition (byte-identity is display-independent; the script still
+prefers DISPLAY3 when attached; the gate stays named as re-run material).
 
 ### Engine-review presence (T-2)
 
@@ -281,4 +349,14 @@ outside this claim, stated as a limit, not swept under.
 |---|---|---|
 | 1 (plan) | called 2026-08-12T05:50 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
 | 2 (plan) | called 2026-08-12T06:05 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
-| 3 (plan) | (to be filled) | |
+| 3 (plan) | called 2026-08-12T06:40 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
+| 4 (plan) | called 2026-08-12T06:55 | (filled at call) |
+
+## Step 5 — contract verification
+
+- `node .spine/patches/verify.mjs` — exit 0 (8 project + 5 engine patches applied, pi-spine 2.10.0).
+- `dotnet build client/CcpClient.sln -c Debug` — **0 Warning(s), 0 Error(s)**.
+- `dotnet test CcpClient.Tests` — **847 passed / 0 failed** (floor 833; +14: 5 override + 3 env + 1 guard + 5 fixture/replay), TRX `sp057-unit.trx`.
+- `dotnet test CcpClient.HeadlessTests` — **33 passed / 0 failed** (floor 33), TRX `sp057-headless.trx`.
+- `git diff --check` clean; `git status --short` shows only File Scope paths
+  (CompositionRoot.cs, Program.cs, Features/Dtrh/*, tests, the task folder).

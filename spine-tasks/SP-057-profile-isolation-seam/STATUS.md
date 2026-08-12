@@ -1,6 +1,6 @@
 ## STATUS: SP-057 — Profile isolation seam (APPDATA trap + m2test fixture discipline)
-**Current Step:** Step 4 — record + pre-completion consult
-**Last Updated:** 2026-08-12 (worker, step 3 complete — byte-identity proven headed, 2677 files identical, override populated)
+**Current Step:** complete (pending .DONE)
+**Last Updated:** 2026-08-12 (worker, steps 1-5 complete — contract green: verify.mjs 0, 0W/0E, 847 unit / 33 headless, TRX)
 **Blockers:** none
 
 ### Step 1: consumer census + seam design + pre-approach consult — COMPLETE
@@ -24,11 +24,11 @@
 - [x] Linux/WSLg disposition recorded honestly
 - [x] Transcripts (no negative case against the live profile)
 
-### Step 4: record + pre-completion consult
-- [ ] record.md (census, trap proof, design + rejected alternatives, manifests, consults, review presence)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + pre-completion consult — COMPLETE
+- [x] record.md (census, trap proof, design + rejected alternatives, manifests, consults, review presence)
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs exit 0; build 0W/0E; ≥833 unit + ≥33 headless, TRX)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs exit 0; build 0W/0E; ≥833 unit + ≥33 headless, TRX)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

@@ -78,11 +78,25 @@ $wv2 = Get-ChildItem "$sandbox\dtrh" -Directory -Filter "wv2-profile*" -ErrorAct
 "positive control [$($wv2.Count -gt 0)]: wv2-profile* present ($($wv2.Count) dirs)" | Out-File $tx -Append
 if ($wv2.Count -eq 0) { $diffExit = 1 }
 $logRaw = Get-Content "$ev\run.log" -Raw
-foreach ($needle in @("data-root override active: CCP_DATA_ROOT", "M2 TEST MODE", "meta engine bound to slot", "M2TEST DONE")) {
+foreach ($needle in @("data-root override active: CCP_DATA_ROOT", "M2 TEST MODE", "meta engine bound to slot")) {
   $hit = $logRaw.Contains($needle)
   "positive control [$hit]: run.log contains '$needle'" | Out-File $tx -Append
   if (-not $hit) { $diffExit = 1 }
 }
+# m2test baseline pin (SP-057 pre-completion consult pin 2): the accepted outcome on a
+# FRESH declared fixture is EXACTLY 7/8 with the single FAIL being meta-commands rev +19
+# (the 19th bump is page-originated narrative traffic; the engine applies exactly the 18
+# modeled ops — pinned by M2TestOpSequence_OffFixture_AppliesExactlyTheModeledEighteen).
+# Anything else fails this script: a second failing check, a different rev delta, 6/8 —
+# or a green 8/8 (which would mean the fixture stopped being fresh).
+$m2Fails = [regex]::Matches($logRaw, "M2TEST FAIL ([^ ]+) ([^\r\n]+)")
+$baselineOk = $logRaw.Contains("M2TEST DONE: FAILURES PRESENT (7/8)") `
+  -and $m2Fails.Count -eq 1 `
+  -and $m2Fails[0].Groups[1].Value -eq "meta-commands" `
+  -and $m2Fails[0].Groups[2].Value -match "^rev \+19 \(expected 18" `
+  -and -not $logRaw.Contains("M2TEST DONE: ALL PASS")
+"positive control [$baselineOk]: m2test baseline is exactly 7/8 with the single explained meta-commands +19 FAIL ($($m2Fails.Count) FAIL lines)" | Out-File $tx -Append
+if (-not $baselineOk) { $diffExit = 1 }
 "OVERALL VERDICT EXIT=$diffExit (0 = byte-identical real profile + populated override root)" | Out-File $tx -Append
 Write-Output "OVERALL VERDICT EXIT=$diffExit"
 exit $diffExit
