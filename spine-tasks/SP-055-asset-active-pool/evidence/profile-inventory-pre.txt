@@ -1,0 +1,10 @@
+Spirals
+ai_memory.json
+companion.json
+dtrh
+dtrh_slot1.json
+dtrh_slots.json
+intake
+intake_punchcard.json
+intake_settings.json
+intake_subject.txt

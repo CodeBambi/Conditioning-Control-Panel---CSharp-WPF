@@ -538,6 +538,50 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     // ---------- b4 media-logging gate (SP-026) ----------
 
     [Fact]
+    public void ActivePool_DeselectedUserVideo_NeverPlays_WhitelistOff_Plays()
+    {
+        // SP-055 (VideoService.cs:6640-6663 parity): the fire-payload video pool routes
+        // through the ONE active-pool definition — a deselected user video is silently
+        // out of the pool (the harness no-op line), payload files are unaffected.
+        var userRoot = Path.Combine(_root, "usermedia");
+        var userDir = Path.Combine(userRoot, "videos");
+        Directory.CreateDirectory(userDir);
+        File.WriteAllBytes(Path.Combine(userDir, "deselected-clip.mp4"), new byte[64]);
+        TouchVideo("payload-clip.mp4");
+        var disabled = DtrhUserMedia.BuildDisabledSet(["videos/deselected-clip.mp4"]);
+
+        (DtrhNativeEffects fx, FakeVideo video) Make(bool useWhitelist)
+        {
+            var a = new FakeAudio();
+            var v = new FakeVideo();
+            var f = new DtrhNativeEffects(a, v, new DtrhNativeEffectsOptions
+            {
+                SfxRoots = [Path.Combine(_root, "sfx")],
+                VideoRoots = [Path.Combine(_root, "videos"), userDir],
+                WhisperRoots = [Path.Combine(_root, "voices")],
+                UserMediaRoot = userRoot,
+                DisabledAssets = disabled,
+                UseAssetWhitelist = useWhitelist,
+                MasterVolume = 80,
+            }, _log.Add, new ManualClock());
+            return (f, v);
+        }
+
+        var (fxOn, videoOn) = Make(useWhitelist: true);
+        fxOn.FireVideoFromPool("deselected-clip.mp4");
+        Assert.Empty(videoOn.Played); // deselected — the pool never yields it
+        Assert.Contains(_log, l => l.Contains("not in the media pool"));
+        fxOn.FireVideoFromPool("payload-clip.mp4");
+        Assert.Single(videoOn.Played); // payload art is never deselectable
+        fxOn.Dispose();
+
+        var (fxOff, videoOff) = Make(useWhitelist: false);
+        fxOff.FireVideoFromPool("deselected-clip.mp4");
+        Assert.Single(videoOff.Played); // the flag gates the mechanism (AppSettings.cs:1637)
+        fxOff.Dispose();
+    }
+
+    [Fact]
     public void MediaLogging_UserMediaRoot_PresenceShapeOnly_PayloadKeepsNames()
     {
         // Packet framing c (SP-018 V5 class): files under a PresenceOnlyRoots root log

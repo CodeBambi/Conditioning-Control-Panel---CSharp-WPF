@@ -1,0 +1,168 @@
+# SP-055 — One active-pool definition (asset deselection parity): record
+
+Wave-15 lane-1. Review Level 2. Contract: verify.mjs + build 0W/0E + both test projects (floor 795/33, SP-054's exit counts). Enabler 2: the three hot docs are NOT worker-edited; orchestrator reconciles at land.
+
+## Step 1 — archaeology (READ-ONLY, WPF current `main` content, File.cs:line)
+
+### The active-pool contract (`ConditioningControlPanel/Services/Chaos/DtrhAssetManifest.cs`)
+
+- `EnumerateActive()` (:85-105): the user's active pool as flat tuples `(Full, Rel, Bytes, IsImage)` — "shared so the transfer compression planner and the game can never disagree about what 'the active pool' is". Lazy; never throws (setup failure → empty).
+- `BuildDisabledSet()` (:116-122): `HashSet<string>` from `App.Settings?.Current?.DisabledAssetPaths ?? new()`, each `p.Replace('\\', '/')`, `StringComparer.OrdinalIgnoreCase`. Comment (:110-115): "Matches FlashService.GetMediaFiles' normalization exactly (case-insensitive, separator-agnostic) so the same unchecks that hide a flash hide it here too."
+- `FlashService.GetMediaFiles` (`Services/Flash/FlashService.cs:2855-2867`): the normalization the above matches — `Norm(p) => p.Replace('\\','/')`, set with `OrdinalIgnoreCase`, lookup on `Norm(Path.GetRelativePath(basePath, f))`, gated `DisabledAssetPaths.Count > 0`.
+- `Scan(root, disabled)` (:125-165): images/ then videos/, in walk order (:128-131 comment: "The accepted-count bound spans BOTH folders (it used to be a shared running total across the two Collect calls) — keep it that way, the manifest's downsampling assumes a bounded but unbiased-by-folder input"). Per-file order:
+  1. Extension filter FIRST: non-matching ext → media-like (`.wmv .avi .mkv .mov .flv .mpg .mpeg .bmp .tiff .heic`) yields `ScanItem(Skipped:true)` (COUNTED); other junk silently ignored.
+  2. `rel = Path.GetRelativePath(root, f).Replace('\\','/')` in a try (catch → filename fallback).
+  3. Deselect check SECOND: `disabled.Count > 0 && disabled.Contains(rel)` → `continue` — "Deselected in the Assets tree -> skip (silently, not 'skipped'): it's user intent, not an unsupported file" (:148-151).
+  4. Size caps THIRD: `len <= 0 || len > cap` → `ScanItem(Skipped:true)` (counted). Image cap 50MB, video cap 500MB (:21-22).
+  5. `accepted++` only on accepted entries; bound `accepted >= MaxEntries * 2` (10000) → `yield break` — accepted-only, combined across both folders.
+- `ScanItem` (:41-45): "Skipped == true means 'media-looking but not usable' (unsupported container, zero-length, over the size cap) — the manifest counts those so the game can be honest; silently-ignored junk and user-deselected files are never yielded." — the two skip meanings stay distinct.
+- Extension lists: images `.jpg .jpeg .png .webp .gif` (:19), videos `.mp4 .webm .m4v` (:20); `MaxEntries = 5000` (:23); walk depth 8, dot-dirs skipped (:24, Walk :167-181); downsample ratio-preserving partial Fisher-Yates (:183-194).
+
+### The intake guard (`ConditioningControlPanel/Services/Quiz/IntakeHostService.cs`)
+
+- `BuildDisabledAssetSet(IEnumerable<string>?)` (:776-781): same normalization — `(p ?? "").Replace('\\','/')`, `OrdinalIgnoreCase` — "so the same uncheck that hides an image from the flashes hides it from the intake page too".
+- `IsAssetActive(disabled, root, fullPath)` (:783-790): **`disabled.Count == 0` → `true`** ("Empty set = nothing deselected = everything active (identical to the pre-fix behavior)"); `Path.GetRelativePath` throw → **`return true`** ("unrelatable path: never silently drop content over a path quirk"); else `!disabled.Contains(rel)`.
+- `BuildMediaManifest()` (:792+): the verbatim #762/#798/#619 comment — "this walk used to list the images folder RAW, so anything the user unchecked in the Assets tree still rode the manifest and showed up in the intake page's effect layer / captcha grid. It now applies the same DisabledAssetPaths filter the flash pool uses; users with nothing deselected see exactly what they saw before."
+
+### The persisted settings (`ConditioningControlPanel/CCP.Core/Models/AppSettings.cs`)
+
+- `DisabledAssetPaths` (:1613-1635): `HashSet<string>`, "Set of relative paths to DISABLED assets. Items NOT in this set are active... relative to EffectiveAssetsPath, stored with forward-slash separators and matched case-insensitively"; setter re-normalizes (Replace `\`→`/`, drops null/empty).
+- `UseAssetWhitelist` (:1637-1646, default `false`): "When true, files in DisabledAssetPaths are excluded from use. When false, all files are active (default behavior)." **Grep-verified: no WPF reader outside AppSettings consults the flag** — the current consumers gate on set-empty only. The port implements the flag's documented contract (PROMPT framing c is binding); with the shipped defaults (flag false, set empty) behavior is identical to WPF today, and the future Assets-tree row owns the write path that pairs them.
+
+## Step 1 — consumer inventory (grep-verified, not guessed)
+
+Every client touch-point of the user-media pool (`<dataDir>/assets`):
+
+| Consumer | Site | Pool access |
+|---|---|---|
+| DTRH manifest at ready | `Features/Dtrh/DtrhHostWindow.axaml.cs:1195` | `DtrhUserMedia.Build(...)` → page manifest message |
+| DTRH probe media | `Features/Dtrh/DtrhHostWindow.axaml.cs:713` (SendProbeMedia) | `DtrhUserMedia.Build(...)` → probe-img messages |
+| Intake init media | `Features/Intake/IntakeHostWindow.axaml.cs:586-587` → `Features/Intake/IntakeMediaManifest.cs:21` | routes through `DtrhUserMedia.Build(...)` (SP-054 landed it that way) |
+| **Fire-payload video pool** | `Features/Dtrh/DtrhNativeEffects.cs` `EnumerateVideoPool()` over `VideoRoots`, which includes `DtrhUserMedia.VideosFolder(_dtrh.UserMediaRoot)` (`DtrhHostWindow.axaml.cs` InitNativeEffects) | **RAW walk found during Step 2 implementation** (missed by the first-pass inventory grep, caught when the EnumerateFiles sweep ran): the b3 covering-video pool plays user clips by name. UPSTREAM FILTERS IT — `VideoService.cs:6640-6663` applies the same `Norm` + OrdinalIgnoreCase DisabledAssetPaths filter to the video pool. In `Features/Dtrh/**` File Scope → routed through the seam in this row. |
+| `/umedia/*` serving | `Features/Dtrh/LoopbackServer.cs:320,369-389` | SERVE-only route, not an enumeration; the page learns URLs only from the manifest (WPF's ccp.assets host likewise serves the raw folder — the filter is at enumeration, never at serving) |
+
+Non-consumers (grep false positives, verified): `AvatarAnimationEngine.cs`/`AvatarTubeParticipant.cs` ("images" = avatar-pack platform bitmaps), `IntakeDraft.cs` ("videos-on" = a knob comment). Root definitions: `DtrhParticipant.cs:92` + `IntakeParticipant.cs:61` — both `Path.Combine(DataDirectory, "assets")`, one shared `<dataDir>` per install (IntakeParticipant.cs:54-56 comment).
+
+**Conclusion (updated after Surprise 1 below):** exactly ONE pool-definition seam is required (`DtrhUserMedia`); every enumeration of the user-media pool routes through it — the DTRH manifest directly, intake through `DtrhUserMedia.Build`, and the fire-payload video pool through `DtrhUserMedia.IsAssetActive` (found in Step 2, upstream-filtered at `VideoService.cs:6640-6663`).
+
+## Step 1 — design (pre-consult)
+
+**Seam home (justified):** the active-pool definition lands in `Features/Dtrh/DtrhUserMedia.cs` — both consumers already route through that file; upstream's split definition (DtrhAssetManifest + IntakeHostService duplicates) is the defect class this row kills; a new `Media/` folder for one concept is ceremony. The persisted document lands in `Persistence/AssetSelectionDocument.cs` (app-global user selection spanning features — WPF AppSettings parity; not DTRH-scoped, not intake-scoped).
+
+**The one definition (public static, `DtrhUserMedia`):**
+- `BuildDisabledSet(IEnumerable<string>?)` — normalization verbatim from `IntakeHostService.cs:776-781` / `DtrhAssetManifest.cs:116-122` (`(p ?? "").Replace('\\','/')`, `OrdinalIgnoreCase`).
+- `IsAssetActive(HashSet<string> disabled, string root, string fullPath, bool useWhitelist)` — gate order: `!useWhitelist → true` (AppSettings.cs:1637 documented contract, framing c) → `disabled.Count == 0 → true` (:784) → `GetRelativePath` throw → `true` (:789, framing b) → `!disabled.Contains(rel)`.
+- `Build(userMediaRoot, mediaOrigin, log, HashSet<string>? disabled = null, bool useWhitelist = false)` — defaults preserve today's all-active behavior for any caller without the store. `Collect` gains the deselect check BETWEEN the extension filter and the size check (upstream Scan order :134-158): a deselected valid-ext file is `continue`d silently (never `Skipped++`); a deselected media-like-unsupported file is still counted skipped (ext check first — pinned by test); the combined accepted bound (`m.Images.Count + m.Videos.Count >= MaxEntries * 2`) spanning both folders is untouched (framing e).
+- The `:13` divergence comment is rewritten: deselection honored via the seam; set persisted, empty until the Assets-tree row.
+
+**Persistence (SP-005 machinery, additive, own named owner):**
+- `Persistence/AssetSelectionDocument.cs`: schema v1 { `List<string> DisabledAssetPaths` (default empty), `bool UseAssetWhitelist` (default false — :1640 parity), `[JsonExtensionData]` (contract §6) }. NEW file `asset_selection.json` in the shared `<dataDir>` — a new document, so no schema bump and no absent-member case exists (Missing outcome = fresh defaults; the absent-member-flag discipline applies to additive members on EXISTING documents).
+- `AssetSelectionStore.Start(...)` static helper beside the document: owner `"AssetSelection"`, starts the store, logs typed Degraded, returns it. Called by (a) `DtrhHostWindow` at window init (the `_barkStore` precedent :203-213) into `_disabledAssets`/`_useAssetWhitelist` fields feeding both Build call sites; (b) `IntakeHostContext.Start` (the settingsStore/punchStore precedent) exposed on the context, feeding `IntakeMediaManifest.Build` (signature gains `disabled`/`useWhitelist` pass-throughs — never a second scan).
+- Load-at-host-open is sufficient: nothing writes the set until the Assets-tree row; that row owns any live-reload concern (recorded).
+
+**Fixture matrix (tests, `client/tests/CcpClient.Tests/AssetActivePoolTests.cs`):** temp root `images/{a.jpg, sub/b.png, CASE.JPG, big.gif(>50MB sparse), photo.wmv}` + `videos/{v.mp4, v2.mkv}`.
+1. Empty set + whitelist on → all active.
+2. Exact rel `images/a.jpg` → excluded, `Skipped` unchanged.
+3. Case difference `IMAGES/A.JPG` → excluded (OrdinalIgnoreCase).
+4. Separator `images\sub\b.png` stored → excluded (separator-agnostic).
+5. Nested `images/sub/b.png` → excluded.
+6. Unrelatable path (empty root → GetRelativePath throws) → `IsAssetActive` true (never a silent drop).
+7. Whitelist OFF + non-empty set → ALL active (the flag gates the mechanism).
+8. Both consumers agree on one fixture: DTRH manifest and intake sample built with the same set — the deselected asset appears in NEITHER; intake's "pool of N" log count matches the DTRH manifest count.
+9. Skip-vs-deselect distinct: deselected oversized `big.gif` → silently dropped, `Skipped` unchanged (deselect check before size); deselected `photo.wmv` → counted `Skipped` (ext check first); non-deselected oversized → `Skipped++`.
+10. Both-folders bound: with a small injected walk bound (see below), images alone saturating the bound → zero videos walked — the bound is combined, not per-folder.
+11. `AssetSelectionDocument` round-trip on SP-005 machinery (schema v1, defaults, ExtensionData preserved, typed Missing on absent file).
+
+**Walk-bound test seam:** `Build` gains an optional `int? walkBound = null` (null → `MaxEntries * 2`). Cheaper and more honest than staging 10,001 files; the bound's SEMANTIC (combined across folders) is what the test pins. (Alternative rejected: 10k-file fixture — minutes of NTFS churn to prove an arithmetic property.)
+
+**Headed proof plan (Step 3, Windows):** stage `sp055_*`-named media into the real greenfield profile `<dataDir>/assets/` (the b4 WH "staged COPIES" precedent; scoped names, removed after — recorded; no data-dir override flag exists) + write `asset_selection.json` {disabled:[the staged image], useAssetWhitelist:true}. Run A: `--dtrh-demo --dtrh-quick --dtrh-auto-close` → transcript `dtrh-media: manifest — 1 image(s), 1 video(s)` (deselected absent) + dimension-validated capture (windowId quirk rule). Run B (control): set empty → `2 image(s), 1 video(s)`. Run C: `--intake-demo --intake-auto-close` with the deselection store → `intake: media manifest sampled (... from a pool of 1)`; Run D (control): pool of 2. File-content proof: the seeded `asset_selection.json` + staged pool listings committed under `evidence/`.
+
+## Step 1 — pre-approach consult
+
+**Mode:** solo (T-7: council banned by PROMPT Do-NOT). **Requested route:** Opus 5 main (2026-08-04 rewire), Fable 5 fallback. **Actual answering model:** NOT surfaced by the consult tool response (no model identity header — recorded honestly, the SP-022…027/049…054 provenance discipline). **Verdict: design APPROVED with corrections — all adopted:**
+
+1. **Whitelist-flag trap mitigation (adopted):** the `UseAssetWhitelist`-off + non-empty-set state silently defeats deselection, and upstream RUNTIME honors a non-empty set regardless of the flag (grep-verified no WPF reader consults it) — so the gate is a documented-contract port (PROMPT framing c is binding authority), NOT an observed-parity claim. Mitigation: `Build` logs a counts-only diagnostic when the set is non-empty AND the flag is false ("deselection set present but the whitelist gate is off — all assets active"), converting the silent trap into a self-evidencing state. Recorded here as a deliberate documented-contract decision; the future Assets-tree row owns the write path that pairs flag + set.
+2. **Store lifecycle (adopted):** mirror the existing per-host store conventions exactly — DtrhHostWindow starts the store at window init beside `_barkStore` (:203-213) and stops it best-effort at teardown (:239); IntakeHostContext starts it beside settingsStore/punchStore and disposes it with them (:116-118). The store is read-only this row (never Mutate → never dirty → FlushAsync no-ops). Recorded: **two readers, zero writers** over one file; the Assets-tree row must resolve single-writer ownership when it adds the write path. **Degraded load → empty set + flag false → ALL ACTIVE** (never silently drop content over a store fault — the framing-b principle applied to the store).
+3. **walkBound test seam (adopted):** accepted over a 10k-file fixture (no InternalsVisibleTo exists → public optional `int? walkBound = null`). Test #10 shape pinned by the consult: N images + 1 video with `walkBound: N` → `images == N`, `videos == 0` (the bound is combined AND aborts the second folder's Collect — the port's per-Collect `return` preserves combined-ness because the second Collect's first check sees the saturated combined count; the test must exercise exactly that). No downsample interference at small N (downsample triggers at total > 5000).
+4. **Real-profile staging hardening (adopted):** the profile may be non-empty → count-based transcript proof must be DELTA-based: a pre-stage baseline run's counts are captured first; control = baseline+2 images/+1 video, deselect = baseline+1. Staging uses a dedicated nested subfolder `<dataDir>/assets/images/sp055/` + `<dataDir>/assets/videos/sp055/` (doubles as the nested-path deselection cell; removal is one subtree + `asset_selection.json`, zero chance of deleting pre-existing user content). Before/after inventory snapshots committed.
+5. **Intake small-pool honesty (adopted):** with pools of 1-2 the intake sample is min(pool, 18) → the discriminating evidence is the `intake: media manifest sampled (… from a pool of N)` line's pool count, not the sample size.
+6. **ToMediaUrl recompute-throw asymmetry (recorded, parity kept):** `IsAssetActive` tolerates an unrelatable path (true), but `ToMediaUrl`/`ToAssetUrl` recompute `GetRelativePath` WITHOUT a catch in BOTH the port and upstream — a path that passed the tolerance could still fault the whole Build (caught by Build's outer try → partial manifest). Upstream-latent, defensive-only in practice (GetRelativePath throws only on null/empty args; walked files under a valid root never hit it). Kept verbatim; the tolerance branch is unit-tested via `IsAssetActive` with an empty root and is recorded as NOT walk-reachable end-to-end (never implied otherwise).
+
+**Adopted design changes vs the pre-consult table:** the whitelist-off diagnostic line (correction 1); Degraded-load → all-active encoding (correction 2); nested `sp055/` staging subtree + baseline-delta proof (correction 4); test #10's exact both-folders assertion (correction 3); the ToMediaUrl asymmetry recorded (correction 6).
+
+## Step 1 — engine-review presence (T-2)
+
+Step-1 plan review call → `skipped: true, spawnFailed: false` (artifact `.reviews/1-20260811T233517.md`) — "Nested reviewer spawn blocked inside pi worker session... the batch engine runs reviews after worker success (SP-195)". Engine review ABSENT in-worker by design (the SP-054 class); code + final reviews run on the engine after .DONE.
+
+## Step 2 — implementation (Rebuild 0W/0E; 814/814 + 33/33 green, floor 795/33; verify.mjs exit 0)
+
+**Files:**
+- `client/src/CcpClient.Desktop/Persistence/AssetSelectionDocument.cs` (NEW) — the persisted half: schema-v1 document { `DisabledAssetPaths` (default empty), `UseAssetWhitelist` (default false, AppSettings.cs:1640 parity), `[JsonExtensionData]` (contract §6) } + `AssetSelectionStore.Start(host, dataDir, ownerName)` (own named owner per host — "DtrhAssetSelection" / "IntakeAssetSelection" per the registry uniqueness convention; typed-Degraded log → flagged defaults = empty set + whitelist off → ALL active). New file `asset_selection.json` in the shared `<dataDir>` — additive by construction (a NEW document: no schema bump, no absent-member case exists).
+- `client/src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs` — the ONE active-pool definition: `BuildDisabledSet` (normalization verbatim, IntakeHostService.cs:776-781) + `IsAssetActive` (gate order: whitelist off → true; empty set → true; unrelatable → true; else `!disabled.Contains(rel)`) + `Build(..., disabled, useWhitelist, walkBound)`; `Collect` applies the deselect check BETWEEN ext filter and size caps (upstream Scan :134-158 exact order), silent (never `Skipped++`); the combined both-folders accepted bound preserved (now via the `bound` parameter, default `MaxEntries * 2`); the whitelist-off trap line (consult correction 1 — counts only, never paths). The `:13` divergence comment replaced with the new truth (deselection honored via this seam; the recorded divergence list now carries only the loopback-URL class).
+- `client/src/CcpClient.Desktop/Features/Intake/IntakeMediaManifest.cs` — pass-through of `disabled`/`useWhitelist` into the SAME `DtrhUserMedia.Build` (never a second scan).
+- `client/src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs` — **the third consumer** (the Step-1 inventory miss, caught by the implementation-time enumeration sweep): `EnumerateVideoPool()` filters files under the user-media root through `DtrhUserMedia.IsAssetActive` (VideoService.cs:6640-6663 parity — upstream's video pool honors the same filter); options gain `UserMediaRoot` / `DisabledAssets` / `UseAssetWhitelist` (null set → all-active for store-less callers; payload/overlay roots are shipped art, never deselectable — the filter gates on the file living under the user-media root).
+- `client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs` — the read-only store started by NEW `InitAssetSelection()` FIRST in `Opened` (before `InitNativeEffects`, whose video pool reads the same fields — an ordering bug the third-consumer wiring exposed and fixed), the normalized set + flag held in fields, both `DtrhUserMedia.Build` call sites (:713 probe, :1195 ready-manifest) + the `DtrhNativeEffectsOptions` wired; best-effort stop beside `_barkStore` in `TeardownBarkPipeline`.
+- `client/src/CcpClient.Desktop/Features/Intake/IntakeHostContext.cs` — the store started beside settingsStore/punchStore, exposed as `AssetSelectionStore`, stopped in `Dispose` (read-only: never Mutate → FlushAsync no-ops).
+- `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs` — the init media manifest wired through the SAME definition with the context's persisted set + flag.
+- `client/tests/CcpClient.Tests/AssetActivePoolTests.cs` (NEW, 18) + `DtrhNativeEffectsTests.cs` (+1: the fire-pool deselection cell — deselected user video never plays with whitelist on, plays with it off, payload art unaffected): the fixture matrix (empty set, exact match, case difference, `\` vs `/`, nested path, video deselection, unrelatable path, whitelist off vs on), the BuildDisabledSet normalization pin (null/empty/separator/case), skip-vs-deselect BOTH directions (deselected-oversize silent vs deselected-media-like counted — the ext-filter-first pin), the both-folders bound (5-image saturation → zero videos + default-bound control), both-consumers-agree × 2 (whitelist on/off, pool-of-N log line + URL absence), the persisted document (defaults/Missing, round-trip + seam consumption of the stored backslash form, ExtensionData preservation).
+
+**Surprise 1 (recorded):** the first-pass consumer inventory missed the b3 fire-payload video pool (`DtrhNativeEffects.EnumerateVideoPool` over the user videos folder) — the initial grep keyed on `images/`+`videos/` literals and the pool arrives via `DtrhUserMedia.VideosFolder(...)`. The implementation-time `EnumerateFiles` sweep caught it; upstream parity confirmed (`VideoService.cs:6640-6663` filters the same pool). Lesson class: inventory greps must sweep the enumeration PRIMITIVES, not the path literals.
+
+**Grep proof (one definition, no second raw walk):** every `EnumerateFiles`/`EnumerateDirectories` touch-point of the user-media pool routes through `DtrhUserMedia` semantics — `DtrhUserMedia.Walk` (the manifest), `DtrhNativeEffects.EnumerateVideoPool` (filtered via `DtrhUserMedia.IsAssetActive`), `LoopbackServer` (serve-only route, not an enumeration). The intake consumer routes through `DtrhUserMedia.Build`.
+
+## Step 3 — headed evidence (Windows; avalonia-live + transcript class)
+
+**Staging (consult correction 4):** the real greenfield profile `%APPDATA%/CcpClient` had NO `assets/` dir and NO `asset_selection.json` pre-task (`profile-inventory-pre.txt`) — the inventory snapshot discharges the pre-stage-baseline obligation directly (a baseline run's counts would be 0/0 by construction). Staged scoped pool: `assets/images/sp055/sp055-a.gif` (65B GIF89a) + `assets/images/sp055/sp055-b.png` (64B, THE DESELECTED asset) + `assets/videos/sp055/sp055-c.mp4` (112B); seeded store `asset_selection.json` {disabledAssetPaths:["images/sp055/sp055-b.png"], useAssetWhitelist:true} (content copy: `seeded-asset_selection.json`). **Post-evidence cleanup restored the profile to a byte-identical inventory (`profile-inventory-post.txt`, diff clean)** — the SP-052 clobber class avoided by scoped names + subtree-only removal.
+
+| Run | Cell | Transcript proof (counts-only lines) | Capture |
+|---|---|---|---|
+| A `runA-dtrh-deselect.log` (EXIT=0) | DTRH, set present + whitelist ON | `dtrh-media: manifest — 1 image(s), 1 video(s), 0 skipped` — **the deselected sp055-b.png never enters the manifest** (2 staged, 1 deselected); no whitelist-off line (the store was honored) | — (seat flag missed this run; run D re-proves with the capture) |
+| B `runB-dtrh-control.log` (EXIT=0) | DTRH control, store moved aside | `2 image(s), 1 video(s), 0 skipped` — the SAME staged pool, both images present | — |
+| C `runC-dtrh-whitelist-off.log` (EXIT=0) | DTRH, set present + whitelist OFF | `deselection set present (1 entry) but the whitelist gate is OFF — all assets active` + `2 image(s), 1 video(s)` — **the flag gates the whole mechanism, headed** (AppSettings.cs:1637 contract; the consult's trap-mitigation line fired verbatim) | `runC-semantic-tree.json` |
+| D `runD-dtrh-deselect-seat.log` (EXIT=0) | A re-run WITH the live seat | `1 image(s), 1 video(s), 0 skipped` — the deselect cell re-proven on the captured run | `runD-semantic-tree.json` |
+| E `runE-intake-deselect.log` (EXIT=0) | INTAKE, set present + whitelist ON | `dtrh-media: manifest — 1 image(s)...` (the SAME seam inside the intake host) + `intake: media manifest sampled (1 gif(s), 0 still(s) from a pool of 1)` — **the deselected still never reaches intake provisioning; the pool-of-1 line is the consult-pinned discriminator** | `runE-semantic-tree.json` |
+| F `runF-intake-control.log` (EXIT=0) | INTAKE control, store aside | `2 image(s)...` + `intake: media manifest sampled (1 gif(s), 1 still(s) from a pool of 2)` — the SAME staged pool, both images provisioned | — |
+
+**Captures (the windowId quirk rule):** `list_windows` + `get_semantic_tree` WITH `handle` (the SP-054/SP-036 binding — `screenshot_window` mis-renders across handles on this machine; never used for evidence). Dimension-validated: run C/D `CCP — Down the Rabbit Hole` 1280x800 and run E `Graded Intake` 1398.86x833.14 — the REAL hosts, never the 520x680 dashboard. The live seat is opt-in (`CCP_MCP=1`, Program.cs:283-289 — the run-A miss, corrected from run C on).
+
+**Both-consumers-agree, headed:** runs A/D + E with the identical seeded store exclude the identical asset from BOTH surfaces (manifest count 1 AND intake pool-of-1); controls B + F show it present in BOTH (2 AND pool-of-2). The A/B pair alone is discriminating (same pool, only the store differs); the E/F pair repeats it on the second consumer.
+
+**Fire-pool consumer:** unit-proven (`ActivePool_DeselectedUserVideo_NeverPlays_WhitelistOff_Plays`); not separately headed-driven (the fx-drive video-file step would only re-prove the pool filter the unit test pins — recorded, not claimed).
+
+### Step 3 — engine-review presence (T-2)
+
+Step-2 plan review call → `skipped: true, spawnFailed: false` (artifact `.reviews/2-20260811T235614.md`); Step-3 plan review call → (recorded after the Step-3 commit below). Both "Nested reviewer spawn blocked inside pi worker session... (SP-195)" — engine review ABSENT in-worker by design; code + final reviews run on the engine after .DONE.
+
+## Step 3 — pre-completion consult
+
+**Mode:** solo (T-7). **Requested route:** Opus 5 main. **Actual answering model:** NOT surfaced by the consult tool response (same provenance discipline as every prior packet — recorded honestly). **Verdict: SOUND — nothing blocks .DONE; five cheap discharges, all executed:**
+
+1. **Asset-stats/favorites stale-URL check (DISCHARGED — clean):** `DtrhAssetStats` deals in NAMES only (filenames, :31 — "Names are case-insensitive (they are filenames)"); the favorites seed is name-keyed and re-resolves THROUGH the manifest, so a deselected asset's name simply never resolves. No stale-URL path exists in the port.
+2. **Unfiltered enumeration sweep (DISCHARGED — recorded here, the completion criterion's grep proof):** every `EnumerateFiles`/`EnumerateDirectories`/`GetFiles` hit in `client/src/CcpClient.Desktop`, classified: `AtomicFileSystemProbe.cs:130` (temp probe files), `DtrhLoom.cs:67` (the Spirals loom store), `DtrhNativeEffects.cs:235` (SFX roots — payload/overlay only), `:359` (**the video pool — ROUTED through the seam this row**), `:400` (whisper roots — payload/overlay), `DtrhParticipant.cs:36` (payload-tree probe count), `DtrhUserMedia.cs:159/163` (**THE seam walk**), `IntakeServingRoots.cs:38` (payload-tree probe count), `Manifest/AssetManifest.cs:317/342` (the SP-009 payload manifest). **No raw user-media walk survives outside the seam.**
+3. **Budgets + durable-lesson candidates sections (DISCHARGED — below).**
+4. **Step-4 obligations (accepted):** the EXACT contract command with TRX loggers, TRX attached into evidence/; `DtrhNativeEffects.cs` explicitly mapped to its File Scope home (`Features/Dtrh/**` — the shared pool type's consumer, declared) in the hygiene section; `grep -c "Review Level" PROMPT.md` ≥ 2 pin.
+5. **Empty-string entry (recorded, harmless):** the port's `BuildDisabledSet` keeps `""` as an entry (IntakeHostService.cs:776-781 verbatim maps null→""; WPF's AppSettings setter drops empties upstream of it — the port's document is a plain list, so a hand-edited doc could carry one). A `""` entry can never match a real relative path; the only effect is cosmetic (a set containing only `""` reads non-empty → the whitelist-off diagnostic could over-report by one). Harmless, parity-verbatim, no code change.
+
+**Relaunch hygiene (verified by the worker after the consult's question):** the watchdog recovery close passes `_recoveryClosing` through the same `Closing` teardown block that calls `TeardownBarkPipeline` → the old store stops before the recreated window's `Opened` starts a fresh one; owner accumulation is bounded by relaunch-once (the `_barkStore` precedent). No store leak across relaunch.
+
+### Budgets (T-11)
+
+Each step well under 2h: Step 1 ≈ 45min (archaeology + design + consult); Step 2 ≈ 1h (implementation incl. the fire-pool discovery + 19 tests); Step 3 ≈ 35min (6 headed runs ≈ 45-60s each + captures + cleanup); Step 4 ≈ 15min (final gates). The 4h export was never approached.
+
+### Durable-lesson candidates (orchestrator picks at land; enabler 2 — the worker does NOT edit port-lessons.md)
+
+1. **Consumer-inventory greps must sweep the enumeration PRIMITIVES (`EnumerateFiles`/`EnumerateDirectories`), not path literals** — the first-pass `images/`+`videos/` grep missed the fire-payload pool because its root arrives via `DtrhUserMedia.VideosFolder(...)` (Surprise 1).
+2. **The avalonia-live seat is opt-in (`CCP_MCP=1`, Program.cs:283-289)** — a headed run without it has no seat to connect to; budget the flag into capture-run launches from the start (run A's missed capture, re-proven as run D).
+3. **A persisted-document row with no writer yet should stage its seeded document into the real profile with scoped names + a subtree-only cleanup, and prove restoration with before/after inventory diffs** — discharges the SP-052 clobber class structurally.
+
+## Step 4 — testing & verification
+
+- `node .spine/patches/verify.mjs` → **exit 0** (8 project + 5 engine patches applied).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → **Build succeeded, 0 Warning(s), 0 Error(s)** (also verified on `-t:Rebuild` in Step 2 — 0W/0E).
+- `dotnet test CcpClient.Tests` → **814/814 green** (floor 795, SP-054's exit count), TRX `sp055-final-unit.trx` attached (force-added past the `*.trx` gitignore, the SP-054 attachment convention). **Flake honestly recorded:** the FIRST TRX run failed 1/814 — `AsyncLifecycleTests.Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary` (Cancelled-vs-Completed timing race in the SP-003 heartbeat lifecycle, a file this task's diff never touches); it passed isolated AND the full-suite re-run is the attached green TRX.
+- `dotnet test CcpClient.HeadlessTests` → **33/33 green** (floor 33), TRX `sp055-final-headless.trx` attached.
+- `git diff --check` → **clean (exit 0)**.
+- `git status --short` → **empty** (every change committed at step boundaries). Committed diff touches ONLY File Scope paths: `Features/Dtrh/DtrhUserMedia.cs` (fileScopeMustChange ✓), `Features/Dtrh/DtrhHostWindow.axaml.cs` + `Features/Dtrh/DtrhNativeEffects.cs` (**explicitly mapped: `Features/Dtrh/**` — the shared pool type's home + its consumer, declared in File Scope**), `Features/Intake/IntakeHostContext.cs` + `IntakeHostWindow.axaml.cs` + `IntakeMediaManifest.cs` (`Features/Intake/**`), `Persistence/AssetSelectionDocument.cs` (`Persistence/**`), `tests/CcpClient.Tests/AssetActivePoolTests.cs` + `DtrhNativeEffectsTests.cs` (`tests/CcpClient.Tests/**`), `spine-tasks/SP-055-asset-active-pool/**`. Zero hits on every fileScopeMustNotChange path (grep-verified: no `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**`, none of the three hot docs — enabler 2 honored). artifactsMustExist: `record.md` present (this file).
+- `grep -c "Review Level" PROMPT.md` = **2** (≥ 2 authoring rule).
+
+**Completion criteria audit:** (1) exactly ONE active-pool definition — grep-proven (the unfiltered sweep, pre-completion discharge 2); all THREE consumers routed (DTRH manifest, intake provisioning, fire-payload pool). (2) Upstream semantics ported verbatim + test-pinned: normalization, empty-set short-circuit, unrelatable-path tolerance (`true`), whitelist gate, skip-vs-deselect distinction, both-folders bound. (3) The deselection set persists (additive new document, no schema bump), empty by default; NO Assets-tree UI built. (4) Headed proof on both consumers (deselected absent runs A/D/E; controls B/F present) with dimension-validated captures. (5) Contract green; both consults persisted with the actual-answering-model provenance honestly recorded (never surfaced by the tool).

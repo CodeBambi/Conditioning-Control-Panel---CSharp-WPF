@@ -71,6 +71,9 @@ public partial class DtrhHostWindow : Window
     private BarkPipeline? _bark;
     private SoundArbitration? _barkArbitration;
     private PersistenceStore<CompanionStateDocument>? _barkStore;
+    private PersistenceStore<AssetSelectionDocument>? _assetSelectionStore;
+    private HashSet<string> _disabledAssets = [];
+    private bool _useAssetWhitelist;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -108,6 +111,9 @@ public partial class DtrhHostWindow : Window
 
         Opened += (_, _) =>
         {
+            // SP-055: the asset selection loads FIRST — InitNativeEffects' video pool
+            // reads the same set + flag, so it must precede every effects/manifest init.
+            InitAssetSelection();
             InitMetaEngine();
             InitNativeEffects();
             InitBarkPipeline();
@@ -171,6 +177,19 @@ public partial class DtrhHostWindow : Window
     }
 
     // ---------- SP-032 q2 bark pipeline (bark message → q1 arbitration) ----------
+
+    /// <summary>
+    /// SP-055: the persisted asset selection feeding the ONE active-pool definition
+    /// (read-only this row; the Assets-tree row owns the write path). Loaded once at
+    /// window open — nothing mutates the set until that row lands. Best-effort stopped in
+    /// <see cref="TeardownBarkPipeline"/>.
+    /// </summary>
+    private void InitAssetSelection()
+    {
+        _assetSelectionStore = AssetSelectionStore.Start(_host, _dtrh.DataDirectory, "DtrhAssetSelection");
+        _disabledAssets = DtrhUserMedia.BuildDisabledSet(_assetSelectionStore.Current.DisabledAssetPaths);
+        _useAssetWhitelist = _assetSelectionStore.Current.UseAssetWhitelist;
+    }
 
     /// <summary>
     /// Construct the bark content pipeline host-locally (CompositionRoot.cs is outside this
@@ -237,9 +256,11 @@ public partial class DtrhHostWindow : Window
         try { _bark?.FlushAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { _barkArbitration?.Dispose(); } catch { /* best-effort */ }
         try { _barkStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { _assetSelectionStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         _bark = null;
         _barkArbitration = null;
         _barkStore = null;
+        _assetSelectionStore = null;
     }
 
     /// <summary>Adapts the host's diagnostic log to the persistence contract's ILogSink.</summary>
@@ -306,6 +327,11 @@ public partial class DtrhHostWindow : Window
             // b4: the user-media videos dir joins the native pool (WPF parity: native
             // payloads play the user's pool; DtrhHostService EffectPayloadFactory).
             VideoRoots = [PayloadAssets, OverlayAssets, DtrhUserMedia.VideosFolder(_dtrh.UserMediaRoot)],
+            // SP-055: the pool's user-media files route through the ONE active-pool
+            // definition (VideoService.cs:6640-6663 parity — deselected videos never play).
+            UserMediaRoot = _dtrh.UserMediaRoot,
+            DisabledAssets = _disabledAssets,
+            UseAssetWhitelist = _useAssetWhitelist,
             // Media-logging rule (packet framing c): anything under the user-media root
             // logs presence+shape ONLY — never a filename (SP-018 V5 class).
             PresenceOnlyRoots = [_dtrh.UserMediaRoot],
@@ -710,7 +736,7 @@ public partial class DtrhHostWindow : Window
             }
         }
 
-        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic);
+        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic, _disabledAssets, _useAssetWhitelist);
         foreach (var image in manifest.Images.Take(2))
         {
             SendToPage(new { type = "probe-img", kind = "image", url = image.Url });
@@ -1192,7 +1218,7 @@ public partial class DtrhHostWindow : Window
         // manifest is user-pool-only, and shipped payload art must not read as user
         // media). An empty user pool → an empty manifest → the page renders its shipped
         // in-page art (fresh-WPF-install parity, hostMedia.hasUserMedia() false).
-        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic);
+        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic, _disabledAssets, _useAssetWhitelist);
         SendToPage(DtrhProtocol.BuildManifest(
             images: manifest.Images,
             videos: manifest.Videos,

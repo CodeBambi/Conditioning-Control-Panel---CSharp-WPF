@@ -10,9 +10,20 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// (:24,107-122), browser-undecodable media counted as skipped (:124-125), ratio-preserving
 /// downsample when over the cap (:127-137).
 ///
-/// Divergences (recorded): DisabledAssetPaths = empty (no assets tree in the greenfield);
-/// URLs are loopback {MediaOrigin}/umedia/<rel> instead of https://ccp.assets/ (the §4
-/// media origin is the greenfield's ccp.assets-class host).
+/// SP-055: this file carries the client's ONE active-pool definition (upstream turned
+/// deselection into a shipped contract — #762/#798/#619 — around DtrhAssetManifest.cs's
+/// `EnumerateActive()` + IntakeHostService.cs's `IsAssetActive`; the port keeps ONE seam
+/// here so no two scans can disagree). `BuildDisabledSet` + `IsAssetActive` port the
+/// normalization VERBATIM (assets-root-relative, `\` → `/`, OrdinalIgnoreCase — matching
+/// FlashService.GetMediaFiles :2855-2867 exactly, so the same uncheck that hides a flash
+/// hides it in every consumer), the empty-set short-circuit, the unrelatable-path
+/// tolerance (`true` — never silently drop content over a path quirk), and the
+/// `UseAssetWhitelist` gate (AppSettings.cs:1637 documented contract). The persisted set
+/// (<see cref="CcpClient.Desktop.Persistence.AssetSelectionDocument"/>) stays empty until
+/// the Assets-tree row owns the write path.
+///
+/// Divergence (recorded): URLs are loopback {MediaOrigin}/umedia/<rel> instead of
+/// https://ccp.assets/ (the §4 media origin is the greenfield's ccp.assets-class host).
 /// Media-logging rule (packet framing c): the build logs COUNTS ONLY, never names/paths.
 /// </summary>
 public static class DtrhUserMedia
@@ -38,16 +49,52 @@ public static class DtrhUserMedia
 
     public static string VideosFolder(string userMediaRoot) => Path.Combine(userMediaRoot, "videos");
 
+    /// <summary>The deselected-asset lookup set, normalized EXACTLY like
+    /// FlashService.GetMediaFiles (DtrhAssetManifest.cs:116-122 / IntakeHostService.cs:776-781
+    /// verbatim): separator-agnostic (`\` → `/`) and case-insensitive — so the same uncheck
+    /// that hides a flash hides it in every consumer of this seam.</summary>
+    public static HashSet<string> BuildDisabledSet(IEnumerable<string>? disabledPaths) => new(
+        (disabledPaths ?? Enumerable.Empty<string>()).Select(p => (p ?? "").Replace('\\', '/')),
+        StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>True when <paramref name="fullPath"/> is still enabled for the user's pool
+    /// (IntakeHostService.cs:783-790 verbatim + the AppSettings.cs:1637 whitelist gate):
+    /// whitelist OFF → everything active (the documented contract gates the whole
+    /// mechanism); empty set → everything active (identical to the pre-fix behavior);
+    /// an unrelatable path → TRUE (never silently drop content over a path quirk).</summary>
+    public static bool IsAssetActive(HashSet<string>? disabled, string root, string fullPath, bool useWhitelist)
+    {
+        if (!useWhitelist) return true;
+        if (disabled is null || disabled.Count == 0) return true;
+        string rel;
+        try { rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/'); }
+        catch { return true; }   // unrelatable path: never silently drop content over a path quirk
+        return !disabled.Contains(rel);
+    }
+
     /// <summary>Build the manifest for the user-media root. Never throws; counts-only log
-    /// (DtrhAssetManifest.cs:70 parity — WPF logs the same counts, never names).</summary>
-    public static Manifest Build(string userMediaRoot, string mediaOrigin, Action<string> log)
+    /// (DtrhAssetManifest.cs:70 parity — WPF logs the same counts, never names).
+    /// <paramref name="disabled"/>/<paramref name="useWhitelist"/> are the active-pool
+    /// contract above; defaults preserve all-active behavior for callers without the store.
+    /// <paramref name="walkBound"/> overrides the combined accepted-count walk bound
+    /// (tests only — the bound spans BOTH folders, DtrhAssetManifest.cs:128-131).</summary>
+    public static Manifest Build(string userMediaRoot, string mediaOrigin, Action<string> log,
+        HashSet<string>? disabled = null, bool useWhitelist = false, int? walkBound = null)
     {
         var m = new Manifest();
         try
         {
             var root = Path.GetFullPath(userMediaRoot);
-            Collect(ImagesFolder(root), root, isImage: true, mediaOrigin, m);
-            Collect(VideosFolder(root), root, isImage: false, mediaOrigin, m);
+            if (!useWhitelist && disabled is { Count: > 0 })
+            {
+                // Documented-contract gate (AppSettings.cs:1637): a present-but-ungated set
+                // would silently defeat deselection — surface the state, never the paths.
+                log($"dtrh-media: deselection set present ({disabled.Count} entr{(disabled.Count == 1 ? "y" : "ies")}) but the whitelist gate is OFF — all assets active");
+            }
+
+            var bound = walkBound ?? MaxEntries * 2;
+            Collect(ImagesFolder(root), root, isImage: true, mediaOrigin, m, disabled, useWhitelist, bound);
+            Collect(VideosFolder(root), root, isImage: false, mediaOrigin, m, disabled, useWhitelist, bound);
 
             var total = m.Images.Count + m.Videos.Count;
             if (total > MaxEntries)
@@ -71,7 +118,8 @@ public static class DtrhUserMedia
         return m;
     }
 
-    private static void Collect(string dir, string root, bool isImage, string mediaOrigin, Manifest m)
+    private static void Collect(string dir, string root, bool isImage, string mediaOrigin, Manifest m,
+        HashSet<string>? disabled, bool useWhitelist, int bound)
     {
         if (!Directory.Exists(dir)) return;
         var exts = isImage ? ImageExts : VideoExts;
@@ -79,7 +127,9 @@ public static class DtrhUserMedia
         var cap = isImage ? MaxImageBytes : MaxVideoBytes;
         foreach (var f in Walk(dir, 0))
         {
-            if (m.Images.Count + m.Videos.Count >= MaxEntries * 2) return; // sample later, but bound the walk
+            // The accepted-count bound spans BOTH folders (DtrhAssetManifest.cs:128-131):
+            // the second folder's first check sees the saturated combined count.
+            if (m.Images.Count + m.Videos.Count >= bound) return; // sample later, but bound the walk
             var ext = Path.GetExtension(f).ToLowerInvariant();
             if (!exts.Contains(ext))
             {
@@ -88,6 +138,11 @@ public static class DtrhUserMedia
                 if (!otherExts.Contains(ext) && IsMediaLike(ext)) m.Skipped++;
                 continue;
             }
+
+            // Deselected in the Assets tree -> skip (silently, NOT "skipped": it's user
+            // intent, not an unsupported file — :148-151). Checked between the extension
+            // filter and the size caps, upstream Scan's exact order (:134-158).
+            if (!IsAssetActive(disabled, root, f, useWhitelist)) continue;
 
             long len;
             try { len = new FileInfo(f).Length; } catch { continue; }

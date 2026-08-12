@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "upstreamVersion": "v6.7.4",
+    "merge": "42286638",
+    "recorded": "2026-08-11",
+    "note": "Top-level payload trees under ConditioningControlPanel/Resources/web/ known at the v6.6.3 -> v6.7.4 sync. Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite. fileCountAtBaseline is record data, not an assertion (in-tree count drift is pinned by the per-tree manifest tests)."
+  },
+  "trees": [
+    {
+      "name": "dtrh",
+      "disposition": "served",
+      "fileCountAtBaseline": 1542,
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/dtrh/** -> payload/dtrh); served read-only through Features/Dtrh/LoopbackServer.cs; presence probed by DtrhParticipant.ProbePayloadRoot (typed Missing/Incomplete/Present)."
+    },
+    {
+      "name": "fyp",
+      "disposition": "not-ported",
+      "fileCountAtBaseline": 8,
+      "boardRow": "For You Feed desktop host + ghost mode (v6.7 — new upstream product surface) [P1 OPEN]",
+      "note": "Upstream Services/Fyp/FypHostService.cs renders Resources/web/fyp/index.html (mosaic reel + ghost mode). No client host exists."
+    },
+    {
+      "name": "goon",
+      "disposition": "not-ported",
+      "fileCountAtBaseline": 184,
+      "boardRow": "Goon Game 1v1 duel host (v6.7 — new upstream product surface) [P1 OPEN]",
+      "note": "The tree whose silent arrival (v6.6.3 -> v6.7.4, suite stayed 683/683 green) motivated this guard. Upstream Services/GoonGame/GoonHostService.cs is the host."
+    },
+    {
+      "name": "intake",
+      "disposition": "served",
+      "fileCountAtBaseline": 2138,
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/intake/** -> payload/intake); served by the Graded Intake host (Features/Intake/IntakeHostWindow.axaml.cs); presence probed by Features/Intake/IntakeServingRoots.cs (typed Present/Missing/Incomplete)."
+    },
+    {
+      "name": "player",
+      "disposition": "not-ported",
+      "fileCountAtBaseline": 3,
+      "boardRow": "Implement unified fullscreen video presentation [P0 BLOCKED]",
+      "note": "The out-of-process browser video engine page (upstream Services/Video/Browser/BrowserVideoEngine.cs loads Resources/web/player/index.html). The v6.7.x upstream parity backlog row itemizes the engine-default + grace-pause delta."
+    },
+    {
+      "name": "tunnel",
+      "disposition": "not-ported",
+      "fileCountAtBaseline": 9,
+      "boardRow": "Implement web-only DTRH host [P0 WIP]",
+      "note": "The endless three.js rabbit-hole backdrop rendered under the whole Chaos game (upstream Chaos/ChaosTunnelService.cs). The DTRH host row's b1–b5 slice cut is declared complete and never enumerated this surface — recorded in spine-tasks/SP-056-upstream-tree-guard/record.md as a board reconciliation point for the orchestrator."
+    },
+    {
+      "name": "vendor",
+      "disposition": "not-ported",
+      "fileCountAtBaseline": 9,
+      "boardRow": "Implement web-only DTRH host [P0 WIP]",
+      "note": "Shared top-level three.js. Consumed ONLY by tunnel/index.html's import map (../vendor/three); dtrh/intake ship their own vendored three inside the dtrh tree; goon vendors internally (goon/vendor/). Rides the tunnel surface's row."
+    }
+  ]
+}

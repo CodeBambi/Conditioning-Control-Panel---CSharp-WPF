@@ -358,6 +358,16 @@ public sealed class DtrhNativeEffects : IDisposable
             {
                 foreach (var file in Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories))
                 {
+                    // SP-055: files under the user-media root route through the ONE
+                    // active-pool definition (VideoService.cs:6640-6663 parity — upstream
+                    // filters this pool against DisabledAssetPaths with the same Norm).
+                    if (_options.UserMediaRoot is { } umRoot
+                        && file.StartsWith(umRoot, StringComparison.OrdinalIgnoreCase)
+                        && !DtrhUserMedia.IsAssetActive(_options.DisabledAssets, umRoot, file, _options.UseAssetWhitelist))
+                    {
+                        continue; // deselected: silently out of the pool, never a filename log
+                    }
+
                     byName[Path.GetFileName(file)] = file;
                 }
             }
@@ -629,6 +639,18 @@ public sealed record DtrhNativeEffectsOptions
     /// never a filename. The user-media root lives here; payload/overlay roots keep names
     /// (SP-025's recorded payload/staged scope).</summary>
     public IReadOnlyList<string> PresenceOnlyRoots { get; init; } = [];
+
+    /// <summary>SP-055: the user-media assets root (&lt;dataDir&gt;/assets) — when set,
+    /// pool files under it route through the ONE active-pool definition. Null → no
+    /// deselection filtering (callers without the store keep all-active behavior).</summary>
+    public string? UserMediaRoot { get; init; }
+
+    /// <summary>SP-055: the normalized deselection set (from <c>DtrhUserMedia.BuildDisabledSet</c>).</summary>
+    public HashSet<string>? DisabledAssets { get; init; }
+
+    /// <summary>SP-055: the whitelist gate (AppSettings.cs:1637 documented contract —
+    /// false = all files active).</summary>
+    public bool UseAssetWhitelist { get; init; }
 
     /// <summary>Whisper pool roots (payload assets/bubbles/voices + overlay shadow).</summary>
     public required IReadOnlyList<string> WhisperRoots { get; init; }
