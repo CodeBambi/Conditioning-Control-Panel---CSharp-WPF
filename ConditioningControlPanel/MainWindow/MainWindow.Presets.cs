@@ -1468,6 +1468,22 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The one recap shown non-modally (video still on screen); null whenever the last one
+        /// was modal or has been dismissed. Modal recaps need no tracking - they cannot stack.
+        /// </summary>
+        private SessionCompleteWindow? _liveSessionRecap;
+        private bool _liveSessionRecapTeardownHooked;
+
+        private void CloseLiveSessionRecap()
+        {
+            var stale = _liveSessionRecap;
+            _liveSessionRecap = null;
+            if (stale == null) return;
+            try { stale.Close(); }
+            catch (Exception ex) { App.Logger?.Debug("Closing previous session recap: {E}", ex.Message); }
+        }
+
+        /// <summary>
         /// Shows the session-complete dialog once any in-flight video teardown has finished.
         /// A bubble-triggered bonus video can still be tearing down when the session log
         /// arrives; its dying fullscreen surface renders as a stuck white plane that buries
@@ -1532,6 +1548,22 @@ namespace ConditioningControlPanel
                         };
                         if (videoUp)
                         {
+                            // Non-modal recaps do not block the next session, so two runs ending
+                            // in quick succession would stack two live cards. Keep exactly one.
+                            CloseLiveSessionRecap();
+                            _liveSessionRecap = dialog;
+                            dialog.Closed += (_, _) =>
+                            {
+                                if (ReferenceEquals(_liveSessionRecap, dialog)) _liveSessionRecap = null;
+                            };
+                            if (!_liveSessionRecapTeardownHooked)
+                            {
+                                _liveSessionRecapTeardownHooked = true;
+                                // Owner is null while this window is not yet loaded, and under
+                                // ShutdownMode=OnLastWindowClose an orphaned recap would keep the
+                                // process alive after the main window goes away.
+                                Closed += (_, _) => CloseLiveSessionRecap();
+                            }
                             dialog.ShowActivated = false;
                             dialog.Show();
                         }

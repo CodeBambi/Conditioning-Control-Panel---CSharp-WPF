@@ -57,35 +57,6 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
-        // Emergency panic teardown (#919b) — enumerates our own click-through overlays off the UI thread.
-        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWindowVisible(IntPtr hWnd);
-
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWindow(IntPtr hWnd);
-
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TOPMOST = 0x00000008;
-        private const int WS_EX_TRANSPARENT = 0x00000020;
-        private const int WS_EX_LAYERED = 0x00080000;
-        private const int SW_HIDE = 0;
-        private const int SW_SHOWNA = 8;   // show without activating - never steals focus back
-
         private static readonly IntPtr HWND_TOPMOST = new(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new(-2);
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -918,6 +889,20 @@ namespace ConditioningControlPanel
         /// </summary>
         private void RunEmergencyPanicTeardown()
         {
+            // The panic double-press ladder ends in an app shutdown, which reliably outlives the 2s
+            // deadline — without this the watchdog fires INTO the shutdown and races App disposal
+            // over services it is already tearing down.
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    VideoDiag.Log("PANIC", "FALLBACK skipped — the app is already shutting down");
+                    return;
+                }
+            }
+            catch { return; }
+
             if (Interlocked.Exchange(ref _panicFallbackRunning, 1) == 1) return;
             try
             {
@@ -931,18 +916,33 @@ namespace ConditioningControlPanel
                 VideoDiag.Log("PANIC", "FALLBACK firing — the UI thread never drained the queued handler");
 
                 try { App.Haptics?.PanicStop(); }        catch (Exception ex) { LogPanicFallbackStep("haptics", ex); }
-                try { App.LayeredAudio?.Stop(); }        catch (Exception ex) { LogPanicFallbackStep("audio layers", ex); }
-                // StopAndDisarm, matching App.KillAllAudio: a plain Stop leaves MantraChantEnabled
-                // persisted, so the chant comes back next launch (#685).
-                try { App.MantraChant?.StopAndDisarm(); } catch (Exception ex) { LogPanicFallbackStep("mantra chant", ex); }
+                // Conditional, matching the designed panic path in StopEverything (#668): with the
+                // standalone Audio Layers master on, the bed is the user's, not the session's.
+                try
+                {
+                    if (App.Settings?.Current?.AudioLayersEnabled != true) App.LayeredAudio?.Stop();
+                }
+                catch (Exception ex) { LogPanicFallbackStep("audio layers", ex); }
+                // StopEmergency, not StopAndDisarm: the same runtime teardown from any thread, but
+                // without persisting MantraChantEnabled=false. The real panic leaves the setting
+                // alone, and a watchdog that fired only because the UI thread was slow must not
+                // silently turn the user's chant off for good.
+                try { App.MantraChant?.StopEmergency(); } catch (Exception ex) { LogPanicFallbackStep("mantra chant", ex); }
+                // #890 rewrote both of these to be reachable from this thread. Called individually
+                // rather than via App.KillAllAudio, which also touches services never audited for
+                // off-thread calls.
+                try { App.MindWipe?.Stop(); }            catch (Exception ex) { LogPanicFallbackStep("mind wipe", ex); }
+                try { App.BrainDrain?.Stop(); }          catch (Exception ex) { LogPanicFallbackStep("brain drain", ex); }
                 try { App.Audio?.ForceUnduck(); }        catch (Exception ex) { LogPanicFallbackStep("unduck", ex); }
                 try { App.ScreenOcr?.Stop(); }           catch (Exception ex) { LogPanicFallbackStep("screen OCR", ex); }
 
-                List<IntPtr> hiddenOverlays;
-                try { hiddenOverlays = HidePassiveOverlaysEmergency(); }
-                catch (Exception ex) { hiddenOverlays = new List<IntPtr>(); LogPanicFallbackStep("overlay hide", ex); }
-
-                QueuePanicFallbackRecovery(hiddenOverlays);
+                // No overlay hiding here by design. ShowWindowAsync only POSTS to the owner thread,
+                // so it cannot hide anything while that thread is the wedged one — and re-showing
+                // the raw-Win32 LayeredCompositorHost behind its back desyncs host.IsVisible, which
+                // CompositorEngine gates every Show/Hide on: one false fire and every layer renders
+                // into an invisible window for the rest of the session. Overlays are the UI thread's
+                // to drop, when it comes back and runs the real handler.
+                QueuePanicFallbackRecovery();
 
                 VideoDiag.Log("PANIC", "FALLBACK complete");
             }
@@ -963,114 +963,33 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Posts a hide to our click-through, always-on-top overlay surfaces. Deliberately limited to
-        /// windows the user cannot interact with anyway (layered + WS_EX_TRANSPARENT + topmost), so
-        /// the main window, lock cards and dialogs are never touched. ShowWindowAsync only POSTS, so
-        /// it lands when the UI thread comes back rather than blocking this thread on it — and unlike
-        /// SetLayeredWindowAttributes it can't break WPF's own layered rendering afterwards.
-        /// Returns the HWNDs it actually posted a hide to, so <see cref="QueuePanicFallbackRecovery"/>
-        /// can put them back.
+        /// Repairs the one thing the off-thread teardown does behind the settings' back: the
+        /// Awareness scanner was stopped (rightly, while the UI was wedged) with nothing to restart
+        /// it, leaving the checkbox reading ON over a dead scanner. Queued so it lands as soon as
+        /// the UI thread drains — after the panic op the watchdog gave up on, which was posted
+        /// earlier and therefore runs first. Idempotent: Start no-ops if it is already running.
         /// </summary>
-        private List<IntPtr> HidePassiveOverlaysEmergency()
-        {
-            uint pid = (uint)Environment.ProcessId;
-            var hidden = new List<IntPtr>();
-
-            EnumWindows((hwnd, _) =>
-            {
-                try
-                {
-                    GetWindowThreadProcessId(hwnd, out uint owner);
-                    if (owner != pid) return true;
-                    if (!IsWindowVisible(hwnd)) return true;
-
-                    int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                    if ((exStyle & WS_EX_LAYERED) == 0) return true;
-                    if ((exStyle & WS_EX_TRANSPARENT) == 0) return true;
-                    if ((exStyle & WS_EX_TOPMOST) == 0) return true;
-
-                    if (ShowWindowAsync(hwnd, SW_HIDE)) hidden.Add(hwnd);
-                }
-                catch { }
-                return true;
-            }, IntPtr.Zero);
-
-            VideoDiag.Log("PANIC", $"FALLBACK posted hide to {hidden.Count} click-through overlay window(s)");
-            return hidden;
-        }
-
-        /// <summary>
-        /// Repairs what the off-thread teardown had to do behind WPF's back, queued so it lands as
-        /// soon as the UI thread drains — after the panic op the watchdog gave up on, which was
-        /// posted earlier and therefore runs first.
-        ///
-        /// Two things need undoing. ShowWindowAsync(SW_HIDE) changes real visibility without WPF
-        /// knowing, so Window.Visibility still reads Visible and a later Show() is a no-op; worse,
-        /// the layered + transparent + topmost filter also matches the shared per-monitor compositor
-        /// host, which is shown once and never re-shown, so a single false fire would kill every
-        /// overlay layer until restart. And the Awareness scanner was stopped (right, while the UI
-        /// was wedged) with nothing to restart it, leaving the checkbox reading ON over a dead
-        /// scanner. Each step is idempotent and guarded on its own.
-        ///
-        /// Only windows WPF still BELIEVES are shown are put back: by the time this runs the real
-        /// panic handler has had its turn, and a surface it deliberately hid (Visibility != Visible)
-        /// is one where WPF and reality already agree — re-showing that would be the same desync in
-        /// the other direction.
-        /// </summary>
-        private void QueuePanicFallbackRecovery(List<IntPtr> hiddenWindows)
+        private void QueuePanicFallbackRecovery()
         {
             try
             {
                 DispatcherHelper.RunOnUI(() =>
                 {
-                    int restored = 0;
-                    foreach (var hwnd in hiddenWindows)
-                    {
-                        try
-                        {
-                            if (hwnd == IntPtr.Zero || !IsWindow(hwnd)) continue;   // destroyed meanwhile
-                            if (IsWindowVisible(hwnd)) continue;                    // already back
-                            if (!WpfStillWantsWindowShown(hwnd)) continue;
-                            if (ShowWindowAsync(hwnd, SW_SHOWNA)) restored++;
-                        }
-                        catch { }
-                    }
-
                     try
                     {
+                        // Same three conditions as the real start path (MainWindow.Patreon.cs):
+                        // the access check matters because entitlement can have lapsed since.
                         var settings = App.Settings?.Current;
-                        if (settings?.ScreenOcrEnabled == true && settings.KeywordTriggersEnabled)
+                        if (settings?.ScreenOcrEnabled == true && settings.KeywordTriggersEnabled &&
+                            KeywordTriggerService.HasAccess())
                             App.ScreenOcr?.Start();   // no-ops if it is already running
                     }
                     catch (Exception ex) { LogPanicFallbackStep("screen OCR restart", ex); }
 
-                    VideoDiag.Log("PANIC", $"FALLBACK recovery ran on the UI thread (re-shown {restored} overlay window(s))");
+                    VideoDiag.Log("PANIC", "FALLBACK recovery ran on the UI thread");
                 });
             }
             catch (Exception ex) { LogPanicFallbackStep("recovery queue", ex); }
-        }
-
-        /// <summary>
-        /// True when the HWND belongs to a WPF window whose Visibility is still Visible (so the
-        /// hide really was ours, behind WPF's back), or to no managed window at all (nothing else
-        /// will ever put it back). UI thread only.
-        /// </summary>
-        private static bool WpfStillWantsWindowShown(IntPtr hwnd)
-        {
-            try
-            {
-                foreach (var w in Application.Current?.Windows.OfType<Window>() ?? Enumerable.Empty<Window>())
-                {
-                    try
-                    {
-                        if (new WindowInteropHelper(w).Handle != hwnd) continue;
-                        return w.Visibility == Visibility.Visible;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            return true;
         }
 
         private void HandlePanicKeyPress()

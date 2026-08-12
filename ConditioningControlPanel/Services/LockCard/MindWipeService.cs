@@ -239,17 +239,23 @@ namespace ConditioningControlPanel.Services
 
         public void Stop()
         {
-            if (!_isRunning) return;
-
+            var wasRunning = _isRunning;
             _isRunning = false;
-            _cts?.Cancel();
 
-            // Audio teardown FIRST and inline. App.KillAllAudio can reach us from the panic
-            // fallback thread, and the DispatcherTimer below has UI-thread affinity - stopping it
-            // first would throw there and leave the audio playing, which is the one thing panic
-            // must never do. NAudio itself has no thread affinity.
+            // Audio teardown FIRST, inline, and UNCONDITIONAL. App.KillAllAudio can reach us from
+            // the panic fallback thread, and the DispatcherTimer below has UI-thread affinity -
+            // stopping it first would throw there and leave the audio playing, which is the one
+            // thing panic must never do. NAudio itself has no thread affinity.
+            // Ungated on purpose: TriggerOnce plays a one-shot with the service STOPPED (six call
+            // sites do), and PlayAudio's publish check is deliberately ungated to match - so an
+            // early return here left panic with no way to reach a clip that was still being built.
             StopCurrentAudio();
             StopLoop();
+
+            // Session/timer/state teardown only matters if there was a session.
+            if (!wasRunning) return;
+
+            _cts?.Cancel();
 
             DispatcherHelper.RunOnUI(() => { try { _timer.Stop(); } catch { } });
 
@@ -263,10 +269,12 @@ namespace ConditioningControlPanel.Services
         {
             _frequencyPerHour = frequencyPerHour;
             _volume = volume;
-            // Update live volume if playing
+            // Update live volume if playing. Try/catch like the Volume setter above: PlaybackStopped
+            // nulls _audioReader from the playback thread, so the field can go away (or the reader
+            // can already be disposed) between the test and the assignment.
             if (_audioReader != null)
             {
-                _audioReader.Volume = (float)_volume;
+                try { _audioReader.Volume = (float)_volume; } catch { }
             }
             // Update loop players
             if (_loopReaderA != null)
@@ -566,18 +574,52 @@ namespace ConditioningControlPanel.Services
 
         private void SchedulePlayerCleanup(bool cleanupA)
         {
+            // Capture the pair that occupies the slot RIGHT NOW, not just which slot it is: a
+            // StopLoop+StartLoop inside the delay below (clip change, stop-all-then-start) publishes
+            // a brand new player into the same slot, and retiring the slot blind killed that one
+            // instead - the loop then ran silent for up to a whole clip length.
+            WaveOutEvent? waveOut;
+            AudioFileReader? reader;
+            lock (_audioLock)
+            {
+                waveOut = cleanupA ? _loopWaveOutA : _loopWaveOutB;
+                reader = cleanupA ? _loopReaderA : _loopReaderB;
+            }
+            if (waveOut == null && reader == null) return;
+
             // Wait a bit longer than the overlap to ensure smooth transition, then cleanup old
             // player. No dispatcher hop: NAudio has no UI affinity, and this retirement must still
             // happen when the UI thread is wedged or already shutting down.
             Task.Delay(TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS + 0.1)).ContinueWith(_ =>
             {
-                try
-                {
-                    if (cleanupA) DisposePlayerA();
-                    else DisposePlayerB();
-                }
+                try { RetireLoopPlayer(cleanupA, waveOut, reader); }
                 catch { }
             });
+        }
+
+        /// <summary>
+        /// Retires the pair captured when the cleanup was scheduled. The slot is cleared only if it
+        /// still holds that exact pair, so a newer player published into it in the meantime survives.
+        /// The captured pair is then disposed unconditionally and OUTSIDE the lock - double-disposing
+        /// an already-retired pair is harmless (NAudio's Stop no-ops when stopped, and DisposePair
+        /// swallows everything).
+        /// </summary>
+        private void RetireLoopPlayer(bool isA, WaveOutEvent? waveOut, AudioFileReader? reader)
+        {
+            lock (_audioLock)
+            {
+                if (isA)
+                {
+                    if (ReferenceEquals(_loopWaveOutA, waveOut)) _loopWaveOutA = null;
+                    if (ReferenceEquals(_loopReaderA, reader)) _loopReaderA = null;
+                }
+                else
+                {
+                    if (ReferenceEquals(_loopWaveOutB, waveOut)) _loopWaveOutB = null;
+                    if (ReferenceEquals(_loopReaderB, reader)) _loopReaderB = null;
+                }
+            }
+            DisposePair(waveOut, reader);
         }
 
         private void DisposePlayerA()

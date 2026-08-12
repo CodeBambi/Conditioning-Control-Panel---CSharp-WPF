@@ -267,7 +267,9 @@ namespace ConditioningControlPanel.Services
             if (_lastAttemptForDate == today && now - _lastAttemptUtc < RetryEvery) return;
             _lastAttemptForDate = today;
             _lastAttemptUtc = now;
-            _lastFetchUtc = now;
+            // _lastFetchUtc is stamped on the SUCCESS path only. Stamping it here would let a
+            // failed afternoon attempt re-close the 6h success gate opened by the morning's
+            // success, hiding a server-side override for six hours instead of ten minutes.
             try
             {
                 var url = $"{OverrideEndpoint}?date={LocalDateStamp()}";
@@ -294,6 +296,7 @@ namespace ConditioningControlPanel.Services
                 var changed = _serverKey != key || _serverKeyForDate != LocalDateStamp();
                 _serverKey = key;
                 _serverKeyForDate = LocalDateStamp();
+                _lastFetchUtc = DateTime.UtcNow;
                 App.Logger?.Information("DailyFree: server override for {Date}: {Key}", _serverKeyForDate, key);
                 if (changed) TodayChanged?.Invoke();
             }

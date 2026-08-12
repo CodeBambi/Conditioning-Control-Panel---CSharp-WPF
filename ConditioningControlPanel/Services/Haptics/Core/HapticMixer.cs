@@ -135,6 +135,10 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         // transients
         private readonly List<ActivePulse> _active = new();
         private readonly List<PendingStep> _pending = new();
+        /// <summary>Scratch grid of instants sampled inside ONE tick window. Built and consumed
+        /// entirely inside the same <c>_gate</c> section (only the per-pulse VALUES escape it), so it
+        /// is reused every tick rather than reallocated.</summary>
+        private readonly List<long> _sampleInstants = new(8);
         private readonly Dictionary<long, SeqState> _sequences = new();
         private long _nextSeqId = 1;
 
@@ -316,13 +320,21 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 // outside it.
                 if (_anyLayerTarget) targetSnapshot = (ToyRole?[])_layerTargets.Clone();
 
-                pulseSamples = _active.Count == 0 ? null : new List<PulseSample>(_active.Count);
-                if (pulseSamples != null)
+                // Every pulse is sampled on ONE shared grid of instants rather than handing each its
+                // own window PEAK: same-priority pulses are SUMMED downstream, and summing two peaks
+                // that never actually coincide reported up to 1.7x the level asked for wherever two
+                // envelopes overlap (a pattern's step boundaries). Peak-of-the-sum needs the terms
+                // evaluated at a common instant, which is what the grid is for.
+                pulseSamples = null;
+                if (_active.Count > 0)
                 {
+                    var instants = BuildSampleInstantsLocked(now, DefaultTickMs);
                     foreach (var p in _active)
                     {
-                        var v = p.EnvelopePeak(now, DefaultTickMs);
-                        if (v > 0) pulseSamples.Add(new PulseSample(v, p.Priority, p.Target));
+                        var values = p.EnvelopeAt(instants);
+                        if (values == null) continue;   // silent at every instant in this window
+                        (pulseSamples ??= new List<PulseSample>(_active.Count))
+                            .Add(new PulseSample(values, p.Priority, p.Target));
                     }
                 }
 
@@ -462,21 +474,32 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             else state.Floor = floorTarget;
 
             // --- transients: sum within a priority group, max across groups ---
+            // The group's contribution is the PEAK OF THE SUM over the tick window, not the sum of
+            // each pulse's own peak: those peaks land at different instants, so adding them handed
+            // overlapping envelopes a level neither one asked for. Every sample carries its value at
+            // the same shared grid of instants, so summing per instant and taking the max across
+            // them is the sum's own peak.
             double transient = 0;
             if (pulses != null && pulses.Count > 0)
             {
+                var instants = pulses[0].Values.Length;   // one grid for the whole tick
                 // Priorities are few; a straight scan grouped by value is cheaper than a dictionary.
                 foreach (var priority in DistinctPriorities(pulses))
                 {
-                    double groupSum = 0;
-                    foreach (var s in pulses)
+                    double groupPeak = 0;
+                    for (int k = 0; k < instants; k++)
                     {
-                        if (s.Priority != priority) continue;
-                        if (!RoleMatches(s.Target, device.Role)) continue;
-                        groupSum += s.Value * temperament.TransientScale;
+                        double groupSum = 0;
+                        foreach (var s in pulses)
+                        {
+                            if (s.Priority != priority) continue;
+                            if (!RoleMatches(s.Target, device.Role)) continue;
+                            groupSum += s.Values[k] * temperament.TransientScale;
+                        }
+                        if (groupSum > groupPeak) groupPeak = groupSum;
                     }
-                    if (groupSum > 1) groupSum = 1;
-                    if (groupSum > transient) transient = groupSum;
+                    if (groupPeak > 1) groupPeak = 1;
+                    if (groupPeak > transient) transient = groupPeak;
                 }
             }
 
@@ -870,13 +893,25 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
                 if (_active.Count >= max)
                 {
-                    // Concurrency cap: the new pulse only gets in by out-ranking the weakest
-                    // thing playing, otherwise a burst just becomes one flat wall of buzz.
-                    int weakest = 0;
-                    for (int j = 1; j < _active.Count; j++)
-                        if (_active[j].Priority < _active[weakest].Priority) weakest = j;
-                    if (_active[weakest].Priority >= p.Pulse.Priority) continue;
-                    _active.RemoveAt(weakest);
+                    // A pulse past its own end is a CORPSE: ExpireActive keeps it one extra tick so
+                    // its final partial window still renders, and that grace was costing a slot.
+                    // Retire one of those before anything else - a corpse outranking a live arrival
+                    // dropped the arrival, and a corpse with a high priority evicted a LIVE
+                    // low-priority pulse instead of itself.
+                    int victim = -1;
+                    for (int j = 0; j < _active.Count; j++)
+                        if (now >= _active[j].StartAt + _active[j].TotalMs) { victim = j; break; }
+
+                    if (victim < 0)
+                    {
+                        // Concurrency cap: the new pulse only gets in by out-ranking the weakest
+                        // thing playing, otherwise a burst just becomes one flat wall of buzz.
+                        victim = 0;
+                        for (int j = 1; j < _active.Count; j++)
+                            if (_active[j].Priority < _active[victim].Priority) victim = j;
+                        if (_active[victim].Priority >= p.Pulse.Priority) continue;
+                    }
+                    _active.RemoveAt(victim);
                 }
 
                 _active.Add(new ActivePulse
@@ -902,6 +937,40 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             if (ms <= 0) return 0;
             var v = (int)Math.Round(ms * scale);
             return Math.Clamp(v, 1, 60_000);
+        }
+
+        /// <summary>
+        /// The instants at which this tick's window is sampled: its start, midpoint and end, plus
+        /// every active pulse's own crest that falls between them. The endpoints alone are not
+        /// enough — a 25 ms tap can start and finish strictly between two of them and would render
+        /// silent, which is exactly what the old per-pulse window peak existed to prevent — and a
+        /// per-pulse peak is not enough either, because the peaks of two summed envelopes land at
+        /// different instants. A shared grid gives the summation a common instant to work at while
+        /// still guaranteeing every pulse is sampled at its own loudest moment.
+        ///
+        /// Caller must hold <see cref="_gate"/>; the returned list is reused next tick, so only the
+        /// per-pulse values built from it may escape the lock.
+        /// </summary>
+        private List<long> BuildSampleInstantsLocked(long now, int windowMs)
+        {
+            var w = Math.Max(0, windowMs);
+            _sampleInstants.Clear();
+            _sampleInstants.Add(now);
+            if (w > 0)
+            {
+                _sampleInstants.Add(now + w / 2);
+                _sampleInstants.Add(now + w);
+            }
+            foreach (var p in _active)
+            {
+                var crest = p.PeakInstant(now, now + w);
+                if (crest < 0) continue;   // the endpoints already bound this one
+                var dup = false;
+                for (int i = 0; i < _sampleInstants.Count; i++)
+                    if (_sampleInstants[i] == crest) { dup = true; break; }
+                if (!dup) _sampleInstants.Add(crest);
+            }
+            return _sampleInstants;
         }
 
         private void ExpireActive(long now)
@@ -1137,10 +1206,15 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             public ToyRole Target;
             public int TotalMs => AttackMs + HoldMs + DecayMs;
 
+            /// <summary>Instantaneous level at <paramref name="now"/>. Silent before the pulse
+            /// starts and silent from its own end onwards: a shaped pulse falls out of the decay
+            /// ramp on its own, but a hard edge (DecayMs == 0) has no ramp to fall out of, and the
+            /// extra tick of grace <see cref="ExpireActive"/> grants used to render it at FULL level
+            /// one tick past its end. The same clamp is what makes a zero-length step silent.</summary>
             public double Envelope(long now)
             {
                 var t = now - StartAt;
-                if (t < 0) return 0;
+                if (t < 0 || t >= TotalMs) return 0;
                 if (t < AttackMs) return AttackMs <= 0 ? Intensity : Intensity * (t / (double)AttackMs);
                 t -= AttackMs;
                 if (t < HoldMs) return Intensity;
@@ -1150,27 +1224,41 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             }
 
             /// <summary>
-            /// PEAK of the envelope over the tick window [now, now + windowMs) rather than the
-            /// instantaneous value at <paramref name="now"/>. The output loop samples once per
-            /// tick, and an envelope is always 0 at t=0 (attack starts at zero), so instantaneous
-            /// sampling produced 0 for every one-shot that lived a single tick.
-            /// The shape is rise / plateau / fall, so the window peak is the larger endpoint —
-            /// unless the crest (end of attack .. end of hold) falls inside the window, in which
-            /// case it is the full intensity.
+            /// The instant inside [<paramref name="from"/>, <paramref name="to"/>] where THIS pulse
+            /// is loudest, or -1 when the window's own endpoints already bound it (still rising at
+            /// the end, or already falling at the start). The shape is rise / plateau / fall, so the
+            /// answer is the crest whenever the crest overlaps the window.
+            ///
+            /// This is what keeps a short tap audible: an envelope is 0 at t=0 (attack starts at
+            /// zero) and a 25 ms pulse can start and finish strictly between two grid points, so the
+            /// grid has to be told where to look.
             /// </summary>
-            public double EnvelopePeak(long now, int windowMs)
+            public long PeakInstant(long from, long to)
             {
-                // A step with no shape at all has no envelope to peak: Envelope() is 0 everywhere
-                // for it, and the crest test below (a <= 0 && b >= 0) would otherwise hand back
-                // full Intensity for a pulse that is supposed to last zero milliseconds.
-                if (TotalMs <= 0) return 0;
-                var w = Math.Max(0, windowMs);
-                var a = now - StartAt;
-                var b = a + w;
-                if (b < 0) return 0;
-                var v = Math.Max(Envelope(now), Envelope(now + w));
-                if (a <= AttackMs + HoldMs && b >= AttackMs) v = Math.Max(v, Intensity);
-                return v;
+                if (TotalMs <= 0) return -1;
+                // Envelope() is silent from StartAt + TotalMs on, so the last instant that can carry
+                // the crest is the millisecond before it — which is the whole answer for an
+                // attack-only pulse, whose crest IS its end.
+                var last = StartAt + TotalMs - 1;
+                var crestFrom = Math.Min(StartAt + AttackMs, last);
+                var crestTo = Math.Min(crestFrom + HoldMs, last);
+                if (crestFrom > to || crestTo < from) return -1;
+                return Math.Clamp(crestFrom, from, to);
+            }
+
+            /// <summary>This pulse's level at each instant on the tick's shared grid, or null when it
+            /// is silent at every one of them (the caller drops it entirely).</summary>
+            public double[]? EnvelopeAt(List<long> instants)
+            {
+                double[]? values = null;
+                for (int i = 0; i < instants.Count; i++)
+                {
+                    var v = Envelope(instants[i]);
+                    if (v <= 0) continue;
+                    values ??= new double[instants.Count];
+                    values[i] = v;
+                }
+                return values;
             }
         }
 
@@ -1216,11 +1304,14 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
         private readonly struct PulseSample
         {
-            public PulseSample(double value, int priority, ToyRole target)
+            public PulseSample(double[] values, int priority, ToyRole target)
             {
-                Value = value; Priority = priority; Target = target;
+                Values = values; Priority = priority; Target = target;
             }
-            public double Value { get; }
+            /// <summary>Envelope level at each instant of the tick's shared grid — same length and
+            /// same order for every sample in a tick, which is what lets a priority group be summed
+            /// instant by instant instead of peak by peak.</summary>
+            public double[] Values { get; }
             public int Priority { get; }
             public ToyRole Target { get; }
         }
