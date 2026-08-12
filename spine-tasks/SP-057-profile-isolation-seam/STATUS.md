@@ -1,15 +1,15 @@
 ## STATUS: SP-057 — Profile isolation seam (APPDATA trap + m2test fixture discipline)
-**Current Step:** not started
-**Last Updated:** 2026-08-12 (authored, wave-16 lane-1)
+**Current Step:** Step 1 — consumer census + seam design + pre-approach consult
+**Last Updated:** 2026-08-12 (worker, step 1 in progress)
 **Blockers:** none
 
 ### Step 1: consumer census + seam design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Census the real `DefaultSettingsPath()`/`SpecialFolder` consumer set (file:line table, bypasses named)
-- [ ] Prove the APPDATA trap as a fact in this repo (Windows + Linux behavior recorded)
-- [ ] Design the override (name, absolute-path rule, typed loud failure, choke-point entry)
-- [ ] Design the m2test declared-fixture discipline
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Census the real `DefaultSettingsPath()`/`SpecialFolder` consumer set (file:line table, bypasses named)
+- [x] Prove the APPDATA trap as a fact in this repo (Windows + Linux behavior recorded)
+- [x] Design the override (name, absolute-path rule, typed loud failure, choke-point entry)
+- [x] Design the m2test declared-fixture discipline
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the seam + fixture discipline
 - [ ] Data-root override at the choke point; defaults unchanged both platforms
