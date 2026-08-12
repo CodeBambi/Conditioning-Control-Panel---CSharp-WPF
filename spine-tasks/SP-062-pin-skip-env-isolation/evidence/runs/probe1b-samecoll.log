@@ -1,0 +1,26 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:21.90]     CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride [FAIL]
+  Failed CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride [20 s]
+  Error Message:
+   TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection CROSS-CLASS leak observation (timeout RED = sequential = the fix's premise holds; GREEN = the fix does NOT serialize) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1256, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied
+  Stack Trace:
+     at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55
+   at CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 46
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:41.90]     CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride [FAIL]
+  Failed CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride [19 s]
+  Error Message:
+   TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection sibling class saw the held override (timeout RED = sequential = fix premise holds) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1255, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied
+  Stack Trace:
+     at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55
+   at CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 76
+--- End of stack trace from previous location ---
+Results File: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\spine-tasks\SP-062-pin-skip-env-isolation\evidence\trx\sp062-probe1b-samecoll.trx
+
+Failed!  - Failed:     2, Passed:     0, Skipped:     0, Total:     2, Duration: 40 s - CcpClient.Tests.dll (net10.0)

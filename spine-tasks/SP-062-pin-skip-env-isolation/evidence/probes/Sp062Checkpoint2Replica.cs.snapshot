@@ -1,0 +1,81 @@
+using CcpClient.Desktop.Lifecycle;
+using Xunit;
+
+namespace CcpClient.Tests;
+
+/// <summary>
+/// SP-062 TEMPORARY checkpoint-2 demonstration (Step 4, the pre-completion consult's gap) —
+/// DELETED before the final tree. The positive control fired the pin's CHECKPOINT-1 skip
+/// (override set before the test started). Checkpoint 2's skip line is the same
+/// Assert.SkipWhen mechanism but was never OBSERVED firing, and the real pin cannot be
+/// instrumented without changing what it measures. This replica carries the pin's EXACT
+/// two-checkpoint sequence with a handshake injected in the window: a mutator in a SEPARATE
+/// collection (default-collection classes are distinct collections = parallel) sets
+/// CCP_DATA_ROOT between the replica's checkpoints on demand. Expected: the replica reports
+/// SKIPPED with the checkpoint-2 reason visible; the mutator passes. Proves the checkpoint-2
+/// reporting path is live code, deterministically.
+/// </summary>
+public static class Sp062Cp2State
+{
+    public static volatile bool AtWindow;
+    public static volatile bool Go;
+    public static volatile bool ReadDone;
+}
+
+public sealed class Sp062Cp2ReplicaPinTests
+{
+    [Fact]
+    public void ReplicaPin_Checkpoint2_SkipReportsSkippedWithLeakReason()
+    {
+        // The pin's exact checkpoint-1 line (verbatim semantics).
+        Assert.SkipWhen(
+            CompositionRoot.ActiveDataRootOverride() is not null,
+            "CCP_DATA_ROOT override is active at the guard checkpoint (leak class: runner-set " +
+            "override in the external process environment) — the pin only binds with the " +
+            "override unset at BOTH checkpoints");
+
+        // The handshake window: the mutator sets the override HERE, between the checkpoints.
+        Sp062Cp2State.AtWindow = true;
+        TestWait.UntilSync(
+            () => Sp062Cp2State.Go,
+            "replica: mutator engaged inside the checkpoint window");
+
+        var actual = CompositionRoot.DefaultSettingsPath(); // rides the now-SET override
+        Sp062Cp2State.ReadDone = true;
+
+        // The pin's exact checkpoint-2 line (verbatim) — must throw SkipException here.
+        Assert.SkipWhen(
+            CompositionRoot.ActiveDataRootOverride() is not null,
+            "CCP_DATA_ROOT became non-null between the guard and the read (leak class: " +
+            "cross-collection process-env leak, the SP-057 flake class) — the pin only binds " +
+            "with the override unset at BOTH checkpoints");
+
+        Assert.Equal("UNREACHABLE — checkpoint-2 skip must have thrown", actual);
+    }
+}
+
+public sealed class Sp062Cp2ReplicaMutatorTests
+{
+    [Fact]
+    public void ReplicaMutator_SetsOverrideInsideTheCheckpointWindow()
+    {
+        TestWait.UntilSync(
+            () => Sp062Cp2State.AtWindow,
+            "replica: pin reached the checkpoint window");
+        var sandbox = Path.Combine(Path.GetTempPath(), "ccp-sp062-cp2-" + Guid.NewGuid().ToString("N"));
+        var prior = Environment.GetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable);
+        Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, sandbox);
+        try
+        {
+            Sp062Cp2State.Go = true;
+            TestWait.UntilSync(
+                () => Sp062Cp2State.ReadDone,
+                "replica: pin read rode the set override");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(CompositionRoot.DataRootOverrideVariable, prior);
+            try { Directory.Delete(sandbox, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+}

@@ -15,7 +15,17 @@ namespace CcpClient.Tests;
 /// (2) <see cref="DataRootOverrideEnvTests"/> — the env-honored half through the REAL
 /// composition, in a non-parallel collection (process-wide env mutation is an xunit
 /// parallelism hazard — consult A1/A2).
+///
+/// SP-062: BOTH classes now live in <see cref="ProcessEnvCollection"/>. The SP-061/SP-062
+/// finding (probe-proven on this runner, record.md Step 1) is that
+/// DisableParallelization does NOT serialize a collection against others under
+/// xUnit.v3 3.2.2 + this runner — so the pin's old home in the default collection let the
+/// env half's process-wide CCP_DATA_ROOT mutation land between its guard and its read.
+/// Co-location serializes the pin with the ONLY in-suite mutator of that variable
+/// (intra-collection sequentiality, probe-1b-proven cross-class); the skip tripwire below
+/// then fires only for an externally-set override, never for an in-suite leak.
 /// </summary>
+[Collection(nameof(ProcessEnvCollection))]
 public class DataRootOverrideTests
 {
     [Fact]
@@ -62,10 +72,14 @@ public class DataRootOverrideTests
         // choke point resolves the REAL per-user profile — which is exactly why headed
         // evidence runs must set the override. Also pins both platform defaults against
         // accidental change (framing c).
-        if (CompositionRoot.ActiveDataRootOverride() is not null)
-        {
-            return; // the runner itself set the override; the pin is meaningless here
-        }
+        // SP-062: LOUD skip (never a silent return) — a vacuous run must report
+        // 891 passed / 1 skipped so the exact-count floor discipline catches it. Reasons
+        // name the variable + leak class only, never the override value (a user path).
+        Assert.SkipWhen(
+            CompositionRoot.ActiveDataRootOverride() is not null,
+            "CCP_DATA_ROOT override is active at the guard checkpoint (leak class: runner-set " +
+            "override in the external process environment) — the pin only binds with the " +
+            "override unset at BOTH checkpoints");
 
         var expectedRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         if (string.IsNullOrEmpty(expectedRoot))
@@ -75,17 +89,11 @@ public class DataRootOverrideTests
         }
 
         var actual = CompositionRoot.DefaultSettingsPath();
-        if (CompositionRoot.ActiveDataRootOverride() is not null)
-        {
-            // A sibling env-mutating fixture (DataRootOverrideEnvTests, the
-            // ProcessEnvCollection half) set the process-wide override BETWEEN the guard
-            // above and the read — the observed SP-057 flake class (SP-061 red classified
-            // 2026-08-12: reproduced on the wave-18 base commit; the collection's
-            // DisableParallelization serialization did not prevent the overlap under
-            // xUnit.v3 3.2.2 + the MTP runner). Skip: the pin only binds when the override
-            // was unset at BOTH checkpoints (the read then provably came from the unset state).
-            return;
-        }
+        Assert.SkipWhen(
+            CompositionRoot.ActiveDataRootOverride() is not null,
+            "CCP_DATA_ROOT became non-null between the guard and the read (leak class: " +
+            "cross-collection process-env leak, the SP-057 flake class) — the pin only binds " +
+            "with the override unset at BOTH checkpoints");
 
         Assert.Equal(
             Path.Combine(expectedRoot, "CcpClient", "settings.json"),
@@ -105,9 +113,11 @@ public class DataRootOverrideTests
     }
 }
 
-/// <summary>The env-mutating half. DisableParallelization: this collection never runs
-/// concurrently with ANY other, so no sibling test can observe the process-wide
-/// override mid-flight (consult A1).</summary>
+/// <summary>The env-mutating half. SP-062: the collection is the isolation mechanism —
+/// intra-collection sequentiality (probe-proven on this runner, record.md Step 1) serializes
+/// every fact here, including the pin class that joined it. DisableParallelization stays as
+/// a NON-RELIED-UPON hint: on this runner it does not serialize cross-collection traffic
+/// (probe 1), and nothing here cites it as proof.</summary>
 [CollectionDefinition(DisableParallelization = true)]
 public sealed class ProcessEnvCollection;
 

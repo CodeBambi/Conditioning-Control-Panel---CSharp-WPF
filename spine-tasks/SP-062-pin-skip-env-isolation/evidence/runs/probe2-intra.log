@@ -1,0 +1,26 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:21.81]     CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PongAnswersPing [FAIL]
+  Failed CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PongAnswersPing [20 s]
+  Error Message:
+   TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe2-pong: ping observed (timeout RED = sequential) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1256, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied
+  Stack Trace:
+     at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55
+   at CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PongAnswersPing() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 96
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:41.82]     CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PingWaitsForPong [FAIL]
+  Failed CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PingWaitsForPong [19 s]
+  Error Message:
+   TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe2-ping: intra-collection handshake (timeout RED = sequential = co-location serializes; GREEN = intra-collection CONCURRENCY exists) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1254, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied
+  Stack Trace:
+     at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55
+   at CcpClient.Tests.Sp062IntraCollectionProbeTests.Probe2_IntraCollection_PingWaitsForPong() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 88
+--- End of stack trace from previous location ---
+Results File: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\spine-tasks\SP-062-pin-skip-env-isolation\evidence\trx\sp062-probe2-intra.trx
+
+Failed!  - Failed:     2, Passed:     0, Skipped:     0, Total:     2, Duration: 40 s - CcpClient.Tests.dll (net10.0)

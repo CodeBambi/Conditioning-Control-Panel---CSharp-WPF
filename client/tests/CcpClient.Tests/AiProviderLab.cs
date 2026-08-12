@@ -168,56 +168,61 @@ public sealed class AiProviderLab : IDisposable
             // The SP-006 probe endpoint (SP-019 item-8 URL shape).
             if (req.HttpMethod == "GET" && path == "/api/version")
             {
-                await Write(res, 200, """{"version":"lab"}""");
+                // SP-062: record BEFORE the response becomes observable — the old order
+                // (Write/Close, then Enqueue) let a fast client read HitsFor after the reply
+                // but before the server task's enqueue ran (observed red: Refusal HitsFor 0
+                // after a Refused reply, run01-unit 2026-08-12). The hit exists the moment the
+                // request is classified; the reply must never precede its own record.
                 _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                await Write(res, 200, """{"version":"lab"}""");
                 return;
             }
 
             if (req.HttpMethod != "POST" || path != "/api/chat")
             {
+                _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
                 res.StatusCode = 404;
                 res.Close();
-                _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
                 return;
             }
 
             switch (mode)
             {
                 case AiLabMode.Ok:
-                    await Write(res, 200, OkBody());
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 200, OkBody());
                     break;
 
                 case AiLabMode.Rate429:
+                    _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
                     res.Headers["Retry-After"] = "1";
                     await Write(res, 429, """{"error":"rate_limit"}""");
-                    _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
                     break;
 
                 case AiLabMode.Error500:
-                    await Write(res, 500, """{"error":"server"}""");
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 500, """{"error":"server"}""");
                     break;
 
                 case AiLabMode.NotFound404:
-                    await Write(res, 404, """{"error":"not found"}""");
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 404, """{"error":"not found"}""");
                     break;
 
                 case AiLabMode.Refusal:
-                    await Write(res, 200, """{"refusal":{"category":"content_filter"}}""");
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 200, """{"refusal":{"category":"content_filter"}}""");
                     break;
 
                 case AiLabMode.Malformed:
-                    await Write(res, 200, "this is not json at all {{{");
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 200, "this is not json at all {{{");
                     break;
 
                 case AiLabMode.Truncated:
                     // A valid-reply PREFIX cut mid-document: the reply text is partially present.
-                    await Write(res, 200, OkBody()[..(OkBody().Length / 2)]);
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    await Write(res, 200, OkBody()[..(OkBody().Length / 2)]);
                     break;
 
                 case AiLabMode.Timeout:
