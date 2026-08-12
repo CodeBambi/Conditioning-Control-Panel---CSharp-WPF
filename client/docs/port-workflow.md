@@ -218,7 +218,9 @@ After each subtask:
 4. update architecture/lessons when research changes a decision;
 5. confirm the task commit contains only that slice;
 6. record required consult verdict, dissent, fit-ledger caveat, and empirical reconciliation for P0/high-risk work;
-7. only then approve the gate and allow the next packet/wave.
+7. only then approve the gate and allow the next packet/wave;
+8. **the land's LAST action is a verification of the tree actually being pushed** (SP-062 land, 2026-08-12). Reconciliation edits belong BEFORE the merged-state run; when an edit lands after it — including a docs/JSON edit — re-run at minimum the guards that CONSUME repository documents (`UpstreamPayloadInventoryTests`, `AiOperationContractTests`, `VersionDerivationTests`, and any successor) before pushing. The wave-18 land shipped a RED base by flipping an inventory disposition to `served` without the `evidence` field that guard keys on, after its verification runs had already passed.
+9. **Trust your own merged-state run over the gate's evidence.** Spine gate artifacts have been stale (T-3) and, at the SP-062 land, were a BASE-tree run from the main checkout reporting failures the lane had already fixed. The decisive check is `git diff` EMPTY between the scratch tree you verified and the integrated tip.
 
 Before resuming after a crash or long pause, compare spine state with git history and the client task board. The repository sources win when they disagree.
 

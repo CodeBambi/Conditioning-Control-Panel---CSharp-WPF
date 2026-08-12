@@ -1,8 +1,8 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-08-12
-**Status:** ACTIVE — wave 19 LANDED (`7518c6a4`); floor 892 unit / 35 headless; next = wave 20 (candidates: board row 49 injected timeout BUDGETS, row 38 harness refuse-unsealed)
-**Next Task ID:** SP-063
+**Status:** ACTIVE — wave 20 authored (SP-063, single lane); wave 19 LANDED (`7518c6a4`); floor 892 unit / 35 headless, 0 skipped
+**Next Task ID:** SP-064
 
 ---
 
@@ -98,6 +98,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-058-graded-intake-v67-delta | Row (P1): v6.6.3 → v6.7.4 intake delta — enumerate from the tree, obligation table, serve accents/ai payload deltas, consume SP-055's `IsAssetActive` (no second definition), pin `TopMarksPercent = 90.0` with its verdict derivation, state the new baseline | **Done 2026-08-12** (landed `7bfce5ac`; batch `20260812T072253` — FULL review chain: code APPROVE + final PASS + contract ok; **clean merge, no T-12**; ledger incomplete a 3rd time (`QuizService.cs +15` unnamed, `GamificationBridge.cs +157` found by widened sweep → cross-referenced to the Trainer Card row); accents SERVE + ai.js/QuizService NOTHING; top-marks computed-and-logged-never-raised typed seams; `IsAssetActive` verified-not-reimplemented; serve-probe 200 w/ trust-anchor sha256 + 404 control; first consumer of the `CCP_DATA_ROOT` seam, real profile BYTE-IDENTICAL; new baseline v6.7.4 `0c9947a6`; 862/862 + 33/33; **orchestrator merged-state check found a red the worker AND the engine gate both missed → new P1 timing-discipline row**; row WIP) | SP-057 |
 
 **WAVE 16 COMPLETE 2026-08-12 — both lanes landed (`c42d82ff`, `7bfce5ac`).** Rows filed across the two land consults: **harness entry points must refuse to run unsealed** (P1 — the SP-057 seam is opt-in, the same procedural class that failed at SP-052), **m2test expectation-model upstream ask** (P2), **wall-clock waits in tests — third occurrence of the timing-discipline class** (P1, encode-don't-fix-once: convert + sweep + guard + constitution line, 10 consecutive greens, zero assertions weakened). Unit floor now **862** with the flaky test named on its row. Next unused task ID: SP-059.
+
+### Wave 20 (authored 2026-08-12 — single lane)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-063-timing-budgets | Row (P1, size M): the FOURTH occurrence of the timing class — injected timeout BUDGETS handed to product code under test, which SP-059's three wait-classes and token alphabet never covered. Deliverables: a written admission rule separating "a budget that decides an outcome" from "a budget whose elapsing IS the subject"; a suite-wide enumeration with per-site dispositions incl. cleared sites; `TestTimingGuardTests` extended to option-assignment budgets under the same pinned-allowlist discipline **with its bite demonstrated by a captured RED**; and a DETERMINISTIC fix at `LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` (raising the 800 ms budget is the banned fix). Product code allowed only under a documented pre-edit justification, additive, non-regression-pinned | Authored 2026-08-12 | SP-062 |
+
+**Why alone (wave-19 land consult, solo):** the row edits a **suite-wide pinned allowlist** keyed on path + exact string + count, and it moves the floor. A parallel lane adding tests would introduce tokens this sweep never saw AND stale the pins at merge — each lane green alone, merged state red (the SP-054/SP-058 class). Standing rule extracted: **a row delivering a suite-wide pinned guard runs alone.** Wave 21 = board row 38 (harness entry points must REFUSE to run unsealed), written UNDER the new guard — the same sequencing that put SP-061 after SP-059. Optional future parallel partner for guard-rows: a lane that adds ZERO tests and touches no test files (e.g. a v6.7 big-surface decomposition doc), expecting owner questions rather than claimable rows as its output.
 
 ### Wave 19 (LANDED 2026-08-12, integrate `7518c6a4`)
 
