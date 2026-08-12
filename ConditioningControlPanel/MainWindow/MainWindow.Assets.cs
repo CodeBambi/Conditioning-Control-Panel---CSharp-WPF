@@ -1354,6 +1354,11 @@ namespace ConditioningControlPanel
             // Update existing preset counts to match current file counts
             // (in case files were added/removed since preset was saved)
             UpdatePresetCountsFromCurrentState();
+
+            // Same trigger, same tab: ShowTab("assets") is the one place that runs on every
+            // visit, so the media-source picker syncs itself here rather than needing its own
+            // hook in TabNavigation.
+            InitializeRemoteMediaPicker();
         }
 
         /// <summary>
@@ -2094,6 +2099,474 @@ namespace ConditioningControlPanel
                 Process.Start(new ProcessStartInfo(pack.PatreonUrl) { UseShellExecute = true });
             }
         }
+
+        #region Media Source Picker (local / remote / both)
+
+        // ---------------------------------------------------------------------------------
+        // THERE IS NO TierGate HERE, AND THAT IS THE DESIGN.
+        //
+        // Remote media as an ASSET SOURCE is free for everyone. It exists so that a user who
+        // installs the app with an empty assets folder still has something to run - and "has no
+        // library yet" is overwhelmingly the free tier, so gating the fix behind the paywall
+        // would put it exactly where it cannot do its job.
+        //
+        // What stays premium is the For You FEED - the browsable surface - which keeps its own
+        // gate at MainWindow.Lab.cs:290. Feed = a place you go and scroll; this = where flashes
+        // and videos happen to come from. Owner decision 2026-08-12, planning/remote-media
+        // PLAN.md blocker B9.
+        //
+        // If you arrived here to "fix" a missing entitlement check: it is not an oversight.
+        // ---------------------------------------------------------------------------------
+
+        private const string MediaSrcLocal = "local";
+        private const string MediaSrcOnline = "online";
+        private const string MediaSrcMixed = "mixed";
+
+        private bool _remotePickerWired;
+        /// <summary>Set while the picker writes settings INTO its controls, so the change
+        /// handlers can tell a user click from an echo of their own last click.</summary>
+        private bool _remotePickerSyncing;
+        private readonly List<ToggleButton> _remoteSourceChipButtons = new();
+        private readonly List<ToggleButton> _remoteNicheChipButtons = new();
+
+        /// <summary>Builds the picker once, then re-syncs it to settings on every tab visit.</summary>
+        private void InitializeRemoteMediaPicker()
+        {
+            try
+            {
+                var tab = AssetsTab;
+                if (tab?.RemoteSourceChips == null) return;
+
+                if (!_remotePickerWired)
+                {
+                    _remotePickerWired = true;
+                    BuildRemoteSourceChips();
+                    BuildRemoteNicheChips();
+
+                    if (tab.SliderRemoteRatio != null)
+                        tab.SliderRemoteRatio.ValueChanged += SliderRemoteRatio_Changed;
+                    if (tab.BtnRemoteAddSub != null)
+                        tab.BtnRemoteAddSub.Click += BtnRemoteAddSub_Click;
+                    if (tab.BtnRemoteClearBlocklist != null)
+                        tab.BtnRemoteClearBlocklist.Click += BtnRemoteClearBlocklist_Click;
+                    if (tab.TxtRemoteCustomSub != null)
+                        tab.TxtRemoteCustomSub.KeyDown += TxtRemoteCustomSub_KeyDown;
+                }
+
+                RefreshRemoteMediaPicker();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker init failed"); }
+        }
+
+        /// <summary>Own assets / Reddit / Both, as chips rather than radio buttons so the whole
+        /// panel speaks one shape language (the niche row below uses the same style).</summary>
+        private void BuildRemoteSourceChips()
+        {
+            var host = AssetsTab?.RemoteSourceChips;
+            if (host == null || host.Children.Count > 0) return;
+
+            var chipStyle = TryFindResource("AchievementFilterChip") as Style;
+
+            void Add(string key, string locKey, string english, string tipKey, string tipEnglish)
+            {
+                var chip = new ToggleButton
+                {
+                    Style = chipStyle,
+                    Tag = key,
+                    Content = LocOr(locKey, english),
+                    ToolTip = LocOr(tipKey, tipEnglish)
+                };
+                chip.Checked += RemoteSourceChip_Changed;
+                chip.Unchecked += RemoteSourceChip_Changed;
+                _remoteSourceChipButtons.Add(chip);
+                host.Children.Add(chip);
+            }
+
+            Add(MediaSrcLocal, "label_media_source_own", "My own assets",
+                "tooltip_media_source_own", "Only the images and videos in your assets folder.");
+            Add(MediaSrcOnline, "label_media_source_online", "Reddit (via Scrolller)",
+                "tooltip_media_source_online", "Stream everything from the subreddits you pick. Nothing is saved to your disk.");
+            Add(MediaSrcMixed, "label_media_source_both", "Both",
+                "tooltip_media_source_both", "Blend your own media with Reddit, in whatever proportion you like.");
+        }
+
+        /// <summary>Niche toggles, straight off the shared catalog. These edit
+        /// <c>FypOnlineNiches</c> — the SAME selection the For You feed uses, on purpose: one
+        /// taxonomy, one selection, two surfaces (see the note in AppSettings).</summary>
+        private void BuildRemoteNicheChips()
+        {
+            var host = AssetsTab?.RemoteNicheChips;
+            if (host == null || host.Children.Count > 0) return;
+
+            var chipStyle = TryFindResource("AchievementFilterChip") as Style;
+
+            foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+            {
+                var chip = new ToggleButton
+                {
+                    Style = chipStyle,
+                    Tag = niche.Id,
+                    Content = niche.Label
+                };
+                chip.Checked += RemoteNicheChip_Changed;
+                chip.Unchecked += RemoteNicheChip_Changed;
+                _remoteNicheChipButtons.Add(chip);
+                host.Children.Add(chip);
+            }
+        }
+
+        /// <summary>Pushes live settings into every control in the panel. Safe to call as often
+        /// as the tab is opened.</summary>
+        private void RefreshRemoteMediaPicker()
+        {
+            var tab = AssetsTab;
+            var settings = App.Settings?.Current;
+            if (tab?.RemoteSourceChips == null || settings == null) return;
+
+            _remotePickerSyncing = true;
+            try
+            {
+                var source = settings.MediaSource;
+                foreach (var chip in _remoteSourceChipButtons)
+                    chip.IsChecked = string.Equals(chip.Tag as string, source, StringComparison.Ordinal);
+
+                if (tab.SliderRemoteRatio != null) tab.SliderRemoteRatio.Value = settings.RemoteMediaRatio;
+                if (tab.TxtRemoteRatio != null) tab.TxtRemoteRatio.Text = $"{settings.RemoteMediaRatio}%";
+                if (tab.RemoteRatioRow != null)
+                    tab.RemoteRatioRow.Visibility = string.Equals(source, MediaSrcMixed, StringComparison.Ordinal)
+                        ? Visibility.Visible : Visibility.Collapsed;
+
+                var blockedSubs = settings.RemoteMediaBlockedSubs;
+                var blockedIds = settings.RemoteMediaBlockedIds;
+
+                // Folded away while the app runs on local files only - except when there is a
+                // blocklist, which must stay reviewable whatever the source is set to.
+                if (tab.RemoteMediaDetails != null)
+                    tab.RemoteMediaDetails.Visibility =
+                        !string.Equals(source, MediaSrcLocal, StringComparison.Ordinal)
+                        || blockedSubs.Count > 0 || blockedIds.Count > 0
+                            ? Visibility.Visible : Visibility.Collapsed;
+
+                var selected = new HashSet<string>(settings.FypOnlineNiches ?? new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (var chip in _remoteNicheChipButtons)
+                    chip.IsChecked = chip.Tag is string id && selected.Contains(id);
+
+                RebuildRemoteCustomSubChips(settings);
+                RebuildRemoteBlocklist(settings, blockedSubs, blockedIds);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker refresh failed"); }
+            finally { _remotePickerSyncing = false; }
+        }
+
+        private void RemoteSourceChip_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_remotePickerSyncing) return;
+            try
+            {
+                if (sender is not ToggleButton chip || chip.Tag is not string key) return;
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                // Un-clicking the live chip would leave the app with no source at all.
+                if (chip.IsChecked != true)
+                {
+                    if (string.Equals(key, settings.MediaSource, StringComparison.Ordinal)) chip.IsChecked = true;
+                    return;
+                }
+                if (string.Equals(key, settings.MediaSource, StringComparison.Ordinal)) return;
+
+                // Anything but "local" starts fetching third-party content, so it is asked for
+                // exactly once - and never asked again of someone who already said yes to the
+                // For You feed's card (HasRemoteMediaConsent, not the raw flag).
+                if (!string.Equals(key, MediaSrcLocal, StringComparison.Ordinal) && !settings.HasRemoteMediaConsent)
+                {
+                    if (!AskRemoteMediaConsent(settings))
+                    {
+                        RefreshRemoteMediaPicker();   // puts the chips back where they were
+                        return;
+                    }
+                }
+
+                settings.MediaSource = key;
+                // Rotation state was picked for the old source and the media services are
+                // holding pools built the old way; both go stale the moment this changes.
+                Services.Fyp.Online.FypOnlineCoordinator.ResetAllChannels();
+                InvalidateAssetPoolsAfterSelectionChange();   // also persists
+                RefreshRemoteMediaPicker();
+
+                App.Logger?.Information("[remote media] source -> {Source}", settings.MediaSource);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Remote media source change failed"); }
+        }
+
+        /// <summary>
+        /// The one-time ask before anything remote is fetched. It is a confirm rather than the
+        /// "remotemedia" intro card because that card is coaching, not a gate: it returns void,
+        /// opens on a later dispatcher pass, is one-shot per install and is suppressed by the
+        /// tutorial and by pacing — so anyone who hit one of those would find the toggle simply
+        /// refusing to move. The card still shows, right afterwards, with the fuller pitch.
+        /// </summary>
+        private bool AskRemoteMediaConsent(Models.AppSettings settings)
+        {
+            var answer = MessageBox.Show(this,
+                LocOr("msg_remote_media_consent",
+                    "Pull media from Reddit?\n\n" +
+                    "The app will stream images and clips from the subreddits you pick, straight from your own machine. " +
+                    "Nothing is saved to your disk, nothing is uploaded, and none of it goes through our servers.\n\n" +
+                    "It is adult content and it is not curated by us - you choose the niches, and you can block anything you don't want to see again.\n\n" +
+                    "Turn it on?"),
+                LocOr("title_remote_media_consent", "Use Reddit media?"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes) return false;
+
+            settings.RemoteMediaConsented = true;
+            App.Settings?.Save();
+            MaybeShowFeatureIntro("remotemedia");
+            return true;
+        }
+
+        private void RemoteNicheChip_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_remotePickerSyncing) return;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                var selected = new List<string>();
+                foreach (var chip in _remoteNicheChipButtons)
+                    if (chip.IsChecked == true && chip.Tag is string id) selected.Add(id);
+
+                // An empty selection is allowed: the coordinator falls back to the first catalog
+                // niche rather than serving nothing, so "none" degrades instead of breaking.
+                settings.FypOnlineNiches = selected;
+                PersistRemoteChannelChange();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Remote niche toggle failed"); }
+        }
+
+        private void SliderRemoteRatio_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_remotePickerSyncing) return;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                settings.RemoteMediaRatio = (int)Math.Round(e.NewValue);   // property clamps 5..95
+                if (AssetsTab?.TxtRemoteRatio != null)
+                    AssetsTab.TxtRemoteRatio.Text = $"{settings.RemoteMediaRatio}%";
+                // Dragging fires this per pixel; Save is debounced, so a whole drag is one write.
+                App.Settings?.Save();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Remote ratio change failed: {E}", ex.Message); }
+        }
+
+        private void BtnRemoteAddSub_Click(object sender, RoutedEventArgs e) => AddRemoteCustomSub();
+
+        private void TxtRemoteCustomSub_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter && e.Key != Key.Return) return;
+            e.Handled = true;
+            AddRemoteCustomSub();
+        }
+
+        private void AddRemoteCustomSub()
+        {
+            try
+            {
+                var box = AssetsTab?.TxtRemoteCustomSub;
+                var settings = App.Settings?.Current;
+                if (box == null || settings == null) return;
+
+                var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(box.Text);
+                if (clean == null)
+                {
+                    MessageBox.Show(this,
+                        LocOr("msg_remote_sub_invalid",
+                            "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."),
+                        LocOr("title_remote_sub_invalid", "Check that name"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
+                if (!list.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                    list.Add(clean);
+                settings.FypOnlineCustomSubs = list;
+                box.Text = "";
+
+                PersistRemoteChannelChange();
+                RefreshRemoteMediaPicker();
+
+                // Adding a sub that is on the blocklist looks like the Add button doing nothing:
+                // the block wins, everywhere, by design. Say so rather than silently overriding
+                // an earlier "never show me this again".
+                if (settings.RemoteMediaBlockedSubs.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                {
+                    MessageBox.Show(this,
+                        string.Format(LocOr("msg_remote_sub_is_blocked_0",
+                            "r/{0} is on your blocklist, so it stays hidden until you unblock it below."), clean),
+                        LocOr("title_remote_sub_is_blocked", "Still blocked"),
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Adding a custom subreddit failed"); }
+        }
+
+        private void RemoveRemoteCustomSub(string sub)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
+            list.RemoveAll(x => string.Equals(x, sub, StringComparison.OrdinalIgnoreCase));
+            settings.FypOnlineCustomSubs = list;
+
+            PersistRemoteChannelChange();
+            RefreshRemoteMediaPicker();
+        }
+
+        private void UnblockRemoteSub(string sub)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var list = new List<string>(settings.RemoteMediaBlockedSubs);
+            list.RemoveAll(x => string.Equals(x, sub, StringComparison.OrdinalIgnoreCase));
+            settings.RemoteMediaBlockedSubs = list;
+
+            PersistRemoteChannelChange();
+            RefreshRemoteMediaPicker();
+            App.Logger?.Information("[remote media] unblocked r/{Sub}", sub);
+        }
+
+        private void BtnRemoteClearBlocklist_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                if (settings.RemoteMediaBlockedSubs.Count == 0 && settings.RemoteMediaBlockedIds.Count == 0) return;
+
+                var confirm = MessageBox.Show(this,
+                    LocOr("msg_remote_clear_blocklist_confirm",
+                        "Unblock everything?\n\nEvery subreddit and every individual post you have blocked can show up again. This can't be undone."),
+                    LocOr("title_remote_clear_blocklist", "Clear blocklist"),
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                settings.RemoteMediaBlockedSubs = new List<string>();
+                settings.RemoteMediaBlockedIds = new List<string>();
+
+                PersistRemoteChannelChange();
+                RefreshRemoteMediaPicker();
+                App.Logger?.Information("[remote media] blocklist cleared");
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Clearing the remote blocklist failed"); }
+        }
+
+        /// <summary>Niche / custom-sub / blocklist edits all land the same way: settings do not
+        /// autosave (the lists are replaced, not observed) and every consumer's rotation state
+        /// was built from the old set.</summary>
+        private void PersistRemoteChannelChange()
+        {
+            App.Settings?.Save();
+            Services.Fyp.Online.FypOnlineCoordinator.ResetAllChannels();
+        }
+
+        private void RebuildRemoteCustomSubChips(Models.AppSettings settings)
+        {
+            var host = AssetsTab?.RemoteCustomSubChips;
+            if (host == null) return;
+
+            host.Children.Clear();
+            foreach (var sub in (settings.FypOnlineCustomSubs ?? new List<string>()).ToList())
+            {
+                var name = sub;   // captured per chip, not per loop variable
+                host.Children.Add(BuildRemoteChip($"r/{name}",
+                    LocOr("tooltip_remote_custom_sub_remove", "Remove this subreddit"),
+                    () => RemoveRemoteCustomSub(name)));
+            }
+
+            if (host.Children.Count == 0)
+                host.Children.Add(MutedRemoteNote(LocOr("label_remote_custom_subs_none",
+                    "None yet - the niches above are plenty to start with.")));
+        }
+
+        private void RebuildRemoteBlocklist(Models.AppSettings settings, List<string> subs, List<string> ids)
+        {
+            if (AssetsTab?.TxtRemoteBlocklistSummary is TextBlock summary)
+            {
+                summary.Text = subs.Count == 0 && ids.Count == 0
+                    ? LocOr("label_remote_blocklist_empty",
+                        "Nothing blocked yet. Whatever you block here is gone from every part of the app.")
+                    : string.Format(LocOr("label_remote_blocklist_summary_0_1",
+                        "{0} subreddits and {1} individual posts blocked."), subs.Count, ids.Count);
+            }
+            if (AssetsTab?.BtnRemoteClearBlocklist != null)
+                AssetsTab.BtnRemoteClearBlocklist.IsEnabled = subs.Count > 0 || ids.Count > 0;
+
+            var host = AssetsTab?.RemoteBlockedChips;
+            if (host == null) return;
+
+            host.Children.Clear();
+            foreach (var sub in subs.ToList())
+            {
+                var name = sub;
+                host.Children.Add(BuildRemoteChip($"r/{name}",
+                    LocOr("tooltip_remote_unblock_sub", "Unblock this subreddit"),
+                    () => UnblockRemoteSub(name)));
+            }
+            // Blocked post ids have no name worth showing - they are summarised in the line
+            // above and cleared with everything else.
+        }
+
+        /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's
+        /// ✕ affordance; both styles live in AssetsTabView.xaml's own resources.</summary>
+        private Border BuildRemoteChip(string label, string removeTip, Action onRemove)
+        {
+            var chip = new Border { Style = AssetsTab?.TryFindResource("RemoteChipBorder") as Style };
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+
+            row.Children.Add(new TextBlock
+            {
+                Text = label,
+                Foreground = Brushes.White,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var close = new Button
+            {
+                Content = "✕",
+                ToolTip = removeTip,
+                Style = AssetsTab?.TryFindResource("RemoteChipCloseButton") as Style
+            };
+            close.Click += (_, _) =>
+            {
+                try { onRemove(); }
+                catch (Exception ex) { App.Logger?.Debug("Remote chip removal failed: {E}", ex.Message); }
+            };
+            row.Children.Add(close);
+
+            chip.Child = row;
+            return chip;
+        }
+
+        private static TextBlock MutedRemoteNote(string text) => new()
+        {
+            Text = text,
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6),
+            Foreground = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray
+        };
+
+        #endregion
 
         #endregion
     }

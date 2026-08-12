@@ -20,8 +20,20 @@ namespace ConditioningControlPanel.Services.Fyp.Online;
 ///     <c>children.iterator</c> — the separate children query's input schema has drifted,
 ///     so we never use it. <c>sortBy: RANDOM</c> + iterator gives non-overlapping pages.
 ///   * <c>mediaSources</c> mixes real video (webm/mp4), a <c>_thumb</c> webm and webp/jpg
-///     stills; the pick is "largest non-thumb webm/mp4". CDN hotlinks with no Referer
+///     stills; the video pick is "largest non-thumb webm/mp4". CDN hotlinks with no Referer
 ///     (HTTP 206, range OK) and webm is Chromium-native, so entries play as-is.
+///
+/// Stills (added 2026-08-12 for the app-wide remote-media work) come from the third
+/// <c>PICTURE</c> filter and map to <c>Type = "image"</c> entries, picked by the same
+/// largest-under-the-cap rule. Video entries additionally carry a
+/// <see cref="FypAssetManifest.Entry.PosterUrl"/> lifted from the stills in the same post.
+///
+/// REMOTE STILLS ARE STATIC, FULL STOP (live-verified 2026-08-12, planning Appendix A).
+/// The <c>GIF</c> filter is a misnomer for "animated content" — it returns webm/mp4
+/// renditions plus static webp/jpg posters and ZERO <c>.gif</c> across three subreddits;
+/// six of those webp posters were byte-checked and are plain VP8 with no <c>ANIM</c> chunk.
+/// Real <c>.gif</c> shows up only incidentally under <c>PICTURE</c> and far too thinly to
+/// pool. Don't write anything here that hopes a remote still will animate.
 ///
 /// Runs entirely on the user's device (see <see cref="IFeedSource"/>'s bright line) and
 /// mirrors gallery-dl's politeness: one request per second, modest page sizes.
@@ -33,6 +45,7 @@ internal sealed class ScrolllerSource : IFeedSource
     private const string Endpoint = "https://api.scrolller.com/admin";
     private const int PageLimit = 30;
     private const int MaxSourceWidth = 1920;          // don't stream 4K into a feed tile
+    private const int MaxPosterWidth = 960;           // a poster is a placeholder, not the media
     private static readonly TimeSpan MinRequestGap = TimeSpan.FromSeconds(1.1);
 
     // Field subset of the reference SubredditQuery — GraphQL lets us ask for less.
@@ -61,17 +74,10 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         return c;
     }
 
-    public async Task<FeedPage?> FetchPageAsync(FeedChannelState channel, CancellationToken ct)
+    public async Task<FeedPage?> FetchPageAsync(FeedChannelState channel, FeedMediaKind kind, CancellationToken ct)
     {
-        // Filter rotation: VIDEO and GIF alternate so gif-heavy subreddits still produce
-        // (scrolller GIFs are silent webm — video entries to the feed). A filter that
-        // comes back empty twice is retired for the channel.
-        string filter;
-        if (channel.VideoFilterDead && channel.GifFilterDead) return new FeedPage();
-        if (channel.VideoFilterDead) filter = "GIF";
-        else if (channel.GifFilterDead) filter = "VIDEO";
-        else filter = channel.NextFilterIsGif ? "GIF" : "VIDEO";
-        channel.NextFilterIsGif = !channel.NextFilterIsGif;
+        var filter = ChooseFilter(channel, kind);
+        if (filter == null) return new FeedPage();   // every filter this kind could use is retired
 
         var variables = new JObject
         {
@@ -98,11 +104,12 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var items = sub["children"]?["items"] as JArray;
         var iterator = (string?)sub["children"]?["iterator"];
         var entries = new List<FypAssetManifest.Entry>();
+        bool stills = filter == "PICTURE";
         if (items != null)
         {
             foreach (var item in items)
             {
-                var e = MapItem(item, channel.Name);
+                var e = MapItem(item, channel.Name, stills);
                 if (e != null) entries.Add(e);
             }
         }
@@ -111,37 +118,77 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         {
             if (filter == "GIF" && ++channel.EmptyGifPages >= 2) channel.GifFilterDead = true;
             if (filter == "VIDEO" && ++channel.EmptyVideoPages >= 2) channel.VideoFilterDead = true;
+            if (filter == "PICTURE" && ++channel.EmptyPicturePages >= 2) channel.PictureFilterDead = true;
         }
 
         return new FeedPage { Entries = entries, NextIterator = iterator };
     }
 
-    /// <summary>One scrolller post → one feed entry, or null when it has no playable
-    /// video source. Id shape "scrolller/&lt;sub&gt;/&lt;postId&gt;" — path-style on purpose:
+    /// <summary>
+    /// Which scrolller filter this request asks for, or null when nothing the caller can
+    /// render is left alive on the channel. Mutates the channel's rotation bit exactly the
+    /// way the video path always has.
+    /// </summary>
+    private static string? ChooseFilter(FeedChannelState channel, FeedMediaKind kind)
+    {
+        switch (kind)
+        {
+            // Stills have only one source filter, so there is nothing to rotate.
+            case FeedMediaKind.Image:
+                return channel.PictureFilterDead ? null : "PICTURE";
+
+            // VIDEO and GIF alternate so gif-heavy subreddits still produce (scrolller
+            // GIFs are silent webm — video entries to the feed either way). A filter that
+            // comes back empty twice is retired for the channel.
+            case FeedMediaKind.Video:
+            {
+                if (channel.VideoFilterDead && channel.GifFilterDead) return null;
+                string filter = channel.VideoFilterDead ? "GIF"
+                              : channel.GifFilterDead ? "VIDEO"
+                              : channel.NextFilterIsGif ? "GIF" : "VIDEO";
+                channel.NextFilterIsGif = !channel.NextFilterIsGif;
+                return filter;
+            }
+
+            // Three-way rotation, skipping whatever is retired. The cursor is per-channel
+            // (FeedChannelState.AnyRotation) so a channel's filter order doesn't depend on
+            // how often the other channels happened to be polled.
+            default:
+            {
+                bool video = !channel.VideoFilterDead;
+                bool gif = !channel.GifFilterDead;
+                bool picture = !channel.PictureFilterDead;
+                if (!video && !gif && !picture) return null;
+                int tick = channel.AnyRotation++;
+                if (channel.AnyRotation >= 3) channel.AnyRotation = 0;
+                for (int i = 0; i < 3; i++)
+                {
+                    switch ((tick + i) % 3)
+                    {
+                        case 0: if (video) return "VIDEO"; break;
+                        case 1: if (gif) return "GIF"; break;
+                        default: if (picture) return "PICTURE"; break;
+                    }
+                }
+                return null;
+            }
+        }
+    }
+
+    /// <summary>One scrolller post → one feed entry, or null when it has no source of the
+    /// requested shape. Id shape "scrolller/&lt;sub&gt;/&lt;postId&gt;" — path-style on purpose:
     /// segIds are "id:k", so ids must never contain ':', and the middle segment is what
     /// lets clip-viewed reports attribute dwell back to the channel.</summary>
-    private static FypAssetManifest.Entry? MapItem(JToken item, string sub)
+    /// <param name="stills">true for a PICTURE page (map to a static "image" entry),
+    /// false for VIDEO/GIF (map to a "video" entry with a poster).</param>
+    private static FypAssetManifest.Entry? MapItem(JToken item, string sub, bool stills)
     {
         var sources = item["mediaSources"] as JArray;
         if (sources == null || sources.Count == 0) return null;
 
-        JToken? best = null;
-        int bestWidth = -1;
-        foreach (var s in sources)
-        {
-            var url = (string?)s["url"];
-            if (string.IsNullOrEmpty(url)) continue;
-            bool isVideo = url.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
-                        || url.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-            if (!isVideo || url.Contains("_thumb", StringComparison.OrdinalIgnoreCase)) continue;
-            int w = (int?)s["width"] ?? 0;
-            // Prefer the largest rendition under the cap; a source over the cap only
-            // wins when nothing smaller exists.
-            bool better = best == null
-                || (w <= MaxSourceWidth && (bestWidth > MaxSourceWidth || w > bestWidth))
-                || (w > MaxSourceWidth && bestWidth > MaxSourceWidth && w < bestWidth);
-            if (better) { best = s; bestWidth = w; }
-        }
+        var best = stills
+            ? PickSource(sources, RemoteMediaFormats.IsRemoteImage, MaxSourceWidth)
+            : PickSource(sources, RemoteMediaFormats.IsRemoteVideo, MaxSourceWidth);
         if (best == null) return null;
 
         long postId = (long?)item["id"] ?? 0;
@@ -150,17 +197,61 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var title = ((string?)item["title"] ?? "").Trim();
         if (title.Length > 90) title = title[..87] + "...";
 
-        return new FypAssetManifest.Entry
+        var entry = new FypAssetManifest.Entry
         {
             Id = $"scrolller/{sub}/{postId}",
             Url = (string?)best["url"] ?? "",
-            Type = "video",              // scrolller "GIFs" arrive as silent webm/mp4
+            // scrolller "GIFs" arrive as silent webm/mp4, so the only two shapes an entry
+            // can take are a clip and a static still.
+            Type = stills ? RemoteMediaFormats.TypeImage : RemoteMediaFormats.TypeVideo,
             Filename = title.Length > 0 ? title : $"r/{sub}",
             Folder = "r/" + sub,
             Width = (int?)best["width"],
             Height = (int?)best["height"],
-            Origin = "online",
+            Origin = RemoteMediaFormats.OriginOnline,
+            // Every post carries webp/jpg stills alongside its renditions, so a video tile
+            // gets a poster for free. A still entry IS the poster.
+            PosterUrl = stills
+                ? null
+                : (string?)PickSource(sources, RemoteMediaFormats.IsRemoteImage, MaxPosterWidth)?["url"],
         };
+
+        // The source and the validator every consumer gates on must agree; if they ever
+        // don't, the entry is dropped here rather than dying downstream as a black tile.
+        if (!RemoteMediaFormats.Validate(entry, out var reason))
+        {
+            App.Logger?.Debug("[FYP online] dropped r/{Sub} post {Post}: {Reason}", sub, postId, reason);
+            return null;
+        }
+        return entry;
+    }
+
+    /// <summary>
+    /// Largest acceptable rendition at or under <paramref name="maxWidth"/>; a source over
+    /// the cap only wins when nothing smaller exists. Shared by the video pick, the still
+    /// pick and the poster pick so the three can never drift apart.
+    ///
+    /// <c>_thumb</c> sources are skipped for every shape: on the video side it's the
+    /// preview loop rather than the clip, and on the still side it's a grid thumbnail that
+    /// would look like a downscale bug at flash size. (Divergence from the mobile port,
+    /// whose <c>pickPosterUrl</c> neither skips thumbs nor is order-independent.)
+    /// </summary>
+    private static JToken? PickSource(JArray sources, Func<string?, bool> accept, int maxWidth)
+    {
+        JToken? best = null;
+        int bestWidth = -1;
+        foreach (var s in sources)
+        {
+            var url = (string?)s["url"];
+            if (string.IsNullOrEmpty(url)) continue;
+            if (!accept(url) || url.Contains("_thumb", StringComparison.OrdinalIgnoreCase)) continue;
+            int w = (int?)s["width"] ?? 0;
+            bool better = best == null
+                || (w <= maxWidth && (bestWidth > maxWidth || w > bestWidth))
+                || (w > maxWidth && bestWidth > maxWidth && w < bestWidth);
+            if (better) { best = s; bestWidth = w; }
+        }
+        return best;
     }
 
     /// <summary>POST one GraphQL operation, globally throttled to ~1 req/s. Returns the

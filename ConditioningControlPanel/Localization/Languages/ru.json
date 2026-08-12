@@ -4270,5 +4270,15 @@
   "rf_palette_startup_video": "Стартовое видео",
   "rf_palette_panic_key": "Тревожная кнопка",
   "rf_palette_no_panic": "Отключить тревожную кнопку",
-  "rf_palette_motion_level": "Уровень движения"
+  "rf_palette_motion_level": "Уровень движения",
+  "section_media_source": "Откуда берётся медиа",
+  "label_media_source_hint": "Своих файлов пока нет? Приложение может транслировать изображения и клипы из Reddit. Ниши выбираешь ты, ничего не сохраняется на диск и ничего не загружается на сервер.",
+  "label_remote_mix": "Доля из сети",
+  "tooltip_remote_mix": "Какая часть того, что ты видишь, берётся из Reddit, а не из твоих папок.",
+  "label_remote_niches": "Ниши",
+  "label_remote_niches_shared": "Общее с лентой For You - один выбор, оба места.",
+  "label_remote_custom_subs": "Твои сабреддиты",
+  "tooltip_remote_custom_sub_add": "Введи название сабреддита (r/ необязательно) или вставь ссылку, затем нажми «Добавить».",
+  "label_remote_blocklist": "Заблокировано",
+  "btn_remote_clear_blocklist": "Очистить список блокировки"
 }

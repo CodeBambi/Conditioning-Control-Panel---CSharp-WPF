@@ -129,7 +129,7 @@ internal static class FypHostService
         var h = _host;
         _host = null;
         try { _meta?.Save(); } catch { }
-        try { FypOnlineCoordinator.Save(); } catch { }
+        try { FypOnlineCoordinator.SaveAll(); } catch { }
         try { h?.Dispose(); }
         catch (Exception ex) { App.Logger?.Debug("FypHost.Close: {E}", ex.Message); }
     }
@@ -225,7 +225,7 @@ internal static class FypHostService
                 var segId = (string?)o["segId"];
                 if (IsRemoteId(segId))
                 {
-                    try { FypOnlineCoordinator.RecordDwell(segId!, (long?)o["dwellMs"] ?? 0); }
+                    try { FypOnlineCoordinator.Fyp.RecordDwell(segId!, (long?)o["dwellMs"] ?? 0); }
                     catch (Exception ex) { App.Logger?.Debug("FypHost: dwell record failed: {E}", ex.Message); }
                 }
                 if (!AllowClipXp()) break;
@@ -354,7 +354,7 @@ internal static class FypHostService
                         s.FypOnlineNiches = arr.Select(t => (string?)t)
                             .Where(id => id != null && known.Contains(id)).Select(id => id!)
                             .Distinct().ToList();
-                        FypOnlineCoordinator.ResetChannels();
+                        FypOnlineCoordinator.Fyp.ResetChannels();
                     }
                     break;
                 }
@@ -365,7 +365,7 @@ internal static class FypHostService
                         s.FypOnlineCustomSubs = arr.Select(t => FypOnlineCoordinator.SanitizeSub((string?)t))
                             .Where(x => x != null).Select(x => x!)
                             .Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToList();
-                        FypOnlineCoordinator.ResetChannels();
+                        FypOnlineCoordinator.Fyp.ResetChannels();
                     }
                     break;
                 }
@@ -397,7 +397,7 @@ internal static class FypHostService
         if (System.Threading.Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
         try
         {
-            var (entries, error) = await FypOnlineCoordinator
+            var (entries, error) = await FypOnlineCoordinator.Fyp
                 .FetchBatchAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
 
             var win = _host?.Window;

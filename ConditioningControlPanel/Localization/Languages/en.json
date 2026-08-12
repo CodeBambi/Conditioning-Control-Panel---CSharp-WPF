@@ -4832,5 +4832,15 @@
   "rf_palette_startup_video": "Startup video",
   "rf_palette_panic_key": "Panic key",
   "rf_palette_no_panic": "Disable panic key",
-  "rf_palette_motion_level": "Motion level"
+  "rf_palette_motion_level": "Motion level",
+  "section_media_source": "Where your media comes from",
+  "label_media_source_hint": "No media of your own yet? The app can stream images and clips from Reddit instead. You choose the niches, nothing is saved to your disk, and nothing is uploaded.",
+  "label_remote_mix": "Remote share",
+  "tooltip_remote_mix": "How much of what you see is pulled from Reddit rather than from your own folders.",
+  "label_remote_niches": "Niches",
+  "label_remote_niches_shared": "Shared with the For You feed - one selection, both places.",
+  "label_remote_custom_subs": "Your own subreddits",
+  "tooltip_remote_custom_sub_add": "Type a subreddit name (the r/ is optional) or paste its link, then press Add.",
+  "label_remote_blocklist": "Blocked",
+  "btn_remote_clear_blocklist": "Clear blocklist"
 }

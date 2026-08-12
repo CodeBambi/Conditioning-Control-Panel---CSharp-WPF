@@ -7,8 +7,50 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <!-- Chips for custom subreddits and for the blocklist: the same pill language as
+             AchievementFilterChip (which the niche toggles use directly) plus the hover-✕ from
+             the companion tab's deny chips. Those live in CompanionTheme.xaml, which every
+             companion control merges into its OWN resources rather than into the app - pulling
+             a hundred companion styles and their converter instances into the asset manager to
+             borrow one ✕ button would cost far more than it saves. Both keys are read from
+             code-behind via AssetsTab.TryFindResource, so they stay in the UserControl's own
+             dictionary rather than a local Grid.Resources (Known Issues #4). -->
+        <Style x:Key="RemoteChipBorder" TargetType="Border">
+            <Setter Property="CornerRadius" Value="13"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Background" Value="#26FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="RemoteChipCloseButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#FFFFB0BE"/>
+            <Setter Property="Margin" Value="7,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="7" Padding="3,1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FF69B4"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
         <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto" MaxHeight="340"/>
             <RowDefinition Height="5"/>
@@ -50,8 +92,93 @@
             </StackPanel>
         </Grid>
     
+        <!-- MEDIA SOURCE: local folders, Reddit via Scrolller, or both.
+             Every control here is populated and wired from MainWindow.Assets.cs
+             (InitializeRemoteMediaPicker) rather than declaring Click/ValueChanged handlers:
+             the chip rows are built from FypOnlineCoordinator.Catalog and from live settings
+             lists, so the same code that fills them owns their events. -->
+        <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
+            <StackPanel>
+                <TextBlock Text="{loc:Str section_media_source}" Style="{StaticResource SectionHeader}"
+                           Margin="0,0,0,2"/>
+                <TextBlock Text="{loc:Str label_media_source_hint}"
+                           Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                <!-- Own assets / Reddit / Both. Radio behaviour is enforced in code so the
+                     chips can share AchievementFilterChip with the niche row below. -->
+                <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
+
+                <!-- Everything below is dead weight while the source is "local", so it only
+                     unfolds once remote media is actually in play (or once there is a
+                     blocklist to review — that has to stay reachable either way). -->
+                <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
+
+                    <!-- Mix ratio: only meaningful in "Both" -->
+                    <Grid x:Name="RemoteRatioRow" x:FieldModifier="internal" Margin="0,4,0,2"
+                          Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_mix}"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Slider x:Name="SliderRemoteRatio" x:FieldModifier="internal" Grid.Column="1"
+                                Minimum="5" Maximum="95" Value="30" Height="22"
+                                IsSnapToTickEnabled="True" TickFrequency="5"
+                                VerticalAlignment="Center" MaxWidth="320" HorizontalAlignment="Left"
+                                ToolTip="{loc:Str tooltip_remote_mix}"/>
+                        <TextBlock x:Name="TxtRemoteRatio" x:FieldModifier="internal" Grid.Column="2"
+                                   Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="11"
+                                   FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </Grid>
+
+                    <!-- Niches. These edit FypOnlineNiches, the SAME selection the For You feed
+                         uses — one taxonomy, one selection, two surfaces (AppSettings). -->
+                    <TextBlock Text="{loc:Str label_remote_niches}" Style="{StaticResource SettingLabel}"
+                               FontSize="12" Margin="0,6,0,2"/>
+                    <TextBlock Text="{loc:Str label_remote_niches_shared}"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <WrapPanel x:Name="RemoteNicheChips" x:FieldModifier="internal"/>
+
+                    <!-- Custom subreddits -->
+                    <TextBlock Text="{loc:Str label_remote_custom_subs}" Style="{StaticResource SettingLabel}"
+                               FontSize="12" Margin="0,6,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBox x:Name="TxtRemoteCustomSub" x:FieldModifier="internal" Width="200"
+                                 Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                 FontSize="11" Padding="6,4" VerticalAlignment="Center"
+                                 ToolTip="{loc:Str tooltip_remote_custom_sub_add}"/>
+                        <Button x:Name="BtnRemoteAddSub" x:FieldModifier="internal" Content="{loc:Str btn_add}"
+                                Style="{StaticResource SmallPinkButton}" Padding="10,4" FontSize="11"
+                                Margin="6,0,0,0"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
+
+                    <!-- Blocklist. There is deliberately no NSFW filter (owner decision), so this
+                         is the user's only content control — which makes an inspectable list,
+                         not just a "block" button elsewhere, part of the feature. -->
+                    <Grid Margin="0,6,0,4">
+                        <TextBlock Text="{loc:Str label_remote_blocklist}" Style="{StaticResource SettingLabel}"
+                                   FontSize="12" HorizontalAlignment="Left"/>
+                        <Button x:Name="BtnRemoteClearBlocklist" x:FieldModifier="internal"
+                                Content="{loc:Str btn_remote_clear_blocklist}"
+                                Style="{StaticResource OutlineButton}" Padding="10,3" FontSize="11"
+                                HorizontalAlignment="Right"/>
+                    </Grid>
+                    <TextBlock x:Name="TxtRemoteBlocklistSummary" x:FieldModifier="internal"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <WrapPanel x:Name="RemoteBlockedChips" x:FieldModifier="internal"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- TOP: Content Packs Section (hidden — most packs live outside the app now; use BtnGetPacks instead) -->
-        <Border x:Name="PacksSection" x:FieldModifier="internal" Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12" Visibility="Collapsed">
+        <Border x:Name="PacksSection" x:FieldModifier="internal" Grid.Row="2" Style="{StaticResource SectionPanel}" Padding="12" Visibility="Collapsed">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -295,11 +422,11 @@
         </Border>
     
         <!-- Splitter (hidden alongside PacksSection) -->
-        <GridSplitter x:Name="PacksSplitter" Grid.Row="2" Height="5" HorizontalAlignment="Stretch"
+        <GridSplitter x:Name="PacksSplitter" Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
                       Background="Transparent" Cursor="SizeNS" Visibility="Collapsed"/>
     
         <!-- BOTTOM: Interactive File Browser -->
-        <Border Grid.Row="3" Style="{StaticResource SectionPanel}" Padding="12">
+        <Border Grid.Row="4" Style="{StaticResource SectionPanel}" Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

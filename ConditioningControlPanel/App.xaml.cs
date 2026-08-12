@@ -203,12 +203,116 @@ namespace ConditioningControlPanel
                     {
                         _warnedMissingCustomAssetsPath = true;
                         Logger?.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
+
+                        // This getter runs during startup, long before there is a window to ask
+                        // on, and it is hot enough that it must never do real work. So only
+                        // *record* that a remote-media offer is warranted; MainWindow drains it
+                        // at a safe moment (see FlushPendingRemoteMediaOffer). A plain field
+                        // write cannot throw, so the fallback behaviour above is untouched.
+                        _pendingRemoteMediaOfferSurface ??= "custom-assets-path-missing";
                     }
                 }
                 return UserAssetsPath;
             }
         }
         private static bool _warnedMissingCustomAssetsPath;
+
+        #region Remote media handoff (Phase 1.5)
+
+        // A user with an empty assets folder used to get near-silence: flashes logged once and
+        // gave up, the wallpaper effect refused, videos threw a dead-end MessageBox. Those are
+        // exactly the moments to offer the remote source instead. The budget lives HERE, in one
+        // place, because a user with an empty folder trips several of those sites inside the
+        // first minute and five independent flag checks would nag five times.
+
+        /// <summary>
+        /// Feature-intro key for the app-wide remote-media coaching card. The card's copy lives in
+        /// <c>FeatureIntros.All</c>; <c>ShowIfFirstTime</c> looks the key up with TryGetValue and
+        /// returns silently when it is missing, so calling this before the card is registered is
+        /// a no-op rather than a crash.
+        /// </summary>
+        private const string RemoteMediaIntroKey = "remotemedia";
+
+        /// <summary>0 until some empty-assets dead end has claimed this launch's single offer.</summary>
+        private static int _remoteMediaOfferClaimed;
+
+        /// <summary>
+        /// Set by a dead end that hit too early (or behind a modal) to show anything. Drained by
+        /// <see cref="FlushPendingRemoteMediaOffer"/> once a window exists and the startup modals
+        /// are down. Never volatile - it is exchanged through Interlocked.
+        /// </summary>
+        private static string? _pendingRemoteMediaOfferSurface;
+
+        /// <summary>
+        /// Offers the remote media source at an empty-assets dead end, at most once per launch
+        /// across every call site. Non-blocking and safe from any thread: it only reads settings
+        /// and queues the coaching card, so callers may invoke it while holding a lock or from a
+        /// background thread. Every failure path is swallowed - the caller's original behaviour
+        /// (log line, MessageBox, "return false") must happen whether or not the offer does.
+        /// </summary>
+        /// <param name="surface">Short id of the dead end, for the log only.</param>
+        /// <param name="owner">Owner window, or null to resolve MainWindow when on the UI thread.</param>
+        internal static void OfferRemoteMediaSource(string surface, Window? owner = null)
+        {
+            try
+            {
+                var settings = Settings?.Current;
+                if (settings == null) return;
+
+                // Already pointed at the remote pool - the dead end is a different problem
+                // (no niches selected, no network) and a "try online media" card would be noise.
+                if (!string.Equals(settings.MediaSource, "local", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                // Never stack on the What's New / update modals. Those pump their own message
+                // loop, so the card's Normal-priority BeginInvoke would run *inside* the modal.
+                // Leave the budget unspent and park it for the flush instead.
+                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
+                {
+                    _pendingRemoteMediaOfferSurface ??= surface;
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+
+                // Application.MainWindow is a DependencyProperty and verifies thread access, so
+                // only touch it when we are actually on the UI thread; a null owner is fine.
+                if (owner == null && dispatcher.CheckAccess())
+                {
+                    try { owner = Current?.MainWindow; } catch { owner = null; }
+                }
+
+                Logger?.Information("RemoteMedia: empty assets at {Surface} — offering the online source", surface);
+                FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, owner);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "RemoteMedia: offer failed at {Surface}", surface);
+            }
+        }
+
+        /// <summary>
+        /// Surfaces an offer recorded by a site that ran too early to show one (startup, or
+        /// behind a modal). Safe to call whenever - it does nothing when nothing is parked.
+        /// </summary>
+        internal static void FlushPendingRemoteMediaOffer(Window? owner = null)
+        {
+            try
+            {
+                var surface = Interlocked.Exchange<string?>(ref _pendingRemoteMediaOfferSurface, null);
+                if (surface == null) return;
+                OfferRemoteMediaSource(surface, owner);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "RemoteMedia: pending offer flush failed");
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Returns a temp directory for media files (decrypted packs, video downloads, etc.)
@@ -1438,6 +1542,7 @@ namespace ConditioningControlPanel
 
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
+            Services.Fyp.Online.RemoteMediaCache.CleanupStaleTempFiles();
 
             // Initialize localization (must be after settings, before UI)
             LocalizationManager.Instance.Initialize(Settings?.Current?.Language ?? "en");

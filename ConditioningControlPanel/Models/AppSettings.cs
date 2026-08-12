@@ -3079,6 +3079,120 @@ namespace ConditioningControlPanel.Models
             get => _fypOnlineConsented;
             set { _fypOnlineConsented = value; OnPropertyChanged(); }
         }
+
+        // ---- remote-media blocklist (app-wide, not FYP-only) ----
+        //
+        // The user's only content control over remote media, and deliberately the ONLY one:
+        // there is no NSFW filter and no safe-mode toggle (owner decision 2026-08-12). The
+        // niche catalog is entirely adult, so filtering on scrolller's isNsfw would empty the
+        // pool rather than shape it — that field stays fetched-and-unread on purpose.
+        //
+        // RemoteMedia* rather than FypOnline* because every consumer of the remote pool
+        // (feed, flashes, intake, DTRH) shares one blocklist, applied in FypOnlineCoordinator
+        // before entries reach any pool. Both are edited in place by the picker, so callers
+        // must App.Settings.Save() themselves — nothing here auto-persists.
+
+        private List<string> _remoteMediaBlockedSubs = new();
+        /// <summary>Subreddits the user never wants to see again (bare names, no "r/").
+        /// Excluded from every consumer's active channel set.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> RemoteMediaBlockedSubs
+        {
+            get => _remoteMediaBlockedSubs;
+            set
+            {
+                var clean = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var raw in value ?? new List<string>())
+                {
+                    var sub = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(raw);
+                    if (sub != null && seen.Add(sub)) clean.Add(sub);
+                }
+                // Over the cap the OLDEST entries go: a fresh block is the one the user just
+                // asked for, and silently dropping it would read as the button not working.
+                if (clean.Count > MaxRemoteMediaBlockedSubs)
+                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedSubs);
+                _remoteMediaBlockedSubs = clean;
+                OnPropertyChanged();
+            }
+        }
+
+        private List<string> _remoteMediaBlockedIds = new();
+        /// <summary>Individual remote entries the user blocked, by entry id
+        /// ("scrolller/&lt;sub&gt;/&lt;post&gt;"). Filtered out of every fetched page.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> RemoteMediaBlockedIds
+        {
+            get => _remoteMediaBlockedIds;
+            set
+            {
+                var clean = new List<string>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var raw in value ?? new List<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var id = raw.Trim();
+                    if (id.Length > 120) continue;   // an id this long isn't one of ours
+                    if (seen.Add(id)) clean.Add(id);
+                }
+                if (clean.Count > MaxRemoteMediaBlockedIds)
+                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedIds);
+                _remoteMediaBlockedIds = clean;
+                OnPropertyChanged();
+            }
+        }
+
+        private const int MaxRemoteMediaBlockedSubs = 200;
+        private const int MaxRemoteMediaBlockedIds = 1000;
+
+        // ---- app-wide media source ----
+        //
+        // The whole point of the feature: a user with an empty assets folder should still be
+        // able to run flashes, videos, the intake and DTRH. This is the app-wide default;
+        // FypSource stays separate so the feed and the rest of the app can disagree.
+        //
+        // NICHE SELECTION IS DELIBERATELY NOT DUPLICATED HERE. Both the WPF picker in the
+        // Assets tab and the FYP page's popover edit FypOnlineNiches / FypOnlineCustomSubs —
+        // one taxonomy, one selection, two surfaces. A second app-wide niche list would drift
+        // from the feed's within a week and there is no user story for wanting them different.
+
+        private string _mediaSource = "local";
+        /// <summary>App-wide asset source: "local" (the user's assets folder, today's only
+        /// behaviour), "online" (remote media only) or "mixed" (both, blended by
+        /// <see cref="RemoteMediaRatio"/>). Whitelisted string rather than an enum, matching
+        /// <see cref="FypSource"/> — an unknown value from a synced or hand-edited settings
+        /// file must degrade to local, not throw.</summary>
+        public string MediaSource
+        {
+            get => _mediaSource;
+            set { _mediaSource = value is "local" or "online" or "mixed" ? value : "local"; OnPropertyChanged(); }
+        }
+
+        private int _remoteMediaRatio = 30;
+        /// <summary>In "mixed" mode, the share of picks drawn from the remote pool (%).</summary>
+        public int RemoteMediaRatio
+        {
+            get => _remoteMediaRatio;
+            set { _remoteMediaRatio = Math.Clamp(value, 5, 95); OnPropertyChanged(); }
+        }
+
+        private bool _remoteMediaConsented = false;
+        /// <summary>The one-time coaching card was accepted. Until then
+        /// <see cref="MediaSource"/> cannot leave "local" — see
+        /// <see cref="HasRemoteMediaConsent"/> for why this isn't read directly.</summary>
+        public bool RemoteMediaConsented
+        {
+            get => _remoteMediaConsented;
+            set { _remoteMediaConsented = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>True when the user has agreed to see remote content anywhere. Read THIS,
+        /// not the raw flag: users who already accepted the FYP feed's consent card agreed to
+        /// exactly this, and asking them a second time in different words would read as the
+        /// app having forgotten. Consent flows one way only — accepting the app-wide card
+        /// does not silently enable the premium feed.</summary>
+        [JsonIgnore]
+        public bool HasRemoteMediaConsent => _remoteMediaConsented || _fypOnlineConsented;
         #endregion
 
         #region Lock Card (Unlocks Lv.35)

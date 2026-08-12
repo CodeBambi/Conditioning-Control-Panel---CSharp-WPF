@@ -652,13 +652,17 @@ export function createEffects({ root, caps, media, theme } = {}) {
   const accent  = (theme && typeof theme.accent  === 'string' && theme.accent)  || DEFAULT_ACCENT;
   const accent2 = (theme && typeof theme.accent2 === 'string' && theme.accent2) || DEFAULT_ACCENT2;
 
-  /* Media manifest: plain URL string lists (page-origin resolvable). Null-safe. */
-  const gifs = (media && Array.isArray(media.gifs))
-    ? media.gifs.filter((u) => typeof u === 'string' && u.length > 0) : [];
-  const images = (media && Array.isArray(media.images))
-    ? media.images.filter((u) => typeof u === 'string' && u.length > 0) : [];
-  /* Ambient drifters + braindrain washes draw from the whole visual manifest. */
-  const ambientPool = gifs.concat(images);
+  /* Media manifest: plain URL string lists. LIVE REFERENCES, not copies — the host can
+   * append remote stills to media.images after boot (web-shim's `assets-append`) and this
+   * module is never re-handed a manifest, so holding the array itself is the only way the
+   * growth reaches us. web-shim normalizes both keys to real arrays, and everything it
+   * pushes is a validated non-empty url, so the old defensive filter has nothing left to
+   * catch; the || [] below is for a hand-built manifest (harness, standalone). */
+  const gifs = (media && Array.isArray(media.gifs)) ? media.gifs : [];
+  const images = (media && Array.isArray(media.images)) ? media.images : [];
+  /* Ambient drifters + braindrain washes draw from the whole visual manifest. A FUNCTION,
+   * not a snapshot, for the same reason — concat() would freeze the pool at boot size. */
+  const ambientPool = () => (images.length ? gifs.concat(images) : gifs);
   /* Garnish words: the user's ACTIVE subliminal phrases, else the praise pool. */
   const userSubliminals = (media && Array.isArray(media.subliminals))
     ? media.subliminals.filter((s) => typeof s === 'string' && s.trim().length > 0) : [];
@@ -1727,7 +1731,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
   /** One drifter: DRIFT (edge-to-edge crossing, 14-26s, gentle rotation/scale)
    *  or GHOST (fade in at a random spot, hold 4-8s, fade out). */
   function spawnAmbient() {
-    if (!hasDOM || reducedMotion || !supportsAnim || !ambientPool.length) return;
+    if (!hasDOM || reducedMotion || !supportsAnim || !ambientPool().length) return;
     if (ambLive >= MAX_AMBIENT || inRecovery) return;
     const spec = ambientSpec(depthNow);
     if (!spec.on) return;
@@ -1743,7 +1747,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
       el.setAttribute('aria-hidden', 'true');
       el.onerror = () => removeAmbientNode(el); // bad URL -> silently gone
       el.style.width = (18 + Math.random() * 16) + 'vmin';
-      el.src = pickOf(ambientPool); // lazy: assigned only at spawn time
+      el.src = pickOf(ambientPool()); // lazy: assigned only at spawn time
       ambRoot.appendChild(el);
       ambNodes.add(el);
       ambLive++;
@@ -1785,7 +1789,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
    *  chain dies quietly when depth sinks below the gate and setDepth restarts
    *  it when the descent resumes. */
   function scheduleAmbient() {
-    if (!hasDOM || reducedMotion || !ambientPool.length) return;
+    if (!hasDOM || reducedMotion || !ambientPool().length) return;
     if (ambTimer || inRecovery) return;
     const spec = ambientSpec(depthNow, Math.random());
     if (!spec.on) return;
@@ -1929,8 +1933,8 @@ export function createEffects({ root, caps, media, theme } = {}) {
       const spec = drainWashSpec(i);
       const el = document.createElement('div');
       el.className = 'ixfx-gdrain';
-      if (ambientPool.length) {
-        try { el.style.backgroundImage = `url("${pickOf(ambientPool)}")`; } catch (_e) {}
+      if (ambientPool().length) {
+        try { el.style.backgroundImage = `url("${pickOf(ambientPool())}")`; } catch (_e) {}
       }
       glRoot.appendChild(el);
       track(el);
@@ -2527,7 +2531,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
   /** Start (or extend) the downpour at the given run depth. Bails without DOM
    *  or media; the caller handles the no-media degrade. */
   function showGifRain(depth) {
-    if (!hasDOM || !ambientPool.length) return;
+    if (!hasDOM || !ambientPool().length) return;
     const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     rainDepth = clamp01(depth);
     if (rainCancel) { rainEndAt = Math.max(rainEndAt, now + GIFRAIN_WINDOW_MS); return; }
@@ -2554,8 +2558,8 @@ export function createEffects({ root, caps, media, theme } = {}) {
   /** ONE falling drop. Own fall duration, own safety-net removal. */
   function spawnRainDrop(depth) {
     if (!rainRoot || rainLiveCount >= GIFRAIN_MAX_NODES) return;
-    let url = pickOf(ambientPool);
-    if (ambientPool.length > 1) { let g = 0; while (url === lastRainUrl && g++ < 6) url = pickOf(ambientPool); }
+    let url = pickOf(ambientPool());
+    if (ambientPool().length > 1) { let g = 0; while (url === lastRainUrl && g++ < 6) url = pickOf(ambientPool()); }
     lastRainUrl = url;
     noteMedia(url, gifs.indexOf(url) >= 0 ? 'gif' : 'image'); // ledger (core/mediaLog.js)
 
@@ -2649,7 +2653,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
         // falling gifs (the burst's own RM path is a single, still node) — the
         // reward still pays, it just stops moving.
         const d = clamp01(typeof depth === 'number' ? depth : depthNow);
-        if (reducedMotion || !ambientPool.length) {
+        if (reducedMotion || !ambientPool().length) {
           // showGifBurst needs real gifs; with neither pool the fired reward
           // still pays SOMETHING (same degrade as the GifBurst kind above).
           if (gifs.length) { try { showGifBurst(d); } catch (_e) {} }

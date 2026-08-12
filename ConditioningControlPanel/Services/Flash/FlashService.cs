@@ -19,6 +19,8 @@ using NAudio.Wave;
 using Serilog;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Fyp.Online;
+using SkiaSharp;
 using Image = System.Windows.Controls.Image;
 
 namespace ConditioningControlPanel.Services
@@ -343,6 +345,11 @@ namespace ConditioningControlPanel.Services
 
             ScheduleNextFlash();
 
+            // Start warming the remote pool NOW rather than on the first draw: a fetch plus a
+            // download is seconds of work and the first flash lands in ~3. No-op unless the
+            // user actually pointed the app at the remote source.
+            EnsureRemotePrefetch();
+
             // Update Discord presence
             App.DiscordRpc?.SetFlashActivity();
 
@@ -577,6 +584,15 @@ namespace ConditioningControlPanel.Services
                         App.Logger.Warning("FlashService: No images found in {Path}. Add images to this folder to enable flash display.", _imagesPath);
                         _noImagesWarningShown = true;
                     }
+
+                    // The most common first-run dead end in the app, and until now it was
+                    // log-only: the user pressed Start and nothing ever happened. Offer the
+                    // remote source instead. Deliberately outside the once-per-session warning
+                    // flag - App owns the one-offer-per-launch budget (shared with the video,
+                    // wallpaper and first-run sites), so a later flash can still carry the offer
+                    // if this one landed while a startup modal was up.
+                    App.OfferRemoteMediaSource("flashes");
+
                     _isBusy = false;
                     return;
                 }
@@ -705,6 +721,18 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                // Remote still: bytes come from RemoteMediaCache, not the filesystem. Placed
+                // AFTER the decode-cache lookup on purpose - the cache is keyed by the same
+                // string, so a repeated remote flash reuses its frozen decode exactly like a
+                // local one and never re-decodes. It returns early because everything below
+                // this point assumes a file on disk.
+                if (IsRemotePath(path))
+                {
+                    var remote = await LoadRemoteImageAsync(path, decodeMax).ConfigureAwait(false);
+                    if (remote != null) StoreDecodedImage(path, remote, decodeMax);
+                    return remote == null ? null : CloneImageData(remote);
+                }
+
                 return await Task.Run(() =>
                 {
                     var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -767,50 +795,7 @@ namespace ConditioningControlPanel.Services
 
                     if (data.Frames.Count == 0) return null;
 
-                    // Estimate memory: width × height × 4 bytes × frame count
-                    var entryBytes = (long)data.Width * data.Height * 4 * data.Frames.Count;
-
-                    lock (_imageDecodeCache)
-                    {
-                        // Replacing an existing entry for this file (re-decode at a larger
-                        // cap, or a concurrent miss that raced us)? Release its bytes first
-                        // so the accounting doesn't drift upward.
-                        if (_imageDecodeCache.TryGetValue(path, out var existing))
-                        {
-                            _imageDecodeCache.Remove(path);
-                            _imageCacheBytes -= (long)existing.data.Width * existing.data.Height * 4 * existing.data.Frames.Count;
-                        }
-
-                        // Evict if over limits
-                        while (_imageDecodeCache.Count >= MAX_IMAGE_CACHE_ENTRIES ||
-                               _imageCacheBytes + entryBytes > MAX_IMAGE_CACHE_BYTES)
-                        {
-                            if (_imageDecodeCache.Count == 0) break;
-                            // Evict least recently accessed
-                            string? oldest = null;
-                            var oldestTime = DateTime.MaxValue;
-                            long oldestBytes = 0;
-                            foreach (var kvp in _imageDecodeCache)
-                            {
-                                if (kvp.Value.lastAccess < oldestTime)
-                                {
-                                    oldestTime = kvp.Value.lastAccess;
-                                    oldest = kvp.Key;
-                                    oldestBytes = (long)kvp.Value.data.Width * kvp.Value.data.Height * 4 * kvp.Value.data.Frames.Count;
-                                }
-                            }
-                            if (oldest != null)
-                            {
-                                _imageDecodeCache.Remove(oldest);
-                                _imageCacheBytes -= oldestBytes;
-                            }
-                            else break;
-                        }
-
-                        _imageDecodeCache[path] = (data, DateTime.UtcNow, decodeMax);
-                        _imageCacheBytes += entryBytes;
-                    }
-
+                    StoreDecodedImage(path, data, decodeMax);
                     return CloneImageData(data);
                 });
             }
@@ -818,6 +803,60 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger.Debug("Could not load image {Path}: {Error}", path, ex.Message);
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Publishes a fresh decode into the frozen-BitmapSource cache, evicting least-recently-
+        /// accessed entries until both caps hold. Extracted from the local decode path so the
+        /// remote-still path (which decodes from a stream, not a Uri) shares one cache and one
+        /// eviction policy instead of growing a second, subtly different copy.
+        /// </summary>
+        /// <param name="key">Cache key: an absolute file path locally, the source URL remotely.</param>
+        private void StoreDecodedImage(string key, LoadedImageData data, int decodeMax)
+        {
+            // Estimate memory: width × height × 4 bytes × frame count
+            var entryBytes = (long)data.Width * data.Height * 4 * data.Frames.Count;
+
+            lock (_imageDecodeCache)
+            {
+                // Replacing an existing entry for this file (re-decode at a larger
+                // cap, or a concurrent miss that raced us)? Release its bytes first
+                // so the accounting doesn't drift upward.
+                if (_imageDecodeCache.TryGetValue(key, out var existing))
+                {
+                    _imageDecodeCache.Remove(key);
+                    _imageCacheBytes -= (long)existing.data.Width * existing.data.Height * 4 * existing.data.Frames.Count;
+                }
+
+                // Evict if over limits
+                while (_imageDecodeCache.Count >= MAX_IMAGE_CACHE_ENTRIES ||
+                       _imageCacheBytes + entryBytes > MAX_IMAGE_CACHE_BYTES)
+                {
+                    if (_imageDecodeCache.Count == 0) break;
+                    // Evict least recently accessed
+                    string? oldest = null;
+                    var oldestTime = DateTime.MaxValue;
+                    long oldestBytes = 0;
+                    foreach (var kvp in _imageDecodeCache)
+                    {
+                        if (kvp.Value.lastAccess < oldestTime)
+                        {
+                            oldestTime = kvp.Value.lastAccess;
+                            oldest = kvp.Key;
+                            oldestBytes = (long)kvp.Value.data.Width * kvp.Value.data.Height * 4 * kvp.Value.data.Frames.Count;
+                        }
+                    }
+                    if (oldest != null)
+                    {
+                        _imageDecodeCache.Remove(oldest);
+                        _imageCacheBytes -= oldestBytes;
+                    }
+                    else break;
+                }
+
+                _imageDecodeCache[key] = (data, DateTime.UtcNow, decodeMax);
+                _imageCacheBytes += entryBytes;
             }
         }
 
@@ -2521,15 +2560,39 @@ namespace ConditioningControlPanel.Services
                 // wrote DisabledAssetPaths forgot to invalidate the pools.
                 PruneDeselectedFromPools();
 
-                // If both lists are empty after refresh, no images available
-                if (_imageList.Count == 0 && _packImageList.Count == 0)
+                // Third pool: remote stills. Non-blocking - it only kicks a background top-up
+                // and reads how many URLs are already warm. No-op when the user is on "local".
+                EnsureRemotePrefetch();
+                int remoteReady = RemoteReadyCount();
+
+                // If every pool is empty after refresh, no images available
+                if (_imageList.Count == 0 && _packImageList.Count == 0 && remoteReady == 0)
                 {
                     return new List<string>();
                 }
 
                 var result = new List<string>(count);
+                bool haveLocal = _imageList.Count > 0 || _packImageList.Count > 0;
                 for (int i = 0; i < count; i++)
                 {
+                    // Remote first, because it is the pool that can decline: a miss falls
+                    // through to the local weighting below, whereas a local pick that then
+                    // wanted to be remote would have nowhere to go.
+                    if (remoteReady > 0 && ShouldDrawRemote(haveLocal))
+                    {
+                        var remoteUrl = TryTakeRemoteUrl();
+                        if (remoteUrl != null)
+                        {
+                            result.Add(remoteUrl);
+                            continue;
+                        }
+                        // Pool went cold (everything evicted). Fall through to local - silently,
+                        // because a remote source that is down must look like "no remote
+                        // content", never like broken flashes.
+                        remoteReady = 0;
+                        if (!haveLocal) break;
+                    }
+
                     // Randomly choose between regular and pack images based on what's available
                     bool usePackImage = false;
                     if (_imageList.Count > 0 && _packImageList.Count > 0)
@@ -2585,6 +2648,15 @@ namespace ConditioningControlPanel.Services
         /// with-replacement picks): a single wash/rain that repeats the same image 2-3x looks broken,
         /// so dedup on the source identity here. May do disk I/O (pack decrypt, one per chosen pack
         /// image) — call OFF the UI thread when requesting more than a couple.
+        ///
+        /// Draws from the REMOTE still pool too, on the same terms as the flashes themselves
+        /// (Phase 3 / Contract 2). Some returned entries may therefore be absolute https URLs
+        /// rather than file paths — consumers must route those through
+        /// <see cref="LoadRemoteStillForOverlayAsync"/> and must not run any file-shaped probe
+        /// (<c>File.Exists</c>, <c>FileInfo.Length</c>, <c>AnimatedWebp.IsAnimated</c>) on one.
+        /// <see cref="IsRemotePath"/> is the test. Remote entries NEVER animate (owner decision
+        /// B2: the provider has no usable GIFs), so a consumer that treats them as stills is
+        /// correct, not degraded.
         /// </summary>
         public List<string> GetChaosImagePaths(int count)
         {
@@ -2595,24 +2667,68 @@ namespace ConditioningControlPanel.Services
                 if (_tempPackFiles.Count > 50) CleanupTempPackFiles();
                 if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
                 PruneDeselectedFromPools();
-                if (_imageList.Count == 0 && _packImageList.Count == 0) return new List<string>();
+
+                // Third pool: remote stills, exactly as in GetNextImages. Non-blocking — it only
+                // kicks a background top-up and reads how many URLs are already warm. No-op when
+                // the user is on "local".
+                //
+                // Without this the chaos overlays were the ONE flash-pool consumer that stayed
+                // local-only: an online-source user with an empty assets folder got working
+                // flashes and washes/cascades that drew literally nothing, which is the exact
+                // failure this feature exists to prevent.
+                EnsureRemotePrefetch();
+                int remoteReady = RemoteReadyCount();
+
+                if (_imageList.Count == 0 && _packImageList.Count == 0 && remoteReady == 0)
+                    return new List<string>();
 
                 // Dedup on the SOURCE index (disk image / pack entry), not the resulting path: a pack
                 // image decrypts to a fresh temp path each call, so path-level dedup would neither
                 // catch pack dupes nor stop us re-decrypting the same file. Distinct sources also mean
                 // each chosen pack image decrypts exactly once. Cap at the pool size.
-                int poolSize = _imageList.Count + _packImageList.Count;
+                // Remote picks dedup on the URL itself — there the URL *is* the source identity
+                // (no decrypt step, no temp path, so it is stable across picks).
+                int localPool = _imageList.Count + _packImageList.Count;
+                int poolSize = localPool + remoteReady;
                 int want = Math.Min(count, poolSize);
+                bool haveLocal = localPool > 0;
                 var chosenDisk = new HashSet<int>();
                 var chosenPack = new HashSet<int>();
+                var chosenRemote = new HashSet<string>(StringComparer.Ordinal);
                 var result = new List<string>(want);
                 int guard = 0, maxGuard = poolSize * 8 + 16;   // backstop vs. random-collision / decrypt-fail retries
 
                 while (result.Count < want && guard++ < maxGuard)
                 {
+                    // Nothing local to fall back on AND no distinct remote URL left: stop. The
+                    // guard would eventually catch this, but spinning maxGuard times to reach the
+                    // same answer burns those iterations while holding _lockObj.
+                    bool remoteSpent = remoteReady <= 0 || chosenRemote.Count >= remoteReady;
+                    if (!haveLocal && remoteSpent) break;
+
+                    // Remote first, for the same reason as GetNextImages: it is the pool that can
+                    // decline, so a miss falls through to the local weighting below — whereas a
+                    // local pick that then wanted to be remote would have nowhere to go.
+                    if (!remoteSpent && ShouldDrawRemote(haveLocal))
+                    {
+                        var remoteUrl = TryTakeRemoteUrl();
+                        if (remoteUrl != null)
+                        {
+                            // Already in this batch → skip it; a single wash/rain that repeats one
+                            // image looks broken, which is the whole reason picks are distinct here.
+                            if (chosenRemote.Add(remoteUrl)) result.Add(remoteUrl);
+                            continue;
+                        }
+                        // Pool went cold (everything evicted). Fall through to local — silently,
+                        // because a remote source that is down must look like "no remote content",
+                        // never like a broken wash.
+                        remoteReady = 0;
+                        if (!haveLocal) break;
+                    }
+
                     bool usePackImage = false;
                     if (_imageList.Count > 0 && _packImageList.Count > 0)
-                        usePackImage = _random.Next(poolSize) >= _imageList.Count;   // weighted by count
+                        usePackImage = _random.Next(localPool) >= _imageList.Count;   // weighted by count
                     else if (_packImageList.Count > 0)
                         usePackImage = true;
 
@@ -2662,6 +2778,453 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("Image lists refreshed: {RegularCount} regular images, {PackCount} pack images from {Path}",
                 _imageList.Count, _packImageList.Count, _imagesPath);
         }
+
+        #endregion
+
+        #region Remote media (Phase 3 - Contract 2)
+
+        // Remote stills as a THIRD flash pool, next to disk images and content-pack images.
+        // The draw in GetNextImages was already a weighted choice between two pools, so this
+        // extends it rather than running a parallel pipeline - one place decides where a flash
+        // comes from, which is the only way the ratio, the disabled set and the fallbacks stay
+        // consistent with each other.
+        //
+        // STILLS ONLY, and that is not a temporary limitation (planning/remote-media B2, owner
+        // decision 2). Scrolller has no usable GIFs: its "GIF" filter means "animated content"
+        // and delivers webm/mp4 with STATIC webp/jpg posters - six of those posters were
+        // byte-checked and are plain VP8 with no ANIM chunk, so even the SKCodec path cannot
+        // animate them. Local GIF flashes keep animating; remote ones never will. Do not add a
+        // webm path here.
+        //
+        // A REMOTE FLASH NEVER WAITS ON THE NETWORK. The ready pool only ever contains URLs
+        // whose bytes are already resident in RemoteMediaCache, warmed by the background
+        // prefetch below. If a URL falls out of the cache before it is drawn it is dropped from
+        // the pool instead of re-fetched on the flash's critical path, and if the pool is empty
+        // the draw silently falls through to the local pools - a remote source that is down
+        // must look like "the user has no remote content", never like broken flashes.
+        //
+        // The paths this pool yields ARE the https URLs. A sentinel scheme was the alternative,
+        // but the raw URL degrades better everywhere a flash path leaks: Path.GetExtension
+        // still reports ".webp", File.Exists is simply false, and the media-history preview
+        // (BitmapImage.UriSource) actually renders it.
+
+        /// <summary>Consumer id for the flash tenant in the coordinator registry. Its own
+        /// rotation state and dwell store, so flashes and the For You feed cannot fight over
+        /// one set of channel iterators (planning/remote-media, B5).</summary>
+        private const string RemoteConsumerId = "flashes";
+
+        /// <summary>Warm the pool up to here. Deliberately just under RemoteMediaCache's
+        /// 64-entry cap: a bigger ready pool would mostly be URLs the cache had already
+        /// evicted, which TryTakeRemoteUrl would then discard on the way out.</summary>
+        private const int RemoteReadyTarget = 24;
+
+        /// <summary>Hard ceiling on the ready pool (URL strings only - the bytes are bounded
+        /// by RemoteMediaCache, not by this).</summary>
+        private const int RemoteReadyMax = 60;
+
+        /// <summary>Minimum gap between batch fetches. ScrolllerSource is already throttled to
+        /// ~1 req/s process-wide; this stops a flash-heavy preset from queueing behind that
+        /// gate faster than it drains.</summary>
+        private const int RemotePrefetchGapSeconds = 8;
+
+        /// <summary>URLs whose bytes are ALREADY in RemoteMediaCache. Guarded by
+        /// <see cref="_remoteLock"/>, never by <see cref="_lockObj"/>: the prefetch runs on a
+        /// background thread and must never be able to block a draw. Lock order is
+        /// _lockObj -> _remoteLock, and nothing on the remote side ever takes _lockObj.</summary>
+        private readonly List<string> _remoteReady = new();
+        private readonly object _remoteLock = new();
+        private bool _remoteFetchInFlight;
+        private DateTime _remoteLastFetchUtc = DateTime.MinValue;
+
+        /// <summary>Cancels prefetches at teardown. Separate from _cancellationSource, which is
+        /// recreated on every Start and cancelled on every Stop - a warm pool should survive a
+        /// stop/start cycle.</summary>
+        private readonly CancellationTokenSource _remoteCts = new();
+
+        /// <summary>True when this path yields bytes over the network rather than off disk.
+        /// The pool stores absolute http(s) URLs, and no local path can look like one.</summary>
+        internal static bool IsRemotePath(string? path)
+            => !string.IsNullOrEmpty(path)
+               && (path!.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// Remote flashes are on. Both halves matter: the user has to have pointed the app at
+        /// the remote source AND consented to remote content at some point. HasRemoteMediaConsent
+        /// (not the raw flag) because someone who already accepted the For You feed's card has
+        /// already agreed to exactly this.
+        /// </summary>
+        private static bool RemoteFlashesEnabled()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return false;
+                if (string.Equals(s.MediaSource, "local", StringComparison.OrdinalIgnoreCase)) return false;
+                return s.HasRemoteMediaConsent;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>The subreddits the remote pool draws from. Deliberately the SAME selection
+        /// the For You feed uses (AppSettings: one taxonomy, one selection, two surfaces) - only
+        /// the rotation state is per-consumer.</summary>
+        private static IReadOnlyList<string> RemoteFlashChannels()
+        {
+            var s = App.Settings?.Current;
+            return FypOnlineCoordinator.ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
+        }
+
+        /// <summary>
+        /// Tops the ready pool up in the background. Returns immediately - callers on the
+        /// dispatcher (and callers holding <see cref="_lockObj"/>) must never be able to block
+        /// on a fetch. Cheap enough to call on every draw: three field reads when the pool is
+        /// already full or a fetch is in flight.
+        /// </summary>
+        private void EnsureRemotePrefetch()
+        {
+            if (!RemoteFlashesEnabled()) return;
+
+            lock (_remoteLock)
+            {
+                if (_remoteFetchInFlight) return;
+                if (_remoteReady.Count >= RemoteReadyTarget) return;
+                if ((DateTime.UtcNow - _remoteLastFetchUtc).TotalSeconds < RemotePrefetchGapSeconds) return;
+                _remoteFetchInFlight = true;
+                _remoteLastFetchUtc = DateTime.UtcNow;
+            }
+
+            // Fire-and-forget by design, and safe to be: PrefetchRemoteBatchAsync touches no UI
+            // state at all and swallows everything, so there is no dispatcher to check and no
+            // exception to escape into TaskScheduler.UnobservedTaskException.
+            _ = Task.Run(PrefetchRemoteBatchAsync);
+        }
+
+        /// <summary>
+        /// One coordinator batch -> validated stills -> bytes in RemoteMediaCache -> URLs in the
+        /// ready pool. Never throws, never touches the UI, never takes <see cref="_lockObj"/>.
+        /// </summary>
+        private async Task PrefetchRemoteBatchAsync()
+        {
+            try
+            {
+                var ct = _remoteCts.Token;
+                if (ct.IsCancellationRequested) return;
+
+                // Ask for Image, not Any: this surface can only render a still, and a video
+                // entry reaching the pool would be a black flash rather than a skipped one.
+                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.Image);
+                var (entries, error) = await coordinator.FetchBatchAsync(ct).ConfigureAwait(false);
+
+                if (error != null)
+                {
+                    // Transport failure. The coordinator is already backing the channel off; all
+                    // this surface has to do is keep whatever is still warm and stay quiet.
+                    App.Logger?.Debug("FlashService: remote still fetch failed ({Error}) - staying on the local pool", error);
+                    return;
+                }
+
+                int warmed = 0;
+                foreach (var entry in entries)
+                {
+                    if (ct.IsCancellationRequested) break;
+
+                    bool full;
+                    lock (_remoteLock) full = _remoteReady.Count >= RemoteReadyMax;
+                    if (full) break;
+
+                    if (!RemoteMediaFormats.Validate(entry, FeedMediaKind.Image, out var reason))
+                    {
+                        App.Logger?.Debug("FlashService: dropped remote entry {Id}: {Reason}", entry?.Id, reason);
+                        continue;
+                    }
+
+                    // Download now, on this background thread, so the draw later is a pure
+                    // memory read. A failure here just means this one still never joins the pool.
+                    if (!await RemoteMediaCache.PrefetchAsync(entry.Url, ct).ConfigureAwait(false)) continue;
+
+                    lock (_remoteLock)
+                    {
+                        if (!_remoteReady.Contains(entry.Url))
+                        {
+                            _remoteReady.Add(entry.Url);
+                            warmed++;
+                        }
+                    }
+                }
+
+                if (warmed > 0)
+                {
+                    int ready;
+                    lock (_remoteLock) ready = _remoteReady.Count;
+                    App.Logger?.Information("FlashService: warmed {Warmed} remote still(s), {Ready} ready", warmed, ready);
+                }
+            }
+            catch (OperationCanceledException) { /* teardown */ }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: remote prefetch failed (non-fatal): {Error}", ex.Message);
+            }
+            finally
+            {
+                lock (_remoteLock) _remoteFetchInFlight = false;
+            }
+        }
+
+        /// <summary>Ready-pool size, for the draw's "is there anything at all" checks.</summary>
+        private int RemoteReadyCount()
+        {
+            lock (_remoteLock) return _remoteReady.Count;
+        }
+
+        /// <summary>
+        /// A remote URL that is still resident in the byte cache, or null. Drawn WITH
+        /// replacement, like both local pools. Anything the cache has since evicted is dropped
+        /// from the pool here rather than handed out - that is what keeps the promise that a
+        /// remote flash never waits on the network.
+        /// Caller must hold <see cref="_lockObj"/> (this reads <see cref="_random"/>).
+        /// </summary>
+        private string? TryTakeRemoteUrl()
+        {
+            lock (_remoteLock)
+            {
+                while (_remoteReady.Count > 0)
+                {
+                    int index = _random.Next(_remoteReady.Count);
+                    var url = _remoteReady[index];
+                    if (RemoteMediaCache.IsCached(url)) return url;
+                    _remoteReady.RemoveAt(index);
+                }
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Should THIS pick come from the remote pool? Caller must hold <see cref="_lockObj"/>.
+        /// </summary>
+        /// <param name="haveLocal">True when a disk or pack image is available as an alternative.</param>
+        private bool ShouldDrawRemote(bool haveLocal)
+        {
+            // Nothing local to fall back to: the remote pool is the whole library. This is the
+            // onboarding case the feature exists for - a user with an empty assets folder.
+            if (!haveLocal) return true;
+
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (string.Equals(s.MediaSource, "online", StringComparison.OrdinalIgnoreCase)) return true;
+            // "mixed": RemoteMediaRatio is the share of picks drawn remotely (clamped 5-95 by
+            // the setter, re-clamped here because a synced settings file is not ours to trust).
+            return _random.Next(100) < Math.Clamp(s.RemoteMediaRatio, 0, 100);
+        }
+
+        /// <summary>
+        /// A remote still -> decoded frames, from bytes already held in RemoteMediaCache.
+        /// Mirrors the static branch of <see cref="LoadImageAsync"/> (WIC, decode-time
+        /// downscale, frozen) but over a stream instead of a Uri, because the whole point of
+        /// Contract 2 is that these never touch disk. Null on any failure - the caller just
+        /// tries another candidate.
+        /// </summary>
+        private async Task<LoadedImageData?> LoadRemoteImageAsync(string url, int decodeMax)
+        {
+            try
+            {
+                // A bounded wait even though the bytes should already be resident: if the entry
+                // was evicted between the pool check and here, this is a re-download, and a flash
+                // that never resolves would hold a decode slot in LoadImagesUntilAsync forever.
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(_remoteCts.Token);
+                cts.CancelAfter(TimeSpan.FromSeconds(15));
+
+                using var stream = await RemoteMediaCache.OpenAsync(url, cts.Token).ConfigureAwait(false);
+                if (stream == null) return null;
+
+                // DecodeRemoteStill is CPU-bound, so it belongs on the pool exactly like the
+                // Task.Run in LoadImageAsync. The stream stays alive for it: this await is
+                // inside the using scope.
+                Stream captured = stream;
+                return await Task.Run(() => DecodeRemoteStill(url, captured, decodeMax)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: remote still {Url} failed to load: {Error}", url, ex.Message);
+                return null;
+            }
+        }
+
+        private static LoadedImageData? DecodeRemoteStill(string url, Stream stream, int decodeMax)
+        {
+            var data = new LoadedImageData { FilePath = url };
+
+            // WIC first - same decoder, same decode-time downscale and same WPF-owned buffer as
+            // every local static flash, so nothing about the memory profile changes.
+            try
+            {
+                int srcW = 0, srcH = 0;
+                try
+                {
+                    stream.Position = 0;
+                    var probe = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                    srcW = probe.PixelWidth; srcH = probe.PixelHeight;
+                }
+                catch { }
+
+                stream.Position = 0;
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;            // decode now, let go of the stream
+                bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bmp.StreamSource = stream;
+                if (srcW > decodeMax || srcH > decodeMax)
+                {
+                    if (srcW >= srcH) bmp.DecodePixelWidth = decodeMax;
+                    else bmp.DecodePixelHeight = decodeMax;
+                }
+                bmp.EndInit();
+                bmp.Freeze();                                          // crosses back to the UI thread
+
+                if (bmp.PixelWidth > 0 && bmp.PixelHeight > 0)
+                {
+                    data.Frames.Add(bmp);
+                    data.Width = bmp.PixelWidth;
+                    data.Height = bmp.PixelHeight;
+                    data.FrameDelay = TimeSpan.FromMilliseconds(100);
+                    return data;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: WIC could not decode remote still {Url}: {Error}", url, ex.Message);
+            }
+
+            // WEBP IS WHY THIS FALLBACK EXISTS. Scrolller's stills are mostly webp (the largest
+            // rendition under the source cap usually is), and WIC only decodes webp on machines
+            // that have the Store "Webp Image Extension" - which is present on most Win11 boxes
+            // and absent on plenty of Win10 ones. Without this, remote flashes would work
+            // perfectly in testing and be a blank feature for a slice of users. SkiaSharp is
+            // already the app's format-agnostic decoder (AnimatedWebp), so the fallback is free.
+            try
+            {
+                stream.Position = 0;
+                using var skData = SKData.Create(stream);
+                if (skData == null) return null;
+                using var codec = SKCodec.Create(skData);
+                if (codec == null) return null;
+
+                // Decode straight into the pixel format BitmapSource.Create is about to be
+                // told it has, rather than decoding native and converting after.
+                int w = codec.Info.Width, h = codec.Info.Height;
+                if (w <= 0 || h <= 0 || (long)w * h > 4096L * 4096L) return null;
+                using var decoded = SKBitmap.Decode(codec,
+                    new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul));
+                if (decoded == null) return null;
+
+                var frame = ToFrozenBitmapSource(decoded, decodeMax);
+                if (frame == null) return null;
+
+                data.Frames.Add(frame);
+                data.Width = frame.PixelWidth;
+                data.Height = frame.PixelHeight;
+                data.FrameDelay = TimeSpan.FromMilliseconds(100);
+                return data;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: Skia could not decode remote still {Url}: {Error}", url, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>SKBitmap (already Bgra8888/Premul) -> frozen BitmapSource, downscaled so the
+        /// longest edge is at most <paramref name="decodeMax"/>. Mirrors
+        /// AnimatedWebp.ToFrozenBitmapSource (whose copy is private and animation-shaped);
+        /// BitmapSource.Create copies the pixels, so the SKBitmap is free to be disposed on the
+        /// way out.</summary>
+        private static BitmapSource? ToFrozenBitmapSource(SKBitmap src, int decodeMax)
+        {
+            SKBitmap? resized = null;
+            try
+            {
+                var bmp = src;
+                int longest = Math.Max(bmp.Width, bmp.Height);
+                if (longest > decodeMax)
+                {
+                    double scale = decodeMax / (double)longest;
+                    int tw = Math.Max(1, (int)Math.Round(bmp.Width * scale));
+                    int th = Math.Max(1, (int)Math.Round(bmp.Height * scale));
+                    resized = bmp.Resize(new SKImageInfo(tw, th, SKColorType.Bgra8888, SKAlphaType.Premul), SKFilterQuality.Medium);
+                    if (resized != null) bmp = resized;
+                }
+
+                var bs = BitmapSource.Create(bmp.Width, bmp.Height, 96, 96, PixelFormats.Pbgra32, null,
+                    bmp.GetPixels(), bmp.ByteCount, bmp.RowBytes);
+                bs.Freeze();
+                return bs;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: Skia -> BitmapSource conversion failed: {Error}", ex.Message);
+                return null;
+            }
+            finally
+            {
+                resized?.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// One remote still → a frozen <see cref="BitmapSource"/>, for the chaos overlays
+        /// (<c>ChaosFlashOverlay</c>'s braindrain wash and <c>ChaosGifCascadeOverlay</c>'s rain).
+        /// Those two borrow this service's pool via <see cref="GetChaosImagePaths"/> but render
+        /// in their OWN windows, so they cannot go through <see cref="LoadRemoteImageAsync"/> —
+        /// they need a bare bitmap to assign to an <c>Image.Source</c>, not a LoadedImageData
+        /// bound to the flash window pipeline. The decode itself is shared
+        /// (<see cref="DecodeRemoteStill"/>), so WIC-then-Skia and the webp fallback behave
+        /// identically in all three places.
+        ///
+        /// STREAM, NOT TEMP FILE, deliberately: both callers already decode off the UI thread
+        /// into a bitmap they own, so <c>StreamSource</c> drops straight into the shape they
+        /// have. <see cref="RemoteMediaCache.MaterializeAsync"/> would have bought nothing here
+        /// and cost a file whose lifetime spans an overlay that is a static singleton with no
+        /// per-clip teardown hook — i.e. a leak waiting to happen.
+        ///
+        /// Never blocks a caller on the network in practice: the pool only ever hands out URLs
+        /// whose bytes are already resident. Null on ANY failure, and every caller's fallback is
+        /// "this clip stays empty", which in a wash or a rain is invisible.
+        /// </summary>
+        /// <param name="decodeMax">Cap on the longest edge of the decoded bitmap.</param>
+        internal static async Task<BitmapSource?> LoadRemoteStillForOverlayAsync(string url, int decodeMax)
+        {
+            try
+            {
+                // Bounded even though this should be a pure memory read: if the entry was evicted
+                // between the draw and here it becomes a real download, and an overlay decode
+                // that never resolves would pin its Image (and, in the cascade, an animated-budget
+                // slot) for the rest of the run. Its own CTS rather than _remoteCts because this
+                // is static — the overlays are static singletons and hold no service reference.
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+                using var stream = await RemoteMediaCache.OpenAsync(url, cts.Token).ConfigureAwait(false);
+                if (stream == null) return null;
+
+                // CPU-bound; the stream stays alive for it because this await is inside the using.
+                Stream captured = stream;
+                int max = Math.Clamp(decodeMax, 64, 4096);
+                var data = await Task.Run(() => DecodeRemoteStill(url, captured, max)).ConfigureAwait(false);
+
+                // Frozen by DecodeRemoteStill, so it is safe to hand across to the UI thread.
+                return data != null && data.Frames.Count > 0 ? data.Frames[0] : null;
+            }
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: chaos overlay could not load remote still {Url}: {Error}", url, ex.Message);
+                return null;
+            }
+        }
+
+        #endregion
+
+        #region Media Queue (continued)
 
         /// <summary>
         /// Drops anything the user has deselected in the Assets tab out of the LIVE pools.
@@ -3314,6 +3877,12 @@ namespace ConditioningControlPanel.Services
                 try { _windowPool.Pop().Close(); } catch { }
             }
             _cancellationSource?.Dispose();
+            // Stop any remote prefetch mid-download. Separate from _cancellationSource, which
+            // Stop() already cancelled - the warm pool is meant to survive a stop/start cycle
+            // and only dies with the service.
+            try { _remoteCts.Cancel(); } catch { }
+            try { _remoteCts.Dispose(); } catch { }
+            lock (_remoteLock) _remoteReady.Clear();
             StopCurrentSound();
             CleanupTempPackFiles();
             lock (_imageDecodeCache) { _imageDecodeCache.Clear(); _imageCacheBytes = 0; }

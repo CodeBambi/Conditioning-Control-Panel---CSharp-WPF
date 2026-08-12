@@ -19,6 +19,9 @@ namespace ConditioningControlPanel;
 /// image from the same pool the flashes draw on (<c>EffectiveAssetsPath/images</c>) and holds
 /// it over the whole desktop at a low opacity for a few seconds, fading in then back out.
 /// Animated GIFs loop; static images are shown frozen. Silent no-op if the pool is empty.
+/// The pool includes REMOTE stills when the user has switched the media source online — those
+/// arrive as https URLs and are decoded from already-downloaded bytes, never off disk and never
+/// on the UI thread (see <see cref="DisplayCore"/>).
 /// ONE window is created on first use and KEPT ALIVE between washes (a new Show() swaps the
 /// image) — creating/closing a layered window mid-run can wedge the shared WPF render thread
 /// (Application Hang 1002 — see ChaosEffectBannerOverlay). Closed only at run teardown via
@@ -147,7 +150,15 @@ public sealed class ChaosFlashOverlay : Window
         ClearImage();
         int gen = ++_displayGen;
 
-        if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+        // A remote still (Phase 3 / Contract 2) is an https URL, not a file. It can never
+        // animate — the provider has no usable GIFs and its webp posters are static VP8 with
+        // no ANIM chunk (owner decision B2) — and none of the file-shaped probes below may run
+        // on one: AnimatedWebp.IsAnimated would open a FileStream on the URL string and
+        // AttachAnimation would decode from a path that does not exist. So remote goes straight
+        // to the still branch, which is also the branch it belongs in.
+        bool remote = Services.FlashService.IsRemotePath(path);
+
+        if (!remote && path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
             // Was XamlAnimatedGif — which decodes at NATIVE resolution with no size cap, so a
             // large GIF looped full-screen for the whole wash held ~100MB+ of resident BGRA
@@ -157,7 +168,7 @@ public sealed class ChaosFlashOverlay : Window
             // wash doesn't need native res; ClearImage's Detach already tears this down.
             Services.AnimatedWebp.AttachAnimation(_img, path, maxDim: 1280, maxFrames: 40);
         }
-        else if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
+        else if (!remote && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
         {
             // Animated webp — XamlAnimatedGif is GIF-only, so these washed on as stills. Decode
             // is capped well below the still path's 2560: unlike XamlAnimatedGif's one-frame-at-
@@ -174,18 +185,37 @@ public sealed class ChaosFlashOverlay : Window
             // lossless on screen. The wash fades in over 500ms, which hides the decode gap.
             int decodeWidth = (int)Math.Min(2560, Math.Max(640, Width));
             string file = path;
-            System.Threading.Tasks.Task.Run(() =>
+            System.Threading.Tasks.Task.Run(async () =>
             {
                 try
                 {
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.DecodePixelWidth = decodeWidth;
-                    bmp.UriSource = new Uri(file, UriKind.Absolute);
-                    bmp.EndInit();
-                    if (bmp.CanFreeze) bmp.Freeze();
-                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                    BitmapSource? bmp;
+                    if (remote)
+                    {
+                        // Bytes are already resident in RemoteMediaCache (the pool only hands out
+                        // warm URLs), so this is a memory read plus the same WIC/Skia decode a
+                        // local still gets — never a network wait, and never on the UI thread.
+                        // Null just means the wash doesn't paint, exactly like an empty pool.
+                        bmp = await Services.FlashService
+                            .LoadRemoteStillForOverlayAsync(file, decodeWidth)
+                            .ConfigureAwait(false);
+                        if (bmp == null) return;
+                    }
+                    else
+                    {
+                        var local = new BitmapImage();
+                        local.BeginInit();
+                        local.CacheOption = BitmapCacheOption.OnLoad;
+                        local.DecodePixelWidth = decodeWidth;
+                        local.UriSource = new Uri(file, UriKind.Absolute);
+                        local.EndInit();
+                        if (local.CanFreeze) local.Freeze();
+                        bmp = local;
+                    }
+
+                    var dispatcher = Application.Current?.Dispatcher;
+                    if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                    dispatcher.BeginInvoke(() =>
                     {
                         // A newer wash (or a clear/teardown) may have superseded this decode.
                         try { if (gen == _displayGen) _img.Source = bmp; } catch { }

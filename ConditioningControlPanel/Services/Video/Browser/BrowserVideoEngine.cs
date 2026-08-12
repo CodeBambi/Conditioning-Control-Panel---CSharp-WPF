@@ -297,12 +297,24 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// root (in which case the caller must use LibVLC). Percent-escaped per path segment.
         /// The pack root is checked FIRST: content-pack clips are AES-decrypted into
         /// <c>App.GetMediaTempPath()</c>, which normally sits inside the assets folder.
+        ///
+        /// A remote clip is already a URL and passes straight through. This engine is the DEFAULT
+        /// video path (<c>BrowserVideoEngineEnabled</c> ships true), so without this every remote
+        /// clip would force a fallback to LibVLC — the engine most users never touch — and a
+        /// stalled network read would land on the WPF dispatcher instead of out-of-process.
+        /// Safe because the player page never reads pixels back (no canvas, no drawImage) and
+        /// carries no CSP, so a CORS-tainted &lt;video&gt; is a non-issue; the FYP feed already
+        /// plays these exact URLs in WebView2.
         /// </summary>
         public static string? BuildPageUrl(string? path)
         {
             if (string.IsNullOrEmpty(path)) return null;
             try
             {
+                if (Uri.TryCreate(path, UriKind.Absolute, out var abs)
+                    && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps))
+                    return abs.AbsoluteUri;
+
                 var full = Path.GetFullPath(path);
                 var packRoot = PackTempRoot();
                 if (TryRelative(full, packRoot, out var packRel))
