@@ -5314,6 +5314,168 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Descent — migration ceremony state
+
+        // Everything in this region is written by exactly one place: the migration ceremony
+        // (Services/Descent/DescentMigrationService). It is all inert on a fresh install and on
+        // every install today — the server has to offer the ceremony before any of it moves.
+        //
+        // TWO FLAGS, TWO MEANINGS, and mixing them up is the bug this comment exists to prevent:
+        //   DescentEpoch            — "which curve is my ledger denominated in". Set at SUBMIT,
+        //                             because the ledger we send must be derived under the curve
+        //                             we claim to be on.
+        //   DescentMigrationCompleted — "the server has acknowledged my choice". Set ONLY on the
+        //                             server's completed:true ack (CONTRACTS §2.4). A crash in
+        //                             between re-offers the ceremony and loses nothing, because
+        //                             both choices are idempotent against an unchanged lifetime XP.
+
+        private int _descentEpoch = 0;
+        /// <summary>
+        /// This ACCOUNT's curve epoch. 0 = curve v1 (everybody, today). 1 = post-ceremony, curve
+        /// v2 live. Read by ProgressionService.ActiveCurveEpoch. NOT the wire constant — see
+        /// DescentEpochs.ClientEpoch, which is a property of the build and is always 1.
+        /// </summary>
+        [JsonProperty]
+        public int DescentEpoch
+        {
+            get => _descentEpoch;
+            set { _descentEpoch = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentMigrationCompleted = false;
+        /// <summary>
+        /// True only once the server has answered a submit with descent_migration.completed.
+        /// The ceremony will not re-offer while this is set, and nothing else may set it.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentMigrationCompleted
+        {
+            get => _descentMigrationCompleted;
+            set { _descentMigrationCompleted = value; OnPropertyChanged(); }
+        }
+
+        private string? _descentMigrationChoice = null;
+        /// <summary>"restore" or "cycle" — the acknowledged choice. Null until the ack lands.</summary>
+        [JsonProperty]
+        public string? DescentMigrationChoice
+        {
+            get => _descentMigrationChoice;
+            set { _descentMigrationChoice = value; OnPropertyChanged(); }
+        }
+
+        private string? _pendingDescentMigrationChoice = null;
+        /// <summary>
+        /// A choice the user has made and this client has applied locally, but which the server
+        /// has not acked yet. Its presence is what makes the next sync carry descent_migration,
+        /// and what stops the ceremony re-opening in front of somebody who already chose. Cleared
+        /// by the ack. A submit that never lands simply retries on every subsequent sync — the
+        /// server treats a repeat submit as a silent no-op (CONTRACTS §2.6).
+        /// </summary>
+        [JsonProperty]
+        public string? PendingDescentMigrationChoice
+        {
+            get => _pendingDescentMigrationChoice;
+            set { _pendingDescentMigrationChoice = value; OnPropertyChanged(); }
+        }
+
+        private DateTime? _descentAnchorUtc = null;
+        /// <summary>
+        /// Year One anchor: the ceremony date (§10). For veterans this is the birth of their
+        /// year, which is why the spiral starts at Day 1 for everybody — nobody's track arrives
+        /// pre-lit. Local mirror of the server's descent.anchor; the server's copy is canonical.
+        /// </summary>
+        [JsonProperty]
+        public DateTime? DescentAnchorUtc
+        {
+            get => _descentAnchorUtc;
+            set { _descentAnchorUtc = value; OnPropertyChanged(); }
+        }
+
+        private int _descentCycle = 0;
+        /// <summary>Cycles taken. 1 after choosing "Descend again". The permanent mark on the card.</summary>
+        [JsonProperty]
+        public int DescentCycle
+        {
+            get => _descentCycle;
+            set { _descentCycle = value; OnPropertyChanged(); }
+        }
+
+        private double _descentCycleXpBonus = 1.0;
+        /// <summary>
+        /// The lasting XP multiplier a Cycle grants. 1.0 = none. Written from
+        /// DescentMigration.CycleXpBonus at submit and clamped to it on read, so the persisted
+        /// figure can never exceed the blessed constant even if the file is edited by hand.
+        /// </summary>
+        [JsonProperty]
+        public double DescentCycleXpBonus
+        {
+            get => _descentCycleXpBonus;
+            set { _descentCycleXpBonus = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentVeteranArchive = false;
+        /// <summary>
+        /// The keepsake marker (§6 reveal ruling): veterans are paid in an archive of every recap
+        /// card they ever earned plus a badge that says they were here before the fall — NOT in
+        /// spiral position. Set for both choices. The server grants the same marker; this is the
+        /// local mirror so the badge renders before the next profile read.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentVeteranArchive
+        {
+            get => _descentVeteranArchive;
+            set { _descentVeteranArchive = value; OnPropertyChanged(); }
+        }
+
+        private int _descentPreMigrationLevel = 0;
+        /// <summary>The level the subject stood at when the ceremony opened. Keepsake copy; 0 = never migrated.</summary>
+        [JsonProperty]
+        public int DescentPreMigrationLevel
+        {
+            get => _descentPreMigrationLevel;
+            set { _descentPreMigrationLevel = value; OnPropertyChanged(); }
+        }
+
+        private double _descentPreMigrationLifetimeXp = 0;
+        /// <summary>Lifetime XP as the server reported it in the offer. Keepsake copy.</summary>
+        [JsonProperty]
+        public double DescentPreMigrationLifetimeXp
+        {
+            get => _descentPreMigrationLifetimeXp;
+            set { _descentPreMigrationLifetimeXp = value; OnPropertyChanged(); }
+        }
+
+        private List<int> _descentPendingStageCeremonies = new();
+        /// <summary>
+        /// THE DRIP (§6). "Take it all back" restores a veteran to a stage they never watched
+        /// themselves reach, so the stage ceremonies they skipped are queued here and released
+        /// ONE PER LOGIN DAY instead of firing in a single unwatchable burst — a veteran relives
+        /// the ladder across a week or two. Client-paced: no server involvement, no timer, just
+        /// this queue and <see cref="DescentLastStageDripDate"/>. Empty for a Cycle, which has no
+        /// ladder to re-walk.
+        /// </summary>
+        [JsonProperty]
+        public List<int> DescentPendingStageCeremonies
+        {
+            get => _descentPendingStageCeremonies;
+            set { _descentPendingStageCeremonies = value ?? new List<int>(); OnPropertyChanged(); }
+        }
+
+        private string? _descentLastStageDripDate = null;
+        /// <summary>
+        /// Local yyyy-MM-dd the last queued stage ceremony was released on. One per DAY, not per
+        /// launch — a user who restarts the app five times gets one, and a user who never opens
+        /// it loses nothing (the queue waits).
+        /// </summary>
+        [JsonProperty]
+        public string? DescentLastStageDripDate
+        {
+            get => _descentLastStageDripDate;
+            set { _descentLastStageDripDate = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Season Recap (local-only, per-device)
 
         // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.

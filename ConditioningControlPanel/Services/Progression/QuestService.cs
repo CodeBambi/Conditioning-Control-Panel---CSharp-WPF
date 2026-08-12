@@ -921,13 +921,17 @@ public class QuestService : IDisposable
             Progress.TotalWeeklyQuestsCompleted++;
         }
 
-        // Scale XP reward based on player level (+4% per level)
+        // Scale XP reward based on player level. +4%/level pre-Descent, +1.2%/level once the
+        // account has been through the migration ceremony (CONTRACTS-0812 §3) — the coefficient
+        // moves with the XP curve, because it was the curve that made the old one a runaway.
+        // ProgressionService.QuestLevelScale reads the per-user epoch, so this is a no-op for
+        // every un-migrated account.
         var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
         var betterQuestsMultiplier = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
         // Quest streak bonus: +3% per consecutive day
         var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
         var streakMultiplier = 1.0 + (questStreak * 0.03);
-        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.04) * betterQuestsMultiplier * streakMultiplier);
+        var scaledXP = (int)Math.Round(def.XPReward * ProgressionService.QuestLevelScale(playerLevel) * betterQuestsMultiplier * streakMultiplier);
 
         Progress.TotalXPFromQuests += scaledXP;
 
