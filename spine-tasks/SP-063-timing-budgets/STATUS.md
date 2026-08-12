@@ -1,5 +1,5 @@
 ## STATUS: SP-063 — Raise the injected test timeout budgets (owner decree)
-**Current Step:** Step 4 — record + pre-completion consult (IN PROGRESS)
+**Current Step:** all steps complete — .DONE next
 **Last Updated:** 2026-08-12 (orchestrator, re-authored — wave 20, single lane)
 **Blockers:** none
 
@@ -22,16 +22,16 @@
 - [x] `Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` green in EVERY run incl. cold
 - [x] Suite wall-clock not materially regressed
 
-### Step 4: record + pre-completion consult — IN PROGRESS
-- [ ] record.md complete (decree verbatim, verified sweep, constant justification, guard RED, run table, intended filings)
-- [ ] Honesty cell: a bigger number lengthens the fuse, it does not remove the time dependence
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + pre-completion consult — COMPLETE
+- [x] record.md complete (decree verbatim, verified sweep, constant justification, guard RED, run table, intended filings)
+- [x] Honesty cell: a bigger number lengthens the fuse, it does not remove the time dependence
+- [x] Pre-completion solo consult (verdict + ACTUAL model)
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification — NOT STARTED
-- [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, 892/35, 0 skipped, TRX)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs 0, 0W/0E, 892/35, 0 skipped, TRX)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
 
 ### Discoveries
 - Batch `20260812T221746` was aborted mid-Step-1 by owner decree, not by failure. Its completed sweep + two non-reproducing cold runs are preserved under `prior-step1/` as INPUT to verify, never as evidence to cite.

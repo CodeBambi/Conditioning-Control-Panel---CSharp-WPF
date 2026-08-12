@@ -93,6 +93,7 @@ the per-run wall-clock column in Step 3.
 - Step 1 plan review: **ABSENT** — `spine_review_step(step=1, type=plan)` returned `skipped: true`, `spawnFailed: false` ("Nested reviewer spawn blocked inside pi worker session … the batch engine runs reviews after worker success (SP-195)"). Artifact: `.reviews/1-20260812T224924.md`. Not a spawn failure, so no fail-closed exit; engine review runs after `.DONE`.
 - Step 2 plan review: **ABSENT** — same skip (`SP-195`), `spawnFailed: false`. Artifact: `.reviews/2-20260812T225427.md`.
 - Step 3 plan review: **ABSENT** — same skip (`SP-195`), `spawnFailed: false`. Artifact: `.reviews/3-20260812T231042.md`.
+- Step 4 plan review: **ABSENT** — same skip (`SP-195`), `spawnFailed: false`. Artifact: `.reviews/4-20260812T231343.md`.
 
 ## Step 2 — what was applied
 
@@ -220,5 +221,17 @@ seconds, and now has ~75× headroom instead of a sub-second fuse.
 - **ACTUAL answering model:** not disclosed by the consult tool's return (same as the
   pre-approach call — worker session model is `kimi-coding/k3`; the consult's answering
   model is unverifiable from inside the worker and is recorded as such, not guessed).
+
+## Step 5 — contract results
+
+`node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo &&
+dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo &&
+dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug
+--nologo` — **PASS**: verify.mjs OK (all patches applied, project + engine roots); build
+0 W / 0 E; unit **892 passed / 0 failed / 0 skipped**; headless **35 passed / 0 failed /
+0 skipped**. TRX attached under `evidence/trx/` (force-added past the repo-wide `*.trx`
+ignore). `git diff --check` clean; `git status --short` shows only File Scope paths;
+`git diff --stat 3023de4d..HEAD` over every must-not-change zone is EMPTY (zero
+product-code, docs, constitution, .spine/.pi, or spikes changes).
 
 <!-- Step 5 contract results appended below -->
