@@ -252,6 +252,7 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260812T123030.md` |
 | 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260812T124618.md` |
 | 3 | `spine_review_step --step 3 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/3-20260812T131057.md` |
+| 4 | `spine_review_step --step 4 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/4-20260812T132718.md` |
 
 ## 6. Step 2 implementation (lab conversion + registry closure)
 
@@ -391,11 +392,44 @@ log before any discussion, and the count restarted).
 **863 unit** = 862 + the guard test (`TestTimingGuardTests`), the only new test this
 task adds. No test was removed or skipped; 33 headless unchanged.
 
-## 8. Drafted `docs/constitution.md` line (NOT applied — orchestrator applies at land)
+## 10. Drafted `docs/constitution.md` line (NOT applied — orchestrator applies at land)
 
 > - **No new wall-clock waits in tests.** Every test wait is a deterministic signal or the shared bounded-window helper with its loud classifier; hard-coded deadline literals, `Thread.Sleep`, `DateTime`/`Environment.TickCount64` polls, and bare `Task.Delay` waits outside the approved helper fail the timing guard.
 
-## 9. Intended board filings (orchestrator reconciles — ENABLER 2)
+## 11. Surprises
+
+1. **`ConfigureAwait(false)` in the helper red-carded 3 headless tests on the first
+   build** — Avalonia dispatcher-owned state may only be polled on the UI thread, and
+   `AvaloniaFact` tests run there. The helper carries no `ConfigureAwait(false)` and the
+   reason is in its source. A library-habit (`ConfigureAwait(false)` everywhere) is
+   wrong for a test-side wait primitive consumed by dispatcher-bound tests.
+2. **The shared DTRH fixture's 200 ms long-poll timeout was load-bearing** — three
+   ack-purge tests rely on fast empty-timeout returns, so the simple fix (raise the
+   fixture timeout) would have slowed those tests 25×. The dedicated-server shape was
+   forced by evidence, not preference.
+3. **Two of the "waits" the sweep found were deletable, not convertible** — the
+   pre-enqueue hedges guarded an ordering that `Inbox.PollAsync`'s synchronous
+   registration already guarantees. The correct class-1 fix was deletion + a proof
+   comment, not a smarter wait.
+4. **xUnit1051 fired on the new call sites** — the analyzer wants the test cancellation
+   token threaded; fixed at all three sites (0W/0E restored).
+
+## 12. Durable-lesson candidates (for port-lessons reconciliation)
+
+1. Three occurrences of one class = the fix must be ENCODED (helper + guard + standing
+   order), never applied once. The guard's pinned allowlist is the part that makes the
+   encoding stick: a bare marker convention would drift.
+2. A timeout must say WHICH thing happened — and a classifier built only on the waiter
+   thread's own scheduling mislabels the cold-start case (the starved side is the
+   ACTOR). Verdict tokens + actor-state evidence travel together.
+3. Negative-observation settles ("wait to see nothing happens") can only false-GREEN,
+   never false-red — class 3 by construction, but they still carry the marker so the
+   guard can tell them from deadlines a machine can lose.
+4. Test-side helpers consumed by Avalonia headless tests must NEVER
+   `ConfigureAwait(false)` — the poll continuation must resume on the dispatcher
+   thread.
+
+## 13. Intended board filings (orchestrator reconciles — ENABLER 2)
 
 1. The P1 timing-discipline row: evidence pointer to this record (sweep table,
    conversion inventory, guard, 10-run chain).
