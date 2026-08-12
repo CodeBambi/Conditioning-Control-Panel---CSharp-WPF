@@ -1,11 +1,11 @@
 ## STATUS: SP-062 — Loud skip + real process-env isolation for the SP-057 pin
-**Current Step:** 1
-**Last Updated:** 2026-08-12 (worker, Step 1 started)
+**Current Step:** 2
+**Last Updated:** 2026-08-12 (worker, Step 1 complete, commit ba84f3e6)
 **Blockers:** none
 **Discoveries / File-Scope amendments:**
 - 2026-08-12 (Step 1, worker): wave-19 base was RED (891 passed / 1 failed) — land commit f3a1192b flipped `tunnel`+`vendor` to `served` in `client/docs/upstream-payload-inventory.json` WITHOUT the `evidence` field SP-056's guard requires for served trees (`UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree`). Repaired as a documented File-Scope amendment (land-defect repair, commit 59fbcf1e); field content dictated verbatim by SP-061's landed record intended filing #3. Named here per FR-WORK-06; the 10-green measurement runs on the repaired base.
 
-### Step 1: reproduce, verify the API, design the isolation + pre-approach consult — IN PROGRESS
+### Step 1: reproduce, verify the API, design the isolation + pre-approach consult — COMPLETE (plan review skipped-by-design SP-195, `.reviews/1-20260812T205835.md`)
 - [x] Update STATUS.md before starting work
 - [x] Deterministic repro of the cross-collection env leak, both directions, with observed counts
   - baseline run 1: 891/1 (the inherited inventory land defect above — repaired; NOT the pin, NOT the row-49 site)
@@ -21,7 +21,20 @@
 
 **Design (pre-consult):** co-locate `DataRootOverrideTests` into `ProcessEnvCollection` (intra-collection sequentiality = probe-2-proven) + `Assert.SkipWhen` loud skips at both checkpoints (reasons name CCP_DATA_ROOT + leak class); keep DisableParallelization as a non-relied-upon hint. Rejected: assembly-wide DisableTestParallelization (serializes 892 tests for one contested resource; baseline parallel suite 36s), trusting DisableParallelization (probe-1-falsified), product-side seam (out of scope; inverts dependency — test-scheduling defect, not product), cross-collection lock fixture (can't bind tests outside the collection), assert-unconditionally (banned false-RED, framing a). Serial cost ≈ 0: only the 11 pin/env tests serialize among themselves.
 
-### Step 2: implement — loud skip + isolation — NOT STARTED
+  - consult: solo ×1, verdict design-sound + hole (probe2 was intra-CLASS; fix needs cross-CLASS same-collection) closed by probe1b RED×2; actual answering model NOT surfaced by the tool (recorded honestly)
+### Step 2: implement — loud skip + isolation — IN PROGRESS
+- [x] Silent `return` → loud skip naming CCP_DATA_ROOT at both checkpoints; assertion strictness unchanged
+  - Assert.SkipWhen at both checkpoints (pinned-binary-verified API); the Assert.Equal when bound is byte-identical
+  - co-location: DataRootOverrideTests joined [Collection(nameof(ProcessEnvCollection))]; DisableParallelization kept as non-relied-upon hint
+- [x] Isolation fix implemented; normal-run skip path unreachable
+  - proven by probe 1b (cross-class same-collection sequentiality) + the enumeration (single in-suite mutator, finally-restore); the skip now fires ONLY for an externally-set override
+- [x] Sweep findings applied or dispositioned per site
+  - enumeration table in record.md Step 1: 2 REAL (this fix), all other surfaces cleared with reasons
+  - DISCOVERED RED fixed (run 1): AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit 891/1, Expected 1 Actual 0 at HitsFor(Refusal) — root cause proven by code read: AiProviderLab.Handle wrote+CLOSED the response before _records.Enqueue, so a fast client could read the count before its own record existed; fixed by recording BEFORE the response becomes observable for every outcome-independent mode (9 sites, one root-cause class; Timeout/HangStream/SlowOk records stay post-outcome — their state is outcome-dependent and awaited via WaitForRecordAsync). Assertion-neutral harness ordering, in-scope (client/tests/**), allowlist untouched
+- [x] Positive control captured: `891 passed / 1 skipped` with the reason visible
+  - command: `set CCP_DATA_ROOT=C:\Temp\ccp-sp062-positive-control-sandbox && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → `Passed: 891, Skipped: 1, Total: 892`, console line `Skipped CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault`, TRX outcome=NotExecuted with Message `CCP_DATA_ROOT override is active at the guard checkpoint (leak class: runner-set override in the external process environment) — ...` (trx: sp062-positive-control.trx)
+- [x] No new deadline literals / injected budgets; timing guard green
+  - pure reordering + SkipWhen calls; TestTimingGuardTests pins untouched (verified in the full-suite greens)
 - [ ] Silent `return` → loud skip naming CCP_DATA_ROOT at both checkpoints; assertion strictness unchanged
 - [ ] Isolation fix implemented; normal-run skip path unreachable
 - [ ] Sweep findings applied or dispositioned per site
