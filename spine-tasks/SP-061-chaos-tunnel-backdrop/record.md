@@ -94,6 +94,7 @@
 | 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T180808.md` |
 | 3 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/3-20260812T183947.md` |
 | 4 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/4-20260812T184714.md` |
+| 5 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/5-20260812T192917.md` |
 
 ---
 
