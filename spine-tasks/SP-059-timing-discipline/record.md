@@ -251,6 +251,7 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
 |------|------|--------|
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260812T123030.md` |
 | 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260812T124618.md` |
+| 3 | `spine_review_step --step 3 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/3-20260812T131057.md` |
 
 ## 6. Step 2 implementation (lab conversion + registry closure)
 

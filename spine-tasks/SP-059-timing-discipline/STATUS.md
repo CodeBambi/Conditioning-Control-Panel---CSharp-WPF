@@ -1,9 +1,9 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** Step 3
-**Last Updated:** 2026-08-12 (worker, Step 2 complete)
+**Current Step:** Step 4
+**Last Updated:** 2026-08-12 (worker, Step 3 complete)
 **Blockers:** none
 
-### Step 1: sweep, classify, design + pre-approach consult — COMPLETE (plan review pending)
+### Step 1: sweep, classify, design + pre-approach consult — COMPLETE
 - [x] Update STATUS.md before starting work
 - [x] Suite-wide sweep table (file:line → construct → what it waits for → class)
 - [x] Classify every site (deterministic-convertible / tolerant-window-required / legitimately real-time)
@@ -16,13 +16,13 @@
 - [x] `IntakeServingTests.LoopbackServer` registered in the leaked-listener self-check
 - [x] Repeated local runs of the flaking test under the conversion recorded
 
-### Step 3: suite-wide conversion + the guard — IN PROGRESS
-- [ ] Class-1 sites converted; class-2 sites on the helper; class-3 sites justified
-- [ ] `ManualClock` duplication consolidated only if zero assertions/behavior change (else recorded why not)
-- [ ] Guard test proven red-then-green against a re-introduced literal
-- [ ] Exact `docs/constitution.md` sentence DRAFTED in record.md (file not edited)
+### Step 3: suite-wide conversion + the guard — COMPLETE
+- [x] Class-1 sites converted; class-2 sites on the helper; class-3 sites justified
+- [x] `ManualClock` duplication consolidated only if zero assertions/behavior change (else recorded why not)
+- [x] Guard test proven red-then-green against a re-introduced literal
+- [x] Exact `docs/constitution.md` sentence DRAFTED in record.md (file not edited)
 
-### Step 4: ten consecutive full-suite green runs — NOT STARTED
+### Step 4: ten consecutive full-suite green runs — IN PROGRESS
 - [ ] 10 runs, each captured to `evidence/run-NN.log`
 - [ ] Run index table in record.md (pass/fail, unit + headless counts, duration)
 - [ ] At least one cold run, with "cold" defined
