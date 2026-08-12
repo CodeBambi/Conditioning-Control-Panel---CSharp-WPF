@@ -75,7 +75,8 @@ public class PlayDoorRenderTests
     [Fact]
     public void TheWholePlayDoorRealizes()
     {
-        // Sixteen cards in one tree. This is the test that would catch a card whose
+        // The whole wall in one tree (the 0812 remake trimmed it to nine cards across eleven
+        // slots). This is the test that would catch a card whose
         // StaticResource lived in LabTabView's Grid.Resources: a UserControl's XAML is parsed
         // before it is attached to MainWindow, so a key that did not travel never resolves.
         OnStaThread(() => Realize(new PlayTabView()));
@@ -107,7 +108,9 @@ public class PlayDoorRenderTests
         // width (1429px of content after the StackPanel's 20px margin: /3 = 476, /2 = 714). A zone
         // that quietly gained a column, or a card that escaped into the wrong zone, halves a
         // card's width — and the wall's own comment says the fixed Columns exist precisely so a
-        // hidden neighbour (the Deeper card follows EnableDeeper) cannot restretch the row.
+        // hidden neighbour cannot restretch the row. Since the 0812 remake: TOGETHER is the
+        // 2-column zone, EYES and SESSIONS are the 3-column ones, and DTRH / the webcam chip /
+        // the Loom strip span the whole wall.
         //
         // The real clip sweep still belongs to the UIA play-test; this only proves the geometry
         // cannot regress below the contracted floor.
@@ -121,12 +124,10 @@ public class PlayDoorRenderTests
                 var slot = (FrameworkElement)page.FindName(name)!;
                 if (slot.Visibility != Visibility.Visible) continue;
 
-                // 2-column EYES zone vs the 3-column zones; SlotDtrh and SlotWebcamChip span the
-                // whole wall.
                 var floor = name switch
                 {
-                    "SlotDtrh" or "SlotWebcamChip" => 900.0,
-                    "SlotGaze" or "SlotFocusGaze" => 640.0,
+                    "SlotDtrh" or "SlotWebcamChip" or "SlotLoom" => 900.0,
+                    "SlotGoon" or "SlotRemoteControl" => 640.0,
                     _ => 400.0,
                 };
 
@@ -157,7 +158,9 @@ public class PlayDoorRenderTests
                 .Where(f => typeof(DependencyObject).IsAssignableFrom(f.FieldType))
                 .ToList();
 
-            Assert.True(fields.Count >= 60,
+            // ~57 named elements since the 0812 remake dropped five cards; the floor exists to
+            // catch the sweep silently seeing zero BAML fields, not to pin the exact count.
+            Assert.True(fields.Count >= 50,
                 $"only {fields.Count} named elements found on PlayTabView — the sweep is not seeing the BAML fields");
 
             var broken = fields.Where(f => f.GetValue(page) == null).Select(f => f.Name).ToList();
@@ -177,9 +180,9 @@ public class PlayDoorRenderTests
     /// </summary>
     private static readonly string[] SlotNames =
     {
-        "SlotDtrh", "SlotGoon", "SlotRemoteControl", "SlotAvailableSubjects", "SlotWebcamChip",
-        "SlotGaze", "SlotFocusGaze", "SlotGradedIntake", "SlotBlinkTrainer", "SlotFyp",
-        "SlotMantra", "SlotLockdown", "SlotDeeper", "SlotBureau", "SlotLoom", "SlotShowcase",
+        "SlotDtrh", "SlotGoon", "SlotRemoteControl", "SlotWebcamChip",
+        "SlotGaze", "SlotFocusGaze", "SlotBlinkTrainer",
+        "SlotGradedIntake", "SlotFyp", "SlotLockdown", "SlotLoom",
     };
 
     [Fact]
@@ -209,9 +212,8 @@ public class PlayDoorRenderTests
         var buttons = new[]
         {
             "BtnPlayFallIn", "BtnPlayQuickDrop", "BtnPlayGoon", "BtnPlayRemoteControl",
-            "BtnPlayAvailableSubjects", "BtnPlayGazeMinigame", "BtnPlayGradedIntake",
-            "BtnPlayBlinkTrainer", "BtnPlayFyp", "BtnPlayMantra", "BtnPlayLockdown",
-            "BtnPlayDeeper", "BtnPlayBureau", "BtnPlayLoom", "BtnPlayShowcase",
+            "BtnPlayGazeMinigame", "BtnPlayGradedIntake", "BtnPlayBlinkTrainer",
+            "BtnPlayFyp", "BtnPlayLockdown", "BtnPlayLoom",
         };
 
         OnStaThread(() =>
@@ -324,6 +326,11 @@ public class PlayDoorRenderTests
         ("PlayRemoteHeroBrush",   "features/remote_control.png"),
         ("PlayFypHeroBrush",      "features/fyp.png"),
         ("PlayLockdownHeroBrush", "lockdown_icon.png"),
+        // 0812 remake: the hero and the Loom strip carry art too. playHeroMap does not mutate
+        // these two yet (they fall back to the embedded copies), but the named-and-mutable
+        // contract holds so adopting them later is a map entry, not a XAML change.
+        ("PlayDtrhHeroBrush",     "features/dtrh.png"),
+        ("PlayLoomHeroBrush",     "features/loom.png"),
     };
 
     [Fact]
@@ -360,33 +367,22 @@ public class PlayDoorRenderTests
     }
 
     // =====================================================================================
-    //  the mantra rescue
+    //  the mantra rescue — retired with the card
     // =====================================================================================
 
     [Fact]
-    public void TheMantraRepPickerOnlyOffersCountsTheServiceAccepts()
+    public void TheMantraEntryPointSurvivesTheCardsRemoval()
     {
-        // MantraService.StartSession clamps to 1..100. A Tag that does not parse silently falls
-        // back to the card's own 25, and a count outside the clamp silently becomes a different
-        // session than the one the user picked.
-        OnStaThread(() =>
-        {
-            var page = new PlayTabView();
-            Realize(page);
-
-            var combo = page.FindName("CmbPlayMantraReps") as ComboBox;
-            Assert.True(combo != null, "CmbPlayMantraReps is missing — the Mantra card cannot supply a rep count");
-            Assert.NotEmpty(combo!.Items);
-
-            foreach (ComboBoxItem item in combo.Items)
-            {
-                Assert.True(item.Tag is string tag && int.TryParse(tag, out var n) && n >= 1 && n <= 100,
-                    $"mantra rep option '{item.Content}' has an unusable Tag '{item.Tag}'");
-            }
-
-            // Something has to be selected up front, or the first click silently uses the fallback.
-            Assert.True(combo.SelectedIndex >= 0, "the mantra rep picker starts with no selection");
-        });
+        // The 0812 remake removed the Mantra card (and its rep picker) from the wall, which made
+        // this page's card the app's ONLY entry point no more — MantraWindow is orphaned until an
+        // owner call re-homes it. StartMantraSession is the one method that knows the window
+        // needs StartSession(n) before load, so it must survive the interregnum: deleting it
+        // "because nothing calls it" would turn the re-home from a one-line change into an
+        // archaeology dig.
+        var m = typeof(global::ConditioningControlPanel.MainWindow)
+            .GetMethod("StartMantraSession", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        Assert.True(m != null,
+            "MainWindow.StartMantraSession is gone — MantraWindow now has no viable entry point left to re-home");
     }
 
     // =====================================================================================

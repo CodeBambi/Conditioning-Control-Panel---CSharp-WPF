@@ -320,10 +320,12 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Check if user has access to keyword triggers (Patreon supporter).
+        /// Check if user has access to keyword triggers (Patreon supporter, or the
+        /// awareness free-day — same rule AutonomyService/HapticMixer apply).
         /// </summary>
         public static bool HasAccess()
         {
+            if (App.DailyFree?.IsFreeToday("awareness") == true) return true;
             var patreon = App.Patreon;
             if (patreon == null) return false;
             return patreon.HasPremiumAccess;
@@ -472,6 +474,14 @@ namespace ConditioningControlPanel.Services
         public void FireDemoTrigger(string keyword, string source = "Tutorial")
         {
             if (string.IsNullOrWhiteSpace(keyword)) return;
+            // Same entitlement gate as Start(): this runs the REAL fire path, so without it the
+            // tutorial was a back door into a premium feature — pulse feed, dispatch and the
+            // keyword achievements included (#887).
+            if (!HasAccess())
+            {
+                App.Logger?.Debug("KeywordTriggerService: demo trigger skipped - no access (requires T2 or whitelist)");
+                return;
+            }
 
             var demo = new KeywordTrigger
             {

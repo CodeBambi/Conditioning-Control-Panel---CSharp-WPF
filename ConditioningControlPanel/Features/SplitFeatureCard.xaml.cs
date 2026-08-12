@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Features
             InitializeComponent();
             Loaded += OnCardLoaded;
             Unloaded += OnCardUnloaded;
+            IsVisibleChanged += (_, _) => RefreshFx();
             MouseEnter += (_, _) => ApplyHover(true);
             MouseLeave += (_, _) => { ApplyHover(false); SetHalfHover(null); };
         }
@@ -193,10 +194,15 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.RefreshFx: {E}", ex.Message); }
         }
 
+        /// <summary>Visibility + window focus + motion + tier, exactly FeatureCard's gate. A
+        /// Forever clock on a collapsed tab burns a composition slot with nothing on screen to
+        /// show for it, and a hidden tab leaves the card Loaded - so IsVisibleChanged (wired in
+        /// the ctor), not Unloaded, is what catches it.</summary>
         private bool AmbientAllowed
         {
             get
             {
+                if (!IsVisible) return false;
                 var w = _hostWindow;
                 if (w != null && (!w.IsActive || w.WindowState == WindowState.Minimized)) return false;
                 return MotionFx.AllowAmbientLoops;

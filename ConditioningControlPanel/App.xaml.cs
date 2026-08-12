@@ -575,7 +575,8 @@ namespace ConditioningControlPanel
         public static AttentionCheckService AttentionCheck { get; private set; } = null!;
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
-        public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        /// <summary>Null when Skia could not be initialized (#912) — every call site is null-conditional.</summary>
+        public static GazeDebugCursorService? GazeCursor { get; private set; }
         public static GazeDriftCorrectionService GazeDrift { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
@@ -794,6 +795,15 @@ namespace ConditioningControlPanel
         private static DateTime _ccpWindowRectsCacheTime = DateTime.MinValue;
         private static readonly TimeSpan CcpWindowRectsCacheDuration = TimeSpan.FromMilliseconds(250);
         private static readonly object _ccpWindowRectsLock = new();
+        private static int _ccpWindowRectsVersion;
+        // Ceiling on the UI-thread hop below. A wedged dispatcher must never wedge the OCR loop.
+        private static readonly TimeSpan CcpWindowRectsUiTimeout = TimeSpan.FromSeconds(2);
+        // A UI thread that just blew that ceiling will not answer the next scan either, and paying
+        // another full 2s per scan is how a busy UI thread turns into a stalled OCR loop. After a
+        // timeout the stale cache is served outright for this long before the hop is retried. Kept
+        // short so the exclusion set can't drift for long behind a UI thread that has recovered.
+        private static readonly TimeSpan CcpWindowRectsTimeoutBackoff = TimeSpan.FromSeconds(3);
+        private static DateTime _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
@@ -824,6 +834,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public static System.Drawing.Rectangle[] GetCcpWindowRectsCached()
         {
+            int version;
             lock (_ccpWindowRectsLock)
             {
                 if (_cachedCcpWindowRects != null &&
@@ -831,108 +842,167 @@ namespace ConditioningControlPanel
                 {
                     return _cachedCcpWindowRects;
                 }
-
-                var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
-                try
+                if (DateTime.Now < _ccpWindowRectsTimeoutBackoffUntil)
                 {
-                    // Must run on the UI thread to enumerate Application.Current.Windows safely.
-                    var dispatcher = Current?.Dispatcher;
-                    if (dispatcher == null || dispatcher.HasShutdownStarted)
-                    {
-                        _cachedCcpWindowRects = Array.Empty<System.Drawing.Rectangle>();
-                        _ccpWindowRectsCacheTime = DateTime.Now;
-                        return _cachedCcpWindowRects;
-                    }
+                    // Still inside the back-off from a hop that timed out — serve the stale rects
+                    // without queueing another 2s wait behind the same busy UI thread. Not gated on
+                    // a non-null cache: if the very FIRST call is the one that times out there is
+                    // nothing to serve but empty, and requiring non-null here made every subsequent
+                    // scan pay a fresh 2s wait for as long as the UI thread stayed wedged. Empty is
+                    // exactly what the timeout path itself returns in that case.
+                    return _cachedCcpWindowRects ?? Array.Empty<System.Drawing.Rectangle>();
+                }
+                version = _ccpWindowRectsVersion;
+            }
 
-                    // Collect the HWNDs on the UI thread, then call GetWindowRect
-                    // outside the dispatcher lock — GetWindowRect is a thread-safe
-                    // Win32 call and doesn't need dispatcher affinity.
+            // The rebuild below hops to the UI thread and MUST NOT hold
+            // _ccpWindowRectsLock while it does: InvalidateCcpWindowRectsCache takes
+            // that same lock from the UI thread, so holding it across the hop is a
+            // lock-order inversion that freezes the whole app (#919). Collect from
+            // the dispatcher first, then take the lock only to swap the cache in.
+            var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
+            try
+            {
+                // Must run on the UI thread to enumerate Application.Current.Windows safely.
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    return StoreCcpWindowRects(Array.Empty<System.Drawing.Rectangle>(), version);
+                }
+
+                // Collect the HWNDs on the UI thread, then call GetWindowRect
+                // off-thread — GetWindowRect is a thread-safe Win32 call and
+                // doesn't need dispatcher affinity.
+                (System.Collections.Generic.List<IntPtr> Hwnds,
+                 System.Drawing.Rectangle[] Bouncing,
+                 System.Drawing.Rectangle[] Subliminal) CollectOnUi()
+                {
                     var hwnds = new System.Collections.Generic.List<IntPtr>();
-                    System.Drawing.Rectangle[] bouncingRects = Array.Empty<System.Drawing.Rectangle>();
-                    System.Drawing.Rectangle[] subliminalRects = Array.Empty<System.Drawing.Rectangle>();
-                    dispatcher.Invoke(() =>
+                    foreach (var w in Current!.Windows.OfType<Window>())
                     {
-                        foreach (var w in Current!.Windows.OfType<Window>())
+                        try
                         {
-                            try
-                            {
-                                if (!w.IsVisible) continue;
-                                if (w.WindowState == WindowState.Minimized) continue;
+                            if (!w.IsVisible) continue;
+                            if (w.WindowState == WindowState.Minimized) continue;
 
-                                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                                if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
-                            }
-                            catch { /* skip malformed window */ }
+                            var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                            if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
                         }
-
-                        // Bouncing text lives in a full-screen overlay window that
-                        // the per-monitor span filter below drops, so its small
-                        // moving text rect would otherwise be read back by the
-                        // awareness OCR (#287). Capture it here on the UI thread.
-                        bouncingRects = BouncingText?.GetActiveTextScreenRects()
-                                        ?? Array.Empty<System.Drawing.Rectangle>();
-
-                        // Subliminal cards are full-screen keep-alive overlays (dropped by the
-                        // span filter below) but are now intentionally left in screen capture so
-                        // they record. To still keep them out of the awareness OCR, exclude just
-                        // the centered text rect of any subliminal currently flashing (#287 pattern).
-                        subliminalRects = Subliminal?.GetActiveTextScreenRects()
-                                          ?? Array.Empty<System.Drawing.Rectangle>();
-                    });
-
-                    // Per-monitor span filter: any CCP window whose rect fully
-                    // covers any single screen is a full-screen overlay
-                    // container (flash/gaze/bubble surfaces, blur overlays,
-                    // and the BouncingText overlay). Those carry no readable
-                    // text at the window level but spanned monitor-sized
-                    // exclusion rects were swallowing every OCR'd word in
-                    // multi-monitor setups (#273). Sized windows like
-                    // AvatarTube, MantraWindow, LockCard, subliminal popups,
-                    // etc. fall well below per-monitor bounds and stay in the
-                    // exclusion list where they belong. BouncingText IS
-                    // full-screen, so its actual text rect is added separately
-                    // below (#287) rather than excluding the whole monitor.
-                    var screens = GetAllScreensCached();
-
-                    foreach (var hwnd in hwnds)
-                    {
-                        if (!IsWindowVisible(hwnd)) continue;
-                        if (!GetWindowRect(hwnd, out var r)) continue;
-
-                        int w = r.Right - r.Left;
-                        int h = r.Bottom - r.Top;
-                        if (w <= 0 || h <= 0) continue;
-
-                        if (SpansAnyMonitor(w, h, screens)) continue;
-
-                        rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                        catch { /* skip malformed window */ }
                     }
 
-                    // Add the bouncing-text rect (captured on the UI thread above).
-                    // It rode through the span filter as a full-screen window, so
-                    // only its small moving text region is excluded — not the
-                    // whole monitor (which would regress #273).
-                    foreach (var br in bouncingRects)
-                    {
-                        if (br.Width > 0 && br.Height > 0) rects.Add(br);
-                    }
+                    // Bouncing text lives in a full-screen overlay window that
+                    // the per-monitor span filter below drops, so its small
+                    // moving text rect would otherwise be read back by the
+                    // awareness OCR (#287). Capture it here on the UI thread.
+                    var bouncing = BouncingText?.GetActiveTextScreenRects()
+                                   ?? Array.Empty<System.Drawing.Rectangle>();
 
-                    // Subliminal text rects (captured on the UI thread above), same rationale as
-                    // bouncing text: the full-screen window was span-filtered out, so only the small
-                    // visible text region is excluded — not the whole monitor.
-                    foreach (var sr in subliminalRects)
-                    {
-                        if (sr.Width > 0 && sr.Height > 0) rects.Add(sr);
-                    }
+                    // Subliminal cards are full-screen keep-alive overlays (dropped by the
+                    // span filter below) but are now intentionally left in screen capture so
+                    // they record. To still keep them out of the awareness OCR, exclude just
+                    // the centered text rect of any subliminal currently flashing (#287 pattern).
+                    var subliminal = Subliminal?.GetActiveTextScreenRects()
+                                     ?? Array.Empty<System.Drawing.Rectangle>();
+
+                    return (Hwnds: hwnds, Bouncing: bouncing, Subliminal: subliminal);
                 }
-                catch (Exception ex)
+
+                (System.Collections.Generic.List<IntPtr> Hwnds,
+                 System.Drawing.Rectangle[] Bouncing,
+                 System.Drawing.Rectangle[] Subliminal) snapshot;
+
+                if (dispatcher.CheckAccess())
                 {
-                    Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+                    snapshot = CollectOnUi();
+                }
+                else
+                {
+                    var op = dispatcher.InvokeAsync(CollectOnUi);
+                    if (!op.Task.Wait(CcpWindowRectsUiTimeout))
+                    {
+                        // UI thread is busy/wedged. Reuse the last known rects rather than
+                        // reporting "no CCP windows" — an empty set lets the awareness OCR
+                        // read our own overlay text back.
+                        Logger?.Debug("GetCcpWindowRectsCached: UI thread did not respond in time, reusing last rects");
+                        lock (_ccpWindowRectsLock)
+                        {
+                            _ccpWindowRectsTimeoutBackoffUntil = DateTime.Now + CcpWindowRectsTimeoutBackoff;
+                            return _cachedCcpWindowRects ?? Array.Empty<System.Drawing.Rectangle>();
+                        }
+                    }
+                    snapshot = op.Task.Result;
                 }
 
-                _cachedCcpWindowRects = rects.ToArray();
-                _ccpWindowRectsCacheTime = DateTime.Now;
-                return _cachedCcpWindowRects;
+                // Per-monitor span filter: any CCP window whose rect fully
+                // covers any single screen is a full-screen overlay
+                // container (flash/gaze/bubble surfaces, blur overlays,
+                // and the BouncingText overlay). Those carry no readable
+                // text at the window level but spanned monitor-sized
+                // exclusion rects were swallowing every OCR'd word in
+                // multi-monitor setups (#273). Sized windows like
+                // AvatarTube, MantraWindow, LockCard, subliminal popups,
+                // etc. fall well below per-monitor bounds and stay in the
+                // exclusion list where they belong. BouncingText IS
+                // full-screen, so its actual text rect is added separately
+                // below (#287) rather than excluding the whole monitor.
+                var screens = GetAllScreensCached();
+
+                foreach (var hwnd in snapshot.Hwnds)
+                {
+                    if (!IsWindowVisible(hwnd)) continue;
+                    if (!GetWindowRect(hwnd, out var r)) continue;
+
+                    int w = r.Right - r.Left;
+                    int h = r.Bottom - r.Top;
+                    if (w <= 0 || h <= 0) continue;
+
+                    if (SpansAnyMonitor(w, h, screens)) continue;
+
+                    rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                }
+
+                // Add the bouncing-text rect (captured on the UI thread above).
+                // It rode through the span filter as a full-screen window, so
+                // only its small moving text region is excluded — not the
+                // whole monitor (which would regress #273).
+                foreach (var br in snapshot.Bouncing)
+                {
+                    if (br.Width > 0 && br.Height > 0) rects.Add(br);
+                }
+
+                // Subliminal text rects (captured on the UI thread above), same rationale as
+                // bouncing text: the full-screen window was span-filtered out, so only the small
+                // visible text region is excluded — not the whole monitor.
+                foreach (var sr in snapshot.Subliminal)
+                {
+                    if (sr.Width > 0 && sr.Height > 0) rects.Add(sr);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+            }
+
+            return StoreCcpWindowRects(rects.ToArray(), version);
+        }
+
+        private static System.Drawing.Rectangle[] StoreCcpWindowRects(
+            System.Drawing.Rectangle[] rects, int version)
+        {
+            lock (_ccpWindowRectsLock)
+            {
+                // An invalidate that landed mid-rebuild means these rects can predate the overlay
+                // that triggered it. They are still handed to THIS caller, but they must not enter
+                // the cache at all: refusing only the freshness stamp still left them in
+                // _cachedCcpWindowRects, where the timeout path above serves them regardless of age.
+                if (_ccpWindowRectsVersion == version)
+                {
+                    _cachedCcpWindowRects = rects;
+                    _ccpWindowRectsCacheTime = DateTime.Now;
+                    _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;   // UI thread answered
+                }
+                return rects;
             }
         }
 
@@ -947,6 +1017,13 @@ namespace ConditioningControlPanel
             lock (_ccpWindowRectsLock)
             {
                 _ccpWindowRectsCacheTime = DateTime.MinValue;
+                // The back-off must never survive an explicit invalidation. This runs ON the UI
+                // thread, which is proof that thread is alive — and the back-off exists only to
+                // avoid re-paying the 2s wait against a wedged one. Leaving it set would make the
+                // stale rects outlive the invalidation that a sub-250ms subliminal flash depends on
+                // to be excluded before the awareness OCR reads our own text back.
+                _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;
+                _ccpWindowRectsVersion++;
             }
         }
 
@@ -1705,6 +1782,15 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             BrainDrain = new BrainDrainService();
 
+            // Entitlement providers come BEFORE anything that gates on them at construction time
+            // (#889: QuestService discarded every premium quest on launch because App.Patreon was
+            // still null when it loaded, so the gate read "no access" and rerolled a free quest).
+            // Both constructors are self-contained — secure token storage + an HttpClient + the
+            // cached state on disk — and neither issues a request; the async validation still runs
+            // later in OnStartup, so this only moves the entitlement READ earlier.
+            Patreon = new PatreonService();
+            SubscribeStar = new SubscribeStarService();
+
             splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
             // Single seam between feature events and achievement tracking. Constructed
@@ -1733,8 +1819,7 @@ namespace ConditioningControlPanel
             DailyFree = new DailyFreeService();
             _ = DailyFree.RefreshAsync();
             Roadmap = new RoadmapService();
-            // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
-            // safe here even though Patreon is not constructed until later in OnStartup.
+            // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
@@ -1914,8 +1999,7 @@ namespace ConditioningControlPanel
                 Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
             }
 
-            Patreon = new PatreonService();
-            SubscribeStar = new SubscribeStarService();
+            // Patreon + SubscribeStar are constructed earlier (see the #889 note there).
             // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
             // which only resolves once the async validation below returns. Hook both providers now
             // that they exist so the pass re-evaluates (and every listener repaints) the moment the
@@ -2043,7 +2127,18 @@ namespace ConditioningControlPanel
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
             Webcam = new WebcamTrackingService();
             FocusGame = new FocusGameService();
-            GazeCursor = new GazeDebugCursorService();
+            // #912: a debug cursor must never be able to kill the launch. Its Skia resources are
+            // lazy now, but a broken/missing libSkiaSharp.dll could still fault the type load —
+            // every call site is null-conditional, so "no gaze debug cursor" is a clean degrade.
+            try
+            {
+                GazeCursor = new GazeDebugCursorService();
+            }
+            catch (Exception ex)
+            {
+                GazeCursor = null;
+                Logger?.Warning(ex, "GazeDebugCursorService failed to initialize - gaze debug cursor unavailable this session");
+            }
             GazeFocus = new GazeFocusService();
             // Click-driven implicit recal — installs its mouse hook only while
             // tracking runs with a calibration loaded (and the setting is on).

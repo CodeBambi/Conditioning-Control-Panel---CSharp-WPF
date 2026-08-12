@@ -387,6 +387,14 @@ public class ProgramService : IDisposable
 
         var today = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
 
+        // Settle the outgoing day before it is judged. Only the day that was current can carry
+        // partial progress, so this is the only index worth sweeping.
+        if ((today - enrollment.CurrentDayDate).Days > 0)
+        {
+            SettleAmbientShortfallDay(enrollment, program, enrollment.CurrentDay);
+            if (enrollment.State != ProgramEnrollmentState.Active) return;
+        }
+
         var result = ProgramClock.Evaluate(
             enrollment.CurrentDayDate,
             enrollment.CurrentDay,
@@ -791,6 +799,54 @@ public class ProgramService : IDisposable
             CompleteChapter(program, enrollment, chapter);
 
         if (program.IsFinalDay(day.DayIndex))
+            Graduate(program, enrollment, day, record);
+
+        Save();
+    }
+
+    /// <summary>
+    /// The ambient layer must never be the SOLE reason a day of real work rolls over as an
+    /// absence (#917). It is background accrual - a filter left on through the working day - so a
+    /// user who ran the session and cleared every required task can still land short of it
+    /// through nothing but forgetting to leave an overlay up, and that shortfall was spending a
+    /// day off and, twice over, lapsing the whole run back to day 1.
+    ///
+    /// The in-day contract is left alone: <see cref="CheckDayCompletion"/> still holds the day
+    /// open while the ambient minutes are short, and the Today card keeps showing the live
+    /// "12 / 60 min" so nothing is silently forgiven while the user can still act on it. Only at
+    /// rollover - when the day is over and the shortfall is no longer fixable - is the day
+    /// settled as complete, for continuity (streak, chapter, Return Day) and WITHOUT the day XP,
+    /// which the ambient minutes genuinely did not earn.
+    /// </summary>
+    private void SettleAmbientShortfallDay(ProgramEnrollment enrollment, ProgramDefinition program, int dayIndex)
+    {
+        var day = program.GetDay(dayIndex);
+        var record = enrollment.GetRecord(dayIndex);
+        if (day == null || record == null || record.DayCompleted || !record.SessionCompleted) return;
+        if (day.Ambient is not { RequiredMinutes: > 0 } ambient) return;
+        if (record.AmbientMinutes >= ambient.RequiredMinutes) return;
+
+        foreach (var task in RequiredTasks(day))
+        {
+            if (!record.CompletedTaskIds.Contains(task.Id)) return;
+        }
+
+        record.DayCompleted = true;
+        record.CompletedAt = DateTime.Now;
+        MarkDirty();
+
+        App.Logger?.Information(
+            "Program {Program} day {Day} settled at rollover: session and every task done, ambient {Have}/{Need} min - counted complete, day XP withheld",
+            program.Id, dayIndex, record.AmbientMinutes, ambient.RequiredMinutes);
+
+        // The chapter and graduation checks live in CheckDayCompletion, which this day never
+        // reached; without them a settled last-day-of-chapter would strand its banked reward and
+        // a settled final day would strand the run short of its graduation panel.
+        var chapter = program.GetChapterForDay(dayIndex);
+        if (chapter != null && chapter.Days.All(d => enrollment.IsDayComplete(d.DayIndex)))
+            CompleteChapter(program, enrollment, chapter);
+
+        if (program.IsFinalDay(dayIndex))
             Graduate(program, enrollment, day, record);
 
         Save();

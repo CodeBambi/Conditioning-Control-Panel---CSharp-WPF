@@ -433,7 +433,8 @@ public class Achievement
             Requirement = "Fire your first keyword trigger",
             FlavorText = "Said the word, felt the pull. Just like that.",
             ImageName = "magic_word.png",
-            Category = AchievementCategory.TimeSessions
+            Category = AchievementCategory.TimeSessions,
+            IsExclusive = true
         },
         ["pavlov"] = new Achievement
         {
@@ -442,7 +443,8 @@ public class Achievement
             Requirement = "Fire 500 keyword triggers",
             FlavorText = "Five hundred times. The bell rings, you respond. No thinking required.",
             ImageName = "pavlov.png",
-            Category = AchievementCategory.TimeSessions
+            Category = AchievementCategory.TimeSessions,
+            IsExclusive = true
         },
 
         // ========== COMPANION (achievements v2 — Phase 1) ==========

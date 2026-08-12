@@ -144,6 +144,13 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             var oldKeys = new HashSet<string>(s.SubliminalPool.Keys);
+            // OrdinalIgnoreCase: the removed-set and ModService's top-up compare
+            // case-insensitively, so detection must too or modded defaults slip through.
+            var defaults = new HashSet<string>(
+                (App.Mods?.GetDefaultSubliminalPool()
+                 ?? Models.BuiltInMods.BambiSleep.SubliminalPool
+                 ?? new Dictionary<string, bool>()).Keys,
+                StringComparer.OrdinalIgnoreCase);
             var dialog = new TextEditorDialog("Subliminal Messages", s.SubliminalPool)
             {
                 Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
@@ -157,6 +164,15 @@ namespace ConditioningControlPanel.Features
                     if (!oldKeys.Contains(key)) s.UserAddedSubliminals.Add(key);
                 foreach (var key in oldKeys)
                     if (!newKeys.Contains(key)) s.UserAddedSubliminals.Remove(key);
+
+                // Record deleted DEFAULTS, or ModService's top-up puts them straight back on the
+                // next launch — the phrase the user deliberately deleted returns forever (#892).
+                foreach (var key in oldKeys)
+                    if (!newKeys.Contains(key) && defaults.Contains(key))
+                        s.RemovedDefaultSubliminals.Add(key);
+                // A default they added back is no longer "removed".
+                foreach (var key in newKeys)
+                    s.RemovedDefaultSubliminals.Remove(key);
 
                 s.SubliminalPool = dialog.ResultData;
                 App.Settings?.Save();

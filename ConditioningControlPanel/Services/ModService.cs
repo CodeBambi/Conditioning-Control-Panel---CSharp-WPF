@@ -216,6 +216,12 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Before the backup is taken: a running session restores its start-of-session pool
+            // snapshot when it ends, which would revert this edit (and, via the snapshot-preferring
+            // backup below, revert it on the next launch too). Teach the snapshot about it first (#906).
+            try { SessionEngine.Active?.NoteUserPhrasePoolEdit(e.PropertyName); }
+            catch (Exception ex) { _log?.Debug("ModService: session snapshot update failed: {Error}", ex.Message); }
+
             SaveCurrentPoolsToSettings(_activeMod.Id);
             _log?.Debug("ModService: synced active pools to per-mod backup for {ModId}", _activeMod.Id);
         }

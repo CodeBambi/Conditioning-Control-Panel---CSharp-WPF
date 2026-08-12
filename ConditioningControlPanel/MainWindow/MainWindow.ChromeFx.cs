@@ -221,6 +221,13 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Timer-independent restore of the fade-out's hit-test suppression. Coming BACK to
+                // a tab inside the 100ms fade replaces its opacity clock, so FadeOutgoingTab's
+                // Completed never runs (and its "they came back" guard returns before restoring
+                // anyway) - the tab would then swallow every click for the rest of the session.
+                // Every tab show funnels through here, so this is the one point that always runs.
+                if (tab is FrameworkElement incomingFe) incomingFe.IsHitTestVisible = true;
+
                 CancelStaggerCleanup();
 
                 var level = MotionFx.Level;
@@ -318,7 +325,13 @@ namespace ConditioningControlPanel
                     try
                     {
                         // The user came back to it inside 100ms: its own entrance owns it now.
-                        if (ReferenceEquals(fe, _activeTabElement)) return;
+                        // Hit-testing is still ours to hand back - the entrance does it too, but
+                        // this callback must never be the reason a live tab stays click-through.
+                        if (ReferenceEquals(fe, _activeTabElement))
+                        {
+                            fe.IsHitTestVisible = true;
+                            return;
+                        }
                         fe.BeginAnimation(OpacityProperty, null);
                         fe.Opacity = 1;
                         fe.IsHitTestVisible = true;

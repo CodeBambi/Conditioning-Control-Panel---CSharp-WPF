@@ -114,6 +114,16 @@ namespace ConditioningControlPanel
 
         internal void ShowTab(string tab)
         {
+            // Case is NOT significant here, and every key resolver downstream already agrees:
+            // BarkTabAliases, NavDoorForTab and CanonicalTabKey all compare OrdinalIgnoreCase.
+            // The dispatch did not - the two `==` redirects below and the `switch` on this
+            // string are both ordinal - so a "Settings" from a deep link, a tutorial step or a
+            // third-party .ccpmod collapsed every tab, matched no case, and left the window on a
+            // blank page with the nav indicator pointing at Home. Every case label and every map
+            // key in this file is lower-case, so normalising once at the door unifies all of
+            // them without touching a single comparison.
+            tab = (tab ?? string.Empty).ToLowerInvariant();
+
             // Legacy redirect: the "patreon" tab was eliminated; its account/data
             // content lives in the Settings door's Account section now, so this IS
             // a tab switch (ShowAppInfoPopup -> ShowAccountSettings -> appsettings).

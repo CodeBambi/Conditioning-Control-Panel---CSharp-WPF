@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using NAudio.Wave;
 using ConditioningControlPanel.Models;
@@ -36,6 +37,18 @@ namespace ConditioningControlPanel
             {
                 PlayCompletionSound();
             }
+
+            // WindowStyle=None + ShowInTaskbar=False means the X button is the only way out,
+            // and the non-modal (buried-video) path has no owner to fall back on. Escape is
+            // the keyboard escape hatch for both.
+            PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape)
+                {
+                    e.Handled = true;
+                    CloseRecap();
+                }
+            };
         }
 
         // Back-compat: callers that don't have a SessionLog (legacy paths) can still
@@ -193,7 +206,25 @@ namespace ConditioningControlPanel
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = true;
+            CloseRecap();
+        }
+
+        /// <summary>
+        /// The one close path. This window is shown modally from history/most session ends but
+        /// non-modally when a video is still on screen (#905) - and setting DialogResult on a
+        /// Show()-shown window throws InvalidOperationException, which with no other close path
+        /// would leave the recap undismissable. Only set it when we are actually modal.
+        /// </summary>
+        private void CloseRecap()
+        {
+            try
+            {
+                DialogResult = true;
+            }
+            catch (InvalidOperationException)
+            {
+                // Shown with Show(), not ShowDialog() - nothing is waiting on a result.
+            }
             Close();
         }
 

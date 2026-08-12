@@ -589,8 +589,13 @@ namespace ConditioningControlPanel.Services
                 App.Overlay?.SetSustainedOverlayOpacity("pink_filter", _currentPinkOpacity / 100.0);
             }
 
-            // Spiral ramp (only after randomized start minute) — same direct-drive as pink above.
-            if (settings.SpiralEnabled && elapsedMinutes >= _randomizedSpiralStartMinute)
+            // Spiral ramp (only after randomized start minute) — ramp-only guard matches the
+            // flash ramp's, not pink's (pink direct-drives constants too).
+            // Only when the session actually ramps: driving the overlay with a constant parks a
+            // ramp hold in OverlayService, which makes the settings-sync skip the spiral for the
+            // whole session and freezes the user's own opacity slider at the session value (#897).
+            if (settings.SpiralEnabled && settings.SpiralOpacity != settings.SpiralOpacityEnd
+                && elapsedMinutes >= _randomizedSpiralStartMinute)
             {
                 var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
                 var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
@@ -683,6 +688,10 @@ namespace ConditioningControlPanel.Services
                 
                 if (elapsedMinutes >= _randomizedSpiralStartMinute)
                 {
+                    // A non-ramping session never drives the overlay directly, so its prescribed
+                    // opacity has to land in settings here the way an immediate start does.
+                    if (settings.SpiralOpacity == settings.SpiralOpacityEnd)
+                        App.Settings.Current.SpiralOpacity = settings.SpiralOpacity;
                     App.Settings.Current.SpiralEnabled = true;
                     if (IsMainWindowValid) _mainWindow.EnableSpiral(true);
                     App.Logger?.Information("Spiral activated at {Minutes:F1} minutes (target was {Target:F1})",
@@ -943,6 +952,101 @@ namespace ConditioningControlPanel.Services
 
         internal Dictionary<string, bool>? UserLockCardPool =>
             _savedLockCardPool == null ? null : new Dictionary<string, bool>(_savedLockCardPool);
+
+        /// <summary>
+        /// Folds an edit the user just made in a phrase editor into this session's restore snapshot,
+        /// so RestoreSettings still undoes the session's own temporary pool changes but no longer
+        /// reverts the user's edit with them (#906: phrases added/removed/renamed mid-session came
+        /// back exactly as they were before the session, silently losing the work).
+        ///
+        /// Every call is a genuine user edit: only ASSIGNING a whole pool raises INPC (the session
+        /// mutates the live pools in place), and the mod-driven assignments are made with
+        /// ModService's pool mirror suppressed, so they never reach here.
+        /// </summary>
+        internal void NoteUserPhrasePoolEdit(string? propertyName)
+        {
+            if (!IsRunning) return;
+            var current = App.Settings?.Current;
+            if (current == null) return;
+
+            try
+            {
+                switch (propertyName)
+                {
+                    case nameof(AppSettings.SubliminalPool):
+                        FoldUserPoolEdit(current.SubliminalPool, ref _prescribedSubliminalPool, ref _savedSubliminalPool);
+                        break;
+                    case nameof(AppSettings.BouncingTextPool):
+                        FoldUserPoolEdit(current.BouncingTextPool, ref _prescribedBouncingTextPool, ref _savedBouncingTextPool);
+                        break;
+                    case nameof(AppSettings.LockCardPhrases):
+                        FoldUserPoolEdit(current.LockCardPhrases, ref _prescribedLockCardPool, ref _savedLockCardPool);
+                        break;
+                }
+                // Every fold assumes a GENUINE user edit (session writes are in-place/no-INPC,
+                // mod writes run suppressed). A non-user caller reaching here corrupts the
+                // restore snapshot — this line is the tell.
+                App.Logger?.Debug("[Session] Folded mid-session {Pool} edit into restore snapshot", propertyName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Session] Failed to fold a mid-session phrase edit into the restore snapshot");
+            }
+        }
+
+        /// <summary>
+        /// Applies the user's delta (live pool vs what the session prescribed) to the pre-session
+        /// snapshot, then re-bases the prescribed copy onto the live pool so a later edit diffs
+        /// against what is actually on screen — and so a mod switch re-asserts the edited pool.
+        /// Phrases the session owns are never folded into the user's pool: only keys the user
+        /// added, deleted, or re-toggled on their OWN phrases move across.
+        /// </summary>
+        private static void FoldUserPoolEdit(
+            Dictionary<string, bool>? live,
+            ref Dictionary<string, bool>? prescribed,
+            ref Dictionary<string, bool>? saved)
+        {
+            if (live == null || saved == null) return;
+
+            if (prescribed == null)
+            {
+                // The session left this pool alone, so the live pool IS the user's own.
+                saved = new Dictionary<string, bool>(live);
+                return;
+            }
+
+            foreach (var kvp in live)
+            {
+                if (!prescribed.TryGetValue(kvp.Key, out var wasEnabled))
+                {
+                    saved[kvp.Key] = kvp.Value;                     // added while the session ran
+                }
+                else if (saved.ContainsKey(kvp.Key))
+                {
+                    // Differs from what the session prescribed: an unambiguous re-toggle of one of
+                    // their own phrases.
+                    //
+                    // EQUAL to what the session prescribed is ambiguous, and stays ambiguous: the
+                    // phrase editor is seeded from the LIVE pool, so the user may have ticked the
+                    // box onto the session's value on purpose, or may simply have saved an
+                    // unrelated edit with the session's own value standing. Adopt only the ENABLED
+                    // side of that ambiguity - ApplySessionSettings disables every pre-existing
+                    // phrase and enables only its own, so adopting a `false` here would silence
+                    // the user's whole pool the moment they save any mid-session edit, while
+                    // adopting a `true` at worst leaves one phrase they already own switched on,
+                    // and it is the half the fold actually loses today (ticking a phrase the
+                    // session happens to run too, which then reverted at session end).
+                    if (wasEnabled != kvp.Value || kvp.Value) saved[kvp.Key] = kvp.Value;
+                }
+            }
+
+            foreach (var key in prescribed.Keys)
+            {
+                if (!live.ContainsKey(key)) saved.Remove(key);       // deleted while the session ran
+            }
+
+            prescribed = new Dictionary<string, bool>(live);
+        }
 
         /// <summary>
         /// Re-asserts this session's prescribed phrase pools over the live settings.

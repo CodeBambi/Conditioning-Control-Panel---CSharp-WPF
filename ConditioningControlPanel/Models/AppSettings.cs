@@ -402,6 +402,19 @@ namespace ConditioningControlPanel.Models
             set { _dailyQuestStreak = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        private int _lastPerfectWeekStreakAwarded = 0;
+        /// <summary>
+        /// The <see cref="DailyQuestStreak"/> value the "Perfect Bimbo Week" milestone bonus was
+        /// last paid out for. Without this latch the bonus re-fired on every daily quest completed
+        /// that day, and again after every restart (#895). Cleared when the streak falls below it,
+        /// so a broken-and-rebuilt streak earns the milestone again.
+        /// </summary>
+        public int LastPerfectWeekStreakAwarded
+        {
+            get => _lastPerfectWeekStreakAwarded;
+            set { _lastPerfectWeekStreakAwarded = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         #region Bark system
 
         private int _barkChatSuppressionMs = 10000;
@@ -1198,13 +1211,18 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Tracks default subliminal triggers the user explicitly removed,
         /// so they don't get re-added on startup by MergeNewDefaultSubliminalTriggers.
+        /// Case-insensitive like <see cref="UserAddedSubliminals"/>: the editor upper-cases what
+        /// it writes back, so an ordinal set stopped matching the default it was recorded for and
+        /// the phrase resurrected on the next launch (#892).
         /// </summary>
-        private HashSet<string> _removedDefaultSubliminals = new();
+        private HashSet<string> _removedDefaultSubliminals = new(StringComparer.OrdinalIgnoreCase);
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public HashSet<string> RemovedDefaultSubliminals
         {
             get => _removedDefaultSubliminals;
-            set => _removedDefaultSubliminals = value ?? new();
+            set => _removedDefaultSubliminals = value == null
+                ? new(StringComparer.OrdinalIgnoreCase)
+                : new(value, StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -3714,6 +3732,35 @@ namespace ConditioningControlPanel.Models
         {
             get => _brainDrainHighRefresh;
             set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
+        }
+
+        private int _brainDrainBlurStrength = 50; // 1-100
+        /// <summary>
+        /// Strength of the Brain Drain SCREEN BLUR (1-100). Deliberately separate from
+        /// <see cref="BrainDrainIntensity"/>, which is the AUDIO half's per-minute trigger
+        /// probability - the rework gave the visual its own dial. Drives both the gaussian
+        /// sigma and the draw alpha on the compositor layer (see BrainDrainLayer.SetIntensity);
+        /// applied live via OverlayService's settings hook while the overlay is showing.
+        /// </summary>
+        [JsonProperty]
+        public int BrainDrainBlurStrength
+        {
+            get => _brainDrainBlurStrength;
+            set { _brainDrainBlurStrength = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private bool _brainDrainMeltEnabled = false;
+        /// <summary>
+        /// Melting mode for the Brain Drain screen effect: the blur plus a slow Perlin
+        /// displacement warp ("melting glass"), i.e. the "braindrain_melt" overlay variant.
+        /// The capture pump fixes the melt flag per run, so OverlayService bounces the overlay
+        /// when this flips mid-show.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainMeltEnabled
+        {
+            get => _brainDrainMeltEnabled;
+            set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
         #endregion
 

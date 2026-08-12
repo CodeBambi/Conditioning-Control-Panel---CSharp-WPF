@@ -35,6 +35,13 @@ public class QuestProgress
     // Streak calendar - dates when daily quests were completed (last 30 days)
     public List<DateTime> DailyQuestCompletionDates { get; set; } = new();
 
+    // #889: a slot rolled while the Patreon/SubscribeStar entitlement was still unresolved drew
+    // from the free-only pool and must be re-rolled once the answer lands. Persisted rather than
+    // in-memory because quitting inside the ~90s settle window would otherwise lose the flag and
+    // leave a patron wearing a free quest all day. QuestService owns the semantics.
+    public bool DailyRolledUnresolved { get; set; }
+    public bool WeeklyRolledUnresolved { get; set; }
+
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>

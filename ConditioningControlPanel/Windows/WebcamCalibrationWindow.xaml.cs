@@ -31,6 +31,13 @@ namespace ConditioningControlPanel
     {
         private const int ReadyMs = 600;          // dot moves, user re-fixates
         private const int SampleMs = 1100;        // ~33 samples at 30fps; well above MinSamplesPerPoint after the saccade-settle drop
+        // A FIXED window is a frame-rate assumption in disguise: below ~11 fps it cannot
+        // physically contain MinSamplesPerPoint frames, so calibration was not merely hard on a
+        // slow camera, it was impossible (#909). The window therefore stretches until the sample
+        // COUNT is met, bounded by this ceiling so a dead camera still fails in finite time and
+        // the worst case stays inside the user's patience.
+        private const int SampleCeilingMs = 4000;
+        private const int SampleSliceMs = 100;    // re-check cadence while the window is stretched
         private const int SettleMs = 200;         // pause between dots
         private const int RetryReadyMs = 900;     // longer pause before retrying a missed dot
         // Minimum surviving iris samples to accept a dot. The SampleMs window yields
@@ -324,6 +331,16 @@ namespace ConditioningControlPanel
                     CalibrationSoundService.DotSampleStart();
                     _collecting = true;
                     await Task.Delay(SampleMs);
+                    // Nominal window spent: on a 30fps camera the count is already met and this
+                    // loop never runs, so the familiar pacing is unchanged. On a slow one, keep
+                    // the window open in short slices until the count is met or the ceiling hits.
+                    long stretchUntil = Environment.TickCount64 + Math.Max(0, SampleCeilingMs - SampleMs);
+                    while (!_cancelled
+                           && _allSamples[i].Count < MinSamplesPerPoint
+                           && Environment.TickCount64 < stretchUntil)
+                    {
+                        await Task.Delay(SampleSliceMs);
+                    }
                     _collecting = false;
                     if (_cancelled) return;
 

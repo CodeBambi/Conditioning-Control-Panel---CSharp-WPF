@@ -1468,6 +1468,22 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The one recap shown non-modally (video still on screen); null whenever the last one
+        /// was modal or has been dismissed. Modal recaps need no tracking - they cannot stack.
+        /// </summary>
+        private SessionCompleteWindow? _liveSessionRecap;
+        private bool _liveSessionRecapTeardownHooked;
+
+        private void CloseLiveSessionRecap()
+        {
+            var stale = _liveSessionRecap;
+            _liveSessionRecap = null;
+            if (stale == null) return;
+            try { stale.Close(); }
+            catch (Exception ex) { App.Logger?.Debug("Closing previous session recap: {E}", ex.Message); }
+        }
+
+        /// <summary>
         /// Shows the session-complete dialog once any in-flight video teardown has finished.
         /// A bubble-triggered bonus video can still be tearing down when the session log
         /// arrives; its dying fullscreen surface renders as a stuck white plane that buries
@@ -1485,8 +1501,14 @@ namespace ConditioningControlPanel
                 if (Dispatcher.HasShutdownStarted) return;
 
                 var cleaning = App.Video?.IsCleaningUp == true;
+                // IsBrowserSessionActive alongside IsPlaying, the same pairing AudioService uses:
+                // when the clip is routed to the WebView2 engine the surface on screen is a
+                // browser window, and the run's phases do not line up with the LibVLC flag the
+                // way this wait assumes. A modal opened against a live browser video lands
+                // BEHIND its topmost surface, invisible and holding the input queue (#905).
                 var videoBusy = cleaning
                     || App.Video?.IsPlaying == true
+                    || App.Video?.IsBrowserSessionActive == true
                     || App.Video?.HasOpenWindows == true;
                 // Soft cap ~3s; while a CloseAll is actively in flight keep waiting up to 10s
                 // (its flag clears in a finally, so this terminates).
@@ -1511,8 +1533,12 @@ namespace ConditioningControlPanel
                         if (Dispatcher.HasShutdownStarted) return;
                         // If we capped out because a NEW video legitimately started (autonomy
                         // can trigger one right after session end), don't steal topmost/focus
-                        // from it — show buried, like the pre-fix behavior.
-                        var videoUp = App.Video?.IsPlaying == true;
+                        // from it — but NEVER show a buried MODAL: an invisible ShowDialog owns
+                        // the input queue and freezes the app for as long as the video runs
+                        // (#905). Buried case goes non-modal + non-activating instead; the
+                        // recap is simply there when the video surface goes away.
+                        var videoUp = App.Video?.IsPlaying == true
+                                      || App.Video?.IsBrowserSessionActive == true;
                         var dialog = new SessionCompleteWindow(log)
                         {
                             Owner = IsLoaded ? this : null,
@@ -1520,15 +1546,36 @@ namespace ConditioningControlPanel
                             // rendered so the summary can't pin itself over other apps.
                             Topmost = !videoUp,
                         };
-                        if (!videoUp)
+                        if (videoUp)
+                        {
+                            // Non-modal recaps do not block the next session, so two runs ending
+                            // in quick succession would stack two live cards. Keep exactly one.
+                            CloseLiveSessionRecap();
+                            _liveSessionRecap = dialog;
+                            dialog.Closed += (_, _) =>
+                            {
+                                if (ReferenceEquals(_liveSessionRecap, dialog)) _liveSessionRecap = null;
+                            };
+                            if (!_liveSessionRecapTeardownHooked)
+                            {
+                                _liveSessionRecapTeardownHooked = true;
+                                // Owner is null while this window is not yet loaded, and under
+                                // ShutdownMode=OnLastWindowClose an orphaned recap would keep the
+                                // process alive after the main window goes away.
+                                Closed += (_, _) => CloseLiveSessionRecap();
+                            }
+                            dialog.ShowActivated = false;
+                            dialog.Show();
+                        }
+                        else
                         {
                             dialog.ContentRendered += (_, _) =>
                             {
                                 dialog.Topmost = false;
                                 dialog.Activate();
                             };
+                            dialog.ShowDialog();
                         }
-                        dialog.ShowDialog();
                     }
                     catch (Exception ex)
                     {

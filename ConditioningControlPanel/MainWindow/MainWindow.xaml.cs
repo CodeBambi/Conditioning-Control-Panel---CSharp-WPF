@@ -833,10 +833,163 @@ namespace ConditioningControlPanel
                     // installing thread's message loop), so the stall column on this very line is
                     // itself evidence.
                     VideoDiag.Log("PANIC", $"panic key '{key}' RECEIVED by the global hook - queueing handler");
-                    Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
+                    var panicOp = Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
                     VideoDiag.Log("PANIC", "handler queued on the dispatcher");
+                    ArmPanicWatchdog(panicOp);
                 }
             }
+        }
+
+        // #919b: the panic press is queued on the dispatcher, so a wedged UI thread swallows it
+        // exactly when it matters most (reporter's trace: the hook logged the press three times,
+        // the handler never ran once). If the queued handler hasn't finished inside this window,
+        // an emergency teardown runs off-thread instead.
+        // Coverage is bounded by where the arming happens: the WH_KEYBOARD_LL hook is installed with
+        // dwThreadId=0 but delivered on the UI thread's own message pump, so the watchdog can only
+        // arm while that thread is still PUMPING. That covers the two reported shapes - a handler
+        // that ran and then hung, and a dispatcher queue starved by higher-priority work - but not a
+        // thread that has stopped pumping altogether (there the callback never runs, Windows drops
+        // the hook for exceeding LowLevelHooksTimeout, and nothing here fires at all).
+        private static readonly TimeSpan PanicWatchdogTimeout = TimeSpan.FromSeconds(2);
+        private static int _panicFallbackRunning;
+
+        /// <summary>
+        /// Watches a queued panic handler from a background thread. Called from the WH_KEYBOARD_LL
+        /// callback, which runs on the UI thread and must return well inside LowLevelHooksTimeout —
+        /// so this only ever spawns the watcher, it never waits here.
+        /// </summary>
+        private void ArmPanicWatchdog(DispatcherOperation? op)
+        {
+            if (op == null) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var finished = await Task.WhenAny(op.Task, Task.Delay(PanicWatchdogTimeout))
+                                             .ConfigureAwait(false);
+                    if (finished == op.Task)
+                    {
+                        try { _ = op.Task.Exception; } catch { }   // observe a faulted handler
+                        return;
+                    }
+                    RunEmergencyPanicTeardown();
+                }
+                catch (Exception ex)
+                {
+                    try { App.Logger?.Error(ex, "Panic watchdog failed"); } catch { }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Last-resort panic path (#919b), on a background thread, when the dispatcher never ran the
+        /// queued handler. ONLY thread-safe teardown belongs here: anything that touches a WPF object
+        /// throws on this thread, and the premise is that the UI thread is unavailable. Every step is
+        /// guarded on its own so one failure can't starve the rest.
+        /// </summary>
+        private void RunEmergencyPanicTeardown()
+        {
+            // The panic double-press ladder ends in an app shutdown, which reliably outlives the 2s
+            // deadline — without this the watchdog fires INTO the shutdown and races App disposal
+            // over services it is already tearing down.
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    VideoDiag.Log("PANIC", "FALLBACK skipped — the app is already shutting down");
+                    return;
+                }
+            }
+            catch { return; }
+
+            if (Interlocked.Exchange(ref _panicFallbackRunning, 1) == 1) return;
+            try
+            {
+                try
+                {
+                    App.Logger?.Warning(
+                        "PANIC FALLBACK: dispatcher did not handle the panic key within {Ms}ms — tearing down off-thread",
+                        (int)PanicWatchdogTimeout.TotalMilliseconds);
+                }
+                catch { }
+                VideoDiag.Log("PANIC", "FALLBACK firing — the UI thread never drained the queued handler");
+
+                try { App.Haptics?.PanicStop(); }        catch (Exception ex) { LogPanicFallbackStep("haptics", ex); }
+                // Conditional, matching the designed panic path in StopEverything (#668): with the
+                // standalone Audio Layers master on, the bed is the user's, not the session's.
+                try
+                {
+                    if (App.Settings?.Current?.AudioLayersEnabled != true) App.LayeredAudio?.Stop();
+                }
+                catch (Exception ex) { LogPanicFallbackStep("audio layers", ex); }
+                // StopEmergency, not StopAndDisarm: the same runtime teardown from any thread, but
+                // without persisting MantraChantEnabled=false. The real panic leaves the setting
+                // alone, and a watchdog that fired only because the UI thread was slow must not
+                // silently turn the user's chant off for good.
+                try { App.MantraChant?.StopEmergency(); } catch (Exception ex) { LogPanicFallbackStep("mantra chant", ex); }
+                // #890 rewrote both of these to be reachable from this thread. Called individually
+                // rather than via App.KillAllAudio, which also touches services never audited for
+                // off-thread calls.
+                try { App.MindWipe?.Stop(); }            catch (Exception ex) { LogPanicFallbackStep("mind wipe", ex); }
+                try { App.BrainDrain?.Stop(); }          catch (Exception ex) { LogPanicFallbackStep("brain drain", ex); }
+                try { App.Audio?.ForceUnduck(); }        catch (Exception ex) { LogPanicFallbackStep("unduck", ex); }
+                try { App.ScreenOcr?.Stop(); }           catch (Exception ex) { LogPanicFallbackStep("screen OCR", ex); }
+
+                // No overlay hiding here by design. ShowWindowAsync only POSTS to the owner thread,
+                // so it cannot hide anything while that thread is the wedged one — and re-showing
+                // the raw-Win32 LayeredCompositorHost behind its back desyncs host.IsVisible, which
+                // CompositorEngine gates every Show/Hide on: one false fire and every layer renders
+                // into an invisible window for the rest of the session. Overlays are the UI thread's
+                // to drop, when it comes back and runs the real handler.
+                QueuePanicFallbackRecovery();
+
+                VideoDiag.Log("PANIC", "FALLBACK complete");
+            }
+            catch (Exception ex)
+            {
+                try { App.Logger?.Error(ex, "Panic fallback teardown failed"); } catch { }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _panicFallbackRunning, 0);
+            }
+        }
+
+        private static void LogPanicFallbackStep(string step, Exception ex)
+        {
+            try { App.Logger?.Warning("PANIC FALLBACK: {Step} step failed: {Error}", step, ex.Message); } catch { }
+            VideoDiag.Log("PANIC", $"FALLBACK step '{step}' failed: {ex.Message}");
+        }
+
+        /// <summary>
+        /// Repairs the one thing the off-thread teardown does behind the settings' back: the
+        /// Awareness scanner was stopped (rightly, while the UI was wedged) with nothing to restart
+        /// it, leaving the checkbox reading ON over a dead scanner. Queued so it lands as soon as
+        /// the UI thread drains — after the panic op the watchdog gave up on, which was posted
+        /// earlier and therefore runs first. Idempotent: Start no-ops if it is already running.
+        /// </summary>
+        private void QueuePanicFallbackRecovery()
+        {
+            try
+            {
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    try
+                    {
+                        // Same three conditions as the real start path (MainWindow.Patreon.cs):
+                        // the access check matters because entitlement can have lapsed since.
+                        var settings = App.Settings?.Current;
+                        if (settings?.ScreenOcrEnabled == true && settings.KeywordTriggersEnabled &&
+                            KeywordTriggerService.HasAccess())
+                            App.ScreenOcr?.Start();   // no-ops if it is already running
+                    }
+                    catch (Exception ex) { LogPanicFallbackStep("screen OCR restart", ex); }
+
+                    VideoDiag.Log("PANIC", "FALLBACK recovery ran on the UI thread");
+                });
+            }
+            catch (Exception ex) { LogPanicFallbackStep("recovery queue", ex); }
         }
 
         private void HandlePanicKeyPress()
@@ -1630,8 +1783,14 @@ namespace ConditioningControlPanel
         /// when even the base fails to resolve, in which case the XAML pack-URI face stands.
         /// </summary>
         private static System.Windows.Media.ImageSource? ModTileVariant(string baseName)
+            => ModTileVariant(baseName, TileDecodeWidth);
+
+        private static System.Windows.Media.ImageSource? ModTileVariant(string baseName, int decodeWidth)
         {
-            var modOverride = ModResourceResolver.ResolveImage($"features/{baseName}.png");
+            // Decoded at a cap rather than through ResolveImage: the tile art is 1376px wide and
+            // these cards render a fraction of that, so a full decode cost ~12MB of pixels each.
+            // A failed decode (no such themed file) is how "the mod has no variant" is detected —
+            // LoadModImageDecoded returns null for a resource that doesn't exist.
             // ResolveImage falls back to the app's own resource when the mod has no override,
             // so "did the mod override it" needs the mod folder check to be meaningful only if
             // the resolver distinguishes. It does not - so order the lookups by specificity
@@ -1645,9 +1804,19 @@ namespace ConditioningControlPanel
                 Models.BuiltInMods.LockedId => "_locked",
                 _ => null,
             };
-            if (suffix == null) return modOverride;
-            return ModResourceResolver.ResolveImage($"features/{baseName}{suffix}.png") ?? modOverride;
+            if (suffix != null)
+            {
+                var themed = LoadModImageDecoded($"features/{baseName}{suffix}.png", decodeWidth);
+                if (themed != null) return themed;
+            }
+            return LoadModImageDecoded($"features/{baseName}.png", decodeWidth);
         }
+
+        // Dashboard tile decode caps. The mosaic lives in a 1489x901 design Viewbox, so a
+        // single-column card paints ~340 DIP and the double-wide Vault ~700; these are roughly
+        // 2x that, which covers a maximized window on a high-DPI display with headroom.
+        private const int TileDecodeWidth = 768;
+        private const int WideTileDecodeWidth = 1024;
 
         /// <summary>
         /// Loads feature images from mod resources (if overrides exist) or embedded resources.
@@ -1668,7 +1837,6 @@ namespace ConditioningControlPanel
                     ("features/bouncing_text.png", SettingsTab.CardBouncingText),
                     ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
                     ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
-                    ("features/justdrop.png", SettingsTab.CardJustDrop),
                     // The ? box and the Vault resolve through ModTileVariant below: built-in
                     // mods get app-shipped themed faces (features/mysterybox_bambi.png, ...)
                     // by filename convention - same mechanism as the takeover art fork - while
@@ -1682,14 +1850,19 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
+                if (SettingsTab.CardJustDrop != null)
+                {
+                    var img = LoadModImageDecoded("features/justdrop.png", TileDecodeWidth);
+                    if (img != null) SettingsTab.CardJustDrop.Icon = img;
+                }
                 if (SettingsTab.CardMystery != null)
                 {
-                    var img = ModTileVariant("mysterybox");
+                    var img = ModTileVariant("mysterybox", TileDecodeWidth);
                     if (img != null) SettingsTab.CardMystery.Icon = img;
                 }
                 if (SettingsTab.CardVault != null)
                 {
-                    var img = ModTileVariant("vault");
+                    var img = ModTileVariant("vault", WideTileDecodeWidth);
                     if (img != null) SettingsTab.CardVault.Icon = img;
                 }
 
@@ -2539,8 +2712,14 @@ namespace ConditioningControlPanel
             // and the first-run prompt's own modals have closed. No-ops when nothing is parked.
             App.FlushPendingRemoteMediaOffer(this);
 
-            // Initialize Avatar Tube Window
-            InitializeAvatarTube();
+            // Initialize Avatar Tube Window. #888: this used to run unconditionally, so a companion
+            // the user had dismissed came back on the next launch — visible but mute, because the
+            // speech path gates on AvatarEnabled separately. Creation is the gate now; Wake (tray)
+            // and the Companion room's toggle build it on demand.
+            if (App.Settings.Current.AvatarEnabled)
+            {
+                InitializeAvatarTube();
+            }
 
             // Initialize the Discord Rich Presence checkbox. Guard with _isLoading so the Changed
             // handler doesn't fire the "Discord Not Linked" MessageBox during startup for users

@@ -1746,6 +1746,24 @@ namespace ConditioningControlPanel.Views.Deeper
                         _videoFullscreenWindow.Content = null;
                 };
 
+                // TOPMOST IS RENTED, NOT OWNED (#905). A fullscreen video has to sit over the
+                // taskbar and over the app, so the window is born Topmost - but it kept that
+                // claim even after another window took focus, which is how the post-session
+                // recap ended up alive and modal BEHIND it: invisible, holding the input queue,
+                // with no way to reach the button that dismisses it. Dropping the claim on
+                // deactivation lets any dialog surface, and taking it back on activation
+                // restores the fullscreen look the moment the user comes back to the video.
+                EventHandler deactivatedHandler = (_, _) =>
+                {
+                    try { if (_videoFullscreenWindow != null) _videoFullscreenWindow.Topmost = false; }
+                    catch { }
+                };
+                EventHandler activatedHandler = (_, _) =>
+                {
+                    try { if (_videoFullscreenWindow != null) _videoFullscreenWindow.Topmost = true; }
+                    catch { }
+                };
+
                 EventHandler? closedHandler = null;
                 closedHandler = (_, _) =>
                 {
@@ -1763,6 +1781,8 @@ namespace ConditioningControlPanel.Views.Deeper
 
                     try { built!.KeyDown -= keyHandler; } catch { }
                     try { built!.Closing -= closingHandler; } catch { }
+                    try { built!.Deactivated -= deactivatedHandler; } catch { }
+                    try { built!.Activated -= activatedHandler; } catch { }
                     try { built!.Closed -= closedHandler!; } catch { }
 
                     _videoFullscreenWindow = null;
@@ -1780,6 +1800,8 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 built.KeyDown += keyHandler;
                 built.Closing += closingHandler;
+                built.Deactivated += deactivatedHandler;
+                built.Activated += activatedHandler;
                 built.Closed += closedHandler;
 
                 // Show small first, pump render queue, then maximize — matches the

@@ -159,6 +159,14 @@ namespace ConditioningControlPanel.Services
         private const long MAX_IMAGE_CACHE_BYTES = 200L * 1024 * 1024; // 200 MB cap
         private long _imageCacheBytes;
 
+        // One corrupt file in the folder is re-picked by the rotation and re-decoded on every
+        // single draw, so an unconditional Warning per failure turns one bad asset into a log
+        // flood — and a corrupt GIF logs twice per attempt (frame decode, then the static
+        // fallback). Warn once per path per session; everything after that drops to Debug.
+        // Concurrent because decodes run on pool threads.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedDecodePaths =
+            new(StringComparer.OrdinalIgnoreCase);
+
         // Decode attribution (cumulative, app-lifetime) for the chaos OOM hunt. A cache MISS that
         // runs an actual decode increments these; cache hits don't. The GIF path was the last
         // GDI+ consumer and was migrated to SKCodec (#486) — if native~ in [CHAOSMEM] still climbs
@@ -801,7 +809,10 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger.Debug("Could not load image {Path}: {Error}", path, ex.Message);
+                // Warning, not Debug: a decode that fails is a flash the user never sees, and at
+                // the default Information min-level the evidence was absent from every log. Once
+                // per path, though — the rotation re-picks the same bad file all session long.
+                LogDecodeFailure("Could not load image {Path}: {Error}", path, ex.Message);
                 return null;
             }
         }
@@ -865,6 +876,16 @@ namespace ConditioningControlPanel.Services
         /// BitmapSource references are shared (they're frozen/immutable), but the list
         /// is independent so SafeCloseFlashWindow can clear it without affecting the cache.
         /// </summary>
+        /// <summary>First decode failure for a path warns, every repeat drops to Debug — see
+        /// <see cref="_warnedDecodePaths"/>. Template takes {Path} then {Error}.</summary>
+        private static void LogDecodeFailure(string template, string path, string error)
+        {
+            if (_warnedDecodePaths.TryAdd(path, 0))
+                App.Logger?.Warning(template, path, error);
+            else
+                App.Logger?.Debug(template, path, error);
+        }
+
         private static LoadedImageData CloneImageData(LoadedImageData source)
         {
             var clone = new LoadedImageData
@@ -901,7 +922,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not load webp frames: {Error}", ex.Message);
+                LogDecodeFailure("Could not load webp frames from {Path}: {Error}", path, ex.Message);
                 return false;
             }
         }
@@ -929,7 +950,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger.Debug("Could not load GIF frames: {Error}", ex.Message);
+                LogDecodeFailure("Could not load GIF frames from {Path}: {Error}", path, ex.Message);
             }
 
             // Single-frame or undecodable GIF → static WIC decode, mirroring the static
@@ -965,7 +986,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger.Debug("Could not load GIF as static image: {Error}", ex.Message);
+                LogDecodeFailure("Could not load GIF as static image {Path}: {Error}", path, ex.Message);
             }
         }
 
@@ -2911,9 +2932,12 @@ namespace ConditioningControlPanel.Services
                 var ct = _remoteCts.Token;
                 if (ct.IsCancellationRequested) return;
 
-                // Ask for Image, not Any: this surface can only render a still, and a video
-                // entry reaching the pool would be a black flash rather than a skipped one.
-                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.Image);
+                // GifStill, not Image and not Any: flash images fetch scrolller's GIF filter
+                // ONLY (owner decision 2026-08-12, matching the web's GalleryFilter usage) and
+                // the source maps each GIF post to its still poster — so this surface still
+                // only ever receives renderable image entries, and a video entry reaching the
+                // pool (a black flash) stays impossible.
+                var coordinator = FypOnlineCoordinator.For(RemoteConsumerId, RemoteFlashChannels, FeedMediaKind.GifStill);
                 var (entries, error) = await coordinator.FetchBatchAsync(ct).ConfigureAwait(false);
 
                 if (error != null)
@@ -3102,34 +3126,41 @@ namespace ConditioningControlPanel.Services
             // and absent on plenty of Win10 ones. Without this, remote flashes would work
             // perfectly in testing and be a blank feature for a slice of users. SkiaSharp is
             // already the app's format-agnostic decoder (AnimatedWebp), so the fallback is free.
+            //
+            // Under the SAME global decode gate as AnimatedWebp: remote stills fan out one
+            // Task.Run per prefetched image, and an ungated second Skia entry point re-opens the
+            // unbounded-concurrency native heap corruption (0xc0000374) the gate was added for.
             try
             {
-                stream.Position = 0;
-                using var skData = SKData.Create(stream);
-                if (skData == null) return null;
-                using var codec = SKCodec.Create(skData);
-                if (codec == null) return null;
+                return AnimatedWebp.RunGatedDecode<LoadedImageData?>(() =>
+                {
+                    stream.Position = 0;
+                    using var skData = SKData.Create(stream);
+                    if (skData == null) return null;
+                    using var codec = SKCodec.Create(skData);
+                    if (codec == null) return null;
 
-                // Decode straight into the pixel format BitmapSource.Create is about to be
-                // told it has, rather than decoding native and converting after.
-                int w = codec.Info.Width, h = codec.Info.Height;
-                if (w <= 0 || h <= 0 || (long)w * h > 4096L * 4096L) return null;
-                using var decoded = SKBitmap.Decode(codec,
-                    new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul));
-                if (decoded == null) return null;
+                    // Decode straight into the pixel format BitmapSource.Create is about to be
+                    // told it has, rather than decoding native and converting after.
+                    int w = codec.Info.Width, h = codec.Info.Height;
+                    if (w <= 0 || h <= 0 || (long)w * h > 4096L * 4096L) return null;
+                    using var decoded = SKBitmap.Decode(codec,
+                        new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul));
+                    if (decoded == null) return null;
 
-                var frame = ToFrozenBitmapSource(decoded, decodeMax);
-                if (frame == null) return null;
+                    var frame = ToFrozenBitmapSource(decoded, decodeMax);
+                    if (frame == null) return null;
 
-                data.Frames.Add(frame);
-                data.Width = frame.PixelWidth;
-                data.Height = frame.PixelHeight;
-                data.FrameDelay = TimeSpan.FromMilliseconds(100);
-                return data;
+                    data.Frames.Add(frame);
+                    data.Width = frame.PixelWidth;
+                    data.Height = frame.PixelHeight;
+                    data.FrameDelay = TimeSpan.FromMilliseconds(100);
+                    return data;
+                });
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: Skia could not decode remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Warning("FlashService: Skia could not decode remote still {Url}: {Error}", url, ex.Message);
                 return null;
             }
         }
@@ -3162,7 +3193,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: Skia -> BitmapSource conversion failed: {Error}", ex.Message);
+                App.Logger?.Warning("FlashService: Skia -> BitmapSource conversion failed: {Error}", ex.Message);
                 return null;
             }
             finally

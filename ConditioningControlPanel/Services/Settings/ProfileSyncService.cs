@@ -85,6 +85,32 @@ namespace ConditioningControlPanel.Services
         public static bool ServerProfileTooEmptyToClampTo(int serverLevel)
             => serverLevel <= 1;
 
+        /// <summary>
+        /// Would clamping to this server record CRATER an established local level? Asked alongside
+        /// <see cref="ServerProfileTooEmptyToClampTo"/> at the V1/legacy clamp site ONLY.
+        ///
+        /// #920: the Level&lt;=1 test only catches a record that is empty. It does nothing about a
+        /// record belonging to somebody ELSE — which is exactly what the V1 identity fallback used
+        /// to hand back, because those endpoints resolve on token presence rather than on the
+        /// account we are actually syncing. A real-but-wrong account reads as fully initialized, so
+        /// a level 203 was clamped down to whatever that other record held and written to disk.
+        ///
+        /// WRONG-ACCOUNT IS THE WHOLE JUSTIFICATION, so this belongs only where a wrong account is
+        /// reachable: the V1 endpoints, which key on token presence. It is deliberately NOT asked
+        /// on the V2 clamp, where /v2/user/sync answers for the unified_id we asked about and the
+        /// account is never in doubt — there, "server level is less than half of local" is not a
+        /// bad read, it is the anti-cheat clamp DOING ITS JOB on an inflated file (203 clamped to
+        /// 40 is exactly a &gt;2x drop), and refusing it would keep the inflated local and push it
+        /// straight back up.
+        ///
+        /// An explicit reset is carried by the <c>level_reset</c> flag and handled on its own
+        /// branch well before this one, so refusing here cannot block a real season wipe. Below
+        /// level 10 the ratio test is off entirely: the absolute numbers are too small for "half"
+        /// to mean anything.
+        /// </summary>
+        public static bool ServerProfileWouldCraterLocalLevel(int serverLevel, int localLevel)
+            => localLevel > 10 && serverLevel * 2 < localLevel;
+
         #region Server-confirmed XP watermark (#865 regression guard)
 
         /// <summary>
@@ -548,21 +574,28 @@ namespace ConditioningControlPanel.Services
                         return true;
                     }
 
-                    // V2 failed — fall through to V1 if OAuth is available
-                    App.Logger?.Warning("V2 sync failed, attempting V1 fallback");
-                }
-
-                var accessToken = GetAccessToken();
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    if (!string.IsNullOrEmpty(unifiedId))
-                        App.Logger?.Warning("V2 sync failed and no OAuth token available — sync unavailable");
-                    else
-                        App.Logger?.Warning("No access token available for profile sync");
+                    // NEVER fall through to V1 while a V2 identity is in hand (#920). The V1
+                    // endpoints are keyed on TOKEN PRESENCE alone — IsPatreonAuth is "a stored
+                    // token blob exists", stale or not — so a transient V2 failure (a 429 is
+                    // enough) went and fetched whatever account that token happens to resolve to,
+                    // then adopted it: a level 203 came back as level 1 after a re-login. A V2
+                    // user's record only exists in the V2 store, so there is nothing correct for
+                    // V1 to return here. Fail the cycle and retry.
+                    App.Logger?.Warning("V2 sync failed for unified user {Id} — refusing the V1 identity fallback; this sync cycle fails and will retry", unifiedId);
+                    LastSyncError = "Load failed: V2 sync unavailable";
                     return false;
                 }
 
-                // V1 fallback — use appropriate endpoint based on auth type
+                // Below here the account has NO V2 identity at all — a genuine legacy user, the
+                // only shape V1 can answer for.
+                var accessToken = GetAccessToken();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    App.Logger?.Warning("No access token available for profile sync");
+                    return false;
+                }
+
+                // V1 (legacy identity only) — use appropriate endpoint based on auth type
                 var endpoint = IsPatreonAuth ? "/user/profile" : "/user/profile-discord";
                 var request = new HttpRequestMessage(HttpMethod.Get, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -1276,7 +1309,11 @@ namespace ConditioningControlPanel.Services
                     }
 
                     v2Request.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
-                    SignRequest(v2Request, v2Body);
+                    if (!SignRequest(v2Request, v2Body))
+                    {
+                        LastSyncError = "Sync skipped: profile has no unified id to sign with";
+                        return false;
+                    }
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
 
@@ -1286,7 +1323,10 @@ namespace ConditioningControlPanel.Services
                         if (v2Response.StatusCode == (System.Net.HttpStatusCode)429)
                         {
                             LastSyncTime = DateTime.Now;
-                            App.Logger?.Debug("V2 Profile sync rate-limited by server, will retry later");
+                            // Warning, not Debug: a 429 is the single most common trigger for the
+                            // whole failed-sync chain below it, and at the default Information
+                            // min-level it was invisible in every log a user ever sent in (#920).
+                            App.Logger?.Warning("V2 Profile sync rate-limited by server (429), will retry later");
                             return false;
                         }
                         await HandleUnauthorizedAsync(v2Response);
@@ -1765,6 +1805,13 @@ namespace ConditioningControlPanel.Services
                                 // whatever XP it carries, because no legitimate clamp puts an
                                 // account that is 75k XP ahead back on Level 1. See
                                 // ServerProfileTooEmptyToClampTo.
+                                // NOT ServerProfileWouldCraterLocalLevel here: this response
+                                // answers for the unified_id we asked about, so a real-but-wrong
+                                // account is not on the table, and a >2x level drop is what a
+                                // genuine clamp of an inflated file LOOKS like (203 → 40). Adding
+                                // it would have disabled the very anti-cheat it sits inside. It
+                                // stays on the V1 path, where token-keyed endpoints can hand back
+                                // somebody else's record (#920).
                                 bool serverLooksUninitialized =
                                     ServerProfileTooEmptyToClampTo(v2Result.User.Level);
 
@@ -2112,8 +2159,15 @@ namespace ConditioningControlPanel.Services
                 // ServerProfileTooEmptyToClampTo.
                 // (The watermark adds nothing here anyway: it is a V2-only mechanism, and this
                 // predicate already covers every empty-row shape it would have caught.)
+                // The crater test rides ONLY here (#920). This method is the V1 path, and the V1
+                // endpoints resolve on token presence rather than on the account being synced, so
+                // the record handed back can belong to somebody else entirely — a real, fully
+                // initialized profile that nothing above would question. The V2 clamp does not ask
+                // it: there the account is pinned by unified_id, and a halved level is the clamp
+                // working rather than a bad read. See ServerProfileWouldCraterLocalLevel.
                 bool looksUninitialized =
-                    ServerProfileTooEmptyToClampTo(cloudProfile.Level);
+                    ServerProfileTooEmptyToClampTo(cloudProfile.Level) ||
+                    ServerProfileWouldCraterLocalLevel(cloudProfile.Level, settings.PlayerLevel);
 
                 if (looksUninitialized)
                 {
@@ -3434,11 +3488,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Signs an HTTP request with HMAC-SHA256 for anti-cheat verification.
         /// Adds X-CCP-Timestamp and X-CCP-Signature headers.
+        ///
+        /// Returns false when there is no unified id to derive the key from. Callers must NOT send
+        /// the request in that case (#894): the server answers an unsigned body with a 403 that
+        /// reads "update your app", which sent people chasing a version problem they did not have.
         /// </summary>
-        private static void SignRequest(HttpRequestMessage request, string body)
+        private static bool SignRequest(HttpRequestMessage request, string body)
         {
             var unifiedId = App.Settings?.Current?.UnifiedId;
-            if (string.IsNullOrEmpty(unifiedId)) return;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                App.Logger?.Warning("Request to {Uri} cannot be signed — no unified id on this profile. Skipping rather than sending unsigned.", request.RequestUri);
+                return false;
+            }
 
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             var payload = $"{timestamp}:{body}";
@@ -3454,6 +3516,7 @@ namespace ConditioningControlPanel.Services
 
             request.Headers.Add("X-CCP-Timestamp", timestamp);
             request.Headers.Add("X-CCP-Signature", signature);
+            return true;
         }
 
         #region Settings Backup/Restore
