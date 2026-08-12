@@ -185,7 +185,91 @@ executed against the live profile.
     used to carry, so the payout pins are unchanged).
 - Result: build 0W/0E; unit suite 846 passed / 0 failed (floor 833; +13 new).
 
-## Step 3 — byte-identity headed evidence (pending)
+## Step 3 — byte-identity headed evidence
+
+Evidence bundle: `spine-tasks/SP-057-profile-isolation-seam/evidence/` —
+`run.ps1` (the whole bracket), `manifest.ps1` / `diff.ps1`, `drive.ps1` (SP-026
+generic driver + SP-057 `-X/-Y` placement params), committed transcripts and manifests.
+
+**Run shape:** real headed `--dtrh-demo --dtrh-quick --dtrh-m2test --dtrh-auto-close 80`
+with `CCP_DATA_ROOT=<evidence>/override-root`, WebView2 151.0.4129.72, full page boot
+over the loopback, m2test driven page-originated to DONE, clean EXIT=0.
+
+**Verdict (final run, committed `run-drive.log` / `diff-verdict.txt`):**
+`DIFF VERDICT: BYTE-IDENTICAL (2677 files, set-equal both directions, all hashes match)`
+— pre/post manifests of the real `%APPDATA%\CcpClient` (app not running at capture,
+both directions set-equality + per-file length+SHA256 + directory existence; consult c
+hole 1). Override root demonstrably populated: 310 files / ~26.5 MB including
+`dtrh_slots.json` (the exact index file SP-052 Run A clobbered), `dtrh/wv2-profile`
+(the WebView2 UserDataFolder rode the seam), plus the run.log positive controls:
+`data-root override active: CCP_DATA_ROOT -> ...`, `M2 TEST MODE`, `meta engine bound
+to slot 1 (TEST clone)`, `M2TEST DONE` (consult c hole 2 — byte-identity without these
+would be vacuous). The override root itself was deleted after manifesting (26 MB of
+browser profile is not committable evidence); `override-manifest.json` (plain paths —
+sandbox content, no privacy surface) is the committed record of population.
+
+**Privacy:** real-profile manifests are committed PATH-HASHED (sha256 of each relative
+path; lengths + content hashes plain) — set-equality and byte-identity remain fully
+verifiable, owner file names never enter git. `manifest.ps1` hashes by default;
+`-PlainPaths` is for sandbox roots. Transcripts scrub the expanded owner profile path
+to `%APPDATA%\CcpClient` (prior packets never committed the expansion). The headed
+capture is committed only as a 140px header strip (`run-header-fixture-sentinel.png`):
+the full-frame grabs incidentally included the owner's overlapping desktop windows and
+were deleted.
+
+**DISPLAY3 gate (named, honest):** the 2026-08-12 session has ONLY `\\.\DISPLAY1
+(0,0) 2880x1800` attached — DISPLAY3 `(-2576,1091)` does not exist in this session's
+virtual desktop (an off-screen SetWindowPos "verifies" trivially; the first capture at
+the DISPLAY3 origin came back blank and is discarded as evidence). The final run placed
+the window at a VISIBLE DISPLAY1 point (100,100), rect-verified, captured with real
+content (dark=65.8%, ~337 distinct colors). The byte-identity claim does not depend on
+the display; the DISPLAY3 convention is re-run material whenever the monitor is back.
+
+**Fixture-origin proof on screen:** the header strip shows `Tempted` / 981 sparks /
+5 gold after m2test: 981 = fixture sentinel 777 + the dry-run payout 204 —
+fixture-origin arithmetic visible in the headed UI, matching
+`payout-sparks sparks=204 dryRun=true` in run.log.
+
+**The m2test `meta-commands` line reads FAIL (7/8) — explained, deterministic, NOT an
+engine regression.** `rev +19 (expected 18)`. Replay of the exact 26-op m2test sequence
+against the engine in isolation (fixture start) produces EXACTLY the modeled +18 — the
+engine applies/rejects every op identically. The 19th bump is PAGE-ORIGINATED: a
+`map-set narrativeCooldownEnds` from cheshireGuide firing a first-gold event line,
+plus a pre-measurement burst (cheshire self-heal `set-num tutorialStage` + the reveals
+framework queueing/flashing fresh unlocks: dollhouse/toybox/pill_teasing/draft_skip/
+variant_* on a runs=3, zero-seen-reveals document). Every prior m2test run cloned the
+OWNER's live document — completed arc, seen lines, populated reveal sets — so this
+traffic never existed; the payload's expectation model (m2test.js:97-100, engine ops
+only, parameterized on m0) never had to account for fresh-profile page chatter. An
+instrumented headed run (temporary test-mode op log, reverted after) captured the full
+op sequence proving this (`run-diag-instrumented.log` — 18 engine ops in the
+measurement window + the 1 page op). Deterministic: +19 on all three headed runs. The
+substantive checks all pass (meta-state gold=5/5 dial/flag/boon, crafting-p2, paperwall,
+payout-xp-cap, payout-sparks). This IS the SP-052 hazard class made visible: evidence
+keyed to a fresh declared state differs from evidence keyed to the owner's live state —
+which is the point of the fixture. Future packets using this seam will see the same
+7/8 with this explanation; if a fully-green m2test board is ever required, the fix
+belongs to the payload's expectation model (read-only WPF tree — an upstream ask, not
+a silent fixture tweak; over-fitting the fixture to impersonate a veteran profile was
+considered and rejected as less honest).
+
+**Linux/WSLg disposition:** named gate — this machine has NO WSL distribution
+installed (`wsl.exe -l` empty), so no Linux headed run was possible. The trap class
+does not exist on Linux (.NET's Unix ApplicationData mapping honors XDG_CONFIG_HOME —
+SP-010) and the override precedes platform resolution by construction; the Linux
+default shape is pinned by the unset-env unit test. First Linux-capable session should
+re-run `run.ps1` under WSLg.
+
+**Negative demonstration: REASONED, not executed** (PROMPT Do-NOT). Two legs:
+(1) the net10 trap proof (Step 1) — `APPDATA=` does not move the resolution, so an
+unsealed run lands in the real profile by construction; (2) the unset-env unit test
+pinning `DefaultSettingsPath()` to the real per-user path. The census shows every
+writer funnels through that one function, so "no override => real profile" needs no
+live demolition against the owner's data.
+
+**Claim scope (consult c):** the proven claim is `%APPDATA%\CcpClient` byte-identity.
+WebView2/LibVLC may write under LocalAppData/Temp outside the seam's directory —
+outside this claim, stated as a limit, not swept under.
 
 ## Step 4 — final consult + budgets + surprises (pending)
 
@@ -196,4 +280,5 @@ executed against the live profile.
 | step | spine_review_step call | result |
 |---|---|---|
 | 1 (plan) | called 2026-08-12T05:50 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
-| 2 (plan) | (to be filled) | |
+| 2 (plan) | called 2026-08-12T06:05 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
+| 3 (plan) | (to be filled) | |

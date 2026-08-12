@@ -1,6 +1,6 @@
 ## STATUS: SP-057 — Profile isolation seam (APPDATA trap + m2test fixture discipline)
-**Current Step:** Step 3 — real-profile byte-identity evidence (headed)
-**Last Updated:** 2026-08-12 (worker, step 2 complete — 846 unit green, 0W/0E build)
+**Current Step:** Step 4 — record + pre-completion consult
+**Last Updated:** 2026-08-12 (worker, step 3 complete — byte-identity proven headed, 2677 files identical, override populated)
 **Blockers:** none
 
 ### Step 1: consumer census + seam design + pre-approach consult — COMPLETE
@@ -17,12 +17,12 @@
 - [x] m2test clones the declared fixture, never the live doc
 - [x] Tests: per-consumer honoring, typed failure, fixture sourcing, bypass guard
 
-### Step 3: real-profile byte-identity evidence (headed)
-- [ ] Pre-run manifest of the real user data directory
-- [ ] Headed run under the override on DISPLAY3 (DTRH host + m2test)
-- [ ] Post-run manifest + diff: byte-identical real profile, override root populated
-- [ ] Linux/WSLg disposition recorded honestly
-- [ ] Transcripts (no negative case against the live profile)
+### Step 3: real-profile byte-identity evidence (headed) — COMPLETE
+- [x] Pre-run manifest of the real user data directory
+- [x] Headed run under the override on DISPLAY3 (DTRH host + m2test)
+- [x] Post-run manifest + diff: byte-identical real profile, override root populated
+- [x] Linux/WSLg disposition recorded honestly
+- [x] Transcripts (no negative case against the live profile)
 
 ### Step 4: record + pre-completion consult
 - [ ] record.md (census, trap proof, design + rejected alternatives, manifests, consults, review presence)
