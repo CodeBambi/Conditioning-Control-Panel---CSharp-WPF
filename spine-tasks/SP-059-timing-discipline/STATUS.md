@@ -1,15 +1,15 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** not started
-**Last Updated:** 2026-08-12 (orchestrator, authored — wave-17 lane-1)
+**Current Step:** Step 2
+**Last Updated:** 2026-08-12 (worker, Step 1 complete pending review)
 **Blockers:** none
 
-### Step 1: sweep, classify, design + pre-approach consult — NOT STARTED
-- [ ] Update STATUS.md before starting work
-- [ ] Suite-wide sweep table (file:line → construct → what it waits for → class)
-- [ ] Classify every site (deterministic-convertible / tolerant-window-required / legitimately real-time)
-- [ ] Deliberate reproduction attempt of the named flake (or the honest cannot-reproduce record)
-- [ ] Design the approved wait helper (loud classifier), the guard rule, and any product seam (default: none)
-- [ ] Pre-approach solo consult (verdict + ACTUAL model in record.md)
+### Step 1: sweep, classify, design + pre-approach consult — COMPLETE (plan review pending)
+- [x] Update STATUS.md before starting work
+- [x] Suite-wide sweep table (file:line → construct → what it waits for → class)
+- [x] Classify every site (deterministic-convertible / tolerant-window-required / legitimately real-time)
+- [x] Deliberate reproduction attempt of the named flake (or the honest cannot-reproduce record)
+- [x] Design the approved wait helper (loud classifier), the guard rule, and any product seam (default: none)
+- [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
 ### Step 2: convert the AI lab + close SP-041's registry gap — NOT STARTED
 - [ ] `WaitForAsync`/`WaitForRecordAsync` converted; the 8000 ms literal gone (not enlarged)
