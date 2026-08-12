@@ -126,8 +126,9 @@ public class AssetManifestTests
     public void CopiedDirection_RealManifest_AllCopiedEntriesPresentCaseExact_SweepClean()
     {
         // SP-023 (first copied consumer — the documented extension of the assert-empty
-        // direction): 3682 copied entries (1542 DTRH payload + 2 product overlay + 2138
-        // intake payload, SP-054's flagged glue bundle) verified against the REAL output
+        // direction): 3700 copied entries (1542 DTRH payload + 2 product overlay + 2138
+        // intake payload, SP-054's flagged glue bundle + 18 tunnel backdrop payload, SP-061:
+        // 9 tunnel + 9 vendor/three) verified against the REAL output
         // directory — existence, ordinal case-exactness, sweep.
         //
         // 2137 -> 2138 at the SP-054 land (orchestrator, upstream sync v6.6.3 -> v6.7.4,
@@ -135,15 +136,22 @@ public class AssetManifestTests
         // flight, so the manifest generated from the pre-sync tree was one entry short of
         // the tree the glob now copies. The count is the tripwire that caught it — bump it
         // WITH the reason, never to silence a sweep failure.
+        // 3682 -> 3700 at SP-061: the tunnel backdrop trees (`payload/tunnel` 9 +
+        // `payload/vendor/three` 9 — the import-map resolution closure, derived in
+        // spine-tasks/SP-061-chaos-tunnel-backdrop/record.md Step 1).
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
-        Assert.Equal(3682, copied.Length);
+        Assert.Equal(3700, copied.Length);
         Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
             && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"
             && e.Path == "payload-overlay/bridge.js");
         Assert.Contains(copied, e => e.Id == "intake.payload/web-shim.js"
             && e.Path == "payload/intake/web-shim.js" && e.Required && e.Trust == "full");
+        Assert.Contains(copied, e => e.Id == "tunnel.payload/index.html"
+            && e.Path == "payload/tunnel/index.html" && e.Required && e.Trust == "full");
+        Assert.Contains(copied, e => e.Id == "tunnel.vendor/three/three.module.min.js"
+            && e.Path == "payload/vendor/three/three.module.min.js" && e.Required && e.Trust == "full");
         var outputRoot = Path.GetDirectoryName(DesktopAssembly.Location)!;
         var failures = AssetVerifier.VerifyCopied(entries, outputRoot);
         Assert.Empty(failures);

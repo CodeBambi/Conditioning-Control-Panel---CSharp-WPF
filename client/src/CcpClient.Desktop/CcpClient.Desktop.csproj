@@ -61,6 +61,21 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <!-- SP-061 tunnel backdrop payload serving (the SAME copied-asset convention +
+         trust-anchor discipline as the dtrh/intake globs; DOCUMENTED File-Scope amendment —
+         record.md Step 2). TWO roots because the page's import map resolves ../vendor/three
+         relative to /tunnel/ (tunnel/index.html:29-34; WPF maps the Resources/web root for
+         the same reason, ChaosTunnelService.cs:43-46). READ-ONLY upstream trees. -->
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\tunnel\**\*">
+      <Link>payload\tunnel\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\vendor\**\*">
+      <Link>payload\vendor\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <!-- Product-owned overlay (served overlay-first; exactly ONE payload shadow:
          bridge.js = blob 13af3f4d + the §3.1 transport diff). -->
     <Content Include="Features\Dtrh\overlay\**\*">

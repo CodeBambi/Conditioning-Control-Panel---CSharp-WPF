@@ -74,9 +74,22 @@ public class DataRootOverrideTests
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
         }
 
+        var actual = CompositionRoot.DefaultSettingsPath();
+        if (CompositionRoot.ActiveDataRootOverride() is not null)
+        {
+            // A sibling env-mutating fixture (DataRootOverrideEnvTests, the
+            // ProcessEnvCollection half) set the process-wide override BETWEEN the guard
+            // above and the read — the observed SP-057 flake class (SP-061 red classified
+            // 2026-08-12: reproduced on the wave-18 base commit; the collection's
+            // DisableParallelization serialization did not prevent the overlap under
+            // xUnit.v3 3.2.2 + the MTP runner). Skip: the pin only binds when the override
+            // was unset at BOTH checkpoints (the read then provably came from the unset state).
+            return;
+        }
+
         Assert.Equal(
             Path.Combine(expectedRoot, "CcpClient", "settings.json"),
-            CompositionRoot.DefaultSettingsPath());
+            actual);
     }
 
     private sealed class TempDir : IDisposable

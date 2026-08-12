@@ -51,7 +51,9 @@ Dispositions: **RETAINED** (full row in §4) · **CROSS-REF** (behavior owned by
 | `Services/Flash/FlashService.cs:2901` `FlashWindow` (pooled flash overlay) | overlay-clickthrough skill scope; no board row authored yet |
 | `Services/Subliminal/BouncingTextService.cs:554` `BouncingTextWindow` | overlay-clickthrough skill scope; no board row authored yet |
 | `Windows/TutorialOverlay.xaml` (owned spotlight overlay, `ShowActivated=false`, re-front logic `TutorialOverlay.xaml.cs`) | overlay-clickthrough skill scope (region-input/Z-order policy); no board row authored yet |
-| Ad-hoc overlays (17): `OverlayService.cs:990` (tint), `:1507` (spiral), `:1585`, `:1973`; `SubliminalService.cs:928`; `SessionEngine.cs:1367` (corner GIF); `KeywordHighlightService.cs:110`; `GazeDebugCursorService.cs:127`; `AttentionCheckService.cs:327`; `BlinkTrainerService.cs:662`; `BubbleCountService.cs:355`; `BubbleService.cs:2099` (interactive bubbles — mixed interactive/passive region policy); `BubbleCountWindow.xaml.cs:1097`; `ChaosBackdropService.cs:178`; `ChaosTunnelService.cs:182`; `MainWindow.Enhancements.cs:2204` (pink flash), `:2312` | overlay-clickthrough skill scope; no board row authored yet |
+| Ad-hoc overlays (16): `OverlayService.cs:990` (tint), `:1507` (spiral), `:1585`, `:1973`; `SubliminalService.cs:928`; `SessionEngine.cs:1367` (corner GIF); `KeywordHighlightService.cs:110`; `GazeDebugCursorService.cs:127`; `AttentionCheckService.cs:327`; `BlinkTrainerService.cs:662`; `BubbleCountService.cs:355`; `BubbleService.cs:2099` (interactive bubbles — mixed interactive/passive region policy); `BubbleCountWindow.xaml.cs:1097`; `ChaosBackdropService.cs:178`; `MainWindow.Enhancements.cs:2204` (pink flash), `:2312` | overlay-clickthrough skill scope; no board row authored yet |
+
+(`ChaosTunnelService.cs:182` was removed from the list above by SP-061 (2026-08-12): it is NOT a click-through overlay — it is the opaque below-Topmost game backdrop, promoted to retained row W-80 in §4.7.)
 
 ### 2.2 Excluded surfaces (4) + 1 non-window note
 
@@ -63,9 +65,9 @@ Dispositions: **RETAINED** (full row in §4) · **CROSS-REF** (behavior owned by
 | `Services/Video/VideoService.cs:4018` dummy window | Invisible collapsed dummy (`Visibility.Collapsed`), never a user surface |
 | `Windows/FeatureSettingsPopup.xaml` | **Not a window** — `<UserControl>` root; enumeration near-miss recorded for completeness. Its nested `PhraseInputDialog` (code-only) IS retained (W-61) |
 
-### 2.3 Retained surfaces (79) — full rows in §4
+### 2.3 Retained surfaces (80) — full rows in §4
 
-Counts per category: standalone interactive window **3** (W-01…W-03) · owned modeless tool/editor **13** (W-04…W-16) · owned modal dialog **45** (W-17…W-61) · interactive topmost attention surface **9** (W-62…W-70) · non-activating notification **5** (W-71…W-75) · startup/progress surface **4** (W-76…W-79). **Total 79 retained rows, IDs W-01…W-79.**
+Counts per category: standalone interactive window **3** (W-01…W-03) · owned modeless tool/editor **13** (W-04…W-16) · owned modal dialog **45** (W-17…W-61) · interactive topmost attention surface **9** (W-62…W-70) · non-activating notification **5** (W-71…W-75) · startup/progress surface **4** (W-76…W-79) · game backdrop surface **1** (W-80, added by SP-061 — promoted from the §2.1 ad-hoc cross-ref: it is opaque and click-ABSORBING, never click-through, so the overlay-clickthrough scope does not own it). **Total 80 retained rows, IDs W-01…W-80.**
 
 ## 3. Observation procedure per field (how the exercise gate will exercise every row)
 
@@ -200,6 +202,16 @@ All: `ShowActivated=false` (XAML), `Topmost=True` (XAML), `ShowInTaskbar=false` 
 | W-77 | **WebcamLoadingSplash** (`Windows/WebcamLoadingSplash.xaml`) | `Owner = this` (`MainWindow.LabTab.cs:426`) | modeless — `.Show()` (`LabTab.cs:433`) | activated d(true) | `ShowInTaskbar=false` (XAML) | `Topmost=True` (XAML) | `NoResize` | `CenterOwner`, 420×200 (XAML) | `WindowStyle.None`, transparent (XAML) | **single instance field** `_webcamLoadingSplash` (`LabTab.cs:401,426-433`); Closed → null |
 | W-78 | **WelcomeDialog** (`Dialogs/WelcomeDialog.xaml`) | **none — unowned** (`WelcomeDialog.xaml.cs:31-33`) | modal — `ShowDialog()` | activated d(true) | d(true) → taskbar button expected | d(false) | `NoResize` | `CenterScreen`, 520×670 (XAML) | `WindowStyle.None`, transparent (XAML) | static entry; new instance per call; first-run gate (`Welcomed` flag) |
 | W-79 | **UpdateProgressDialog** (`Dialogs/UpdateProgressDialog.xaml`) | none coded (CD) | modeless — `.Show()` (`App.xaml.cs:2537`) | activated d(true) | d(true) → taskbar button expected | d(false) | `NoResize` | `CenterScreen`, 400×150 (XAML) | `WindowStyle.ToolWindow` (XAML) | new per update; closed by update completion |
+
+### 4.7 Game backdrop surfaces (1)
+
+The opaque full-screen backdrop shape the §1.2 category vocabulary did not have: sits **below every Topmost game surface by construction**, absorbs clicks (they reach the page — deliberately NOT click-through, so the overlay-clickthrough scope does not own it), never activates, never in taskbar/Alt-Tab. Added by SP-061 (2026-08-12).
+
+| ID | Window | Owner | Modality | Activation/focus | Taskbar/Alt-Tab | Topmost | Resize | Placement | Decorations | Close/reuse lifecycle |
+|---|---|---|---|---|---|---|---|---|---|---|
+| W-80 | **Chaos tunnel backdrop** (ad-hoc, `Chaos/ChaosTunnelService.cs:182`) | none coded (CD) | modeless — `.Show()` (`:204`) | **non-activating:** `ShowActivated=false` (`:189`), `Focusable=false` (`:190`), `WS_EX_NOACTIVATE` (`:563`) — clicks reach the page for power-up raycasting (NO `WS_EX_TRANSPARENT`, `:31`) | `ShowInTaskbar=false` (`:188`) + `WS_EX_TOOLWINDOW` (`:563`) → no taskbar, hidden from Alt-Tab | **`Topmost=false` (`:187`) + sunk to `HWND_BOTTOM` after show (`:206`, `:433-441`)** — deterministically below every Topmost bubble/FX/video/HUD window; z-guard keeps MainWindow BELOW the tunnel while a run is live (1500ms timer + `WM_WINDOWPOSCHANGING` rewrite hook, `:444-539`) | `NoResize` (`:191`) | `Manual` at (0,0), primary-screen sized (`:194-196`) | `WindowStyle.None`, **`AllowsTransparency=false` — OPAQUE** (`:180-186`; a WebView2 child HWND does not paint in a layered window) | **own-lifecycle warm window:** `Preload()` builds under the countdown (`:66-80`), `Show()` posts run-start (`:82-99`), `CloseActive()` = page exit anim → close on `exit-done` or 1200ms watchdog force (`:141-163`); warm window REUSED across RunAgain (re-arm guard `:289-294`); one logical instance (static service), gated on `ChaosTunnelEnabled` (`:58`) |
+
+**W-80 greenfield status (RV, 2026-08-12, SP-061):** ported under `client/src/CcpClient.Desktop/Features/Chaos/` and runtime-verified headed on Windows — pixel-proven layering both directions (a real Topmost `DtrhVideoWindow` occludes the rendering tunnel; the tunnel visible where nothing covers it), non-activation proven across show/re-show cycles, profile byte-identical under `CCP_DATA_ROOT` (evidence: `spine-tasks/SP-061-chaos-tunnel-backdrop/evidence/wh/`). Ported deltas vs the CD row: the preventive `WM_WINDOWPOSCHANGING` rewrite hook is NOT ported — the 1500ms timer corrects a rise within one cadence (observed live), so a re-activated dashboard can paint over the backdrop for up to ~1.5s before the demote lands; Linux is a typed-Unavailable surface this row (no page-side bridge transport + no keep-below control on the NativeWebDialog toplevel).
 
 ## 5. Platform matrix
 
