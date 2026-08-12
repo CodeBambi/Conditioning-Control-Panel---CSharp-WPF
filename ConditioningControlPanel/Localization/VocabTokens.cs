@@ -26,19 +26,17 @@ namespace ConditioningControlPanel.Localization
         public const string CollectiveToken = "{collective}";
 
         // ---------------------------------------------------------------------------------
-        // VANILLA DEFAULTS — the two lines to edit when the name is decided.
-        //
-        // OPEN DECISION (planning/one-descent/DECISIONS.md, 2026-08-10): the vanilla petname is
-        // still awaiting the owner's sign-off; "dreamer"/"dreamers" is the working candidate, not
-        // the final word. Nothing else in the codebase hard-codes either value — changing these two
-        // consts changes every unmodded surface — so this is the single config point.
+        // VANILLA DEFAULTS — owner-locked 2026-08-12: "sweetie"/"sweeties"
+        // (planning/one-descent/DECISIONS.md). Nothing else in the codebase hard-codes either
+        // value — changing these two consts changes every unmodded surface — so this stays the
+        // single config point.
         // ---------------------------------------------------------------------------------
 
-        /// <summary>Vanilla (no mod override) value for <c>{petname}</c>. PENDING OWNER SIGN-OFF.</summary>
-        public const string VanillaPetName = "dreamer";
+        /// <summary>Vanilla (no mod override) value for <c>{petname}</c>.</summary>
+        public const string VanillaPetName = "sweetie";
 
-        /// <summary>Vanilla (no mod override) value for <c>{collective}</c>. PENDING OWNER SIGN-OFF.</summary>
-        public const string VanillaCollective = "dreamers";
+        /// <summary>Vanilla (no mod override) value for <c>{collective}</c>.</summary>
+        public const string VanillaCollective = "sweeties";
 
         /// <summary>
         /// Resolved values for one manifest, cached so the substitution pass does not re-walk the
