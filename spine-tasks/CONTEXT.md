@@ -1,8 +1,8 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-08-12
-**Status:** ACTIVE — wave 18 LANDED (`e1a4df6e`); wave 19 next = SP-062 (loud skip + fixture env isolation, filed at the SP-061 land)
-**Next Task ID:** SP-062
+**Status:** ACTIVE — wave 19 RUNNING (batch `20260812T203752`, single lane SP-062); wave 18 LANDED (`e1a4df6e`)
+**Next Task ID:** SP-063
 
 ---
 
@@ -98,6 +98,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-058-graded-intake-v67-delta | Row (P1): v6.6.3 → v6.7.4 intake delta — enumerate from the tree, obligation table, serve accents/ai payload deltas, consume SP-055's `IsAssetActive` (no second definition), pin `TopMarksPercent = 90.0` with its verdict derivation, state the new baseline | **Done 2026-08-12** (landed `7bfce5ac`; batch `20260812T072253` — FULL review chain: code APPROVE + final PASS + contract ok; **clean merge, no T-12**; ledger incomplete a 3rd time (`QuizService.cs +15` unnamed, `GamificationBridge.cs +157` found by widened sweep → cross-referenced to the Trainer Card row); accents SERVE + ai.js/QuizService NOTHING; top-marks computed-and-logged-never-raised typed seams; `IsAssetActive` verified-not-reimplemented; serve-probe 200 w/ trust-anchor sha256 + 404 control; first consumer of the `CCP_DATA_ROOT` seam, real profile BYTE-IDENTICAL; new baseline v6.7.4 `0c9947a6`; 862/862 + 33/33; **orchestrator merged-state check found a red the worker AND the engine gate both missed → new P1 timing-discipline row**; row WIP) | SP-057 |
 
 **WAVE 16 COMPLETE 2026-08-12 — both lanes landed (`c42d82ff`, `7bfce5ac`).** Rows filed across the two land consults: **harness entry points must refuse to run unsealed** (P1 — the SP-057 seam is opt-in, the same procedural class that failed at SP-052), **m2test expectation-model upstream ask** (P2), **wall-clock waits in tests — third occurrence of the timing-discipline class** (P1, encode-don't-fix-once: convert + sweep + guard + constitution line, 10 consecutive greens, zero assertions weakened). Unit floor now **862** with the flaky test named on its row. Next unused task ID: SP-059.
+
+### Wave 19 (RUNNING 2026-08-12, batch `20260812T203752` — single lane)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-062-pin-skip-env-isolation | Row (P1, size S/M): the SP-057 pin can pass VACUOUSLY. Two defects, both in scope — (1) the silent `return` becomes a LOUD skip so a vacuous run reports `891 passed / 1 skipped` and the exact-count floor discipline catches it for free; (2) the underlying process-wide env leak is fixed for real (`DisableParallelization` proven NOT to serialize under xUnit.v3 3.2.2 + the MTP runner), proven by a repro harness rather than by the runner's documented claim. Plus an enumeration (not a prediction) of every correctness dependency on process-wide mutable state, a positive control proving the skip is live code, and 10 consecutive greens including a fresh-checkout first-ever build | Authored + launched 2026-08-12 | SP-061 |
+
+**Why alone (wave-19 decomposition consult, solo):** this row changes what "passing" MEANS for the whole suite. A second lane would (i) contaminate the 10-consecutive-green measurement whose entire subject is scheduling pressure, and (ii) race the exact floor count the acceptance depends on. Rows 38 (harness refuse-unsealed) and 49 (injected timeout BUDGETS, fourth occurrence) are the natural successors and both produce more trustworthy evidence landing AFTER this one. Priority note: row 49's red is a real cold-run failure while row 48's is a silent-green signal defect — the instrument is fixed first because row 49's own acceptance ("10 consecutive greens") is unmeasurable until it is. SP-062 carries the row-49 site by NAME as a known, diagnosed, out-of-scope red (raising its 800 ms budget stays banned).
 
 ### Wave 18 (LANDED 2026-08-12, integrate `e1a4df6e`)
 

@@ -1,5 +1,12 @@
 # Port Status (as of 2026-08-12, third export — laptop)
 
+## Wave 19 (RUNNING — launched 2026-08-12, batch `20260812T203752`, single lane)
+
+- **SP-062 = the SP-057 pin's loud skip + REAL process-env isolation.** Silent `return` → skip (so a vacuous run reads `891 passed / 1 skipped` and the exact-count floor catches it), plus the actual cross-collection env leak fixed and proven by a repro harness (`DisableParallelization` does NOT serialize under xUnit.v3 3.2.2 + the MTP runner). Enumeration of process-wide-state dependencies, positive control, 10 consecutive greens with ≥1 fresh-checkout first-ever build.
+- **Single lane by consult (solo):** the row changes what "passing" means suite-wide — a second lane contaminates the 10-green scheduling-pressure measurement and races the floor count. Successors: board row 38 (harness entry points refuse unsealed) and row 49 (injected timeout BUDGETS, 4th occurrence). Row 49's site `LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` is carried in SP-062 BY NAME as a known out-of-scope cold red; raising its 800 ms budget stays banned.
+- Session posture: git clean and in sync with origin at `f3a1192b`; MCP 1/3 (avalonia-docs connected; avalonia-live `fetch failed`; avalonia-ui not connected); no MonitorCreate/LoopList tools → batch watcher is a background pi Agent on `spine wait`. Next unused task ID after this wave: **SP-063**.
+- Board reconcile at launch: row "Wire companion memory into prompt context" status cell corrected OPEN→WIP (landed SP-047 work must never read as claimable).
+
 Branch: `feat/crossplatform` @ wave-17 integrate `eb1f60d4`. **35+ land commits ahead of `origin/feat/crossplatform` and NOT pushed** (waves 13-17). Do not `reset --hard origin` on this machine — that would destroy them.
 
 ## Live state (2026-08-12)
