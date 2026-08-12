@@ -350,7 +350,7 @@ prefers DISPLAY3 when attached; the gate stays named as re-run material).
 | 1 (plan) | called 2026-08-12T05:50 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
 | 2 (plan) | called 2026-08-12T06:05 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
 | 3 (plan) | called 2026-08-12T06:40 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
-| 4 (plan) | called 2026-08-12T06:55 | (filled at call) |
+| 4 (plan) | called 2026-08-12T06:56 | SKIPPED engine-owned (SP-195), spawnFailed=false — not a failure |
 
 ## Step 5 — contract verification
 
