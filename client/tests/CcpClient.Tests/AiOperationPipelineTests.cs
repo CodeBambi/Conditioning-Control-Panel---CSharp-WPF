@@ -198,6 +198,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud); // the switch IS the cancellation
 
@@ -218,6 +219,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud);
         provider.Release(); // the LATE reply arrives after the switch
@@ -241,6 +243,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromSeconds(10));
@@ -264,6 +267,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         // Panic with a SHORT bound: the uncooperative op is still blocked; drain hits the bound.
         var started = TestWait.MonotonicNow();

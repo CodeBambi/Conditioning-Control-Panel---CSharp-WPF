@@ -1,6 +1,6 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** Step 5
-**Last Updated:** 2026-08-12 (worker, Step 4 complete — 10/10 green)
+**Current Step:** Step 6
+**Last Updated:** 2026-08-12 (worker, Step 5 complete — pre-completion consult done, chain re-established 10/10)
 **Blockers:** none
 
 ### Step 1: sweep, classify, design + pre-approach consult — COMPLETE
@@ -28,12 +28,12 @@
 - [x] At least one cold run, with "cold" defined
 - [x] Floor discipline honored (862/33; any red named before discussion)
 
-### Step 5: record + pre-completion consult — IN PROGRESS
-- [ ] record.md complete (incl. assertion-change proof and intended board filings)
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
-- [ ] STATUS.md accurate before .DONE
+### Step 5: record + pre-completion consult — COMPLETE
+- [x] record.md complete (incl. assertion-change proof and intended board filings)
+- [x] Pre-completion solo consult (verdict + ACTUAL model)
+- [x] STATUS.md accurate before .DONE
 
-### Step 6: Testing & Verification — NOT STARTED
+### Step 6: Testing & Verification — IN PROGRESS
 - [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥862 unit + ≥33 headless, TRX)
 - [ ] `git diff --check` clean
 - [ ] `git status --short` shows only File Scope paths

@@ -245,6 +245,41 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
      (path + exact line content); unmarked token fails, unpinned marker fails, stale pin
      fails.
 
+### Pre-completion solo consult (Step 5)
+
+- **Route:** in-session `consult` tool, `mode: "solo"`. As with the pre-approach call,
+  the tool response does not echo its answering-model identity — **ACTUAL answering
+  model honestly unidentifiable from tool output** (SP-037/SP-043 precedent).
+- **TRUNCATION (second occurrence, recorded per the SP-058 precedent):** the response
+  was truncated mid-item-(b); items (c) (guard hole audit) and (d) (never-land review)
+  never arrived. Nothing stitched or guessed. Item (c) was partially discharged by my
+  own token-set gap check (added `SpinWait`/`SpinUntil`/`CancellationTokenSource(TimeSpan`/
+  `CancelAfter(` — zero current sites, closes the slip-through paths); the engine's
+  code review after .DONE covers the rest.
+- **Received findings (items a–b), all acted on:**
+  1. **REAL DRIFT CAUGHT:** the `FakeProvider.FirstCall` conversion changed the waited
+     condition from `Calls == 1` (exactly one send — would go RED on a double-send) to
+     ≥1. **Adopted fix:** `Assert.Equal(1, provider.Calls)` restored after each of the
+     four waits, and the 10-run chain re-established after the change.
+  2. **Record precision:** wait WINDOWS moved from scattered per-site literals
+     (2 s/5 s/8 s) to the helper's uniform 20 s tolerant window — that is the framing-(a)
+     sanctioned trade (tolerant window + loud classifier), but §7 now says so explicitly
+     instead of implying nothing time-related changed. ASSERTION bounds (elapsed
+     subject matter) are verbatim-unchanged.
+  3. **Classifier limitation recorded:** a single >250 ms scheduling hiccup (e.g. GC
+     pause) can flip a REAL failure's verdict token to ENVIRONMENT-STARVED — the test
+     still FAILS (never skipped, never green), the message instructs rerun-first, and
+     the actor-state evidence travels with it. Verdict = hypothesis; evidence = the
+     differential.
+  4. **`Until(Task)` window timer retired on early success** (cosmetic leak the advisor
+     flagged) — the timeout `Task.Delay` is now cancelled via a CTS.
+  5. **Sufficiency verdict (b):** the honest claim is *mechanism removed + no
+     regression*, not *flake proven gone*: the red's producing mechanism (the 8000 ms
+     losable deadline with an undifferentiated message) no longer exists anywhere in
+     the suite; the re-established 10-run chain (below) proves no regression and no new
+     flake; "the original 2-in-6 cold red is gone" remains an INFERENCE FROM MECHANISM,
+     not a measurement — it was never reproduced here. §2 and §9 carry this caveat.
+
 ## Review Level: 2 — engine-review presence log (T-2 heading format)
 
 | Step | Call | Result |
@@ -288,12 +323,16 @@ the registry-closure proof (any false leak report would have failed it LOUD).
 
 `git diff d5a49f7e -- client/tests` filtered to assertion-bearing lines; EVERY touched
 assertion below. **Zero assertions relaxed, deleted, tolerance-widened, or
-`Skip=`'d. Suite counts: the guard ADDS one unit test (863 unit / 33 headless after
-Step 3; the floor note is re-stated in §9).**
+`Skip=`'d. ASSERTION bounds are verbatim-unchanged; WAIT WINDOWS moved from scattered
+per-site literals (2 s/5 s/8 s) to the helper's uniform 20 s tolerant window with the
+loud classifier — the framing-(a)-sanctioned trade, stated explicitly (pre-completion
+consult precision point). The consult also caught one incidental condition drift
+(`Calls == 1` → ≥1), RESTORED as `Assert.Equal(1, provider.Calls)` ×4 (see #1).**
+Suite counts: 863 unit (862 floor + the guard test) / 33 headless.
 
 | # | diff | verdict |
 |---|------|---------|
-| 1 | `- Assert.Fail("condition not met within 2s")` (AiOperationPipelineTests local poll) | wait-failure mechanism, not a product assertion; replaced by `TestWait.Until(provider.FirstCall.Task, …)` — a DETERMINISTIC signal with a louder classified failure on the same in-flight condition |
+| 1 | `- Assert.Fail("condition not met within 2s")` (AiOperationPipelineTests local poll) | wait-failure mechanism, not a product assertion; replaced by `TestWait.Until(provider.FirstCall.Task, …)` — a DETERMINISTIC signal with a louder classified failure. The poll's exact-`Calls == 1` condition became ≥1 through the signal — **drift caught by the pre-completion consult and RESTORED as `Assert.Equal(1, provider.Calls)` after each wait** |
 | 2 | `- Assert.True(condition(), "timed out waiting for {what}")` (lab WaitForAsync tail) | wait-failure mechanism; the three call sites now `TestWait.Until` on identical conditions (`BytesReadSoFar > 0`, `SendAttempts >= 1`) |
 | 3 | 3 × `- Assert.True(await WaitForAsync(() => heartbeat…/texts…), msg)` → `+ await TestWait.Until(<same lambda>, <same msg>)` (AsyncLifecycleTests) | identical conditions AND messages; the helper throws the classified failure where the bool+Assert.True pair threw a plain one |
 | 4 | `- Assert.True(Dispatch.Pending > 0, "no dispatch post arrived within the bound")` → `TestWait.UntilSync(() => Dispatch.Pending > 0, …)` (CompanionViewModelTests) | identical condition; the pump still runs after the wait |
@@ -371,22 +410,35 @@ Each run: `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -
 stdout+stderr redirected to `evidence/run-NN.log` (the SP-058 land lesson: no tailing —
 the full command chain is in every file, verify.mjs OK line confirmed present ×10).
 
+**Chain history (honesty):** a first 10/10 chain was established after Step 3; the
+pre-completion consult then produced code changes (the `Calls == 1` restoration, the
+`Until(Task)` timer retirement, four new guard tokens). Test code changed ⇒ the chain
+was RE-ESTABLISHED from zero; the index below is the FINAL, current chain. The
+superseded chain was also 10/10 (recorded here so the re-run is not mistaken for a
+red-restart — no red ever occurred in either chain).
+
 | run | conditions | result | unit | headless | durations | build |
 |-----|-----------|--------|------|----------|-----------|-------|
-| 01 | **COLD** — `bin/`+`obj/` deleted for all three projects first; full restore+rebuild, first test-host start (the closest this environment gets to the SP-058 reds' cold/first-run correlation) | green | 863/863 | 33/33 | 36s / 15s | 0W/0E |
-| 02 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
+| 01 | **COLD** — `bin/`+`obj/` deleted for all three projects first; full restore+rebuild, first test-host start (the closest this environment gets to the SP-058 reds' cold/first-run correlation) | green | 863/863 | 33/33 | 35s / 15s | 0W/0E |
+| 02 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
 | 03 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
 | 04 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
 | 05 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
 | 06 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
-| 07 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
-| 08 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
+| 07 | warm | green | 863/863 | 33/33 | 36s / 14s | 0W/0E |
+| 08 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
 | 09 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
 | 10 | warm | green | 863/863 | 33/33 | 35s / 14s | 0W/0E |
 
 **10/10 consecutive green, zero reds of any class** — no red to name (floor discipline
 discharged vacuously; had any red occurred it would have been named BY NAME from its
 log before any discussion, and the count restarted).
+
+**Honesty caveat (pre-completion consult):** this chain proves NO REGRESSION and NO NEW
+flake. The original 2-in-6 cold red was never reproduced in this environment (§2);
+"the flake is gone" is an inference from the removed mechanism (the 8000 ms losable
+deadline with an undifferentiated message no longer exists anywhere in the suite), not
+a measurement.
 
 **Floor note:** the row's floor is 862 unit / 33 headless. The honest count is now
 **863 unit** = 862 + the guard test (`TestTimingGuardTests`), the only new test this

@@ -60,13 +60,15 @@ public static class TestWait
         Task signal, string what, Func<string>? state = null, TimeSpan? window = null)
     {
         var effectiveWindow = window ?? DefaultWindow;
-        var timeout = Task.Delay(effectiveWindow);
+        using var timeoutCts = new CancellationTokenSource();
+        var timeout = Task.Delay(effectiveWindow, timeoutCts.Token);
         // NO ConfigureAwait(false) anywhere in this helper: headless UI tests poll
         // dispatcher-owned state from the UI thread — continuations must resume on the
         // caller's context (AvaloniaFact runs the test on the dispatcher thread).
         var winner = await Task.WhenAny(signal, timeout);
         if (winner == signal)
         {
+            await timeoutCts.CancelAsync(); // retire the window timer on early success
             await signal; // surface a faulted signal as itself
             return;
         }
