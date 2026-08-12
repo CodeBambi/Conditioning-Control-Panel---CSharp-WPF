@@ -12,7 +12,8 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T122035.md` |
-| 2 | plan | SKIPPED BY DESIGN (same class, this session) | `.reviews/2-20260812T122245.md` |
+| 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260812T122245.md` |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260812T122955.md` |
 
 ---
 
@@ -93,3 +94,11 @@ Full table in the audit doc. The load-bearing ones: memory consent **Denied** (p
 | Memory pairs-only model (system/enrichment/ambient never persisted) | admission §4 rule 1 |
 
 **New-evidence check:** H7 (burn-on-attempt vs upstream's v6.7 burn-on-delivery) is NOT one of these — the port's discipline was ported from old WPF (`LastTriggeredAt = now`) and upstream itself abandoned it; the table treats it as upstream drift → MERGE candidate, no boundary touched.
+
+---
+
+## Step 3 — divergence table + privacy verdicts
+
+The table lives in `client/docs/her-room-divergence-audit.md` §3 (groups A awareness observation & privacy / B reaction pipeline / C brain & memory / D Her Room UI / E asset row). 37 element rows + 1 asset row; every row carries upstream `File.cs:line`, port counterpart or explicit "none", user-observable difference, one of the four pinned verdicts, a data-boundary line (O/R/T — "none" stated explicitly where true), and a reason. Verdict distribution: ADOPT 14 (incl. all the subtractive/transparency rows), KEEP 11 (incl. decided divergences + refuted-migration + dead-asset rows), MERGE 8, BLOCKED-ON-OWNER 17 (some rows carry split verdicts, e.g. mechanism A / values B — counts are per row-half where split). The owner decision list (audit §4) is 12 plain questions with options and consequences.
+
+**Boundary-line discipline:** every row states newly observed/retained/transmitted data. Rows A1, A7, A12-A14, B10 carry new-observation or new-retention lines and are B regardless of technical ease (hard filter, framing (b)). Rows A3/A4/A6/A8/A10/A11/A16/D12 state "none" or "narrows" explicitly — the subtractive class the pre-approach consult told the audit to hunt.

@@ -1,5 +1,5 @@
 ## STATUS: SP-060 — Her Room + Awareness divergence audit (zero product code)
-**Current Step:** Step 3 — divergence table + privacy verdicts
+**Current Step:** Step 4 — sizing, audit doc, pre-completion consult
 **Last Updated:** 2026-08-12 (worker, in progress)
 **Blockers:** none
 
@@ -14,12 +14,12 @@
 - [x] Port defaults + named limits recorded as facts (consent placeholder, cooldown families, memory read-gating)
 - [x] Already-decided divergences flagged with their decision citation
 
-### Step 3: divergence table + privacy verdicts — IN PROGRESS
-- [ ] One row per element with verdict ADOPT / KEEP / MERGE / BLOCKED-ON-OWNER
-- [ ] Data-boundary line per row (newly observed / retained / transmitted — "none" is an answer)
-- [ ] Owner decision list, each item a plain answerable question
+### Step 3: divergence table + privacy verdicts — COMPLETE
+- [x] One row per element with verdict ADOPT / KEEP / MERGE / BLOCKED-ON-OWNER
+- [x] Data-boundary line per row (newly observed / retained / transmitted — "none" is an answer)
+- [x] Owner decision list, each item a plain answerable question
 
-### Step 4: sizing verdicts, audit doc + pre-completion consult — NOT STARTED
+### Step 4: sizing verdicts, audit doc + pre-completion consult — IN PROGRESS
 - [ ] Sizing verdict per ADOPT/MERGE row (S/M/L, evidence class, deps, limit shape)
 - [ ] `client/docs/her-room-divergence-audit.md` written (self-contained)
 - [ ] `record.md` written (method, consults + ACTUAL models, UNKNOWNs, intended filings)
