@@ -76,8 +76,62 @@ namespace ConditioningControlPanel.Services
 
             // Track for quests (only for "earn X XP" type quests)
             App.Quests?.TrackXPEarned((int)amount);
-            
+
             // Check for level up
+            SpendXPOnLevels(settings, inOfflineMode);
+
+            XPChanged?.Invoke(this, settings.PlayerXP);
+        }
+
+        /// <summary>
+        /// Awards XP that the server already decided the exact size of - currently only the web XP
+        /// claim settled through /v2/user/sync (see ProfileSyncService's claim handshake).
+        ///
+        /// Deliberately NOT AddXP: the amount is the server's, so it takes no skill-tree multiplier,
+        /// no idle suppression, no companion routing and no quest credit - doubling it here would let
+        /// a web action out-earn the same action in the app. What it DOES share is the level-up loop,
+        /// so a claim that pushes the player over the line gets the full level-up experience
+        /// (celebration, haptics, level achievements, skill points, leaderboard sync).
+        /// </summary>
+        /// <param name="amount">Exact XP to add, as minted by the server.</param>
+        public void AddClaimedXP(double amount)
+        {
+            if (amount <= 0) return;
+
+            // Same gate as AddXP: logged in, or offline mode with a local username
+            var isOfflineMode = App.Settings?.Current?.OfflineMode == true;
+            var hasOfflineUsername = !string.IsNullOrWhiteSpace(App.Settings?.Current?.OfflineUsername);
+
+            if (!App.IsLoggedIn && !(isOfflineMode && hasOfflineUsername))
+            {
+                App.Logger?.Debug("Web XP claim not applied - user not logged in and not in offline mode");
+                return;
+            }
+
+            var inOfflineMode = isOfflineMode && hasOfflineUsername;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var previousXP = settings.PlayerXP;
+            settings.PlayerXP += amount;
+
+            // Track total XP earned (for stats)
+            App.Achievements?.TrackXPEarned(amount);
+
+            App.Logger?.Information("Web XP claim applied: +{Amount} (was {Prev}, now {Now})", amount, previousXP, settings.PlayerXP);
+
+            SpendXPOnLevels(settings, inOfflineMode);
+
+            XPChanged?.Invoke(this, settings.PlayerXP);
+        }
+
+        /// <summary>
+        /// Drains banked XP into levels for as long as the player can afford the next one, running
+        /// the full level-up experience for each level gained. Shared by AddXP and AddClaimedXP so
+        /// the two ways XP can arrive can never drift apart.
+        /// </summary>
+        private void SpendXPOnLevels(Models.AppSettings settings, bool inOfflineMode)
+        {
             var xpNeeded = GetXPForLevel(settings.PlayerLevel);
             while (settings.PlayerXP >= xpNeeded)
             {
@@ -123,8 +177,6 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Offline mode: Skipped cloud sync for level up to {Level}", settings.PlayerLevel);
                 }
             }
-            
-            XPChanged?.Invoke(this, settings.PlayerXP);
         }
 
         public double GetXPForLevel(int level)
