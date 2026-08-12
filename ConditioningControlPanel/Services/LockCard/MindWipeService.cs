@@ -28,7 +28,18 @@ namespace ConditioningControlPanel.Services
         private string[]? _audioFiles;
         private WaveOutEvent? _waveOut;
         private AudioFileReader? _audioReader;
-        
+        /// <summary>Bumped by every one-shot trigger and by StopCurrentAudio. A build that finishes
+        /// after a newer trigger (or after a stop) is thrown away instead of published.</summary>
+        private long _playGeneration;
+
+        /// <summary>
+        /// Guards every player field in this service. Held ONLY for cheap work: state checks,
+        /// generation reads/bumps, field swaps and <c>WaveOutEvent.Play</c> (which just queues the
+        /// playback thread). Never held across a build, a Stop or a Dispose, so a background build
+        /// can never block a stop and a stop can never block the UI thread.
+        /// </summary>
+        private readonly object _audioLock = new();
+
         // Session mode
         private bool _sessionMode;
         private int _sessionBaseFrequency;
@@ -47,9 +58,32 @@ namespace ConditioningControlPanel.Services
         private AudioFileReader? _loopReaderA;
         private AudioFileReader? _loopReaderB;
         private bool _usePlayerA = true; // Alternate between A and B
+        /// <summary>Identifies the current loop session; bumped by StopLoop (and so by every
+        /// StartLoop, which stops first). A player that finishes building - or is still parked -
+        /// after a stop is discarded instead of played.</summary>
+        private long _loopGeneration;
         private DispatcherTimer? _crossfadeTimer;
         private TimeSpan _loopDuration;
-        
+        /// <summary>The next clip's pair, already opened and Init'd, waiting for its crossfade tick.</summary>
+        private PreparedLoopPlayer? _pendingLoopPlayer;
+
+        /// <summary>A fully built pair (device open, reader indexed) that has not been started yet.</summary>
+        private sealed class PreparedLoopPlayer
+        {
+            public PreparedLoopPlayer(AudioFileReader reader, WaveOutEvent waveOut, bool isA, long generation)
+            {
+                Reader = reader;
+                WaveOut = waveOut;
+                IsA = isA;
+                Generation = generation;
+            }
+
+            public readonly AudioFileReader Reader;
+            public readonly WaveOutEvent WaveOut;
+            public readonly bool IsA;
+            public readonly long Generation;
+        }
+
         public bool IsRunning => _isRunning;
         public bool IsLooping => _loopMode && (_loopWaveOutA?.PlaybackState == PlaybackState.Playing ||
                                                 _loopWaveOutB?.PlaybackState == PlaybackState.Playing);
@@ -208,11 +242,16 @@ namespace ConditioningControlPanel.Services
             if (!_isRunning) return;
 
             _isRunning = false;
-            _timer.Stop();
             _cts?.Cancel();
 
+            // Audio teardown FIRST and inline. App.KillAllAudio can reach us from the panic
+            // fallback thread, and the DispatcherTimer below has UI-thread affinity - stopping it
+            // first would throw there and leave the audio playing, which is the one thing panic
+            // must never do. NAudio itself has no thread affinity.
             StopCurrentAudio();
             StopLoop();
+
+            DispatcherHelper.RunOnUI(() => { try { _timer.Stop(); } catch { } });
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
@@ -254,13 +293,16 @@ namespace ConditioningControlPanel.Services
             // Stop any existing playback
             StopLoop();
             
-            _loopMode = true;
-            _volume = volume;
-            _loopFilePath = _audioFiles[_random.Next(_audioFiles.Length)];
+            lock (_audioLock)
+            {
+                _loopMode = true;
+                _volume = volume;
+                _loopFilePath = _audioFiles[_random.Next(_audioFiles.Length)];
+                _usePlayerA = true;
+            }
             _loopStartTime = DateTime.Now;
             _cleanSlateAchieved = false;
-            _usePlayerA = true;
-            
+
             // Get audio duration for crossfade timing
             try
             {
@@ -274,9 +316,10 @@ namespace ConditioningControlPanel.Services
                 _loopDuration = TimeSpan.FromSeconds(30); // Fallback
             }
             
-            // Start first player
-            StartNextLoopPlayer();
-            
+            // Start first player (nothing to wait for, so it plays as soon as it is built) - which
+            // then immediately prepares the pair the first crossfade tick will need.
+            PrepareNextLoopPlayer(playImmediately: true);
+
             // Setup crossfade timer - triggers slightly before track ends to start next player
             var crossfadeInterval = _loopDuration - TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS);
             if (crossfadeInterval.TotalMilliseconds < 100)
@@ -311,135 +354,297 @@ namespace ConditioningControlPanel.Services
                 }
             }
             
-            // Start the next player (creates overlap)
-            StartNextLoopPlayer();
+            // Play the pair prepared a whole clip ago. The tick fires only 120ms before the outgoing
+            // clip ends, so BUILDING here (~half a second) is an audible gap every single cycle.
+            StartPreparedLoopPlayer();
         }
-        
-        private void StartNextLoopPlayer()
+
+        /// <summary>
+        /// Starts the pair parked by the previous cycle, then immediately prepares the next one so
+        /// it has a full clip length of lead time.
+        /// </summary>
+        private void StartPreparedLoopPlayer()
         {
-            if (!_isRunning || !_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+            PreparedLoopPlayer? prepared;
+            PreparedLoopPlayer? discarded = null;
+            WaveOutEvent? displacedOut = null;
+            AudioFileReader? displacedReader = null;
+            var started = false;
 
-            // Endpoint is down — the crossfade loop would otherwise re-open a device every clip
-            // length forever, blocking the UI thread inside waveOutOpen each time (#778/#779).
-            if (App.Audio?.IsOutputSuppressed == true) return;
-
-            try
+            lock (_audioLock)
             {
-                if (_usePlayerA)
-                {
-                    // Clean up old player A if exists
-                    DisposePlayerA();
-                    
-                    // Create new player A
-                    _loopReaderA = new AudioFileReader(_loopFilePath);
-                    _loopReaderA.Volume = (float)_volume;
+                prepared = _pendingLoopPlayer;
+                _pendingLoopPlayer = null;
 
-                    _loopWaveOutA = new WaveOutEvent();
-                    App.Audio?.ApplyPreferredDevice(_loopWaveOutA);
-                    _loopWaveOutA.Init(_loopReaderA);
-                    _loopWaveOutA.Play();
-                    
-                    App.Logger?.Debug("MindWipe: Started player A");
-                    
-                    // Schedule cleanup of player B after overlap period
-                    SchedulePlayerCleanup(false);
-                }
-                else
+                if (prepared != null)
                 {
-                    // Clean up old player B if exists
-                    DisposePlayerB();
-                    
-                    // Create new player B
-                    _loopReaderB = new AudioFileReader(_loopFilePath);
-                    _loopReaderB.Volume = (float)_volume;
-
-                    _loopWaveOutB = new WaveOutEvent();
-                    App.Audio?.ApplyPreferredDevice(_loopWaveOutB);
-                    _loopWaveOutB.Init(_loopReaderB);
-                    _loopWaveOutB.Play();
-                    
-                    App.Logger?.Debug("MindWipe: Started player B");
-                    
-                    // Schedule cleanup of player A after overlap period
-                    SchedulePlayerCleanup(true);
-                }
-                
-                // Alternate for next iteration
-                _usePlayerA = !_usePlayerA;
-                App.Audio?.NoteOutputSuccess();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "MindWipe: Error starting loop player");
-                App.Audio?.NoteOutputFailure("mindwipe-loop", ex.Message);
-            }
-        }
-        
-        private void SchedulePlayerCleanup(bool cleanupA)
-        {
-            // Wait a bit longer than the overlap to ensure smooth transition, then cleanup old player
-            Task.Delay(TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS + 0.1)).ContinueWith(_ =>
-            {
-                DispatcherHelper.RunOnUI(() =>
-                {
-                    if (cleanupA)
+                    if (!_isRunning || !_loopMode || prepared.Generation != _loopGeneration)
                     {
-                        DisposePlayerA();
+                        // A stop beat this tick — a parked pair from a dead loop session must never
+                        // be heard.
+                        discarded = prepared;
                     }
                     else
                     {
-                        DisposePlayerB();
+                        try
+                        {
+                            // Play() only queues the playback thread, so it is cheap enough to hold
+                            // the lock across — and holding it means no stop can slip in between
+                            // starting the pair and publishing it where a stop can find it.
+                            prepared.WaveOut.Play();
+                            (displacedOut, displacedReader) = PublishLoopPlayerLocked(prepared);
+                            started = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "MindWipe: Error starting prepared loop player");
+                            discarded = prepared;
+                        }
                     }
-                });
+                }
+            }
+
+            if (discarded != null) DisposePair(discarded.WaveOut, discarded.Reader);
+            DisposePair(displacedOut, displacedReader);
+
+            if (started)
+            {
+                App.Audio?.NoteOutputSuccess();
+                App.Logger?.Debug("MindWipe: Started player {Slot}", prepared!.IsA ? "A" : "B");
+                // Retire the OTHER player once the overlap has elapsed.
+                SchedulePlayerCleanup(!prepared.IsA);
+                PrepareNextLoopPlayer(playImmediately: false);
+                return;
+            }
+
+            // Nothing usable was parked (first cycle after a failed build, or the build is still
+            // running). Build-and-play so the loop repairs itself instead of going silent.
+            PrepareNextLoopPlayer(playImmediately: true);
+        }
+
+        /// <summary>
+        /// Builds the next A/B pair off-thread and either parks it for the next crossfade tick or,
+        /// for the first clip and the self-repair path, starts it as soon as it is ready.
+        /// Building an AudioFileReader (mp3 index) and opening a WaveOutEvent are half-second
+        /// blocking calls, and the crossfade re-does both every clip length — on the UI thread that
+        /// is the app hitching every ~3 seconds for as long as the loop runs (#890).
+        /// </summary>
+        private void PrepareNextLoopPlayer(bool playImmediately)
+        {
+            // Endpoint is down — the crossfade loop would otherwise re-open a device every clip
+            // length forever, blocking inside waveOutOpen each time (#778/#779). Checked before the
+            // A/B turn is taken, so a skipped cycle can't desync the alternation.
+            if (App.Audio?.IsOutputSuppressed == true) return;
+
+            bool isA;
+            long generation;
+            string path;
+            float volume;
+
+            lock (_audioLock)
+            {
+                if (!_isRunning || !_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+
+                isA = _usePlayerA;
+                // Alternate immediately: the build below is asynchronous, but the A/B turn-taking
+                // has to stay in step with the crossfade timer that will start it.
+                _usePlayerA = !_usePlayerA;
+                generation = _loopGeneration;
+                path = _loopFilePath!;
+                volume = (float)_volume;
+            }
+
+            Task.Run(() =>
+            {
+                AudioFileReader? reader = null;
+                WaveOutEvent? waveOut = null;
+                try
+                {
+                    reader = new AudioFileReader(path) { Volume = volume };
+                    waveOut = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(waveOut);
+                    waveOut.Init(reader);
+                }
+                catch (Exception ex)
+                {
+                    DisposePair(waveOut, reader);
+                    App.Logger?.Error(ex, "MindWipe: Error building loop player");
+                    App.Audio?.NoteOutputFailure("mindwipe-loop", ex.Message);
+                    return;
+                }
+
+                var prepared = new PreparedLoopPlayer(reader!, waveOut!, isA, generation);
+                PreparedLoopPlayer? discarded = null;
+                WaveOutEvent? displacedOut = null;
+                AudioFileReader? displacedReader = null;
+                var started = false;
+
+                lock (_audioLock)
+                {
+                    // The stop decision is arbitrated HERE, on this thread. NAudio has no UI
+                    // affinity, and deferring it to the dispatcher meant a wedged UI thread (the
+                    // panic case) could never stop an in-flight pair, while a shutdown dropped it
+                    // still playing and undisposed.
+                    if (!_isRunning || !_loopMode || generation != _loopGeneration)
+                    {
+                        discarded = prepared;
+                    }
+                    else if (playImmediately)
+                    {
+                        try
+                        {
+                            prepared.WaveOut.Play();
+                            (displacedOut, displacedReader) = PublishLoopPlayerLocked(prepared);
+                            started = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "MindWipe: Error starting loop player");
+                            discarded = prepared;
+                        }
+                    }
+                    else
+                    {
+                        discarded = _pendingLoopPlayer;   // only one build is ever in flight
+                        _pendingLoopPlayer = prepared;
+                    }
+                }
+
+                if (discarded != null) DisposePair(discarded.WaveOut, discarded.Reader);
+                DisposePair(displacedOut, displacedReader);
+
+                if (started)
+                {
+                    App.Audio?.NoteOutputSuccess();
+                    SchedulePlayerCleanup(!isA);
+                    // A whole clip of lead time for the next one, so its tick only has to Play().
+                    PrepareNextLoopPlayer(playImmediately: false);
+                }
             });
         }
-        
+
+        /// <summary>
+        /// Swaps a freshly started pair into its A/B slot and returns whatever it displaced (for the
+        /// caller to dispose outside the lock). Caller must hold <see cref="_audioLock"/>.
+        /// </summary>
+        private (WaveOutEvent?, AudioFileReader?) PublishLoopPlayerLocked(PreparedLoopPlayer prepared)
+        {
+            WaveOutEvent? oldOut;
+            AudioFileReader? oldReader;
+
+            if (prepared.IsA)
+            {
+                oldOut = _loopWaveOutA;
+                oldReader = _loopReaderA;
+                _loopWaveOutA = prepared.WaveOut;
+                _loopReaderA = prepared.Reader;
+            }
+            else
+            {
+                oldOut = _loopWaveOutB;
+                oldReader = _loopReaderB;
+                _loopWaveOutB = prepared.WaveOut;
+                _loopReaderB = prepared.Reader;
+            }
+
+            // The volume slider may have moved while this player was being built.
+            try { prepared.Reader.Volume = (float)_volume; } catch { }
+            return (oldOut, oldReader);
+        }
+
+        /// <summary>
+        /// Stops and disposes a pair. Never called with <see cref="_audioLock"/> held: waveOutReset
+        /// and waveOutClose take NAudio's own locks and can be raced by the playback thread, so this
+        /// service's lock deliberately stays out of them.
+        /// </summary>
+        private static void DisposePair(WaveOutEvent? waveOut, AudioFileReader? reader)
+        {
+            try { waveOut?.Stop(); } catch { }
+            try { waveOut?.Dispose(); } catch { }
+            try { reader?.Dispose(); } catch { }
+        }
+
+        private void SchedulePlayerCleanup(bool cleanupA)
+        {
+            // Wait a bit longer than the overlap to ensure smooth transition, then cleanup old
+            // player. No dispatcher hop: NAudio has no UI affinity, and this retirement must still
+            // happen when the UI thread is wedged or already shutting down.
+            Task.Delay(TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS + 0.1)).ContinueWith(_ =>
+            {
+                try
+                {
+                    if (cleanupA) DisposePlayerA();
+                    else DisposePlayerB();
+                }
+                catch { }
+            });
+        }
+
         private void DisposePlayerA()
         {
-            try
+            WaveOutEvent? waveOut;
+            AudioFileReader? reader;
+            lock (_audioLock)
             {
-                _loopWaveOutA?.Stop();
-                _loopWaveOutA?.Dispose();
+                waveOut = _loopWaveOutA;
+                reader = _loopReaderA;
                 _loopWaveOutA = null;
-                
-                _loopReaderA?.Dispose();
                 _loopReaderA = null;
             }
-            catch { }
+            DisposePair(waveOut, reader);
         }
-        
+
         private void DisposePlayerB()
         {
-            try
+            WaveOutEvent? waveOut;
+            AudioFileReader? reader;
+            lock (_audioLock)
             {
-                _loopWaveOutB?.Stop();
-                _loopWaveOutB?.Dispose();
+                waveOut = _loopWaveOutB;
+                reader = _loopReaderB;
                 _loopWaveOutB = null;
-                
-                _loopReaderB?.Dispose();
                 _loopReaderB = null;
             }
-            catch { }
+            DisposePair(waveOut, reader);
         }
-        
+
         /// <summary>
         /// Stop the looping audio
         /// </summary>
         public void StopLoop()
         {
-            _loopMode = false;
-            _loopFilePath = null;
-            
-            if (_crossfadeTimer != null)
+            PreparedLoopPlayer? pending;
+            lock (_audioLock)
             {
-                _crossfadeTimer.Tick -= CrossfadeTimer_Tick;
-                _crossfadeTimer.Stop();
-                _crossfadeTimer = null;
+                _loopMode = false;
+                _loopFilePath = null;
+                _loopGeneration++;   // any player still being built, or parked, is now stale
+                pending = _pendingLoopPlayer;
+                _pendingLoopPlayer = null;
             }
-            
+
+            var timer = _crossfadeTimer;
+            _crossfadeTimer = null;
+            if (timer != null)
+            {
+                // DispatcherTimer has UI-thread affinity; everything else here does not, so a stop
+                // arriving off-thread still kills the audio. A tick that drains later finds
+                // _loopMode false and does nothing.
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    try
+                    {
+                        timer.Tick -= CrossfadeTimer_Tick;
+                        timer.Stop();
+                    }
+                    catch { }
+                });
+            }
+
+            if (pending != null) DisposePair(pending.WaveOut, pending.Reader);
             DisposePlayerA();
             DisposePlayerB();
-            
+
             App.Logger?.Information("MindWipe: Loop stopped");
         }
         
@@ -523,51 +728,107 @@ namespace ConditioningControlPanel.Services
         {
             if (App.Audio?.IsOutputSuppressed == true) return; // endpoint down — stay quiet, don't spin
 
-            try
+            float volume;
+            long generation;
+            lock (_audioLock)
             {
-                // Stop any currently playing audio
-                StopCurrentAudio();
+                volume = (float)_volume;
+                generation = ++_playGeneration;
+            }
 
-                _audioReader = new AudioFileReader(filePath);
-                _audioReader.Volume = (float)_volume;
-
-                _waveOut = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(_waveOut);
-                _waveOut.Init(_audioReader);
-                _waveOut.PlaybackStopped += (s, e) =>
+            // Same off-thread build as the loop path: AudioFileReader (mp3 index) and waveOutOpen
+            // are half-second blocking calls, and this fires from a DispatcherTimer tick up to 180
+            // times an hour (#890).
+            Task.Run(() =>
+            {
+                AudioFileReader? reader = null;
+                WaveOutEvent? waveOut = null;
+                try
                 {
-                    // Cleanup after playback
-                    try
+                    reader = new AudioFileReader(filePath) { Volume = volume };
+                    waveOut = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(waveOut);
+                    waveOut.Init(reader);
+
+                    // Capture THIS pair rather than reading the fields: by the time the clip ends
+                    // they can already point at a newer player, and disposing that one killed live
+                    // audio.
+                    var endedReader = reader;
+                    var endedWaveOut = waveOut;
+                    waveOut.PlaybackStopped += (_, _) =>
                     {
-                        _waveOut?.Dispose();
-                        _audioReader?.Dispose();
+                        lock (_audioLock)
+                        {
+                            if (ReferenceEquals(_waveOut, endedWaveOut))
+                            {
+                                _waveOut = null;
+                                _audioReader = null;
+                            }
+                        }
+                        DisposePair(endedWaveOut, endedReader);
+                    };
+                }
+                catch (Exception ex)
+                {
+                    DisposePair(waveOut, reader);
+                    App.Logger?.Error(ex, "MindWipe: Error playing audio file {Path}", filePath);
+                    App.Audio?.NoteOutputFailure("mindwipe", ex.Message);
+                    return;
+                }
+
+                WaveOutEvent? displacedOut = null;
+                AudioFileReader? displacedReader = null;
+                var started = false;
+
+                lock (_audioLock)
+                {
+                    // Arbitrated on this thread, not on the dispatcher: a wedged or shut-down UI
+                    // thread must still be able to stop this pair (App.KillAllAudio on panic).
+                    // Deliberately NOT gated on _isRunning — TriggerOnce plays a test clip with the
+                    // service stopped; the generation is what a stop bumps.
+                    if (generation == _playGeneration)
+                    {
+                        try
+                        {
+                            waveOut!.Play();   // only queues the playback thread; cheap under the lock
+                            displacedOut = _waveOut;
+                            displacedReader = _audioReader;
+                            _waveOut = waveOut;
+                            _audioReader = reader;
+                            // The volume slider may have moved while this player was being built.
+                            try { reader!.Volume = (float)_volume; } catch { }
+                            started = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "MindWipe: Error starting audio file {Path}", filePath);
+                        }
                     }
-                    catch { }
-                };
-                
-                _waveOut.Play();
-                App.Audio?.NoteOutputSuccess();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "MindWipe: Error playing audio file {Path}", filePath);
-                App.Audio?.NoteOutputFailure("mindwipe", ex.Message);
-                StopCurrentAudio(); // Init/Play threw with the fields already assigned — free them now
-            }
+                }
+
+                DisposePair(displacedOut, displacedReader);
+                if (started) App.Audio?.NoteOutputSuccess();
+                else DisposePair(waveOut, reader);
+            });
         }
-        
+
         private void StopCurrentAudio()
         {
-            try
+            WaveOutEvent? waveOut;
+            AudioFileReader? reader;
+            lock (_audioLock)
             {
-                _waveOut?.Stop();
-                _waveOut?.Dispose();
+                // Bumping the generation is what makes a stop stick: a build still in flight finds
+                // itself stale and disposes instead of publishing over the top of the stop.
+                _playGeneration++;
+                // Fields cleared FIRST: PlaybackStopped may already have disposed this pair, and a
+                // throw out of Stop() used to leave the stale references in place.
+                waveOut = _waveOut;
+                reader = _audioReader;
                 _waveOut = null;
-                
-                _audioReader?.Dispose();
                 _audioReader = null;
             }
-            catch { }
+            DisposePair(waveOut, reader);
         }
         
         /// <summary>

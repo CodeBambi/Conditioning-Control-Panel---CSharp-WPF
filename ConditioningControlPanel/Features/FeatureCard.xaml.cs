@@ -171,6 +171,7 @@ namespace ConditioningControlPanel.Features
             // HelpButtonStyle / HelpTooltipStyle / PinkBrush live.
             Loaded += OnCardLoaded;
             Unloaded += OnCardUnloaded;
+            IsVisibleChanged += OnCardVisibilityChanged;
             MouseEnter += OnCardMouseEnter;
             MouseLeave += OnCardMouseLeave;
         }
@@ -310,11 +311,17 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.RefreshFx: {E}", ex.Message); }
         }
 
-        /// <summary>The single gate for this card's ambient clock: window focus + motion + tier.</summary>
+        /// <summary>The single gate for this card's ambient clock: visibility + window focus +
+        /// motion + tier.</summary>
         private bool AmbientAllowed
         {
             get
             {
+                // A Forever clock on a collapsed tab burns a composition slot for the rest of the
+                // session with nothing on screen to show for it. The card stays Loaded when its
+                // tab is hidden - only IsVisible goes false - so Unloaded is not the hook that
+                // catches this; IsVisibleChanged (wired in the ctor) is.
+                if (!IsVisible) return false;
                 var w = _hostWindow;
                 if (w != null && (!w.IsActive || w.WindowState == WindowState.Minimized)) return false;
                 return MotionFx.AllowAmbientLoops;
@@ -425,6 +432,10 @@ namespace ConditioningControlPanel.Features
         }
 
         private void OnHostWindowStateish(object? sender, EventArgs e) => RefreshFx();
+
+        /// <summary>Tab hidden = clock stopped, tab shown again = clock re-armed. RefreshFx is
+        /// idempotent, so this needs no latch of its own.</summary>
+        private void OnCardVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => RefreshFx();
 
         private void OnCardMouseEnter(object sender, MouseEventArgs e) => ApplyHover(true);
 

@@ -68,17 +68,28 @@
                   Visibility="Collapsed" IsHitTestVisible="False"/>
 
             <!-- Half titles: A pinned to its top-left corner, B to its bottom-right,
-                 each on a dark pill so they survive busy art. -->
+                 each on a dark pill so they survive busy art.
+
+                 TextTrimming, not TextWrapping: a pill in a triangle's corner has one line
+                 of room, and the longer localised titles (fr/de/ru run half again as long
+                 as en) were running into the root border's ClipToBounds and being cut
+                 mid-glyph with nothing to say they had been. An ellipsis at least admits
+                 it. No ToolTip to carry the full string: both pills are
+                 IsHitTestVisible="False" so the whole card stays ONE hit surface for the
+                 positional per-half test, and a tooltip on an unhittable element never
+                 opens. -->
             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="8,8,0,0" CornerRadius="7" Background="#B01A1A2E"
                     Padding="7,2,8,3" IsHitTestVisible="False">
                 <TextBlock x:Name="TxtTitleA" Text="A" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
                            FontSize="11" FontWeight="SemiBold"/>
             </Border>
             <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,8,8" CornerRadius="7" Background="#B01A1A2E"
                     Padding="7,2,8,3" IsHitTestVisible="False">
                 <TextBlock x:Name="TxtTitleB" Text="B" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
                            FontSize="11" FontWeight="SemiBold"/>
             </Border>
 

@@ -222,7 +222,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.TryStart(
                         InteractionQueueService.InteractionType.PopQuiz,
-                        () => ShowPopQuiz(),
+                        () => ShowPopQuiz(isTest, isDeferredReplay: true),
                         queue: true);
                     return;
                 }

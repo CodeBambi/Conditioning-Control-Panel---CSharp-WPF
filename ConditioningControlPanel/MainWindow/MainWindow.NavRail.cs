@@ -75,6 +75,14 @@ namespace ConditioningControlPanel
         private bool _navRailReady;
         private DispatcherTimer? _navRailCollapseTimer;
 
+        /// <summary>Outstanding <see cref="HoldNavRailOpen"/> claims. While this is above zero the
+        /// rail ignores every collapse trigger - the delay timer, the pointer leaving, and the
+        /// click-elsewhere - because the caller is showing the user something IN the rail and a
+        /// rail that shuts underneath a spotlight is worse than no spotlight at all. Counted, not
+        /// a bool: a tutorial step and the palette can be up at once, and the first one to finish
+        /// must not release the other's hold.</summary>
+        private int _navRailHoldCount;
+
         /// <summary>Every label in the rail, cached once. Faded rather than collapsed: a
         /// Visibility flip would re-measure the door panels mid-tween and fight the accordion's
         /// own Height animation.</summary>
@@ -102,6 +110,7 @@ namespace ConditioningControlPanel
                 _navRailCollapseTimer.Tick += (_, __) =>
                 {
                     _navRailCollapseTimer!.Stop();
+                    if (_navRailHoldCount > 0) return;
                     // The pointer may have come back during the delay.
                     if (!NavSidebar.IsMouseOver) SetNavRailExpanded(false);
                 };
@@ -114,6 +123,7 @@ namespace ConditioningControlPanel
                 NavSidebar.MouseLeave += (_, __) =>
                 {
                     _navRailCollapseTimer?.Stop();
+                    if (_navRailHoldCount > 0) return;
                     _navRailCollapseTimer?.Start();
                 };
 
@@ -123,6 +133,7 @@ namespace ConditioningControlPanel
                 PreviewMouseDown += (_, __) =>
                 {
                     if (NavSidebar.IsMouseOver) return;
+                    if (_navRailHoldCount > 0) return;
                     _navRailCollapseTimer?.Stop();
                     SetNavRailExpanded(false);
                 };
@@ -215,16 +226,39 @@ namespace ConditioningControlPanel
         /// Opens the rail and holds it, for code-driven navigation that needs the user to SEE
         /// where they landed (the tutorial's spotlights, the Ctrl+K palette). Without this the
         /// spotlight would point at a 56px icon strip with the target row shut inside it.
+        ///
+        /// <para>The hold is a real suspension, not a restart: this used to Stop the collapse
+        /// timer and immediately Start it again, so the rail shut one second later exactly as if
+        /// nobody had asked - a hold that did not hold. Every caller MUST pair this with
+        /// <see cref="ReleaseNavRailOpen"/>, or the rail stays open for the session.</para>
         /// </summary>
         internal void HoldNavRailOpen()
         {
             try
             {
+                _navRailHoldCount++;
                 _navRailCollapseTimer?.Stop();
                 SetNavRailExpanded(true);
-                _navRailCollapseTimer?.Start();
             }
             catch (Exception ex) { App.Logger?.Debug("HoldNavRailOpen: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Drops one <see cref="HoldNavRailOpen"/> claim. The last one out hands the rail back to
+        /// the normal delay: the pointer may well be sitting on it (a spotlight usually ends with
+        /// a click on the row), so the timer's own IsMouseOver check gets the final say rather
+        /// than collapsing on the spot.
+        /// </summary>
+        internal void ReleaseNavRailOpen()
+        {
+            try
+            {
+                if (_navRailHoldCount > 0) _navRailHoldCount--;
+                if (_navRailHoldCount > 0) return;
+                _navRailCollapseTimer?.Stop();
+                _navRailCollapseTimer?.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ReleaseNavRailOpen: {E}", ex.Message); }
         }
     }
 }

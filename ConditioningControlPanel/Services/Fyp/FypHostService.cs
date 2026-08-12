@@ -157,9 +157,14 @@ internal static class FypHostService
                     audioGlow = s?.FypAudioGlow ?? true,
                     eyeControl = s?.FypEyeControl ?? false,
                     eyeGaze = s?.FypEyeGaze ?? false,
-                    source = s?.FypSource ?? "library",
-                    onlineRatio = s?.FypOnlineRatio ?? 30,
-                    onlineConsented = s?.FypOnlineConsented ?? false,
+                    // Effective, not raw: the app-wide media source (Assets tab) reaches the
+                    // feed too — see EffectiveFeedSource. The page's popover still edits the
+                    // feed's own FypSource underneath.
+                    source = EffectiveFeedSource(),
+                    onlineRatio = EffectiveOnlineRatio(),
+                    // Either consent card (the feed's or the app-wide one) counts — asking the
+                    // same question twice in different words reads as the app forgetting.
+                    onlineConsented = s?.HasRemoteMediaConsent ?? false,
                 },
                 // The niche catalog rides along so the page can render chips (and knows
                 // each niche's subreddits — deselecting one prunes its clips client-side).
@@ -331,7 +336,9 @@ internal static class FypHostService
                     var src = (string?)value ?? "library";
                     // The page shows the consent card before ever posting a non-library
                     // source; belt and braces here so a stale page can't skip it.
-                    if (src != "library" && s.FypOnlineConsented != true) src = "library";
+                    // HasRemoteMediaConsent, not the raw FYP flag: a user who accepted the
+                    // app-wide remote-media card has already agreed to exactly this.
+                    if (src != "library" && !s.HasRemoteMediaConsent) src = "library";
                     s.FypSource = src;
                     break;
                 }
@@ -390,10 +397,50 @@ internal static class FypHostService
     private static bool IsRemoteId(string? id) =>
         id != null && id.StartsWith("scrolller/", StringComparison.Ordinal);
 
+    /// <summary>
+    /// The feed's effective content source: "library", "online" or "mixed".
+    ///
+    /// The FYP predates the app-wide media source and kept its own picker
+    /// (FypSource/FypOnlineConsented) — which made it the ONE remote surface the app-wide
+    /// gate (<c>MediaSource != "local" &amp;&amp; HasRemoteMediaConsent</c>) never reached. A user
+    /// who flipped the Assets tab to Online got remote flashes, videos, intake and DTRH,
+    /// and a stubbornly local feed, because FypSource was still "library" and
+    /// <see cref="ServeRemoteBatch"/> refused to fetch (found live 2026-08-12: the flashes
+    /// consumer pulled 30 entries while the feed pulled zero in the same session).
+    ///
+    /// Web parity: the web app has exactly one source of remote content. Here the feed's
+    /// own picker wins whenever it has left "library"; otherwise the app-wide source
+    /// carries over, gated on the same consent property every other surface reads.
+    /// </summary>
+    private static string EffectiveFeedSource()
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return "library";
+        if (s.FypSource != "library") return s.FypSource;
+        if (s.MediaSource != "local" && s.HasRemoteMediaConsent) return s.MediaSource;
+        return "library";
+    }
+
+    /// <summary>The mixed-mode remote share the effective source implies: the feed's own
+    /// ratio when its picker is active, the app-wide ratio when the source carried over.</summary>
+    private static int EffectiveOnlineRatio()
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return 30;
+        return s.FypSource != "library" ? s.FypOnlineRatio : s.RemoteMediaRatio;
+    }
+
     private static async void ServeRemoteBatch()
     {
         var s = App.Settings?.Current;
-        if (s == null || s.FypSource == "library" || !s.FypOnlineConsented) return;
+        if (s == null || !s.HasRemoteMediaConsent || EffectiveFeedSource() == "library")
+        {
+            // The page only asks when it believes remote is on, so a refusal here is the
+            // interesting half of a "my feed is empty" report — say why, quietly.
+            App.Logger?.Debug("FypHost: need-remote refused (source {Fyp}/{App}, consent {Consent})",
+                s?.FypSource, s?.MediaSource, s?.HasRemoteMediaConsent);
+            return;
+        }
         if (System.Threading.Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
         try
         {
@@ -555,6 +602,13 @@ internal static class FypHostService
             _ghostStateGuard = OnGhostWindowStateChanged;
             win.StateChanged += _ghostStateGuard;
             StartGhostDiagnostics(hwnd);
+            // That tick is no longer only diagnostics — it carries the topmost re-assert, the one
+            // thing that keeps the mirror from being buried for the rest of the session. Its own
+            // catch swallows a construction failure, so a ghost could go live with no watchdog at
+            // all. Treat a missing timer as a failed EnterGhost and let the handler below unwind
+            // it, rather than parking the real window off-screen behind a mirror nothing maintains.
+            if (_ghostDiagTimer == null)
+                throw new InvalidOperationException("ghost watchdog timer failed to start");
 
             _ghost.Show();
             GetWindowRect(hwnd, out var applied);
@@ -761,10 +815,39 @@ internal static class FypHostService
                         r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
                 }
                 catch (Exception ex) { App.Logger?.Debug("FypGhost diag failed: {E}", ex.Message); }
+                ReassertGhostTopmost();
             };
             _ghostDiagTimer.Start();
         }
         catch (Exception ex) { App.Logger?.Debug("FypHost.StartGhostDiagnostics: {E}", ex.Message); }
+    }
+
+    /// <summary>Topmost is a z-order BAND, not a promise: the mirror and its two buttons are
+    /// created TopMost once, and anything shown topmost afterwards lands above them. Nothing on
+    /// the ghost path ever puts them back (every SetWindowPos here passes SWP_NOZORDER, and the
+    /// owner link that used to carry z-order is deliberately severed while parked), so one
+    /// full-screen intruder buried the feed for the rest of the session. Re-assert on the tick
+    /// that already runs while ghosted — biggest window first, so the mirror lands under its own
+    /// buttons rather than over them.</summary>
+    private static void ReassertGhostTopmost()
+    {
+        try
+        {
+            if (!_ghosted || _ghost == null) return;
+            List<System.Windows.Forms.Form>? ghostForms = null;
+            foreach (System.Windows.Forms.Form f in System.Windows.Forms.Application.OpenForms)
+            {
+                if (!f.IsHandleCreated || !f.TopMost) continue;
+                if (!string.Equals(f.Text, GhostFormTitle, StringComparison.Ordinal)) continue;
+                (ghostForms ??= new List<System.Windows.Forms.Form>()).Add(f);
+            }
+            if (ghostForms == null) return;
+            ghostForms.Sort((a, b) => ((long)b.Width * b.Height).CompareTo((long)a.Width * a.Height));
+            foreach (var f in ghostForms)
+                SetWindowPos(f.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch (Exception ex) { App.Logger?.Debug("FypGhost topmost re-assert failed: {E}", ex.Message); }
     }
 
     private static void StopGhostDiagnostics()
@@ -782,6 +865,12 @@ internal static class FypHostService
     private const int DWMWA_CLOAKED = 14;
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    /// <summary>Window text every <see cref="FypGhostOverlay"/> form carries — the only handle
+    /// this class has on the mirror and its buttons (the overlay owns them privately).</summary>
+    private const string GhostFormTitle = "For You";
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct RECT

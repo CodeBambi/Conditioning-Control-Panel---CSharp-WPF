@@ -402,6 +402,23 @@ namespace ConditioningControlPanel
             // Hide the sprite and reattach to main window UI
             App.Logger?.Information("User dismissed avatar - hiding and reattaching");
 
+            // #888: dismissing is a decision, not a session state. Persist it, or the tube is
+            // rebuilt on the next launch (visible, and mute — speech gates on this same flag).
+            // Written BEFORE HideTube so the detached-tube early-out in HideAvatarTube can't
+            // keep a dismissed companion on screen.
+            try
+            {
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.AvatarEnabled = false;
+                    App.Settings.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to persist avatar dismissal: {Error}", ex.Message);
+            }
+
             // Reattach if detached
             if (!_isAttached)
             {
@@ -410,6 +427,15 @@ namespace ConditioningControlPanel
 
             // Hide the tube
             HideTube();
+
+            // The Companion room's hero card mirrors AvatarEnabled but only re-reads it on a Sync,
+            // so dismissing from here left its "shown" toggle lit until something else touched the
+            // tab. Nudge the room the same way the other quick-menu flips sync MainWindow.
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                try { mainWindow.SyncCompanionRoom(); }
+                catch (Exception ex) { App.Logger?.Debug("Companion room sync after dismiss failed: {Error}", ex.Message); }
+            }
         }
 
         /// <summary>

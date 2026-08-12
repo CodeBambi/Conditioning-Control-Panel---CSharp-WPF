@@ -844,11 +844,10 @@ namespace ConditioningControlPanel
             // Restore the Companion accordion open/closed state (sections default to collapsed)
             RestoreCompanionSectionStates();
 
-            // Hide avatar if disabled
-            if (!settings.AvatarEnabled)
-            {
-                HideAvatarTube();
-            }
+            // (The old "hide avatar if disabled" guard is gone: it ran in the ctor, before
+            // MainWindow_Loaded builds the tube, so it was always a no-op. #888 moved the decision
+            // to the only place it can work — the tube is not created at all when AvatarEnabled
+            // is false.)
 
             UpdatePatreonUI();
         }

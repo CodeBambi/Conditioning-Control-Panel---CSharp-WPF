@@ -65,14 +65,21 @@ public class GazeDebugCursorService : IDisposable
 
     // Soft radial sprite for the dot bloom (shared, built once) + cached
     // tint filters so the paint path never allocates per frame.
+    //
+    // #912: every one of these used to be a field initializer, so a missing or unloadable
+    // libSkiaSharp.dll threw out of the constructor and killed the launch — for a DEBUG cursor.
+    // They are built lazily behind EnsureSkiaResources() instead, and the service degrades to
+    // "no cursor" when Skia is unavailable.
     private static SKImage? _dotSprite;
-    private static readonly SKColorFilter IdleCF = SKColorFilter.CreateBlendMode(IdleBody, SKBlendMode.Modulate);
-    private static readonly SKColorFilter LockedCF = SKColorFilter.CreateBlendMode(LockedBody, SKBlendMode.Modulate);
-    private static readonly SKColorFilter WhiteCF = SKColorFilter.CreateBlendMode(CoreWhite, SKBlendMode.Modulate);
-    private readonly SKPaint _spritePaint = new() { BlendMode = SKBlendMode.Plus, IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
-    private readonly SKPaint _trailGlow = new() { Style = SKPaintStyle.Stroke, IsAntialias = true, BlendMode = SKBlendMode.Plus, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4f) };
-    private readonly SKPaint _trailCore = new() { Style = SKPaintStyle.Stroke, IsAntialias = true, BlendMode = SKBlendMode.Plus, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
-    private readonly SKPaint _rimPaint = new() { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f };
+    private static bool _dotSpriteFailed;
+    private static SKColorFilter? _idleCF;
+    private static SKColorFilter? _lockedCF;
+    private static SKColorFilter? _whiteCF;
+    private SKPaint? _spritePaint;
+    private SKPaint? _trailGlow;
+    private SKPaint? _trailCore;
+    private SKPaint? _rimPaint;
+    private bool _skiaUnavailable;
 
     public GazeDebugCursorService()
     {
@@ -116,8 +123,45 @@ public class GazeDebugCursorService : IDisposable
             DisposeAll();
     }
 
+    /// <summary>
+    /// Builds the Skia paints/filters on first use. Returns false — permanently, for this session —
+    /// when the native Skia library isn't usable, so the cursor simply never appears instead of
+    /// throwing out of a constructor or a render callback (#912).
+    /// </summary>
+    private bool EnsureSkiaResources()
+    {
+        if (_skiaUnavailable) return false;
+        if (_spritePaint != null) return true;
+
+        try
+        {
+            _spritePaint = new SKPaint { BlendMode = SKBlendMode.Plus, IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
+            _trailGlow = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, BlendMode = SKBlendMode.Plus, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4f) };
+            _trailCore = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, BlendMode = SKBlendMode.Plus, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
+            _rimPaint = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f };
+            _idleCF ??= SKColorFilter.CreateBlendMode(IdleBody, SKBlendMode.Modulate);
+            _lockedCF ??= SKColorFilter.CreateBlendMode(LockedBody, SKBlendMode.Modulate);
+            _whiteCF ??= SKColorFilter.CreateBlendMode(CoreWhite, SKBlendMode.Modulate);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _skiaUnavailable = true;
+            // A throw part-way through leaves the paints built so far holding native SKPaint
+            // (and a blur SKMaskFilter) handles — dropping the references without disposing
+            // them leaks that memory for the session.
+            DisposePaints();
+            App.Logger?.Warning(
+                "GazeDebugCursorService: Skia is unavailable ({Error}) — the gaze debug cursor is disabled this session",
+                ex.Message);
+            return false;
+        }
+    }
+
     private void EnsureOverlayAndSubscribe()
     {
+        if (!EnsureSkiaResources()) return;
+
         if (_overlay == null)
         {
             try
@@ -188,6 +232,22 @@ public class GazeDebugCursorService : IDisposable
         _hasPos = false;
         _faceLost = false;
         _locked = false;
+        // Native Skia objects, and this is the only teardown the service has: the cursor can be
+        // shown and released many times a session. EnsureSkiaResources rebuilds them on the next
+        // Show (the cached colour filters are static and deliberately outlive this).
+        DisposePaints();
+    }
+
+    private void DisposePaints()
+    {
+        try { _spritePaint?.Dispose(); } catch { }
+        try { _trailGlow?.Dispose(); } catch { }
+        try { _trailCore?.Dispose(); } catch { }
+        try { _rimPaint?.Dispose(); } catch { }
+        _spritePaint = null;
+        _trailGlow = null;
+        _trailCore = null;
+        _rimPaint = null;
     }
 
     private void HandleGazeMove(Point p)
@@ -306,9 +366,24 @@ public class GazeDebugCursorService : IDisposable
     }
 
     /// <summary>Soft white radial sprite, tinted per draw (ChaosSkiaFxOverlay.Dot pattern).</summary>
-    private static SKImage DotSprite()
+    private static SKImage? DotSprite()
     {
         if (_dotSprite != null) return _dotSprite;
+        if (_dotSpriteFailed) return null;
+        try
+        {
+            return _dotSprite = BuildDotSprite();
+        }
+        catch (Exception ex)
+        {
+            _dotSpriteFailed = true;
+            App.Logger?.Warning("GazeDebugCursorService: dot sprite could not be built: {Error}", ex.Message);
+            return null;
+        }
+    }
+
+    private static SKImage BuildDotSprite()
+    {
         const int s = 128;
         var info = new SKImageInfo(s, s, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var surf = SKSurface.Create(info);
@@ -321,8 +396,7 @@ public class GazeDebugCursorService : IDisposable
             new[] { 0f, 0.35f, 1f }, SKShaderTileMode.Clamp);
         using var p = new SKPaint { Shader = shader, IsAntialias = true };
         c.DrawCircle(r, r, r, p);
-        _dotSprite = surf.Snapshot();
-        return _dotSprite;
+        return surf.Snapshot();
     }
 
     private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
@@ -330,6 +404,7 @@ public class GazeDebugCursorService : IDisposable
         var canvas = e.Surface.Canvas;
         canvas.Clear(SKColors.Transparent);
         if (!_hasPos || _faceLost || _overlay == null) return;
+        if (!EnsureSkiaResources()) return;
 
         canvas.Save();
         canvas.Scale((float)_dpiX, (float)_dpiY);   // draw in window-local DIPs
@@ -347,10 +422,10 @@ public class GazeDebugCursorService : IDisposable
                 float t = 1f - b.Age / TrailLifeSec;    // 1 fresh → 0 dead
                 if (t <= 0f) continue;
                 float ease = t * t;
-                _trailGlow.Color = body.WithAlpha((byte)(70 * ease));
+                _trailGlow!.Color = body.WithAlpha((byte)(70 * ease));
                 _trailGlow.StrokeWidth = 2.5f + 7.5f * ease;
                 canvas.DrawLine(a.X, a.Y, b.X, b.Y, _trailGlow);
-                _trailCore.Color = body.WithAlpha((byte)(140 * ease));
+                _trailCore!.Color = body.WithAlpha((byte)(140 * ease));
                 _trailCore.StrokeWidth = 1f + 2.4f * ease;
                 canvas.DrawLine(a.X, a.Y, b.X, b.Y, _trailCore);
             }
@@ -363,18 +438,22 @@ public class GazeDebugCursorService : IDisposable
         float cx = (float)(_pos.X - _overlay.Left);
         float cy = (float)(_pos.Y - _overlay.Top);
         var sprite = DotSprite();
-        var bodyCF = _locked ? LockedCF : IdleCF;
-        DrawSprite(canvas, sprite, cx, cy, DotRadius * 3.2f, 60, bodyCF);
-        DrawSprite(canvas, sprite, cx, cy, DotRadius * 1.6f, 190, bodyCF);
-        DrawSprite(canvas, sprite, cx, cy, DotRadius * 0.7f, 220, WhiteCF);
-        _rimPaint.Color = CoreWhite.WithAlpha(210);
+        var bodyCF = _locked ? _lockedCF : _idleCF;
+        if (sprite != null)
+        {
+            DrawSprite(canvas, sprite, cx, cy, DotRadius * 3.2f, 60, bodyCF);
+            DrawSprite(canvas, sprite, cx, cy, DotRadius * 1.6f, 190, bodyCF);
+            DrawSprite(canvas, sprite, cx, cy, DotRadius * 0.7f, 220, _whiteCF);
+        }
+        _rimPaint!.Color = CoreWhite.WithAlpha(210);
         canvas.DrawCircle(cx, cy, DotRadius, _rimPaint);
 
         canvas.Restore();
     }
 
-    private void DrawSprite(SKCanvas canvas, SKImage img, float cx, float cy, float radius, byte alpha, SKColorFilter tint)
+    private void DrawSprite(SKCanvas canvas, SKImage img, float cx, float cy, float radius, byte alpha, SKColorFilter? tint)
     {
+        if (_spritePaint == null) return;
         _spritePaint.ColorFilter = tint;
         _spritePaint.Color = new SKColor(255, 255, 255, alpha);
         var dest = new SKRect(cx - radius, cy - radius, cx + radius, cy + radius);

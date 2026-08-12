@@ -205,9 +205,9 @@ public class GamificationBridge : IDisposable
             var p = Prog; if (p == null) return;
             p.KeywordTriggersFired++;
             Ach?.MarkDirty();
-            Ach?.TryUnlock("magic_word");
+            Ach?.TryUnlockExclusive("magic_word");
             if (p.KeywordTriggersFired >= PavlovKeywordTriggers)
-                Ach?.TryUnlock("pavlov");
+                Ach?.TryUnlockExclusive("pavlov");
         }
         catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: keyword handler failed"); }
     }

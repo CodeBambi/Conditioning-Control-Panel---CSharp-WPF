@@ -281,8 +281,10 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
             lock (_gate)
             {
-                PromotePending(now);
+                // Expire BEFORE promoting: a finished envelope must not hold a slot in the
+                // concurrency window against the pulse that is arriving this very tick.
                 ExpireActive(now);
+                PromotePending(now);
                 ExpireSequencesLocked(now);
                 ApplyLayerEnvelopes(now);
 
@@ -319,7 +321,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 {
                     foreach (var p in _active)
                     {
-                        var v = p.Envelope(now);
+                        var v = p.EnvelopePeak(now, DefaultTickMs);
                         if (v > 0) pulseSamples.Add(new PulseSample(v, p.Priority, p.Target));
                     }
                 }
@@ -904,8 +906,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
         private void ExpireActive(long now)
         {
+            // The extra tick of grace is what guarantees EVERY envelope gets at least one full
+            // sampled window: a 70 ms Pulse tap is already over by the tick after the one that
+            // promoted it, and dropping it at TotalMs retired it before it was ever sampled.
             for (int i = _active.Count - 1; i >= 0; i--)
-                if (now >= _active[i].StartAt + _active[i].TotalMs) _active.RemoveAt(i);
+                if (now >= _active[i].StartAt + _active[i].TotalMs + DefaultTickMs) _active.RemoveAt(i);
         }
 
         private void ExpireSequences(long now)
@@ -1142,6 +1147,30 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 t -= HoldMs;
                 if (t < DecayMs) return DecayMs <= 0 ? 0 : Intensity * (1.0 - t / (double)DecayMs);
                 return 0;
+            }
+
+            /// <summary>
+            /// PEAK of the envelope over the tick window [now, now + windowMs) rather than the
+            /// instantaneous value at <paramref name="now"/>. The output loop samples once per
+            /// tick, and an envelope is always 0 at t=0 (attack starts at zero), so instantaneous
+            /// sampling produced 0 for every one-shot that lived a single tick.
+            /// The shape is rise / plateau / fall, so the window peak is the larger endpoint —
+            /// unless the crest (end of attack .. end of hold) falls inside the window, in which
+            /// case it is the full intensity.
+            /// </summary>
+            public double EnvelopePeak(long now, int windowMs)
+            {
+                // A step with no shape at all has no envelope to peak: Envelope() is 0 everywhere
+                // for it, and the crest test below (a <= 0 && b >= 0) would otherwise hand back
+                // full Intensity for a pulse that is supposed to last zero milliseconds.
+                if (TotalMs <= 0) return 0;
+                var w = Math.Max(0, windowMs);
+                var a = now - StartAt;
+                var b = a + w;
+                if (b < 0) return 0;
+                var v = Math.Max(Envelope(now), Envelope(now + w));
+                if (a <= AttackMs + HoldMs && b >= AttackMs) v = Math.Max(v, Intensity);
+                return v;
             }
         }
 

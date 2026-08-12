@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 using NAudio.Wave;
 using Serilog;
 
@@ -20,7 +22,19 @@ namespace ConditioningControlPanel.Services
         private string[]? _audioFiles;
         private WaveOutEvent? _waveOut;
         private AudioFileReader? _audioReader;
-        
+        /// <summary>Bumped by every trigger and by StopCurrentAudio. A build that finishes after a
+        /// newer one started (or after a stop) is thrown away instead of published over the live
+        /// player.</summary>
+        private long _playGeneration;
+
+        /// <summary>
+        /// Guards the player fields and the generation. Held ONLY for cheap work: the arbitration
+        /// check, the field swap and <c>WaveOutEvent.Play</c> (which just queues the playback
+        /// thread). Never held across a build, a Stop or a Dispose, so a background build can never
+        /// block a stop and a stop can never block the UI thread.
+        /// </summary>
+        private readonly object _audioLock = new();
+
         public bool IsRunning => _isRunning;
         public int AudioFileCount => _audioFiles?.Length ?? 0;
 
@@ -132,10 +146,14 @@ namespace ConditioningControlPanel.Services
             if (!_isRunning) return;
 
             _isRunning = false;
-            _timer.Stop();
             _cts?.Cancel();
 
+            // Audio teardown FIRST and inline. App.KillAllAudio can reach us from the panic
+            // fallback thread, and the DispatcherTimer below has UI-thread affinity - stopping it
+            // first would throw there and leave the audio playing. NAudio has no thread affinity.
             StopCurrentAudio();
+
+            DispatcherHelper.RunOnUI(() => { try { _timer.Stop(); } catch { } });
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
@@ -183,49 +201,127 @@ namespace ConditioningControlPanel.Services
         {
             if (App.Audio?.IsOutputSuppressed == true) return; // endpoint down — stay quiet, don't spin
 
-            try
+            var volume = CurrentMasterVolume();
+            long generation;
+            lock (_audioLock)
             {
-                StopCurrentAudio();
+                generation = ++_playGeneration;
+            }
 
-                _audioReader = new AudioFileReader(filePath);
-                _audioReader.Volume = (float)(App.Settings.Current.MasterVolume / 100.0);
-                
-                _waveOut = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(_waveOut);
-                _waveOut.Init(_audioReader);
-                _waveOut.PlaybackStopped += (s, e) =>
-                {
-                    try
-                    {
-                        _waveOut?.Dispose();
-                        _audioReader?.Dispose();
-                    }
-                    catch { }
-                };
-                
-                _waveOut.Play();
-                App.Audio?.NoteOutputSuccess();
-            }
-            catch (Exception ex)
+            // Building an AudioFileReader (mp3 index) and opening a WaveOutEvent are half-second
+            // blocking calls. Run at this feature's cadence on the UI thread they read as the app
+            // hitching every few seconds (#890), so the whole build happens off-thread; the pair is
+            // only started once it has won the arbitration below.
+            Task.Run(() =>
             {
-                App.Logger?.Error(ex, "BrainDrain: Error playing audio file {Path}", filePath);
-                App.Audio?.NoteOutputFailure("braindrain", ex.Message);
-                StopCurrentAudio(); // Init/Play threw with the fields already assigned — free them now
-            }
+                AudioFileReader? reader = null;
+                WaveOutEvent? waveOut = null;
+                try
+                {
+                    reader = new AudioFileReader(filePath) { Volume = volume };
+                    waveOut = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(waveOut);
+                    waveOut.Init(reader);
+
+                    // Capture THIS pair rather than reading the fields: by the time the clip ends
+                    // they can already point at a newer player, and disposing that one killed
+                    // live audio.
+                    var endedReader = reader;
+                    var endedWaveOut = waveOut;
+                    waveOut.PlaybackStopped += (_, _) =>
+                    {
+                        lock (_audioLock)
+                        {
+                            if (ReferenceEquals(_waveOut, endedWaveOut))
+                            {
+                                _waveOut = null;
+                                _audioReader = null;
+                            }
+                        }
+                        DisposePair(endedWaveOut, endedReader);
+                    };
+                }
+                catch (Exception ex)
+                {
+                    DisposePair(waveOut, reader);
+                    App.Logger?.Error(ex, "BrainDrain: Error playing audio file {Path}", filePath);
+                    App.Audio?.NoteOutputFailure("braindrain", ex.Message);
+                    return;
+                }
+
+                WaveOutEvent? displacedOut = null;
+                AudioFileReader? displacedReader = null;
+                var started = false;
+
+                lock (_audioLock)
+                {
+                    // The stop decision is arbitrated HERE, on this thread. NAudio has no UI
+                    // affinity, and deferring it to the dispatcher meant a wedged UI thread (the
+                    // panic case) could never stop an in-flight pair, while a shutdown dropped it
+                    // still playing and undisposed.
+                    if (_isRunning && generation == _playGeneration)
+                    {
+                        try
+                        {
+                            waveOut!.Play();   // only queues the playback thread; cheap under the lock
+                            displacedOut = _waveOut;
+                            displacedReader = _audioReader;
+                            _waveOut = waveOut;
+                            _audioReader = reader;
+                            // Master volume may have been dragged during the build, and nothing
+                            // else re-reads it for this clip's whole duration.
+                            try { reader!.Volume = CurrentMasterVolume(); } catch { }
+                            started = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "BrainDrain: Error starting audio file {Path}", filePath);
+                        }
+                    }
+                }
+
+                DisposePair(displacedOut, displacedReader);
+                if (started) App.Audio?.NoteOutputSuccess();
+                else DisposePair(waveOut, reader);
+            });
         }
-        
+
+        private static float CurrentMasterVolume()
+        {
+            try { return Math.Clamp(App.Settings.Current.MasterVolume, 0, 100) / 100f; }
+            catch { return 1f; }
+        }
+
+        /// <summary>
+        /// Stops and disposes a pair. Never called with <see cref="_audioLock"/> held: waveOutReset
+        /// and waveOutClose take NAudio's own locks and can be raced by the playback thread, so this
+        /// service's lock deliberately stays out of them.
+        /// </summary>
+        private static void DisposePair(WaveOutEvent? waveOut, AudioFileReader? reader)
+        {
+            try { waveOut?.Stop(); } catch { }
+            try { waveOut?.Dispose(); } catch { }
+            try { reader?.Dispose(); } catch { }
+        }
+
         private void StopCurrentAudio()
         {
-            try
+            WaveOutEvent? waveOut;
+            AudioFileReader? reader;
+            lock (_audioLock)
             {
-                _waveOut?.Stop();
-                _waveOut?.Dispose();
+                // Bumping the generation is what makes a stop stick: Stop() alone relied on
+                // !_isRunning, so a Stop->Start while a build was in flight let the stopped
+                // session's clip publish over the new one.
+                _playGeneration++;
+                // Fields cleared FIRST: PlaybackStopped may already have disposed this pair, and a
+                // throw out of Stop() used to leave the stale references in place.
+                waveOut = _waveOut;
+                reader = _audioReader;
                 _waveOut = null;
-
-                _audioReader?.Dispose();
                 _audioReader = null;
             }
-            catch { }
+            DisposePair(waveOut, reader);
         }
 
         /// <summary>

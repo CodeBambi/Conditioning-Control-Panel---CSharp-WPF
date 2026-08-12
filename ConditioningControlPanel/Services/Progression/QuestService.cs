@@ -55,6 +55,19 @@ public class QuestService : IDisposable
     private readonly Random _random = new();
     private bool _isDirty;
 
+    // #889: Patreon validation is asynchronous, so at launch the entitlement gate can still read
+    // "no access" for a paying patron — and the premium-loss rerolls below then destroyed their
+    // premium quest on every single launch. A deferred decision costs at most one refresh tick.
+    private readonly DateTime _startedUtc = DateTime.UtcNow;
+    private static readonly TimeSpan EntitlementSettleWindow = TimeSpan.FromSeconds(90);
+    private bool _premiumRecheckPending;
+    // The other half of the same problem: a slot ROLLED while the entitlement was unresolved
+    // drew from the free-only pool (IsQuestAvailableForTier reads the same "no access"), and a
+    // patron then wore a free quest for the whole day. Remembered per slot so the recheck can
+    // re-roll it — and only it — once the answer lands.
+    private bool _dailyRolledUnresolved;
+    private bool _weeklyRolledUnresolved;
+
     // Accumulators for fractional minutes (time-based quests are called with small increments)
     private double _spiralMinutesAccumulator;
     private double _pinkFilterMinutesAccumulator;
@@ -116,9 +129,20 @@ public class QuestService : IDisposable
         {
             var dailyExpired = Progress.IsDailyExpired();
             var weeklyExpired = Progress.IsWeeklyExpired();
-            if (dailyExpired || weeklyExpired)
+            // A premium-loss decision deferred at launch (#889) is retried here, once the
+            // entitlement answer has landed.
+            var premiumRecheck = _premiumRecheckPending && IsEntitlementResolved();
+            if (dailyExpired || weeklyExpired || premiumRecheck)
             {
-                App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
+                if (premiumRecheck)
+                {
+                    _premiumRecheckPending = false;
+                    App.Logger?.Information("Quest premium recheck: entitlement resolved, reconciling deferred quests");
+                }
+                else
+                {
+                    App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
+                }
                 CheckAndGenerateQuests();
                 QuestsRefreshed?.Invoke(this, EventArgs.Empty);
             }
@@ -280,7 +304,8 @@ public class QuestService : IDisposable
         if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted)
         {
             var dailyDef = GetCurrentDailyDefinition();
-            if (dailyDef != null && !IsQuestAvailableForTier(dailyDef))
+            if (dailyDef != null && !IsQuestAvailableForTier(dailyDef)
+                && CanDropPremiumQuest(Progress.DailyQuest, "daily"))
             {
                 App.Logger?.Information("Daily quest '{QuestId}' requires premium (access lost), regenerating",
                     Progress.DailyQuest.DefinitionId);
@@ -306,7 +331,8 @@ public class QuestService : IDisposable
         if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted)
         {
             var weeklyDef = GetCurrentWeeklyDefinition();
-            if (weeklyDef != null && !IsQuestAvailableForTier(weeklyDef))
+            if (weeklyDef != null && !IsQuestAvailableForTier(weeklyDef)
+                && CanDropPremiumQuest(Progress.WeeklyQuest, "weekly"))
             {
                 App.Logger?.Information("Weekly quest '{QuestId}' requires premium (access lost), regenerating",
                     Progress.WeeklyQuest.DefinitionId);
@@ -328,6 +354,37 @@ public class QuestService : IDisposable
             }
         }
 
+        // The premium-loss rerolls above only defend a quest that already EXISTS. A slot rolled
+        // while the entitlement was unresolved (launch on a fresh day is the common case) drew
+        // from the free pool with nothing to defend, and no recheck was ever armed. Now that the
+        // answer has landed as premium, re-roll the slot against the blended pool — but only
+        // while it is untouched, so a quest the player has already worked on is never taken away.
+        if (_dailyRolledUnresolved && IsEntitlementResolved())
+        {
+            _dailyRolledUnresolved = false;
+            if (App.Patreon?.HasPremiumAccess == true && Progress.DailyQuest != null
+                && !Progress.DailyQuest.IsCompleted && Progress.DailyQuest.CurrentProgress == 0)
+            {
+                App.Logger?.Information("Daily quest '{QuestId}' was rolled before the entitlement resolved — re-rolling with premium access",
+                    Progress.DailyQuest.DefinitionId);
+                GenerateNewDailyQuest();
+                changed = true;
+            }
+        }
+
+        if (_weeklyRolledUnresolved && IsEntitlementResolved())
+        {
+            _weeklyRolledUnresolved = false;
+            if (App.Patreon?.HasPremiumAccess == true && Progress.WeeklyQuest != null
+                && !Progress.WeeklyQuest.IsCompleted && Progress.WeeklyQuest.CurrentProgress == 0)
+            {
+                App.Logger?.Information("Weekly quest '{QuestId}' was rolled before the entitlement resolved — re-rolling with premium access",
+                    Progress.WeeklyQuest.DefinitionId);
+                GenerateNewWeeklyQuest();
+                changed = true;
+            }
+        }
+
         if (changed)
         {
             _isDirty = true;
@@ -337,6 +394,11 @@ public class QuestService : IDisposable
 
     private void GenerateNewDailyQuest(string? excludeId = null)
     {
+        // Rolling before the entitlement answer lands means rolling from the free-only pool.
+        // Flag the slot (and arm the refresh tick) so it is re-rolled if the answer is premium.
+        _dailyRolledUnresolved = !IsEntitlementResolved();
+        if (_dailyRolledUnresolved) _premiumRecheckPending = true;
+
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
         var availableQuests = questPool
@@ -372,6 +434,10 @@ public class QuestService : IDisposable
 
     private void GenerateNewWeeklyQuest(string? excludeId = null)
     {
+        // Same deferred-tier bookkeeping as the daily generator — see the note there.
+        _weeklyRolledUnresolved = !IsEntitlementResolved();
+        if (_weeklyRolledUnresolved) _premiumRecheckPending = true;
+
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
         var availableQuests = questPool
@@ -400,6 +466,50 @@ public class QuestService : IDisposable
 
         App.Logger?.Information("Generated new weekly quest: {QuestId} (from {Source})",
             selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+    }
+
+    /// <summary>
+    /// Guards the "requires premium, access lost" rerolls (#889). Throwing a premium quest away is
+    /// only correct once we actually KNOW the entitlement, and a Patreon answer arrives seconds
+    /// after launch — before it does, every patron looks free. Progress is also protected: a quest
+    /// the player has already worked on is never taken away mid-run. A deferred decision is retried
+    /// by the refresh timer, so a genuinely lapsed patron still gets a free quest a tick later.
+    /// </summary>
+    private bool CanDropPremiumQuest(ActiveQuest quest, string slot)
+    {
+        if (quest.CurrentProgress > 0)
+        {
+            App.Logger?.Information(
+                "Premium {Slot} quest '{QuestId}' kept: it already has progress ({Progress})",
+                slot, quest.DefinitionId, quest.CurrentProgress);
+            return false;
+        }
+
+        if (!IsEntitlementResolved())
+        {
+            _premiumRecheckPending = true;
+            App.Logger?.Information(
+                "Premium {Slot} quest '{QuestId}' kept: entitlement not resolved yet, deferring the decision",
+                slot, quest.DefinitionId);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// True once the premium gate can be trusted this session: an entitled read is self-evidently
+    /// resolved, and an unentitled one is only believed after validation has had time to land (and
+    /// is not still in flight). Never permanently "unresolved" — the settle window guarantees a
+    /// lapsed patron's quest is reconciled shortly after launch instead of never.
+    /// </summary>
+    private bool IsEntitlementResolved()
+    {
+        var patreon = App.Patreon;
+        if (patreon == null) return false;
+        if (patreon.IsVerifying) return false;
+        if (patreon.HasPremiumAccess) return true;
+        return DateTime.UtcNow - _startedUtc >= EntitlementSettleWindow;
     }
 
     /// <summary>

@@ -1881,7 +1881,10 @@ namespace ConditioningControlPanel
         internal void BtnManageMessages_Click(object sender, RoutedEventArgs e)
         {
             var oldKeys = new HashSet<string>(App.Settings.Current.SubliminalPool.Keys);
-            var defaults = App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>();
+            // OrdinalIgnoreCase to match the removed-set and ModService's top-up comparison.
+            var defaults = new HashSet<string>(
+                (App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
+                StringComparer.OrdinalIgnoreCase);
 
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);
             dialog.Owner = this;
@@ -1892,7 +1895,7 @@ namespace ConditioningControlPanel
                 var newKeys = new HashSet<string>(dialog.ResultData.Keys);
                 foreach (var key in oldKeys)
                 {
-                    if (!newKeys.Contains(key) && defaults.ContainsKey(key))
+                    if (!newKeys.Contains(key) && defaults.Contains(key))
                         App.Settings.Current.RemovedDefaultSubliminals.Add(key);
                 }
 

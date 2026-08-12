@@ -594,6 +594,14 @@ public class SkillTreeService : IDisposable
         var streak = settings.DailyQuestStreak;
         var playerLevel = settings.PlayerLevel;
 
+        // The streak broke and is being rebuilt, so the same milestone can be earned again.
+        // Persisted immediately: nothing else on this path saves settings when no bonus is due.
+        if (streak < settings.LastPerfectWeekStreakAwarded)
+        {
+            settings.LastPerfectWeekStreakAwarded = 0;
+            App.Settings?.Save();
+        }
+
         // Determine base XP reward based on milestone
         int baseXP = 0;
         string milestone = "";
@@ -615,6 +623,19 @@ public class SkillTreeService : IDisposable
         }
 
         if (baseXP == 0) return 0;
+
+        // Pay each milestone once. This runs on EVERY daily quest completion, so without the
+        // latch the bonus was awarded again for every further quest that day - and again on the
+        // next launch, since the streak value itself hadn't changed (#895).
+        if (settings.LastPerfectWeekStreakAwarded == streak)
+        {
+            App.Logger?.Debug("Perfect Bimbo Week {Milestone} bonus already awarded for streak {Streak}; skipping",
+                milestone, streak);
+            return 0;
+        }
+
+        settings.LastPerfectWeekStreakAwarded = streak;
+        App.Settings?.Save();
 
         // Scale with player level (+2% per level)
         var scaledXP = (int)Math.Round(baseXP * (1 + playerLevel * 0.02));

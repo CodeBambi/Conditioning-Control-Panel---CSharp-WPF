@@ -157,7 +157,11 @@ namespace ConditioningControlPanel
                 // another thread — these read MainWindow's UI and must be read here.
                 bool ownThread = App.Settings?.Current?.AvatarOwnThread == true;
                 bool muted = App.Settings?.Current?.AvatarMuted == true;
-                bool showNow = IsVisible && WindowState != WindowState.Minimized;
+                // #888: never auto-show a companion the user has dismissed. Callers that mean to
+                // show it anyway (WakeBambiUp, the Companion room toggle) show it explicitly after
+                // flipping AvatarEnabled back on.
+                bool showNow = IsVisible && WindowState != WindowState.Minimized
+                               && App.Settings?.Current?.AvatarEnabled == true;
 
                 if (ownThread)
                 {
@@ -260,6 +264,21 @@ namespace ConditioningControlPanel
         /// </summary>
         public void WakeBambiUp()
         {
+            // #888: waking her is the opposite decision to Dismiss, and it has to survive a restart
+            // the same way. Set before the tube is built — creation and the speech gate both read it.
+            try
+            {
+                if (App.Settings?.Current != null && !App.Settings.Current.AvatarEnabled)
+                {
+                    App.Settings.Current.AvatarEnabled = true;
+                    App.Settings.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to persist avatar wake: {Error}", ex.Message);
+            }
+
             // Create tube if needed
             if (_avatarTubeWindow == null)
             {
