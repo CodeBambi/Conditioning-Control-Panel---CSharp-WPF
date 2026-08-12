@@ -168,3 +168,4 @@ honestly, the standing provenance discipline).
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T205835.md` |
+| 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T210637.md` |

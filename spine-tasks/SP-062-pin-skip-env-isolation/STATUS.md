@@ -1,6 +1,6 @@
 ## STATUS: SP-062 — Loud skip + real process-env isolation for the SP-057 pin
-**Current Step:** 2
-**Last Updated:** 2026-08-12 (worker, Step 1 complete, commit ba84f3e6)
+**Current Step:** 4
+**Last Updated:** 2026-08-12 (worker, Step 3 complete — 10/10 consecutive greens incl. 1 cold first-ever build)
 **Blockers:** none
 **Discoveries / File-Scope amendments:**
 - 2026-08-12 (Step 1, worker): wave-19 base was RED (891 passed / 1 failed) — land commit f3a1192b flipped `tunnel`+`vendor` to `served` in `client/docs/upstream-payload-inventory.json` WITHOUT the `evidence` field SP-056's guard requires for served trees (`UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree`). Repaired as a documented File-Scope amendment (land-defect repair, commit 59fbcf1e); field content dictated verbatim by SP-061's landed record intended filing #3. Named here per FR-WORK-06; the 10-green measurement runs on the repaired base.
@@ -22,7 +22,7 @@
 **Design (pre-consult):** co-locate `DataRootOverrideTests` into `ProcessEnvCollection` (intra-collection sequentiality = probe-2-proven) + `Assert.SkipWhen` loud skips at both checkpoints (reasons name CCP_DATA_ROOT + leak class); keep DisableParallelization as a non-relied-upon hint. Rejected: assembly-wide DisableTestParallelization (serializes 892 tests for one contested resource; baseline parallel suite 36s), trusting DisableParallelization (probe-1-falsified), product-side seam (out of scope; inverts dependency — test-scheduling defect, not product), cross-collection lock fixture (can't bind tests outside the collection), assert-unconditionally (banned false-RED, framing a). Serial cost ≈ 0: only the 11 pin/env tests serialize among themselves.
 
   - consult: solo ×1, verdict design-sound + hole (probe2 was intra-CLASS; fix needs cross-CLASS same-collection) closed by probe1b RED×2; actual answering model NOT surfaced by the tool (recorded honestly)
-### Step 2: implement — loud skip + isolation — IN PROGRESS
+### Step 2: implement — loud skip + isolation — COMPLETE (plan review skipped-by-design SP-195, `.reviews/2-20260812T210637.md`)
 - [x] Silent `return` → loud skip naming CCP_DATA_ROOT at both checkpoints; assertion strictness unchanged
   - Assert.SkipWhen at both checkpoints (pinned-binary-verified API); the Assert.Equal when bound is byte-identical
   - co-location: DataRootOverrideTests joined [Collection(nameof(ProcessEnvCollection))]; DisableParallelization kept as non-relied-upon hint
@@ -41,12 +41,30 @@
 - [ ] Positive control captured: `891 passed / 1 skipped` with the reason visible
 - [ ] No new deadline literals / injected budgets; timing guard green
 
-### Step 3: ten consecutive greens, one genuinely cold — NOT STARTED
-- [ ] 10 consecutive full-suite runs, zero reds, TRX attached, output redirected to files
-- [ ] ≥1 fresh-checkout first-ever build (rebuild-in-place does not count)
-- [ ] Every clean run 892 passed / 0 skipped + 35 headless
-- [ ] Row-49 site occurrences recorded (run #, cold/warm, TRX name) — untouched
-- [ ] Run table + TRX artifacts committed under evidence/
+### Step 3: ten consecutive greens, one genuinely cold — COMPLETE (run table below)
+- [x] 10 consecutive full-suite runs, zero reds, TRX attached, output redirected to files
+- [x] ≥1 fresh-checkout first-ever build (rebuild-in-place does not count)
+- [x] Every clean run 892 passed / 0 skipped + 35 headless
+- [x] Row-49 site occurrences recorded (run #, cold/warm, TRX name) — untouched
+- [x] Run table + TRX artifacts committed under evidence/
+
+**Run table (post-fix tree, commit b89b25f0; zero reds, zero skips, zero row-49 firings):**
+
+| run | worktree | cold/warm | wall | unit | headless | TRX |
+|---|---|---|---|---|---|---|
+| green01 | in-place | warm | 79s | 892/0 | 35/0 | sp062-green01-{unit,headless}.trx |
+| green02 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green02-* |
+| green03 | in-place | warm | 71s | 892/0 | 35/0 | sp062-green03-* |
+| green04 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green04-* |
+| green05 | FRESH (`C:/Code/ccp-sp062-cold`, detached @b89b25f0, removed after) | **COLD — first-ever build** (0W/0E, build log committed) | 106s | 892/0 | 35/0 | sp062-green05-cold-* |
+| green06 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green06-* |
+| green07 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green07-* |
+| green08 | in-place | warm | 73s | 892/0 | 35/0 | sp062-green08-* |
+| green09 | in-place | warm | 72s | 892/0 | 35/0 | sp062-green09-* |
+| green10 | in-place | warm | 73s | 892/0 | 35/0 | sp062-green10-* |
+
+Row-49 site (`LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable`): **zero firings across all 10 runs incl. the cold first-ever build** — nothing to attribute, site untouched. Hit-rate data point for that row: 0/1 cold, 0/10 this measurement.
+Interruption named honestly: a pre-fix run (logs `run01-*`, TRX `sp062-run01-*`) went 891/1 on the AiProviderLab record-ordering race — root-caused + fixed in Step 2 before this series; the 10 above are consecutive post-fix.
 
 ### Step 4: record + pre-completion consult — NOT STARTED
 - [ ] record.md complete (repro, API verification, enumeration, design, positive control, run table, limits, intended filings)

@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="aa4df05f-5f79-4d94-add6-7886ea5a407f" name="Micha@MICH_S_YOGA 2026-08-13 05:56:30" runUser="MICH_S_YOGA\Micha" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-08-13T05:56:30.6133656+09:00" queuing="2026-08-13T05:56:30.6133660+09:00" start="2026-08-13T05:56:07.8713798+09:00" finish="2026-08-13T05:56:50.7604768+09:00" />
+  <TestSettings name="default" id="f0b8655c-8b86-4004-be20-48c530859f57">
+    <Deployment runDeploymentRoot="Micha_MICH_S_YOGA_2026-08-13_05_56_30" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="0ead6a2f-eb12-4db9-991b-31a3ccf8ba7a" testId="ba783713-3783-249f-e3e4-d6f38d9c7531" testName="CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride" computerName="MICH_S_YOGA" duration="00:00:19.9888363" startTime="2026-08-13T05:56:30.5701847+09:00" endTime="2026-08-13T05:56:50.5605073+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0ead6a2f-eb12-4db9-991b-31a3ccf8ba7a">
+      <Output>
+        <ErrorInfo>
+          <Message>TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection sibling class saw the held override (timeout RED = sequential = fix premise holds) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1255, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied</Message>
+          <StackTrace>   at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55&#xD;
+   at CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 76&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="dc61ef8d-21ae-42ba-8e4f-1226e0586680" testId="9da37061-63de-f11d-ff84-360a06915901" testName="CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride" computerName="MICH_S_YOGA" duration="00:00:20.0547414" startTime="2026-08-13T05:56:10.4430962+09:00" endTime="2026-08-13T05:56:30.5439914+09:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dc61ef8d-21ae-42ba-8e4f-1226e0586680">
+      <Output>
+        <ErrorInfo>
+          <Message>TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection CROSS-CLASS leak observation (timeout RED = sequential = the fix's premise holds; GREEN = the fix does NOT serialize) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1256, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied</Message>
+          <StackTrace>   at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken) in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs:line 55&#xD;
+   at CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs:line 46&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride" storage="c:\code\conditioning-control-panel---csharp-wpf\.worktrees\spine-20260812t203752\lane-1\client\tests\ccpclient.tests\bin\debug\net10.0\ccpclient.tests.dll" id="9da37061-63de-f11d-ff84-360a06915901">
+      <Execution id="dc61ef8d-21ae-42ba-8e4f-1226e0586680" />
+      <TestMethod codeBase="C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.Tests.Sp062SameCollObserverTests" name="Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride" />
+    </UnitTest>
+    <UnitTest name="CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride" storage="c:\code\conditioning-control-panel---csharp-wpf\.worktrees\spine-20260812t203752\lane-1\client\tests\ccpclient.tests\bin\debug\net10.0\ccpclient.tests.dll" id="ba783713-3783-249f-e3e4-d6f38d9c7531">
+      <Execution id="0ead6a2f-eb12-4db9-991b-31a3ccf8ba7a" />
+      <TestMethod codeBase="C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="CcpClient.Tests.Sp062SameCollMutatorTests" name="Probe1b_SameCollectionCrossClass_MutatorHoldsOverride" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="ba783713-3783-249f-e3e4-d6f38d9c7531" executionId="0ead6a2f-eb12-4db9-991b-31a3ccf8ba7a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9da37061-63de-f11d-ff84-360a06915901" executionId="dc61ef8d-21ae-42ba-8e4f-1226e0586680" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="2" executed="2" passed="0" failed="2" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.11)&#xD;
+[xUnit.net 00:00:00.46]   Discovering: CcpClient.Tests&#xD;
+[xUnit.net 00:00:01.31]   Discovered:  CcpClient.Tests&#xD;
+[xUnit.net 00:00:01.67]   Starting:    CcpClient.Tests&#xD;
+[xUnit.net 00:00:21.90]       TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection CROSS-CLASS leak observation (timeout RED = sequential = the fix's premise holds; GREEN = the fix does NOT serialize) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1256, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied&#xD;
+[xUnit.net 00:00:21.90]       Stack Trace:&#xD;
+[xUnit.net 00:00:21.90]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs(55,0): at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:21.90]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs(46,0): at CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride()&#xD;
+[xUnit.net 00:00:21.90]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:41.90]       TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full 20s for probe1b: same-collection sibling class saw the held override (timeout RED = sequential = fix premise holds) and it never became true: treat as a REAL product/test failure. EVIDENCE: polls=1255, elapsed=20000ms, worst-scheduler-slip=22ms, threadpool-pending=0, actor-state: none supplied&#xD;
+[xUnit.net 00:00:41.91]       Stack Trace:&#xD;
+[xUnit.net 00:00:41.91]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\TestWait.cs(55,0): at CcpClient.Tests.TestWait.Until(Func`1 condition, String what, Func`1 state, Nullable`1 window, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:41.91]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T203752\lane-1\client\tests\CcpClient.Tests\Sp062LeakReproProbes.cs(76,0): at CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride()&#xD;
+[xUnit.net 00:00:41.91]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:41.94]   Finished:    CcpClient.Tests (ID = 'a74675fcfab33c390d211453f8e63a0ec6c7903f28c5f02079fb99007dba5d08')&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="MICH_S_YOGA" outcome="Error" timestamp="2026-08-13T05:56:30.5560784+09:00">
+        <Text>[xUnit.net 00:00:21.90]     CcpClient.Tests.Sp062SameCollObserverTests.Probe1b_SameCollectionCrossClass_ObserverWatchesForOverride [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="MICH_S_YOGA" outcome="Error" timestamp="2026-08-13T05:56:50.5627758+09:00">
+        <Text>[xUnit.net 00:00:41.90]     CcpClient.Tests.Sp062SameCollMutatorTests.Probe1b_SameCollectionCrossClass_MutatorHoldsOverride [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>
