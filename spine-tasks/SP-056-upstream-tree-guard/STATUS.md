@@ -1,11 +1,11 @@
 ## STATUS: SP-056 — Upstream payload-tree guard
 **Current Step:** Step 1 — inventory + guard design + pre-approach consult
-**Last Updated:** 2026-08-11 (authored)
+**Last Updated:** 2026-08-11 (step 1 in progress)
 **Blockers:** none
 
 ### Step 1: inventory + guard design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Enumerate upstream top-level payload trees + honest dispositions (served / not-ported + row ref)
+- [x] Update STATUS.md before starting work
+- [x] Enumerate upstream top-level payload trees + honest dispositions (served / not-ported + row ref)
 - [ ] Design inventory schema + non-vacuous repo-root resolution + failure message
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
 
