@@ -73,6 +73,73 @@
     <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="{DynamicResource ElevatedSurface}"/>
     <!-- New: quaternary text -->
     <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}"/>
+    <!-- Velvet Kit: secondary text tier (see Colors.xaml). -->
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource TextSecondary}"/>
+
+    <!-- ============================================================
+         Velvet Kit: section-hue brushes. Per section:
+           SectionHueXBrush       — edge bar / icon tint / panel title text
+           SectionHueXWashBrush   — diagonal wash for the card face; PAINT ON
+                                    TOP of ElevatedSurfaceBrush (the wash ends
+                                    transparent, it is not a full background)
+           SectionHueXBorderBrush — card BorderBrush (replaces GlassBorder on
+                                    hue-coded cards)
+         Static tokens (not mod-mutable) so StaticResource is safe here.
+         ============================================================ -->
+    <SolidColorBrush x:Key="SectionHueGeneralBrush" Color="{StaticResource SectionHueGeneral}"/>
+    <SolidColorBrush x:Key="SectionHueGeneralBorderBrush" Color="{StaticResource SectionHueGeneralBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueGeneralWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueGeneralWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueStartupBrush" Color="{StaticResource SectionHueStartup}"/>
+    <SolidColorBrush x:Key="SectionHueStartupBorderBrush" Color="{StaticResource SectionHueStartupBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueStartupWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueStartupWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueAudioBrush" Color="{StaticResource SectionHueAudio}"/>
+    <SolidColorBrush x:Key="SectionHueAudioBorderBrush" Color="{StaticResource SectionHueAudioBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueAudioWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueAudioWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueDevicesBrush" Color="{StaticResource SectionHueDevices}"/>
+    <SolidColorBrush x:Key="SectionHueDevicesBorderBrush" Color="{StaticResource SectionHueDevicesBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueDevicesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueDevicesWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHuePerformanceBrush" Color="{StaticResource SectionHuePerformance}"/>
+    <SolidColorBrush x:Key="SectionHuePerformanceBorderBrush" Color="{StaticResource SectionHuePerformanceBorder}"/>
+    <LinearGradientBrush x:Key="SectionHuePerformanceWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHuePerformanceWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueNotificationsBrush" Color="{StaticResource SectionHueNotifications}"/>
+    <SolidColorBrush x:Key="SectionHueNotificationsBorderBrush" Color="{StaticResource SectionHueNotificationsBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueNotificationsWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueNotificationsWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueAccountBrush" Color="{StaticResource SectionHueAccount}"/>
+    <SolidColorBrush x:Key="SectionHueAccountBorderBrush" Color="{StaticResource SectionHueAccountBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueAccountWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueAccountWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueDataBrush" Color="{StaticResource SectionHueData}"/>
+    <SolidColorBrush x:Key="SectionHueDataBorderBrush" Color="{StaticResource SectionHueDataBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueDataWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueDataWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="SectionHueUpdatesBrush" Color="{StaticResource SectionHueUpdates}"/>
+    <SolidColorBrush x:Key="SectionHueUpdatesBorderBrush" Color="{StaticResource SectionHueUpdatesBorder}"/>
+    <LinearGradientBrush x:Key="SectionHueUpdatesWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+        <GradientStop Color="{StaticResource SectionHueUpdatesWash}" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.55"/>
+    </LinearGradientBrush>
 
     <!-- Deeper tab accent brushes -->
     <SolidColorBrush x:Key="DeeperAccentBrush" Color="{DynamicResource DeeperAccent}"/>
