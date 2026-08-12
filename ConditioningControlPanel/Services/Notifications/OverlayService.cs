@@ -822,7 +822,10 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampPink = null;
                         }
-                        if (!settings.PinkFilterEnabled) hide();
+                        // Feature ownership requires the engine to be running (see
+                        // HideOverlaySustained) — a ticked checkbox with the engine stopped
+                        // has no reconciler to ever tear this down.
+                        if (!(_isRunning && settings.PinkFilterEnabled)) hide();
                     }
                 }
                 else if (kind == "spiral")
@@ -841,7 +844,7 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampSpiral = null;
                         }
-                        if (!settings.SpiralEnabled) hide();
+                        if (!(_isRunning && settings.SpiralEnabled)) hide();
                     }
                 }
                 else // braindrain / braindrain_melt
@@ -852,7 +855,7 @@ public class OverlayService : IDisposable
                     // only checked the setting, so the first timed effect to end killed a co-active
                     // band (the setting is false for everyone while the feature is reworked).
                     if (_timedBrainDrainHolds > 0) _timedBrainDrainHolds--;
-                    if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                    if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                         hide();
                 }
             }
@@ -940,8 +943,13 @@ public class OverlayService : IDisposable
             // the overlay stayed frozen at the ramp's final opacity forever (#563). Clearing it
             // returns ownership to the reconciler, which re-applies the user's saved opacity next
             // tick (base-on) or the overlay is torn down (base-off).
-            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
-            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
+            // The persistent feature only actually owns the overlay while the service is running:
+            // with the engine stopped there is no 500ms reconciler, so leaving the overlay up for a
+            // merely-ticked checkbox strands it on screen forever after a Deeper band ends (the
+            // "overlay outlives the enhancement" report). Engine running + feature on still hands
+            // ownership back to the reconciler as before.
+            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !(_isRunning && settings.PinkFilterEnabled)) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !(_isRunning && settings.SpiralEnabled)) StopSpiral(); },
             // Guard braindrain the same way as pink/spiral: a Deeper band exit must not tear down
             // the user's base Brain Drain feature, NOR a timed braindrain effect that is still in
             // flight. Clear ramp ownership + the sustained hold, then stop only when nothing else
@@ -950,7 +958,7 @@ public class OverlayService : IDisposable
             {
                 _sustainedBrainDrainHeld = false;
                 _rampBrainDrainOpacity = null;
-                if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                     StopBrainDrainBlur();
             },
             _ => null
@@ -2907,12 +2915,14 @@ public class OverlayService : IDisposable
         var settings = App.Settings.Current;
 
         // Only start/update brain drain if the overlay service is running (engine is active).
-        // Unconditional stop: this is a full teardown (service not running), same as Stop()/panic —
-        // StopBrainDrainBlur clears the sustained hold so nothing stale survives it.
+        // Engine-stopped is NOT a license to kill an ad-hoc blur: this method is reachable from
+        // CurrentSettings_PropertyChanged (not gated on _isRunning), and Deeper bands run without
+        // the engine — so toggling BrainDrainEnabled/Intensity mid-video used to tear a live band
+        // down with no path to ever re-show it. Same hold discipline as everywhere else.
         if (!_isRunning)
         {
-            // Don't start brain drain if engine isn't running
-            StopBrainDrainBlur();
+            if (ShouldStopHeldOverlay(featureWantsIt: false, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                StopBrainDrainBlur();
             return;
         }
 
