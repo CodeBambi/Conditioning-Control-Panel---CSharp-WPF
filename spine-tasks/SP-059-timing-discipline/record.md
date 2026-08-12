@@ -288,6 +288,7 @@ mechanism) fails the run LOUD naming every leaked port/owner. Registered:
 | 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260812T124618.md` |
 | 3 | `spine_review_step --step 3 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/3-20260812T131057.md` |
 | 4 | `spine_review_step --step 4 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/4-20260812T132718.md` |
+| 5 | `spine_review_step --step 5 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/5-20260812T134940.md` |
 
 ## 6. Step 2 implementation (lab conversion + registry closure)
 

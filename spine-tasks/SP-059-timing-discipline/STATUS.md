@@ -1,6 +1,6 @@
 ## STATUS: SP-059 — Timing discipline in tests (convert, sweep, guard)
-**Current Step:** Step 6
-**Last Updated:** 2026-08-12 (worker, Step 5 complete — pre-completion consult done, chain re-established 10/10)
+**Current Step:** complete
+**Last Updated:** 2026-08-12 (worker, all steps complete — .DONE)
 **Blockers:** none
 
 ### Step 1: sweep, classify, design + pre-approach consult — COMPLETE
@@ -33,7 +33,7 @@
 - [x] Pre-completion solo consult (verdict + ACTUAL model)
 - [x] STATUS.md accurate before .DONE
 
-### Step 6: Testing & Verification — IN PROGRESS
-- [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥862 unit + ≥33 headless, TRX)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
+### Step 6: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥862 unit + ≥33 headless, TRX)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
