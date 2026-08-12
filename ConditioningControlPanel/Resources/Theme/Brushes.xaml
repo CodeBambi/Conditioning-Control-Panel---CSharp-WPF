@@ -129,4 +129,40 @@
          XAML anchors read {DynamicResource AccentGradientBrush}; everything else stays on PinkBrush. -->
     <SolidColorBrush x:Key="AccentGradientBrush" Color="{DynamicResource PinkColor}"/>
 
+    <!-- ==================================================================
+         TIER LIVERY - the persistent "this is paid content" trim, worn by a
+         tiered feature's chrome (Studio rack row, Play cards, rail chips)
+         whether or not the account has the tier. Distinct from the lockband
+         vocabulary (RailLock*/PlayLock*, local to their views), which is the
+         PRICE TAG a locked account sees on top of this; the livery never
+         hides, so a patron still sees which features are the premium ones.
+
+         Deliberately CONSTANT across mods, like the lockbands: a tier mark is
+         commerce, not decor, so it does not take colour from the mod chain.
+         Literal gradient stops on purpose - a Theme dictionary referencing a
+         fresh cross-dictionary StaticResource is the BAML EndOfStream trap
+         (see Velvet-Kit round 2). Base tones match the established tier
+         colours: gold #F0C24B = Tier 1, and Tier 2 wears DIAMOND (ice-white
+         cyan) - the violet flask stays on the lockband glyphs only. -->
+    <LinearGradientBrush x:Key="Tier1GoldBorderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#F2D98C" Offset="0"/>
+        <GradientStop Color="#C9963B" Offset="0.5"/>
+        <GradientStop Color="#8C6218" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier1GoldHoverBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FFE9A9" Offset="0"/>
+        <GradientStop Color="#F0C24B" Offset="0.5"/>
+        <GradientStop Color="#C9963B" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier2DiamondBorderBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#EAFBFF" Offset="0"/>
+        <GradientStop Color="#8FD4EF" Offset="0.5"/>
+        <GradientStop Color="#4C93C4" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Tier2DiamondHoverBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FFFFFF" Offset="0"/>
+        <GradientStop Color="#BFEFFF" Offset="0.5"/>
+        <GradientStop Color="#7FC4E8" Offset="1"/>
+    </LinearGradientBrush>
+
 </ResourceDictionary>

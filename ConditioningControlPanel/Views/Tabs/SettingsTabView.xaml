@@ -279,11 +279,18 @@
                     <Setter Property="Margin" Value="0,0,0,4"/>
                     <Setter Property="Height" Value="42"/>
                     <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+                    <!-- Routed through the Button's own BorderBrush (was a literal
+                         GlassBorderBrush on cb) so a chip can override it: the Tier 1
+                         chips wear the gold tier livery (Brushes.xaml) permanently,
+                         while ChipGradedIntake - a weekly pass, not a tier - keeps this
+                         glass default. Hover still wins: the triggers below set cb
+                         directly, and a template trigger outranks a TemplateBinding. -->
+                    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="cb" Background="{TemplateBinding Background}"
-                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                                         CornerRadius="9" RenderOptions.BitmapScalingMode="HighQuality">
                                     <!-- CornerRadius 8 = the chip's 9 minus the 1px border, so the
                                          overlays follow the inner curve instead of squaring it off. -->
@@ -428,6 +435,7 @@
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtTakeover}"
                             Click="ChipTakeover_Click" ToolTip="Takeover — the companion triggers effects on her own · left-click opens it, right-click turns it on">
                         <Grid>
@@ -443,6 +451,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipAwareness" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtAwareness}"
                             Click="ChipAwareness_Click" ToolTip="Awareness — reacts to what's on your screen · left-click opens it, right-click turns it on">
                         <Grid>
@@ -457,6 +466,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipHaptics" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtHaptics}"
                             Click="ChipHaptics_Click" ToolTip="Haptics — connect a toy · left-click opens it, right-click turns it on">
                         <Grid>
@@ -492,6 +502,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtVoice}"
                             Click="ChipVoice_Click" ToolTip="She's Listening — voice control (&quot;Hey Bambi&quot;) and the mic · left-click opens it, right-click turns it on">
                         <Grid>
@@ -515,6 +526,7 @@
                          premium gate — the chip itself never blocks, exactly like its siblings.
                          No state dot for the same reason Intake has none. -->
                     <Button x:Name="ChipFyp" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtFyp}"
                             Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library · left- or right-click opens it">
                         <Grid>
@@ -537,7 +549,7 @@
                          cost this card in height. -->
                     <Border x:Name="CardLockdown" x:FieldModifier="internal"
                             Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Lockdown — locks you in for the set time (panic key disabled)">
                         <Grid>
@@ -578,7 +590,7 @@
                          full-bleed treatment as Lockdown. -->
                     <Border x:Name="CardBlink" x:FieldModifier="internal"
                             Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Blink Trainer — webcam blink-gated visuals">
                         <Grid>
@@ -615,6 +627,7 @@
                     </Border>
                     <!-- Remote — opens a flyout to compose + start a remote session -->
                     <Button x:Name="ChipRemote" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtRemote}"
                             Click="ChipRemote_Click" ToolTip="Remote Control — let someone drive your session">
                         <Grid>

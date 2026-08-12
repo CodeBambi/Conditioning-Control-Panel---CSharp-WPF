@@ -105,6 +105,17 @@ namespace ConditioningControlPanel.Views.Tabs
             /// header must hide rather than double up (Haptics).</summary>
             public bool OwnHeader;
 
+            /// <summary>
+            /// The tier this module is SOLD at: 0 = free, 1 = premium, 2 = Lab. Presentation
+            /// only — the row wears the tier livery (gold/diamond, Resources\Theme\Brushes.xaml)
+            /// permanently, whoever is looking; the refusal still belongs to the panel's own
+            /// premium gate and <see cref="Services.TierGate"/>. Hand-maintained, like
+            /// <see cref="BarkFeature"/>: there is no per-module verdict to derive it from
+            /// without asking PatreonService a question ("is this ALLOWED?") that answers a
+            /// different question than "what does it COST?".
+            /// </summary>
+            public int Tier;
+
             // Built by BuildRack.
             public RadioButton? Row;
             public TextBlock? Label;
@@ -260,7 +271,10 @@ namespace ConditioningControlPanel.Views.Tabs
                 // its enable lives on the nested Haptics settings object. Flip the page's own
                 // master box so MainWindow.ChkHapticsEnabled_Changed runs - including the
                 // premium gate that reverts the box for a free account.
-                toggle: () => FlipMasterCheckBox(PanelHaptics?.ChkHapticsEnabled));
+                toggle: () => FlipMasterCheckBox(PanelHaptics?.ChkHapticsEnabled),
+                // The rack's one paid module (the premium gate above is the enforcement this
+                // livery advertises). Same bar as the rail chip's RailLockBand: Tier 1.
+                tier: 1);
 
             _layout.Add("st4_studio_group_timing");
             // Both fire the popup's single "SchedulerRamp" key so the existing rules keep firing.
@@ -280,7 +294,7 @@ namespace ConditioningControlPanel.Views.Tabs
 
             void Add(string key, string glyph, string english, string locKey, UIElement? host,
                      UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = false,
-                     Action? toggle = null)
+                     Action? toggle = null, int tier = 0)
             {
                 var entry = new StudioRackEntry
                 {
@@ -293,6 +307,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     BarkFeature = bark,
                     Dot = dot,
                     OwnHeader = ownHeader,
+                    Tier = tier,
                     // Default: route the rack key straight into the dashboard's own quick-toggle.
                     // Derived rather than hand-listed per row so adding a wall tile for a module
                     // (or a module for a wall tile) cannot leave the rack behind.
@@ -385,6 +400,16 @@ namespace ConditioningControlPanel.Views.Tabs
                         VerticalAlignment = VerticalAlignment.Center,
                     },
                 };
+                // Tier livery on the chip: the metal on the chip's own frame plus a tinted
+                // well behind the glyph, so the mark survives even where the row rim is
+                // faint. Presentation only — see StudioRackEntry.Tier.
+                if (e.Tier > 0)
+                {
+                    iconChip.BorderBrush = TierLiveryBrush(e.Tier);
+                    iconChip.Background = new SolidColorBrush(e.Tier >= 2
+                        ? Color.FromRgb(0x1E, 0x33, 0x40)    // deep ice under diamond
+                        : Color.FromRgb(0x3D, 0x33, 0x1E));  // dark amber under gold
+                }
                 Grid.SetColumn(iconChip, 0);
                 grid.Children.Add(iconChip);
 
@@ -415,6 +440,9 @@ namespace ConditioningControlPanel.Views.Tabs
                     Tag = e.Key,
                     Content = grid,
                 };
+                // BorderBrush is the template's TierRim (RackEntryStyle nulls it for free
+                // rows), so a tiered row wears a permanent gold/diamond outline.
+                if (e.Tier > 0) e.Row.BorderBrush = TierLiveryBrush(e.Tier);
                 e.Row.Click += RackEntry_Click;
                 // Right-click = quick-toggle, the same second gesture the dashboard tiles carry.
                 // On the ROW, not on the dot: the dot is 7px, and the gesture belongs to the
@@ -601,9 +629,32 @@ namespace ConditioningControlPanel.Views.Tabs
             if (target == null) return;
 
             if (DetailHeader != null)
+            {
                 DetailHeader.Visibility = target.OwnHeader ? Visibility.Collapsed : Visibility.Visible;
+                // The header echoes the row's tier livery, so the detail pane says "this is
+                // the paid one" in the same metal the rack does. #2A2A46 = the header's own
+                // XAML literal, restored verbatim for free modules.
+                DetailHeader.BorderBrush = target.Tier > 0
+                    ? TierLiveryBrush(target.Tier)
+                    : new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x46));
+            }
             if (TxtDetailIcon != null) TxtDetailIcon.Text = target.Glyph;
             if (TxtDetailTitle != null) TxtDetailTitle.Text = LabelFor(target);
+        }
+
+        /// <summary>
+        /// The tier livery for a paid module's chrome: gold = Tier 1, diamond = Tier 2, from
+        /// the shared theme (Resources\Theme\Brushes.xaml) with a flat literal fallback in the
+        /// established tier tones, because a missing brush must degrade to a duller rim, never
+        /// to a throw inside row construction.
+        /// </summary>
+        private Brush TierLiveryBrush(int tier)
+        {
+            var key = tier >= 2 ? "Tier2DiamondBorderBrush" : "Tier1GoldBorderBrush";
+            return (Brush?)TryFindResource(key)
+                   ?? new SolidColorBrush(tier >= 2
+                       ? Color.FromRgb(0x8F, 0xD4, 0xEF)
+                       : Color.FromRgb(0xF0, 0xC2, 0x4B));
         }
 
         /// <summary>
