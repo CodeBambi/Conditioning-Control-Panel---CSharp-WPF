@@ -65,9 +65,9 @@
 8. **Harness (HARNESS-ONLY, Program/App wiring):** `--tunnel-demo` (show + run-start at ready through the real message path), `--tunnel-drive "<steps>"` (timed steps: `topmost-show`/`topmost-hide` over the REAL `DtrhVideoWindow` Topmost surface, `tunnel-hide`/`tunnel-show`, `main-raise` for the z-guard), `--tunnel-auto-close N`. External PS harness: pre/post real-profile sha256 manifests (path-hashed) + diff, `GetWindowRect` lines for every window per capture, `GetForegroundWindow` before/after tunnel show, screen captures per phase.
 9. **Tests (timing-guard clean):** tunnel loopback contract (GET-only 405, both routes 200, 415 negative control, traversal 403, 404s, route-class logging), core state machine (ready flush order, streak dedup, exit fast/force paths via direct elapsed-handler calls, RunAgain re-arm), capability selection from injected states, window policy assertions (headless), manifest tunnel-entry presence. All waits via `TestWait` or direct handler invocation; zero new deadline literals; `LoopbackListenerRegistry` registered per SP-059.
 
-### Consults
+## Consults
 
-(verdicts + actual answering models recorded below)
+(recorded inline: Step 1 pre-approach; Step 4 pre-completion)
 
 #### Pre-approach consult (Step 1)
 
@@ -92,6 +92,7 @@
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T174335.md` |
 | 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T180808.md` |
+| 3 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/3-20260812T183947.md` |
 
 ---
 
@@ -122,7 +123,7 @@
 
 **Run:** `scratch/headed-run.ps1` → `evidence/wh/` (transcript, run.log, 4 screen captures + 4 PrintWindow captures, profile manifests). App: Debug build, `--tunnel-demo --tunnel-drive topmost-show,tunnel-close,tunnel-show,topmost-hide,finish` under `CCP_DATA_ROOT=<sandbox>` (SP-057 isolation; the `data-root override active` seam logged). Foreign (non-CCP) windows were temporarily minimized for the captures and restored after — loud lines in the transcript.
 
-**Evidence method (the v1 lesson):** a bottom-sunk window sits below ALL non-topmost windows including other apps', so a raw screen capture of a busy desktop never shows the tunnel. Tunnel-content proof = `PrintWindow(PW_RENDERFULLCONTENT)` on the tunnel's own hwnd (z-order-independent capture of its real presented surface — probe-verified, 1801 distinct colors). Screen captures answer "what is on TOP" per region. Z-order facts = a 512-bound `GW_HWNDPREV` walk from the tunnel's hwnd comparing REAL window handles.
+**Evidence method (the v1 lesson):** a bottom-sunk window sits below ALL non-topmost windows including other apps', so a raw screen capture of a busy desktop never shows the tunnel. The layering claims rest on THREE pillars: the **composited screen capture** (the pixel proof — the occluder's black client exactly where tunnel pixels would be, tunnel colors immediately outside), the **recorded rects** (the black region's boundary matches the Topmost window's `GetWindowRect`), and the **hwnd z-walk** (identity-level ordering, not a property read — a 512-bound `GW_HWNDPREV` walk from the tunnel's hwnd). `PrintWindow(PW_RENDERFULLCONTENT)` is z-order-INDEPENDENT and is the **CONTROL, never the layering proof**: it kills the competing explanation "the region was black because the tunnel stopped rendering" by showing the tunnel's own presented surface alive at the same moment. A/D bookend the same screen region colorful with the occluder gone.
 
 | Phase | Rects (physical px) | z-walk | Pixels | Verdict |
 |---|---|---|---|---|
@@ -133,19 +134,43 @@
 
 **Show/hide cycles:** one full cycle each way — CloseActive (graceful `run-end` → real page `exit-done` → fast-path teardown, run.log line 43) then a fresh Show under the live Topmost surface (C), and the topmost surface shown (B) then hidden (D) over a continuous tunnel run.
 
-**Activation/focus proof:** foreground window per phase (transcript lines): A = File Explorer (pre-existing), B/C = the DTRH video window (an activating attention surface — its own design), D = CCP Client (dashboard inherits foreground when foreign windows minimize — OS-driven, not a show). **The tunnel NEVER held foreground or activation across show, re-show, and both cycles** (ShowActivated=false + WS_EX_NOACTIVATE doing their work; the re-show under the video in C did not move foreground off the video).
+**Activation proof (measured: `GetForegroundWindow` identity — never claimed as keyboard focus):** the load-bearing cell is **C** — the tunnel was re-shown while the DTRH video window (SAME process) held foreground, and foreground stayed on the video; the foreground-lock cannot explain a same-process steal that never happened. A/D corroborate weakly (the app never held foreground there, so the OS foreground lock is partly the explanation — recorded honestly). D: the dashboard inherited foreground when foreign windows minimized — OS-driven, not a show. **The tunnel never became the foreground/activated window across show, re-show, and both cycles** (the declared + unit-asserted `ShowActivated=false` / `WS_EX_NOACTIVATE` doing their work). Alt-Tab: the `WS_EX_TOOLWINDOW` style is asserted (unit + declared); a switcher observation was NOT performed — the style is the claim, not an observation.
 
-**Z-guard live function:** the dashboard's activation (foreground inheritance during minimize churn) raised it above the tunnel mid-run (B's z-walk: dashboard-above=True at 03:37:03); the guard demoted it back within one 1500ms cadence (8 demote events logged; C and D: dashboard-above=False). This is the ported timer semantics correcting a real rise — WPF's no-flash `WM_WINDOWPOSCHANGING` rewrite hook remains the deliberately unported delta (filed); the correction window is one cadence.
+**Z-guard live function:** the dashboard's activation (foreground inheritance during minimize churn) raised it above the tunnel mid-run (B's z-walk: dashboard-above=True at 03:37:03); the guard demoted it back within one 1500ms cadence (8 demote events logged; C and D: dashboard-above=False). This is the ported timer semantics correcting a real rise. **The named visible consequence of the unported WndProc hook:** a re-activated dashboard can paint over the backdrop for up to ~1.5s (one guard cadence) before the demote lands — WPF's `WM_WINDOWPOSCHANGING` rewrite hook would prevent the rise from painting at all; it stays rejected-for-now (its trigger has no greenfield source; the timer path is the evidenced one).
 
-**Profile byte-identity (SP-057):** real profile `%APPDATA%\CcpClient` = 2677 files, path-hashed sha256 manifests pre/post — **IDENTICAL** (`evidence/wh/profile-pre.txt` == `profile-post.txt`; the run wrote only under the CCP_DATA_ROOT sandbox, which is NOT committed — browser profile data is never committable evidence).
+**Profile byte-identity (SP-057), two controls paired:** the POSITIVE control — the override seam was live: `evidence/wh/run.log:1` carries `data-root override active: CCP_DATA_ROOT -> …` (the path it names is the PRE-MOVE sandbox location `scratch/evidence/wh/sandbox-root`; the sandbox tree itself is deliberately NOT committed — WebView2 profile data is never committable evidence, SP-057 discipline). The NEGATIVE control — the real profile was untouched: `%APPDATA%\CcpClient` = 2677 files, path-hashed sha256 manifests pre/post **IDENTICAL** (`profile-pre.txt` == `profile-post.txt`). Neither control alone is the claim.
 
 **Graceful exit:** `finish` → CloseActive → page `exit-done` → fast-path teardown → lifetime shutdown → **EXIT=0** (run.log tail; the `Chrome_WidgetWin_0` unregister line is the known WebView2 cosmetic noise, SP-027 consolidated limits). Non-ASCII characters in the redirected stderr render as `?`/`�` (app-side console encoding, cosmetic; markers are ASCII).
+
+**Evidence currency:** no product code changed after the capturing run — the last product edits (the `PageReady` pacing hook, the 10s step cadence, the harness video sizing) landed BEFORE the final headed run; the headed evidence is against the tree at HEAD. (If any product file changes in Step 4/5, Step 3 reopens — the consult's gate.)
 
 **Linux disposition:** gated — WSL has zero distros (exact gate above). The Linux surface is typed Unavailable BY DESIGN this row (no page-side bridge transport + no keep-below control on the dialog toplevel — capability reason text carries both); no Linux run was possible and no Linux claim is made.
 
 ## Step 4 — record + window manifest + pre-completion consult
 
-(pending)
+**Window manifest:** `client/docs/window-behavior-manifest.md` — new §4.7 "Game backdrop surfaces" with row **W-80** (full W-xx field language, CD cites per field), the §2.1 ad-hoc-overlay cross-ref entry for `ChaosTunnelService.cs:182` REMOVED (it was misclassified there: the tunnel is opaque and click-absorbing, never click-through — the overlay-clickthrough scope does not own it), §2.3 counts bumped 79→80, and an RV status note naming the headed evidence + the two ported deltas (unported WndProc hook; Linux typed Unavailable).
+
+## Intended board filings (orchestrator reconciles at land — ENABLER 2)
+
+1. **DTRH host row ratification qualifier — DISCHARGEABLE:** the qualifier bars ratifying the DTRH host row DONE until this tunnel row resolves or the tunnel is decreed out of scope. This task lands the tunnel surface with its contract pixel-proven on Windows (named limits below). **The qualifier's resolution condition is met by this landing — stated, not set; the orchestrator owns the row states.**
+2. **This row ("Chaos tunnel backdrop surface"):** acceptance met on Windows with named limits — Linux gated (WSL zero distros) AND the Linux surface typed-Unavailable by design this row (no page bridge transport, no keep-below control); ambient bed N/A (no chaos sound-library port — that row owns the six `tunnel_*.mp3` cues, a content gap not a parity claim); the WndProc no-flash hook rejected-for-now (item 4).
+3. **`client/docs/upstream-payload-inventory.json` (out of worker scope):** flip `tunnel` + `vendor` to `served` with evidence naming `payload/tunnel` + `payload/vendor` via `Features/Chaos/ChaosTunnelLoopback` (SP-061). **Recorded per the consult's correction: SP-056's guard checks well-formedness only, so the suite stays GREEN on the stale `not-ported` disposition — green is not honest here until the orchestrator flips the entries.**
+4. **Rejected-for-now alternative (file for the board):** WPF's preventive `WM_WINDOWPOSCHANGING` rewrite hook (`ChaosTunnelService.cs:484-510`) — the no-flash refinement; the ported 1500ms timer corrects a dashboard rise within one cadence (observed live, Step 3). Port the hook only if a visible flash is ever reported.
+5. **Port-lessons candidates:** (a) a bottom-sunk window sits below OTHER APPS' windows too — busy-desktop screen captures never show it; `PrintWindow(PW_RENDERFULLCONTENT)` is the z-order-independent content proof. (b) Headed harnesses must call `SetProcessDPIAware` BEFORE any Forms/Drawing use or `GetWindowRect` (virtualized) and `CopyFromScreen` (physical) silently disagree. (c) PS 5.1: `Start-Process -PassThru` loses `ExitCode` (use `System.Diagnostics.Process`); a BOM-less .ps1 with non-ASCII parses smart quotes as string terminators. (d) The first attempt's "`Window.SystemDecorations` renamed/obsoleted in v12" note was half-wrong — the property exists, RETYPED to the `WindowDecorations` enum (12.1.1 binary-verified); `WindowDecorations.None` is the v12 borderless, not `ExtendClientAreaToDecorationsHint`.
+6. **Timeout-budget sweep naming (framing e):** this task adds NO new injected timeout budgets and NO new deadline literals in tests. One adjacent naming: the shared-invariant fixture passes `longPollTimeout: 200ms` into the LANDED `LoopbackServer`'s existing injectable seam (the `DtrhLoopbackContractTests:46` precedent) — not a new budget; named so the fourth-occurrence budgets row's sweep sees it. The headed harness's waits are PowerShell pacing outside `client/tests/**`.
+7. **A-013:** avalonia-live MCP re-checked once — still unreachable (`fetch failed`), recorded Unavailable; never consulted as v12 authority (API facts are 12.1.1-binary reflection, `scratch/apiprobe`).
+
+### Pre-completion consult (Step 4)
+
+**Mode:** solo ×2 (first call truncated at the closing gate — the standing truncation class; a short follow-up retrieved the remainder). **Actual answering model:** NOT surfaced by the tool (recorded honestly).
+
+**Verdict: evidence standard SOUND; the hook stays filed — do NOT port it before `.DONE`** (not in the completion criteria; its trigger has no greenfield source; landing un-exercised Win32 after the headed evidence trades evidenced behavior for unevidenced). Four precision fixes, ALL APPLIED above:
+1. **PrintWindow labeled the CONTROL, never the layering proof** (z-order-independent → proves rendering only; layering rests on the composited screen capture + rects + hwnd z-walk, with A/D bookends).
+2. **Activation paragraph rewritten to lead with cell C** (same-process foreground holder — the foreground-lock-free cell), A/D demoted to weak corroboration; the claim is `GetForegroundWindow` identity (activation), never keyboard focus; Alt-Tab = style asserted, not observed.
+3. **The unported hook's VISIBLE consequence named** (~1.5s dashboard-over-backdrop correction window) in record + the W-80 note — an unnamed visible delta is an overclaim by silence.
+4. **Positive/negative control pairing for the profile claim** (override line = run.log:1, naming the pre-move sandbox path, sandbox deliberately uncommitted; byte-identity = the negative control) + the **evidence-matches-HEAD** line (no product change after the capturing run; a Step-4/5 product change reopens Step 3).
+
+**Process gate (applied as Step 5):** re-run the FULL contract testCommand on the FINAL tree (the Step-2 greens predate the Step-3 product churn), `git diff --check` clean, `git status --short` = File Scope + the documented csproj amendment (named in record Step 2 + STATUS + the Step-2 commit body), THEN `.DONE`. No headed re-run needed — nothing in Step 4/5 is product code.
 
 ## Intended board filings (orchestrator reconciles at land — ENABLER 2)
 

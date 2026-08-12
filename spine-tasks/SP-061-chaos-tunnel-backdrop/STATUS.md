@@ -1,6 +1,6 @@
 ## STATUS: SP-061 — Chaos tunnel backdrop (opaque below-Topmost web surface)
-**Current Step:** Step 4 — record + window manifest + pre-completion consult
-**Last Updated:** 2026-08-12 (worker, Step 3 complete — layering proven in pixels both directions)
+**Current Step:** Step 5 — Testing & Verification
+**Last Updated:** 2026-08-12 (worker, Step 4 complete, pre-completion consult applied)
 **Blockers:** none
 
 ### Step 1: dual-source archaeology + layering design + pre-approach consult — COMPLETE (plan review pending)
@@ -26,11 +26,11 @@
 - [x] DISPLAY3 or a LOUD named fallback; Linux disposition honest
 - [x] A-013 advisory re-check (MCP unreachable at authoring — record Unavailable if still down)
 
-### Step 4: record + window manifest + pre-completion consult — NOT STARTED
-- [ ] `client/docs/window-behavior-manifest.md` row(s) added
-- [ ] record.md complete (dual-source tables, captures, limits, intended filings)
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + window manifest + pre-completion consult — COMPLETE (plan review pending)
+- [x] `client/docs/window-behavior-manifest.md` row(s) added
+- [x] record.md complete (dual-source tables, captures, limits, intended filings)
+- [x] Pre-completion solo consult (verdict + ACTUAL model)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification — NOT STARTED
 - [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, ≥863 unit + ≥33 headless, TRX)
