@@ -12,7 +12,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Descent;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
 {
@@ -1110,7 +1112,27 @@ namespace ConditioningControlPanel.Services
                 // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
                 // haven't completed a round-trip load yet this session, skip sending XP/level.
                 // This prevents a settings reset (update crash, corruption) from zeroing the server.
-                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < MeaningfulProgressXp)
+                // THE ONE SANCTIONED DOWNWARD WRITE (CONTRACTS-0812 §2.5). A migration choice the
+                // user has made but the server has not acked yet suspends BOTH XP-regression
+                // guards below for this sync — and only for this sync, because the flag is
+                // cleared by the ack. Without it the two guards do exactly what they were built
+                // to do and refuse the ceremony: "Descend again" pushes Level 1 / 0 XP, which is
+                // the defaults-guard's whole signature, and both choices push a total under the
+                // watermark this client and the server last agreed on.
+                //
+                // Suspending them is safe here precisely because this is not a local calculation
+                // that went wrong: the figure was derived from the SERVER's own total_xp_earned
+                // in response to the SERVER's own offer, and the server re-derives and clamps it
+                // on arrival. Nothing else in the app can set this flag.
+                var pendingMigrationChoice = settings.PendingDescentMigrationChoice;
+                var migrationSubmitInFlight = DescentMigrationChoices.IsValid(pendingMigrationChoice);
+                if (migrationSubmitInFlight)
+                {
+                    App.Logger?.Information("[Descent] Migration submit riding this sync (choice={Choice}, Level {Level}, XP {Xp}) — XP regression guards suspended for it.",
+                        pendingMigrationChoice, settings.PlayerLevel, (int)totalXp);
+                }
+
+                if (!migrationSubmitInFlight && !_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < MeaningfulProgressXp)
                 {
                     App.Logger?.Warning("Sync blocked — local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
                         settings.PlayerLevel, (int)totalXp);
@@ -1133,7 +1155,7 @@ namespace ConditioningControlPanel.Services
                 // — a local total that fell with no server-side explanation — and it cannot latch,
                 // which matters because this check sits in front of the whole payload, not just
                 // the XP field.
-                var watermark = ActiveXpWatermark(settings);
+                var watermark = migrationSubmitInFlight ? 0 : ActiveXpWatermark(settings);
                 if (watermark > 0 && totalXp < watermark)
                 {
                     App.Logger?.Error("[XP watermark] Sync REFUSED — would push {Xp} XP, below the {Watermark} XP this client and the server last agreed on for this account this season (Level {Level}). This local profile has LOST progress; not asking the server to match it. Fix the local file or reset the account deliberately.",
@@ -1215,6 +1237,17 @@ namespace ConditioningControlPanel.Services
                         // recorded — is a no-op, not an error. Fallback data for the Year One
                         // anchor only; nothing reads it back.
                         install_date = string.IsNullOrWhiteSpace(settings.InstallDate) ? null : settings.InstallDate,
+                        // THE EPOCH ECHO (CONTRACTS-0812 §1). Unconditional, on every body, from
+                        // every build that carries this line — it identifies the CLIENT, not the
+                        // account, so it does not wait for a flag and it does not read settings.
+                        //
+                        // Server side it is the resurrection guard: once a record is migrated, a
+                        // sync body arriving without this number has its xp/level/total_xp_earned
+                        // ignored outright, which is the only thing standing between a migrated
+                        // account and an unsynced old-curve phone pushing a pre-migration level
+                        // back up through the take-higher merge. Legacy clients see no error and
+                        // no wire change; their level writes just stop landing.
+                        descent_epoch = DescentEpochs.ClientEpoch,
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
@@ -1225,6 +1258,23 @@ namespace ConditioningControlPanel.Services
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
                     AddAuthHeader(v2Request);
                     var v2Body = JsonConvert.SerializeObject(v2SyncData);
+
+                    // THE CHOICE SUBMIT (CONTRACTS-0812 §2.2), grafted on rather than declared in
+                    // the anonymous object above, because an anonymous property would serialize as
+                    // `"descent_migration": null` on the 100% of syncs that carry no choice — and
+                    // §0.4 says flag-off is BYTE-IDENTICAL wire, not "identical apart from a null".
+                    // No pending choice, no re-serialization, no new bytes.
+                    //
+                    // The re-derived ledger rides in the ORDINARY xp/level fields (already built
+                    // above from the settings the ceremony rewrote); this object carries nothing
+                    // but the choice.
+                    if (migrationSubmitInFlight)
+                    {
+                        var payload = JObject.Parse(v2Body);
+                        payload["descent_migration"] = new JObject { ["choice"] = pendingMigrationChoice };
+                        v2Body = payload.ToString(Formatting.None);
+                    }
+
                     v2Request.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
                     SignRequest(v2Request, v2Body);
 
@@ -1366,6 +1416,25 @@ namespace ConditioningControlPanel.Services
 
                             App.Progression?.AddClaimedXP(webXpClaim.Amount);
                         }
+
+                        // THE MIGRATION HANDSHAKE, both halves (CONTRACTS-0812 §2). Absent block =
+                        // nothing happens, which is the state of every account in the world until
+                        // the owner arms DESCENT_MIGRATION server-side. There is no client flag to
+                        // find and no local condition that reaches this code on its own.
+                        //
+                        // Ack FIRST, offer second, and the order matters: a submit's own response
+                        // carries the ack, and settling it before looking at `required` means a
+                        // server that (wrongly) sent both in one breath cannot re-open a ceremony
+                        // the user just finished.
+                        HandleDescentMigrationAck(settings, v2Result?.DescentMigration);
+                        HandleDescentMigrationOffer(settings, v2Result?.DescentMigration);
+
+                        // The stage-ceremony drip (§6). A successful sync is the cheapest honest
+                        // proxy for "signed in and awake today" that needs no new lifecycle
+                        // wiring, and the tick is a same-local-day no-op, so syncing forty times
+                        // still releases exactly one. Returns immediately for the ~100% of
+                        // accounts with an empty queue.
+                        App.DescentMigration?.TickStageDrip();
 
                         // Prestige: adopt the server's lifetime_points_spent when ahead (other
                         // device / migration backfill). Monotonic — never lowered.
@@ -1636,6 +1705,28 @@ namespace ConditioningControlPanel.Services
                                 (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
                             }));
                         }
+                        // THE CEREMONY'S LEDGER IS NOT UP FOR NEGOTIATION until the server acks it.
+                        //
+                        // This is the nastiest interaction in the whole migration. The adopt block
+                        // below exists to pull a client UP to a server that is 5k ahead — and on
+                        // the sync that submits a Cycle, the server's pre-migration record is
+                        // hundreds of thousands of XP ahead of the Level 1 ledger we just wrote.
+                        // If the server did NOT process the submit (flag off mid-flight, an older
+                        // deploy, a partial write), the adopt would cheerfully resurrect the
+                        // pre-ceremony level while the pending choice sat on disk waiting to
+                        // re-submit — a client and a server disagreeing about whether a one-way
+                        // ceremony happened.
+                        //
+                        // So: while a submit is in flight, the ONLY response allowed to move the
+                        // ledger is one carrying the ack. With the ack, the server's figures ARE
+                        // the post-migration truth (including the §2.5 ±1-level clamp on a
+                        // restore) and adopting them is exactly right. Without it, we keep what
+                        // the ceremony wrote and try again next sync.
+                        else if (migrationSubmitInFlight && v2Result?.DescentMigration?.Completed != true)
+                        {
+                            App.Logger?.Warning("[Descent] Migration submit was not acknowledged in this response — holding the ceremony's ledger (Level {Level}) and ignoring the server's pre-migration figures. Will re-submit on the next sync.",
+                                settings.PlayerLevel);
+                        }
                         // Adopt server XP after sync. Two cases:
                         // 1. Server > local: server has more (admin boost, other device). Adopt.
                         // 2. Server significantly < local: server clamped us (anti-cheat). Adopt to
@@ -1711,7 +1802,14 @@ namespace ConditioningControlPanel.Services
                         // deliberately KEPT a higher local — the clamp's defend branch — the totals
                         // differ, RecordAgreedServerXp sees the disagreement and leaves the
                         // previously agreed figure standing.
-                        if (v2Result?.User != null)
+                        //
+                        // Suppressed entirely while a migration submit is unacked, for the same
+                        // reason the adopt above is: there is no agreement to record. The server
+                        // is still quoting a pre-ceremony total and this client is deliberately
+                        // holding a lower one. Writing that down as "agreed" would arm the
+                        // send-guard at a figure the ceremony just retired.
+                        if (v2Result?.User != null &&
+                            (!migrationSubmitInFlight || v2Result.DescentMigration?.Completed == true))
                         {
                             var agreedClientXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
                             RecordAgreedServerXp(settings, v2Result.User.Xp, agreedClientXp, "V2 sync");
@@ -3666,6 +3764,76 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region The Descent — migration handshake (CONTRACTS-0812 §2)
+
+        /// <summary>
+        /// Settle a submit. THE ACK IS THE ONLY THING THAT MAY WRITE
+        /// <see cref="AppSettings.DescentMigrationCompleted"/> — this method is the one place that
+        /// touches it, and it is deliberately the mirror image of the web-XP claim handshake a few
+        /// hundred lines up.
+        ///
+        /// <para>The lopsidedness is the point. The client applies its half of the migration
+        /// BEFORE the submit (it has to — the ledger it sends must be denominated in the curve it
+        /// claims), and marks itself done only when the server says so. Crash in the gap and the
+        /// server is still unmigrated, so it re-offers; the pending choice is still on disk, so
+        /// the very next sync re-submits it; and the server treats a repeat submit as a silent
+        /// no-op. Nothing is lost in any ordering, because both choices are pure functions of a
+        /// lifetime XP total that never moves.</para>
+        /// </summary>
+        private static void HandleDescentMigrationAck(AppSettings settings, V2DescentMigration? block)
+        {
+            if (block?.Completed != true) return;
+            if (settings.DescentMigrationCompleted) return;   // already settled; idempotent
+
+            // Prefer the server's echo of the choice; fall back to what we submitted. They can
+            // only differ if the account migrated on another device, and the server's word wins.
+            var choice = DescentMigrationChoices.IsValid(block.Choice)
+                ? block.Choice
+                : settings.PendingDescentMigrationChoice;
+
+            settings.DescentMigrationCompleted = true;
+            settings.DescentMigrationChoice = choice;
+            settings.PendingDescentMigrationChoice = null;
+            App.Settings?.Save();
+
+            App.Logger?.Information("[Descent] Migration ACKNOWLEDGED by server (choice={Choice}). Curve v2 is now this account's curve, permanently.",
+                choice ?? "unknown");
+        }
+
+        /// <summary>
+        /// Open the ceremony when the server offers it. Every condition here is a reason NOT to:
+        /// the block has to be present, it has to say required, the account must not already be
+        /// migrated, and there must be no choice already made and waiting to land.
+        ///
+        /// <para>That last one is what stops the ceremony re-opening in front of a user who has
+        /// already chosen but whose ack has not arrived — the server will keep saying "required"
+        /// until the submit lands, and asking a one-way question twice is the one thing this
+        /// ceremony must never do.</para>
+        /// </summary>
+        private static void HandleDescentMigrationOffer(AppSettings settings, V2DescentMigration? block)
+        {
+            if (block?.Required != true) return;
+            if (settings.DescentMigrationCompleted) return;
+            if (DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice))
+            {
+                App.Logger?.Debug("[Descent] Offer re-sent but a choice is already pending server ack — not re-opening the ceremony.");
+                return;
+            }
+
+            var offer = new DescentMigrationOffer
+            {
+                TotalXpEarned = block.TotalXpEarned ?? 0,
+                DevotionDays = block.DevotionDays ?? 0
+            };
+
+            App.Logger?.Information("[Descent] Server is offering the migration ceremony (lifetime {Xp} XP, {Days} devotion days).",
+                (int)offer.TotalXpEarned, offer.DevotionDays);
+
+            App.DescentMigration?.OfferReceived(offer);
+        }
+
+        #endregion
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -3893,8 +4061,45 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("web_xp")]
             public V2WebXp? WebXp { get; set; }
 
+            /// <summary>
+            /// The Descent migration handshake, offer AND ack on the same key (CONTRACTS §2).
+            /// Absent unless the server has DESCENT_MIGRATION armed, which is why it is nullable
+            /// and why every reader treats absence as "there is no ceremony".
+            /// </summary>
+            [JsonProperty("descent_migration")]
+            public V2DescentMigration? DescentMigration { get; set; }
+
             [JsonProperty("user")]
             public V2SyncUser? User { get; set; }
+        }
+
+        /// <summary>
+        /// One shape, two directions. On an ordinary sync the server may fill
+        /// <see cref="Required"/> + the two figures (the OFFER); on the response to a submit it
+        /// fills <see cref="Completed"/> + <see cref="Choice"/> (the ACK). Nullable throughout:
+        /// a missing field is never a zero, it is a server that did not speak.
+        /// </summary>
+        private class V2DescentMigration
+        {
+            /// <summary>The offer. True = this account has not migrated and the flag is on.</summary>
+            [JsonProperty("required")]
+            public bool? Required { get; set; }
+
+            /// <summary>Lifetime XP the SERVER holds — the sole input to the relevel (§2.5).</summary>
+            [JsonProperty("total_xp_earned")]
+            public double? TotalXpEarned { get; set; }
+
+            /// <summary>Server-side devotion days, already backfilled. Display only.</summary>
+            [JsonProperty("devotion_days")]
+            public int? DevotionDays { get; set; }
+
+            /// <summary>The ack. The ONLY thing that may mark this client migrated (§2.4).</summary>
+            [JsonProperty("completed")]
+            public bool? Completed { get; set; }
+
+            /// <summary>The choice the server recorded: "restore" or "cycle".</summary>
+            [JsonProperty("choice")]
+            public string? Choice { get; set; }
         }
 
         private class V2WebXp

@@ -503,6 +503,15 @@ namespace ConditioningControlPanel
         /// behaviour it had before the seam existed. See LiveEventService.
         /// </summary>
         public static Services.Events.LiveEventService? LiveEvent { get; private set; }
+
+        /// <summary>
+        /// THE MIGRATION CEREMONY's runtime (CONTRACTS-0812 §4). Constructed on every launch and
+        /// DORMANT on every launch: the only thing that can wake it is a /v2/user/sync response
+        /// carrying <c>descent_migration.required</c>, which the server sends only with
+        /// DESCENT_MIGRATION armed. There is no client flag and no other entry point.
+        /// </summary>
+        public static Services.Descent.DescentMigrationService? DescentMigration { get; private set; }
+
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -1916,6 +1925,9 @@ namespace ConditioningControlPanel
             // Constructing it costs nothing and issues no request: it fetches only
             // when a surface asks, and the Trainer Card is the only one that does.
             Descent = new Services.Descent.DescentService();
+            // Costs one allocation and issues nothing. See the property doc: it cannot act until
+            // a server offer arrives.
+            DescentMigration = new Services.Descent.DescentMigrationService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
