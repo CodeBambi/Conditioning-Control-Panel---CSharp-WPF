@@ -383,6 +383,14 @@ namespace ConditioningControlPanel
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
+
+        /// <summary>
+        /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
+        /// ladder, the relapse bonus). Nullable and normally EMPTY: the server ships
+        /// the block only to accounts inside the rollout dial, and every surface that
+        /// reads it renders nothing at all when it is absent.
+        /// </summary>
+        public static Services.Descent.DescentService? Descent { get; private set; }
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -1760,6 +1768,9 @@ namespace ConditioningControlPanel
             // answer lands, instead of leaving a patron looking free until something else refreshes.
             IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
+            // Constructing it costs nothing and issues no request: it fetches only
+            // when a surface asks, and the Trainer Card is the only one that does.
+            Descent = new Services.Descent.DescentService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
