@@ -216,13 +216,26 @@ public static class Program
             ? intakeCloseSeconds
             : 0;
 
+        // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
+        // below-Topmost surface at startup (the --loom-demo demonstrator class; no
+        // dashboard entry point exists — typed named limit). --tunnel-drive "<steps>" is
+        // HARNESS-ONLY (timed steps: topmost-show/topmost-hide over the REAL DtrhVideoWindow
+        // Topmost surface, tunnel-close/tunnel-show cycles, finish). --tunnel-auto-close
+        // <seconds> closes on a timer (SP-008 no-input exit evidence).
+        var tunnelDemo = args.Contains("--tunnel-demo", StringComparer.Ordinal);
+        var tunnelDrive = ArgValue(args, "--tunnel-drive");
+        var tunnelAutoClose = int.TryParse(ArgValue(args, "--tunnel-auto-close"), out var tunnelCloseSeconds)
+            ? tunnelCloseSeconds
+            : 0;
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test,
                 dtrhKillRenderers, loomDemo, loomDrive, loomAutoClose,
-                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoClose).StartWithClassicDesktopLifetime(args);
+                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoClose,
+                tunnelDemo, tunnelDrive, tunnelAutoClose).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -294,13 +307,15 @@ public static class Program
         string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
         bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
         bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
-        int intakeAutoCloseSeconds = 0)
+        int intakeAutoCloseSeconds = 0,
+        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0)
     {
         var builder = AppBuilder
             .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
                 dtrhKillRenderers, loomDemo, loomDrive, loomAutoCloseSeconds,
-                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoCloseSeconds))
+                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoCloseSeconds,
+                tunnelDemo, tunnelDrive, tunnelAutoCloseSeconds))
             .UsePlatformDetect();
         // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
         // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.

@@ -260,6 +260,13 @@ public sealed class CompositionRoot
             Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeEmbedded()));
         capabilities.Register(Features.Dtrh.DtrhCapabilityProbes.DialogCapability, _ =>
             Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeDialog()));
+        // SP-061: the tunnel backdrop's single admitted surface (Windows embedded WebView2).
+        // Linux = typed Unavailable with the tunnel's OWN reasons (no page-side bridge
+        // transport, no keep-below control — never a green dialog row for an unadmitted
+        // surface, consult ruling 3b). Windows delegates to the DTRH embedded probe (the
+        // dependency is literally the same engine load).
+        capabilities.Register(Features.Chaos.ChaosTunnelCapabilityProbes.EmbeddedCapability, _ =>
+            Task.FromResult(Features.Chaos.ChaosTunnelCapabilityProbes.ProbeEmbedded()));
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
 
         return new ApplicationHost(

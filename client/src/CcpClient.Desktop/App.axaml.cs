@@ -31,6 +31,9 @@ public partial class App : Application
     private readonly string? _intakeDrive;
     private readonly bool _intakeKillRenderers;
     private readonly int _intakeAutoCloseSeconds;
+    private readonly bool _tunnelDemo;
+    private readonly string? _tunnelDrive;
+    private readonly int _tunnelAutoCloseSeconds;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
@@ -40,7 +43,8 @@ public partial class App : Application
         string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
         bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
         bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
-        int intakeAutoCloseSeconds = 0)
+        int intakeAutoCloseSeconds = 0,
+        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -63,6 +67,9 @@ public partial class App : Application
         _intakeDrive = intakeDrive;
         _intakeKillRenderers = intakeKillRenderers;
         _intakeAutoCloseSeconds = intakeAutoCloseSeconds;
+        _tunnelDemo = tunnelDemo;
+        _tunnelDrive = tunnelDrive;
+        _tunnelAutoCloseSeconds = tunnelAutoCloseSeconds;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -274,6 +281,15 @@ public partial class App : Application
                         }), TaskScheduler.Default);
                 };
                 dashboard.Opened += (_, _) => intakeCoordinator.Launch();
+            }
+
+            // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
+            // below-Topmost surface (the --loom-demo demonstrator class; the greenfield
+            // dashboard has no Chaos game entry point — typed named limit). The drive /
+            // auto-close flags are HARNESS-ONLY (ChaosTunnelDemoDrive).
+            if (_tunnelDemo)
+            {
+                Features.Chaos.ChaosTunnelDemoDrive.Attach(_host, dashboard, desktop, _tunnelDrive, _tunnelAutoCloseSeconds);
             }
         }
 

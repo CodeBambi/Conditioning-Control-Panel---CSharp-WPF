@@ -55335,6 +55335,276 @@
       ],
       "overridePolicy": "none",
       "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/audio.js",
+      "source": "copied",
+      "path": "payload/tunnel/audio.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/camera.js",
+      "source": "copied",
+      "path": "payload/tunnel/camera.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/fx.js",
+      "source": "copied",
+      "path": "payload/tunnel/fx.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/index.html",
+      "source": "copied",
+      "path": "payload/tunnel/index.html",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/main.js",
+      "source": "copied",
+      "path": "payload/tunnel/main.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/powerups.js",
+      "source": "copied",
+      "path": "payload/tunnel/powerups.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/quality.js",
+      "source": "copied",
+      "path": "payload/tunnel/quality.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/tunnel.js",
+      "source": "copied",
+      "path": "payload/tunnel/tunnel.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.payload/zones.js",
+      "source": "copied",
+      "path": "payload/tunnel/zones.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/tunnel @ git tree 7f992f2f6dc40e8de2d22d3241dc6c180a26d497 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/three.module.min.js",
+      "source": "copied",
+      "path": "payload/vendor/three/three.module.min.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/EffectComposer.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/EffectComposer.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/MaskPass.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/MaskPass.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/Pass.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/Pass.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/RenderPass.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/RenderPass.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/ShaderPass.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/ShaderPass.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/postprocessing/UnrealBloomPass.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/postprocessing/UnrealBloomPass.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/shaders/CopyShader.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/shaders/CopyShader.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "tunnel.vendor/three/addons/shaders/LuminosityHighPassShader.js",
+      "source": "copied",
+      "path": "payload/vendor/three/addons/shaders/LuminosityHighPassShader.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy tunnel backdrop payload tree ConditioningControlPanel/Resources/web/vendor @ git tree a87ef4a3b2d9b3056208de5cb5ead011aacd0f63 (added in main commit 3e84a831 feat(chaos): endless 3D rabbit-hole tunnel background (opt-in); last touched f1135c4c tunnel v2), copied unmodified at build via linked Content glob (SP-061)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
     }
   ]
 }

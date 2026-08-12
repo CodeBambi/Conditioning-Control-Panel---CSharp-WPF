@@ -351,7 +351,7 @@ public class CapabilityTests
             // SP-046: the companion participant's probes register at construction (before
             // the demonstrator registrations) — registration order IS this list's order.
             Assert.Equal(
-                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog"],
+                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded"],
                 capabilities.Names);
 
             // SP-046 AI provider probes: real typed states. local-ollama is a REAL
@@ -377,7 +377,7 @@ public class CapabilityTests
             // platform reports an honest typed state (Available with dependency evidence,
             // Unavailable with the admitted-shape reason, or DependencyMissing), never
             // not-probed after the phase.
-            foreach (var name in new[] { "dtrh-webview-embedded", "dtrh-web-dialog" })
+            foreach (var name in new[] { "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded" })
             {
                 var state = capabilities.GetState(name);
                 Assert.True(

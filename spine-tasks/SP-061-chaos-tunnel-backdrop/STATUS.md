@@ -1,6 +1,6 @@
 ## STATUS: SP-061 — Chaos tunnel backdrop (opaque below-Topmost web surface)
-**Current Step:** Step 1 — dual-source archaeology + layering design + pre-approach consult
-**Last Updated:** 2026-08-12 (worker, Step 1 in progress)
+**Current Step:** Step 3 — headed layering evidence
+**Last Updated:** 2026-08-12 (worker, Step 2 complete, plan review engine-skipped)
 **Blockers:** none
 
 ### Step 1: dual-source archaeology + layering design + pre-approach consult — COMPLETE (plan review pending)
@@ -11,13 +11,14 @@
 - [x] Design: opaque non-activating below-Topmost window, platform split, §4 serving, `CCP_DATA_ROOT` profile
 - [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
-### Step 2: implement the window + serving + manifest — NOT STARTED
-- [ ] Tunnel window/service under `Features/Chaos/**` with typed capability probing
-- [ ] Payload served through manifest + loopback discipline (deny-by-default, no filename logging)
-- [ ] Manifest entries added; `--verify-assets` green Debug + Release
-- [ ] Tests obeying the timing guard (no new deadline literals or injected budgets)
+### Step 2: implement the window + serving + manifest — COMPLETE (plan review engine-skipped, T-2 recorded)
+- [x] Tunnel window/service under `Features/Chaos/**` with typed capability probing
+- [x] Payload served through manifest + loopback discipline (deny-by-default, no filename logging)
+- [x] Manifest entries added; `--verify-assets` green Debug + Release
+- [x] Tests obeying the timing guard (no new deadline literals or injected budgets)
+- **File-Scope amendment (documented):** `CcpClient.Desktop.csproj` — two linked Content globs (the SP-023/SP-054 wiring-only class; named in record.md Step 2 + the Step-2 commit body)
 
-### Step 3: headed layering evidence — NOT STARTED
+### Step 3: headed layering evidence — IN PROGRESS
 - [ ] Tunnel live with the three.js page actually rendering (pixels)
 - [ ] Layering proof both directions with window rects
 - [ ] Activation/focus proof + show/hide cycles

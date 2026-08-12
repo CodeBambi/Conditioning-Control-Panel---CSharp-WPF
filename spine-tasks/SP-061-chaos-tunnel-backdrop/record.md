@@ -90,7 +90,35 @@
 
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
-| 1 | plan | CALLED — result recorded below | (Step-1 commit) |
+| 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T174335.md` |
+| 2 | plan | (recorded post-call below) | |
+
+---
+
+## Step 2 — implement the window + serving + manifest
+
+**File-Scope amendment (documented per the SP-023/SP-054 precedent class):** `client/src/CcpClient.Desktop/CcpClient.Desktop.csproj` is not named in the packet's File Scope, but the copied-payload convention REQUIRES its two linked Content globs (`payload/tunnel`, `payload/vendor`) — wiring-only, the exact shape of the landed dtrh/intake globs (`Link` + PreserveNewest ×2, no `ExcludeFromSingleFile`). Also named in STATUS.md and this step's commit body. The packet's own "`client/assets/**` + the asset manifest source of truth" line covers `Assets/assets.manifest.json` (18 entries appended, formatting-identical mechanical append verified by diff: +270 lines, zero reformat churn).
+
+**Landed:**
+- `Features/Chaos/ChaosTunnelCore.cs` — the pure protocol state machine (ready latch + pending FIFO, streak dedup, RunAgain re-arm, exit-done fast/force, typed sfx counting).
+- `Features/Chaos/ChaosTunnelLoopback.cs` — the dedicated one-origin §4-discipline server (`/health`, `/tunnel/*`, `/vendor/*`; GET-only 405; swept {.html,.js} MIME pin with 415 deny-by-default; traversal 403; nosniff; ONE-segment route-class logging — tighter than the DTRH two-segment shape). Traversal/MIME logic cites the mirrored `LoopbackServer.cs` lines.
+- `Features/Chaos/ChaosTunnelCapabilityProbes.cs` — ONE capability (`chaos-tunnel-webview-embedded`); Windows delegates to the DTRH embedded probe (same engine load), Linux carries the tunnel's own two-gap Unavailable (consult ruling 3b; no dialog capability exists).
+- `Features/Chaos/ChaosTunnelWindow.cs` — opaque borderless (`WindowDecorations.None`, 12.1.1-binary-verified), non-topmost/non-activating/non-focusable/no-taskbar, primary-screen sizing at Opened (DIP-correct), `Win32Properties.AddWindowStylesCallback` ex-styles at creation (NOACTIVATE|TOOLWINDOW, never TRANSPARENT), anti-MPO + occlusion browser args, per-surface `wv2-profile` under the CCP_DATA_ROOT-riding data root, stale-profile-lock retry-once via the shared `DtrhProfileLock` machinery.
+- `Features/Chaos/ChaosTunnelService.cs` — own-lifecycle orchestration: Preload/Show/CloseActive + the message set; sink-to-bottom at show; the z-guard (1500ms cadence, dashboard-only demotion, 512-bound walk, stops at run end — WPF :444-539 semantics; the WndProc rewrite hook NOT ported, filed); exit watchdog 1200ms (product timer; tests invoke the elapsed path directly — zero test waits, zero injected budgets).
+- `Features/Chaos/ChaosTunnelWin32.cs` — the shared constants/P-Invoke surface.
+- `Features/Chaos/ChaosTunnelDemoDrive.cs` — HARNESS-ONLY `--tunnel-demo`/`--tunnel-drive`/`--tunnel-auto-close` (the --loom-demo demonstrator class; timed steps honestly labeled).
+- Wiring (in-scope): CompositionRoot capability registration; Program.cs/App.axaml.cs flag threading.
+- Manifest: 18 `copied` entries (ids `tunnel.payload/*` ×9, `tunnel.vendor/*` ×9), trust-anchor provenance (git trees 7f992f2f… / a87ef4a3…, added 3e84a831, last touched f1135c4c).
+
+**Tests (+29 unit, +2 headless — 892/892 + 35/35 green):** `ChaosTunnelCoreTests` (10), `ChaosTunnelLoopbackTests` (12 — incl. the 415 negative control, the shared-invariant pin against the mirrored DTRH server, the swept-extension derivation guard, the manifest two-direction-vs-upstream-trees guard), `ChaosTunnelCapabilityTests` (4), `ChaosTunnelWindowHeadlessTests` (2 — declared-policy + safe-no-surface); `CapabilityTests` exact-name list + `AssetManifestTests` copied-count tripwire bumped WITH reasons (3682→3700). One honest test-authoring correction recorded: a bare `%2e%2e/` path never reaches the server (System.Uri unescapes + dot-segment-removes client-side → 404 route refusal instead of 403); the 403 cases use encoded slashes.
+
+**Gates:** build 0W/0E Debug + Release; `--verify-assets` PASS Debug AND Release (`asset OK copied: 3700 entries present, case-exact, sweep clean`).
+
+**Timing guard:** no new deadline literals, no `Task.Delay`/`Thread.Sleep` in tests (the one `longPollTimeout: 200ms` in the shared-invariant fixture mirrors the landed DTRH fixture's own injectable — wait, see record note: this constructor parameter is the LANDED LoopbackServer's existing injectable seam (DtrhLoopbackContractTests:46 precedent), not a NEW budget added by this task; named here per framing (e) so the budgets row's sweep sees it.
+
+## Step 3 — headed layering evidence
+
+(pending)
 
 ## Intended board filings (orchestrator reconciles at land — ENABLER 2)
 
