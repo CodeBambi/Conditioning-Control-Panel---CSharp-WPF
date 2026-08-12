@@ -1,15 +1,15 @@
 ## STATUS: SP-061 — Chaos tunnel backdrop (opaque below-Topmost web surface)
-**Current Step:** not started
-**Last Updated:** 2026-08-12 (orchestrator, authored — wave 18, single lane)
+**Current Step:** Step 1 — dual-source archaeology + layering design + pre-approach consult
+**Last Updated:** 2026-08-12 (worker, Step 1 in progress)
 **Blockers:** none
 
-### Step 1: dual-source archaeology + layering design + pre-approach consult — NOT STARTED
-- [ ] Update STATUS.md before starting work
-- [ ] WPF truth from `Chaos/ChaosTunnelService.cs` (lifecycle, style, z-order mechanism, focus policy) with `File.cs:line`
-- [ ] First-attempt ACCEPT/ADAPT/REJECT list (never imported as design)
-- [ ] Payload + vendor derivation (what the page actually resolves); distinguished from DTRH `engine/tunnel.js`
-- [ ] Design: opaque non-activating below-Topmost window, platform split, §4 serving, `CCP_DATA_ROOT` profile
-- [ ] Pre-approach solo consult (verdict + ACTUAL model in record.md)
+### Step 1: dual-source archaeology + layering design + pre-approach consult — COMPLETE (plan review pending)
+- [x] Update STATUS.md before starting work
+- [x] WPF truth from `Chaos/ChaosTunnelService.cs` (lifecycle, style, z-order mechanism, focus policy) with `File.cs:line`
+- [x] First-attempt ACCEPT/ADAPT/REJECT list (never imported as design)
+- [x] Payload + vendor derivation (what the page actually resolves); distinguished from DTRH `engine/tunnel.js`
+- [x] Design: opaque non-activating below-Topmost window, platform split, §4 serving, `CCP_DATA_ROOT` profile
+- [x] Pre-approach solo consult (verdict + ACTUAL model in record.md)
 
 ### Step 2: implement the window + serving + manifest — NOT STARTED
 - [ ] Tunnel window/service under `Features/Chaos/**` with typed capability probing
