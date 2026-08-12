@@ -1,6 +1,6 @@
 ## STATUS: SP-058 — Graded Intake v6.7.x delta
-**Current Step:** Step 2 — implement the obligations
-**Last Updated:** 2026-08-12 (worker, Step 1 complete — plan review skipped:in-worker SP-195 class; Step 2 in progress)
+**Current Step:** Step 3 — host-proven evidence (headed, under the SP-057 seam)
+**Last Updated:** 2026-08-12 (worker, Step 2 complete 862/862+33/33 — plan review skipped:in-worker SP-195 class; Step 3 in progress)
 **Blockers:** none (SP-057 landed c42d82ff — seam available)
 
 ### Step 1: delta archaeology + obligation table + pre-approach consult
@@ -11,12 +11,12 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the obligations
-- [ ] Serve new payload files through the real serving contract + typed probe
-- [ ] Provision accents.js host requirements (or record NOTHING)
-- [ ] Apply ai.js host obligations only
-- [ ] IsAssetActive gating through SP-055's single definition
-- [ ] TopMarksPercent 90.0 pinned with verdict derivation + boundaries
-- [ ] Tests per shipped obligation
+- [x] Serve new payload files through the real serving contract + typed probe
+- [x] Provision accents.js host requirements (or record NOTHING)
+- [x] Apply ai.js host obligations only
+- [x] IsAssetActive gating through SP-055's single definition
+- [x] TopMarksPercent 90.0 pinned with verdict derivation + boundaries
+- [x] Tests per shipped obligation
 
 ### Step 3: host-proven evidence (headed, under the SP-057 seam)
 - [ ] Headed intake run on DISPLAY3 with the data-root override set

@@ -1,0 +1,23 @@
+
+manifest: C:\Users\Micha\AppData\Roaming\CcpClient -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\pre-manifest.json (2677 files)
+launched pid=27788 with CCP_DATA_ROOT=C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-root
+attached screens: \\.\DISPLAY1 {X=0,Y=0,Width=2880,Height=1800}
+DISPLAY3 ABSENT in this session — falling back to DISPLAY1 (100,100); the DISPLAY3 convention gate is named in record.md
+rect 100,100 2472x1522
+saved C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\run-host-live.png
+capture landed (width-floored): True
+drive completion observed: True
+EXIT=0
+manifest: C:\Users\Micha\AppData\Roaming\CcpClient -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\post-manifest.json (2677 files)
+DIFF VERDICT: BYTE-IDENTICAL (2677 files, set-equal both directions, all hashes match)
+manifest: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-root -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-manifest.json (216 files)
+positive control [True]: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-root\intake_settings.json — pass spend + fullscreen persist (the intake store)
+positive control [True]: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-root\intake_punchcard.json — punch card (first hole + pending draft)
+positive control [True]: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260812T072253\lane-1\spine-tasks\SP-058-graded-intake-v67-delta\evidence\override-root\intake\drafted_sessions — the drafted-session sink
+positive control [True]: run.log contains 'data-root override active: CCP_DATA_ROOT'
+positive control [True]: run.log contains 'intake: init sent'
+positive control [True]: run.log contains 'intake: serve-probe GET /dtrh/core/accents.js -> 200'
+positive control [True]: run.log contains 'intake: serve-probe GET /dtrh/core/accents-missing.js -> 404'
+positive control [True]: run.log contains 'intake: graded verdict'
+positive control [True]: top-marks boundary verdict line is exactly True at 90%
+OVERALL VERDICT EXIT=0 (0 = byte-identical real profile + populated override root + delta proofs present)
