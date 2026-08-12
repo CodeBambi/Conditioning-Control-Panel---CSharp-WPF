@@ -1202,6 +1202,12 @@ namespace ConditioningControlPanel.Services
                         // local loadout is empty and unconfirmed - see BuildCosmeticsPayload, an
                         // all-empty object means "unequip everything" to the server.
                         cosmetics = BuildCosmeticsPayload(settings),
+                        // Web XP claim ack: the id of the claim this client last APPLIED. Sent on
+                        // every sync, not just the one after a claim - the server settles the pending
+                        // bucket when it sees its own id come back, and ignores stale/unknown ones.
+                        // Null until the first claim ever lands, which is a perfectly good "nothing
+                        // applied yet" to the server.
+                        web_xp_claim_ack = settings.LastWebXpClaimId,
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
@@ -1321,6 +1327,38 @@ namespace ConditioningControlPanel.Services
                         // Trainer Card cosmetics: fill-if-empty only, so a fresh machine inherits
                         // the look and an established one is never undressed by a stale echo.
                         if (AdoptCloudCosmetics(v2Result?.Cosmetics)) App.Settings?.Save();
+
+                        // WEB XP CLAIM. The server mints XP for verified web activity into a pending
+                        // bucket; it never touches the ledger the client authors (xp/level). It hands
+                        // that bucket over one claim at a time - {id, amount} on this response - and
+                        // THIS is the only door web XP walks through into real progression, so it
+                        // gets the normal level-up experience on the way in.
+                        //
+                        // The handshake is deliberately lopsided. We persist the id BEFORE adding the
+                        // XP, and we ack that id on every sync from then on. A crash in the gap costs
+                        // the player one claim; the other order would pay it twice on the next launch,
+                        // and under-paying once is the failure we can live with. The server re-offers
+                        // an unacked claim indefinitely, so nothing is lost by skipping a round -
+                        // which is exactly why level_reset skips: a season-reset response is about to
+                        // overwrite level and XP wholesale, and XP applied into that is XP thrown away.
+                        //
+                        // The whole block is a no-op when `web_xp` is absent (server flag off).
+                        var webXpClaim = v2Result?.WebXp?.Claim;
+                        if (webXpClaim != null &&
+                            !string.IsNullOrEmpty(webXpClaim.Id) &&
+                            webXpClaim.Amount > 0 &&
+                            webXpClaim.Id != settings.LastWebXpClaimId &&
+                            v2Result?.LevelReset != true)
+                        {
+                            App.Logger?.Information("V2 Sync: Web XP claim {ClaimId} — applying +{Amount} XP (pending {Pending}, lifetime {Total})",
+                                webXpClaim.Id, webXpClaim.Amount, v2Result?.WebXp?.Pending ?? 0, v2Result?.WebXp?.Total ?? 0);
+
+                            // Order is load-bearing — see above.
+                            settings.LastWebXpClaimId = webXpClaim.Id;
+                            App.Settings?.Save();
+
+                            App.Progression?.AddClaimedXP(webXpClaim.Amount);
+                        }
 
                         // Prestige: adopt the server's lifetime_points_spent when ahead (other
                         // device / migration backfill). Monotonic — never lowered.
@@ -3840,8 +3878,41 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("companion_progress")]
             public Dictionary<string, Models.CompanionProgress>? CompanionProgress { get; set; }
 
+            /// <summary>
+            /// Web XP the server has minted for verified web activity, plus at most one claim to
+            /// hand over. Absent entirely while the server-side flag is off — nullable for exactly
+            /// that reason, and the claim handler treats absence as "nothing to do".
+            /// </summary>
+            [JsonProperty("web_xp")]
+            public V2WebXp? WebXp { get; set; }
+
             [JsonProperty("user")]
             public V2SyncUser? User { get; set; }
+        }
+
+        private class V2WebXp
+        {
+            /// <summary>XP minted but not yet handed to this client.</summary>
+            [JsonProperty("pending")]
+            public int Pending { get; set; }
+
+            /// <summary>Lifetime web XP for this account (informational — never applied directly).</summary>
+            [JsonProperty("total")]
+            public long Total { get; set; }
+
+            /// <summary>The one claim on offer, or null when there is nothing to settle.</summary>
+            [JsonProperty("claim")]
+            public V2WebXpClaim? Claim { get; set; }
+        }
+
+        private class V2WebXpClaim
+        {
+            /// <summary>Idempotency key — persisted locally once applied and echoed back as the ack.</summary>
+            [JsonProperty("id")]
+            public string? Id { get; set; }
+
+            [JsonProperty("amount")]
+            public int Amount { get; set; }
         }
 
         private class V2SyncUser
