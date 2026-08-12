@@ -5181,6 +5181,25 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Web XP claim (claim-on-sync handshake)
+
+        private string? _lastWebXpClaimId = null;
+        /// <summary>
+        /// Id of the last web-XP claim this client APPLIED to the local ledger. The server mints XP
+        /// for verified web activity into a pending bucket and offers it back on /v2/user/sync as
+        /// {id, amount}; this field is both the "already paid" marker and the ack we echo up on every
+        /// subsequent sync so the server can settle. Persisted before the XP is added, never after —
+        /// see the handshake comment in ProfileSyncService. Null until the first claim ever lands.
+        /// </summary>
+        [JsonProperty]
+        public string? LastWebXpClaimId
+        {
+            get => _lastWebXpClaimId;
+            set { _lastWebXpClaimId = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Season Recap (local-only, per-device)
 
         // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.
