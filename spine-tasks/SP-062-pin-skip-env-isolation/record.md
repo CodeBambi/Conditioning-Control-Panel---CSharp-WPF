@@ -170,8 +170,8 @@ honestly, the standing provenance discipline).
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — the engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260812T205835.md` |
 | 2 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/2-20260812T210637.md` |
 | 3 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/3-20260812T212352.md` |
-| 4 | plan | (filled per call) | `.reviews/` |
-| 5 | plan | (filled per call) | `.reviews/` |
+| 4 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/4-20260812T214956.md` |
+| 5 | plan | **SKIPPED BY DESIGN** (same SP-195 engine-owned shape) | `.reviews/5-20260812T215001.md` |
 
 ---
 
