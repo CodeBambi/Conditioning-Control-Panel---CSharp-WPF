@@ -24,12 +24,15 @@ namespace ConditioningControlPanel
     /// from XP the server has not accepted is a number nobody agreed to.
     ///
     /// CADENCE (shared with mobile and web):
-    ///   • on Trainer Card open,
-    ///   • every 60s while the card is the visible tab,
-    ///   • and immediately after an accepted /v2/user/sync — the moment today's XP
-    ///     actually lands in the server vat (ProfileSyncService.SyncProfileAsync).
+    ///   • on Trainer Card open — ALWAYS, whether or not this account has ever had a
+    ///     block; it is the one request that can light a dark key up,
+    ///   • every 60s while the card is the visible tab AND the window is in front of
+    ///     somebody AND the key is lit (<see cref="EvaluateVatPoll"/>),
+    ///   • and immediately after an accepted /v2/user/sync, also key-gated
+    ///     (ProfileSyncService.SyncProfileAsync) — the moment today's XP actually
+    ///     lands in the server vat.
     /// A 10s floor inside DescentService keeps a burst of those from becoming a
-    /// burst of requests.
+    /// burst of requests, and offline mode stops all three at the service.
     /// </summary>
     public partial class MainWindow
     {
@@ -50,6 +53,7 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _vatPollTimer;
         private bool _vatWired;
         private bool _vatArmed;
+        private bool _vatOnScreen;
 
         // ============================== lifecycle ==============================
 
@@ -63,6 +67,7 @@ namespace ConditioningControlPanel
             try
             {
                 WireProfileVat();
+                _vatOnScreen = onScreen;
                 if (!onScreen)
                 {
                     _vatPollTimer?.Stop();
@@ -70,12 +75,48 @@ namespace ConditioningControlPanel
                 }
 
                 ApplyDescentToVat();                       // draw what we already know
+
+                // THE ONE UNGATED REQUEST. Opening the card always asks, even for an
+                // account that has never been seen to carry a block — this is the
+                // single call that lets a dark key light up. Everything recurring
+                // (the poll below, the post-sync hook in ProfileSyncService) waits
+                // for DescentService.HasSeenBlock.
                 App.Descent?.RequestRefresh("trainer card open");
+
+                EvaluateVatPoll();
+            }
+            catch (Exception ex) { App.Logger?.Debug("OnProfileVatVisibilityChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// THE POLL'S GATE, and it is a NETWORK gate rather than a drawing one.
+        ///
+        /// Three conditions, all required:
+        ///   • the Trainer Card is the tab on screen,
+        ///   • the window is actually in front of somebody — mirrored from the
+        ///     renderer's own test (<see cref="VatGlassCanvas.WindowIsPresenting"/>)
+        ///     so the clock and the requests cannot drift apart. The renderer was
+        ///     gated on window state from the start; the timer was not, so a
+        ///     minimised app sat there fetching a meter nobody could see, forever.
+        ///   • and this account has been seen to have a descent block at all.
+        /// Re-evaluated on window state (MainWindow.ProfileFx's existing hooks), on
+        /// tab change, and after every block change — the last of which is how the
+        /// card-open request promotes a newly-lit key into a polling one.
+        /// </summary>
+        private void EvaluateVatPoll()
+        {
+            try
+            {
+                bool run = _vatOnScreen
+                           && App.Descent?.HasSeenBlock == true
+                           && VatGlassCanvas.WindowIsPresenting(this);
+
+                if (!run) { _vatPollTimer?.Stop(); return; }
 
                 _vatPollTimer ??= CreateVatPollTimer();
                 _vatPollTimer.Start();
             }
-            catch (Exception ex) { App.Logger?.Debug("OnProfileVatVisibilityChanged: {E}", ex.Message); }
+            catch (Exception ex) { App.Logger?.Debug("EvaluateVatPoll: {E}", ex.Message); }
         }
 
         private DispatcherTimer CreateVatPollTimer()
@@ -86,7 +127,19 @@ namespace ConditioningControlPanel
             };
             timer.Tick += (_, _) =>
             {
-                try { App.Descent?.RequestRefresh("trainer card poll"); }
+                try
+                {
+                    // Belt and braces: the gate is re-tested on the tick as well as
+                    // on the events, so no missed Deactivated can leave it running.
+                    if (!_vatOnScreen
+                        || App.Descent?.HasSeenBlock != true
+                        || !VatGlassCanvas.WindowIsPresenting(this))
+                    {
+                        _vatPollTimer?.Stop();
+                        return;
+                    }
+                    App.Descent?.RequestRefresh("trainer card poll");
+                }
                 catch (Exception ex) { App.Logger?.Debug("Vat poll: {E}", ex.Message); }
             };
             return timer;
@@ -110,7 +163,13 @@ namespace ConditioningControlPanel
         {
             // DescentService already marshalled to the UI thread and already checked
             // the dispatcher; this is a plain handler by the time it gets here.
-            try { ApplyDescentToVat(); }
+            try
+            {
+                ApplyDescentToVat();
+                // A block arriving is what arms the poll for a key that was dark when
+                // the card opened; a block being withdrawn (or logout) disarms it.
+                EvaluateVatPoll();
+            }
             catch (Exception ex) { App.Logger?.Debug("OnDescentBlockChanged: {E}", ex.Message); }
         }
 
@@ -146,16 +205,33 @@ namespace ConditioningControlPanel
             switch (read.Kind)
             {
                 case VatReadKind.Seed:
-                    glass.Seed(read.Fill);
+                    glass.SnapTo(read.Fill);
                     break;
+
                 case VatReadKind.Pour:
+                    if (!glass.IsPresenting)
+                    {
+                        // A POUR NOBODY IS THERE FOR IS NOT REPLAYED. The sync hook
+                        // can land a qualifying earn while the window is minimised or
+                        // the card is behind another tab; swinging the faucet then
+                        // means swinging it on the user's return, announcing XP from
+                        // minutes ago. The reading still applies — silently.
+                        glass.EaseTo(read.Fill);
+                        break;
+                    }
                     // The faucet swings in. A pour landing while one is already
                     // running EXTENDS it inside the canvas; nothing restarts here.
                     glass.PourTo(read.Fill);
                     App.Logger?.Debug("[Descent] vat pour +{Xp} XP -> {Pct:F0}%", read.DeltaXp, read.Fill * 100);
                     break;
+
                 case VatReadKind.Silent:
-                    glass.EaseTo(read.Fill);
+                    // A CAP OR LIP CHANGE IS A RE-SCALE, NOT A READING. Levelling up
+                    // buys a bigger cap, so the same XP is suddenly a smaller
+                    // fraction of it — easing that would draw a long drain the user
+                    // did not lose. Snap to the new scale and say nothing.
+                    if (read.ScaleChanged) glass.SnapTo(read.Fill);
+                    else glass.EaseTo(read.Fill);
                     break;
             }
         }

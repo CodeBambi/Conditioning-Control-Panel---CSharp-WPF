@@ -189,7 +189,15 @@ namespace ConditioningControlPanel.Controls
         }
 
         /// <summary>Snap to a level with no theater — the first server read of a session.</summary>
-        public void Seed(double fill)
+        public void Seed(double fill) => SnapTo(fill);
+
+        /// <summary>
+        /// Set the level at once, with no ease and no faucet, and drop any pour in
+        /// flight. Two callers, both of which are re-scalings rather than readings:
+        /// the session's first read (<see cref="Seed"/>), and a cap or lip change —
+        /// a different meter, not a different amount of liquid.
+        /// </summary>
+        public void SnapTo(double fill)
         {
             _target = Clamp(fill);
             _fill = _target;
@@ -322,14 +330,31 @@ namespace ConditioningControlPanel.Controls
         private bool ShouldRun()
         {
             if (_faults >= FaultLimit) return false;
-            if (!IsLoaded || !IsVisible) return false;
             if (!Animated) return false;
-            var w = _window;
-            if (w != null)
-            {
-                if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive) return false;
-            }
+            return IsPresenting;
+        }
+
+        /// <summary>
+        /// "This surface is in front of a human right now" — everything ShouldRun
+        /// tests EXCEPT the motion setting and the fault trip, so a caller that is
+        /// not a renderer can share the definition. The vat's 60s network poll gates
+        /// on this: reduced motion still wants a current reading, a minimised window
+        /// does not.
+        /// </summary>
+        public bool IsPresenting => IsLoaded && IsVisible && WindowIsPresenting(_window);
+
+        /// <summary>
+        /// The window half of the gate, in ONE place so the renderer's clock and the
+        /// host's poll cannot drift apart. A null window means "not parented yet" and
+        /// is left to the caller's own IsLoaded/IsVisible test rather than answering
+        /// false here.
+        /// </summary>
+        public static bool WindowIsPresenting(Window? window)
+        {
+            if (window == null) return true;
+            if (window.WindowState == WindowState.Minimized) return false;
+            if (!window.IsVisible) return false;
+            if (!window.IsActive) return false;
             return true;
         }
 
@@ -341,9 +366,24 @@ namespace ConditioningControlPanel.Controls
             _timer.Start();
         }
 
+        /// <summary>
+        /// NO STALE FAUCET. Stopping the clock SETTLES any pour in flight instead of
+        /// freezing it mid-swing: the level lands on its target and the spout is put
+        /// away. Without this the faucet's remaining seconds sit in <see cref="_pourT"/>
+        /// for as long as the window is minimised or the tab is elsewhere, and then
+        /// replay — a pour announcing XP earned minutes ago, the moment the user comes
+        /// back. The reading is never lost, only its theater.
+        /// </summary>
         private void StopClock()
         {
             if (_timer.IsEnabled) _timer.Stop();
+            if (_pourT <= 0 && _slide <= 0) return;
+            _pourT = 0;
+            _slide = 0;
+            _fill = _target;
+            _splash.Clear();   // otherwise a frozen droplet hangs in mid-air
+            NotifyPercent();
+            _sk.InvalidateVisual();
         }
 
         // ================================= tick =================================
@@ -535,7 +575,10 @@ namespace ConditioningControlPanel.Controls
             bool streamOn = pouring && (faucetRect is null || _slide > 0.88);
 
             using var jarPath = new SKPath();
-            jarPath.AddRoundRect(new SKRoundRect(new SKRect(x0, yT, x1, yB), JarRadius, JarRadius));
+            // SKRoundRect is IDisposable in SkiaSharp 2.88 — an un-disposed one per
+            // frame is 30 finalizable natives a second on a surface that never stops.
+            using (var jarRRect = new SKRoundRect(new SKRect(x0, yT, x1, yB), JarRadius, JarRadius))
+                jarPath.AddRoundRect(jarRRect);
 
             // ---- liquid, clipped to the jar --------------------------------------
             canvas.Save();
