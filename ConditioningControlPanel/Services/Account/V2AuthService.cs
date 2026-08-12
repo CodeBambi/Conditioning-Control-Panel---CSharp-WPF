@@ -466,6 +466,23 @@ namespace ConditioningControlPanel.Services
         /// Get user profile from v2 API
         /// </summary>
         public async Task<V2User?> GetUserProfileAsync(string unifiedId)
+            => (await GetUserProfileNodeAsync(unifiedId))?.ToObject<V2User>();
+
+        /// <summary>
+        /// The RAW `user` node of /v2/user/profile.
+        ///
+        /// V2User is a fixed DTO and drops every key it does not declare, which is
+        /// fine for the account fields and useless for anything additive the server
+        /// grows later. The `descent` block is exactly that (ccp-server server.js
+        /// attachDescentBlocks) — it rides inside this node, ships only to accounts
+        /// inside the rollout dial, and is read straight off the JSON by
+        /// Services.Descent.DescentReader.
+        ///
+        /// One request path, one set of auth headers, one place a 401 can be handled:
+        /// GetUserProfileAsync is a thin projection of this method rather than a
+        /// second copy of it.
+        /// </summary>
+        public async Task<JObject?> GetUserProfileNodeAsync(string unifiedId)
         {
             try
             {
@@ -480,8 +497,13 @@ namespace ConditioningControlPanel.Services
                     return null;
                 }
 
-                var result = JObject.Parse(json);
-                return result["user"]?.ToObject<V2User>();
+                // NOT JObject.Parse: date coercion has to be off or every date-ish
+                // string in the additive `descent` block reads as absent. See
+                // Services.Descent.DescentReader.ParseWire for the whole trap.
+                // V2User is unaffected — its DateTime members still deserialize from
+                // plain strings.
+                var result = Descent.DescentReader.ParseWire(json);
+                return result?["user"] as JObject;
             }
             catch (Exception ex)
             {

@@ -1678,6 +1678,16 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("V2 Sync: Could not parse server flags: {Error}", parseEx.Message);
                     }
 
+                    // THE VAT'S ONE UNAVOIDABLE SECOND REQUEST. An accepted sync is the
+                    // moment today's XP lands in the server vat, and the sync RESPONSE
+                    // does not carry the `descent` block (attachDescentBlocks is wired
+                    // to /v2/user/profile and /v2/user/me only), so the meter can only
+                    // learn about its own pour by asking again. Fire-and-forget, rate-
+                    // floored inside the service, and it can never disturb this method:
+                    // deliberately placed AFTER the catch above so nothing it does is
+                    // swallowed as "could not parse server flags".
+                    App.Descent?.RequestRefresh("v2 sync accepted");
+
                     syncSucceeded = true;
                     return true;
                 }
