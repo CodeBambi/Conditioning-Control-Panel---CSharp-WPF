@@ -184,11 +184,13 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Stage column: preview frame on top, action panel (status + Start session +
-                         tracker toggle) directly underneath. v5.9.9 moved the actions out of the
-                         right column so they live next to the visual they control.
-                         BlinkTrainerStageActions is disabled by RefreshBlinkTrainerGate for
-                         non-premium users - the stage itself stays lit as the shop window. -->
+                    <!-- Stage column: preview frame on top, ONE action bar (status left, buttons
+                         right) directly underneath. v5.9.9 moved the actions out of the right
+                         column so they live next to the visual they control; round 5 folds the
+                         three stacked pieces it left behind (status row / Start session / tracker
+                         toggle) into a single 448-wide row, which is ~90px of air reclaimed in the
+                         narrow host. BlinkTrainerStageActions is disabled by RefreshBlinkTrainerGate
+                         for non-premium users - the stage itself stays lit as the shop window. -->
                     <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" HorizontalAlignment="Center">
                         <Border x:Name="BlinkTrainerStageFrame"
                                 Width="448" Height="288"
@@ -222,58 +224,81 @@
                             </Border>
                         </Border>
 
-                        <!-- ═══ STAGE ACTIONS (under preview) ═══
-                             IsEnabled is toggled by RefreshBlinkTrainerGate. -->
-                        <StackPanel x:Name="BlinkTrainerStageActions" x:FieldModifier="internal">
+                        <!-- ═══ STAGE ACTION BAR (one row, under preview) ═══
+                             IsEnabled is toggled by RefreshBlinkTrainerGate, so this element must
+                             stay the SINGLE container wrapping every action. Width is pinned to the
+                             stage's own 448 so the row is the stage's footer rather than a band
+                             across the whole column. Layout: status cluster in the * column, then
+                             tracker toggle, then Start session (loudest, right-most). The status
+                             side owns the star column because its text is state-driven and can run
+                             long (the Error state prints App.BlinkTrainer.LastError verbatim) -
+                             it ellipsises instead of squeezing the Auto button columns. -->
+                        <Grid x:Name="BlinkTrainerStageActions" x:FieldModifier="internal"
+                              Width="448" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                            <!-- ═══ STATUS ROW ═══ -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                            <!-- ═══ STATUS CLUSTER (dot + text + optional fix-it button) ═══ -->
+                            <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
                                 <!-- The 0.8s idle blink that used to live here (a Storyboard in this
                                      element's own Resources) was retired by the FX pass: it ran in
                                      IdleReady, i.e. when nothing was happening. The dot now breathes
                                      a mod-tinted glow only while a session is RUNNING - see
                                      SetBlinkTrainerStatusPulse in
                                      MainWindow/MainWindow.TabFxTakeoverLabStatus.cs. -->
-                                <Ellipse x:Name="BlinkTrainerStatusDot" x:FieldModifier="internal" Width="10" Height="10"
-                                         Fill="{DynamicResource PinkBrush}" Margin="0,0,10,0"
+                                <Ellipse Grid.Column="0" x:Name="BlinkTrainerStatusDot" x:FieldModifier="internal"
+                                         Width="10" Height="10"
+                                         Fill="{DynamicResource PinkBrush}" Margin="0,0,9,0"
                                          VerticalAlignment="Center"/>
-                                <TextBlock x:Name="BlinkTrainerStatusText" x:FieldModifier="internal"
+                                <TextBlock Grid.Column="1" x:Name="BlinkTrainerStatusText" x:FieldModifier="internal"
                                            Text="{loc:Str blink_trainer_status_ready}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="13"
+                                           FontSize="12.5"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                            VerticalAlignment="Center"/>
-                                <Button x:Name="BlinkTrainerStatusAction" x:FieldModifier="internal"
+                                <!-- Contextual fix-it button (grant consent / add folder / calibrate).
+                                     Collapsed until WireBlinkTrainerStatusAction fills it in. -->
+                                <Button Grid.Column="2" x:Name="BlinkTrainerStatusAction" x:FieldModifier="internal"
                                         Visibility="Collapsed"
-                                        Margin="12,0,0,0"
+                                        Margin="10,0,0,0"
+                                        VerticalAlignment="Center"
                                         Style="{StaticResource OutlineButton}"
                                         Padding="10,4"
-                                        FontSize="12"/>
-                            </StackPanel>
-
-                            <!-- ═══ START BUTTON ═══ -->
-                            <Button x:Name="BtnBlinkTrainerStartSession" x:FieldModifier="internal"
-                                    Content="{loc:Str blink_trainer_start_session}"
-                                    HorizontalAlignment="Center"
-                                    Margin="0,14,0,0"
-                                    Padding="32,12"
-                                    FontSize="16"
-                                    FontWeight="Bold"
-                                    Style="{StaticResource SmallPinkButton}"
-                                    Click="BtnBlinkTrainerStartSession_Click"/>
+                                        FontSize="11.5"/>
+                            </Grid>
 
                             <!-- Tracker toggle (v5.9.9). Mirrors the Lab BtnWebcamDebugStart
                                  so Blink Trainer users can stop the webcam without leaving
                                  the tab. Label/colour are refreshed by
                                  RefreshBlinkTrainerTrackerButton. -->
-                            <Button x:Name="BtnBlinkTrainerStartStopTracker" x:FieldModifier="internal"
+                            <Button Grid.Column="1" x:Name="BtnBlinkTrainerStartStopTracker" x:FieldModifier="internal"
                                     Content="Start tracker"
-                                    HorizontalAlignment="Center"
-                                    Margin="0,10,0,0"
-                                    Padding="22,8"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,8,0"
+                                    Padding="16,7"
                                     FontSize="12"
                                     Style="{StaticResource OutlineButton}"
                                     Click="BtnBlinkTrainerStartStopTracker_Click"/>
-                        </StackPanel>
+
+                            <!-- ═══ START BUTTON — still the loudest thing on the row ═══ -->
+                            <Button Grid.Column="2" x:Name="BtnBlinkTrainerStartSession" x:FieldModifier="internal"
+                                    Content="{loc:Str blink_trainer_start_session}"
+                                    VerticalAlignment="Center"
+                                    Padding="22,9"
+                                    FontSize="13.5"
+                                    FontWeight="Bold"
+                                    Style="{StaticResource SmallPinkButton}"
+                                    Click="BtnBlinkTrainerStartSession_Click"/>
+                        </Grid>
                     </StackPanel>
 
                     <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
@@ -307,7 +332,7 @@
                          Spans both columns and caps at 940 so the settings keep a readable measure. -->
                     <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                           x:Name="BlinkTrainerGatedZone"
-                          Margin="0,18,0,0" MaxWidth="940" HorizontalAlignment="Left">
+                          Margin="0,12,0,0" MaxWidth="940" HorizontalAlignment="Left">
                         <StackPanel x:Name="BlinkTrainerGatedContent" x:FieldModifier="internal">
 
                             <!-- ── ASSET PACKS ── -->

@@ -786,12 +786,15 @@
 
                 <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
                      clips its Background to CornerRadius but does NOT clip child content, so a
-                     child Image would square off the rounded corners (round-2 lesson). Capped at
-                     560px because the hub is a tall page - an uncapped stretch would be a 1000px
-                     column of wallpaper. -->
+                     child Image would square off the rounded corners (round-2 lesson). Top-pinned
+                     with a fixed 520px height (same as AwarenessTabView's side plate) so it sits
+                     directly under the hero bar: the hub column is far taller than the plate, and a
+                     Stretch-aligned Border capped by MaxHeight gets centred in the leftover space,
+                     which left the art floating mid-page. Height must stay explicit - a
+                     background-only Border has no natural height and would collapse. -->
                 <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                         BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
-                        VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560">
+                        VerticalAlignment="Top" Height="520">
                     <Border.Background>
                         <ImageBrush Stretch="UniformToFill">
                             <ImageBrush.ImageSource>

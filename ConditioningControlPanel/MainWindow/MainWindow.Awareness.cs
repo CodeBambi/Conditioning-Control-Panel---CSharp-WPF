@@ -1187,7 +1187,10 @@ namespace ConditioningControlPanel
 
             // No preset installed. Before Phase 5 this dead-ended in the App Info popup
             // because the custom-trigger editor was stranded on the Collapsed PatreonTab
-            // (G3). It now lives one row above this link, so open it and scroll to it.
+            // (G3). It now lives one row above this link, so open it, scroll to it and pulse
+            // it. RevealTriggerEditor is idempotent and never silent - an already-open drawer
+            // still re-scrolls and re-pulses, because "nothing visibly happened" is how this
+            // branch got reported as a dead click.
             AwarenessTab.KeywordPanel?.RevealTriggerEditor();
         }
 

@@ -624,12 +624,21 @@
 
                     <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
                          clips its Background to CornerRadius but does NOT clip child content
-                         (round-2 lesson). Pinned to the top with a MaxHeight because this page is
-                         tall - a stretched plate would be a 2000px column of one PNG. -->
+                         (round-2 lesson), and the code-behind mirror writes mod art straight into
+                         this Background brush.
+                         ASPECT SIZING: remote_control.png is 1376x768 LANDSCAPE. A fixed portrait
+                         box (the old MinHeight/MaxHeight pair) made UniformToFill scale the art to
+                         the box height and crop ~60% of its width away, so the poster's
+                         "REMOTE CONTROL" lettering read "MOTE TROL". Instead the Border takes its
+                         height from an invisible Uniform child Image of the SAME source: that child
+                         measures to the art's aspect at whatever width the column gives us, the
+                         Border adopts it, and UniformToFill then paints an exact fit with zero crop.
+                         The child binds to ImgRemoteControlFeature.Source so mod art resizes the
+                         plate too. Still top-pinned, so the tall page never stretches it. -->
                     <Border x:Name="SideArtPlate" x:FieldModifier="internal"
                             Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
-                            VerticalAlignment="Top" MinHeight="420" MaxHeight="560">
+                            VerticalAlignment="Top">
                         <Border.Background>
                             <ImageBrush Stretch="UniformToFill">
                                 <ImageBrush.ImageSource>
@@ -638,15 +647,20 @@
                                 </ImageBrush.ImageSource>
                             </ImageBrush>
                         </Border.Background>
-                        <!-- Scrim so the plate sits under the page instead of fighting it. -->
-                        <Border CornerRadius="12">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
-                                    <GradientStop Color="#66000000" Offset="0"/>
-                                    <GradientStop Color="#00000000" Offset="0.45"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        </Border>
+                        <Grid>
+                            <!-- Sizing-only child: never drawn, never hit-tested. -->
+                            <Image Stretch="Uniform" Opacity="0" IsHitTestVisible="False"
+                                   Source="{Binding Path=Source, ElementName=ImgRemoteControlFeature, FallbackValue='pack://application:,,,/Resources/features/remote_control.png'}"/>
+                            <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                            <Border CornerRadius="12">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                        <GradientStop Color="#66000000" Offset="0"/>
+                                        <GradientStop Color="#00000000" Offset="0.45"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
                     </Border>
                 </Grid>
 

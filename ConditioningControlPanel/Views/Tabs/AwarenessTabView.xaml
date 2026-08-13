@@ -602,7 +602,7 @@
 
                         <!-- ==================== ADVANCED LINK ==================== -->
                         <Grid Margin="0,0,0,0"
-                              ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, this link opens the App Info &amp; Data popup instead.">
+                              ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, it opens the custom-trigger drawer just above instead, where you can build your own keywords from scratch.">
                             <TextBlock HorizontalAlignment="Center">
                                 <Hyperlink x:Name="LnkAwarenessAdvanced"
                                            Foreground="{DynamicResource PinkBrush}"
