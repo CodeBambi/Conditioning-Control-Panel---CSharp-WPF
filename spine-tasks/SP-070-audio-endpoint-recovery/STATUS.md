@@ -1,7 +1,7 @@
 ## STATUS: SP-070 — Audio comes back when the endpoint comes back
 
-**Current Step:** 1
-**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
+**Current Step:** 3
+**Last Updated:** 2026-08-14 (worker, Step 3 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 996 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -35,34 +35,34 @@ device, no new seam.**
 ---
 
 ### Step 1: Establish the two facts the design depends on, then design the recovery
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped in-worker, SP-195 — recorded)
 
 - [x] Update STATUS.md before starting work
-- [ ] WPF recovery re-derived by symbol; found-vs-given recorded for every anchor
-- [ ] The three non-items stated with reasons (stop and report if any turns out applicable)
-- [ ] **FACT 1** — the calling thread of the play seam, with the traced call chain
-- [ ] **FACT 2** — panic and teardown proven separate from `_audioDisabledForSession`
-- [ ] Design written before code: counter reset by success, clock-gated cooldown, single-flight re-probe
+- [x] WPF recovery re-derived by symbol; found-vs-given recorded for every anchor
+- [x] The three non-items stated with reasons (stop and report if any turns out applicable)
+- [x] **FACT 1** — the calling thread of the play seam, with the traced call chain
+- [x] **FACT 2** — panic and teardown proven separate from `_audioDisabledForSession`
+- [x] Design written before code: counter reset by success, clock-gated cooldown, single-flight re-probe
       reusing `Initialize`; cooldown checked before the attempt; `_gate` never held across a backend call;
       discovering caller never blocked
-- [ ] Knob values adopted with WPF cites (and any divergence argued from the port's shape)
-- [ ] Bounded-restoration clearance table (teardown, panic, explicit stop, device change, healthy session)
-- [ ] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
+- [x] Knob values adopted with WPF cites (and any divergence argued from the port's shape)
+- [x] Bounded-restoration clearance table (teardown, panic, explicit stop, device change, healthy session)
+- [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement the recovery in one file
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped in-worker, SP-195 — recorded; build 0W/0E)
 
-- [ ] Disable becomes expiring, not terminal; success path still clears what it clears today
-- [ ] Re-probe only when suppressed AND cooldown elapsed AND none in flight
-- [ ] Re-probe reuses `Initialize` with the remembered NAME; never runs under `_gate`
-- [ ] Success clears + resets; failure re-arms the window
-- [ ] Teardown and panic untouched
-- [ ] Transition-only logging; no new observation, persistence, log of user data, or network call
-- [ ] Typed outcomes only; no exception escapes the play seam
-- [ ] Product-file `git diff` summarized; no edit outside File Scope
+- [x] Disable becomes expiring, not terminal; success path still clears what it clears today
+- [x] Re-probe only when suppressed AND cooldown elapsed AND none in flight
+- [x] Re-probe reuses `Initialize` with the remembered NAME; never runs under `_gate`
+- [x] Success clears + resets; failure re-arms the window
+- [x] Teardown and panic untouched
+- [x] Transition-only logging; no new observation, persistence, log of user data, or network call
+- [x] Typed outcomes only; no exception escapes the play seam
+- [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] The user story as a fact: dead endpoint → refused → endpoint returns → audio plays again
 - [ ] Failure counting + reset on success
