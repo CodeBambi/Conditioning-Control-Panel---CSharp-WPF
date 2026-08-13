@@ -1,0 +1,4 @@
+iterations=500
+Completed: none
+Cancelled: count=500 zeroTick=493 ticked=7 minTicks=0 maxTicks=1
+other=0 timeouts=0

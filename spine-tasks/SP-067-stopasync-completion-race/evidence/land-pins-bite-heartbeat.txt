@@ -1,0 +1,13 @@
+Test run for C:\Code\ccp-land-w24\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.10]     CcpClient.Tests.AsyncLifecycleTests.Heartbeat_StoppedBeforeFirstTick_CompletesCancelled_ZeroTick [FAIL]
+  Failed CcpClient.Tests.AsyncLifecycleTests.Heartbeat_StoppedBeforeFirstTick_CompletesCancelled_ZeroTick [39 ms]
+  Error Message:
+   Assert.IsType() Failure: Value is not the exact type
+Expected: typeof(CcpClient.Desktop.Lifecycle.OperationOutcome+Cancelled)
+Actual:   typeof(CcpClient.Desktop.Lifecycle.OperationOutcome+Completed)
+  Stack Trace:
+     at CcpClient.Tests.AsyncLifecycleTests.Heartbeat_StoppedBeforeFirstTick_CompletesCancelled_ZeroTick() in C:\Code\ccp-land-w24\client\tests\CcpClient.Tests\AsyncLifecycleTests.cs:line 222
+--- End of stack trace from previous location ---
+
+Failed!  - Failed:     1, Passed:     2, Skipped:     0, Total:     3, Duration: 249 ms - CcpClient.Tests.dll (net10.0)
