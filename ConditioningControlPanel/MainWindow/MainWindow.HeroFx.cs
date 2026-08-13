@@ -294,6 +294,12 @@ namespace ConditioningControlPanel
         /// is what makes the default mod's #FF69B4 land on exactly the FF69B4 -> E85CE0 -> FF7E6B
         /// triple the spec asks for while a blue mod gets a coherent blue-family charge instead of
         /// somebody else's pink.
+        ///
+        /// <para>Called by <see cref="ApplyStartCharge"/> and by the mod-switch sweep in
+        /// MainWindow.UiUpdates.cs - the sweep is what keeps an ALREADY-charged (or idle-charged)
+        /// button honest, since the brush is built once and would otherwise hold the previous mod's
+        /// hue until the next charge. Three Color writes on a live brush: no allocation, no new
+        /// storyboard, and the offset drift (if any is running) is left exactly as it was.</para>
         /// </summary>
         private void TintStartCharge()
         {

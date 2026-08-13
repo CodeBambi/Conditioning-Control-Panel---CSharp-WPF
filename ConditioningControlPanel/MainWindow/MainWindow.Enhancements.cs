@@ -44,7 +44,13 @@ namespace ConditioningControlPanel
         private const double SecretCardHeight = 56;
 
         /// <summary>
-        /// Refreshes the entire Enhancements tab UI
+        /// Refreshes the entire Enhancements tab UI.
+        ///
+        /// <para>Also the tab's mod-switch repaint - every node carries accent fills, MakeModAware
+        /// names/flavour and per-skill art from the resolver. The sweep in MainWindow.UiUpdates.cs
+        /// calls it ONLY while this tab is on screen: <see cref="DrawSkillTree"/> rebuilds ~28 nodes
+        /// plus the secret rail and is the most expensive redraw in the app, and a tab nobody is
+        /// looking at gets the same work for free on its next show (ShowTab).</para>
         /// </summary>
         private void RefreshEnhancementsUI()
         {

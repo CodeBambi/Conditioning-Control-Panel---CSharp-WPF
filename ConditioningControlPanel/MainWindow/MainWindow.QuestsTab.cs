@@ -67,6 +67,14 @@ namespace ConditioningControlPanel
         }
 
 
+        /// <summary>
+        /// Repaints the whole Quests tab: quest cards, stats, the streak calendar and the punch card.
+        ///
+        /// <para>Also the tab's mod-switch repaint - quest names and descriptions go through
+        /// MakeModAware, and the calendar ring, punch-card holes and streak status are accent-filled.
+        /// The sweep in MainWindow.UiUpdates.cs calls it only while the tab is on screen, because
+        /// ShowTab already calls it on every entry.</para>
+        /// </summary>
         private void RefreshQuestUI()
         {
             var questService = App.Quests;

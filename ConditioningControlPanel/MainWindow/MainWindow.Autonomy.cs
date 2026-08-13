@@ -188,6 +188,11 @@ namespace ConditioningControlPanel
             Dispatcher.BeginInvoke(() => _avatarTubeWindow?.UpdateQuickMenuState());
         }
 
+        /// <summary>
+        /// Paints the Takeover start/stop button. Its "on" state is the mod accent, which is why the
+        /// mod-switch sweep in MainWindow.UiUpdates.cs re-runs it with the live setting: nothing else
+        /// touches this button between toggles, so a switch left it wearing the old mod's pink.
+        /// </summary>
         private void UpdateAutonomyButtonState(bool isEnabled)
         {
             if (BambiTakeoverTab.BtnAutonomyStartStop == null) return;

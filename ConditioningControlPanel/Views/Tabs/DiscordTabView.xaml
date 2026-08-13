@@ -276,14 +276,22 @@
                                                       Fill="{StaticResource FaucetMetal}"
                                                       Stroke="#3A2A3E" StrokeThickness="0.6"
                                                       Data="M 23,10 L 31,10 L 31,17 L 29,22 L 25,22 L 23,17 Z"/>
-                                                <!-- handle: pink tee on top -->
+                                                <!-- handle: accent tee on top. DynamicResource, not
+                                                     the #FF69B4 literal it was authored with:
+                                                     PinkBrush is the mod accent and is rewritten in
+                                                     Application.Resources on every mod switch
+                                                     (MainWindow.RefreshThemeAwareElements), so the
+                                                     one coloured part of the faucet follows the mod
+                                                     instead of staying pink under a blue one.
+                                                     Its value is #FF69B4 by default (Colors.xaml),
+                                                     so the CCP Default look is unchanged. -->
                                                 <Rectangle Width="4" Height="7" HorizontalAlignment="Left"
                                                            VerticalAlignment="Top" Margin="13,4,0,0"
                                                            Fill="{StaticResource FaucetMetal}"
                                                            Stroke="#3A2A3E" StrokeThickness="0.5"/>
                                                 <Rectangle Width="13" Height="4.5" RadiusX="2" RadiusY="2"
                                                            HorizontalAlignment="Left" VerticalAlignment="Top"
-                                                           Margin="8.5,1,0,0" Fill="#FF69B4"
+                                                           Margin="8.5,1,0,0" Fill="{DynamicResource PinkBrush}"
                                                            Stroke="#B44780" StrokeThickness="0.6"/>
 
                                                 <!-- droplet sparkle at the spout while XP is waiting
