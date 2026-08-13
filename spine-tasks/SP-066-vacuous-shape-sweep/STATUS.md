@@ -1,5 +1,5 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 3 — disposition every site
+**Current Step:** 4 — the shape guard, and the T-17 auditor edit
 **Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
@@ -25,15 +25,15 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] Injections removed and removal proven
 - [x] Schema + wrapper change in ONE commit; floor bumped in that commit if the count moved
 
-### Step 3: disposition every site — 🔄 In Progress
+### Step 3: disposition every site — ✅ Complete (plan review engine-skipped SP-195)
 > ⚠️ Hydrate: one checkbox group per shape class once the Step 1 inventory exists
-- [ ] EVERY inventory entry verdicted: `not-vacuous` / `platform-skip-converted` / `fixed` / `deleted` / `residual` — none left unverdicted
-- [ ] `Assert.NotEmpty` (or explicit count assertion) before every loop-only assertion body dispositioned `not-vacuous` (framing c)
-- [ ] Any conversion whose skip fires here added to `allowedSkips` under the admission rule, machine class named; SP-057 pin and the named flake NEVER listed
-- [ ] Zero assertions weakened / tolerances widened / tests quarantined — proven by per-file `git diff` review summarized in the record
-- [ ] Ledger committed with cleared entries; `floor.json` bumped in the same commit as any count change, reason in the message
+- [x] EVERY inventory entry verdicted: `not-vacuous` / `platform-skip-converted` / `fixed` / `deleted` / `residual` — none left unverdicted
+- [x] `Assert.NotEmpty` (or explicit count assertion) before every loop-only assertion body dispositioned `not-vacuous` (framing c)
+- [x] Any conversion whose skip fires here added to `allowedSkips` under the admission rule, machine class named; SP-057 pin and the named flake NEVER listed
+- [x] Zero assertions weakened / tolerances widened / tests quarantined — proven by per-file `git diff` review summarized in the record
+- [x] Ledger committed with cleared entries; `floor.json` bumped in the same commit as any count change, reason in the message
 
-### Step 4: the shape guard, and the T-17 auditor edit — ⬜ Not Started
+### Step 4: the shape guard, and the T-17 auditor edit — 🔄 In Progress
 - [ ] Guard test fails with `file:line` for any site absent from the ledger; repo-root walk; NEVER skips (missing directory = failure)
 - [ ] Captured RED from a probe fact with a silenced assertion; probe removed and removal proven
 - [ ] Guard's own honesty stated in the test file and the record (shape guard; runtime vacuity invisible)
