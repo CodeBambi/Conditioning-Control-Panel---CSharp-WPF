@@ -84,9 +84,12 @@ public class NavRailFlyoutTests
         double tileShut = ConstValue(src, "NavDoorTileCollapsed");
         double tileOpen = ConstValue(src, "NavDoorTileExpanded");
 
-        // Owner call: the art was 28/44 and read as a thumbnail on a plate.
+        // Owner call: the art was 28/44 and read as a thumbnail on a plate. The rule that
+        // survives tile resizes (the tile shrank 56 -> 50 for the accent window frame the same
+        // day) is RELATIVE: the art fills the tile to within the 2px inset per side that keeps
+        // the hue ring visible, in both states.
         Assert.True(iconShut >= 40, $"the shut door art shrank back to {iconShut}");
-        Assert.True(iconOpen >= 52, $"the open door art shrank back to {iconOpen}");
+        Assert.True(iconOpen >= tileOpen - 4, $"the open door art ({iconOpen}) floats in its {tileOpen}px tile again");
 
         // But it still has to leave the tile's own 1px edge showing - that edge is the active
         // door's hue ring (RefreshNavDoorActive), the only "you are here" mark left on the row.
