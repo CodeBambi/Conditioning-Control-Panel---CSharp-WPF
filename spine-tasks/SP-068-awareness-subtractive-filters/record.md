@@ -112,7 +112,15 @@ No new datum is observed (no process name, app id, window class, dwell time — 
 
 ## 8. Implementation + bite evidence
 
-(to be filled — diff summary, no-new-datum grep proof, bite matrix, floor bump, run table)
+**Implementation (Step 2, committed):**
+
+Per-file product diff summary (`git diff --stat`): `AiAwarenessService.cs` +57/-2 (F1: `PrivacyFiltered` drop kind, two content-free capability codes, `Observe` classifier wiring at the observation seam, pre-packaging check in `RunReactionAsync`, `TryPackage` F1 re-check + F2 scrubbed assembly); `AiOperationPipeline.cs` +24 (F3 strip after output moderation, before persist/apply; emptied → `Unavailable("reply-stripped-empty")` with persist skipped); **new** `AiPrivacyFilters.cs` (+~380 incl. doc comments: the union marker list — verified set-identical to the computed WPF union, 55/55, zero missing/extra — `LooksIncognito`, `ClassifyCapturedTitle`, `SanitizeTitleForWire` verbatim, `StripUnsanctionedLinks` verbatim-minus-dead-sanction-check). No edit outside F1/F2/F3; `git status --short` shows only File Scope paths.
+
+**Own-diff grep proof (framing b):** added lines matching `logger|console.|file.|_memory|write|httpclient|sendasync|emit` = exactly ONE functional line — the F1 typed-drop diagnostic `_diagnostics.Emit(new AiDiagnosticRecord(Awareness, Unspecified, Completed, "dropped:privacy-filtered", -1, 0, 0, []))` (content-free stable code, the same observability class as the landed `suppressed:*` drops; contract §4 rule 3 requires drops to be observable; §12-clean, no title). All other matches are doc comments. No new persist call, no logger, no network, no file write.
+
+**Verification after implementation:** build 0W/0E; full floor wrapper run BEFORE any new facts: **903/903 unit, 35/35 headless, 2 skipped (exactly the pinned Windows-observed names)** — every landed pin unweakened, including the real-foreground observation test and the exact-shape packaging test.
+
+(to be filled — bite matrix, floor bump, run table)
 
 ## 9. Honesty cell
 

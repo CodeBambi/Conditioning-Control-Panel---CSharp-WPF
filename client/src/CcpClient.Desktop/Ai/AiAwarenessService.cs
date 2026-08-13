@@ -190,7 +190,7 @@ public sealed record AiAwarenessContext(string Category, string App, string Titl
 /// </summary>
 public static class AiAwarenessContextPackaging
 {
-    /// <summary>Moderates every field, then assembles. False + typed refusal when any field blocks; <paramref name="request"/> is null in that case (nothing transmittable exists).</summary>
+    /// <summary>Moderates every field RAW (a blocking verdict on any field prevents transmission entirely — zero network follows), then assembles with the Title SCRUBBED by the SP-068 F2 filter (<see cref="AiPrivacyFilters.SanitizeTitleForWire"/>). Order is load-bearing: moderate first keeps landed behavior byte-identical (a blocked raw title still blocks the whole package), and the scrub only narrows what is then assembled — never the reverse. A title that scrubs to nothing is carried as NO title (WPF `ResolveTitle`→null→`TitleForWire: null` semantics, AwarenessPrivacyRules.cs:455-466: the frame proceeds title-free). SP-068 F1 defense in depth: an incognito title is never packaged (WPF re-checks inside the shared rules — "defence in depth, not the enforcing copy", AwarenessObserverPolicy.cs:227-229); returns false with <paramref name="refusal"/> NULL in that case — a privacy-filter drop, not a moderation verdict. Fields never enter diagnostics or memory: this packager emits nothing, and the pipeline persists memory for the interactive class only (c4).</summary>
     public static bool TryPackage(
         AiAwarenessContext context,
         AiModerationBoundary boundary,
@@ -199,6 +199,16 @@ public static class AiAwarenessContextPackaging
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(boundary);
+
+        // SP-068 F1: incognito first — before moderation, before assembly, before anything
+        // is resolved (WPF order, AwarenessObserverPolicy.cs:264-266).
+        if (AiPrivacyFilters.LooksIncognito(context.Title))
+        {
+            request = null;
+            refusal = null; // a privacy-filter drop, not a moderation verdict
+            return false;
+        }
+
         foreach (var field in new[] { context.Category, context.App, context.Title, context.DurationText })
         {
             ArgumentNullException.ThrowIfNull(field);
@@ -210,9 +220,13 @@ public static class AiAwarenessContextPackaging
             }
         }
 
+        // SP-068 F2: the assembled title is the scrubbed one (verbatim WPF values,
+        // AwarenessPrivacyRules.cs:346-372); null = no title carried.
+        var title = AiPrivacyFilters.SanitizeTitleForWire(context.Title) ?? string.Empty;
+
         // The WPF-observed shape verbatim (AiService.cs:160-163).
         request = new AiRequest(
-            $"[Category: {context.Category} | App: {context.App} | Title: {context.Title} | Duration: {context.DurationText}]");
+            $"[Category: {context.Category} | App: {context.App} | Title: {title} | Duration: {context.DurationText}]");
         refusal = null;
         return true;
     }
@@ -232,6 +246,9 @@ public enum AiAwarenessDropKind
 
     /// <summary>The provider could not produce a reply and no app-authored canned fallback was supplied (window-reaction path — WPF has no canned fallback there).</summary>
     ProviderUnavailable,
+
+    /// <summary>The context title tripped the SP-068 F1 privacy filter (a private-window marker — WPF `FrameDrop.Incognito`, AwarenessObserverPolicy.cs:266, a hard drop ahead of every list). Zero transmission: nothing about the title is packaged, resolved, or logged.</summary>
+    PrivacyFiltered,
 
     /// <summary>The owned operation was cancelled (panic / provider switch / teardown).</summary>
     Cancelled,
@@ -276,6 +293,12 @@ public static class AiWindowTitleCapability
 
     /// <summary>Transient Windows state: no foreground window (lock screen, secure desktop, mid-switch — WPF WindowAwarenessService.cs:596-604 discipline).</summary>
     public const string NoForegroundWindowCode = "no-foreground-window";
+
+    /// <summary>SP-068 F1: the captured title carried a private-window marker — hard-dropped at the seam (WPF `FrameDrop.Incognito`, AwarenessObserverPolicy.cs:266). Content-free: the title itself never rides along.</summary>
+    public const string IncognitoDropCode = "title-dropped-private-window";
+
+    /// <summary>SP-068 F1 blank case: the capture succeeded but yielded no usable title — dropped (WPF net fail-closed, `AwarenessDropReason.NoTitle`, AwarenessPrivacyRules.cs:276-277). Content-free.</summary>
+    public const string BlankTitleDropCode = "title-dropped-blank";
 
     /// <summary>Declares the capability probe (registration never yields Available — SP-006; the probe must run).</summary>
     public static void Register(CapabilityRegistry capabilities)
@@ -509,6 +532,18 @@ public sealed class AiAwarenessService
             return SuppressedDrop(AiSuppressionKind.Cooldown, AiAwarenessDropKind.CooldownSuppressed, "suppressed:cooldown");
         }
 
+        // SP-068 F1 (audit row A6): the incognito hard-drop, before anything is packaged
+        // (WPF "Incognito first. Before classification, before the lists, before anything
+        // is resolved.", AwarenessObserverPolicy.cs:264-266). Typed drop + content-free
+        // diagnostic — the title never rides along (contract §12). TryPackage re-checks
+        // (defence in depth); this seam gives the drop its honest TYPE.
+        if (AiPrivacyFilters.LooksIncognito(context.Title))
+        {
+            _diagnostics.Emit(new AiDiagnosticRecord(
+                AiOperationClass.Awareness, AiEndpointClass.Unspecified, AiDiagnosticOutcome.Completed, "dropped:privacy-filtered", -1, 0, 0, []));
+            return new AiAwarenessRoutingResult.Dropped(AiAwarenessDropKind.PrivacyFiltered);
+        }
+
         if (!AiAwarenessContextPackaging.TryPackage(context, _boundary, out var request, out _))
         {
             // A blocking policy prevents transmission — zero network follows. Content-free
@@ -542,10 +577,26 @@ public sealed class AiAwarenessService
         }
 
         return AiWindowTitleCapability.TryCaptureForegroundTitle(out var title)
-            ? new AiTitleObservation.Observed(title)
+            ? Observe(title)
             : new AiTitleObservation.Unavailable(new CapabilityState.Unavailable(new CapabilityReason(
                 AiWindowTitleCapability.NoForegroundWindowCode, "no capturable foreground window at observation time")));
     }
+
+    // SP-068 F1 (audit row A6): the incognito hard-drop and the blank-title decision,
+    // applied at the seam BEFORE the title can be returned to a caller. The pure decision
+    // lives in AiPrivacyFilters.ClassifyCapturedTitle (unit-testable without a real
+    // foreground window); the codes are content-free — the title never enters the reason.
+    private static AiTitleObservation Observe(string title) =>
+        AiPrivacyFilters.ClassifyCapturedTitle(title) switch
+        {
+            AiPrivacyFilters.CapturedTitleVerdict.DropIncognito => new AiTitleObservation.Unavailable(
+                new CapabilityState.Unavailable(new CapabilityReason(
+                    AiWindowTitleCapability.IncognitoDropCode, "title withheld by the privacy filter (private-window marker)"))),
+            AiPrivacyFilters.CapturedTitleVerdict.DropBlank => new AiTitleObservation.Unavailable(
+                new CapabilityState.Unavailable(new CapabilityReason(
+                    AiWindowTitleCapability.BlankTitleDropCode, "foreground window yielded no usable title"))),
+            _ => new AiTitleObservation.Observed(title),
+        };
 
     private AiAwarenessRoutingResult Route(AiOperationResult result, string? fallbackText)
     {

@@ -1,6 +1,6 @@
 ## STATUS: SP-068 — Three subtractive privacy filters over the landed awareness and reply paths
-**Current Step:** Step 1 — Re-derive the three behaviors from WPF and clear the boundary
-**Last Updated:** 2026-08-13 (worker, step 1 in progress)
+**Current Step:** Step 2 — Implement the three filters
+**Last Updated:** 2026-08-13 (worker, step 1 complete; step 2 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 903 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-067, integrate `75a09d61`.
@@ -15,7 +15,7 @@
 
 **Three filters mean three bite tests.** Revert one filter at a time and prove only its own pins go red. SP-067's land proved a shared revert falsely verifies pins that were never exercised.
 
-### Step 1: Re-derive the three behaviors from WPF and clear the boundary — 🔄 In progress
+### Step 1: Re-derive the three behaviors from WPF and clear the boundary — ✅ Complete
 - [x] Update STATUS.md before starting work
 - [x] Per filter: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a — the audit's cites are already proven stale)
 - [x] F1: WPF's two incognito marker lists reconciled (agree or differ, exactly how); single port-side definition decided
@@ -27,13 +27,13 @@
 - [x] Any `ai-operation-contract.md` wording the filters need is **named, not written** (framing c)
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning
 
-### Step 2: Implement the three filters — narrowing only — ⬜ Not started
-- [ ] F1 applied at the port's title seam before the title can be packaged or returned; WPF cite in a comment
-- [ ] F2 applied to the title with verbatim values; WPF cite in a comment
-- [ ] F3 strip applied at the derived point with the emptied-reply case typed; WPF cite in a comment
-- [ ] Exactly **one** definition per filter; every consumer routed through it (SP-055 discipline)
-- [ ] Own-diff grep proves no new log / diagnostic / persist / network call
-- [ ] Per-file `git diff` summary in the record; no edit outside F1/F2/F3
+### Step 2: Implement the three filters — narrowing only — 🔄 In progress
+- [x] F1 applied at the port's title seam before the title can be packaged or returned; WPF cite in a comment
+- [x] F2 applied to the title with verbatim values; WPF cite in a comment
+- [x] F3 strip applied at the derived point with the emptied-reply case typed; WPF cite in a comment
+- [x] Exactly **one** definition per filter; every consumer routed through it (SP-055 discipline)
+- [x] Own-diff grep proves no new log / diagnostic / persist / network call
+- [x] Per-file `git diff` summary in the record; no edit outside F1/F2/F3
 
 ### Step 3: Bind all three, one source at a time — ⬜ Not started
 - [ ] Regression facts per filter (drop, strip, cap, URL removal, and stripped text never reaching memory or the bubble)
