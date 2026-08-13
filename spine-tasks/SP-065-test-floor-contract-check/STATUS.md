@@ -1,9 +1,9 @@
 ## STATUS: SP-065 — Mechanical skip/count detection that fails the CONTRACT
-**Current Step:** 1 (probe the runner surface, choose the mechanism, design the guard)
-**Last Updated:** 2026-08-13 (worker, Step 1 in progress)
+**Current Step:** 2 (implement the wrapper and the pin, prove BOTH verdicts)
+**Last Updated:** 2026-08-13 (worker, Step 2 in progress)
 **Blockers:** none
 
-### Step 1: probe the runner surface, choose the mechanism, design the guard — IN PROGRESS
+### Step 1: probe the runner surface, choose the mechanism, design the guard — COMPLETE
 - [x] Update STATUS.md before starting work
 - [x] Probe `dotnet test --help`, xunit v3 `failSkips`, MTP `--minimum-expected-tests` — exact invocation + exact response each
 - [x] Choose the mechanism; reject the other two on their real failure modes (exactly-N skips; zero-results/never-ran/filtered-out)
@@ -12,7 +12,7 @@
 - [x] Half-install guard design: walk, `>= SP-065` ID rule, `file:line` shape, why it cannot skip
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch
 
-### Step 2: implement the wrapper and the pin, prove BOTH verdicts — NOT STARTED
+### Step 2: implement the wrapper and the pin, prove BOTH verdicts — IN PROGRESS
 - [ ] Wrapper at exactly `client/tests/floor/check-floor.mjs`; pin beside it; `git ls-files` tracking proof
 - [ ] Results outside the worktree; `git status --porcelain --ignored=matching -uall` gains no new entry
 - [ ] Every fail-closed behavior implemented AND demonstrated (one table row per failure mode)
