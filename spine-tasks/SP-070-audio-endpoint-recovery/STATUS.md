@@ -1,7 +1,7 @@
 ## STATUS: SP-070 — Audio comes back when the endpoint comes back
 
-**Current Step:** Not started
-**Last Updated:** 2026-08-14 (orchestrator, authoring)
+**Current Step:** 1
+**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 996 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -35,9 +35,9 @@ device, no new seam.**
 ---
 
 ### Step 1: Establish the two facts the design depends on, then design the recovery
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] Update STATUS.md before starting work
+- [x] Update STATUS.md before starting work
 - [ ] WPF recovery re-derived by symbol; found-vs-given recorded for every anchor
 - [ ] The three non-items stated with reasons (stop and report if any turns out applicable)
 - [ ] **FACT 1** — the calling thread of the play seam, with the traced call chain
