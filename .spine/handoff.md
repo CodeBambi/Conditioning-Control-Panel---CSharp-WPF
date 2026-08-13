@@ -1,14 +1,20 @@
-# HANDOFF — 2026-08-13 — wave 22 LANDED, run continues
+# HANDOFF — 2026-08-13 — wave 23 LAUNCHED (SP-066 in flight), run continues
 
-**Status: NOT PARKED. No in-flight batch, no gate pending, no worker running.** Wave 22 landed and is pushed (`c799d2cf`). The next phase of `client/tools/port-loop.ps1` is an AUTHOR + LAUNCH phase (port.txt case B), not a land.
+**Status: NOT PARKED. Wave 23 is IN FLIGHT.** SP-066 (board row 49 part (1) + T-17 riding) was authored, committed (`1276de71`), pushed, and launched detached. **The next phase is therefore port.txt case C (batch running → exit at once) and then case A (LAND IT)** — it is NOT another author+launch. Everything below the next two sections is the wave-22 land record, still accurate as history.
 
-Supersedes the 2026-08-04 handoff (waves 4-7). That revision's machine facts are still broadly accurate; its "next claimable work" is long done.
+## Land checks specific to SP-066 (the landing phase has no memory of authoring)
 
-## Where the run actually is
+1. **Read `client/tests/floor/floor.json` `allowedSkips` FIRST.** The packet moves the pin from `{passed, skipped}` to `{total, allowedSkips[]}`, which creates a new quarantine temptation. Two names are banned from that list and both bans are in the packet's `## Do NOT`: the **SP-057 pin** (a skip there means `CCP_DATA_ROOT` went process-wide — the vacuous `896/1` green SP-062 closed) and the named flake **`ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`** (privacy boundary; reproduce and fix at source, never quarantine). Every listed entry must name the machine class where it *does* execute.
+2. **Check the commit ORDER, not just the end state.** The schema change had to land BEFORE any `Assert.Skip` conversion; doing it the other way reddens the packet's own contract and the cheap way out is widening the pin — the exact failure this row exists to prevent, reproduced by its own fix.
+3. **Expect these non-claims in `record.md` and do not let them be dropped at reconciliation:** the detector is lexical, so **runtime vacuity is NOT detected** (assertions hoisted into helpers read as absent; a loop over an empty collection reads as asserting); the guard binds only enumerated shapes; `allowedSkips` records intent nothing verifies; **T-17's induced-skip auditor RUN is not delivered** (only the `port-audit-prompt.md:12-13` edit + a prompt pin), so T-17 stays OPEN with that residual; Linux unproven.
+4. **Verify the merged tree THROUGH the wrapper**, as wave 22 did: in a scratch worktree run `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs` (the wrapper is `--no-build` by design — standalone it measures the last build and names the wrong cause), 3 consecutive greens, then prove `git diff` is EMPTY between the verified tree and the integrated tip.
+5. **Next unused task ID after this wave: SP-067.**
 
-- **Landed this phase:** SP-065 (board row 49 **part (2) only**) — integrate `09b4b639`, reconcile + push `c799d2cf`. Batch `20260813T032810` completed and archived; it was a CLEAN land (no recovery, unlike wave 21).
+## Where the run was at the wave-22 land
+
+- **Landed the previous phase:** SP-065 (board row 49 **part (2) only**) — integrate `09b4b639`, reconcile + push `c799d2cf`. Batch `20260813T032810` completed and archived; it was a CLEAN land (no recovery, unlike wave 21).
 - **Floor is now 898 unit / 35 headless / 0 skipped, build 0W/0E**, and it is enforced by machinery rather than by a human comparing numbers: `node client/tests/floor/check-floor.mjs` owns both `dotnet test` invocations and fails the CONTRACT on an unexpected skip or an off-floor count.
-- **Next unused task ID: SP-066.**
+- **Next unused task ID at that land: SP-066** (now consumed by SP-066; next unused is SP-067).
 
 ## Next claimable work (author ONE wave, then exit)
 
