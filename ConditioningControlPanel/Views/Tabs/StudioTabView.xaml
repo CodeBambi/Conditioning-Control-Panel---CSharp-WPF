@@ -134,7 +134,12 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <Image Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center"
+            <!-- The pack:// Source is the DEFAULT, not the answer: OnLoaded and every
+                 RepaintModAwareChrome push ModResourceResolver's verdict over it, so a mod that
+                 ships resources/nav/door_studio.png is honoured here the way it already is on the
+                 nav rail (MainWindow.ApplyDoorArt). A null resolve leaves this default standing. -->
+            <Image x:Name="ImgStudioDoorIcon"
+                   Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center"
                    RenderOptions.BitmapScalingMode="HighQuality"
                    Source="pack://application:,,,/Resources/nav/door_studio.png">
                 <Image.Clip>
