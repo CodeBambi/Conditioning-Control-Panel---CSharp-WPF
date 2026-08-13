@@ -118,6 +118,54 @@ public class Achievement
             ImageName = "daily_maintenance.png",
             Category = AchievementCategory.Progression
         },
+
+        // The four paid programs' graduation badges. ProgramService.Graduate has always unlocked
+        // GraduationBadgeId; until these existed it unlocked four ids that were in no catalogue, so
+        // finishing fourteen or twenty-eight days of a program someone paid for produced a Warning
+        // in the log and nothing else - no badge, no art, and no Discord post, because the announce
+        // webhook 400s on ids the server has never heard of.
+        //
+        // Each one is written in its own program's voice: Firmware is DroneOS install fiction, Kept
+        // is Circe's ownership, Presentation is the mirror and the photographs, Takeover is Bambi's
+        // protocol. Free and visible like first_week_graduate: the program is the paywall, the badge
+        // is the receipt, and an IsExclusive receipt would vanish from the gallery on a lapse.
+        ["firmware_install_graduate"] = new Achievement
+        {
+            Id = "firmware_install_graduate",
+            Name = "Install Complete",
+            Requirement = "Finish the fourteen-cycle Firmware Install program",
+            FlavorText = "[INSTALL COMPLETE] Fourteen cycles logged. No errors reported. The Unit did not ask once what it was for.",
+            ImageName = "firmware_install_graduate.png",
+            Category = AchievementCategory.Progression
+        },
+        ["kept_graduate"] = new Achievement
+        {
+            Id = "kept_graduate",
+            Name = "Kept",
+            Requirement = "Finish the twenty-eight-day Kept program",
+            FlavorText = "Twenty-eight days, and you handed her every one of them. She has decided. You'll notice she didn't ask.",
+            ImageName = "kept_graduate.png",
+            Category = AchievementCategory.Progression
+        },
+        ["presentation_graduate"] = new Achievement
+        {
+            Id = "presentation_graduate",
+            Name = "Presented",
+            Requirement = "Finish the fourteen-day Presentation program",
+            FlavorText = "Seven photographs. Put day one beside day fourteen and try to tell yourself nothing happened.",
+            ImageName = "presentation_graduate.png",
+            Category = AchievementCategory.Progression
+        },
+        ["takeover_graduate"] = new Achievement
+        {
+            Id = "takeover_graduate",
+            Name = "Bambi Time",
+            Requirement = "Finish the twenty-eight-day Takeover program",
+            FlavorText = "Twenty-eight days and every trigger installed. Your own keyboard sets you off now. That was the schedule.",
+            ImageName = "takeover_graduate.png",
+            Category = AchievementCategory.Progression
+        },
+
         ["window_shopping"] = new Achievement
         {
             Id = "window_shopping",
