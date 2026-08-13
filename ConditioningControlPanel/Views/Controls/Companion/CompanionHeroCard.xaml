@@ -313,6 +313,10 @@
                                  either: the opaque bounds are 158..417 across (centre 53.2%) and
                                  97..801 down (centre 46.8%).
 
+                                 (A parallel same-day fix tried AlignmentY=Top on the fill crop —
+                                 head kept, heels still eaten; this measured-viewbox approach
+                                 replaced it in the merge.)
+
                                  Uniform keeps the whole figure, and the code-behind then points
                                  this brush's Viewbox at a square centred on the art's OWN opaque
                                  bounds — so the padding a mod happens to ship is measured rather
