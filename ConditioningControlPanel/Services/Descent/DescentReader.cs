@@ -129,6 +129,24 @@ namespace ConditioningControlPanel.Services.Descent
                 DayFillStart = Str(block["day_fill_start"]),
                 DayFillStartDayN = ReadStartDayN(block["day_fill_start_day_n"], dayFill.Count, days),
                 HistoryFrom = Str(block["history_from"]),
+
+                // THE WHOLE NODE, KEPT. Everything above is this reader's opinion of a
+                // subset; the fields it does not model (day_quest, stations, breaks,
+                // anchor, chapter, cycle, a ladder it declined) are dropped on the floor,
+                // and the spiral embed needs them to draw more than a naked coil. So the
+                // node is re-serialised compactly and forwarded byte-faithfully by §9 v2
+                // — the app authors nothing, the embed validates for itself.
+                //
+                // Captured HERE, past the well-formed bar, and nowhere else: a malformed
+                // payload has already returned null above and therefore carries no raw
+                // either. The tri-state law holds unchanged — no block, no raw.
+                //
+                // ToString(Formatting.None) re-emits what ParseWire read, and ParseWire
+                // reads with DateParseHandling.None, so date-shaped strings are still
+                // strings and come back out exactly as sent. Run this over a token from a
+                // coercing parse instead and every day string would re-emit as an
+                // invented midnight instant.
+                RawJson = block.ToString(Formatting.None),
             };
         }
 

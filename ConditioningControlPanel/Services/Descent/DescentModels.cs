@@ -137,5 +137,23 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>Where recorded history begins — the backfill boundary. Never read
         /// DayFill.Count as the user's whole history.</summary>
         public string? HistoryFrom { get; init; }
+
+        /// <summary>
+        /// THE SERVER'S BLOCK, VERBATIM — the compact re-serialisation of the exact
+        /// `descent` node this instance was parsed from, kept for §9 v2 forwarding to
+        /// the spiral embed (see SpiralEmbedView.BuildState).
+        ///
+        /// NEVER CLIENT-AUTHORED. Nothing in this app composes, patches or tops up this
+        /// string: it is the wire node and only the wire node, so that what the embed
+        /// validates is what the server said and not what a desktop reader made of it.
+        /// The typed fields above are this client's READING of that node; they are not
+        /// its source. Do not rebuild this from them.
+        ///
+        /// Non-null on every block that came off a payload — the reader sets it at the
+        /// same moment it decides the block is well-formed, so "block exists" and "raw
+        /// exists" are the same fact. Null ONLY in hand-built blocks (tests, and any
+        /// future local construction), which is exactly why the forward is conditional.
+        /// </summary>
+        public string? RawJson { get; init; }
     }
 }
