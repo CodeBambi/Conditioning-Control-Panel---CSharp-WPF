@@ -528,6 +528,38 @@
                                                                HorizontalAlignment="Center" Margin="0,-4,0,0"/>
                                                 </StackPanel>
                                             </Border>
+
+                                            <!-- ==== THE SPIRAL plate ====
+                                                 The Descent's door on the Trainer Card, beside the two
+                                                 gold plates but deliberately NOT gold: LEVEL and RANK are
+                                                 the leaderboard's currency, the spiral is the descent's,
+                                                 so it wears the mod accent (DynamicResource - it repaints
+                                                 on a mod switch, and so does the glyph inside it).
+
+                                                 ZERO FOOTPRINT WHEN DARK, the same safety property the
+                                                 vat bay above carries: the server withholds the `descent`
+                                                 block from every account outside the rollout dial, and
+                                                 Collapsed means the plate row measures exactly as it did
+                                                 before this existed. MainWindow.ProfileSpiral.cs is the
+                                                 only thing that ever shows it, and it shows it only for
+                                                 a real block on YOUR OWN card - a searched profile's
+                                                 descent is not ours to draw. -->
+                                            <Border x:Name="ProfileSpiralPlate" x:FieldModifier="internal"
+                                                    Visibility="Collapsed" CornerRadius="10" Padding="14,6"
+                                                    Margin="8,0,0,0" Cursor="Hand"
+                                                    Background="{DynamicResource TransparentPink20Brush}"
+                                                    BorderBrush="{DynamicResource PinkSoftBrush}" BorderThickness="1"
+                                                    ToolTip="{loc:Str profile_spiral_plate_tip}"
+                                                    MouseLeftButtonUp="ProfileSpiralPlate_Click">
+                                                <StackPanel>
+                                                    <TextBlock Text="{loc:Str profile_spiral_plate}"
+                                                               Foreground="{DynamicResource PinkSoftBrush}" FontSize="9"
+                                                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                                                    <fx:SpiralGlyph x:Name="ProfileSpiralGlyph" x:FieldModifier="internal"
+                                                                    Width="44" Height="44" Margin="0,1,0,0"
+                                                                    HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
                                         </StackPanel>
 
                                         <!-- Patreon tier art (Pink filter / Prime subject) -->

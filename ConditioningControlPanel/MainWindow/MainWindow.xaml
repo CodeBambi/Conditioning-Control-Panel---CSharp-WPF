@@ -1746,6 +1746,34 @@
                                                 </Setter.Value>
                                             </Setter>
                                         </Style>
+                                        <!-- Same skin, stretched presenter. The row above hosts a
+                                             single left-aligned caption, which is all any of the
+                                             plain links needs; the spiral row carries a glyph, a
+                                             label AND a right-aligned summary, and a Left-aligned
+                                             ContentPresenter measures to the content instead of the
+                                             row, so the summary would sit against the label rather
+                                             than the panel edge. Everything else (height feel,
+                                             hover fill, foreground swap) is inherited. -->
+                                        <Style x:Key="ProfileMenuWideItemStyle" TargetType="Button"
+                                               BasedOn="{StaticResource ProfileMenuItemStyle}">
+                                            <Setter Property="Height" Value="34"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bg" Background="Transparent" CornerRadius="6" Padding="10,0">
+                                                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bg" Property="Background" Value="#2D2D50"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
                                     </StackPanel.Resources>
 
                                     <!-- Identity: display name + tier badge (🧪 Lab / 🔒 Premium),
@@ -1784,6 +1812,27 @@
 
                                     <Border Height="1" Background="#3D3D60" Margin="0,10,0,6"/>
 
+                                    <!-- THE SPIRAL. Collapsed by default and shown only when the
+                                         server has actually shipped this account a descent block
+                                         (MainWindow.ProfileBubble.cs / RefreshProfileMenuSpiral) -
+                                         block presence IS the rollout gate, so there is no flag to
+                                         check and nothing to see for anyone outside the dial.
+                                         The summary is numbers and a Roman numeral only: stage
+                                         NAMES are still an open owner call with no loc keys. -->
+                                    <Button x:Name="ProfileMenuSpiralRow" Visibility="Collapsed"
+                                            Style="{StaticResource ProfileMenuWideItemStyle}"
+                                            Click="ProfileMenuSpiral_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <controls:SpiralGlyph x:Name="ProfileMenuSpiralGlyph" DockPanel.Dock="Left"
+                                                                  Width="22" Height="22" Margin="0,0,8,0"
+                                                                  VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="ProfileMenuSpiralSummary" DockPanel.Dock="Right"
+                                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            <TextBlock Text="{loc:Str profile_menu_spiral}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                    </Button>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_profile}" Click="ProfileMenuProfile_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"

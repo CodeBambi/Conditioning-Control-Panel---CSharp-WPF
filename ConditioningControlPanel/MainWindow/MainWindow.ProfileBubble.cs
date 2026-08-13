@@ -95,6 +95,10 @@ namespace ConditioningControlPanel
                 if (App.Discord != null)
                     App.Discord.AuthenticationChanged += OnBubbleAuthChanged;
 
+                // The spiral row's own subscription (BlockChanged). Idempotent, and taken
+                // here so a block landing before the menu is ever opened still repaints it.
+                WireProfileSpiral();
+
                 RefreshProfileBubble();
             }
             catch (Exception ex)
@@ -122,6 +126,8 @@ namespace ConditioningControlPanel
                     App.Subliminal.SubliminalDisplayed -= OnBubbleSubliminalDisplayed;
                 if (App.Discord != null)
                     App.Discord.AuthenticationChanged -= OnBubbleAuthChanged;
+
+                UnwireProfileSpiral();
 
                 _profileBubbleOpenTimer?.Stop();
                 _profileBubbleCloseTimer?.Stop();
@@ -313,6 +319,12 @@ namespace ConditioningControlPanel
 
                 if (ProfileMenuAccountBtn != null)
                     ProfileMenuAccountBtn.Content = loggedIn ? Loc.Get("btn_logout") : Loc.Get("account_chip_sign_in");
+
+                // THE SPIRAL ROW (MainWindow.ProfileSpiral.cs). Here rather than in
+                // OpenProfileBubbleMenu because this method IS the menu's paint choke
+                // point - it runs on open AND on every live tick while open, so a block
+                // that landed while the popup was shut is picked up on the way in.
+                RefreshProfileMenuSpiral();
             }
             catch (Exception ex)
             {
