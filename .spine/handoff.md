@@ -42,9 +42,14 @@ clean, and `feat/crossplatform` is pushed and in sync at `851596cf`.
 
 ## Claimable work (author ONE wave, then EXIT — do not monitor)
 
-Five queue rows now exist purely to harden the test suite, and **the digest asks the owner whether
-to keep going or return to WPF parity features.** Absent an owner answer, prefer the P1 product-risk
-row (the first one) over more suite scaffolding, and consider pairing it with a product row.
+**Author the AsyncLifecycle StopAsync race (the first row below) unless the owner has said
+otherwise.** That is a recorded recommendation, not an open question: it is the only item in the
+current claimable set that is a defect in the PRODUCT's shutdown path rather than scaffolding around
+the tests, it has surfaced twice, and it is currently queued behind test tooling — the wrong order.
+The digest states this to the owner as a recommendation with an intent to proceed. The question
+genuinely left open for them is the RATIO after that (how much of the run goes to suite
+trustworthiness vs WPF parity features); if `client/docs/port-digest.md` carries an owner answer,
+that answer wins over this note.
 
 - **P1 `AsyncLifecycleTests.Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary`** — the
   StopAsync completion race. **Second recorded occurrence** (SP-055, then SP-066 run 0); both times
