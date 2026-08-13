@@ -101,6 +101,18 @@ namespace ConditioningControlPanel.Views.Tabs
         public Brush GlowBrush { get; set; } = Brushes.Transparent;
         public Visibility GlowVisibility { get; set; } = Visibility.Collapsed;
 
+        /// <summary>
+        /// One-shot: this day just flipped to complete, so its node flares. Set only on the rebuild
+        /// that observed the flip (MainWindow.ProgramsFx.cs rides the same once-per-day guard the
+        /// day-complete banner pop does), so the template's storyboard can never replay - and unlike
+        /// <see cref="Breathe"/> this is INTERACTION motion, so it survives Reduced and only
+        /// MotionLevel.Off removes it.
+        /// </summary>
+        public bool Ignite { get; set; }
+
+        /// <summary>Fill of the ignite flare. The program accent as a frozen radial, built in code.</summary>
+        public Brush IgniteBrush { get; set; } = Brushes.Transparent;
+
         /// <summary>Milestone treatment: boss crown / reward gift under the node.</summary>
         public string RewardGlyph { get; set; } = "";
         public Visibility RewardVisibility { get; set; } = Visibility.Collapsed;

@@ -49,6 +49,25 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>Glow-breath centre in element-normalized coordinates.</summary>
         public Point GlowCenter { get; set; } = new(0.5, 0.5);
+
+        /// <summary>
+        /// Share of the tier's particle budget the dust field is allowed to fill, 0-1. Default 1 is
+        /// exactly the behaviour every caller had before this existed: the budget, in full.
+        ///
+        /// <para>This exists for surfaces whose particle density is itself expressive - the Programs
+        /// tab's ignition curve spends it as "how far into the run am I" - and it only ever narrows
+        /// the tier's budget, never widens it, so no caller can use it to buy frames back.</para>
+        /// </summary>
+        public double DustDensity { get; set; } = 1.0;
+
+        /// <summary>
+        /// Overrides the mod palette for this surface's particle and glow layers. Null (the default)
+        /// keeps <see cref="FxTheme"/>'s colours, which is what every ambient surface in the app
+        /// wants. Set it only where the surface has its own authored accent that would otherwise
+        /// clash with the mod's - a program's AccentColor is author-supplied and is the identity the
+        /// rest of that panel is already painted in.
+        /// </summary>
+        public System.Windows.Media.Color? Tint { get; set; }
     }
 
     /// <summary>
@@ -263,6 +282,17 @@ namespace ConditioningControlPanel.Controls
                 _glow = ToSk(FxTheme.GlowColor);
                 _flash = ToSk(FxTheme.FlashTintColor);
                 _mistAlpha = (float)Math.Clamp(FxTheme.MistOpacity, 0.0, 1.0);
+
+                // A surface with its own authored accent overrides the mod palette for the two
+                // layers that read as "this thing's colour" - the particles and the glow. Mist and
+                // flash stay the mod's, so the surface still sits inside the app's theme rather
+                // than becoming a coloured hole in it.
+                if (_config.Tint is { } tint)
+                {
+                    var accent = new SKColor(tint.R, tint.G, tint.B);
+                    _particle = accent;
+                    _glow = accent;
+                }
 
                 _mistTint?.Dispose(); _mistTint = SKColorFilter.CreateBlendMode(_mist, SKBlendMode.Modulate);
                 _particleTint?.Dispose(); _particleTint = SKColorFilter.CreateBlendMode(_particle, SKBlendMode.Modulate);
@@ -499,8 +529,17 @@ namespace ConditioningControlPanel.Controls
             if ((_config.Layers & AmbientFxLayers.DustField) == 0 || _fogOnly) return;
 
             _dustT += dt;
+            // The surface's own density share of whatever the governor is currently allowing. Never
+            // above the live budget: this can only ever spend less than the tier permits.
+            var density = Math.Clamp(_config.DustDensity, 0.0, 1.0);
+            var target = Math.Min((int)Math.Round(_liveBudget * density), _dust.Length);
+
+            // Shrink immediately when the density drops (a program cooling off between days), so the
+            // field thins out on the next tick instead of waiting for natural expiry.
+            if (_dustN > target) _dustN = Math.Max(0, target);
+
             // Refill slowly so the field breathes rather than blinking back in all at once.
-            while (_dustN < Math.Min(_liveBudget, _dust.Length) && _dustT > 0.12f)
+            while (_dustN < target && _dustT > 0.12f)
             {
                 _dustT -= 0.12f;
                 float life = 5f + (float)_rng.NextDouble() * 9f;
