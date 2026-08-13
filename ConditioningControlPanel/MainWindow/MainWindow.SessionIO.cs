@@ -147,62 +147,86 @@ namespace ConditioningControlPanel
             // Show the "Your Sessions" header
             PresetsTab.TxtCustomSessionsHeader.Visibility = Visibility.Visible;
 
+            // Geometry and colour come from SdSessionRow in PresetsTabView.xaml (Session Door
+            // Overhaul, 2026-08-13) so a custom row is indistinguishable from a built-in one and
+            // re-tints with the active mod. Hover is the style's trigger: do NOT assign BorderBrush
+            // as a local value here, it would outrank the trigger and kill the hover.
             var border = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(16, 14, 16, 14),
-                Margin = new Thickness(0, 0, 0, 8),
-                Cursor = System.Windows.Input.Cursors.Hand,
                 Tag = session.Id
             };
+            var rowStyle = TryFindTabStyle("SdSessionRow");
+            if (rowStyle != null) border.Style = rowStyle;
+            else
+            {
+                border.Background = Application.Current.Resources["SurfaceBgBrush"] as Brush;
+                border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as Brush;
+                border.BorderThickness = new Thickness(1);
+                border.CornerRadius = new CornerRadius(12);
+                border.Padding = new Thickness(13, 11, 13, 11);
+                border.Margin = new Thickness(0, 0, 0, 7);
+                border.Cursor = System.Windows.Input.Cursors.Hand;
+            }
 
-            // Style with border
-            border.SetValue(Border.BorderBrushProperty, Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96)));
-            border.SetValue(Border.BorderThicknessProperty, new Thickness(2));
-
-            border.MouseEnter += (s, e) => border.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
-            border.MouseLeave += (s, e) => border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             border.MouseLeftButtonUp += SessionCard_Click;
             PrepareSessionRowFx(border);
 
             var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // Left side: Session info
-            var infoPanel = new StackPanel();
-            Grid.SetColumn(infoPanel, 0);
+            // Art plate, carrying the session's own glyph - the same 52x38 thumb the four built-in
+            // rows have, so the list does not step where the custom rows start.
+            var thumb = new Border();
+            var thumbStyle = TryFindTabStyle("SdRowThumb");
+            if (thumbStyle != null) thumb.Style = thumbStyle;
+            else
+            {
+                thumb.Width = 52; thumb.Height = 38;
+                thumb.CornerRadius = new CornerRadius(8);
+                thumb.Background = Application.Current.Resources["PanelBgBrush"] as Brush;
+                thumb.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as Brush;
+                thumb.BorderThickness = new Thickness(1);
+                thumb.Margin = new Thickness(0, 0, 12, 0);
+                thumb.VerticalAlignment = VerticalAlignment.Center;
+            }
+            thumb.Child = new Helpers.EmojiTextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon,
+                FontSize = 17,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(thumb, 0);
+            grid.Children.Add(thumb);
+
+            // Middle: session info
+            var infoPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(infoPanel, 1);
 
             var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
 
-            var nameText = new TextBlock
+            // The glyph moved to the thumb, so the title is the name alone.
+            var nameText = new Helpers.EmojiTextBlock
             {
-                Text = $"{session.Icon} {session.GetModeAwareName()}",
-                Foreground = new SolidColorBrush(Colors.White),
+                Text = session.GetModeAwareName(),
+                Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? new SolidColorBrush(Colors.White),
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 15
+                FontSize = 14.5,
+                VerticalAlignment = VerticalAlignment.Center
             };
             headerPanel.Children.Add(nameText);
 
-            // Duration badge
-            var durationBadge = new Border
-            {
-                Background = FindResource("PinkBrush") as SolidColorBrush,
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(8, 3, 8, 3),
-                Margin = new Thickness(10, 0, 0, 0)
-            };
-            durationBadge.Child = new TextBlock
-            {
-                Text = $"{session.DurationMinutes} MIN",
-                Foreground = new SolidColorBrush(Colors.White),
-                FontSize = 10,
-                FontWeight = FontWeights.Bold
-            };
-            headerPanel.Children.Add(durationBadge);
+            // Duration / difficulty / CUSTOM pills, in the shared SdPill shape so a custom row's
+            // pills line up with a built-in row's. The difficulty palette stays LITERAL on purpose:
+            // it encodes difficulty, not brand, and following the mod accent would paint HARD and
+            // EASY the same colour on a drone build.
+            headerPanel.Children.Add(MakeSessionPill(
+                $"{session.DurationMinutes} MIN",
+                Application.Current.Resources["PinkBrush"] as Brush,
+                new SolidColorBrush(Colors.White)));
 
-            // Difficulty badge
             var (diffBg, diffFg) = session.Difficulty switch
             {
                 Models.SessionDifficulty.Easy => ("#2A3A2A", "#90EE90"),
@@ -211,38 +235,15 @@ namespace ConditioningControlPanel
                 Models.SessionDifficulty.Extreme => ("#4A2A2A", "#FF6347"),
                 _ => ("#2A3A2A", "#90EE90")
             };
-            var diffBadge = new Border
-            {
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffBg)),
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(8, 3, 8, 3),
-                Margin = new Thickness(6, 0, 0, 0)
-            };
-            diffBadge.Child = new TextBlock
-            {
-                Text = session.GetDifficultyText(),
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffFg)),
-                FontSize = 10,
-                FontWeight = FontWeights.Bold
-            };
-            headerPanel.Children.Add(diffBadge);
+            headerPanel.Children.Add(MakeSessionPill(
+                session.GetDifficultyText(),
+                new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffBg)),
+                new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffFg))));
 
-            // Custom badge
-            var customBadge = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(106, 90, 205)), // Purple
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(8, 3, 8, 3),
-                Margin = new Thickness(6, 0, 0, 0)
-            };
-            customBadge.Child = new TextBlock
-            {
-                Text = "CUSTOM",
-                Foreground = new SolidColorBrush(Colors.White),
-                FontSize = 10,
-                FontWeight = FontWeights.Bold
-            };
-            headerPanel.Children.Add(customBadge);
+            headerPanel.Children.Add(MakeSessionPill(
+                "CUSTOM",
+                Application.Current.Resources["NeonPurpleTransparent20Brush"] as Brush,
+                Application.Current.Resources["NeonPurpleBrush"] as Brush));
 
             // Catalogue share status badge (pending/approved/rejected), if shared.
             var sessKey = string.IsNullOrEmpty(session.SourceFilePath) ? null : CanonicalCataloguePathKey(session.SourceFilePath);
@@ -252,15 +253,17 @@ namespace ConditioningControlPanel
 
             infoPanel.Children.Add(headerPanel);
 
-            // Description
+            // Description. Trimming is the TextBlock's job now - the old code hand-cut the string
+            // at 60 chars and appended "...", which cut mid-word and mid-surrogate-pair.
             var descText = new TextBlock
             {
                 Text = string.IsNullOrEmpty(session.Description)
-                    ? "Custom session"
-                    : session.GetModeAwareDescription().Split('\n')[0].Substring(0, Math.Min(60, session.GetModeAwareDescription().Split('\n')[0].Length)) + "...",
-                Foreground = new SolidColorBrush(Color.FromRgb(160, 160, 160)),
-                FontSize = 13,
-                Margin = new Thickness(0, 6, 0, 0)
+                    ? Loc.Get("label_custom_session")
+                    : session.GetModeAwareDescription().Split('\n')[0],
+                Foreground = Application.Current.Resources["TextMutedBrush"] as Brush,
+                FontSize = 12,
+                Margin = new Thickness(0, 4, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
             };
             infoPanel.Children.Add(descText);
 
@@ -272,12 +275,12 @@ namespace ConditioningControlPanel
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(buttonPanel, 1);
+            Grid.SetColumn(buttonPanel, 2);
 
-            var editBtn = CreateSessionActionButton("✏", "Edit Session", session.Id, SessionBtn_Edit);
-            var exportBtn = CreateSessionActionButton("📤", Loc.Get("tooltip_export_session"), session.Id, SessionBtn_Export);
+            var editBtn = CreateSessionActionButton("✎", Loc.Get("tooltip_edit_session"), session.Id, SessionBtn_Edit);
+            var exportBtn = CreateSessionActionButton("↗", Loc.Get("tooltip_export_session"), session.Id, SessionBtn_Export);
             var shareBtn = CreateSessionActionButton("☁", Loc.Get("tooltip_share_to_catalogue"), session.Id, SessionBtn_Share);
-            var deleteBtn = CreateSessionDeleteButton("🗑", "Delete Session", session.Id, SessionBtn_Delete);
+            var deleteBtn = CreateSessionDeleteButton("🗑", Loc.Get("tooltip_delete_session"), session.Id, SessionBtn_Delete);
 
             buttonPanel.Children.Add(editBtn);
             buttonPanel.Children.Add(exportBtn);
@@ -290,65 +293,74 @@ namespace ConditioningControlPanel
             PresetsTab.CustomSessionsPanel.Children.Add(border);
         }
 
+        /// <summary>
+        /// One badge on a session row, in the tab's shared <c>SdPill</c> shape. Colours are passed
+        /// in rather than looked up: two of the three pills are semantic (difficulty) and must not
+        /// follow the mod accent, and the caller is the only thing that knows which is which.
+        /// </summary>
+        private Border MakeSessionPill(string text, Brush? background, Brush? foreground)
+        {
+            var pill = new Border { Background = background };
+            var pillStyle = TryFindTabStyle("SdPill");
+            if (pillStyle != null) pill.Style = pillStyle;
+            else
+            {
+                pill.CornerRadius = new CornerRadius(5);
+                pill.Padding = new Thickness(8, 2.5, 8, 2.5);
+                pill.Margin = new Thickness(9, 0, 0, 0);
+                pill.VerticalAlignment = VerticalAlignment.Center;
+            }
+            // Background is assigned as a LOCAL value above, which is exactly right here: SdPill
+            // deliberately sets no Background, so there is no setter to fight.
+            pill.Child = new TextBlock
+            {
+                Text = text,
+                Foreground = foreground,
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold
+            };
+            return pill;
+        }
+
+        /// <summary>
+        /// A glyph button on a custom session row.
+        ///
+        /// <para>Was ~20 lines of hand-built <see cref="FrameworkElementFactory"/> per button,
+        /// twice over, painting #353555 with a pink hover. It is now the tab's <c>SdRowAction</c>
+        /// style, so a custom row's buttons are the same object as a built-in row's and re-tint on
+        /// a mod switch. FrameworkElementFactory is also the obsolete half of the templating API -
+        /// there was no reason to keep two copies of it alive for a rounded rectangle.</para>
+        /// </summary>
         private Button CreateSessionActionButton(string content, string tooltip, string tag, RoutedEventHandler handler)
+            => CreateSessionRowButton(content, tooltip, tag, handler, "SdRowAction");
+
+        /// <summary>Same button, red hover. Destructive actions do not wear the brand colour.</summary>
+        private Button CreateSessionDeleteButton(string content, string tooltip, string tag, RoutedEventHandler handler)
+            => CreateSessionRowButton(content, tooltip, tag, handler, "SdRowActionDanger");
+
+        private Button CreateSessionRowButton(string content, string tooltip, string tag,
+                                              RoutedEventHandler handler, string styleKey)
         {
             var btn = new Button
             {
                 Content = content,
                 ToolTip = tooltip,
-                Tag = tag,
-                Width = 26,
-                Height = 26,
-                Background = new SolidColorBrush(Color.FromRgb(53, 53, 85)),
-                Foreground = new SolidColorBrush(Color.FromRgb(144, 144, 144)),
-                BorderThickness = new Thickness(0),
-                FontSize = 12,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(2, 0, 0, 0)
+                Tag = tag
             };
+            var style = TryFindTabStyle(styleKey);
+            if (style != null) btn.Style = style;
+            else
+            {
+                btn.Width = 28;
+                btn.Height = 28;
+                btn.Background = Brushes.Transparent;
+                btn.Foreground = Application.Current.Resources["TextDimBrush"] as Brush;
+                btn.BorderThickness = new Thickness(0);
+                btn.FontSize = 12.5;
+                btn.Cursor = System.Windows.Input.Cursors.Hand;
+                btn.Margin = new Thickness(3, 0, 0, 0);
+            }
             btn.Click += handler;
-
-            // Create template for rounded corners and hover effect
-            var template = new ControlTemplate(typeof(Button));
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
-            var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
-            contentFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            contentFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-            borderFactory.AppendChild(contentFactory);
-            template.VisualTree = borderFactory;
-
-            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, FindResource("PinkBrush")));
-            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Colors.White)));
-            template.Triggers.Add(hoverTrigger);
-
-            btn.Template = template;
-            return btn;
-        }
-
-        private Button CreateSessionDeleteButton(string content, string tooltip, string tag, RoutedEventHandler handler)
-        {
-            var btn = CreateSessionActionButton(content, tooltip, tag, handler);
-
-            // Update hover to red
-            var template = new ControlTemplate(typeof(Button));
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
-            var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
-            contentFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            contentFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-            borderFactory.AppendChild(contentFactory);
-            template.VisualTree = borderFactory;
-
-            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Color.FromRgb(232, 17, 35))));
-            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Colors.White)));
-            template.Triggers.Add(hoverTrigger);
-
-            btn.Template = template;
             return btn;
         }
 
