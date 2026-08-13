@@ -107,6 +107,24 @@ public static class Program
             log.Log($"data-root override active: {CompositionRoot.DataRootOverrideVariable} -> {resolved} (HARNESS-ONLY isolation seam, SP-057)");
         }
 
+        // SP-064: HARNESS-ONLY entry points REFUSE to run unsealed. The SP-057 seam only
+        // isolates when someone remembers to set it; for flags whose only purpose is
+        // automated evidence capture / failure injection, forgetting must fail loudly HERE
+        // — before the composition root, a window, or any profile write. Everything before
+        // this line is write-free (DebugLogSink is Console.Error/Debug-only). Demo flags,
+        // pre-phase self-checks, and modifiers are NEVER refused (row decree; the residual
+        // hole — a demo flag plus an auto-close modifier makes an unattended run the gate
+        // permits — is named in the task record, not silently closed).
+        if (dataRootOverride is null)
+        {
+            var harnessFlags = HarnessEntryPoints.HarnessFlagsIn(args);
+            if (harnessFlags.Count > 0)
+            {
+                Console.Error.WriteLine(HarnessEntryPoints.RefusalMessage(harnessFlags));
+                return HarnessEntryPoints.RefusalExitCode;
+            }
+        }
+
         // SP-027 slice b5 HARNESS-ONLY failure injection (parsed EARLY — the blocked-route
         // prefix threads into the composition root below; the kill flag rides into App):
         // --dtrh-kill-renderers kills the profile-matched WebView2 children once the

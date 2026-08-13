@@ -67,6 +67,27 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 | `--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion` | ChaosTunnelWindow.cs:164 | WebView2 AdditionalBrowserArguments (one two-option string literal) |
 | `--label=ccp-client` | SecretStores.cs:157 | secret-tool argv label |
 
+## Step 2 — implementation
+
+- `Lifecycle/HarnessEntryPoints.cs`: the ONE registry (39 entries: 8 Harness, 8 Demo,
+  5 SelfCheck, 13 Modifier, 5 NotAStartupFlag), pure `HarnessFlagsIn`,
+  `RefusalExitCode = 3`, `RefusalMessage` (names the flags +
+  `CompositionRoot.DataRootOverrideVariable`).
+- Gate in `Program.Main` immediately after the SP-057 override block, before
+  `new CompositionRoot`: unsealed + any Harness flag → stderr message, `return 3`.
+- `HarnessEntryPointGateTests` (4 facts, pure — no env mutation, no ProcessEnvCollection
+  need): table-driven refusal/allow over the registry, harness-set pinned at the exact
+  eight, message content, unknown-arg tolerance.
+- `HarnessEntryPointGuardTests` (1 fact): every `--flag` literal under client/src
+  classified (file:line violations, never-skip) + stale-registry reverse check + the
+  wiring assertion (gate call after `ActiveDataRootOverride()`, before `new CompositionRoot`).
+- **Guard RED captured:** `evidence/guard-red.txt` — injected `--sp064-red-probe` failed
+  the guard with `Sp064RedProbe.cs:6` named; probe then deleted. The first guard run also
+  bit the registry's own doc comments (quoted `"--..."` placeholders) — reworded; the
+  guard binds its own registry file, as designed.
+- **New exact floor: 897 unit / 35 headless, 0 skipped** (892 + 5 new facts). Interim
+  runs: unit 897/0/0, headless 35/0/0 (`evidence/step2-*.log` + TRX).
+
 ## Step 1 — gate design (consult-checked)
 
 - **Registry (one place):** `client/src/CcpClient.Desktop/Lifecycle/HarnessEntryPoints.cs` —
@@ -124,4 +145,5 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 
 ## Engine plan reviews (Review Level 2 — T-2 heading presence recorded per call)
 
-- Step 1: pending.
+- Step 1: `spine_review_step` — engine-skipped (SP-195: nested reviewer spawn blocked in-worker; the batch engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260813T011635.md`.
+- Step 2: pending call.
