@@ -24,6 +24,9 @@ namespace ConditioningControlPanel
         /// <summary>One-shot guard: the service outlives the tab, so we subscribe exactly once.</summary>
         private bool _programsSubscribed;
 
+        /// <summary>One-shot guard for the app-wide repaint hooks (see EnsureProgramsAppHooks).</summary>
+        private bool _programsAppHooked;
+
         // -----------------------------------------------------------------------------------
         // "New tab" attention pulse
         //
@@ -44,6 +47,13 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StartProgramsTabPulse()
         {
+            // Reduced motion. This is a repeating decorative loop (four cycles, 5.6s) whose only job
+            // is to draw the eye, so it goes with the other ambient clocks rather than with the
+            // interaction ones - the announcement is not lost either way, because the NEW state is
+            // also carried by the rail entry itself. Gated before the door-header escalation on
+            // purpose: that fallback is the same loop one level up.
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+
             // Phase 1 moved BtnPrograms into DoorPanelYou, a ClipToBounds panel parked at Height 0
             // unless the You door is the open one - and the rail opens on Home, so on a first launch
             // this scale would play entirely inside the clip. When the owning door is shut the
@@ -61,6 +71,7 @@ namespace ConditioningControlPanel
                 RepeatBehavior = new RepeatBehavior(4),
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
             };
+            Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
             anim.Completed += (_, _) =>
             {
                 _programsPulseRunning = false;
@@ -101,6 +112,10 @@ namespace ConditioningControlPanel
 
         private void EnsureProgramsSubscribed()
         {
+            // Deliberately first, and outside the service null check below: both of these fire
+            // whether or not App.Programs came up.
+            EnsureProgramsAppHooks();
+
             if (_programsSubscribed) return;
             var svc = App.Programs;
             if (svc == null) return;
@@ -109,6 +124,41 @@ namespace ConditioningControlPanel
             svc.ProgramLapsed += OnProgramLapsed;
             svc.ProgramGraduated += OnProgramGraduated;
             _programsSubscribed = true;
+        }
+
+        /// <summary>
+        /// The two app-wide signals that invalidate everything this tab painted, hooked exactly once.
+        ///
+        /// <para>ModChanged: every image on this surface - the run sigil, the hero plate, the layer
+        /// and task icons, the browse crests and the Dashboard banner - resolves through
+        /// <see cref="Services.ModResourceResolver"/>, whose cache is keyed <c>{ActiveModId}:{path}</c>.
+        /// The cache is cleared before ModChanged is raised, so a repaint here is what actually
+        /// re-resolves it; without one, switching mods from the top bar leaves the whole Programs
+        /// surface wearing the previous mod's art, because a user already sitting on this tab gets no
+        /// Loaded, no tab change and no visibility change. Same contract (and the same reasoning) as
+        /// RefreshProfileStatBadges in MainWindow.ProfileCard.cs.</para>
+        ///
+        /// <para>LanguageChanged: the view's <c>{loc:Str}</c> bindings re-translate themselves, but
+        /// every string this file sets is a one-shot <c>Loc.Get</c> on a plain property - so without
+        /// this the tab sits half-translated until something else happens to rebuild it.</para>
+        ///
+        /// <para>Both go through <see cref="MarshalProgramRefresh"/>, which is dispatcher-marshalled
+        /// and bails once shutdown has started.</para>
+        /// </summary>
+        private void EnsureProgramsAppHooks()
+        {
+            if (_programsAppHooked) return;
+            _programsAppHooked = true;
+
+            try
+            {
+                if (App.Mods != null) App.Mods.ModChanged += (_, _) => MarshalProgramRefresh();
+                LocalizationManager.Instance.LanguageChanged += (_, _) => MarshalProgramRefresh();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Programs tab app-wide repaint hooks failed");
+            }
         }
 
         private void OnProgramTodayChanged(object? sender, EventArgs e) => MarshalProgramRefresh();
@@ -171,6 +221,61 @@ namespace ConditioningControlPanel
         }
 
         private static bool ProgramHasPremium => App.Patreon?.HasPremiumAccess == true;
+
+        /// <summary>
+        /// Text colour for a chip whose BACKGROUND is the program accent - the layer strip's NEW
+        /// pill and the task card's done tick.
+        ///
+        /// Both were authored with a near-white foreground against an accent fill, which is fine for
+        /// the shipped accents and unreadable the moment a mod or a third-party program picks a pale
+        /// one: white on #F8E9C4 is white on white. Sixteen accents are already user-supplied strings
+        /// (ProgramDefinition.AccentColor), so this is decided from the colour rather than assumed.
+        ///
+        /// WCAG relative luminance - Rec. 709 coefficients over LINEARISED channels, not over the
+        /// raw bytes. The difference decides the one case that matters here: the app's own
+        /// #FF69B4 measures 0.56 on raw bytes and 0.40 linearised, so the naive form would have
+        /// flipped the shipped pink to dark ink and quietly restyled every chip in the feature. The
+        /// 0.6 split is deliberately well above that and below cream/gold (0.82 / 0.70), which are
+        /// the accents where the light label genuinely disappears: this rescues invisible text, it
+        /// does not chase a WCAG contrast target.
+        /// </summary>
+        private static Brush ProgramContrastForeground(Brush background)
+        {
+            var light = ProgramThemeBrush("TextLightBrush", Brushes.White);
+
+            try
+            {
+                if (background is not SolidColorBrush solid) return light;
+
+                var c = solid.Color;
+                var luminance = 0.2126 * SrgbToLinear(c.R)
+                              + 0.7152 * SrgbToLinear(c.G)
+                              + 0.0722 * SrgbToLinear(c.B);
+                if (luminance <= 0.6) return light;
+
+                // Deliberately the panel's own darkest surface rather than pure black: the chips sit
+                // on a themed card and a hard #000 reads as a hole punched in it.
+                return ProgramThemeBrush("DarkerBgBrush", Brushes.Black);
+            }
+            catch { /* a contrast pick failing must never break the tab */ }
+
+            return light;
+        }
+
+        /// <summary>One sRGB channel, un-gamma'd. The sibling of the luminance sum above.</summary>
+        private static double SrgbToLinear(byte channel)
+        {
+            var v = channel / 255.0;
+            return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+
+        /// <summary>
+        /// Identity of the run currently on screen: program plus attempt. Every one-shot celebration
+        /// key hangs off this, because "day 3" alone is the same string on attempt 2 and on the next
+        /// program entirely.
+        /// </summary>
+        private static string ProgramRunKey(ProgramEnrollment enrollment) =>
+            $"{enrollment.ProgramId}:{enrollment.AttemptNumber}";
 
         /// <summary>
         /// Horizontal accent wash for the rail's completed segment. Derived from the program accent
@@ -387,59 +492,89 @@ namespace ConditioningControlPanel
             try
             {
                 EnsureProgramsSubscribed();
+                ResetProgramRunPopsIfRunChanged();
 
                 var tab = ProgramsTab;
                 if (tab == null) return;
 
                 EnsureProgramsFxHooked(tab);
 
-                // Remember whether the run view was already on screen: the entrance animation
-                // plays on its first reveal only, never on the once-a-second event refreshes.
-                var runWasVisible = tab.ProgramsRunPanel.Visibility == Visibility.Visible;
-
-                tab.ProgramsBrowsePanel.Visibility = Visibility.Collapsed;
-                tab.ProgramsRunPanel.Visibility = Visibility.Collapsed;
-                tab.ProgramsLapsedPanel.Visibility = Visibility.Collapsed;
-                tab.ProgramsGraduatedPanel.Visibility = Visibility.Collapsed;
-
-                var svc = App.Programs;
-                var enrollment = svc?.ActiveEnrollment;
-                var program = svc?.ActiveProgram;
-
-                if (svc == null || enrollment == null || program == null ||
-                    enrollment.State == ProgramEnrollmentState.Withdrawn)
+                // A verifier credit raises TodayChanged, and on a busy session that is ~90 events.
+                // Each one used to run the whole tab build - three ItemsSource assignments plus the
+                // day rail, whose today node carries a Forever storyboard that was then restarted on
+                // a container about to be thrown away - for a surface nobody was looking at, which is
+                // exactly what UpdateProgramSessionRow's own "no list rebuilds" rule exists to stop.
+                // Behind a hidden tab we remember that it is stale instead, and the visibility hook
+                // flushes it on the way in. The Dashboard's Today card is a handful of property
+                // writes on a card that IS on screen, so it is refreshed either way.
+                if (!tab.IsVisible)
                 {
-                    BuildProgramBrowseList();
-                    tab.ProgramsBrowsePanel.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    switch (enrollment.State)
-                    {
-                        case ProgramEnrollmentState.Lapsed:
-                            BuildProgramLapsedPanel(program, enrollment);
-                            tab.ProgramsLapsedPanel.Visibility = Visibility.Visible;
-                            break;
-
-                        case ProgramEnrollmentState.Graduated:
-                            BuildProgramGraduatedPanel(program, enrollment);
-                            tab.ProgramsGraduatedPanel.Visibility = Visibility.Visible;
-                            break;
-
-                        default:
-                            BuildProgramRunPanel(program, enrollment);
-                            tab.ProgramsRunPanel.Visibility = Visibility.Visible;
-                            if (!runWasVisible && tab.IsVisible) StartProgramRunEntrance(tab);
-                            break;
-                    }
+                    _programsRefreshPending = true;
+                    RefreshProgramTodayCard();
+                    return;
                 }
 
+                _programsRefreshPending = false;
+                RebuildProgramsTab(tab);
                 RefreshProgramTodayCard();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "RefreshProgramsUI failed");
             }
+        }
+
+        /// <summary>
+        /// Picks the state panel, builds it, and reveals it.
+        ///
+        /// <para>The four panels' visibility is applied in a <c>finally</c>, and the choice is made
+        /// before a single control is touched. It used to collapse all four up front and reveal the
+        /// chosen one at the end of the build, with a catch that only logged - so ANY throw inside a
+        /// build (a definition with a duplicate DayIndex, a bad override, a missing template) left the
+        /// whole tab a blank sheet. Definitions are validated at enroll time only and enrollments
+        /// persist nothing but the program id, so a definition that changed under a live enrollment is
+        /// a real path into that state. A half-dressed panel is recoverable; an empty tab reads as the
+        /// feature having been removed.</para>
+        /// </summary>
+        private void RebuildProgramsTab(ProgramsTabView tab)
+        {
+            // Remember whether the run view was already on screen: the entrance animation plays on
+            // its first reveal only, never on the once-a-second event refreshes.
+            var runWasVisible = tab.ProgramsRunPanel.Visibility == Visibility.Visible;
+
+            var svc = App.Programs;
+            var enrollment = svc?.ActiveEnrollment;
+            var program = svc?.ActiveProgram;
+
+            // Four null checks and an enum - nothing here can throw, which is what lets the reveal
+            // below be unconditional.
+            var browse = svc == null || enrollment == null || program == null ||
+                         enrollment.State == ProgramEnrollmentState.Withdrawn;
+            var state = browse ? (ProgramEnrollmentState?)null : enrollment!.State;
+            var lapsed = state == ProgramEnrollmentState.Lapsed;
+            var graduated = state == ProgramEnrollmentState.Graduated;
+            var run = !browse && !lapsed && !graduated;
+
+            try
+            {
+                if (browse) BuildProgramBrowseList();
+                else if (lapsed) BuildProgramLapsedPanel(program!, enrollment!);
+                else if (graduated) BuildProgramGraduatedPanel(program!, enrollment!);
+                else BuildProgramRunPanel(program!, enrollment!);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Programs tab build failed for {Program}", program?.Id ?? "(browse)");
+            }
+            finally
+            {
+                tab.ProgramsBrowsePanel.Visibility = browse ? Visibility.Visible : Visibility.Collapsed;
+                tab.ProgramsLapsedPanel.Visibility = lapsed ? Visibility.Visible : Visibility.Collapsed;
+                tab.ProgramsGraduatedPanel.Visibility = graduated ? Visibility.Visible : Visibility.Collapsed;
+                tab.ProgramsRunPanel.Visibility = run ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (run && !runWasVisible && tab.IsVisible) StartProgramRunEntrance(tab);
         }
 
         // -----------------------------------------------------------------------------------
@@ -566,12 +701,19 @@ namespace ConditioningControlPanel
                 ApplyProgramArtMask(tab.RunSigil, tab.RunSigilMask, sigil);
                 tab.RunSigil.Fill = accent;
                 tab.RunSigilGlow.Fill = ProgramRadialGlowBrush(accent, 150);
+                tab.RunSigilBox.Visibility = Visibility.Visible;
                 tab.RunSigilHost.Visibility = Visibility.Visible;
                 tab.RunSigilGlow.Visibility = Visibility.Visible;
                 tab.RunAccentBar.Visibility = Visibility.Collapsed;
             }
             else
             {
+                // The 84x84 WRAPPER goes too, not just its two children: a Collapsed child inside a
+                // visible fixed-size Grid still measures 84, so the header kept reserving a 102px
+                // identity column (84 + the 18px gutter) for a 4px accent bar. Four of the five
+                // shipped programs have no sigil_*.png, and ProgramArt.Sigil has no fallback, so this
+                // is the common case rather than the edge one.
+                tab.RunSigilBox.Visibility = Visibility.Collapsed;
                 tab.RunSigilHost.Visibility = Visibility.Collapsed;
                 tab.RunSigilGlow.Visibility = Visibility.Collapsed;
                 tab.RunAccentBar.Visibility = Visibility.Visible;
@@ -634,8 +776,17 @@ namespace ConditioningControlPanel
 
             // One snapshot of the day objects: GetDay walks AllDays per call, and milestone
             // dressing needs a lookup per node.
-            var daysByIndex = program.AllDays.ToDictionary(d => d.DayIndex);
+            //
+            // GroupBy/First, not ToDictionary: a definition carrying the same DayIndex twice is only
+            // ever caught by ProgramDefinition.Validate at ENROLL time, and an enrollment persists
+            // nothing but the program id - so a mod (or a shipped definition edited under a live run)
+            // can hand this an ArgumentException, which used to take the whole tab down with it.
+            // First wins, exactly as GetDay's own FirstOrDefault does.
+            var daysByIndex = program.AllDays
+                .GroupBy(d => d.DayIndex)
+                .ToDictionary(g => g.Key, g => g.First());
             var glowBrush = ProgramRadialGlowBrush(accent, 170);
+            var breathingAllowed = Services.MotionFx.AllowAmbientLoops;
 
             for (int i = 1; i <= program.LengthDays; i++)
             {
@@ -668,6 +819,13 @@ namespace ConditioningControlPanel
                     pip.IsCurrent = true;
                     pip.GlowBrush = glowBrush;
                     pip.GlowVisibility = Visibility.Visible;
+
+                    // The halo's BREATHING is a Forever/AutoReverse storyboard in the item template,
+                    // fired by a DataTrigger on this flag rather than on IsCurrent - which is what
+                    // lets the reduced-motion gate actually stop the clock instead of merely hiding
+                    // it. Off, today's node keeps the halo, statically. Read at build time, so a
+                    // motion-setting change is honoured on the next rebuild.
+                    pip.Breathe = breathingAllowed;
                     tip = Loc.GetF("programs_pip_today", i);
                 }
                 else if (record?.DayCompleted == true)
@@ -810,9 +968,11 @@ namespace ConditioningControlPanel
             // Pop the banner once per day, the moment the day flips to done. The field remembers
             // the popped day even when the tab is hidden, so backgrounded completions don't replay
             // the pop on the next visit - they just show the banner already settled.
-            if (record.DayCompleted && _programDayCompletePopped != enrollment.CurrentDay)
+            var runKey = ProgramRunKey(enrollment);
+            var dayKey = $"{runKey}:{enrollment.CurrentDay}";
+            if (record.DayCompleted && !string.Equals(_programDayCompletePopped, dayKey, StringComparison.Ordinal))
             {
-                _programDayCompletePopped = enrollment.CurrentDay;
+                _programDayCompletePopped = dayKey;
                 if (tab.IsVisible)
                 {
                     PopProgramScale(tab.TodayCompleteBannerScale);
@@ -858,14 +1018,32 @@ namespace ConditioningControlPanel
             // --- Tasks ---
             var items = new List<ProgramTaskItem>();
             var hasRitual = false;
-            var completedTasks = 0;
             var glassBrush = ProgramThemeBrush("GlassBorderBrush", Brushes.Gray);
+
+            // The pill counts what the DAY counts. ProgramService.RequiredTasks - which is what
+            // CheckDayCompletion walks and what the Dashboard's Today card already reports against -
+            // drops Optional tasks and premium tasks the user cannot verify. Counting every card
+            // instead left the tab stuck at "1 of 2 done" on a day the Dashboard called finished.
+            // Optional and blocked cards are still SHOWN; they are annotated onto the end of the pill
+            // rather than folded into the fraction.
+            var requiredTasks = 0;
+            var completedRequired = 0;
+            var optionalTasks = 0;
+            var blockedTasks = 0;
+            var doneChipForeground = ProgramContrastForeground(accent);
 
             foreach (var task in day.Tasks)
             {
                 var complete = svc != null && svc.IsTaskComplete(record, task);
-                if (complete) completedTasks++;
                 var blocked = svc != null && svc.IsTaskBlocked(task);
+
+                if (blocked) blockedTasks++;
+                else if (task.Optional) optionalTasks++;
+                else
+                {
+                    requiredTasks++;
+                    if (complete) completedRequired++;
+                }
                 var isRitual = task.Kind == ProgramTaskKind.Ritual;
                 if (isRitual) hasRitual = true;
 
@@ -886,13 +1064,19 @@ namespace ConditioningControlPanel
                     RowOpacity = blocked ? 0.5 : 1.0,
                     AccentBrush = accent,
                     CardBorderBrush = complete ? accent : glassBrush,
-                    DoneChipVisibility = complete ? Visibility.Visible : Visibility.Collapsed
+                    DoneChipVisibility = complete ? Visibility.Visible : Visibility.Collapsed,
+                    DoneChipForeground = doneChipForeground
                 };
 
                 // One-shot completion pop: JustCompleted is set only when this exact task was seen
                 // incomplete on a previous build of this same day. The very first paint of an
                 // already-done day therefore renders settled, not celebrating.
-                var seenKey = $"{enrollment.CurrentDay}:{task.Id}";
+                //
+                // Keyed on the RUN, not on the bare day index: task "mantra" of day 3 is a different
+                // thing on attempt 2, and a different thing again on the next program. The set is
+                // also cleared whenever that run identity changes, so it cannot grow for the life of
+                // the process.
+                var seenKey = $"{runKey}:{enrollment.CurrentDay}:{task.Id}";
                 if (complete)
                 {
                     if (_programTasksSeenIncomplete.Remove(seenKey)) item.JustCompleted = true;
@@ -965,13 +1149,24 @@ namespace ConditioningControlPanel
             // than overflowing the grid (see the note in ProgramsTabView.xaml).
             tab.TaskListColumn.MaxWidth = Math.Clamp(items.Count, 1, 3) * 370;
 
-            if (items.Count > 0)
+            // The fraction is required-only, so it reaches "n of n" exactly when the day does. The
+            // cards it leaves out are named after it rather than hidden - and named with the same
+            // keys their own badges carry, because this file may not add localisation keys.
+            if (requiredTasks > 0)
             {
-                tab.TxtTodayTasksDone.Text = Loc.GetF("programs_tasks_done_count", completedTasks, items.Count);
+                var pill = Loc.GetF("programs_tasks_done_count", completedRequired, requiredTasks);
+                if (optionalTasks > 0) pill += $"  ·  {optionalTasks} {Loc.Get("programs_task_optional")}";
+                if (blockedTasks > 0) pill += $"  ·  {blockedTasks} {Loc.Get("btn_program_locked")}";
+
+                tab.TxtTodayTasksDone.Text = pill;
+                tab.TodayTasksDonePill.ToolTip = blockedTasks > 0 ? Loc.Get("programs_locked_hint") : null;
                 tab.TodayTasksDonePill.Visibility = Visibility.Visible;
             }
             else
             {
+                // Nothing is required today (every card optional or locked): "0 of 0 done" is not a
+                // sentence, and each card already carries its own badge saying which it is.
+                tab.TodayTasksDonePill.ToolTip = null;
                 tab.TodayTasksDonePill.Visibility = Visibility.Collapsed;
             }
 
@@ -1012,6 +1207,11 @@ namespace ConditioningControlPanel
             var glassBrush = ProgramThemeBrush("GlassBorderBrush", Brushes.Gray);
             var newTip = Loc.Get("programs_layer_new_tip");
 
+            // The NEW pill is accent-FILLED, so its text cannot be a fixed near-white: a pale
+            // program or mod accent renders it white on white. Decided from the accent's luminance,
+            // once per build (see ProgramContrastForeground).
+            var newPillForeground = ProgramContrastForeground(accent);
+
             var chips = new List<ProgramLayerChip>();
 
             foreach (var (isOn, labelKey, iconPath) in ProgramLayerCatalog)
@@ -1027,6 +1227,7 @@ namespace ConditioningControlPanel
                     AccentBrush = accent,
                     LabelBrush = isNew ? lightBrush : mutedBrush,
                     BorderBrush = isNew ? accent : glassBrush,
+                    NewForeground = newPillForeground,
                     NewVisibility = isNew ? Visibility.Visible : Visibility.Collapsed,
                     Tip = isNew ? $"{label} - {newTip}" : label
                 };
@@ -1207,6 +1408,17 @@ namespace ConditioningControlPanel
                     tab.TodaySessionProgressRow.Visibility = Visibility.Collapsed;
                     tab.TxtTodaySessionProgress.Visibility = Visibility.Collapsed;
                     StopProgramSessionSheen();
+
+                    // Restored HERE too, not only in the block below. This return runs on every tick
+                    // where the service momentarily has no record (a day flip, a withdraw racing a
+                    // tick), and it used to jump the restore entirely - so a Pause that had been
+                    // disabled for a running session stayed disabled, with its "cannot pause now"
+                    // tooltip, until the next full repaint happened to come along.
+                    if (tab.BtnProgramPauseResume != null)
+                    {
+                        tab.BtnProgramPauseResume.ClearValue(UIElement.IsEnabledProperty);
+                        tab.BtnProgramPauseResume.ClearValue(FrameworkElement.ToolTipProperty);
+                    }
                     return;
                 }
 
@@ -1330,15 +1542,51 @@ namespace ConditioningControlPanel
         /// <summary>True while the session-bar sheen loop is running.</summary>
         private bool _programSheenActive;
 
-        /// <summary>Day index whose day-complete banner pop has already played (or been skipped).</summary>
-        private int _programDayCompletePopped = -1;
+        /// <summary>
+        /// "{programId}:{attempt}:{dayIndex}" whose day-complete banner pop has already played (or
+        /// been skipped). A bare day index collided with itself: day 3 of attempt 2, and day 3 of
+        /// whatever program came next, both read as already popped and their celebrations were
+        /// silently skipped.
+        /// </summary>
+        private string? _programDayCompletePopped;
 
         /// <summary>
-        /// "{dayIndex}:{taskId}" for every task that has been BUILT incomplete. A task found
-        /// complete while its key is in here has just flipped, which is the only moment the task
-        /// card's pop storyboard is allowed to fire.
+        /// "{programId}:{attempt}:{dayIndex}:{taskId}" for every task that has been BUILT incomplete.
+        /// A task found complete while its key is in here has just flipped, which is the only moment
+        /// the task card's pop storyboard is allowed to fire. Same key shape as the banner above, and
+        /// for the same reason; cleared with it whenever the run identity changes, which is also what
+        /// stops it growing for the life of the process.
         /// </summary>
         private readonly HashSet<string> _programTasksSeenIncomplete = new();
+
+        /// <summary>The run identity ("{programId}:{attempt}") the two sets above belong to.</summary>
+        private string? _programRunKeySeen;
+
+        /// <summary>
+        /// Set when a refresh arrived while the tab was hidden; flushed by the visibility hook.
+        /// </summary>
+        private bool _programsRefreshPending;
+
+        /// <summary>
+        /// Drops the one-shot celebration bookkeeping when the (program, attempt) pair changes -
+        /// enroll, restart after a lapse, withdraw, or a mod swapping the library out underneath.
+        /// Called from every refresh, which is one string comparison, rather than from the handful of
+        /// handlers that happen to know a run ended.
+        /// </summary>
+        private void ResetProgramRunPopsIfRunChanged()
+        {
+            try
+            {
+                var enrollment = App.Programs?.ActiveEnrollment;
+                var key = enrollment == null ? null : ProgramRunKey(enrollment);
+                if (string.Equals(key, _programRunKeySeen, StringComparison.Ordinal)) return;
+
+                _programRunKeySeen = key;
+                _programDayCompletePopped = null;
+                _programTasksSeenIncomplete.Clear();
+            }
+            catch { /* bookkeeping must never break a repaint */ }
+        }
 
         private void EnsureProgramsFxHooked(ProgramsTabView tab)
         {
@@ -1363,6 +1611,17 @@ namespace ConditioningControlPanel
                 {
                     StopProgramSessionSheen();
                     return;
+                }
+
+                // Everything that happened behind the hidden tab was recorded, not painted (see
+                // RefreshProgramsUI). This is the flush - and it also covers the tab's very first
+                // show, because a refresh that ran before the tab was ever visible took the same
+                // early return.
+                if (_programsRefreshPending)
+                {
+                    _programsRefreshPending = false;
+                    RebuildProgramsTab(tab);
+                    RefreshProgramTodayCard();
                 }
 
                 if (tab.ProgramsRunPanel.Visibility == Visibility.Visible) StartProgramRunEntrance(tab);
@@ -1391,6 +1650,20 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Reduced motion. An entrance is INTERACTION motion by the app's own split (MotionFx:
+                // "hover, press, transitions, entrances - off only at Off"), so this is gated on
+                // AllowTransitions rather than on AllowAmbientLoops: at Reduced the tab still slides
+                // in, at Off it simply appears. Snapping the rail fill to its rest value is what
+                // stops "no animation" from also meaning "no fill".
+                if (!Services.MotionFx.AllowTransitions)
+                {
+                    tab.RunHeaderPanel.Opacity = 1;
+                    tab.TodayPanel.Opacity = 1;
+                    tab.RailFillScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    tab.RailFillScale.ScaleX = 1;
+                    return;
+                }
+
                 AnimateProgramPanelIn(tab.RunHeaderPanel, 0);
                 AnimateProgramPanelIn(tab.TodayPanel, 90);
 
@@ -1399,6 +1672,7 @@ namespace ConditioningControlPanel
                     BeginTime = TimeSpan.FromMilliseconds(150),
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                 };
+                Timeline.SetDesiredFrameRate(grow, AmbientFrameRate);
                 tab.RailFillScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
             }
             catch (Exception ex)
@@ -1412,6 +1686,17 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Second gate, because this is also reachable on its own. Same split as the caller:
+                // an entrance is interaction motion, so only Off skips it - and skipping means the
+                // panel is shown at rest, never left at the animation's start value.
+                if (!Services.MotionFx.AllowTransitions)
+                {
+                    panel.BeginAnimation(UIElement.OpacityProperty, null);
+                    panel.Opacity = 1;
+                    panel.RenderTransform = null;
+                    return;
+                }
+
                 var slideTransform = new System.Windows.Media.TranslateTransform(0, 14);
                 panel.RenderTransform = slideTransform;
 
@@ -1444,6 +1729,11 @@ namespace ConditioningControlPanel
         {
             if (_programSheenActive) return;
 
+            // Ambient clock, so it only runs at MotionLevel.Full on a tier that allows ambient
+            // motion - the same gate the Dashboard banner's own sweep asks (MainWindow.ProgramBanner
+            // .cs). The fallback is the bar without a highlight passing over it, which is the bar.
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+
             try
             {
                 if (!tab.SessionBarHost.IsLoaded) return;
@@ -1454,6 +1744,7 @@ namespace ConditioningControlPanel
                 {
                     RepeatBehavior = RepeatBehavior.Forever
                 };
+                Timeline.SetDesiredFrameRate(sweep, AmbientFrameRate);
                 tab.SessionSheen.Opacity = 1; // the gradient itself is translucent
                 tab.SessionSheenSlide.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, sweep);
                 _programSheenActive = true;

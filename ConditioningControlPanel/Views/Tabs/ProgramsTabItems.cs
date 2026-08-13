@@ -88,11 +88,16 @@ namespace ConditioningControlPanel.Views.Tabs
         public double NodeSize { get; set; } = 30;
         public double LabelSize { get; set; } = 11;
 
-        /// <summary>
-        /// Today's node only. Read once by the template's DataTrigger to start the breathing-glow
-        /// storyboard - the carrier never changes after build, so the trigger can never re-fire.
-        /// </summary>
+        /// <summary>Today's node. Drives the node's size/colour treatment only.</summary>
         public bool IsCurrent { get; set; }
+
+        /// <summary>
+        /// Today's node AND motion allowed. Read once by the template's DataTrigger to start the
+        /// breathing-glow storyboard - the carrier never changes after build, so the trigger can
+        /// never re-fire. Separate from <see cref="IsCurrent"/> so the reduced-motion gate stops the
+        /// clock rather than hiding a halo that is still ticking (see BuildProgramDayStrip).
+        /// </summary>
+        public bool Breathe { get; set; }
         public Brush GlowBrush { get; set; } = Brushes.Transparent;
         public Visibility GlowVisibility { get; set; } = Visibility.Collapsed;
 
@@ -156,6 +161,13 @@ namespace ConditioningControlPanel.Views.Tabs
         public Visibility DoneChipVisibility { get; set; } = Visibility.Collapsed;
 
         /// <summary>
+        /// Ink for that ✓, picked from the chip's own accent fill rather than fixed near-white -
+        /// a pale program or mod accent rendered the tick white on white. See
+        /// MainWindow.ProgramsTab.cs / ProgramContrastForeground.
+        /// </summary>
+        public Brush DoneChipForeground { get; set; } = Brushes.White;
+
+        /// <summary>
         /// True only on the rebuild immediately after the task flipped to complete (the code-behind
         /// diffs against a seen-incomplete set), so the template's pop storyboard fires exactly once.
         /// </summary>
@@ -198,6 +210,13 @@ namespace ConditioningControlPanel.Views.Tabs
 
         /// <summary>Fill of the NEW pill. The program accent, resolved in code.</summary>
         public Brush AccentBrush { get; set; } = Brushes.Gray;
+
+        /// <summary>
+        /// Ink for the NEW pill's label, picked from the accent behind it rather than fixed
+        /// near-white - a pale accent rendered the word white on white. See
+        /// MainWindow.ProgramsTab.cs / ProgramContrastForeground.
+        /// </summary>
+        public Brush NewForeground { get; set; } = Brushes.White;
 
         /// <summary>The NEW pill: this layer was not in the previous day's session.</summary>
         public Visibility NewVisibility { get; set; } = Visibility.Collapsed;

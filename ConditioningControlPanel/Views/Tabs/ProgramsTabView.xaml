@@ -280,7 +280,13 @@
                                             HorizontalAlignment="Left" VerticalAlignment="Stretch"
                                             Background="{DynamicResource PinkBrush}"/>
 
-                                    <Grid Width="84" Height="84">
+                                    <!-- Named so code can collapse the WHOLE 84px box, not just its
+                                         two children: a Collapsed child inside a visible fixed-size
+                                         Grid still measures 84, which kept a 102px identity column
+                                         (84 + the 18px gutter) reserved for a 4px accent bar on the
+                                         four of five shipped programs that have no sigil art. -->
+                                    <Grid x:Name="RunSigilBox" x:FieldModifier="internal"
+                                          Width="84" Height="84">
                                         <!-- Soft accent halo behind the sigil chip. Fill is a frozen
                                              radial built from the program accent in code; static, no
                                              animation, just presence. -->
@@ -429,7 +435,12 @@
                                             Background="{DynamicResource SurfaceBgBrush}"
                                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                                         <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="🎁" FontSize="12" VerticalAlignment="Center"
+                                            <!-- FontSize BEFORE Text, deliberately: EmojiTextBlock
+                                                 sizes the inline Twemoji image from FontSize at the
+                                                 moment Text is set, and XAML applies attributes in
+                                                 declaration order - so the other way round the glyph
+                                                 silently renders at the default size instead. -->
+                                            <helpers:EmojiTextBlock FontSize="12" Text="🎁" VerticalAlignment="Center"
                                                                     Margin="0,0,6,0"/>
                                             <TextBlock Text="{loc:Str programs_chapter_reward}"
                                                        Foreground="{DynamicResource TextMutedBrush}"
@@ -500,7 +511,21 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid Width="54" Height="82" HorizontalAlignment="Center">
+                                                <!-- Width is the CELL's, not a fixed 54. The
+                                                     UniformGrid divides the rail by the program
+                                                     length, so at 28 days a cell is ~49px - and a
+                                                     54px item arranged into a 49px slot picks up
+                                                     WPF's automatic layout clip, which sliced the
+                                                     nodes and the 58px today halo flat down both
+                                                     sides. Stretched to the cell there is no
+                                                     overflow and therefore no clip, and the halo is
+                                                     free to bleed the few pixels into its
+                                                     neighbours that a soft radial glow should. Every
+                                                     child inside is centre-aligned, so a short
+                                                     program's much wider cells look exactly as they
+                                                     did. Height stays fixed: it is in step with the
+                                                     62px node area and the track's 28.5 offset. -->
+                                                <Grid Height="82" HorizontalAlignment="Stretch">
                                                     <Grid Height="62" VerticalAlignment="Top">
                                                         <!-- Panel-coloured backing so the track stops at
                                                              every node instead of drawing a line through
@@ -545,10 +570,19 @@
                                                                             VerticalAlignment="Bottom"/>
                                                 </Grid>
                                                 <DataTemplate.Triggers>
-                                                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                    <!-- Breathe, NOT IsCurrent: the carrier ANDs
+                                                         "this is today" with the app's reduced-motion
+                                                         gate (MotionFx.AllowAmbientLoops) so this
+                                                         Forever clock is never started at all under
+                                                         Reduced/Off - today's node then keeps the
+                                                         halo, statically. Frame-capped to the app's
+                                                         ambient rate for the same reason every other
+                                                         idle loop is. -->
+                                                    <DataTrigger Binding="{Binding Breathe}" Value="True">
                                                         <DataTrigger.EnterActions>
                                                             <BeginStoryboard>
-                                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True"
+                                                                            Timeline.DesiredFrameRate="24">
                                                                     <DoubleAnimation Storyboard.TargetName="PipGlow"
                                                                                      Storyboard.TargetProperty="Opacity"
                                                                                      From="0.35" To="0.95" Duration="0:0:1.2">
@@ -713,13 +747,17 @@
                                                                        VerticalAlignment="Center"/>
                                                             <!-- NEW pill: this layer was not in yesterday's
                                                                  session. Accent-filled, so it reads at a
-                                                                 glance without a second colour in the theme. -->
+                                                                 glance without a second colour in the theme.
+                                                                 The label's ink is computed from that fill
+                                                                 in code (NewForeground) - a fixed near-white
+                                                                 disappears entirely on a pale accent, and
+                                                                 accents are author-supplied strings. -->
                                                             <Border CornerRadius="9999" Padding="5,0" Margin="7,0,0,0"
                                                                     VerticalAlignment="Center"
                                                                     Visibility="{Binding NewVisibility}"
                                                                     Background="{Binding AccentBrush}">
                                                                 <TextBlock Text="{loc:Str programs_layer_new}"
-                                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                                           Foreground="{Binding NewForeground}"
                                                                            FontSize="9" FontWeight="Bold"/>
                                                             </Border>
                                                         </StackPanel>
@@ -736,7 +774,8 @@
                                             Background="{DynamicResource SurfaceBgBrush}"
                                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                                         <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="🎁" FontSize="12" VerticalAlignment="Center"
+                                            <!-- FontSize before Text - see the chapter-reward chip. -->
+                                            <helpers:EmojiTextBlock FontSize="12" Text="🎁" VerticalAlignment="Center"
                                                                     Margin="0,0,6,0"/>
                                             <TextBlock Text="{loc:Str programs_day_reward}"
                                                        Foreground="{DynamicResource TextMutedBrush}"
@@ -761,7 +800,8 @@
                                                             ScaleX="1" ScaleY="1"/>
                                         </Border.RenderTransform>
                                         <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="✨" FontSize="14" VerticalAlignment="Center"
+                                            <!-- FontSize before Text - see the chapter-reward chip. -->
+                                            <helpers:EmojiTextBlock FontSize="14" Text="✨" VerticalAlignment="Center"
                                                                     Margin="0,0,8,0"/>
                                             <TextBlock Text="{loc:Str programs_day_complete}"
                                                        Foreground="{DynamicResource PinkBrush}"
@@ -1021,12 +1061,16 @@
                                                         </Border>
                                                     </StackPanel>
 
-                                                    <!-- Done chip, top-right - the battle-pass claim tick. -->
+                                                    <!-- Done chip, top-right - the battle-pass claim tick.
+                                                         Its ink comes from the accent behind it
+                                                         (DoneChipForeground), not from a fixed
+                                                         near-white: a pale program accent rendered the
+                                                         tick white on white. -->
                                                     <Border Grid.Column="2" Width="22" Height="22" CornerRadius="11"
                                                             VerticalAlignment="Top" HorizontalAlignment="Right"
                                                             Visibility="{Binding DoneChipVisibility}"
                                                             Background="{Binding StatusBrush}">
-                                                        <TextBlock Text="✓" Foreground="{DynamicResource TextLightBrush}"
+                                                        <TextBlock Text="✓" Foreground="{Binding DoneChipForeground}"
                                                                    FontSize="12" FontWeight="Bold"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>
