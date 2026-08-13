@@ -25,10 +25,16 @@ namespace ConditioningControlPanel.Controls
     /// the desktop's X-Auth-Token never enters a browser, because the browser is never
     /// in a position to need one.
     ///
-    /// PROTOCOL (§9, exact):
+    /// PROTOCOL (§9 v2, exact):
     ///   host → page   { type: 'spiral:state', devotion_days, stage, relapse_multiplier?,
-    ///                   vat_fill_pct?, lit_station_ids?, reduced_motion?, perf_tier? }
+    ///                   vat_fill_pct?, lit_station_ids?, reduced_motion?, perf_tier?,
+    ///                   descent? }
     ///   page → host   { type: 'spiral:ready' }
+    /// v2 ADDS ONE OPTIONAL FIELD and changes nothing else. `descent` is the server's
+    /// own block, forwarded VERBATIM (DescentBlock.RawJson), and it is present only when
+    /// one exists. Absent is the v1 contract and stays legal in both directions: an old
+    /// embed drops the unknown key, and a new embed against a v1 host simply never sees
+    /// it. See BuildState for why the forward is raw rather than re-authored.
     /// State posted before 'spiral:ready' is QUEUED, not dropped — the canvas's boot and
     /// the descent block's arrival race every launch, and whichever wins, the last state
     /// posted is the state drawn. Note the handshake is 'spiral:ready', NOT the bare
@@ -224,7 +230,11 @@ namespace ConditioningControlPanel.Controls
             if (_disposed) return;
             try
             {
-                var json = JsonConvert.SerializeObject(BuildState(block));
+                // ToString, not JsonConvert.SerializeObject: the state is already a JObject
+                // and the `descent` branch under it is the server's own tokens, so writing
+                // the tree straight out is the one serialisation with nothing in the middle
+                // that could re-shape a value on the way to the wire.
+                var json = BuildState(block).ToString(Formatting.None);
                 if (IsReady && _web?.CoreWebView2 != null)
                 {
                     _web.CoreWebView2.PostWebMessageAsJson(json);
@@ -246,23 +256,71 @@ namespace ConditioningControlPanel.Controls
         /// two host-owned signals the canvas cannot know: how much motion this user
         /// allows, and how much GPU the app currently has to spare.
         ///
-        /// `lit_station_ids` is DELIBERATELY ABSENT. The station registry lives in
+        /// `descent` (v2) IS THE SERVER'S BLOCK, UNTOUCHED. The reader parses a subset —
+        /// devotion, stage, relapse, vat — and drops the rest on the floor, which is why
+        /// the map window drew a naked spiral: day_fill, day_quest, stations, breaks,
+        /// dates and thresholds never left this process. Rather than teach desktop to
+        /// re-author them (three clients, three chances to author them differently), the
+        /// original node is re-emitted byte-faithfully from DescentBlock.RawJson and the
+        /// embed runs its OWN strict validation on it. THE APP AUTHORS NOTHING HERE:
+        /// every number under this key is a number the server stated. Do not "helpfully"
+        /// merge, default or patch a field into it — the moment desktop writes into this
+        /// object, the canvas is drawing a record the server never agreed to.
+        ///
+        /// PRESENCE IS THE CONTRACT, not null-ness. With no block (or a hand-built one
+        /// with no raw), the key is ABSENT — that is v1 exactly, which is what an embed
+        /// deployed before v2 expects. A null-valued `descent` would be a third state
+        /// nobody specified.
+        ///
+        /// `lit_station_ids` remains DELIBERATELY ABSENT. The station registry lives in
         /// cclabs-web (lib/descent/stations.ts); desktop has no copy and must not invent
         /// one — a client-authored list of lit stations is a client deciding what it has
         /// earned. The canvas treats the field as optional and lights nothing without it.
+        /// When `descent` IS present it supersedes the question entirely: the block
+        /// carries the server's own stations, so the canvas resolves what is lit from
+        /// the record instead of from a list this side would have had to make up.
         /// </summary>
-        private static object BuildState(DescentBlock? block)
+        internal static JObject BuildState(DescentBlock? block)
         {
-            return new
+            var state = new JObject
             {
-                type = "spiral:state",
-                devotion_days = block?.DevotionDays ?? 0,
-                stage = block?.Stage?.N ?? 0,
-                relapse_multiplier = block?.Relapse?.Multiplier ?? 1.0,
-                vat_fill_pct = block?.Vat?.FillPct ?? 0.0,
-                reduced_motion = MotionFx.Level != Models.MotionLevel.Full,
-                perf_tier = PerfTier(),
+                ["type"] = "spiral:state",
+                ["devotion_days"] = block?.DevotionDays ?? 0,
+                ["stage"] = block?.Stage?.N ?? 0,
+                ["relapse_multiplier"] = block?.Relapse?.Multiplier ?? 1.0,
+                ["vat_fill_pct"] = block?.Vat?.FillPct ?? 0.0,
+                ["reduced_motion"] = MotionFx.Level != Models.MotionLevel.Full,
+                ["perf_tier"] = PerfTier(),
             };
+
+            // Re-parsed with date coercion OFF for the same reason DescentReader.ParseWire
+            // turns it off: the default rewrites every ISO-8601-shaped STRING into a
+            // DateTime, and re-serialising that emits an invented offset. The whole point
+            // of this field is that what arrives at the canvas is what the server sent,
+            // so the round trip has to be lossless or it is not a verbatim forward.
+            var raw = ParseVerbatim(block?.RawJson);
+            if (raw is not null) state["descent"] = raw;
+
+            return state;
+        }
+
+        /// <summary>Re-parse a stored block with date coercion off. Null on anything unusable.</summary>
+        private static JToken? ParseVerbatim(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                return JsonConvert.DeserializeObject<JToken>(
+                    json, new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+            }
+            catch (Exception ex)
+            {
+                // The block already parsed once to exist at all, so this is unreachable in
+                // practice — and if it ever is reached, the field drops out and the canvas
+                // gets a clean v1 payload rather than a half-forwarded one.
+                App.Logger?.Debug("[Spiral] raw descent re-parse failed: {E}", ex.Message);
+                return null;
+            }
         }
 
         /// <summary>
