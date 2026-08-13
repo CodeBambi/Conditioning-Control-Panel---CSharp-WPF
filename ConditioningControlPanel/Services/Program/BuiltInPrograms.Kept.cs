@@ -205,7 +205,12 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. You hand it over.",
         AccentColor = "#8A0F5E",
         RewardId = "kept_ch1_offering",
+        // The collar half has no surface behind it yet: every collar in the cosmetics registry is a
+        // mod-owned adornment behind its own achievement gate, and minting a new one is art plus a
+        // registry row plus a server entry, none of which this lane owns. It stays as a ledger line;
+        // the half that actually writes something is the session below.
         RewardDescription = "Her collar on your profile, and the day-7 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 1 -------------------------------------------------------------------------
@@ -413,6 +418,21 @@ public static partial class BuiltInPrograms
         AccentColor = "#B01684",
         RewardId = "kept_ch2_ache",
         RewardDescription = "A phrase pack in her words, and the day-14 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
+
+        // "In her words" literally: every line is a key of the Locked manifest's own SubliminalPool
+        // (see BuiltInMods.LockedId), so each one arrives with its linked whisper audio and haptic
+        // pattern rather than as a silent stranger. The chapter's templates run fifteen; the pack is
+        // the six that are about HER, because "a phrase pack" is not "the whole pool".
+        RewardPhrases = new List<string>
+        {
+            "MINE",
+            "SHE HOLDS THE KEY",
+            "ACHE FOR HER",
+            "KEPT AND HAPPY",
+            "STAY LOCKED",
+            "THANK HER"
+        },
         Days = new List<ProgramDay>
         {
             // ---- Day 8 -------------------------------------------------------------------------
@@ -651,7 +671,10 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. It stops being something you do.",
         AccentColor = "#E81CA8",
         RewardId = "kept_ch3_habit",
+        // The avatar-set half is fiction with no client surface: avatar sets ship as mod content,
+        // not as something a program can mint. Ledger line only; the session is the real half.
         RewardDescription = "An avatar set of her, and the day-21 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 15 ------------------------------------------------------------------------
@@ -890,7 +913,10 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. Then it isn't yours to call.",
         AccentColor = "#FF6EC7",
         RewardId = "kept_ch4_decision",
+        // The badge half is real and lands elsewhere: chapter 4 ends on day 28, which is graduation,
+        // and ProgramService.Graduate unlocks GraduationBadgeId ("kept_graduate").
         RewardDescription = "The Kept badge, and the day-28 session unlocked permanently.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 22 ------------------------------------------------------------------------

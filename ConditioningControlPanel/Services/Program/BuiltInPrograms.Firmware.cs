@@ -160,6 +160,17 @@ public static partial class BuiltInPrograms
         AccentColor = "#008F11",
         RewardId = "firmware_module1",
         RewardDescription = "[MODULE INSTALLED] FORMATTED FOR OBEDIENCE. Module retained on restart.",
+
+        // The module name is not decoration: FORMATTED FOR OBEDIENCE is a key of the Dronification
+        // manifest's own SubliminalPool, so "[MODULE INSTALLED]" installs the literal phrase the
+        // line names. Its siblings from the same pool ride with it - the module is the baseline
+        // format, not one string.
+        RewardPhrases = new List<string>
+        {
+            "FORMATTED FOR OBEDIENCE",
+            "FIRMWARE LOCKED",
+            "PROCESS. COMPLY. REPEAT."
+        },
         Days = new List<ProgramDay>
         {
             // ---- Cycle 1 -----------------------------------------------------------------------
@@ -364,6 +375,7 @@ public static partial class BuiltInPrograms
         AccentColor = "#00FF41",
         RewardId = "firmware_module2",
         RewardDescription = "[INSTALL COMPLETE] Cycle 14 retained as a permanent replayable session.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Cycle 8 -----------------------------------------------------------------------

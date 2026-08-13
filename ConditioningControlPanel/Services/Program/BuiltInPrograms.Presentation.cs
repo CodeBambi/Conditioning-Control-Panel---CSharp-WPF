@@ -138,6 +138,10 @@ public static partial class BuiltInPrograms
         Subtitle = "A week of skin, and one photograph you'll want back later",
         AccentColor = "#BB8FCE",
         RewardId = "pr_ch1_banked",
+        // Nothing to file. The ledger already exists and is already the user's: the ritual pages ARE
+        // ProgramDayRecord.RitualPhotos, written as the days were done and kept on disk beside the
+        // roadmap diary. This reward's whole content is the ledger entry saying it is theirs to keep,
+        // which is why it authors neither a session nor a phrase pack.
         RewardDescription = "Banked: the first four pages of your ledger, kept locally, yours to delete whenever you like.",
         Days = new List<ProgramDay>
         {
@@ -349,6 +353,21 @@ public static partial class BuiltInPrograms
         AccentColor = "#9B59B6",
         RewardId = "pr_ch2_banked",
         RewardDescription = "Banked: the full seven-page ledger and a phrase pack, kept locally.",
+
+        // SISSY POOL KEYS, NOT BAMBI ONES. The Sissy manifest is a near-clone of the Bambi one with
+        // the Bambi-prefixed entries renamed - BAMBI SLEEP became DEEP SLEEP, BAMBI FREEZE became
+        // FREEZE, BAMBI UNIFORM LOCK became UNIFORM LOCK - so a pack copy-pasted from the Takeover
+        // file would compile, install, and be six phrases this program's mod has never heard of.
+        // Same warning as PrSoftSubliminals.
+        RewardPhrases = new List<string>
+        {
+            "GOOD GIRL",
+            "BIMBO DOLL",
+            "PRIMPED AND PAMPERED",
+            "UNIFORM LOCK",
+            "FREEZE",
+            "SNAP AND FORGET"
+        },
         Days = new List<ProgramDay>
         {
             // ---- Day 8 - the deload ------------------------------------------------------------

@@ -244,6 +244,23 @@ public class ProgramEnrollment
     /// <summary>Chapters whose reward has already been granted this attempt.</summary>
     public List<string> CompletedChapterIds { get; set; } = new();
 
+    /// <summary>
+    /// Reward id to the moment it was first MATERIALISED - i.e. the moment the session was filed
+    /// and the phrases installed, not merely the moment the id was appended to
+    /// <see cref="BankedRewards"/>.
+    ///
+    /// Two jobs. It is the "granted at" the possessions read model shows, and it is how
+    /// ProgramRewardService tells a first grant from a re-materialisation: a first grant is allowed
+    /// to switch a phrase the user had turned off back ON (the reward line promises it goes live),
+    /// while every later pass may only re-add phrases that are missing entirely. Without the
+    /// distinction, every launch would re-enable phrases the user had deliberately silenced.
+    ///
+    /// Additive and defaulted, so enrollments saved before it existed round-trip unchanged - they
+    /// simply read as "never materialised", which is exactly right for rewards banked back when
+    /// nothing consumed the list.
+    /// </summary>
+    public Dictionary<string, DateTime> RewardGrantedAt { get; set; } = new();
+
     public bool IsActive => State == ProgramEnrollmentState.Active;
 
     public ProgramDayRecord GetOrCreateRecord(int dayIndex, DateTime programDate)

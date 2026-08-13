@@ -147,12 +147,12 @@ public static partial class BuiltInPrograms
         Subtitle = "Two words, over and over, until they stop being words",
         AccentColor = "#FFB6C1",
         RewardId = "tk_ch1_banked",
-        // Softened from "...stay in your subliminal pool for good." Nothing writes them there - the
-        // reward is recorded as an id in enrollment.BankedRewards and no code path adds a phrase to
-        // the user's own pool - and unlike the program's other reward copy that one named a surface
-        // the user can go and open, so it reads as a bug rather than as flavour. "Installed" is the
-        // program's own fiction and stays.
-        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP. Yours from here, and a restart can't take them back.",
+        // The copy was softened once, when nothing wrote the phrases anywhere. ProgramRewardService
+        // now installs RewardPhrases into the user's own subliminal pool, so the line names the pool
+        // again. The two phrases are exactly the two the line names - the chapter's template runs six.
+        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP. "
+                            + "They stay in your subliminal pool, and a restart can't take them back.",
+        RewardPhrases = new List<string> { "GOOD GIRL", "BAMBI SLEEP" },
         Days = new List<ProgramDay>
         {
             // ---- Day 1 -------------------------------------------------------------------------
@@ -365,6 +365,7 @@ public static partial class BuiltInPrograms
         AccentColor = "#FF69B4",
         RewardId = "tk_ch2_banked",
         RewardDescription = "Banked: BIMBO DOLL, SNAP AND FORGET and PRIMPED AND PAMPERED, installed permanently.",
+        RewardPhrases = new List<string> { "BIMBO DOLL", "SNAP AND FORGET", "PRIMPED AND PAMPERED" },
         Days = new List<ProgramDay>
         {
             // ---- Day 8 - the deload ------------------------------------------------------------
@@ -571,7 +572,11 @@ public static partial class BuiltInPrograms
         Subtitle = "The week the program stops waiting for you to start it",
         AccentColor = "#FF1493",
         RewardId = "tk_ch3_banked",
+        // The ambient half needs nothing granted: the ambient layers are unlocked by REACHING
+        // chapter 3, and the days from here on carry their own ProgramAmbient. Only the two phrases
+        // are a possession, so only they are authored here.
         RewardDescription = "Banked: BAMBI FREEZE and BAMBI UNIFORM LOCK, installed permanently, and the ambient layers stay unlocked.",
+        RewardPhrases = new List<string> { "BAMBI FREEZE", "BAMBI UNIFORM LOCK" },
         Days = new List<ProgramDay>
         {
             // ---- Day 15 - the arming ceremony --------------------------------------------------
@@ -807,6 +812,7 @@ public static partial class BuiltInPrograms
         AccentColor = "#FF1493",
         RewardId = "tk_ch4_banked",
         RewardDescription = "Banked: day twenty-eight, unlocked permanently as a replayable session.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 22 - the last deload ------------------------------------------------------

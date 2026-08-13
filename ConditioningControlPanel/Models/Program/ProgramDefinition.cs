@@ -158,6 +158,28 @@ public class ProgramChapter
 
     /// <summary>Identifier of the banked reward, recorded on the enrollment so a restart cannot revoke it.</summary>
     public string? RewardId { get; set; }
+
+    /// <summary>
+    /// The reward files this chapter's LAST day as a real, permanently replayable session in the
+    /// user's own Sessions catalogue (ProgramRewardService does the filing).
+    ///
+    /// Authored on the chapter rather than hard-coded against RewardId so a community program can
+    /// promise the same thing and actually get it. The day is derived - it is always the chapter's
+    /// highest DayIndex - because every reward line in the built-ins names the chapter's final day
+    /// and a second authored number could only ever disagree with the first.
+    /// </summary>
+    public bool RewardSavesFinalSession { get; set; }
+
+    /// <summary>
+    /// Phrases the reward installs permanently into the user's subliminal pool. These must be keys
+    /// of the pool the program's own mod ships (see BuiltInMods) - a phrase that is not a manifest
+    /// key still flashes, but has no linked whisper audio and no haptic pattern, so it lands as a
+    /// silent stranger among the user's own phrases.
+    ///
+    /// Deliberately a SUBSET of the chapter's session templates rather than the whole pool: the
+    /// reward line names two or three phrases, and installing fifteen would be a different promise.
+    /// </summary>
+    public List<string> RewardPhrases { get; set; } = new();
 }
 
 /// <summary>

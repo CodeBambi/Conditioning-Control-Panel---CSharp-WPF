@@ -130,15 +130,15 @@ public static partial class BuiltInPrograms
                     Subtitle = "Six easy days and one that isn't",
                     AccentColor = "#FF69B4",
                     RewardId = "first_week_preset",
-                    // Softened from "The \"First Week\" preset - day seven, saved permanently,
-                    // replayable whenever you want it back." Nothing implements that: CompleteChapter
-                    // records the RewardId in enrollment.BankedRewards and no code path turns a
+                    // The promise was softened once, when nothing implemented it: CompleteChapter
+                    // recorded the RewardId in enrollment.BankedRewards and no code path turned a
                     // banked id into a saved session, so a free user finishing the funnel went
-                    // looking for a preset that was never written. Banking IS real, so the copy now
-                    // promises exactly the part that happens. See the fix report - eleven sibling
-                    // reward lines across the paid programs make the same class of promise and are
-                    // left alone pending the owner call on building the grant.
-                    RewardDescription = "Day seven, banked - it's yours, and a restart can't take it back.",
+                    // looking for a preset that was never written. ProgramRewardService now files
+                    // the chapter's final day as a real session in the user's own catalogue
+                    // (RewardSavesFinalSession below), so the copy names the preset again.
+                    RewardDescription = "The First Week preset - day seven, saved to your sessions, "
+                                        + "replayable whenever you want it back.",
+                    RewardSavesFinalSession = true,
                     Days = new List<ProgramDay>
                     {
                         // ---- Day 1 ---------------------------------------------------------------
