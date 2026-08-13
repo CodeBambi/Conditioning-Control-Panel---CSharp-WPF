@@ -1,6 +1,6 @@
 ## STATUS: SP-068 — Three subtractive privacy filters over the landed awareness and reply paths
-**Current Step:** Step 2 — Implement the three filters
-**Last Updated:** 2026-08-13 (worker, step 1 complete; step 2 in progress)
+**Current Step:** Step 3 — Bind all three, one source at a time
+**Last Updated:** 2026-08-13 (worker, steps 1-2 complete; step 3 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 903 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-067, integrate `75a09d61`.
@@ -27,7 +27,7 @@
 - [x] Any `ai-operation-contract.md` wording the filters need is **named, not written** (framing c)
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning
 
-### Step 2: Implement the three filters — narrowing only — 🔄 In progress
+### Step 2: Implement the three filters — narrowing only — ✅ Complete
 - [x] F1 applied at the port's title seam before the title can be packaged or returned; WPF cite in a comment
 - [x] F2 applied to the title with verbatim values; WPF cite in a comment
 - [x] F3 strip applied at the derived point with the emptied-reply case typed; WPF cite in a comment
@@ -35,7 +35,7 @@
 - [x] Own-diff grep proves no new log / diagnostic / persist / network call
 - [x] Per-file `git diff` summary in the record; no edit outside F1/F2/F3
 
-### Step 3: Bind all three, one source at a time — ⬜ Not started
+### Step 3: Bind all three, one source at a time — 🔄 In progress
 - [ ] Regression facts per filter (drop, strip, cap, URL removal, and stripped text never reaching memory or the bubble)
 - [ ] **Negative control per filter** — input that must pass through unchanged, so a filter that eats everything cannot satisfy the pin
 - [ ] **Bite matrix:** F1 reverted alone → only F1's pins red; then F2; then F3. Each RED captured under `evidence/` naming the reverted source
