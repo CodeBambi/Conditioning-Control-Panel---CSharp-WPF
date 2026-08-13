@@ -210,7 +210,8 @@ namespace ConditioningControlPanel
         /// <summary>Rail buttons, so icons can centre themselves when the labels are gone.</summary>
         private readonly List<ButtonBase> _navRailButtons = new();
 
-        /// <summary>The seven door rows in rail order - the stagger index IS this order.</summary>
+        /// <summary>The door rows in rail order (tab doors + launcher doors) - the stagger index
+        /// IS this order.</summary>
         private readonly List<NavDoorRow> _navDoorRows = new();
 
         /// <summary>Door names, excluded from <see cref="_navRailLabels"/>. See
@@ -309,7 +310,7 @@ namespace ConditioningControlPanel
         private const int NavDoorArtDecodeWidth = 128;
 
         /// <summary>
-        /// Points the seven door medallions at the active mod's art. The paths are the mod
+        /// Points the door medallions at the active mod's art. The paths are the mod
         /// compatibility surface (nav/door_*.png) and are never renamed; a mod that ships none of
         /// them resolves straight back to the embedded copies, which is byte-identical to what
         /// MainWindow.xaml already authored.
@@ -334,6 +335,7 @@ namespace ConditioningControlPanel
                     (ImgDoorPlay,      "nav/door_play.png"),
                     (ImgDoorYou,       "nav/door_you.png"),
                     (ImgDoorLibrary,   "nav/door_library.png"),
+                    (ImgDoorWebApp,    "nav/door_webapp.png"),
                     (ImgDoorSettings,  "nav/door_settings.png"),
                 };
 
@@ -374,7 +376,8 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Resolves the seven medallion rows. The parts are found BY TYPE among the door
+        /// Resolves the medallion rows (NavDoorMap's tab doors plus the NavLauncherDoors). The
+        /// parts are found BY TYPE among the door
         /// Button's direct content children (glow = the Ellipse, tile = the Border, icon = the
         /// Viewbox, label host = the one tagged <see cref="NavDoorLabelHostTag"/>), which is the
         /// same shape ChromeFx's NudgeNavIcon relies on - it takes the first Image-or-Viewbox
@@ -387,9 +390,14 @@ namespace ConditioningControlPanel
         /// </summary>
         private void CacheNavDoorRows()
         {
-            foreach (var d in NavDoorMap)
+            // Tab doors from the map, then the launcher doors (v6.8.0: the Web App door) - a
+            // launcher is a full medallion row minus a destination, and leaving it out of this
+            // walk is how it would end up frozen at its authored collapsed size while every
+            // row around it grows.
+            var doorKeys = NavDoorMap.Select(d => d.Door).Concat(NavLauncherDoors);
+            foreach (var door in doorKeys)
             {
-                var btn = NavDoorParts(d.Door).Header;
+                var btn = NavDoorParts(door).Header;
                 if (btn?.Content is not Panel content) continue;
 
                 var kids = content.Children.OfType<FrameworkElement>().ToList();
@@ -400,7 +408,7 @@ namespace ConditioningControlPanel
                 var host = kids.FirstOrDefault(k => (k.Tag as string) == NavDoorLabelHostTag);
                 if (glow == null || tile == null || icon == null || host is not Panel hostPanel)
                 {
-                    App.Logger?.Debug("CacheNavDoorRows: door {Door} has no medallion content", d.Door);
+                    App.Logger?.Debug("CacheNavDoorRows: door {Door} has no medallion content", door);
                     continue;
                 }
 

@@ -44,6 +44,7 @@ namespace ConditioningControlPanel
             ("nav/door_library.png", "Library door (64px sq)"),
             ("nav/door_studio.png", "Studio door (64px sq)"),
             ("nav/door_you.png", "You door (64px sq)"),
+            ("nav/door_webapp.png", "Web App door (64px sq)"),
             ("nav/door_settings.png", "Settings door (64px sq)"),
         };
 

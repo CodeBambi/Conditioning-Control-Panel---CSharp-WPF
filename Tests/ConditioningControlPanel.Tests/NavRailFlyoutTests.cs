@@ -109,11 +109,12 @@ public class NavRailFlyoutTests
         double iconShut = ConstValue(NavRailSource(), "NavDoorIconCollapsed");
 
         // MainWindow.xaml authors the COLLAPSED state, so a rail whose Loaded hook never ran still
-        // renders correctly shut - which only holds while the two halves agree.
+        // renders correctly shut - which only holds while the two halves agree. Eight since
+        // v6.8.0: the seven tab doors plus the Web App launcher door.
         var authored = Regex.Matches(
             xaml,
             "<Viewbox Grid\\.Column=\"0\" Width=\"" + iconShut + "\" Height=\"" + iconShut + "\"");
-        Assert.Equal(7, authored.Count);
+        Assert.Equal(8, authored.Count);
 
         // The permanent grey hairline is gone; the 1px edge is Transparent until the door is active.
         Assert.DoesNotContain(
