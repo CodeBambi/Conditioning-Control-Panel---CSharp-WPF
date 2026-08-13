@@ -104,6 +104,14 @@ public class ProgramRolloverResult
 
     /// <summary>The rollover ran past the end of the program.</summary>
     public bool RanPastEnd { get; set; }
+
+    /// <summary>
+    /// Today's program-date is BEFORE the anchor - the system clock moved backwards (a manual
+    /// correction, a timezone move, a CMOS battery). Never an absence: the service re-anchors and
+    /// says so in the log. Without this the gap is negative forever and the run parks silently,
+    /// because a non-advancing evaluation leaves CurrentDayDate exactly where it was.
+    /// </summary>
+    public bool ClockWentBackwards { get; set; }
 }
 
 /// <summary>
@@ -138,7 +146,13 @@ public static class ProgramClock
         var result = new ProgramRolloverResult { NewCurrentDay = currentDay };
 
         var gap = (todayProgramDate - currentDayDate).Days;
-        if (gap <= 0) return result;
+        if (gap < 0)
+        {
+            result.ClockWentBackwards = true;
+            return result;
+        }
+
+        if (gap == 0) return result;
 
         result.Advanced = true;
 
@@ -149,18 +163,26 @@ public static class ProgramClock
             if (!isDayComplete(dayIndex)) result.MissedDays.Add(dayIndex);
         }
 
-        result.DaysOffSpent = result.MissedDays.Count;
-        result.Lapsed = result.DaysOffSpent > daysOffRemaining;
-        result.IsReturnDay = result.MissedDays.Count > 0 && !result.Lapsed;
-
         var target = currentDay + gap;
         if (target > lengthDays)
         {
             result.RanPastEnd = true;
             target = lengthDays;
+
+            // The clamp puts the user back on a day the sweep above may already have counted as
+            // missed. One day cannot be both the absence and the day being stood on: the record
+            // would carry Missed and, once the user finishes it, DayCompleted - which reads as a
+            // day that was simultaneously skipped and perfect, and spends an allowance for a day
+            // still in front of them.
+            result.MissedDays.Remove(target);
         }
 
         result.NewCurrentDay = target;
+
+        result.DaysOffSpent = result.MissedDays.Count;
+        result.Lapsed = result.DaysOffSpent > daysOffRemaining;
+        result.IsReturnDay = result.MissedDays.Count > 0 && !result.Lapsed;
+
         return result;
     }
 }
@@ -203,6 +225,13 @@ public class ProgramEnrollment
     public DateTime? PausedAt { get; set; }
     public DateTime? GraduatedAt { get; set; }
     public DateTime? LapsedAt { get; set; }
+
+    /// <summary>
+    /// Program-date the daily nudge last fired on. Persisted rather than held in memory so a
+    /// restart during the nudge hour cannot fire it a second (and third) time - the reminder is
+    /// the one thing in this file the user hears whether or not they open the app.
+    /// </summary>
+    public DateTime? LastNudgeDate { get; set; }
 
     public Dictionary<int, ProgramDayRecord> Records { get; set; } = new();
 
