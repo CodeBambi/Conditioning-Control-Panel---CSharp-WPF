@@ -1,6 +1,6 @@
 # SP-068 record — Three subtractive privacy filters (F1 incognito drop, F2 title scrub, F3 unsanctioned-link strip)
 
-Status: in progress. Floor at authoring: 903 unit / 35 headless / 2 skipped on Windows (SP-067, `75a09d61`).
+Status: **complete — delivered at 946 unit / 35 headless / 2 pinned Windows-observed skips** (the 2 Linux-gated names), build 0W/0E; floor bumped 903→946 in the same commit as the +43 facts. Floor at authoring: 903 unit / 35 headless / 2 skipped on Windows (SP-067, `75a09d61`).
 
 ## 1. WPF anchors — found vs given (framing a; every offset re-derived by symbol name)
 

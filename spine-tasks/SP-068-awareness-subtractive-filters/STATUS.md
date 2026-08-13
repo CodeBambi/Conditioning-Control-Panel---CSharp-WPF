@@ -47,12 +47,12 @@
 - [x] **Honesty cell** — including: F1/F2 harden a path with **no product consumer today** (F3's path is live); execution vs reading per filter; this is **three rows of one audit table filtered at authoring**, not a verdict on Her Room, and row `:46` stays OPEN; deferred halves named (sigil unwrap, C3 title rewrite, 120-char cap, headed rows A11/D6/D11); **Linux unproven**; filters are lossy by design
 - [x] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
 - [x] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
+- [x] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
 
-### Step 5: Testing & Verification — ⬜ Not started
-- [ ] Contract testCommand passes through the wrapper (`verify.mjs` exit 0, build 0W/0E, new exact counts, skip set exactly the 2 Windows-observed pinned names)
-- [ ] **3 consecutive full-suite greens**, >= 1 a fresh-checkout first-ever build; per-run table (run, worktree, cold/warm, counts, skipped names, TRX path)
-- [ ] Bite matrix complete: three separate reverts, three separate REDs, other filters' pins green each time
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+### Step 5: Testing & Verification — ✅ Complete
+- [x] Contract testCommand passes through the wrapper (G3: `verify.mjs` exit 0, build 0W/0E, floor 946/946 unit + 35/35 headless, skip set exactly the 2 pinned Windows-observed names — ccp-floor-NHUMSK)
+- [x] 3 consecutive full-suite greens: G1 final (warm, ccp-floor-jOKUqM), G2 final (**cold fresh-worktree first-ever build** @ cd08531f, ccp-floor-iJcqGg), G3 final (contract chain, ccp-floor-NHUMSK) — full table in record.md §10
+- [x] Bite matrix complete: four single-filter reverts R1–R4 (F1-incognito 11 red, F1-blank 3 red, F2 8 red, F3 8 red), each RED captured under `evidence/`, other filters' pins green each time
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths (all committed)
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact (only pre-existing T-14 `.pi/npm/` + standard `bin/`/`obj/`; evidence TRX renamed off the gitignore)
