@@ -184,6 +184,21 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             return removed;
         }
 
+        /// <summary>
+        /// Removes every turn the predicate matches, returning how many went. Backs the mod-switch
+        /// purge: bark echoes carry the companion name they were recorded under
+        /// (<see cref="CompanionTurn.FormatBarkEcho"/>), so after a mod switch the old ones read as
+        /// a second speaker in the window and the model starts roleplaying a two-voice transcript.
+        /// </summary>
+        public int RemoveAll(Func<CompanionTurn, bool> predicate)
+        {
+            if (predicate == null) return 0;
+            int removed;
+            lock (_lock) removed = _turns.RemoveAll(t => predicate(t));
+            if (removed > 0) RaiseTurnsChanged();
+            return removed;
+        }
+
         /// <summary>Drops everything, including the restored-turn marker. Backs "forget everything".</summary>
         public void Clear()
         {

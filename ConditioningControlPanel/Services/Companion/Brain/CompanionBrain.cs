@@ -261,7 +261,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
                 // Live 0806: small models imitate the bark-echo sigil and wrap their own replies in
                 // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
-                var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+                // The speaker name lets the 0813 transcript shape drop lines the model attributed
+                // to a DIFFERENT companion (the previous mod's) instead of quoting them.
+                var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
 
                 // Live 0806: and they invent URLs when asked for a video they have no link for.
                 // Strip before the reply is appended — a fabricated link left in the window teaches
@@ -353,7 +355,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
                 }
 
-                var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+                var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text, ActiveSpeakerName());
                 reactionText = AiTextHygiene.StripUnsanctionedLinks(reactionText);
                 if (reactionText.Length == 0)
                 {
@@ -428,6 +430,29 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 App.Logger?.Debug("CompanionBrain: bark echo failed: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>The active companion's display name, or null when the mod stack isn't up (tests).</summary>
+        private static string? ActiveSpeakerName()
+        {
+            try { return App.Mods?.GetCompanionName(); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Called when the active mod changes. Bark echoes are recorded with the companion name
+        /// baked into their text (<see cref="CompanionTurn.FormatBarkEcho"/>), and the persona
+        /// fence deliberately keeps BarkEcho turns — so without this purge the window carries
+        /// «OldCompanion said aloud: …» next to the new mod's echoes, and the model answers with a
+        /// two-speaker roleplay transcript (observed 2026-08-13 after Bambi → Drone). The echoes
+        /// are flavor, never persisted, and replay from the new mod's bark_rules.json anyway.
+        /// </summary>
+        public void OnModSwitched()
+        {
+            var purged = Session.RemoveAll(t => t.Kind == TurnKind.BarkEcho);
+            if (purged > 0)
+                App.Logger?.Information(
+                    "CompanionBrain: mod switch purged {Count} stale bark echo(es) from the window", purged);
         }
 
         // ===================== misc =====================
