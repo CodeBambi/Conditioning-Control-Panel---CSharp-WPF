@@ -67,6 +67,63 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 | `--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion` | ChaosTunnelWindow.cs:164 | WebView2 AdditionalBrowserArguments (one two-option string literal) |
 | `--label=ccp-client` | SecretStores.cs:157 | secret-tool argv label |
 
+- Step 3: `spine_review_step` — engine-skipped (SP-195, same). Artifact: `.reviews/3-20260813T014543.md`.
+- Step 4/5: single final `spine_review_step` call at completion (step 4) — pending.
+
+## Step 5 — verification
+
+- Contract testCommand green as suite run R3 on the final code tree: `verify.mjs` exit 0
+  (all patches, both roots), build 0W/0E, **897 unit / 35 headless, 0 skipped**, TRX under
+  `evidence/trx/`.
+- `git diff --check` clean (only LF→CRLF advisories).
+- `git status --short` / scope audit: only File Scope paths touched
+  (`Program.cs`, `Lifecycle/HarnessEntryPoints.cs`, the two test files, this task folder).
+
+## Honesty cell — what this does NOT close
+
+1. **The `--dtrh-demo --dtrh-auto-close 30` residual hole (and the whole demo+modifier
+   class):** a demo flag plus an auto-close/picker-timeout modifier is an unattended,
+   evidence-shaped run that this gate still permits, because the row's decree protects
+   demo flags from refusal. `--avatar-corrupt-demo` sits in the same bucket (class 2 by
+   decree + in-memory-only corruption). Named for the owner; NOT unilaterally extended.
+2. **Only the data root is protected.** WebView2 (`%LOCALAPPDATA%`-adjacent user-data
+   dirs outside the override when a path is hardcoded — none known today), LibVLC, and
+   `%TEMP%` writes are outside SP-057's claim scope and outside this gate's.
+3. **The guard binds the literal surface it scans and nothing else:** `"--..."` string
+   literals in `client/src/**/*.cs`. A flag spelled via string concatenation,
+   interpolation, or `nameof` composition would evade the regex; a flag consumed only in
+   `.axaml` markup is unscanned (none exist today — the axaml hits are WebView2 args in
+   code-behind `.cs`).
+4. **A harness path invoked by something other than `Program.Main` is unprotected** —
+   e.g. a future test host or tool constructing `CompositionRoot` directly with harness
+   knobs. The gate rides the real product entry point only.
+5. **Linux is unproven here:** zero WSL distros on this machine; no Linux run was faked.
+   The gate itself is platform-neutral C# (env read + early return), but no headed or
+   headless Linux evidence exists for it.
+6. **Token-wise scanning:** the gate matches whole argv tokens against the registry; a
+   harness flag appearing as another flag's VALUE also refuses (conservative, intended).
+   `CCP_DATA_ROOT=""` (empty/whitespace) also refuses — `ActiveDataRootOverride()` treats
+   it as unset; conservative and intended.
+7. **This is a deliberate BEHAVIOR BREAK for existing tooling/scripts** that launched
+   `--dtrh-m2test` / `--dtrh-fx-drive` / `--loom-drive` / `--intake-drive` /
+   `--tunnel-drive` / the kill/block injectors unsealed: they now exit 3. Every headed
+   evidence script must set `CCP_DATA_ROOT` (SP-057's run.ps1 already does). Filed for
+   the orchestrator below.
+
+## Intended board/doc filings (orchestrator reconciles at land — worker sets no row state)
+
+- `client/docs/task-board.md`: the SP-064 row — evidence: gate + registry + guard landed;
+  refusal exit 3 real-process proven; profile byte-identical (2677 files, both
+  directions); floor now **897 unit / 35 headless, 0 skipped**; board row 49's
+  skip/count check is the successor and must pin the NEW count.
+- `client/docs/port-lessons.md`: (1) opt-in isolation seams decay into mandatory ones —
+  procedural mitigations fail (SP-052 class); (2) a guard over flag literals bites its own
+  registry's doc comments — write placeholders unquoted; (3) cold worktrees at this depth
+  need `git -c core.longpaths=true worktree add` (legacy WPF asset paths overflow
+  MAX_PATH) and `rm -rf` for removal.
+- `client/docs/port-workflow.md` §204 rule: the `CCP_DATA_ROOT` rule can now read
+  "mandatory for harness entry points — the app refuses (exit 3) when it is unset".
+
 ## Step 3 — real-process evidence (four bounded runs; `evidence/run.ps1`, transcript in
 `evidence/run-transcript.log`, OVERALL VERDICT EXIT=0)
 
@@ -107,7 +164,17 @@ Machine posture: DISPLAY3 absent (only DISPLAY1 2880x1800 attached) — loud fal
 | R3 | lane-1 (full contract: verify.mjs exit 0, build 0W/0E) | warm | 897 passed | 35 passed | 0 / 0 |
 
 TRX attached per run under `evidence/trx/` (sp064-r1/r2-cold/r3 + step2 interim).
-All output redirected to files, never tailed.
+All output redirected to files, never tailed. **Ordering:** R3 ran the full contract
+command on the final CODE tree; only `record.md` / `STATUS.md` / evidence files were
+edited afterward (plus the run-(d) capture correction below).
+
+**Run-(d) capture correction (pre-completion consult):** the first run.ps1 pass saved a
+CopyFromScreen PNG at the verified rect — it showed overlapping TERMINAL windows (the CCP
+Client window was beneath them), i.e. owner session content that is neither app evidence
+nor committable. The PNG was deleted uncommitted-from-evidence (removed from git), the
+script now uses `-Action dump` (UIA tree + the verified GetWindowRect line), and the rect
+proof stands on the transcript line `GetWindowRect: (100,100)-(1034,1354) [934x1254]` —
+drive.ps1 exits 2 when placement does not hold.
 
 ## Step 2 — implementation
 
@@ -183,7 +250,14 @@ All output redirected to files, never tailed.
   assertion in the guard instead, and let Step 3's real-process run be the behavioral
   proof. Consequence: no test in this packet mutates process env, so no
   ProcessEnvCollection additions (SP-062 untouched).
-- **Pre-completion (Step 4):** pending.
+- **Pre-completion (Step 4), mode: solo.** Verdict: **no blocker, proceed to `.DONE`**
+  after the mechanical Step 5 items. The tool again surfaced **no answering-model
+  attribution** (recorded, never invented). Guidance followed: (1) ran `git diff --check`
+  (clean) + scope audit (`git diff --name-only f8b9214d..HEAD` = exactly the 4 in-scope
+  product/test files + this task folder; no bin/obj; no Sp064RedProbe resurrection);
+  (2) ordering sentence added to the suite table; (3) run-(d) PNG privacy defect fixed
+  (deleted; script now dumps UIA + rect only); (4) honesty cell now names the
+  tooling behavior break and the empty-string `CCP_DATA_ROOT` refusal.
 
 ## Engine plan reviews (Review Level 2 — T-2 heading presence recorded per call)
 

@@ -95,7 +95,11 @@ $pd = Start-Process $exe -PassThru `
   -RedirectStandardError "$ev\run-d-plain.stderr.log" -RedirectStandardOutput "$ev\run-d-plain.stdout.log"
 Note "(d) launched plain pid=$($pd.Id), CCP_DATA_ROOT=[$env:CCP_DATA_ROOT]"
 Start-Sleep -Seconds 10
-pwsh -NoProfile -File "$ev\drive.ps1" -Action capture -Arg "$ev\run-d-plain-window.png" -TitleLike "CCP Client" -X $placeX -Y $placeY *>&1 | Out-File $tx -Append
+# dump (UIA tree + verified GetWindowRect line), NOT capture: a CopyFromScreen at the rect
+# grabs whatever is topmost there — on the owner's session that is terminal content, which
+# is neither app evidence nor committable (privacy). The rect line is the proof the packet
+# requires; drive.ps1 exits 2 when placement does not hold.
+pwsh -NoProfile -File "$ev\drive.ps1" -Action dump -TitleLike "CCP Client" -X $placeX -Y $placeY *>&1 | Out-File $tx -Append
 if ($LASTEXITCODE -ne 0) { Note "(d) FAIL: no rect-verified 'CCP Client' window"; $verdict = 1 }
 $errDsofar = Get-Content "$ev\run-d-plain.stderr.log" -Raw
 if ($errDsofar.Contains("refusing to start")) { Note "(d) FAIL: plain launch was refused"; $verdict = 1 }

@@ -1,5 +1,5 @@
 ## STATUS: SP-064 — Harness entry points must REFUSE to run unsealed
-**Current Step:** 4 (in progress)
+**Current Step:** 5 (complete — .DONE next)
 **Last Updated:** 2026-08-13 (worker, lane-1)
 **Blockers:** none
 
@@ -25,16 +25,16 @@
 - [x] (d) plain launch unsealed → not refused, window rect-verified, exit 0, profile delta reported honestly
 - [x] 3 consecutive full-suite greens, ≥1 fresh-checkout first-ever build, TRX attached, per-run table incl. skipped column
 
-### Step 4: record + pre-completion consult — IN PROGRESS
-- [ ] record.md complete (table, gate, registry, guard RED, four process runs, 3-run suite table with the new exact floor, intended filings)
-- [ ] Honesty cell: the demo+auto-close residual hole, non-data-root writes, guard surface bounds, non-`Main` harness paths, Linux unproven
-- [ ] Pre-completion solo consult (verdict + ACTUAL model)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + pre-completion consult — COMPLETE
+- [x] record.md complete (table, gate, registry, guard RED, four process runs, 3-run suite table with the new exact floor, intended filings)
+- [x] Honesty cell: the demo+auto-close residual hole, non-data-root writes, guard surface bounds, non-`Main` harness paths, Linux unproven
+- [x] Pre-completion solo consult (verdict + ACTUAL model) — verdict: no blocker; no answering-model attribution surfaced by the tool (recorded as such)
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification — NOT STARTED
-- [ ] Contract testCommand passes (verify.mjs 0, 0W/0E, new exact unit count / 35 headless, 0 skipped, TRX)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs 0, 0W/0E, new exact unit count / 35 headless, 0 skipped, TRX) — R3 on the final code tree: **897 / 35 / 0**
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
 
 ### Discoveries
 - The Mission's class-4 list named `--no-video-title-show` a startup modifier; the tree shows it is a LibVLC constructor arg (LibVlcDtrhVideo.cs:144), never a program arg. It + 4 sibling non-startup literals get the registry's `NotAStartupFlag` bucket so the guard binds them.
