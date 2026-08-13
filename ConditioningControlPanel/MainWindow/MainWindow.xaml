@@ -2114,168 +2114,193 @@
             </Border>
         </Grid>
 
-        <!-- Main Content - Settings Tab -->
-        <views:SettingsTabView x:Name="SettingsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,2" />
+        <!-- ===================== THE PAGE (the tab views) =====================
+             The 24 tab views still stack in one cell exactly as they did; the only thing
+             this AdornerDecorator changes is WHERE their adorners are drawn.
+
+             Without it, every card FX adorner on this page (TierFxBorder's tier livery
+             band, PerimeterCometAdorner, PremiumGateFx, the Assets/Exclusives/Quests
+             sheens) went to the WINDOW's adorner layer, which the Window template paints
+             above every child of this Grid - Panel.ZIndex included. So the instant the
+             nav rail flyout (NavSidebar, ZIndex 60) opened over the page, the livery band
+             of a card sitting underneath it kept shining straight through the rail. With
+             the layer scoped here those adorners belong to an ordinary ZIndex-0 element,
+             so the rail covers them exactly as it covers the cards they decorate.
+
+             (A card inside a ScrollViewer was never affected - WPF already scopes its
+             adorners to the ScrollContentPresenter. The dashboard mosaic is not in one,
+             which is why the tease card's rim was the surface that showed it.)
+
+             AdornerDecorator takes a single child, hence the Grid - a one-cell stack,
+             which is all Row 4 / Column 1 ever was, so the per-view Grid.Row/Grid.Column
+             moved onto the wrapper. Nothing about tab visibility, ShowTab or any x:Name
+             changed. -->
+        <AdornerDecorator Grid.Row="4" Grid.Column="1">
+            <Grid>
+                <!-- Main Content - Settings Tab -->
+                <views:SettingsTabView x:Name="SettingsTab" Margin="10,5,10,2" />
 
 
-        <!-- Presets Tab (Hidden by default) -->
-        <views:PresetsTabView x:Name="PresetsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Presets Tab (Hidden by default) -->
+                <views:PresetsTabView x:Name="PresetsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Progression Tab: DEMOLISHED (UX restructure, Phase 8). ProgressionTabView was a
-             permanently Collapsed ghost - no ShowTab case ever revealed it - whose 114 controls
-             were a second copy of the Studio rack's dose dials plus Scheduler/Ramp. The tab key
-             "progression" survives forever as a redirect onto Home (MainWindow.TabNavigation.cs)
-             because 54 bark rules per mod and the tutorial ladder still fire it. -->
+                <!-- Progression Tab: DEMOLISHED (UX restructure, Phase 8). ProgressionTabView was a
+                     permanently Collapsed ghost - no ShowTab case ever revealed it - whose 114 controls
+                     were a second copy of the Studio rack's dose dials plus Scheduler/Ramp. The tab key
+                     "progression" survives forever as a redirect onto Home (MainWindow.TabNavigation.cs)
+                     because 54 bark rules per mod and the tutorial ladder still fire it. -->
 
 
-        <!-- Quests Tab -->
-        <views:QuestsTabView x:Name="QuestsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Quests Tab -->
+                <views:QuestsTabView x:Name="QuestsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Achievements Tab -->
-        <views:AchievementsTabView x:Name="AchievementsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Achievements Tab -->
+                <views:AchievementsTabView x:Name="AchievementsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
-        <!-- Companion Tab (v5.9 - Hero + AI Brain redesign) -->
-        <views:CompanionTabView x:Name="CompanionTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
-
-
-        <!-- Patreon Exclusives Tab: DEMOLISHED (UX restructure, Phase 8). PatreonTabView was a
-             permanently Collapsed ghost - ShowTab("patreon") early-returns into ShowAppInfoPopup()
-             and never revealed it. Its 7 account cards left in Phase 2 (Settings · Account,
-             Views/Controls/AppSettings/AccountSettingsSection.xaml) and its keyword/OCR editors in
-             Phase 5 (Awareness, Views/Controls/Companion/KeywordTriggersPanel.xaml). The tab key
-             "patreon" survives forever as a redirect (MainWindow.TabNavigation.cs) because
-             TutorialService still declares it. -->
+                <!-- Companion Tab (v5.9 - Hero + AI Brain redesign) -->
+                <views:CompanionTabView x:Name="CompanionTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Profile Tab -->
-        <views:DiscordTabView x:Name="DiscordTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
-
-        <!-- Lab Tab — RETIRED in Phase 6 of the UX restructure; LabTabView.xaml(.cs) deleted.
-             Its cards live on the Play wall below and "lab" is a permanent ShowTab alias onto it,
-             so nothing that ever asked for this view lost its destination. -->
-
-        <!-- Play Tab ("play") — the Play door's card wall, added in Phase 6 of the UX restructure.
-             A scrollable wall of named slots (DTRH hero, Goon, Gaze, Focus Gaze, Bureau, Mantra,
-             Deeper, For You, Blink Trainer, Graded Intake, Lockdown, Remote Control, Available
-             Subjects, Loom, Showcase). Cards are shims onto the handlers that always owned them,
-             so an entitled click runs exactly the code the old Lab button ran; the gold/violet
-             lockbands are decoration and TierGate does the refusing.
-             ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
-             per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
-             Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
-        <views:PlayTabView x:Name="PlayTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Patreon Exclusives Tab: DEMOLISHED (UX restructure, Phase 8). PatreonTabView was a
+                     permanently Collapsed ghost - ShowTab("patreon") early-returns into ShowAppInfoPopup()
+                     and never revealed it. Its 7 account cards left in Phase 2 (Settings · Account,
+                     Views/Controls/AppSettings/AccountSettingsSection.xaml) and its keyword/OCR editors in
+                     Phase 5 (Awareness, Views/Controls/Companion/KeywordTriggersPanel.xaml). The tab key
+                     "patreon" survives forever as a redirect (MainWindow.TabNavigation.cs) because
+                     TutorialService still declares it. -->
 
 
-        <!-- Leaderboard Tab -->
-        <views:LeaderboardTabView x:Name="LeaderboardTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Profile Tab -->
+                <views:DiscordTabView x:Name="DiscordTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
-        <!-- Assets & Packs Tab -->
-        <views:AssetsTabView x:Name="AssetsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Lab Tab — RETIRED in Phase 6 of the UX restructure; LabTabView.xaml(.cs) deleted.
+                     Its cards live on the Play wall below and "lab" is a permanent ShowTab alias onto it,
+                     so nothing that ever asked for this view lost its destination. -->
 
-        <!-- Enhancements Tab (Skill Tree) -->
-        <views:EnhancementsTabView x:Name="EnhancementsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
-
-        <!-- Deeper Tab — universal media enhancement system.
-             Mission 2 (hub redesign): single-column layout, unified library
-             list with virtualization, search + filter pills + sort dropdown
-             replace the two-column Library/Recent grid. -->
-        <!-- Drag-and-drop is handled by the window-wide Window_Drop system (media →
-             Play/Edit/Library prompt, *.ccpenh.json → library import) so the whole
-             tab is a uniform drop target. A tab-local AllowDrop handler here would
-             steal the bubbling events from the global overlay and only cover part of
-             the tab, so it's intentionally absent. -->
-        <views:DeeperTabView x:Name="DeeperTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Play Tab ("play") — the Play door's card wall, added in Phase 6 of the UX restructure.
+                     A scrollable wall of named slots (DTRH hero, Goon, Gaze, Focus Gaze, Bureau, Mantra,
+                     Deeper, For You, Blink Trainer, Graded Intake, Lockdown, Remote Control, Available
+                     Subjects, Loom, Showcase). Cards are shims onto the handlers that always owned them,
+                     so an entitled click runs exactly the code the old Lab button ran; the gold/violet
+                     lockbands are decoration and TierGate does the refusing.
+                     ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
+                     per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
+                     Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
+                <views:PlayTabView x:Name="PlayTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Awareness Engine Tab -->
-        <views:AwarenessTabView x:Name="AwarenessTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Leaderboard Tab -->
+                <views:LeaderboardTabView x:Name="LeaderboardTab" Margin="10,5,10,10" Visibility="Collapsed" />
+
+                <!-- Assets & Packs Tab -->
+                <views:AssetsTabView x:Name="AssetsTab" Margin="10,5,10,10" Visibility="Collapsed" />
+
+                <!-- Enhancements Tab (Skill Tree) -->
+                <views:EnhancementsTabView x:Name="EnhancementsTab" Margin="10,5,10,10" Visibility="Collapsed" />
+
+                <!-- Deeper Tab — universal media enhancement system.
+                     Mission 2 (hub redesign): single-column layout, unified library
+                     list with virtualization, search + filter pills + sort dropdown
+                     replace the two-column Library/Recent grid. -->
+                <!-- Drag-and-drop is handled by the window-wide Window_Drop system (media →
+                     Play/Edit/Library prompt, *.ccpenh.json → library import) so the whole
+                     tab is a uniform drop target. A tab-local AllowDrop handler here would
+                     steal the bubbling events from the global overlay and only cover part of
+                     the tab, so it's intentionally absent. -->
+                <views:DeeperTabView x:Name="DeeperTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Remote Control Tab — Patreon premium feature, full redesign with QR pairing -->
-        <views:RemoteControlTabView x:Name="RemoteControlTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Awareness Engine Tab -->
+                <views:AwarenessTabView x:Name="AwarenessTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- SP5 layer 3: Available Subjects directory tab. Controller side of
-             remote control. NeonPurple accent throughout. Free-tier; the
-             content is fetched per-poll from /v2/directory/list (X-Auth-Token
-             auth). Click Connect on a card → POST /v2/directory/claim → on
-             200, the returned session_url opens in the user's default browser
-             via Process.Start (one-click pairing URL with PIN in the hash
-             fragment, never logged or persisted on the desktop). -->
-        <views:AvailableSubjectsTabView x:Name="AvailableSubjectsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Remote Control Tab — Patreon premium feature, full redesign with QR pairing -->
+                <views:RemoteControlTabView x:Name="RemoteControlTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Bambi Takeover Tab — Patreon premium feature, visible-but-locked for free users -->
-        <views:BambiTakeoverTabView x:Name="BambiTakeoverTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- SP5 layer 3: Available Subjects directory tab. Controller side of
+                     remote control. NeonPurple accent throughout. Free-tier; the
+                     content is fetched per-poll from /v2/directory/list (X-Auth-Token
+                     auth). Click Connect on a card → POST /v2/directory/claim → on
+                     200, the returned session_url opens in the user's default browser
+                     via Process.Start (one-click pairing URL with PIN in the hash
+                     fragment, never logged or persisted on the desktop). -->
+                <views:AvailableSubjectsTabView x:Name="AvailableSubjectsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users.
-             MOVED in Phase 4: HapticsTabView is now a module of the Studio rack
-             (Views/Tabs/StudioTabView.xaml, rack key "haptics"). The x:Name "HapticsTab" it
-             used to declare here survives as a MainWindow passthrough property in
-             MainWindow.TabNavigation.cs, so every HapticsTab.<x:Name> dereference across the
-             MainWindow partials, both features/vibe.png repaint rows, the IsVisibleChanged
-             live-status hook and the SessionLock sweep keep working verbatim.
-             ShowTab("haptics") still fires the bark key "haptics", never "studio". -->
+                <!-- Bambi Takeover Tab — Patreon premium feature, visible-but-locked for free users -->
+                <views:BambiTakeoverTabView x:Name="BambiTakeoverTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Lockdown Mode Tab (graduated from Lab in v5.8.4) -->
-        <views:LockdownTabView x:Name="LockdownTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users.
+                     MOVED in Phase 4: HapticsTabView is now a module of the Studio rack
+                     (Views/Tabs/StudioTabView.xaml, rack key "haptics"). The x:Name "HapticsTab" it
+                     used to declare here survives as a MainWindow passthrough property in
+                     MainWindow.TabNavigation.cs, so every HapticsTab.<x:Name> dereference across the
+                     MainWindow partials, both features/vibe.png repaint rows, the IsVisibleChanged
+                     live-status hook and the SessionLock sweep keep working verbatim.
+                     ShowTab("haptics") still fires the bark key "haptics", never "studio". -->
 
 
-        <!-- Blink Trainer Tab — Patreon premium feature, flagship webcam experience.
-             Promoted from Lab Webcam Games card in v5.9.8. Phase A: scaffold + header only. -->
-        <views:BlinkTrainerTabView x:Name="BlinkTrainerTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Lockdown Mode Tab (graduated from Lab in v5.8.4) -->
+                <views:LockdownTabView x:Name="LockdownTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- She's Listening Tab — voice control Exclusive (offline mic commands + spoken mantras) -->
-        <views:SheListeningTabView x:Name="SheListeningTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Blink Trainer Tab — Patreon premium feature, flagship webcam experience.
+                     Promoted from Lab Webcam Games card in v5.9.8. Phase A: scaffold + header only. -->
+                <views:BlinkTrainerTabView x:Name="BlinkTrainerTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Graded Intake Tab — banded-descent intake Exclusive. Graduated out of the Lab;
-             the controls moved here verbatim (see GradedIntakeTabView.xaml). -->
-        <views:GradedIntakeTabView x:Name="GradedIntakeTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- She's Listening Tab — voice control Exclusive (offline mic commands + spoken mantras) -->
+                <views:SheListeningTabView x:Name="SheListeningTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Training Programs Tab — multi-day arcs (enrollment ceremony, day clock, ledger).
-             Browse / run / lapsed / graduated are four panels inside one view, switched from
-             MainWindow.ProgramsTab.cs. -->
-        <views:ProgramsTabView x:Name="ProgramsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Graded Intake Tab — banded-descent intake Exclusive. Graduated out of the Lab;
+                     the controls moved here verbatim (see GradedIntakeTabView.xaml). -->
+                <views:GradedIntakeTabView x:Name="GradedIntakeTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Exclusives Tab — "the Velvet Vault". Registry-driven showcase of the
-             supporter-only features (ExclusiveFeature.All); replaced the launcher
-             popup submenu. Cards navigate; destination tabs own the premium gates. -->
-        <views:ExclusivesTabView x:Name="ExclusivesTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Training Programs Tab — multi-day arcs (enrollment ceremony, day clock, ledger).
+                     Browse / run / lapsed / graduated are four panels inside one view, switched from
+                     MainWindow.ProgramsTab.cs. -->
+                <views:ProgramsTabView x:Name="ProgramsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Settings Tab ("appsettings") — the Settings door's own page, added in Phase 2 of
-             the UX restructure. NOT "SettingsTab": that name belongs to the dashboard/Home and
-             is API for ~200 call sites. Eight sections + a mini-rail; see AppSettingsTabView.xaml. -->
-        <views:AppSettingsTabView x:Name="AppSettingsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Exclusives Tab — "the Velvet Vault". Registry-driven showcase of the
+                     supporter-only features (ExclusiveFeature.All); replaced the launcher
+                     popup submenu. Cards navigate; destination tabs own the premium gates. -->
+                <views:ExclusivesTabView x:Name="ExclusivesTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Studio Tab ("studio") — the Studio door's effects rack, added in Phase 4 of the UX
-             restructure. Master-detail: a fixed rack list on the left, exactly one module panel
-             on the right. Every module is instantiated with this view and toggled by Visibility
-             (ground rule §2.3); nothing is ever re-parented, so the dashboard mosaic's
-             FeaturePopupWindow path keeps building its own separate instances and keeps working.
-             Hosts the Haptics page as its "haptics" module. -->
-        <views:StudioTabView x:Name="StudioTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- Settings Tab ("appsettings") — the Settings door's own page, added in Phase 2 of
+                     the UX restructure. NOT "SettingsTab": that name belongs to the dashboard/Home and
+                     is API for ~200 call sites. Eight sections + a mini-rail; see AppSettingsTabView.xaml. -->
+                <views:AppSettingsTabView x:Name="AppSettingsTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Just Drop Tab ("justdrop") — a thin WebView2 host of the web session shop at
-             app.cclabs.app/dashboard/express. The shop, its order book and its share/delete/replay
-             actions are the PAGE's; nothing here duplicates them, by doctrine. The control is
-             constructed with the window like every other tab, but its WebView2 is not built until
-             the door is first opened (JustDropTabView.OnTabShown), so a user who never opens it
-             never pays for a second Chromium.
+                <!-- Studio Tab ("studio") — the Studio door's effects rack, added in Phase 4 of the UX
+                     restructure. Master-detail: a fixed rack list on the left, exactly one module panel
+                     on the right. Every module is instantiated with this view and toggled by Visibility
+                     (ground rule §2.3); nothing is ever re-parented, so the dashboard mosaic's
+                     FeaturePopupWindow path keeps building its own separate instances and keeps working.
+                     Hosts the Haptics page as its "haptics" module. -->
+                <views:StudioTabView x:Name="StudioTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
-             Reachable only while JustDropService.DoorAvailable is true — the rail rows above are
-             Collapsed until the server flag says otherwise. -->
-        <views:JustDropTabView x:Name="JustDropTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+
+                <!-- Just Drop Tab ("justdrop") — a thin WebView2 host of the web session shop at
+                     app.cclabs.app/dashboard/express. The shop, its order book and its share/delete/replay
+                     actions are the PAGE's; nothing here duplicates them, by doctrine. The control is
+                     constructed with the window like every other tab, but its WebView2 is not built until
+                     the door is first opened (JustDropTabView.OnTabShown), so a user who never opens it
+                     never pays for a second Chromium.
+
+                     Reachable only while JustDropService.DoorAvailable is true — the rail rows above are
+                     Collapsed until the server flag says otherwise. -->
+                <views:JustDropTabView x:Name="JustDropTab" Margin="10,5,10,10" Visibility="Collapsed" />
+            </Grid>
+        </AdornerDecorator>
 
 
 
