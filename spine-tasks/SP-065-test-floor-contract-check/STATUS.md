@@ -1,6 +1,6 @@
 ## STATUS: SP-065 — Mechanical skip/count detection that fails the CONTRACT
-**Current Step:** 4 (record + pre-completion consult)
-**Last Updated:** 2026-08-13 (worker, Step 4 in progress)
+**Current Step:** 5 complete — all steps done
+**Last Updated:** 2026-08-13 (worker, all steps complete)
 **Blockers:** none
 
 ### Step 1: probe the runner surface, choose the mechanism, design the guard — COMPLETE
@@ -27,18 +27,20 @@
 - [x] This packet's own PROMPT.md passes the guard (self-binding)
 - [x] Confirm no false fire on a packet that legitimately runs no tests
 
-### Step 4: record + pre-completion consult — IN PROGRESS
-- [ ] record.md complete (probes verbatim, mechanism + rejections, fail-closed table, new exact pin, both verdicts, drift, guard RED, ls-files proof, cleanliness proof, 3-run table, consults + actual models, intended filings)
-- [ ] Honesty cell — all six named limits
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate before .DONE
+### Step 4: record + pre-completion consult — COMPLETE
+- [x] record.md complete (probes verbatim, mechanism + rejections, fail-closed table, new exact pin, both verdicts, drift, guard RED, ls-files proof, cleanliness proof, 3-run table, consults + actual models, intended filings)
+- [x] Honesty cell — all six named limits
+- [x] Pre-completion solo consult
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification — NOT STARTED
-- [ ] Contract testCommand passes through the wrapper (verify.mjs 0, 0W/0E, new exact counts, 0 skipped)
-- [ ] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] No new gitignored-dirty entry produced by the wrapper
+### Step 5: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes through the wrapper (verify.mjs 0, 0W/0E, 898 unit / 35 headless, 0 skipped)
+- [x] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build (run 2 cold)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] No new gitignored-dirty entry produced by the wrapper
 
 ### Discoveries
-- (none yet — authored 2026-08-13)
+- xunit.runner.visualstudio 3.1.5: a dynamic skip (`Assert.SkipWhen`) yields `outcome="NotExecuted"` in the TRX result list while `Counters/@notExecuted` stays 0 and `@executed` excludes it — Counters arithmetic does NOT close over skips. Skip counts must be anchored on the result list.
+- runsettings `<xunit><failSkips>` is silently unhonored on this stack; `xunit.runner.json` beside the test dll IS honored; MTP flags are silently swallowed (VSTest mode).
+- Named flake: `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` — 1 red in 15 full-suite runs, mechanism non-obvious (per-instance fixtures), filed for the board.

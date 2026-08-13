@@ -346,4 +346,42 @@ are preserved in the evidence file.)
 
 ## Step 5 — verification
 
-(filled in during Step 5)
+### Contract testCommand (in-lane, verbatim)
+
+`node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs`
+→ verify.mjs OK (all patches applied on all roots); build **0W/0E**;
+`FLOOR OK: CcpClient.Tests: 898/898 passed, 0/0 skipped; CcpClient.HeadlessTests: 35/35
+passed, 0/0 skipped`; **exit 0**. The contract now routes BOTH `dotnet test` invocations
+through the wrapper — the packet's own gate is the mechanism.
+
+### 3 consecutive full-suite greens (final code state, HEAD `eb353a37`)
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped |
+|---|---|---|---|---|---|
+| 1 | lane-1 (contract testCommand) | warm | 898/898 | 35/35 | 0 |
+| 2 | fresh `git worktree add` from HEAD, **first-ever build** (0W/0E, 27 s) | **COLD** | 898/898 | 35/35 | 0 |
+| 3 | lane-1 | warm | 898/898 | 35/35 | 0 |
+
+Cold-worktree note: `verify.mjs` was NOT run in the cold worktree (`.pi/npm` is T-14-staged
+only in the lane; a scratch worktree has no spine staging). The cold property required by
+the lesson — fresh checkout, first-ever build — held; verify.mjs coverage came from run 1
+in-lane. Cold worktree removed afterwards (`git worktree list` shows only expected entries).
+
+### Status sweeps
+
+- `git diff --check` — clean.
+- `git status --short` — only `spine-tasks/SP-065-test-floor-contract-check/**` and the
+  File Scope paths (`client/tests/floor/**`, `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs`).
+- `git status --porcelain --ignored=matching -uall | grep -icE 'trx|testresult|ccp-floor'`
+  = **0** — the wrapper produces no ignored artifact in the worktree (framing d), re-verified
+  after the final runs.
+- `client/src/**` — zero changes (verifiable via `git diff ff74eb7b..HEAD --stat`).
+
+### Full-suite run tally this lane (flake denominator, SP-058 lesson)
+
+15 full-suite wrapper runs (each = both projects): 1 named red
+(`ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`, run 1), 4
+intentional REDs (induced skip, drift ±1, exactly-N attempt 1 operator error), 1 RED that
+caught the wrapper's own Counters-arithmetic bug (exactly-N attempt 2), 9 greens (incl.
+the exactly-N temp-pin green and the 3-run table). Flake hit rate: **1 in 15, unquantified** —
+filed, not fixed, not weakened.
