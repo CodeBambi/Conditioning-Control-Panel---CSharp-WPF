@@ -100,10 +100,17 @@
              2026-08-11 emoji purge: door icons are painted art thumbnails
              (Resources/nav/door_*.png, 64x64 native). 2026-08-12 (CONTRACT.md "Nav rail
              interaction spec"): the row became a medallion tile that grows with the rail -
-             44px r12 tile with a 28px icon while the rail is shut, 56px tile with a 44px icon
+             44px r12 tile with a 40px icon while the rail is shut, 56px tile with a 52px icon
              and a big bottom-aligned name once it opens. Every size in that sentence is
              animated from MainWindow.NavRail.cs (which also says why the open tile is 56 and
              not the contract's 64); nothing here animates itself.
+
+             2026-08-13 (owner: the door art is too small and sits in a grey ring): the icon
+             went 28/44 -> 40/52 inside the SAME tile, and the tile's permanent GlassBorder
+             hairline became Transparent. The 1px edge is still there and still 1px - it is
+             what RefreshNavDoorActive paints the door's hue on - it just carries no colour
+             until you are standing in that door. Nothing about the row's size moved: the tile
+             is 44/56, the row is 64 tall, the rail is 56 wide, the hit target is the whole row.
 
              The row is a FIXED 64px tall in BOTH states on purpose: only the tile inside it
              grows. Animating the row height as well would re-layout the whole rail (and shove
@@ -520,8 +527,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
                                          re-point the art at the active mod's override. The literal
@@ -577,8 +584,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorStudio"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -658,8 +665,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorCompanion"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -736,8 +743,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorPlay"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -857,8 +864,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorYou"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -962,8 +969,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorLibrary"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1148,8 +1155,8 @@
                             <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                            <Viewbox Grid.Column="0" Width="28" Height="28"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Column="0" Width="40" Height="40"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"

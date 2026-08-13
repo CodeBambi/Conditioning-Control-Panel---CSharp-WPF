@@ -7,7 +7,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
-using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -17,6 +16,10 @@ namespace ConditioningControlPanel
     /// much space, can we collapse the names and keep only the icons? on hover we can bring it up
     /// and uncollapse it - keep it there for 1 sec before collapsing it back, or on any click
     /// elsewhere").
+    ///
+    /// <para><b>2026-08-13:</b> the "1 sec" half of that is gone - see
+    /// <see cref="NavRailCollapseAnimMs"/>. The rail now starts shutting on the frame the pointer
+    /// leaves it; only the click-elsewhere and hover-to-open halves are unchanged.</para>
     ///
     /// <para><b>Why the expanded rail OVERLAYS the page instead of widening the layout.</b> The
     /// whole UI lives in a <c>Viewbox Stretch="Fill"</c> over a fixed <c>DesignCanvas</c>, and the
@@ -79,6 +82,27 @@ namespace ConditioningControlPanel
         /// QuadOut). The door labels get their own, longer, staggered pair below.</summary>
         private const int NavRailAnimMs = 190;
 
+        /// <summary>
+        /// The way OUT, 2026-08-13 (owner: the rail "stays open way too long after you move off
+        /// it"). Opening is a reveal and keeps its 190ms; closing is the rail getting out of the
+        /// way, so it runs a little quicker.
+        ///
+        /// <para><b>What actually changed is that there is no longer a WAIT in front of it.</b>
+        /// Until now MouseLeave started a 1000ms DispatcherTimer and the collapse happened on its
+        /// Tick, so the rail sat over the page for a full second after the pointer had gone. The
+        /// timer is deleted, not shortened: MouseLeave collapses on the spot and this constant is
+        /// the whole of the delay the user can perceive.</para>
+        ///
+        /// <para><b>Why that does not flicker.</b> The leave is measured on <c>NavSidebar</c>,
+        /// the rail container, and WPF raises MouseLeave only when the pointer leaves an
+        /// element's entire subtree - crossing from a door to its accordion entries, or between
+        /// two doors, never fires it. A pointer wobbling across the rail's edge alternates
+        /// MouseLeave/MouseEnter, and <see cref="SetNavRailExpanded"/> early-outs whenever the
+        /// state asked for is the state it is already in, so each real crossing starts at most one
+        /// tween and a re-entry mid-collapse simply re-targets the same Width clock.</para>
+        /// </summary>
+        private const int NavRailCollapseAnimMs = 150;
+
         // ===================== medallion door rows (CONTRACT, 2026-08-12) =====================
         // Sizes are animated between these two states; MainWindow.xaml authors the COLLAPSED
         // value on every element, so a rail whose Loaded hook never ran still renders correctly
@@ -95,9 +119,21 @@ namespace ConditioningControlPanel
         private const double NavDoorTileExpanded = 56;
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
-        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.</summary>
-        private const double NavDoorIconCollapsed = 28;
-        private const double NavDoorIconExpanded = 44;
+        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.
+        ///
+        /// <para>2026-08-13 (owner: the door images are too small and ringed in grey). Was 28 shut
+        /// / 44 open inside the same 44/56 tile, i.e. 8px of grey plate plus a 1px grey hairline
+        /// all the way round a 28px thumbnail. The tile did not grow - the art did, to 2px inside
+        /// it in both states, and the plate's idle outline went Transparent in MainWindow.xaml so
+        /// the only ring left is the hue one RefreshNavDoorActive paints on the door you are in.
+        /// Row pitch, tile size, hit target and rail width are all untouched.</para>
+        ///
+        /// <para>52 open is the ceiling worth taking: the art is 64px native, so anything past
+        /// ~56 DIP is upscale, and the 2px inset is what keeps the tile's r12 corners (and the
+        /// active hue ring, which is painted on the tile's own 1px edge) from being covered by
+        /// the art sitting on top of them.</para></summary>
+        private const double NavDoorIconCollapsed = 40;
+        private const double NavDoorIconExpanded = 52;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
         /// 4px each side where the gradient has already reached zero alpha, so the rail's
@@ -131,16 +167,11 @@ namespace ConditioningControlPanel
         /// race whose winner is whichever call happened to be last.</summary>
         private const string NavDoorLabelHostTag = "navdoorlabel";
 
-        /// <summary>Owner's number: the rail stays open a beat after the pointer leaves, so a
-        /// diagonal slide toward a child row does not shut it mid-reach.</summary>
-        private const int NavRailCollapseDelayMs = 1000;
-
         private bool _navRailExpanded;
         private bool _navRailReady;
-        private DispatcherTimer? _navRailCollapseTimer;
 
         /// <summary>Outstanding <see cref="HoldNavRailOpen"/> claims. While this is above zero the
-        /// rail ignores every collapse trigger - the delay timer, the pointer leaving, and the
+        /// rail ignores every collapse trigger - the pointer leaving and the
         /// click-elsewhere - because the caller is showing the user something IN the rail and a
         /// rail that shuts underneath a spotlight is worse than no spotlight at all. Counted, not
         /// a bool: a tutorial step and the palette can be up at once, and the first one to finish
@@ -204,38 +235,24 @@ namespace ConditioningControlPanel
                 // the subscription block in MainWindow.xaml.cs.
                 ApplyDoorArt();
 
-                _navRailCollapseTimer = new DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(NavRailCollapseDelayMs)
-                };
-                _navRailCollapseTimer.Tick += (_, __) =>
-                {
-                    _navRailCollapseTimer!.Stop();
-                    if (_navRailHoldCount > 0) return;
-                    // The pointer may have come back during the delay.
-                    if (!NavSidebar.IsMouseOver) SetNavRailExpanded(false);
-                };
+                NavSidebar.MouseEnter += (_, __) => SetNavRailExpanded(true);
 
-                NavSidebar.MouseEnter += (_, __) =>
-                {
-                    _navRailCollapseTimer?.Stop();
-                    SetNavRailExpanded(true);
-                };
+                // No timer, by owner call (NavRailCollapseAnimMs): leaving the rail IS the
+                // collapse trigger. NavSidebar is the whole rail, so this does not fire while the
+                // pointer is travelling between doors or down into an open accordion.
                 NavSidebar.MouseLeave += (_, __) =>
                 {
-                    _navRailCollapseTimer?.Stop();
                     if (_navRailHoldCount > 0) return;
-                    _navRailCollapseTimer?.Start();
+                    SetNavRailExpanded(false);
                 };
 
                 // "or on any click elsewhere". Preview, so it lands even when the click is
                 // handled by whatever it hit. A click INSIDE the rail is a navigation and keeps
-                // the rail open - the delay timer takes over once the pointer leaves.
+                // the rail open - MouseLeave takes over the moment the pointer goes.
                 PreviewMouseDown += (_, __) =>
                 {
                     if (NavSidebar.IsMouseOver) return;
                     if (_navRailHoldCount > 0) return;
-                    _navRailCollapseTimer?.Stop();
                     SetNavRailExpanded(false);
                 };
 
@@ -403,8 +420,14 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Repaints one row's "you are here" state from the active bar ChromeFx owns: hue ring
         /// on the tile, hue on the name, full opacity instead of .85, and a stronger halo.
-        /// ClearValue rather than writing the idle colours back, so the style's own
-        /// DynamicResource brushes (GlassBorder / TextLight) stay live for mod repaints.
+        /// ClearValue rather than writing the idle colours back, so the label's own
+        /// DynamicResource (TextLight) stays live for mod repaints.
+        ///
+        /// <para>The tile's ring is the ONLY ring on a door row since 2026-08-13 - the permanent
+        /// grey hairline is authored Transparent now and the art fills the tile to within 2px -
+        /// so this is what tells the user which door they are in at a glance. Idle rows clear
+        /// back to no ring at all (ClearValue on a locally-set Transparent brush leaves null,
+        /// which paints nothing - same result, one less brush).</para>
         /// </summary>
         private void RefreshNavDoorActive(NavDoorRow row)
         {
@@ -451,6 +474,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyNavDoorRows(bool expand, bool animate)
         {
+            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
             double tileTo = expand ? NavDoorTileExpanded : NavDoorTileCollapsed;
             double iconTo = expand ? NavDoorIconExpanded : NavDoorIconCollapsed;
             double glowTo = expand ? NavDoorGlowExpanded : NavDoorGlowCollapsed;
@@ -460,9 +484,9 @@ namespace ConditioningControlPanel
             for (int i = 0; i < _navDoorRows.Count; i++)
             {
                 var row = _navDoorRows[i];
-                SetNavRailSize(row.Tile, tileTo, animate);
-                SetNavRailSize(row.Icon, iconTo, animate);
-                SetNavRailSize(row.Glow, glowTo, animate);
+                SetNavRailSize(row.Tile, tileTo, animate, ms);
+                SetNavRailSize(row.Icon, iconTo, animate, ms);
+                SetNavRailSize(row.Glow, glowTo, animate, ms);
                 SetNavDoorGlow(row, animate);
 
                 if (!animate)
@@ -479,19 +503,19 @@ namespace ConditioningControlPanel
 
                 row.LabelHost.BeginAnimation(UIElement.OpacityProperty,
                     new DoubleAnimation(labelTo, TimeSpan.FromMilliseconds(
-                        expand ? NavDoorLabelFadeMs : NavRailAnimMs / 2))
+                        expand ? NavDoorLabelFadeMs : ms / 2))
                     { BeginTime = begin, EasingFunction = ease });
 
                 row.LabelSlide.BeginAnimation(TranslateTransform.YProperty,
                     new DoubleAnimation(riseTo, TimeSpan.FromMilliseconds(
-                        expand ? NavDoorLabelSlideMs : NavRailAnimMs / 2))
+                        expand ? NavDoorLabelSlideMs : ms / 2))
                     { BeginTime = begin, EasingFunction = ease });
             }
         }
 
         /// <summary>Square-grows one part. Width and Height take the same clock on purpose: two
         /// halves of one tween drifting apart is how a tile ends up a rectangle mid-flight.</summary>
-        private static void SetNavRailSize(FrameworkElement el, double to, bool animate)
+        private static void SetNavRailSize(FrameworkElement el, double to, bool animate, int ms)
         {
             if (!animate)
             {
@@ -502,7 +526,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            var size = new DoubleAnimation(to, TimeSpan.FromMilliseconds(NavRailAnimMs))
+            var size = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             };
@@ -517,11 +541,12 @@ namespace ConditioningControlPanel
             _navRailExpanded = expand;
 
             double to = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
+            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
             animate &= MotionFx.AllowTransitions;
 
             if (animate)
             {
-                var width = new DoubleAnimation(to, TimeSpan.FromMilliseconds(NavRailAnimMs))
+                var width = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
                 {
                     EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
                 };
@@ -530,7 +555,7 @@ namespace ConditioningControlPanel
                 // Labels trail the width slightly on the way out and lead it on the way in, so
                 // text never paints outside the rail's clip.
                 var fade = new DoubleAnimation(expand ? 1 : 0, TimeSpan.FromMilliseconds(
-                    expand ? NavRailAnimMs : NavRailAnimMs / 2));
+                    expand ? ms : ms / 2));
                 foreach (var label in _navRailLabels)
                     label.BeginAnimation(UIElement.OpacityProperty, fade);
             }
@@ -581,17 +606,16 @@ namespace ConditioningControlPanel
         /// where they landed (the tutorial's spotlights, the Ctrl+K palette). Without this the
         /// spotlight would point at a 56px icon strip with the target row shut inside it.
         ///
-        /// <para>The hold is a real suspension, not a restart: this used to Stop the collapse
-        /// timer and immediately Start it again, so the rail shut one second later exactly as if
-        /// nobody had asked - a hold that did not hold. Every caller MUST pair this with
-        /// <see cref="ReleaseNavRailOpen"/>, or the rail stays open for the session.</para>
+        /// <para>The hold is a real suspension: while <see cref="_navRailHoldCount"/> is up,
+        /// MouseLeave and the click-elsewhere both bail out instead of collapsing. Every caller
+        /// MUST pair this with <see cref="ReleaseNavRailOpen"/>, or the rail stays open for the
+        /// session.</para>
         /// </summary>
         internal void HoldNavRailOpen()
         {
             try
             {
                 _navRailHoldCount++;
-                _navRailCollapseTimer?.Stop();
                 SetNavRailExpanded(true);
             }
             catch (Exception ex) { App.Logger?.Debug("HoldNavRailOpen: {E}", ex.Message); }
@@ -599,9 +623,10 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Drops one <see cref="HoldNavRailOpen"/> claim. The last one out hands the rail back to
-        /// the normal delay: the pointer may well be sitting on it (a spotlight usually ends with
-        /// a click on the row), so the timer's own IsMouseOver check gets the final say rather
-        /// than collapsing on the spot.
+        /// the pointer: a spotlight usually ends with a click on the row it was pointing at, so a
+        /// release with the mouse still ON the rail leaves it open and lets the normal MouseLeave
+        /// shut it. Anywhere else, the hold was the only thing keeping it up - collapse now,
+        /// because with the delay timer gone there is nothing else that ever would.
         /// </summary>
         internal void ReleaseNavRailOpen()
         {
@@ -609,8 +634,7 @@ namespace ConditioningControlPanel
             {
                 if (_navRailHoldCount > 0) _navRailHoldCount--;
                 if (_navRailHoldCount > 0) return;
-                _navRailCollapseTimer?.Stop();
-                _navRailCollapseTimer?.Start();
+                if (NavSidebar?.IsMouseOver != true) SetNavRailExpanded(false);
             }
             catch (Exception ex) { App.Logger?.Debug("ReleaseNavRailOpen: {E}", ex.Message); }
         }
