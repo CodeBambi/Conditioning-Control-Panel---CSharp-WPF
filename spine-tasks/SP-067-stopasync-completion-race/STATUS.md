@@ -1,6 +1,6 @@
 ## STATUS: SP-067 — The StopAsync completion race: a cancelled heartbeat that reports Completed
-**Current Step:** Not started
-**Last Updated:** 2026-08-13 (orchestrator, authoring)
+**Current Step:** Step 1 (in progress)
+**Last Updated:** 2026-08-13 (worker, lane-1)
 **Blockers:** none
 
 **Floor at authoring:** 900 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-066, integrate `29950e9b`.
@@ -8,14 +8,14 @@
 
 **The defect in one line:** `HeartbeatParticipant.TickLoopAsync` (`client/src/CcpClient.Desktop/Lifecycle/Participants.cs:108`) returns `OperationOutcome.Completed` from a post-loop `return` that is reachable **only** when the token is cancelled — contradicting `async-lifecycle-fault-contract.md` §2:25 and §3.4. The correct shape already exists at `StatusTickerParticipant.cs:150-152`.
 
-### Step 1: Reproduce the race and name the mechanism — RED before any fix — ⬜ Not Started
-- [ ] Update STATUS.md before starting work
-- [ ] Contract lines (§2:25, §3.4) read **in the file** and quoted in `record.md` with line numbers
-- [ ] Bounded-loop probe driving `HeartbeatParticipant` start→stop, recording the terminal outcome per iteration, run against **unmodified** product code
-- [ ] **RED captured** under `evidence/`: >= 1 iteration reporting `Completed` where the contract requires `Cancelled`, with iteration count and observed hit rate
-- [ ] Mechanism named precisely: which exit path produced it, why the token was already cancelled there, why the OCE path did not fire — framing (a) explicitly **confirmed or refuted**
-- [ ] Zero-tick determinism (framing e) stated with the measurement behind it
-- [ ] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply, ask narrowly) — verdict + **ACTUAL answering model**; record exactly what surfaced, never stitch a verdict from reasoning
+### Step 1: Reproduce the race and name the mechanism — RED before any fix — 🔄 In Progress
+- [x] Update STATUS.md before starting work
+- [x] Contract lines (§2:25, §3.4) read **in the file** and quoted in `record.md` with line numbers
+- [x] Bounded-loop probe driving `HeartbeatParticipant` start→stop, recording the terminal outcome per iteration, run against **unmodified** product code
+- [x] **RED captured** under `evidence/`: >= 1 iteration reporting `Completed` where the contract requires `Cancelled`, with iteration count and observed hit rate
+- [x] Mechanism named precisely: which exit path produced it, why the token was already cancelled there, why the OCE path did not fire — framing (a) explicitly **confirmed or refuted**
+- [x] Zero-tick determinism (framing e) stated with the measurement behind it
+- [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply, ask narrowly) — verdict + **ACTUAL answering model**; record exactly what surfaced, never stitch a verdict from reasoning
 
 ### Step 2: Fix at the source, and sweep the class — ⬜ Not Started
 > ⚠️ Hydrate: expand the sweep checkboxes once Step 1's enumeration of `Task<OperationOutcome>` methods exists
