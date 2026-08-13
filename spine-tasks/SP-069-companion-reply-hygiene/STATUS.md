@@ -1,21 +1,29 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Complete (post-REVISE fix landed)
-**Last Updated:** 2026-08-13 (worker, final-review REVISE addressed)
+**Current Step:** Complete (second final-review REVISE addressed)
+**Last Updated:** 2026-08-14 (worker, second final-review REVISE addressed)
 **Blockers:** none
 
-**Post-`.DONE` engine reviews:** Step-5 code review APPROVE; final review **REVISE** — the H2
-order pin provably passed under all 120 permutations of the five patterns. Fixed: the pin was
-replaced with three permutation-distinguishing cases (`H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder`),
-`record.md` §2/§9 corrected, the R2 bite re-run (12 red, exactly the H2 set), floor bumped
-993→995 in the same commit as the tests. Full contract chain re-run green twice after the fix
-(995/995 unit, 35/35 headless, exactly the 2 pinned skips, build 0W/0E).
+**Post-`.DONE` engine reviews:** Step-5 code review APPROVE; final review round 1 **REVISE** (order pin
+passed under all 120 permutations) — fixed in `fb14e4a6`; final review round 2 **REVISE** — the
+`record.md` §2 / test-comment claim that `ClosedCategoryTag` and `ClosedMetadataTag` "commute" is false
+(executed counterexample `[Context:[Foo: z[Category: x][Apple pie` → `""` in WPF order, `[Apple pie`
+when `ClosedMetadataTag` runs first). Fixed: added the input as a fourth order-pin case
+(`H2_OrderPin_PermutationDistinguishers_ProveFixedOrder`), corrected the false commute claims in
+`record.md` §2 and the test comment (only `UnclosedKnownTag` vs `UnclosedKeyedTag` lacks a
+distinguisher — stated as "no distinguisher found" over a 400k-input adjacent-swap fuzz; 120
+permutations executed, 8 survivors under the four pins), re-ran the R2 bite (13 red, exactly the
+H2 set incl. all 4 order-pin rows; restoration green), floor 995→996 in the same commit as the
+test. Full contract chain re-run green (verify.mjs OK, build 0W/0E, 996/996 unit, 35/35 headless,
+exactly the 2 pinned skips — ccp-floor-wIQ2db).
 
 **Floor at authoring:** 946 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
 `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-068, integrate `f2662cd0`.
-**NEW EXACT COUNTS (this packet): 995 unit / 35 headless / 2 skipped** — bump `floor.json` `total` in the same commit
+**NEW EXACT COUNTS (this packet): 996 unit / 35 headless / 2 skipped** — bump `floor.json` `total` in the same commit
 as the facts that moved it, with the reason in the message. `allowedSkips` is untouched.
 (Originally 993; +2 from the post-REVISE order-pin replacement — one non-biting pin replaced by
-three permutation-distinguishing cases.)
+three permutation-distinguishing cases; +1 from the post-REVISE-round-2 fourth case pinning the
+two closed passes' relative order, with the false "commute" claim corrected to "no distinguisher
+found" for the unclosed pair only.)
 
 **The three layers in one line each (all at the reply seam, upstream of SP-068's link strip):**
 - **H1 — reasoning-block strip + tokenizer artifacts:** `<think>`/`<thinking>`/`<reasoning>`/`<thought>`

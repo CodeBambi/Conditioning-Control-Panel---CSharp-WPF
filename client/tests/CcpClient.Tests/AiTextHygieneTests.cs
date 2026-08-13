@@ -116,9 +116,9 @@ public class AiTextHygieneTests
     }
 
     [Theory]
-    // record.md §2 (corrected after final-review REVISE): three inputs whose output provably
-    // changes under permutation of the five patterns — verified by executing the transcribed
-    // regexes over all 120 permutations.
+    // record.md §2 (corrected after final-review REVISE rounds 1-2): four inputs whose output
+    // provably changes under permutation of the five patterns — verified by executing the
+    // transcribed regexes over all 120 permutations.
     // Case 1 (closed passes BEFORE ReactionCategoryTag — 40/120 perms break):
     //   WPF order: ClosedCategoryTag consumes "[Category: a [Media/Streaming]" (its [^\]]*
     //   stops at the FIRST ']') leaving " b]". If ReactionCategoryTag runs before BOTH closed
@@ -134,10 +134,21 @@ public class AiTextHygieneTests
     // Case 3 (UnclosedKeyedTag AFTER ReactionCategoryTag — 60/120 perms break): same shape
     //   with an unknown keyword, so only UnclosedKeyedTag can eat the fragment.
     [InlineData("[Foo: x [Media/Streaming]", "")]
-    // Provably UNOBSERVABLE pairings (stated honestly in record.md §2): ClosedCategoryTag vs
-    // ClosedMetadataTag (the former's matches are a subset of the latter's) and the two
-    // unclosed passes against each other commute on every constructible input.
-    public void H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder(string input, string expected)
+    // Case 4 (ClosedCategoryTag BEFORE ClosedMetadataTag — 70/120 perms break): nested
+    //   brackets. WPF order: ClosedCategoryTag removes "[Category: x]" first, leaving
+    //   "[Context:[Foo: z[Apple pie", which ClosedMetadataTag then consumes whole → "".
+    //   If ClosedMetadataTag runs FIRST it stops at the first ']', removing
+    //   "[Context:[Foo: z[Category: x]" and leaving "[Apple pie" (\b discipline: not "App").
+    //   (Final-review REVISE round 2: this is the case that disproves the earlier "the two
+    //   closed passes commute" claim — per-match subsetting does not imply commuting outputs
+    //   when brackets nest.)
+    [InlineData("[Context:[Foo: z[Category: x][Apple pie", "")]
+    // Pairing with NO DISTINGUISHER FOUND (stated honestly in record.md §2 — "no distinguisher
+    // found", not "provably unobservable"): UnclosedKnownTag vs UnclosedKeyedTag. A 400k-input
+    // adjacent-swap fuzz over the transcribed regexes found a distinguisher for every other
+    // adjacent pair in WPF's order; the four pins above reduce the 120 permutations to 8
+    // survivors (executed), and no stronger honesty claim is made.
+    public void H2_OrderPin_PermutationDistinguishers_ProveFixedOrder(string input, string expected)
     {
         Assert.Equal(expected, AiTextHygiene.StripMetadataTags(input));
     }

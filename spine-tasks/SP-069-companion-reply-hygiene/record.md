@@ -45,23 +45,32 @@ originally asserted (`[Category: [Foo]: bar` → `: bar` in WPF order, `""` perm
 its own terms**: `UnclosedKeyedTag` cannot match `[Foo]: bar` (the character after the colon is
 `]`, which its `[^\]]` class excludes), so the claimed permuted path never fires — verified by
 executing the five transcribed regexes plus collapse+trim over **all 120 permutations**: every
-permutation yields `: bar`. The three REAL distinguishers (all 120 permutations executed; WPF
-order output in **bold**):
+permutation yields `: bar`. The REAL distinguishers (all 120 permutations executed; WPF order
+output in **bold**; cases 1-3 from REVISE round 1, case 4 added in REVISE round 2):
 
 | # | Input | WPF order | Broken under | Perms broken |
 |---|-------|-----------|--------------|--------------|
 | 1 | `[Category: a [Media/Streaming] b]` | **`b]`** (`ClosedCategoryTag`'s `[^\]]*` stops at the FIRST `]`, consuming `[Category: a [Media/Streaming]`) | `ReactionCategoryTag` before BOTH closed passes: it eats `[Media/Streaming]` first, then a closed pass consumes the whole `[Category: a  b]` → `""` | 40/120 |
 | 2 | `[App x [Media/Streaming]` | **`""`** (reaction removed → `[App x ` → `UnclosedKnownTag` eats it) | `UnclosedKnownTag` before `ReactionCategoryTag`: the `]` blocks the end anchor while the reaction tag is present, and once the reaction tag is gone the unclosed pass has already run → `[App x` survives | 60/120 |
 | 3 | `[Foo: x [Media/Streaming]` | **`""`** (same shape, unknown keyword → `UnclosedKeyedTag`) | `UnclosedKeyedTag` before `ReactionCategoryTag` → `[Foo: x` survives | 60/120 |
+| 4 | `[Context:[Foo: z[Category: x][Apple pie` | **`""`** (`ClosedCategoryTag` removes `[Category: x]` first → `[Context:[Foo: z[Apple pie` → `ClosedMetadataTag` consumes it whole) | `ClosedMetadataTag` before `ClosedCategoryTag`: it stops at the FIRST `]`, removing `[Context:[Foo: z[Category: x]` and leaving `[Apple pie` (the `\b` discipline keeps `[Apple` from matching `App`) | 70/120 |
 
-The semantic order relations these pin: **closed passes → ReactionCategoryTag → unclosed passes**.
-Provably UNOBSERVABLE pairings (stated honestly, per Step 1's escape hatch): `ClosedCategoryTag`
-vs `ClosedMetadataTag` commute because the former's matches are a strict subset of the latter's;
-the two unclosed passes commute with each other and with the closed passes on every input
-constructed (both are end-anchored and non-`]`-crossing, so neither can uncover a fragment the
-other would then treat differently). The deep property that IS load-bearing: the reaction-tag
-pass must sit **between** the closed and unclosed passes, or nested tags change what the
-end-anchored passes see at end-of-string.
+The semantic order relations these pin: **closed passes → ReactionCategoryTag → unclosed passes**,
+plus — after final-review REVISE round 2 — `ClosedCategoryTag` before `ClosedMetadataTag` (case 4).
+Executed over all 120 permutations, the four pins leave **8 surviving permutations** (re-derived by
+execution for this correction; an earlier draft of this section claimed more than it could prove).
+**Honesty correction (final-review REVISE round 2):** the earlier version of this section asserted
+that `ClosedCategoryTag` vs `ClosedMetadataTag` "commute because the former's matches are a strict
+subset of the latter's" and that the unclosed passes "commute with the closed passes on every input
+constructed". **That claim is false** — per-match subsetting does not imply commuting outputs when
+brackets nest, and case 4 above is the executed counterexample (permuting the two closed passes
+changes the output). What survives scrutiny: a 400k-input adjacent-swap fuzz over the transcribed
+regexes found a distinguisher for **every adjacent pair in WPF's order except `UnclosedKnownTag` vs
+`UnclosedKeyedTag`** — for that one pairing, **no distinguisher was found** (stated as "no
+distinguisher found", not "provably unobservable"; both are end-anchored and non-`]`-crossing, but
+that argument was not elevated to a proof again). The deep property that IS load-bearing: the
+reaction-tag pass must sit **between** the closed and unclosed passes, or nested tags change what
+the end-anchored passes see at end-of-string.
 
 ### H3 — `LooksLikeEnvelopeLeak` (WPF `AiResponseParser.cs:53-58`)
 
@@ -208,7 +217,7 @@ SP-067 lesson applied to this packet's own evidence.
 | Revert | Source reverted | RED set (exactly these, from the TRX) | Everything else |
 |---|---|---|---|
 | R1 (H1) | `AiTextHygiene.Clean` — early `return text` | **15 red**: 4 `H1_ReasoningBlock_EachTagName` rows + `H1_ReasoningBlock_CaseInsensitive` + `H1_UnterminatedBlock_EatsToEndOfString` + `H1_OrphanClosingTag_Removed` + `H1_TokenizerArtifact_GSpace` + `H1_TokenizerArtifact_CNewline` + `H1_LossyBoundary` + seam: `UnionRule_TokenJoinedAcrossTagBoundary`, `UnionRule_TokenJoinedByArtifactCharacter`, `HygieneEmptiedReply`, both `SoftHit_*` seam facts | 976 passed — H2/H3/union-reverse pins all green |
-| R2 (H2) | `AiTextHygiene.StripMetadataTags` — early `return text` | **12 red (RE-RUN after final-review REVISE, with the corrected order pin in place)**: 5 `H2_EachOfTheFiveShapes` rows + `H2_PortTrigger` + `H2_WhitespaceCollapse_AndTrim` + **3 `H2_OrderPin_ThreePermutationDistinguishers` rows** + seam: `TriggerEcho_StrippedBeforeBubbleAndMemory`, `H3_ComposedWithThePortsOwnTrigger_StillDetected`. The original R2 run's `H2_OrderPin_NestedTruncation` red proved MEMBERSHIP only (a whole-function revert red-tells any pin in the function); the order-pinning proof is the 120-permutation execution in §2 plus the new pins' presence in this RED set | 981 passed — H1/H3/union pins and H2 negative controls green (identity satisfies byte-identical controls; the shape pins carry the removal proof). TRX: `Counters total=995 failed=12` |
+| R2 (H2) | `AiTextHygiene.StripMetadataTags` — early `return text` | **13 red (RE-RUN after final-review REVISE round 2, with the four-case order pin in place)**: 5 `H2_EachOfTheFiveShapes` rows + `H2_PortTrigger` + `H2_WhitespaceCollapse_AndTrim` + **4 `H2_OrderPin_PermutationDistinguishers` rows** (all four, including the round-2 closed-pass case) + seam: `TriggerEcho_StrippedBeforeBubbleAndMemory`, `H3_ComposedWithThePortsOwnTrigger_StillDetected`. A whole-function revert red-tells MEMBERSHIP only; the order-pinning proof is the 120-permutation execution in §2 (8 surviving permutations) plus all four pins' presence in this RED set | 981 passed — H1/H3/union pins and H2 negative controls green (identity satisfies byte-identical controls; the shape pins carry the removal proof). TRX: `Counters total=996 failed=13` |
 | R3 (H3) | `AiTextHygiene.LooksLikeEnvelopeLeak` — early `return false` | **6 red**: 3 `H3_EnvelopeLeak_Detected` rows + seam: `H3_LeakedEnvelope_TypedMalformedOutput`, `H3_DetectionIsUnion_TagTail`, `H3_ComposedWithThePortsOwnTrigger` | 985 passed — H3 negative controls green (a dead detector returns false, which the controls expect; the detect rows carry the proof) |
 | R4 (union rule) | `AiOperationPipeline.cs` — hygienic `EvaluateOutput` block disabled | **3 red**: `UnionRule_TokenJoinedAcrossTagBoundary`, `UnionRule_TokenJoinedByArtifactCharacter`, `SoftHit_VisibleOnlyAfterHygiene` — exactly the pins only the hygienic half can trip | 988 passed — reverse-direction (raw-scan) union pins green |
 
@@ -216,7 +225,10 @@ After R4 was undone: rebuild 0W/0E + wrapper **FLOOR OK 993/993** — the tree i
 stuck on a revert. Evidence: `evidence/bite-R{1..4}-*.log` + `evidence/bite-R{1..4}-*.trx.txt`.
 **R2 was re-run after the final-review REVISE** (order-pin replacement): RED set above at the
 995 count, `evidence/bite-R2-H2-metadata.{log,trx.txt}` refreshed; restoration re-verified
-(wrapper **FLOOR OK 995/995**, build 0W/0E) before commit.
+(wrapper **FLOOR OK 995/995**, build 0W/0E) before commit. **R2 was re-run a second time after
+final-review REVISE round 2** (fourth order-pin case): **13 red**, exactly the H2 set with all
+four order-pin rows, `evidence/bite-R2-H2-metadata.trx.txt` refreshed again; restoration
+re-verified (wrapper **FLOOR OK 996/996**, build 0W/0E) before commit.
 
 ## 10. Run table
 
@@ -249,6 +261,18 @@ G1–G3; the post-REVISE change is a test-only replacement of one pin by three s
 pins plus its floor bump, and the full chain (verify.mjs + build 0W/0E + wrapper) was re-run
 green twice after it (post-bump gate and restoration gate).
 
+**Post-REVISE-round-2 runs (final review `REVISE` on the false "closed passes commute" claim —
+see §2's honesty correction and §9 R2):**
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped (names) | TRX |
+|---|---|---|---|---|---|---|
+| post-fix gate | lane-1 | warm | 996/996 (floor bumped 995→996 in the same commit as the fourth case) | 35/35 | the 2 pinned names | ccp-floor-cJApOM |
+| bite R2 re-run #2 | lane-1 | warm | **13 red**, exactly the R2 set incl. all 4 order-pin rows | — | — | evidence/bite-R2-H2-metadata.trx.txt (ccp-floor-eelLW3) |
+| restoration gate | lane-1 | warm | 996/996 | 35/35 | the 2 pinned names | ccp-floor-kRbrL0 |
+| final contract chain | lane-1 | warm | 996/996 | 35/35 | the 2 pinned names | ccp-floor-wIQ2db (verify.mjs OK + build 0W/0E + wrapper FLOOR OK) |
+
+The named flake did NOT fire in the round-2 runs either.
+
 ## 11. Engine-review presence (T-2)
 
 | Step | `spine_review_step` call | Outcome |
@@ -259,11 +283,18 @@ green twice after it (post-bump gate and restoration gate).
 
 No REVISE and no spawn failure occurred at worker-run time; code/final review are the
 engine's post-`.DONE` phases. **Post-`.DONE` engine reviews:** Step-5 code review APPROVE
-(`.reviews/5-20260813T143319.md`); final review **REVISE** (`.reviews/final-20260813T144138.md`)
-— the H2 order pin provably did not bite (passes under all 120 permutations). Addressed in this
-resume: the pin was replaced with three permutation-distinguishing cases (§2 corrected, §9 R2
-re-run, floor 993→995 in the same commit as the tests), and both non-blocking suggestions were
-accepted (§6's detection-union contract line, §13's paragraph-collapse board finding).
+(`.reviews/5-20260813T143319.md`); final review round 1 **REVISE** (`.reviews/final-20260813T144138.md`)
+— the H2 order pin provably did not bite (passes under all 120 permutations). Addressed: the pin
+was replaced with three permutation-distinguishing cases (§2 corrected, §9 R2 re-run, floor
+993→995 in the same commit as the tests), and both non-blocking suggestions were accepted (§6's
+detection-union contract line, §13's paragraph-collapse board finding). Final review round 2
+**REVISE** (`.reviews/final-20260813T152258.md`) — the three pins genuinely bit, but §2 and the
+test comment falsely claimed the two closed passes "commute" (executed counterexample supplied).
+Addressed: fourth order-pin case added (`[Context:[Foo: z[Category: x][Apple pie` → `""`,
+70/120 perms broken, pins `ClosedCategoryTag` before `ClosedMetadataTag`), §2 and the test
+comment corrected (only `UnclosedKnownTag` vs `UnclosedKeyedTag` lacks a distinguisher — stated
+as "no distinguisher found" over a 400k-input adjacent-swap fuzz, not "provably unobservable"),
+§9 R2 re-run (13 red, all four order-pin rows), floor 995→996 in the same commit as the test.
 
 ## 12. Honesty cell
 
@@ -279,8 +310,11 @@ accepted (§6's detection-union contract line, §13's paragraph-collapse board f
 3. **`AiEnvelopeValidator` remains unwired**; this packet did not change that, and no model text
    moved toward the command-execution path.
 4. **Execution vs reading:** all three layers, the union rule, and the seam wiring were verified
-   by EXECUTION (49 new facts — 47 original + 2 net from the post-REVISE order-pin
-   replacement — plus four bite reverts, R2 re-run post-REVISE). WPF anchors and WPF's moderation ordering
+   by EXECUTION (50 new facts — 47 original + 2 net from the post-REVISE order-pin
+   replacement + 1 from the round-2 fourth case — plus four bite reverts, R2 re-run after each
+   REVISE round). The order claims were verified by executing the transcribed regexes over all
+   120 permutations (8 survivors under the four pins) and a 400k-input adjacent-swap fuzz
+   (no distinguisher found for the unclosed pair only). WPF anchors and WPF's moderation ordering
    were verified by reading (table in §1). `EvaluateOutput`'s purity was verified by reading
    (`AiModerationBoundary.cs:279-296`).
 5. **No real local model output was exercised** — only constructed fixtures (including the exact
