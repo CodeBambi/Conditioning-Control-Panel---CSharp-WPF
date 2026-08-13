@@ -326,12 +326,42 @@ public class PlayDoorRenderTests
         ("PlayRemoteHeroBrush",   "features/remote_control.png"),
         ("PlayFypHeroBrush",      "features/fyp.png"),
         ("PlayLockdownHeroBrush", "lockdown_icon.png"),
-        // 0812 remake: the hero and the Loom strip carry art too. playHeroMap does not mutate
-        // these two yet (they fall back to the embedded copies), but the named-and-mutable
-        // contract holds so adopting them later is a map entry, not a XAML change.
+        // 0812 remake: the hero and the Loom strip carry art too. The named-and-mutable contract
+        // was already in place then; the mod-awareness sweep (0813) spent it, so playHeroMap now
+        // mutates these two on every mod switch like the eight above it. Before that, a .ccpmod
+        // overriding features/dtrh.png repainted every OTHER surface using that file and left the
+        // biggest one on the embedded art.
         ("PlayDtrhHeroBrush",     "features/dtrh.png"),
         ("PlayLoomHeroBrush",     "features/loom.png"),
     };
+
+    /// <summary>
+    /// Every brush above must actually appear in <c>playHeroMap</c>, paired with the path listed.
+    /// The list is otherwise a statement of intent that a XAML-only change keeps satisfying while
+    /// the wall goes stale - which is exactly the state the two rows below were in until 0813.
+    /// Read out of the source, because the map is a local in <c>LoadFeatureImages</c> and there is
+    /// nothing to reflect over.
+    /// </summary>
+    [Fact]
+    public void PlayHeroMapFeedsEveryHeroBrush()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+
+        var start = source.IndexOf("var playHeroMap", StringComparison.Ordinal);
+        Assert.True(start >= 0, "playHeroMap is gone from MainWindow.xaml.cs - the Play wall no longer repaints on a mod switch");
+        var end = source.IndexOf("};", start, StringComparison.Ordinal);
+        Assert.True(end > start, "playHeroMap's initializer did not terminate - the scrape is wrong, not the map");
+        var map = source.Substring(start, end - start);
+
+        foreach (var (brush, path) in HeroBrushes)
+        {
+            Assert.True(map.Contains(brush, StringComparison.Ordinal),
+                $"{brush} is not in playHeroMap - its card never repaints on a mod switch");
+            Assert.True(map.Contains($"\"{path}\"", StringComparison.Ordinal),
+                $"playHeroMap does not feed {path} - the mod contract path for {brush}");
+        }
+    }
 
     [Fact]
     public void EveryHeroBrushIsNamedAndStillMutable()

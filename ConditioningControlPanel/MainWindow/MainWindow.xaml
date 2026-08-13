@@ -523,7 +523,12 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
+                                         re-point the art at the active mod's override. The literal
+                                         Source stays: it is what renders before that call, and what
+                                         stays on screen if the resolver comes back empty. -->
+                                    <Image x:Name="ImgDoorHome"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_home.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -575,7 +580,8 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <Image x:Name="ImgDoorStudio"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_studio.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -655,7 +661,8 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <Image x:Name="ImgDoorCompanion"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_companion.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -732,7 +739,8 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <Image x:Name="ImgDoorPlay"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_play.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -852,7 +860,8 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <Image x:Name="ImgDoorYou"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_you.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -956,7 +965,8 @@
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                                 <Viewbox Grid.Column="0" Width="28" Height="28"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                    <Image x:Name="ImgDoorLibrary"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                            Source="pack://application:,,,/Resources/nav/door_library.png">
                                         <Image.Clip>
                                             <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
@@ -1141,7 +1151,8 @@
                                     BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
                             <Viewbox Grid.Column="0" Width="28" Height="28"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                <Image x:Name="ImgDoorSettings"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
                                        Source="pack://application:,,,/Resources/nav/door_settings.png">
                                     <Image.Clip>
                                         <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
