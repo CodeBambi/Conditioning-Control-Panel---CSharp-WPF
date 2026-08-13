@@ -247,5 +247,72 @@ the reason in the commit message and in `lastMovedBy` (documentation-only field)
 ### Engine review, Step 3 (T-2 heading format)
 
 `spine_review_step step=3 type=plan` → **engine review ABSENT**: nested reviewer spawn
-blocked inside worker session (`skipped: true, spawnFailed: false`). Reviews run on the
-engine after `.DONE`.
+blocked inside worker session (`skipped: true, spawnFailed: false`, artifact
+`.reviews/3-20260813T040324.md`). Reviews run on the engine after `.DONE`.
+
+## Step 4 — honesty cell, filings, consults
+
+### Honesty cell — what this mechanism does NOT close
+
+1. **It detects an off-floor count but does not name which test vanished.** The TRX has
+   the names; the wrapper deliberately checks counts, not identity. Diagnosis still starts
+   from the trx in the printed results directory.
+2. **It binds only invocations routed through the wrapper.** A bare `dotnet test` run by a
+   human still exits 0 on an unexpected skip. The Step 3 guard binds future PACKETS
+   (>= SP-65 testCommands); it cannot bind a keyboard.
+3. **It cannot prove the pinned number is the RIGHT number.** A pin bumped in the same
+   commit as a bad or vacuous test is blessed by the mechanism. This replaces "a human
+   must compare numbers" with "a human must justify a bump" — better, and **not
+   verification**. (`lastMovedBy` is documentation; nothing checks it.)
+4. **It does nothing for part (1)'s vacuous-SHAPE sweep.** A test that asserts nothing and
+   reports passed stays invisible to it.
+5. **The template that makes future packets inherit the wrapper is an orchestrator land
+   action** (`.spine/patches/manifest.json` — not worker-writable). The guard catches its
+   omission only at the NEXT packet's lane, not before.
+6. **Linux unproven.** Zero WSL distros on this machine; no Linux run was attempted and
+   none is faked. The wrapper is portable node + TRX parsing, but "portable by
+   construction" is not "proven on Linux".
+7. **Test name-swap blind spot** (from the Step 1 consult reasoning, kept deliberately):
+   a commit that removes one fact and adds another keeps the count and passes. Closing it
+   means pinning a hash of the sorted test-name list — more friction than this row sized
+   for; named here so nobody believes count = identity.
+
+### Intended filings (named only — the worker sets no row state, ENABLER 2)
+
+- **task-board.md**: row 49 part (2) evidence — wrapper (`client/tests/floor/check-floor.mjs`),
+  pin (`floor.json` 898/35/0), half-install guard (`FloorWrapperGuardTests`); part (1)
+  remains open on the board.
+- **task-board.md (new row candidate)**: named flake —
+  `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` went red once
+  in this lane (1 in 6+ full-suite runs, unquantified), per-instance fixtures so the
+  mechanism is non-obvious; named so nobody "fixes" it by weakening the assertion.
+- **port-lessons.md (candidate)**: `cmd | tail; echo $?` reports TAIL's exit code — measure
+  with `${PIPESTATUS[0]}`. Hit during this packet's own probes (first-pass readings were
+  all wrong and were re-measured).
+- **orchestrator land action**: `.spine/patches/manifest.json` packet-template change
+  routing future testCommands through `node client/tests/floor/check-floor.mjs`. Until it
+  lands, the Step 3 guard turns the NEXT bound packet's lane red — the designed catch point.
+
+### Product capability statement (port-workflow item 11)
+
+This task writes **zero product code** and closes **no product capability**.
+`client/src/**` untouched (verified in Step 5 status sweep).
+
+### Consults
+
+- **Pre-approach (Step 1), mode solo**: reasoning only, NO verdict text surfaced; actual
+  answering model not surfaced. Recorded verbatim in Step 1; adopted reasoning observations
+  are marked "consult-reasoning point" there. Nothing stitched.
+- **Pre-completion**: below, appended after the call.
+
+### Engine-review presence summary (T-2)
+
+| Step | Call | Engine review |
+|---|---|---|
+| 1 | `spine_review_step step=1 type=plan` | ABSENT (nested-spawn block, skipped=true, spawnFailed=false) |
+| 2 | `spine_review_step step=2 type=plan` | ABSENT (same) |
+| 3 | `spine_review_step step=3 type=plan` | ABSENT (same) |
+
+## Step 5 — verification
+
+(filled in during Step 5)

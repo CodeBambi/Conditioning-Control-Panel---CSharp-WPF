@@ -1,6 +1,6 @@
 ## STATUS: SP-065 — Mechanical skip/count detection that fails the CONTRACT
-**Current Step:** 3 (the half-install guard)
-**Last Updated:** 2026-08-13 (worker, Step 3 in progress)
+**Current Step:** 4 (record + pre-completion consult)
+**Last Updated:** 2026-08-13 (worker, Step 4 in progress)
 **Blockers:** none
 
 ### Step 1: probe the runner surface, choose the mechanism, design the guard — COMPLETE
@@ -21,13 +21,13 @@
 - [x] Every injection removed and proven removed
 - [x] Pin bumped in the same commit as any count change, reason stated
 
-### Step 3: the half-install guard — IN PROGRESS
+### Step 3: the half-install guard — COMPLETE
 - [x] Guard walks `spine-tasks/*/PROMPT.md`, enforces IDs `>= SP-065`, `file:line` violations, never skips
 - [x] Captured RED from a probe packet with a bare `dotnet test` testCommand; probe deleted and deletion proven
 - [x] This packet's own PROMPT.md passes the guard (self-binding)
 - [x] Confirm no false fire on a packet that legitimately runs no tests
 
-### Step 4: record + pre-completion consult — NOT STARTED
+### Step 4: record + pre-completion consult — IN PROGRESS
 - [ ] record.md complete (probes verbatim, mechanism + rejections, fail-closed table, new exact pin, both verdicts, drift, guard RED, ls-files proof, cleanliness proof, 3-run table, consults + actual models, intended filings)
 - [ ] Honesty cell — all six named limits
 - [ ] Pre-completion solo consult
