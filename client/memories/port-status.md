@@ -1,4 +1,12 @@
-# Port Status (as of 2026-08-12, third export — laptop)
+# Port Status (as of 2026-08-13, fourth export — laptop)
+
+## Wave 21 (AUTHORED + LAUNCHED 2026-08-13 — SP-064, single lane)
+
+- **First phase run under the unattended loop** (`client/tools/port-loop.ps1`): the shell owns waiting, one fresh pi session per phase. This session did phase B only (reconcile → consult → author → launch detached → exit); it did NOT monitor the batch.
+- **SP-064 = board row 38** (harness entry points must REFUSE to run unsealed). Gate in the real `Program.Main` path after the SP-057 override block and before composition-root construction; ONE registry for the classification; a guard test that fails on any unclassified startup flag literal; real-process proof both directions (refusal leaves `%APPDATA%\CcpClient` byte-identical under path-hashed manifests + SP-057 positive controls; plain unsealed launch still opens a window and exits 0).
+- **Single lane on purpose:** the deliverable is a suite-wide pinned enumeration of entry points and every product slice here has added its own `--x-demo`/`--x-drive` flag, so a parallel lane is green alone and RED at merge (SP-054/SP-058 class). It also moves the exact-count floor that board row 49 part (2) would pin — that row is the successor.
+- **Decomposition consult (solo, Opus 5) returned reasoning only; the final verdict text was not surfaced by the tool.** Recorded, never stitched; its guidance is carried in the packet framings.
+- Base floor at launch: **892 unit / 35 headless / 0 skipped**. This wave ADDS facts — the worker states the new exact count. Next unused task ID: **SP-065**.
 
 ## Wave 20 (LANDED 2026-08-12, integrate `10c37650`; floor stays 892/35/0-skipped)
 

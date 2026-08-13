@@ -1,8 +1,8 @@
 # Conditioning-Control-Panel — Context
 
-**Last Updated:** 2026-08-12
-**Status:** ACTIVE — wave 20 LANDED (`10c37650`); floor 892 unit / 35 headless, 0 skipped; next = wave 21 (board row 38: harness entry points must REFUSE to run unsealed)
-**Next Task ID:** SP-064
+**Last Updated:** 2026-08-13
+**Status:** ACTIVE — wave 21 AUTHORED + LAUNCHED (SP-064, single lane, board row 38: harness entry points must REFUSE to run unsealed); base floor 892 unit / 35 headless, 0 skipped (this wave ADDS facts — the worker states the new exact count); next after landing = board row 49 part (2), the mechanical skip/count contract check, which must pin the POST-SP-064 count
+**Next Task ID:** SP-065
 
 ---
 
@@ -98,6 +98,18 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-058-graded-intake-v67-delta | Row (P1): v6.6.3 → v6.7.4 intake delta — enumerate from the tree, obligation table, serve accents/ai payload deltas, consume SP-055's `IsAssetActive` (no second definition), pin `TopMarksPercent = 90.0` with its verdict derivation, state the new baseline | **Done 2026-08-12** (landed `7bfce5ac`; batch `20260812T072253` — FULL review chain: code APPROVE + final PASS + contract ok; **clean merge, no T-12**; ledger incomplete a 3rd time (`QuizService.cs +15` unnamed, `GamificationBridge.cs +157` found by widened sweep → cross-referenced to the Trainer Card row); accents SERVE + ai.js/QuizService NOTHING; top-marks computed-and-logged-never-raised typed seams; `IsAssetActive` verified-not-reimplemented; serve-probe 200 w/ trust-anchor sha256 + 404 control; first consumer of the `CCP_DATA_ROOT` seam, real profile BYTE-IDENTICAL; new baseline v6.7.4 `0c9947a6`; 862/862 + 33/33; **orchestrator merged-state check found a red the worker AND the engine gate both missed → new P1 timing-discipline row**; row WIP) | SP-057 |
 
 **WAVE 16 COMPLETE 2026-08-12 — both lanes landed (`c42d82ff`, `7bfce5ac`).** Rows filed across the two land consults: **harness entry points must refuse to run unsealed** (P1 — the SP-057 seam is opt-in, the same procedural class that failed at SP-052), **m2test expectation-model upstream ask** (P2), **wall-clock waits in tests — third occurrence of the timing-discipline class** (P1, encode-don't-fix-once: convert + sweep + guard + constitution line, 10 consecutive greens, zero assertions weakened). Unit floor now **862** with the flaky test named on its row. Next unused task ID: SP-059.
+
+### Wave 21 (authored + launched 2026-08-13 — single lane)
+
+**WAVE 21 IN FLIGHT — SP-064, board row 38.** The SP-057 `CCP_DATA_ROOT` seam is opt-in, so a packet that forgets writes the owner's real profile exactly as before it existed (the procedural-mitigation class that already failed at SP-052). SP-064 makes the seam mandatory for launches whose only purpose is automated evidence capture: a startup gate in the real `Program.Main` path, placed after the SP-057 override validation and before composition-root construction, that exits non-zero naming `CCP_DATA_ROOT`; one registry holding the classification; a guard test that fails when any startup flag literal is unclassified; and real-process proof in both directions (refusal leaves the real profile byte-identical under path-hashed manifests with SP-057's positive controls; a plain unsealed launch still opens a window and exits 0).
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-064-harness-refuse-unsealed | Harness-only entry points refuse to start unsealed. Classification is by resolved launch INTENT, not flag spelling: class 1 HARNESS (`--dtrh-m2test`, `--dtrh-fx-drive`, `--intake-drive`, `--loom-drive`, `--tunnel-drive` + the harness-only failure injectors `--dtrh-kill-renderers`, `--dtrh-block-route`, `--intake-kill-renderers`) refuses; class 2 DEMO/INSPECTION and class 3 PRE-PHASE SELF-CHECK never refuse (the row's explicit ban); class 4 MODIFIER carries no independent verdict. The `--dtrh-demo --dtrh-auto-close 30` residual hole is named for the owner, not silently closed. | authored 2026-08-13, batch launched | SP-057, SP-063 |
+
+**Why alone:** the deliverable is a suite-wide pinned enumeration of startup entry points, and every product slice in this port's history has added its own `--x-demo`/`--x-drive` flag — a parallel lane adding a flag is green alone and RED at merge against this guard (SP-054/SP-058 class; the wave-19 standing rule "a row delivering a suite-wide pinned guard runs alone"). It also moves the exact-count floor, which is what board row 49 part (2) would pin, so that row is the successor and must land after this one.
+
+**Decomposition consult (solo, Opus 5, 2026-08-13):** returned **reasoning only — the final verdict text was not surfaced by the tool.** Recorded, never stitched. Its substantive guidance is carried into the packet's framings: classify by intent rather than spelling and name the residual hole; the gate must ride the real entry point and fire before any write, proven by a real process run rather than a pin alone; one registry plus an unclassified-literal guard mirroring `DataRootChokePointGuardTests`.
 
 ### Wave 20 (LANDED 2026-08-12, integrate `10c37650`)
 
