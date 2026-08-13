@@ -311,13 +311,42 @@ public sealed class AiOperationPipeline
                 return OperationOutcome.Cancelled.Instance;
             }
 
-            // Output moderation boundary (contract §7 rule 1): after the stale check
-            // (discarded replies are never moderated — no side effects on dropped work),
-            // before the reply is applied. Model-produced Generated text only; app-authored
-            // Fallback text is a recorded non-claim (record.md §2 row 12). Output blocks
-            // never escalate (WPF: model output is never the user's doing).
             if (produced is AiReply.Generated generated)
             {
+                // SP-069 reply hygiene, upstream of every consumer (WPF AiTextHygiene.Clean /
+                // StripMetadataTags and AiResponseParser.LooksLikeEnvelopeLeak; shipped fix
+                // 932d829a). REMOVAL ONLY — H1 reasoning blocks + tokenizer artifacts, then
+                // H2 metadata-tag echoes (the port's own trigger: AiAwarenessService.cs:229
+                // sends the model exactly this shape and local models mirror it back).
+                var afterH1 = AiTextHygiene.Clean(generated.Text);
+                var hygienic = AiTextHygiene.StripMetadataTags(afterH1);
+
+                // H3 envelope-leak DETECTION as a union (SP-069 pre-approach consult): the
+                // port's trigger composed with a leak ("[Category: …] {\"response\":…}") is
+                // only visible before H2, while a truncation fragment is only certain after
+                // it — check both. Detection only: no lift, no unescape, no repair, no
+                // execution (contract §8 zero repair); the existing typed MalformedOutput is
+                // the answer, the pair is never persisted, and AiEnvelopeValidator stays
+                // unwired.
+                if (AiTextHygiene.LooksLikeEnvelopeLeak(afterH1) ||
+                    AiTextHygiene.LooksLikeEnvelopeLeak(hygienic))
+                {
+                    reply = new AiReply.Unavailable(AiReplyCodes.MalformedOutput);
+                    return OperationOutcome.Completed.Instance;
+                }
+
+                // Output moderation boundary (contract §7 rule 1): after the stale check
+                // (discarded replies are never moderated — no side effects on dropped work),
+                // before the reply is applied. Model-produced Generated text only; app-authored
+                // Fallback text is a recorded non-claim (record.md §2 row 12). Output blocks
+                // never escalate (WPF: model output is never the user's doing).
+                // SP-069 UNION rule: the gate evaluates the RAW text AND the hygienic text and
+                // blocks if EITHER hits — it can only refuse more, never less. WPF moderates
+                // the sanitized text only (OpenAiCompatibleService.cs:630-631); the union is a
+                // deliberate fail-closed divergence (record.md §4). EvaluateOutput is pure
+                // (AiModerationBoundary.cs:279-296 — no counter, no escalation, no state), so
+                // the second call cannot double-count. A raw SoftHit does not short-circuit a
+                // hygienic Block; when both soft-hit, the RAW verdict is the one surfaced.
                 switch (_moderation.EvaluateOutput(generated.Text, outputSurface))
                 {
                     case AiModerationVerdict.Block outputBlock:
@@ -326,6 +355,19 @@ public sealed class AiOperationPipeline
                     case AiModerationVerdict.SoftHit:
                         softHitCode = "soft-hit:output";
                         break;
+                }
+
+                if (!string.Equals(hygienic, generated.Text, StringComparison.Ordinal))
+                {
+                    switch (_moderation.EvaluateOutput(hygienic, outputSurface))
+                    {
+                        case AiModerationVerdict.Block outputBlock:
+                            reply = new AiReply.Refused(new AiModerationRefusal(outputBlock.CategoryCode, AiModerationSource.Output));
+                            return OperationOutcome.Completed.Instance;
+                        case AiModerationVerdict.SoftHit:
+                            softHitCode ??= "soft-hit:output";
+                            break;
+                    }
                 }
 
                 // SP-068 F3 (audit row C3, strip half): model-invented URLs are removed
@@ -339,14 +381,17 @@ public sealed class AiOperationPipeline
                 // invented links — no reply at all"): typed Unavailable from the EXISTING
                 // vocabulary, and the turn pair is NEVER appended (the port's equivalent
                 // of WPF's user-turn rollback — both appends live in the block below, so
-                // skipping it keeps the pair atomic).
-                var stripped = AiPrivacyFilters.StripUnsanctionedLinks(generated.Text);
+                // skipping it keeps the pair atomic). SP-069: the strip reads the HYGIENIC
+                // text; a reply emptied by H1/H2 lands in the same emptied path.
+                var stripped = AiPrivacyFilters.StripUnsanctionedLinks(hygienic);
                 if (stripped.Length == 0)
                 {
                     reply = new AiReply.Unavailable("reply-stripped-empty");
                     return OperationOutcome.Completed.Instance;
                 }
 
+                // Compared against the RAW text: hygiene-only changes (link strip a no-op)
+                // must still reach the bubble and memory.
                 if (!string.Equals(stripped, generated.Text, StringComparison.Ordinal))
                 {
                     produced = generated with { Text = stripped };

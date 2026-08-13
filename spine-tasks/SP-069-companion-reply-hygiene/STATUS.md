@@ -1,5 +1,5 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Step 1
+**Current Step:** Step 2
 **Last Updated:** 2026-08-13 (worker, Step 1 start)
 **Blockers:** none
 
@@ -33,19 +33,19 @@ model text on the command-execution path — a different row and a widening.
 **Four layers changed means four bite tests.** Revert H1, H2, H3 and the union rule one at a time and prove
 only that layer's own pins go red. SP-067's land proved a shared revert falsely verifies pins never exercised.
 
-### Step 1: Re-derive the three layers from WPF and prove the ordering is monotone — 🔶 In progress
+### Step 1: Re-derive the three layers from WPF and prove the ordering is monotone — ✅ Complete
 - [x] Update STATUS.md before starting work
-- [ ] Per layer: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a)
-- [ ] H2: five patterns **and their order** transcribed; the case that demonstrates the order constructed — or the honest statement that no such case could be constructed
-- [ ] H1: block regex, orphan-closer rule and both character mappings transcribed verbatim; the unterminated-block case decided and justified
-- [ ] H3: two-part predicate confirmed; lift confirmed deliberately not ported; `AiReplyCodes.MalformedOutput` judged honest for the case — if not, **stop and report** (no new `AiReply` case)
-- [ ] Layer order derived from WPF and stated with its reason
-- [ ] **Union rule proven, not assumed:** `EvaluateOutput` verified pure; monotonicity argued in writing; adversarial cases constructed in **both** directions
-- [ ] Boundary clearance written per layer: observed / retained / transmitted / logged, before vs after — every delta **less or equal**
-- [ ] Any `ai-operation-contract.md` §7 rule 1 wording the change needs is **named, not written** (framing c)
-- [ ] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning (T-18)
+- [x] Per layer: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a)
+- [x] H2: five patterns **and their order** transcribed; the case that demonstrates the order constructed — or the honest statement that no such case could be constructed
+- [x] H1: block regex, orphan-closer rule and both character mappings transcribed verbatim; the unterminated-block case decided and justified
+- [x] H3: two-part predicate confirmed; lift confirmed deliberately not ported; `AiReplyCodes.MalformedOutput` judged honest for the case — if not, **stop and report** (no new `AiReply` case)
+- [x] Layer order derived from WPF and stated with its reason
+- [x] **Union rule proven, not assumed:** `EvaluateOutput` verified pure; monotonicity argued in writing; adversarial cases constructed in **both** directions
+- [x] Boundary clearance written per layer: observed / retained / transmitted / logged, before vs after — every delta **less or equal**
+- [x] Any `ai-operation-contract.md` §7 rule 1 wording the change needs is **named, not written** (framing c)
+- [x] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning (T-18)
 
-### Step 2: Implement the three layers — removal only — ⬜ Not started
+### Step 2: Implement the three layers — removal only — 🔶 In progress
 - [ ] `AiTextHygiene.cs` with exactly one definition per rule, WPF cite per rule, H2's order readable as ordered
 - [ ] H3 is detection only — no extraction, unescape, repair, execution, or call into `AiEnvelopeValidator`
 - [ ] Applied at the seam in the derived order, upstream of SP-068's link strip, which is unmodified
