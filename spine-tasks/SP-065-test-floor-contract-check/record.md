@@ -201,5 +201,51 @@ on the mechanism's first run.
 ### Engine review, Step 2 (T-2 heading format)
 
 `spine_review_step step=2 type=plan` → **engine review ABSENT**: nested reviewer spawn
+blocked inside worker session (`skipped: true, spawnFailed: false`, artifact
+`.reviews/2-20260813T035932.md`). Reviews run on the engine after `.DONE`.
+
+## Step 3 — the half-install guard
+
+### Guard implementation
+
+`client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs` — one fact
+(`PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper`), mirroring the
+choke-point/harness guards: FindRepoRoot walk (anchor `client/CcpClient.sln`),
+**never skips** (missing `spine-tasks/` → hard failure), `file:line` violations.
+Walks `spine-tasks/*/PROMPT.md` (packet-root only), parses the packet number from the
+directory name, binds IDs **>= 65**; grandfathering is the ID rule alone. For bound
+packets: the `| testCommand | \`...\` |` row must exist and parse (missing/unparseable =
+violation — the guard refuses to go blind), and a command matching `\bdotnet\s+test\b`
+without `check-floor.mjs` is a violation.
+
+### Captured RED (probe packet)
+
+Probe `spine-tasks/SP-099-floor-guard-probe/PROMPT.md` with a bare-`dotnet test`
+testCommand → guard **FAILED** naming
+`spine-tasks/SP-099-floor-guard-probe/PROMPT.md:7` verbatim (`evidence/red-guard-probe.txt`).
+Probe deleted afterwards (`ls | grep -c SP-099` = 0, no git entries), guard re-run green.
+
+### Self-binding and no-false-fire
+
+- This packet's own PROMPT.md (SP-065 >= 65, bound): testCommand is `node verify.mjs &&
+  dotnet build ... && node client/tests/floor/check-floor.mjs` — `dotnet build` is not
+  `dotnet test`, and the wrapper token is present. **Passes.**
+- Live tree classification (grep sweep, all 65 packets): every packet below 65 with a bare
+  `dotnet test` testCommand (SP-002..SP-064) is **grandfathered by the ID rule** — the guard
+  does not flag them (verified green on the real tree).
+- **No-false-fire on legitimately test-less packets**: SP-001 and SP-021 have testCommand
+  rows with no `dotnet test` at all; the guard passes them by construction, and the
+  whole-tree green run confirms it in fact.
+
+### Pin bump (framing e)
+
+The guard adds exactly one fact: unit floor 897 → **898** (headless stays 35, skipped
+stays 0). `floor.json` bumped in THIS commit — the same commit as the guard test — with
+the reason in the commit message and in `lastMovedBy` (documentation-only field).
+**New exact floor: 898 unit / 35 headless / 0 skipped.**
+
+### Engine review, Step 3 (T-2 heading format)
+
+`spine_review_step step=3 type=plan` → **engine review ABSENT**: nested reviewer spawn
 blocked inside worker session (`skipped: true, spawnFailed: false`). Reviews run on the
 engine after `.DONE`.

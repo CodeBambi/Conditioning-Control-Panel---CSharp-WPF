@@ -1,8 +1,8 @@
 {
   "projects": {
-    "CcpClient.Tests": { "passed": 897, "skipped": 0 },
+    "CcpClient.Tests": { "passed": 898, "skipped": 0 },
     "CcpClient.HeadlessTests": { "passed": 35, "skipped": 0 }
   },
   "bumpRule": "Bump only in the SAME commit as the test change that moves the count; the commit message states the reason. Never widen, disable, or special-case to make a step pass (SP-065 framing e).",
-  "lastMovedBy": "SP-064 (897/35/0). Documentation only — the mechanism cannot verify this field or that the pinned number is the RIGHT number."
+  "lastMovedBy": "SP-065 (897->898 unit: FloorWrapperGuardTests adds one fact; same-commit bump per framing e). Documentation only — the mechanism cannot verify this field or that the pinned number is the RIGHT number."
 }
