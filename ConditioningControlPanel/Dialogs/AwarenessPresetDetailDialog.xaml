@@ -14,83 +14,15 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <!-- Dark-themed ComboBox style so the closed selection box and popup both
-             render on dark chrome with white text, matching the rest of the app.
-             The default WPF ComboBox template ignores Background on the closed
-             state and shows white-on-white, which is unreadable. -->
-        <Style x:Key="DialogDarkComboBox" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="White"/>
+        <!-- Dark-themed ComboBox for the two combos this dialog builds in code
+             (AwarenessPresetDetailDialog.xaml.cs:774 and :938 resolve it by name -
+             the key MUST survive, FindResource throws on a missing one). It used to
+             carry a full hand-rolled dark template only because the stock ComboBox
+             renders white-on-white; Velvet Kit's implicit ComboBox chrome
+             (Resources/Theme/Inputs.xaml) now owns that, so all that is left here is
+             this dialog's compact font size on top of it. -->
+        <Style x:Key="DialogDarkComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                          Focusable="False" ClickMode="Press">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border Background="#1E1E32" BorderBrush="#3A3A5C" BorderThickness="1" CornerRadius="3" Cursor="Hand">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="16"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Path Grid.Column="1" Fill="#B0B0B0" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      Data="M 0 0 L 3.5 3.5 L 7 0 Z"/>
-                                            </Grid>
-                                        </Border>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            <ContentPresenter IsHitTestVisible="False"
-                                              Content="{TemplateBinding SelectionBoxItem}"
-                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              Margin="6,3,18,3" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                <ContentPresenter.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Style>
-                                </ContentPresenter.Resources>
-                            </ContentPresenter>
-                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                                   PopupAnimation="Slide">
-                                <Border Background="#1E1E32" BorderBrush="#3A3A5C" BorderThickness="1" CornerRadius="3" Margin="0,1,0,0"
-                                        MinWidth="{TemplateBinding ActualWidth}">
-                                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="ItemContainerStyle">
-                <Setter.Value>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="Background" Value="#1E1E32"/>
-                        <Setter Property="Padding" Value="6,4"/>
-                        <Setter Property="Cursor" Value="Hand"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#FF69B4"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Setter.Value>
-            </Setter>
         </Style>
     </Window.Resources>
 

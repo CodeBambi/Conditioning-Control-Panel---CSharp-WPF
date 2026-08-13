@@ -24,7 +24,7 @@
         <!-- Preview Section -->
         <Border Grid.Row="1" Background="{DynamicResource PreviewBgBrush}" CornerRadius="8" Padding="20" Margin="0,0,0,15">
             <StackPanel>
-                <TextBlock Text="{loc:Str section_preview}" Foreground="#808080" FontSize="11" Margin="0,0,0,10"/>
+                <TextBlock Text="{loc:Str section_preview}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
                 <Border x:Name="PreviewBorder" HorizontalAlignment="Center"
                         CornerRadius="20" Padding="20,10,20,10" Cursor="Hand">
                     <Border.Effect>
@@ -46,7 +46,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- Preset Buttons -->
-                    <TextBlock Text="{loc:Str label_quick_presets}" Foreground="#808080" FontSize="11" Margin="0,0,0,8"/>
+                    <TextBlock Text="{loc:Str label_quick_presets}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
                     <WrapPanel Margin="0,0,0,15">
                         <Button Content="{loc:Str btn_purple_classic}" Style="{StaticResource SecondaryButton}"
                                 Margin="0,0,8,8" Click="PresetPurple_Click"/>
@@ -68,7 +68,7 @@
                         <TextBlock Text="{loc:Str label_primary_color}" Foreground="White" VerticalAlignment="Center"/>
                         <Button x:Name="BtnColor1" Grid.Column="1" Style="{StaticResource ColorButton}"
                                 Click="BtnColor1_Click"/>
-                        <TextBlock x:Name="TxtColor1" Grid.Column="2" Foreground="#808080"
+                        <TextBlock x:Name="TxtColor1" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                     </Grid>
 
@@ -82,7 +82,7 @@
                         <TextBlock Text="{loc:Str label_secondary_color}" Foreground="White" VerticalAlignment="Center"/>
                         <Button x:Name="BtnColor2" Grid.Column="1" Style="{StaticResource ColorButton}"
                                 Click="BtnColor2_Click"/>
-                        <TextBlock x:Name="TxtColor2" Grid.Column="2" Foreground="#808080"
+                        <TextBlock x:Name="TxtColor2" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                     </Grid>
 
@@ -96,7 +96,7 @@
                         <TextBlock Text="{loc:Str label_text_color}" Foreground="White" VerticalAlignment="Center"/>
                         <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButton}"
                                 Click="BtnTextColor_Click"/>
-                        <TextBlock x:Name="TxtTextColor" Grid.Column="2" Foreground="#808080"
+                        <TextBlock x:Name="TxtTextColor" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                     </Grid>
 
@@ -135,7 +135,7 @@
                         <TextBlock Text="{loc:Str label_border_color}" Foreground="White" VerticalAlignment="Center"/>
                         <Button x:Name="BtnBorderColor" Grid.Column="1" Style="{StaticResource ColorButton}"
                                 Click="BtnBorderColor_Click"/>
-                        <TextBlock x:Name="TxtBorderColor" Grid.Column="2" Foreground="#808080"
+                        <TextBlock x:Name="TxtBorderColor" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                     </Grid>
 

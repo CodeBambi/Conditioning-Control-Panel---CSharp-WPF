@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.ModPickerDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str dialog_mod_picker}"
         Height="720" Width="840"
@@ -41,7 +42,7 @@
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
                     <Button x:Name="BtnCloseX" Content="X" Click="BtnSkip_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
                             BorderThickness="0" Cursor="Hand" Padding="8,2"
                             Width="30" Height="30"/>
                 </Grid>
@@ -66,11 +67,15 @@
                                     </Grid.ColumnDefinitions>
 
                                     <!-- Art -->
+                                    <!-- ClipToBounds added with the hover pop: without it the 1.06
+                                         zoom paints the mod art straight over the accent border. -->
                                     <Border Grid.Column="0" Width="86" Height="86" CornerRadius="8"
                                             BorderBrush="{Binding AccentBrush}" BorderThickness="2"
+                                            ClipToBounds="True"
                                             Background="#1A1A2E" Margin="0,0,14,0">
                                         <Image Source="{Binding ArtUri}" Stretch="UniformToFill"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               hover:HoverPop.IsEnabled="True"/>
                                     </Border>
 
                                     <!-- Text block -->
@@ -96,13 +101,13 @@
                                                          Value="{Binding Percent, Mode=OneWay}"
                                                          Background="#252542" Foreground="{Binding AccentBrush}"
                                                          BorderThickness="0"/>
-                                            <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="#A0A0A0"
+                                            <TextBlock Grid.Row="1" Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
                                                        FontSize="11" Margin="0,4,0,0"/>
                                         </Grid>
 
                                         <!-- Status-only line (queued / done / failed, no bar) -->
                                         <TextBlock Text="{Binding StatusText}" Visibility="{Binding StatusOnlyVisibility}"
-                                                   Foreground="#A0A0A0" FontSize="11" Margin="0,8,0,0"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,8,0,0"/>
                                     </StackPanel>
 
                                     <!-- Size badge + selection -->
@@ -134,7 +139,7 @@
 
             <!-- Hint line: background-continue normally, offline copy when the manifest is missing -->
             <TextBlock x:Name="TxtHint" Grid.Row="3" Text="{loc:Str modpicker_hint_background}"
-                       Foreground="#808080" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
                        Margin="20,6,20,10"/>
 
             <!-- Buttons -->

@@ -7,7 +7,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
@@ -42,10 +44,15 @@ namespace ConditioningControlPanel.Views.Tabs
     /// leave three master toggles live mid-session.
     /// (3) <see cref="HapticsPanel"/> is the new home of <c>MainWindow.HapticsTab</c>.</para>
     ///
-    /// <para><b>Quiet surface.</b> No ambient loop is registered for this view and none may be
-    /// (PLAN §2.7). The rack's selection visual is trigger-driven; the only clock is a 120ms
-    /// detail crossfade, gated on <see cref="MotionFx.AllowTransitions"/> and self-terminating,
-    /// so there is nothing for the motion kill-switch or the ShowTab teardown to reach.</para>
+    /// <para><b>Quiet surface, with exactly one exception.</b> No ambient loop is REGISTERED for
+    /// this view (PLAN §2.7) and none may be: the rack's selection visual is trigger-driven and
+    /// the detail crossfade is a 120ms self-terminating clock gated on
+    /// <see cref="MotionFx.AllowTransitions"/>. Velvet Kit 2 adds one perimeter comet on the
+    /// CHECKED row's art tile — one adorner, one clock, capped at 24fps, moved by
+    /// <see cref="SetTileComet"/> and torn off the moment the selection leaves. It is gated
+    /// twice (transitions here, ambient loops inside the adorner) and degrades to a static lit
+    /// outline rather than vanishing, so the motion kill-switch still has exactly one thing to
+    /// reach and it is reachable from <see cref="RefreshTileComets"/>.</para>
     /// </summary>
     public partial class StudioTabView : UserControl
     {
@@ -63,6 +70,16 @@ namespace ConditioningControlPanel.Views.Tabs
             /// <summary>Stable rack key. API for <see cref="FocusRackEntry"/>; never renamed.</summary>
             public string Key = string.Empty;
             public string Glyph = string.Empty;
+
+            /// <summary>
+            /// Filename under <c>Resources/features/</c> for this module's feature art, or null
+            /// for the three modules that have never had any (Visuals, Scheduler, Ramp).
+            /// <para>CASE MATTERS: pack URIs into a resource assembly are matched
+            /// case-insensitively at runtime today, but the on-disk names are genuinely mixed
+            /// (<c>flash.png</c> vs <c>Pink_filter.png</c> vs <c>Mind_Wipers.png</c>) and these
+            /// strings are verbatim copies of them. Keep it that way.</para>
+            /// </summary>
+            public string? Art;
             /// <summary>English fallback fed to <c>MainWindow.ModAwareLabel</c>.</summary>
             public string English = string.Empty;
             public string LocKey = string.Empty;
@@ -120,6 +137,23 @@ namespace ConditioningControlPanel.Views.Tabs
             public RadioButton? Row;
             public TextBlock? Label;
             public Ellipse? DotShape;
+
+            /// <summary>The resting visual: art/emoji chip, caption, state dot. Hidden while this
+            /// row is the checked one AND it has art (<see cref="Tile"/> takes over).</summary>
+            public Grid? Strip;
+
+            /// <summary>The checked visual for a module WITH art: a 56px full-bleed art tile.
+            /// Null for the three art-less modules, whose checked state is the strip as before.
+            /// Both states are built once and swapped by Visibility - see
+            /// <see cref="ApplyRowState"/> for why this is not a template trigger.</summary>
+            public Grid? Tile;
+            public TextBlock? TileLabel;
+            public Ellipse? TileDot;
+
+            /// <summary>The comet lapping this row's tile outline while it is the checked row,
+            /// or null. Exactly one entry can hold one at a time — see
+            /// <see cref="SetTileComet"/>.</summary>
+            public PerimeterCometAdorner? Comet;
         }
 
         private readonly List<StudioRackEntry> _entries = new();
@@ -190,6 +224,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 RefreshRackLabels();
                 RefreshDots();
                 SelectEntry(_selected, announce: true, animate: false);
+                RefreshTileComets();
             }
             catch (Exception ex) { App.Logger?.Debug("StudioTabView.OnTabShown: {E}", ex.Message); }
         }
@@ -226,47 +261,64 @@ namespace ConditioningControlPanel.Views.Tabs
         //  rack construction
         // =====================================================================================
 
+        /// <summary>
+        /// Order is the Phase-4 contract's, with group captions inserted so nothing moves.
+        ///
+        /// <para><b>The art column (Velvet Kit 2).</b> Every entry names its file under
+        /// <c>Resources/features/</c> - the same square tile the dashboard mosaic and the
+        /// FeaturePopupWindow chrome have always used, finally reaching the rack. Three modules
+        /// pass null because no such art has ever existed for them (Visuals is a bundle of
+        /// unrelated toggles, Scheduler and Ramp are timing, not effects); those rows keep the
+        /// emoji chip on a hue-wash, and their checked state is the plain strip.</para>
+        ///
+        /// <para><b>Every entry now sets OwnHeader.</b> Velvet Kit 2 gives every feature page its
+        /// own 72px in-page hero, so the shared <c>DetailHeader</c> bar would name the module a
+        /// second time directly above it. The mechanism is deliberately still per-entry rather
+        /// than a hard-collapse in <see cref="RefreshDetailHeader"/>: the flag keeps meaning
+        /// exactly what it always meant ("this panel draws its own page header"), it is now simply
+        /// true of all of them, and a page that ever loses its hero passes <c>ownHeader: false</c>
+        /// and gets the shared bar back with nothing else to change.</para>
+        /// </summary>
         private void BuildRack()
         {
-            // Order is the Phase-4 contract's, with group captions inserted so nothing moves.
             _layout.Add("st4_studio_group_effects");
-            Add("flash", "⚡", "Flash Images", "section_flash_images", HostFlash, PanelFlash, "Flash",
+            Add("flash", "⚡", "flash.png", "Flash Images", "section_flash_images", HostFlash, PanelFlash, "Flash",
                 () => App.Settings?.Current?.FlashEnabled);
-            Add("video", "🎬", "Mandatory Video", "section_mandatory_video", HostVideo, PanelVideo, "Video",
+            Add("video", "🎬", "mandatory_videos.png", "Mandatory Video", "section_mandatory_video", HostVideo, PanelVideo, "Video",
                 () => App.Settings?.Current?.MandatoryVideosEnabled);
-            Add("subliminal", "💭", "Subliminals", "section_subliminals_2", HostSubliminal, PanelSubliminal, "Subliminal",
+            Add("subliminal", "💭", "subliminal.png", "Subliminals", "section_subliminals_2", HostSubliminal, PanelSubliminal, "Subliminal",
                 () => App.Settings?.Current?.SubliminalEnabled);
-            Add("spiral", "🌀", "Spiral Overlay", "label_spiral_overlay", HostSpiral, PanelSpiral, "Spiral",
+            Add("spiral", "🌀", "spiral_overlay.png", "Spiral Overlay", "label_spiral_overlay", HostSpiral, PanelSpiral, "Spiral",
                 () => App.Settings?.Current?.SpiralEnabled);
-            Add("pinkfilter", "💗", "Pink Filter", "label_pink_filter", HostPinkFilter, PanelPinkFilter, "PinkFilter",
+            Add("pinkfilter", "💗", "Pink_filter.png", "Pink Filter", "label_pink_filter", HostPinkFilter, PanelPinkFilter, "PinkFilter",
                 () => App.Settings?.Current?.PinkFilterEnabled);
             // Visuals has no single master toggle - the dashboard card is deliberately neutral
             // too (MainWindow.Presets.cs:800). A dot that cannot be wired honestly is omitted.
-            Add("visuals", "👁", "Visuals", "section_visuals", HostVisuals, PanelVisuals, "Visuals", null);
+            Add("visuals", "👁", null, "Visuals", "section_visuals", HostVisuals, PanelVisuals, "Visuals", null);
 
             _layout.Add("st4_studio_group_games");
-            Add("bubbles", "🫧", "Bubble Pop", "label_bubble_pop", HostBubblePop, PanelBubblePop, "BubblePop",
+            Add("bubbles", "🫧", "Bubble_pop.png", "Bubble Pop", "label_bubble_pop", HostBubblePop, PanelBubblePop, "BubblePop",
                 () => App.Settings?.Current?.BubblesEnabled);
-            Add("bubblecount", "🔢", "Bubble Count", "label_bubble_count", HostBubbleCount, PanelBubbleCount, "BubbleCount",
+            Add("bubblecount", "🔢", "Bubble_count.png", "Bubble Count", "label_bubble_count", HostBubbleCount, PanelBubbleCount, "BubbleCount",
                 () => App.Settings?.Current?.BubbleCountEnabled);
-            Add("lockcard", "📐", "Lock Card", "label_lock_card", HostLockCard, PanelLockCard, "LockCard",
+            Add("lockcard", "📐", "Phrase_Lock.png", "Lock Card", "label_lock_card", HostLockCard, PanelLockCard, "LockCard",
                 () => App.Settings?.Current?.LockCardEnabled);
-            Add("bouncingtext", "📺", "Bouncing Text", "label_bouncing_text", HostBouncingText, PanelBouncingText, "BouncingText",
+            Add("bouncingtext", "📺", "bouncing_text.png", "Bouncing Text", "label_bouncing_text", HostBouncingText, PanelBouncingText, "BouncingText",
                 () => App.Settings?.Current?.BouncingTextEnabled);
 
             _layout.Add("st4_studio_group_immersion");
-            Add("mindwipe", "🧠", "Mind Wipe", "label_mind_wipe", HostMindWipe, PanelMindWipe, "MindWipe",
+            Add("mindwipe", "🧠", "Mind_Wipers.png", "Mind Wipe", "label_mind_wipe", HostMindWipe, PanelMindWipe, "MindWipe",
                 () => App.Settings?.Current?.MindWipeEnabled);
             // New in Phase 4 (G2 rescue). "BrainDrain" is a NEW feature_eq value; all three
             // built-in mods now carry a matching feat_braindrain FeatureOpened rule.
-            Add("braindrain", "💧", "Brain Drain", "section_brain_drain", HostBrainDrain, PanelBrainDrain, "BrainDrain",
+            Add("braindrain", "💧", "brain_drain.png", "Brain Drain", "section_brain_drain", HostBrainDrain, PanelBrainDrain, "BrainDrain",
                 () => App.Settings?.Current?.BrainDrainEnabled);
             // Haptics: no FeatureOpened key. ShowTab("haptics") still fires
             // NotifyTabNavigated("haptics"), which is what its 3 rules per mod match on.
             // The dot reads a nested settings object with no INPC, so it refreshes on every
             // Studio show and on every selection rather than live.
-            Add("haptics", "📳", "Haptics", "tab_haptics", PanelHaptics, null, null,
-                () => App.Settings?.Current?.Haptics?.Enabled, ownHeader: true,
+            Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null,
+                () => App.Settings?.Current?.Haptics?.Enabled,
                 // No wall key: the mosaic never carried Haptics (the premium rail chip does), and
                 // its enable lives on the nested Haptics settings object. Flip the page's own
                 // master box so MainWindow.ChkHapticsEnabled_Changed runs - including the
@@ -281,10 +333,10 @@ namespace ConditioningControlPanel.Views.Tabs
             // Neither is a wall tile either, and neither drives a service directly (the 30s
             // SchedulerTimer_Tick and the session ramp read the flags), so the honest quick-toggle
             // is the panel's own enable box - it writes the flag and Saves in one place.
-            Add("scheduler", "📅", "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
+            Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
                 () => App.Settings?.Current?.SchedulerEnabled,
                 toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled));
-            Add("ramp", "📈", "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
+            Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
                 () => App.Settings?.Current?.IntensityRampEnabled,
                 toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.ChkEnabled));
 
@@ -292,14 +344,15 @@ namespace ConditioningControlPanel.Views.Tabs
             RefreshRackLabels();
             RefreshDots();
 
-            void Add(string key, string glyph, string english, string locKey, UIElement? host,
-                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = false,
+            void Add(string key, string glyph, string? art, string english, string locKey, UIElement? host,
+                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = true,
                      Action? toggle = null, int tier = 0)
             {
                 var entry = new StudioRackEntry
                 {
                     Key = key,
                     Glyph = glyph,
+                    Art = art,
                     English = english,
                     LocKey = locKey,
                     Host = host,
@@ -373,106 +426,20 @@ namespace ConditioningControlPanel.Views.Tabs
 
                 if (item is not StudioRackEntry e) continue;
 
-                // icon | caption | state dot
-                var grid = new Grid();
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                // Two states, both built now, swapped by Visibility. See ApplyRowState.
+                var content = new Grid();
 
-                // The glyph sits inside a 20x20 rounded chip: raw emoji floating beside text is
-                // the stock-toolkit look; contained, every icon takes the same visual weight and
-                // the column reads as a designed rack instead of a bullet list.
-                var iconChip = new Border
-                {
-                    Width = 20,
-                    Height = 20,
-                    CornerRadius = new CornerRadius(6),
-                    Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x4A)),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x39, 0x39, 0x63)),
-                    BorderThickness = new Thickness(1),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 8, 0),
-                    Child = new EmojiTextBlock
-                    {
-                        Text = e.Glyph,
-                        FontSize = 11,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
-                };
-                // Tier livery on the chip: the metal on the chip's own frame plus a tinted
-                // well behind the glyph, so the mark survives even where the row rim is
-                // faint. Presentation only — see StudioRackEntry.Tier.
-                if (e.Tier > 0)
-                {
-                    iconChip.BorderBrush = TierLiveryBrush(e.Tier);
-                    iconChip.Background = new SolidColorBrush(e.Tier >= 2
-                        ? Color.FromRgb(0x1E, 0x33, 0x40)    // deep ice under diamond
-                        : Color.FromRgb(0x3D, 0x33, 0x1E));  // dark amber under gold
-                }
-                Grid.SetColumn(iconChip, 0);
-                grid.Children.Add(iconChip);
+                e.Strip = BuildRestingStrip(e);
+                content.Children.Add(e.Strip);
 
-                e.Label = new TextBlock
-                {
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                };
-                Grid.SetColumn(e.Label, 1);
-                grid.Children.Add(e.Label);
-
-                // v6.8.0 NEW pill: remove in 6.9
-                // Brain Drain came back from the dead in this release, so the rack row that
-                // hosts it says so for one cycle. Literal colours, no TryFindResource: this is
-                // the same pink the rail's pills use and it must not depend on a theme key.
-                // The extra column is added to THIS row's grid only (the grid is per-row), and
-                // the dot below now takes the last column rather than a hard-coded 2, so a
-                // badged row keeps icon | label | pill | dot in that order.
-                if (string.Equals(e.Key, "braindrain", StringComparison.OrdinalIgnoreCase))
-                {
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                    var newPill = new Border
-                    {
-                        CornerRadius = new CornerRadius(6),
-                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
-                        BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
-                        BorderThickness = new Thickness(1),
-                        Padding = new Thickness(4, 0, 4, 0),
-                        Margin = new Thickness(6, 0, 0, 0),
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Child = new TextBlock
-                        {
-                            Text = "NEW",
-                            FontFamily = new FontFamily("Consolas"),
-                            FontSize = 9,
-                            FontWeight = FontWeights.Bold,
-                            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7)),
-                        },
-                    };
-                    Grid.SetColumn(newPill, 2);
-                    grid.Children.Add(newPill);
-                }
-
-                if (e.Dot != null)
-                {
-                    e.DotShape = new Ellipse
-                    {
-                        Width = 7,
-                        Height = 7,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Margin = new Thickness(6, 0, 2, 0),
-                    };
-                    // Last column, not a fixed 2: the NEW pill above inserts a column on the row
-                    // it badges (v6.8.0). Unbadged rows still resolve to 2.
-                    Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
-                    grid.Children.Add(e.DotShape);
-                }
+                e.Tile = BuildArtTile(e);              // null when this module has no art
+                if (e.Tile != null) content.Children.Add(e.Tile);
 
                 e.Row = new RadioButton
                 {
                     Style = (Style?)TryFindResource("RackEntryStyle"),
                     Tag = e.Key,
-                    Content = grid,
+                    Content = content,
                 };
                 // BorderBrush is the template's TierRim (RackEntryStyle nulls it for free
                 // rows), so a tiered row wears a permanent gold/diamond outline.
@@ -482,8 +449,382 @@ namespace ConditioningControlPanel.Views.Tabs
                 // On the ROW, not on the dot: the dot is 7px, and the gesture belongs to the
                 // whole entry. Rows with no Toggle fall through unhandled (Visuals).
                 e.Row.MouseRightButtonUp += RackEntry_RightClick;
+                // Instant, storyboard-free state swap. Wired to Checked/Unchecked rather than
+                // driven from SelectEntry so the swap can never drift out of step with
+                // IsChecked - the RadioButton group also unchecks the outgoing row by itself.
+                e.Row.Checked += (_, __) => ApplyRowState(e);
+                e.Row.Unchecked += (_, __) => ApplyRowState(e);
+                ApplyRowState(e);
+
                 RackList.Children.Add(e.Row);
             }
+        }
+
+        // =====================================================================================
+        //  row visuals — resting strip, active art tile
+        // =====================================================================================
+
+        /// <summary>Height of a checked row that has art. The RESTING height (38) deliberately
+        /// lives only in RackEntryStyle's Height setter, so there is one owner of it.</summary>
+        private const double ActiveTileHeight = 56;
+
+        /// <summary>
+        /// The resting row: art (or emoji) chip | caption | state dot.
+        ///
+        /// <para>The chip is 28px now rather than 20. Raw emoji floating beside text is the
+        /// stock-toolkit look; contained AND filled with the module's own feature art, every row
+        /// takes the same visual weight and the column reads as a designed rack rather than a
+        /// bullet list. The three art-less modules keep their emoji, on a hue-wash that matches
+        /// the art rows' warmth so they do not read as broken.</para>
+        /// </summary>
+        private Grid BuildRestingStrip(StudioRackEntry e)
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var chip = new Border
+            {
+                Width = 28,
+                Height = 28,
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 9, 0),
+                SnapsToDevicePixels = true,
+            };
+            chip.SetResourceReference(Border.BorderBrushProperty, "GlassBorderBrush");
+            RenderOptions.SetBitmapScalingMode(chip, BitmapScalingMode.HighQuality);
+
+            var chipArt = LoadFeatureArt(e.Art, 56);
+            if (chipArt != null)
+            {
+                var brush = new ImageBrush(chipArt)
+                {
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center,
+                };
+                brush.Freeze();
+                chip.Background = brush;
+            }
+            else
+            {
+                // No art on disk for this module (or it failed to decode): emoji on a hue-wash.
+                chip.Background = ChipHueWashBrush;
+                chip.Child = new EmojiTextBlock
+                {
+                    Text = e.Glyph,
+                    FontSize = 14,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+            }
+            // Tier livery on the chip: the metal on the chip's own frame (and, for the art-less
+            // chips, a tinted well behind the glyph), so the mark survives even where the row
+            // rim is faint. Presentation only — see StudioRackEntry.Tier.
+            if (e.Tier > 0)
+            {
+                chip.BorderBrush = TierLiveryBrush(e.Tier);
+                if (chipArt == null)
+                    chip.Background = new SolidColorBrush(e.Tier >= 2
+                        ? Color.FromRgb(0x1E, 0x33, 0x40)    // deep ice under diamond
+                        : Color.FromRgb(0x3D, 0x33, 0x1E));  // dark amber under gold
+            }
+            Grid.SetColumn(chip, 0);
+            grid.Children.Add(chip);
+
+            e.Label = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            Grid.SetColumn(e.Label, 1);
+            grid.Children.Add(e.Label);
+
+            // v6.8.0 NEW pill: remove in 6.9
+            // Brain Drain came back from the dead in this release, so the rack row that
+            // hosts it says so for one cycle. Literal colours, no TryFindResource: this is
+            // the same pink the rail's pills use and it must not depend on a theme key.
+            // The extra column is added to THIS row's grid only (the grid is per-row), and
+            // the dot below takes the last column rather than a hard-coded 2, so a
+            // badged row keeps icon | label | pill | dot in that order.
+            if (string.Equals(e.Key, "braindrain", StringComparison.OrdinalIgnoreCase))
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var newPill = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(4, 0, 4, 0),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = "NEW",
+                        FontFamily = new FontFamily("Consolas"),
+                        FontSize = 9,
+                        FontWeight = FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7)),
+                    },
+                };
+                Grid.SetColumn(newPill, 2);
+                grid.Children.Add(newPill);
+            }
+
+            if (e.Dot != null)
+            {
+                e.DotShape = new Ellipse
+                {
+                    Width = 7,
+                    Height = 7,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(6, 0, 2, 0),
+                };
+                // Last column, not a fixed 2: the NEW pill above inserts a column on the row
+                // it badges (v6.8.0). Unbadged rows still resolve to 2.
+                Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
+                grid.Children.Add(e.DotShape);
+            }
+
+            return grid;
+        }
+
+        /// <summary>
+        /// The checked visual for a module WITH art: a 56px full-bleed tile. The art is
+        /// right-anchored and masked away toward the left, with a scrim gradient over it, so the
+        /// caption sits on flat panel colour and the art is the thing your eye lands on.
+        ///
+        /// <para>Returns null when the module has no art - those rows keep the strip when checked
+        /// and only get the RackEntryStyle trigger fill, exactly as before.</para>
+        ///
+        /// <para>NEGATIVE MARGIN IS DELIBERATE. RackEntryStyle's ContentPresenter is inset
+        /// 12,0,10,0; "full-bleed" means undoing that. The left inset is undone to 3 rather than
+        /// 0 so the template's 3px pink RowBar still shows beside the tile instead of being
+        /// painted over by it (the ContentPresenter renders ON TOP of RowBar), which is also why
+        /// the left corners are 3 and the right corners 8.</para>
+        /// </summary>
+        private Grid? BuildArtTile(StudioRackEntry e)
+        {
+            var art = LoadFeatureArt(e.Art, 256);
+            if (art == null) return null;
+
+            var corners = new CornerRadius(3, 8, 8, 3);
+
+            // Height is EXPLICIT, not inherited from the row. RackEntryStyle's ContentPresenter
+            // is VerticalAlignment=Center, so content is measured to its own desired size and
+            // then centred - a stretch-height tile would collapse to the height of its caption.
+            var tile = new Grid
+            {
+                Height = ActiveTileHeight,
+                Margin = new Thickness(-9, 0, -10, 0),
+                Visibility = Visibility.Collapsed,
+            };
+
+            var artBrush = new ImageBrush(art)
+            {
+                Stretch = Stretch.UniformToFill,
+                AlignmentX = AlignmentX.Right,
+                AlignmentY = AlignmentY.Center,
+            };
+            artBrush.Freeze();
+
+            // Painted as a Border BACKGROUND, not an Image child: a Border clips its own
+            // background to CornerRadius, but does not clip child elements to it.
+            var artLayer = new Border
+            {
+                CornerRadius = corners,
+                Background = artBrush,
+                OpacityMask = TileArtFadeMask,
+            };
+            RenderOptions.SetBitmapScalingMode(artLayer, BitmapScalingMode.HighQuality);
+            tile.Children.Add(artLayer);
+
+            tile.Children.Add(new Border
+            {
+                CornerRadius = corners,
+                Background = TileScrimBrush,
+            });
+
+            e.TileLabel = new TextBlock
+            {
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(12, 0, 26, 0),
+            };
+            tile.Children.Add(e.TileLabel);
+
+            if (e.Dot != null)
+            {
+                e.TileDot = new Ellipse
+                {
+                    Width = 7,
+                    Height = 7,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 11, 0),
+                };
+                tile.Children.Add(e.TileDot);
+            }
+
+            return tile;
+        }
+
+        /// <summary>
+        /// Swaps a row between its resting strip and its 56px art tile, and grows/shrinks the row
+        /// to match. Instant by design: the rack is a quiet surface (PLAN §2.7), so this is a
+        /// Visibility flip and a Height write, with no storyboard for the motion kill-switch to
+        /// have to reach.
+        /// <para>Height is CLEARED rather than set back to 38 so RackEntryStyle's own Height
+        /// setter takes the row again - one place owns the resting height.</para>
+        /// </summary>
+        private static void ApplyRowState(StudioRackEntry e)
+        {
+            if (e.Row == null || e.Tile == null) return;   // art-less rows: nothing to swap
+
+            bool on = e.Row.IsChecked == true;
+            e.Tile.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (e.Strip != null) e.Strip.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+
+            if (on) e.Row.Height = ActiveTileHeight;
+            else e.Row.ClearValue(FrameworkElement.HeightProperty);
+
+            SetTileComet(e, on);
+        }
+
+        // =====================================================================================
+        //  active-tile comet (Velvet Kit 2 · FX lane A)
+        // =====================================================================================
+
+        /// <summary>Corner radius the comet follows. Mirrors <see cref="BuildArtTile"/>'s
+        /// <c>CornerRadius(3, 8, 8, 3)</c> — the adorner takes one radius, and 8 is the one the
+        /// eye reads (the 3s exist only to leave the template's RowBar showing).</summary>
+        private const double ActiveTileCornerRadius = 8;
+
+        /// <summary>Lap time for the active tile. Faster than the adorner's 9s default on
+        /// purpose: this is a small tile and the ONE thing on the rack that is meant to look
+        /// live, not a large card breathing in the background.</summary>
+        private const double ActiveTileLapSeconds = 4.0;
+
+        /// <summary>
+        /// Puts the perimeter comet on the checked row's art tile and takes it off everything
+        /// else — exactly one comet exists on this surface at a time, which is the whole reason
+        /// the rack can carry an ambient FX at all (PLAN §2.7's "quiet surface" rule is about not
+        /// having eighty of them, and the tiering in the Motion Lab spec reserves animated borders
+        /// for the active/hero surface).
+        ///
+        /// <para>Gated on <see cref="MotionFx.AllowTransitions"/> here; the adorner ALSO checks
+        /// <see cref="MotionFx.AllowAmbientLoops"/> itself and degrades to a static lit outline
+        /// rather than vanishing when the tier or the motion level says no loops.</para>
+        ///
+        /// <para>A null return from <c>Attach</c> is expected, not a failure: rows are built in
+        /// the constructor, long before this control is in a visual tree with an adorner layer.
+        /// <see cref="RefreshTileComets"/> from <c>Loaded</c>/<c>OnTabShown</c> is what picks the
+        /// default selection up.</para>
+        /// </summary>
+        private static void SetTileComet(StudioRackEntry e, bool on)
+        {
+            try
+            {
+                bool allowed;
+                try { allowed = MotionFx.AllowTransitions; } catch { allowed = false; }
+
+                if (!on || e.Tile == null || !allowed)
+                {
+                    PerimeterCometAdorner.Detach(e.Comet);
+                    e.Comet = null;
+                    return;
+                }
+                if (e.Comet != null) return;                  // already lit — leave its clock alone
+                e.Comet = PerimeterCometAdorner.Attach(e.Tile, ActiveTileCornerRadius,
+                                                       ActiveTileLapSeconds);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Studio tile comet: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Re-asserts the comet for every row. Idempotent, and cheap when nothing has changed.
+        /// Called on Loaded (the adorner layer only exists from then on) and on every door open
+        /// (so a motion-level change made in Settings takes effect on the way back in).
+        /// </summary>
+        private void RefreshTileComets()
+        {
+            foreach (var entry in _entries)
+                SetTileComet(entry, entry.Row?.IsChecked == true);
+        }
+
+        /// <summary>
+        /// Decodes a <c>Resources/features/</c> PNG at the size it will actually be drawn at.
+        /// The source tiles are ~1024px square; handing WPF twelve of those undecimated for a
+        /// 28px chip is the classic way to spend 50MB on a sidebar. Frozen so the brushes built
+        /// from them are freezable too, and so nothing pins them to this thread.
+        /// <para>Null in, null out - and a decode failure is null as well rather than a throw:
+        /// a missing art file must cost the row its picture, not the whole rack.</para>
+        /// </summary>
+        private static BitmapImage? LoadFeatureArt(string? file, int decodePixelWidth)
+        {
+            if (string.IsNullOrWhiteSpace(file)) return null;
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri("pack://application:,,,/Resources/features/" + file, UriKind.Absolute);
+                bmp.DecodePixelWidth = decodePixelWidth;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Studio rack art '{File}': {E}", file, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Hue-wash behind the emoji of an art-less module's chip: 135°, warm to pink.</summary>
+        private static readonly LinearGradientBrush ChipHueWashBrush = Frozen(new LinearGradientBrush(
+            Color.FromArgb(0x40, 0xFF, 0x7E, 0x6B),
+            Color.FromArgb(0x1F, 0xFF, 0x69, 0xB4),
+            new Point(0, 0), new Point(1, 1)));
+
+        /// <summary>
+        /// Fades the active tile's art out toward the left so it dissolves into the panel instead
+        /// of ending on a hard edge under the caption. Alpha is all that matters in an
+        /// OpacityMask; the black is arbitrary.
+        /// </summary>
+        private static readonly LinearGradientBrush TileArtFadeMask = Frozen(new LinearGradientBrush(
+            new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0x00, 0, 0, 0), 0.00),
+                new GradientStop(Color.FromArgb(0x8C, 0, 0, 0), 0.40),
+                new GradientStop(Color.FromArgb(0xFF, 0, 0, 0), 0.75),
+            },
+            new Point(0, 0.5), new Point(1, 0.5)));
+
+        /// <summary>
+        /// Readability scrim over the tile art: near-solid panel colour under the caption,
+        /// gone by 80% so the right-hand art stays clean.
+        /// </summary>
+        private static readonly LinearGradientBrush TileScrimBrush = Frozen(new LinearGradientBrush(
+            new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(0xF2, 0x1E, 0x1E, 0x38), 0.00),
+                new GradientStop(Color.FromArgb(0xF2, 0x1E, 0x1E, 0x38), 0.22),
+                new GradientStop(Color.FromArgb(0x00, 0x1E, 0x1E, 0x38), 0.80),
+            },
+            new Point(0, 0.5), new Point(1, 0.5)));
+
+        private static T Frozen<T>(T brush) where T : Freezable
+        {
+            brush.Freeze();
+            return brush;
         }
 
         // =====================================================================================
@@ -656,6 +997,13 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <see cref="SelectEntry"/> so a mod switch can repaint it too: <c>LabelFor</c> routes
         /// through <c>MainWindow.ModAwareLabel</c>, so the title is mod-renamable and would
         /// otherwise keep the previous mod's feature name. Deliberately does not re-announce.
+        ///
+        /// <para><b>As of Velvet Kit 2 this collapses the header every time</b>, because every
+        /// entry sets <see cref="StudioRackEntry.OwnHeader"/> - each feature page draws its own
+        /// in-page hero now. The branch is left intact rather than hard-collapsed: it is the same
+        /// one Haptics has always taken, it still reads as what it means, and it is what brings
+        /// the shared bar back for any page that loses its hero. The icon and title are still
+        /// written so that bar is correct the moment it is shown again.</para>
         /// </summary>
         private void RefreshDetailHeader()
         {
@@ -751,8 +1099,14 @@ namespace ConditioningControlPanel.Views.Tabs
         private void RefreshRackLabels()
         {
             foreach (var e in _entries)
-                if (e.Label != null)
-                    e.Label.Text = LabelFor(e);
+            {
+                var text = LabelFor(e);
+                // Both states carry their own caption, so both get repainted. Missing the tile
+                // one would leave the ACTIVE row - the only one anybody is reading - frozen in
+                // the previous language or the previous mod's feature name.
+                if (e.Label != null) e.Label.Text = text;
+                if (e.TileLabel != null) e.TileLabel.Text = text;
+            }
         }
 
         private static string LabelFor(StudioRackEntry e) =>
@@ -791,6 +1145,21 @@ namespace ConditioningControlPanel.Views.Tabs
             nameof(Models.AppSettings.IntensityRampEnabled),
         };
 
+        /// <summary>
+        /// The lit dot's halo. Hoisted to one frozen instance rather than allocated per dot per
+        /// repaint (RefreshDots runs on every settings write that moves a dot, on every selection
+        /// and on every Studio show). Still not an animation, so there is nothing here for the
+        /// motion kill-switch to reach.
+        /// </summary>
+        private static readonly System.Windows.Media.Effects.DropShadowEffect DotGlow =
+            Frozen(new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                BlurRadius = 7,
+                ShadowDepth = 0,
+                Opacity = 0.85,
+            });
+
         private void RefreshDots()
         {
             var on = (Brush?)TryFindResource("PinkBrush") ?? Brushes.HotPink;
@@ -798,34 +1167,34 @@ namespace ConditioningControlPanel.Views.Tabs
 
             foreach (var e in _entries)
             {
-                if (e.DotShape == null || e.Dot == null) continue;
+                if (e.Dot == null) continue;
                 bool? state;
                 try { state = e.Dot(); } catch { state = null; }
 
                 // Unknown state reads as off rather than vanishing: the row's geometry must not
                 // jump around because a settings object happened to be null for a tick.
                 bool lit = state == true;
-                e.DotShape.Fill = lit ? on : off;
-                e.DotShape.Opacity = lit ? 1.0 : 0.35;
-                // Static halo on a lit dot - an Effect swap is not an animation, so there is
-                // still nothing here for the motion kill-switch to reach.
-                e.DotShape.Effect = lit
-                    ? new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        Color = Color.FromRgb(0xFF, 0x69, 0xB4),
-                        BlurRadius = 7,
-                        ShadowDepth = 0,
-                        Opacity = 0.85,
-                    }
-                    : null;
-                e.DotShape.ToolTip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
+                var tip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
+
+                // Both states own a dot; the checked row is showing the tile's one.
+                Paint(e.DotShape);
+                Paint(e.TileDot);
 
                 // Same sentence on the whole row for the rows the right-click gesture can flip:
                 // the dot is 7px of hover target, and after a quick-toggle the row the cursor is
                 // already sitting on should be able to answer "did that take?" itself. Existing
                 // keys only - no new string enters the nine language files for this.
                 if (e.Row != null && e.Toggle != null)
-                    e.Row.ToolTip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
+                    e.Row.ToolTip = tip;
+
+                void Paint(Ellipse? dot)
+                {
+                    if (dot == null) return;
+                    dot.Fill = lit ? on : off;
+                    dot.Opacity = lit ? 1.0 : 0.35;
+                    dot.Effect = lit ? DotGlow : null;
+                    dot.ToolTip = tip;
+                }
             }
         }
 
@@ -845,6 +1214,8 @@ namespace ConditioningControlPanel.Views.Tabs
             HookHapticsModule();
             RefreshRackLabels();
             RefreshDots();
+            // Only now does an adorner layer exist for the rows built in the constructor.
+            RefreshTileComets();
         }
 
         /// <summary>

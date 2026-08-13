@@ -68,7 +68,7 @@
                                     <TextBlock Grid.Column="1" Text="{Binding Text}" 
                                                Foreground="White" FontSize="13"
                                                VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="2" Text="✕" Foreground="#808080" 
+                                    <TextBlock Grid.Column="2" Text="✕" Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="14" VerticalAlignment="Center"
                                                Cursor="Hand" MouseLeftButtonDown="BtnRemove_Click"
                                                ToolTip="{loc:Str tooltip_remove_item}">

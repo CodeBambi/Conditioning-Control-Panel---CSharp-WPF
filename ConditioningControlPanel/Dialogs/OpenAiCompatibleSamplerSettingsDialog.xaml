@@ -44,7 +44,7 @@
                    Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
 
         <TextBlock Grid.Row="1" Text="{loc:Str hint_sampler_settings}"
-                   Foreground="{DynamicResource TextDimBrush}" FontSize="12"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                    TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -122,7 +122,7 @@
 
             <Button Grid.Column="0" Style="{StaticResource SamplerButton}"
                     Content="{loc:Str label_sampler_reset_defaults}"
-                    Background="Transparent" Foreground="{DynamicResource TextDimBrush}"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderBrush="#505050" BorderThickness="1"
                     Click="BtnReset_Click"/>
 

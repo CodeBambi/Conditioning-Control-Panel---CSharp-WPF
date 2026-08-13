@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -56,9 +57,12 @@
                                         <DropShadowEffect x:Name="LockdownImageGlow" x:FieldModifier="internal" Color="#FF1493" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
                                     </Border.Effect>
                                     <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
+                                    <!-- Pop on the Image, not the host: the host carries the glow the
+                                         lockdown pulse drives, and it owns the ClipToBounds. -->
                                     <Image x:Name="ImgLockdownFeature" x:FieldModifier="internal"
                                            Source="pack://application:,,,/Resources/lockdown_icon.png" Stretch="Uniform"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           hover:HoverPop.IsEnabled="True"/>
                                 </Border>
     
                                 <!-- Setup Panel (visible when lockdown is NOT active) -->
@@ -66,14 +70,14 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
                                         <TextBlock Text="{loc:Str label_duration_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                         <ComboBox x:Name="CmbLockdownDuration" x:FieldModifier="internal" Width="140" SelectedIndex="1"
-                                                  Background="{DynamicResource DarkerBgBrush}" Foreground="Black" FontSize="13" BorderBrush="{DynamicResource PanelAccentBrush}">
-                                            <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240" Foreground="Black"/>
+                                                  Background="{DynamicResource DarkerBgBrush}" FontSize="13" BorderBrush="{DynamicResource PanelAccentBrush}">
+                                            <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5"/>
+                                            <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10"/>
+                                            <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15"/>
+                                            <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30"/>
+                                            <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60"/>
+                                            <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120"/>
+                                            <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240"/>
                                         </ComboBox>
                                     </StackPanel>
                                     <Button x:Name="BtnActivateLockdown" Content="{loc:Str btn_activate}" Cursor="Hand"
@@ -110,7 +114,7 @@
                                 <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                                           Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                           Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                                 <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                         Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                                     <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>

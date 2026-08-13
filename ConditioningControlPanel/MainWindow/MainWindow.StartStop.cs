@@ -34,6 +34,11 @@ namespace ConditioningControlPanel
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
+            // Velvet Kit 2 (FX lane B): the ignition. Pure decoration - it reads no state, takes no
+            // decision, and is wrapped end to end; deleting the line would not change one branch
+            // below it. See MainWindow.HeroFx.cs.
+            FlashStartIgnition();
+
             // Don't allow manual start/stop while remote controller is connected
             if (App.RemoteControl?.ControllerConnected == true) return;
 
@@ -781,6 +786,11 @@ namespace ConditioningControlPanel
                     TxtPresetsStatus.Text = "";
                 }
             }
+
+            // Velvet Kit 2 (FX lane B): idle gets the charged gradient + ring exhale, running gets
+            // the heartbeat. Deliberately AFTER both branches - it only ever releases a background
+            // it applied itself, so the red STOP painted above always stands.
+            ApplyStartHeroState();
         }
 
         private void UpdateStartButtonForRemoteControl(bool connected)
@@ -837,6 +847,10 @@ namespace ConditioningControlPanel
                     };
                 }
             }
+
+            // Velvet Kit 2 (FX lane B): a connected controller is neither idle nor "running" for FX
+            // purposes - the charge is released and no loop starts. See MainWindow.HeroFx.cs.
+            ApplyStartHeroState();
         }
 
         /// <summary>

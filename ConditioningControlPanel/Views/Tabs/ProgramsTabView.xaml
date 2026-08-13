@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -178,6 +179,7 @@
                                                         <Rectangle Width="66" Height="66"
                                                                    RadiusX="33" RadiusY="33" Opacity="0.8"
                                                                    Fill="{Binding AccentBrush}"
+                                                                   hover:HoverPop.IsEnabled="True"
                                                                    OpacityMask="{Binding ArtMask}"/>
                                                     </Border>
 
@@ -185,7 +187,13 @@
                                                          five shipped programs have no sigil and land on the
                                                          same shared archetype plate, so the glyph is what
                                                          keeps their crests apart at a glance. -->
+                                                    <!-- IsHitTestVisible=False so the glyph does not punch a
+                                                         hole in the crest's hover: without it, sliding the
+                                                         pointer onto the emoji reads as leaving the art and
+                                                         the pop flickers. The halo Ellipse above is opted
+                                                         out for the same reason. -->
                                                     <helpers:EmojiTextBlock Text="{Binding Icon}" FontSize="30"
+                                                                            IsHitTestVisible="False"
                                                                             HorizontalAlignment="Center"
                                                                             VerticalAlignment="Center"/>
                                                 </Grid>
@@ -983,6 +991,7 @@
                                                            Margin="0,0,12,0" VerticalAlignment="Center"
                                                            Source="{Binding Icon}"
                                                            Visibility="{Binding IconVisibility}"
+                                                           hover:HoverPop.IsEnabled="True"
                                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                                     <TextBlock Grid.Column="0" Grid.RowSpan="2" Text="{Binding StatusGlyph}"
                                                                Visibility="{Binding GlyphVisibility}"
@@ -1169,7 +1178,7 @@
                                                        FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                             <TextBlock x:Name="TxtTodayClosesNote" x:FieldModifier="internal"
                                                        Foreground="{DynamicResource TextMutedBrush}"
-                                                       FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                                       FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                                             <TextBlock x:Name="TxtTodayStreak" x:FieldModifier="internal"
                                                        Foreground="{DynamicResource TextMutedBrush}"
                                                        FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>

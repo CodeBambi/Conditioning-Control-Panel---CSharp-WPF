@@ -53,13 +53,13 @@
                             <Run Text=" ? " FontWeight="Bold" Foreground="White" Background="{DynamicResource PinkBrush}"/>
                             <Run Text="{loc:Str label_button_in_the_top_bar_for_a_full_tutorial}"/>
                         </TextBlock>
-                        <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
                             <Run Text="{loc:Str label_hover_over_any_setting_to_see_what_it_does}"/>
                         </TextBlock>
-                        <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
                             <Run Text="{loc:Str label_add_videos_to_assets_videos_and_images_to_ass}"/>
                         </TextBlock>
-                        <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
                             <Run Text="{loc:Str label_for_gaming_use_borderless_windowed_mode_for_o}"/>
                         </TextBlock>
                     </StackPanel>

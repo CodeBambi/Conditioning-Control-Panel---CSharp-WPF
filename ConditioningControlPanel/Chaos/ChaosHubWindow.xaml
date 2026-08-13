@@ -110,7 +110,10 @@
             <Setter Property="Background" Value="#22FFFFFF"/><Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="Bold"/>
         </Style>
-        <Style x:Key="Chk" TargetType="CheckBox">
+        <!-- BasedOn the app-wide implicit CheckBox (Resources/Theme/Inputs.xaml): a keyed
+             style otherwise REPLACES the implicit one and these fall back to the white
+             Win32 tick box. Only the label styling is local. -->
+        <Style x:Key="Chk" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Margin" Value="0,3"/>
@@ -147,7 +150,10 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- big, scaled-up checkbox for the full-width OPTIONS panel -->
+        <!-- big, scaled-up checkbox for the full-width OPTIONS panel. Inherits the implicit
+             CheckBox chrome transitively through Chk (a Style has ONE BasedOn - pointing this
+             at {x:Type CheckBox} would drop Chk's label colour). The 1.35 LayoutTransform
+             zooms the whole control, so the 18px dot renders at ~24px: intended. -->
         <Style x:Key="OptChk" TargetType="CheckBox" BasedOn="{StaticResource Chk}">
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="Margin" Value="0,14"/>

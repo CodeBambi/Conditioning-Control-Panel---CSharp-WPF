@@ -20,7 +20,7 @@
                            FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"/>
                 <TextBlock Text="Scan this code with the CCP mobile app to sign in as this account."
-                           FontSize="12" Foreground="#B0B0B0" TextWrapping="Wrap" TextAlignment="Center"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center"
                            HorizontalAlignment="Center" Margin="0,5,0,0"/>
             </StackPanel>
 
@@ -34,7 +34,7 @@
 
                 <!-- Manual fallback code -->
                 <TextBlock Text="No camera? Enter this code in the app:"
-                           FontSize="11" Foreground="#808080"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                 <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="6"
                         Background="{DynamicResource PanelBgBrush}" Padding="20,10"
@@ -46,7 +46,7 @@
                 </Border>
 
                 <TextBlock x:Name="TxtStatus" Text="Fetching code..."
-                           FontSize="12" Foreground="#B0B0B0" TextWrapping="Wrap"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
                            HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,10"/>
 
                 <Button x:Name="BtnRefresh" Content="Get a new code"
@@ -59,7 +59,7 @@
             <!-- Close -->
             <Button Grid.Row="2" Content="Close"
                     Padding="20,8" HorizontalAlignment="Right"
-                    Background="Transparent" Foreground="#808080"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Click="BtnClose_Click"/>
         </Grid>

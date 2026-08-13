@@ -14,7 +14,7 @@
         <!-- Attached/Detached pill. RadioButton (a ToggleButton) so the pair is mutually
              exclusive for free; GroupName keeps them paired. -->
         <Style x:Key="TubeFitModePill" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#B0B0B0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -83,7 +83,7 @@
                                VerticalAlignment="Center"/>
                     <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
                             BorderThickness="0" Cursor="Hand" Padding="8,2"
                             Width="30" Height="30"/>
                 </Grid>
@@ -101,7 +101,7 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="{loc:Str tube_fit_subtitle}"
-                           Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                 <!-- WYSIWYG preview. The nested Viewbox/Grid pair replicates the real tube window:
                      the outer 780x1020 grid is the window rect (it clips, like the window bounds),
@@ -179,7 +179,7 @@
                                 Style="{StaticResource TubeFitButton}" Padding="10,5" Margin="8,0,0,0"/>
                     </StackPanel>
 
-                    <TextBlock x:Name="TxtImageInfo" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtImageInfo" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                 </StackPanel>
             </Grid>
 

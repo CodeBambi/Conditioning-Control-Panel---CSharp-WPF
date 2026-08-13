@@ -23,7 +23,7 @@
                            HorizontalAlignment="Center"/>
             </Border>
             <TextBlock Text="{loc:Str dialog_chat_shortcut_capture_hint}"
-                       Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
                        Margin="0,0,0,12"/>
             <CheckBox x:Name="ChkGlobal" Content="{loc:Str chat_shortcut_global_checkbox}"
                       Foreground="White" FontSize="12" Margin="0,0,0,12"

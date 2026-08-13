@@ -110,7 +110,7 @@
                                 <TextBlock Text="{Binding Label}" FontSize="13"
                                            Foreground="{DynamicResource TextLightBrush}"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Context}" FontSize="10"
+                                <TextBlock Text="{Binding Context}" FontSize="11"
                                            Foreground="{DynamicResource TextDimBrush}"
                                            TextTrimming="CharacterEllipsis"
                                            Visibility="{Binding ContextVisibility}"/>
@@ -131,7 +131,7 @@
                     CornerRadius="0,0,12,12" Padding="14,7"
                     BorderBrush="#2A2A46" BorderThickness="0,1,0,0">
                 <TextBlock x:Name="TxtHint" Text="{loc:Str set2_palette_hint}"
-                           Foreground="{DynamicResource TextDimBrush}" FontSize="10"/>
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
             </Border>
         </Grid>
     </Border>

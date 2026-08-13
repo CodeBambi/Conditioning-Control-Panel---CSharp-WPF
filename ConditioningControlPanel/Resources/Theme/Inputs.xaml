@@ -1,0 +1,707 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============================================================================
+         Velvet Kit — Inputs.xaml (UI polish 2, 2026-08-12)
+
+         IMPLICIT (keyless) chrome for the stock Win32/Aero2 controls. Before this
+         file every un-styled ComboBox / CheckBox / TextBox / ContextMenu in the app
+         rendered with the white system theme: white dropdown popups, black text on
+         our dark panels, square 0-radius corners. Each surface used to paper over it
+         with a local copy of a dark template (there were five near-identical ones).
+
+         Merge order matters: this dictionary is merged LAST in App.xaml so a lane
+         that wants different chrome can still shadow it with a LOCAL implicit style
+         (MainWindow.xaml and the Deeper editor both do), and any keyed style keeps
+         winning outright — a control with Style="{StaticResource X}" does NOT pick
+         these up unless X carries BasedOn="{StaticResource {x:Type T}}".
+
+         Rules honoured here (see planning/ui-polish-2/CONTRACT.md):
+           · DynamicResource for every mod-mutable key (PinkBrush, SurfaceBgBrush,
+             TransparentPink*, ElevatedSurfaceBrush, …) so a mod switch repaints.
+           · Radius scale: 8 for inputs, 10 for popups, 6 for list/menu rows.
+           · Glows only on the focused/hovered single control, never on containers.
+           · Popups keep AllowsTransparency=True — a non-layered popup is painted
+             behind WebView2/VLC airspace and shows square corners.
+         ============================================================================ -->
+
+    <!-- Accent at 60% for the input hover border. A DynamicResource brush cannot
+         carry alpha (PinkBrush is opaque), so this is a dedicated brush bound to
+         PinkColor with Opacity — it still follows the active mod's accent. -->
+    <SolidColorBrush x:Key="InputHoverBorderBrush" Color="{DynamicResource PinkColor}" Opacity="0.6"/>
+
+    <!-- Shared popup chrome values live inline in each template (a ControlTemplate
+         cannot BasedOn another), but they are all: ElevatedSurface + TransparentPink20
+         border + r10 + 4px padding. Keep the three in sync if you retune one. -->
+
+    <!-- ========================= ComboBox ========================= -->
+    <!-- No IsEditable ComboBox exists in the codebase, so this template deliberately
+         omits PART_EditableTextBox. If you ever set IsEditable="True", add it or the
+         control will throw at template-apply time. -->
+    <Style TargetType="{x:Type ComboBox}">
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBox}">
+                    <Grid SnapsToDevicePixels="True">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="22"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- The chrome. Background/BorderBrush are pushed onto the
+                             ToggleButton here (NOT TemplateBound inside its own
+                             template — that would bind to the ToggleButton itself),
+                             so an inline Background= on the ComboBox still wins. -->
+                        <ToggleButton x:Name="ToggleButton" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Focusable="False" ClickMode="Press"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Chrome" Cursor="Hand" CornerRadius="8"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            SnapsToDevicePixels="True">
+                                        <Path x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Margin="0,0,9,0" Data="M 0 0 L 4 4 L 8 0"
+                                              Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.6"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource InputHoverBorderBrush}"/>
+                                            <Setter TargetName="Arrow" Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                        </Trigger>
+                                        <!-- Open: accent border + a single-control glow. -->
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="Arrow" Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="Chrome" Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10"
+                                                                      ShadowDepth="0" Opacity="0.35"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+
+                        <!-- Selection box. Sits in column 0 only so long text stops at
+                             the arrow instead of running under it. -->
+                        <ContentPresenter x:Name="ContentSite" Grid.Column="0"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+
+                        <Popup x:Name="PART_Popup" Grid.Column="0" Grid.ColumnSpan="2"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom" Focusable="False"
+                               PopupAnimation="Slide"
+                               AllowsTransparency="True">
+                            <Border x:Name="DropDownBorder" Margin="0,4,0,0" CornerRadius="10" Padding="4"
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource TransparentPink20Brush}"
+                                    BorderThickness="1" SnapsToDevicePixels="True">
+                                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              SnapsToDevicePixels="True">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"
+                                                    SnapsToDevicePixels="True"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="DropDownBorder" Property="MinHeight" Value="28"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ======================= ComboBoxItem ======================= -->
+    <!-- NOTE: this replaces the old implicit `Foreground=Black` ComboBoxItem style
+         that used to live in Resources/Theme/MainWindow.xaml — it existed only to
+         stay readable on the WHITE system popup. The two changes must always ship
+         together (contract R1). -->
+    <Style TargetType="{x:Type ComboBoxItem}">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="HorizontalContentAlignment"
+                Value="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+        <Setter Property="VerticalContentAlignment"
+                Value="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                    <Border x:Name="Bd" CornerRadius="6" Margin="0,1"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 5px accent dot marks the selected row. -->
+                            <Ellipse x:Name="SelDot" Grid.Column="0" Width="5" Height="5"
+                                     HorizontalAlignment="Left" VerticalAlignment="Center"
+                                     Fill="{DynamicResource PinkBrush}" Visibility="Hidden"/>
+                            <ContentPresenter Grid.Column="1" Margin="7,0,0,0"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                            <Setter TargetName="SelDot" Property="Visibility" Value="Visible"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================= CheckBox ========================= -->
+    <!-- The house "dot": an 18px circle, not a square tick. The iOS-style switch is a
+         SEPARATE keyed style (Controls.xaml → ToggleStyle) and 120 call sites set it
+         explicitly, so they never reach this template. Never point them here.
+
+         Foreground is set (not inherited) on purpose: replacing the stock style drops
+         its system-black Foreground setter, and Control.Foreground's default value is
+         black — invisible on every surface in this app. -->
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <!-- Grid, NOT a horizontal StackPanel: several call sites put a
+                         TextWrapping="Wrap" TextBlock in Content (the mic/webcam consent
+                         gates), and a StackPanel measures its children at infinite width
+                         so that text would never wrap. -->
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid x:Name="DotHost" Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="DotScale" ScaleX="1" ScaleY="1"/>
+                            </Grid.RenderTransform>
+                            <Border x:Name="Dot" CornerRadius="9"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1" SnapsToDevicePixels="True"/>
+                            <Ellipse x:Name="Core" Width="7" Height="7" Fill="White" Visibility="Collapsed"/>
+                        </Grid>
+                        <ContentPresenter x:Name="ContentHost" Grid.Column="1" Margin="8,0,0,0"
+                                          RecognizesAccessKey="True"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Content-less checkboxes must not carry the 8px content gap. -->
+                        <Trigger Property="Content" Value="{x:Null}">
+                            <Setter TargetName="ContentHost" Property="Margin" Value="0"/>
+                        </Trigger>
+                        <Trigger Property="Content" Value="">
+                            <Setter TargetName="ContentHost" Property="Margin" Value="0"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                        </Trigger>
+                        <!-- Three-state middle value: filled but no white core. -->
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Dot" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                            <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Dot" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                            <Setter TargetName="Core" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Dot" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8"
+                                                      ShadowDepth="0" Opacity="0.5"/>
+                                </Setter.Value>
+                            </Setter>
+                            <!-- check-pop: 1 → 1.18 → 1 over 140ms -->
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="DotScale"
+                                                                       Storyboard.TargetProperty="ScaleX">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.07" Value="1.18"/>
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.14" Value="1"/>
+                                        </DoubleAnimationUsingKeyFrames>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="DotScale"
+                                                                       Storyboard.TargetProperty="ScaleY">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.07" Value="1.18"/>
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.14" Value="1"/>
+                                        </DoubleAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================== TextBox ========================= -->
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource PinkBrush}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource PinkBrush}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="AllowDrop" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Border x:Name="Bd" CornerRadius="8"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            SnapsToDevicePixels="True">
+                        <!-- Effect lives here at Opacity 0 so the focus glow can be
+                             animated (the FocusGlowTextBox recipe). Nothing paints
+                             while opacity is 0. -->
+                        <Border.Effect>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8"
+                                              ShadowDepth="0" Opacity="0"/>
+                        </Border.Effect>
+                        <!-- Hidden/Hidden mirrors the stock template: TextBoxBase pushes
+                             its own Horizontal/VerticalScrollBarVisibility onto this
+                             ScrollViewer at OnApplyTemplate, so multi-line boxes that ask
+                             for scrollbars still get them. -->
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                      Margin="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource InputHoverBorderBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                        <EventTrigger RoutedEvent="GotKeyboardFocus">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Bd"
+                                                     Storyboard.TargetProperty="Effect.Opacity"
+                                                     To="0.45" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="LostKeyboardFocus">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Bd"
+                                                     Storyboard.TargetProperty="Effect.Opacity"
+                                                     To="0" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Focus-glow TextBox. Moved here from Resources/Theme/MainWindow.xaml so it can be
+         BasedOn the implicit style above (BasedOn is a StaticResource lookup and cannot
+         reach forward across merged dictionaries). The glow/caret it used to declare by
+         hand is now the base chrome, so this is a thin alias kept for its call site
+         (Dialogs/ProgramEnrollDialog.xaml) - do NOT rename the key. -->
+    <Style x:Key="FocusGlowTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"/>
+
+    <!-- ======================= ListBoxItem ======================== -->
+    <!-- Modest on purpose: it exists to kill the stock cornflower-blue selection
+         (e.g. RemoteControlTabView's LstRemoteCommandLog). Lists that draw their own
+         row card keep setting ItemContainerStyle and never reach this. -->
+    <Style TargetType="{x:Type ListBoxItem}">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="4,3"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="HorizontalContentAlignment"
+                Value="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+        <Setter Property="VerticalContentAlignment"
+                Value="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                    <Border x:Name="Bd" CornerRadius="6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ======================== ContextMenu ======================= -->
+    <!-- HasDropShadow=True is REQUIRED, not decoration: it is what makes the menu's
+         internal Popup a layered (per-pixel transparent) window, and without it the
+         r10 corners render against an opaque square HWND. Replacing the stock style
+         also drops its HasDropShadow setter, so it must be re-stated here. Tooltips
+         are the opposite case — see the App.xaml comment (layered-tooltip deadlock);
+         context menus are user-initiated and have always been layered. -->
+    <Style TargetType="{x:Type ContextMenu}">
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink20Brush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Grid.IsSharedSizeScope" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border x:Name="Bd" CornerRadius="10"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      CanContentScroll="True">
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                            SnapsToDevicePixels="True"/>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================== MenuItem ======================== -->
+    <!-- Four Role templates, same as the stock theme: the default Setter covers
+         SubmenuItem (a leaf inside a popup) and the three triggers swap in the
+         header/popup variants. The submenu Popup MUST stay named PART_Popup —
+         MenuItem drives its own submenu through that part. -->
+    <Style TargetType="{x:Type MenuItem}">
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <!-- Role: SubmenuItem (default) -->
+                <ControlTemplate TargetType="{x:Type MenuItem}">
+                    <Border x:Name="Bd" CornerRadius="6" Margin="0,1"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemIconColumn"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemGestureColumn"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter x:Name="Icon" Grid.Column="0" ContentSource="Icon"
+                                              VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Path x:Name="CheckMark" Grid.Column="0" Width="10" Height="10" Margin="0,0,8,0"
+                                  Visibility="Collapsed" Stretch="Uniform"
+                                  VerticalAlignment="Center" Fill="{DynamicResource PinkBrush}"
+                                  Data="M9.86 3.14a.5.5 0 0 1 0 .72L4.5 9.22 1.64 6.36a.5.5 0 1 1 .72-.72L4.5 7.78l4.64-4.64a.5.5 0 0 1 .72 0z"/>
+                            <ContentPresenter x:Name="HeaderHost" Grid.Column="1" ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                            <TextBlock x:Name="GestureText" Grid.Column="2" Margin="18,0,0,0"
+                                       Text="{TemplateBinding InputGestureText}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Icon" Value="{x:Null}">
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="InputGestureText" Value="">
+                            <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <!-- Role: TopLevelItem — a click-through entry on a Menu bar. -->
+            <Trigger Property="Role" Value="TopLevelItem">
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                            <Border x:Name="Bd" CornerRadius="6"
+                                    Background="{TemplateBinding Background}"
+                                    Padding="{TemplateBinding Padding}"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+
+            <!-- Role: TopLevelHeader — a Menu bar entry that opens a popup below. -->
+            <Trigger Property="Role" Value="TopLevelHeader">
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                            <Grid>
+                                <Border x:Name="Bd" CornerRadius="6"
+                                        Background="{TemplateBinding Background}"
+                                        Padding="{TemplateBinding Padding}"
+                                        SnapsToDevicePixels="True">
+                                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <Popup x:Name="PART_Popup" Placement="Bottom" Focusable="False"
+                                       IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                       AllowsTransparency="True" PopupAnimation="Fade">
+                                    <Border CornerRadius="10" Padding="4" Margin="0,4,0,0"
+                                            Grid.IsSharedSizeScope="True"
+                                            Background="{DynamicResource ElevatedSurfaceBrush}"
+                                            BorderBrush="{DynamicResource TransparentPink20Brush}"
+                                            BorderThickness="1" SnapsToDevicePixels="True">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                            SnapsToDevicePixels="True"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                </Trigger>
+                                <Trigger Property="IsSubmenuOpen" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+
+            <!-- Role: SubmenuHeader — a nested entry that flies its popup out right. -->
+            <Trigger Property="Role" Value="SubmenuHeader">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                            <Border x:Name="Bd" CornerRadius="6" Margin="0,1"
+                                    Background="{TemplateBinding Background}"
+                                    Padding="{TemplateBinding Padding}"
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="MenuItemIconColumn"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter x:Name="Icon" Grid.Column="0" ContentSource="Icon"
+                                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                                      RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                                    <Path Grid.Column="2" Margin="18,0,0,0" Data="M 0 0 L 4 4 L 0 8"
+                                          Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                          VerticalAlignment="Center"/>
+                                    <Popup x:Name="PART_Popup" Grid.Column="0" Grid.ColumnSpan="3"
+                                           Placement="Right" HorizontalOffset="4" VerticalOffset="-6"
+                                           Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                           AllowsTransparency="True" PopupAnimation="Fade">
+                                        <Border CornerRadius="10" Padding="4"
+                                                Grid.IsSharedSizeScope="True"
+                                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                                BorderBrush="{DynamicResource TransparentPink20Brush}"
+                                                BorderThickness="1" SnapsToDevicePixels="True">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Disabled">
+                                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                                SnapsToDevicePixels="True"/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Popup>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="Icon" Value="{x:Null}">
+                                    <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                                </Trigger>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                </Trigger>
+                                <Trigger Property="IsSubmenuOpen" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ========================= Separator ======================== -->
+    <!-- Standalone separators (the stock one is a light system grey line). -->
+    <Style TargetType="{x:Type Separator}">
+        <Setter Property="Background" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="0,6"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Separator}">
+                    <Border Height="{TemplateBinding Height}"
+                            Background="{TemplateBinding Background}"
+                            SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A Separator dropped inside a Menu/ContextMenu does NOT get the implicit style
+         above: the menu's container generator hands it the style stored under
+         MenuItem.SeparatorStyleKey (a local value, which beats any implicit style).
+         Without this entry every menu divider stays the stock light-grey line. -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
+        <Setter Property="Background" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="6,4"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Separator}">
+                    <Border Height="{TemplateBinding Height}"
+                            Background="{TemplateBinding Background}"
+                            SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

@@ -375,9 +375,10 @@ namespace ConditioningControlPanel
             ApplyAchievementCardTooltip(parts, unlocked);
 
             // The card carries the transforms the entrance stagger and the unlock reveal need;
-            // the badge host carries the hover tilt. Two separate transform groups on purpose.
+            // the badge host carries the hover tilt; the badge Image carries the hover pop.
+            // Three separate transform groups on purpose - each animator owns exactly one.
             EnsureCardTransforms(card);
-            PrepareAchievementTileFx(card, unlocked, badgeHost);
+            PrepareAchievementTileFx(card, unlocked, badgeHost, image);
 
             return card;
         }
