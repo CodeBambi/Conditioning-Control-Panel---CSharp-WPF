@@ -774,6 +774,7 @@
   "label_not_connected": "Не подключено",
   "label_login_to_unlock_exclusive_features": "Войди, чтобы открыть эксклюзивные функции",
   "label_link_discord_for_community_features": "Привяжи Discord для функций сообщества",
+  "profile_link_discord_notice": "Привяжи Discord, чтобы открыть функции профиля: публичную карточку, закреплённые награды и обмен с сообществом.",
   "label_link_accounts": "Привязка аккаунтов",
   "label_link_both_providers_to_access_your_account_fr": "Привяжи обоих провайдеров, чтобы входить с любого из них.",
   "btn_link_patreon": "⭐ Привязать Patreon",

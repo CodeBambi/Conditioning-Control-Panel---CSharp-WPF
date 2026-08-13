@@ -111,20 +111,42 @@ public class GamificationBridge : IDisposable
                 App.RemoteControl.CommandReceived += OnRemoteCommand;
             }
 
-            // Retroactive: best_friends only fires on the CompanionLevelUp *event*, so a
-            // user who already maxed their companion(s) before this achievement existed (or
-            // before the bridge subscribed) never re-triggers it (#308). Check current
-            // companion levels once at startup and unlock if the milestone is already met.
-            CheckExistingCompanionMilestone();
+            // Both calls below REPAIR an unlock the user already earned — they reconstruct it
+            // from state that outlived the achievement file (companion level, the chat turn log)
+            // rather than witnessing a fresh earn — so they run SILENTLY, exactly as the
+            // post-login cloud restore does. Celebrating a reconstruction was wrong twice over:
+            // logout deliberately wipes achievements.json (ClearProgressionData) while companion
+            // progress and the turn log survive it, so "Best Friends" and "Pleased to Meet You"
+            // popped again on EVERY launch that followed a logout — and re-posted to Discord
+            // with them. The unlock itself is still recorded, saved and cloud-synced; only the
+            // popup/sound/webhook are skipped.
+            //
+            // The prior flag value is saved rather than assumed false so a cloud restore that is
+            // already suppressing cannot be un-suppressed on the way out of this block.
+            var ach = Ach;
+            var wasSuppressed = ach?.SuppressPopups ?? false;
+            if (ach != null) ach.SuppressPopups = true;
+            try
+            {
+                // Retroactive: best_friends only fires on the CompanionLevelUp *event*, so a
+                // user who already maxed their companion(s) before this achievement existed (or
+                // before the bridge subscribed) never re-triggers it (#308). Check current
+                // companion levels once at startup and unlock if the milestone is already met.
+                CheckExistingCompanionMilestone();
 
-            // Retroactive: the companion-chat counter was fed by exactly one call site (the
-            // tube's legacy send handler), so every message that went through the modern brain
-            // funnel — and everything ever typed in Her Room — counted for nothing (#877).
-            // Long-time chatters would otherwise start over from zero, so put a BEST-EFFORT
-            // FLOOR under the counter once, from the little the companion happened to persist.
-            // It does not recover the true history (nothing on disk can) — see the method
-            // summary for exactly how far it reaches and what it cannot restore.
-            BackfillCompanionChatCount();
+                // Retroactive: the companion-chat counter was fed by exactly one call site (the
+                // tube's legacy send handler), so every message that went through the modern brain
+                // funnel — and everything ever typed in Her Room — counted for nothing (#877).
+                // Long-time chatters would otherwise start over from zero, so put a BEST-EFFORT
+                // FLOOR under the counter once, from the little the companion happened to persist.
+                // It does not recover the true history (nothing on disk can) — see the method
+                // summary for exactly how far it reaches and what it cannot restore.
+                BackfillCompanionChatCount();
+            }
+            finally
+            {
+                if (ach != null) ach.SuppressPopups = wasSuppressed;
+            }
 
             App.Logger?.Information("GamificationBridge started — achievement subscriptions wired");
         }

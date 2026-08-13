@@ -1677,6 +1677,7 @@
   "label_not_connected": "Not Connected",
   "label_login_to_unlock_exclusive_features": "Login to unlock exclusive features",
   "label_link_discord_for_community_features": "Link Discord for community features",
+  "profile_link_discord_notice": "Link your Discord to unlock profile features: your public card, showcase pins, and community sharing.",
   "label_link_accounts": "Link Accounts",
   "label_link_both_providers_to_access_your_account_fr": "Link both providers to access your account from either login method.",
   "btn_link_patreon": "⭐ Link Patreon",

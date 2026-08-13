@@ -775,6 +775,7 @@
   "label_not_connected": "Non Connecté",
   "label_login_to_unlock_exclusive_features": "Connecte-toi pour débloquer les fonctionnalités exclusives",
   "label_link_discord_for_community_features": "Lie Discord pour les fonctionnalités communautaires",
+  "profile_link_discord_notice": "Lie ton Discord pour débloquer les fonctionnalités de profil : ta carte publique, les épingles de la vitrine et le partage communautaire.",
   "label_link_accounts": "Lier les Comptes",
   "label_link_both_providers_to_access_your_account_fr": "Lie les deux fournisseurs pour accéder à ton compte depuis l'une ou l'autre méthode de connexion.",
   "btn_link_patreon": "⭐ Lier Patreon",
