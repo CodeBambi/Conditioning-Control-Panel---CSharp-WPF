@@ -1,6 +1,13 @@
-# Port Status (as of 2026-08-13, fourth export — laptop)
+# Port Status (as of 2026-08-13, fifth export — laptop)
 
-## Wave 21 (AUTHORED + LAUNCHED 2026-08-13 — SP-064, single lane)
+## Wave 21 (LANDED 2026-08-13, integrate `e8eab7c1`; floor 892/35/0 → **897 unit / 35 headless / 0 skipped**)
+
+- **SP-064 LANDED (row 38 stays WIP pending owner ratification).** Harness-only entry points exit 3 naming `CCP_DATA_ROOT` when unset; gate in the real `Program.Main` between the SP-057 override read and composition-root construction; one registry + table-driven refusal pin + unclassified-literal guard (captured RED); profile BYTE-IDENTICAL over 2677 files after a refused run. **Behavior break: every headed evidence script must set `CCP_DATA_ROOT` or exit 3.**
+- **The land was a recovery, not a clean pass.** Batch `20260813T010705` ended `failed`/`GitignoredDirtyWorktree` AFTER contract-verified + code-review APPROVE + final-review PASS. The `--diagnose` headline (`git rm -r --cached`) was DANGEROUS — 117 force-added tracked files (all of `client/tools/verify`, `port-loop.ps1`, `Tools/asset_gen`) would have been staged for deletion; spine's own event payload carried the correct advice. Recovery: preserve+hash the 8 gitignored TRX → surgical clean of unclassified dirt → remove lane `.pi/npm` → `force-merge` → `retry` + `resume` (reconcile-from-`.DONE`, no worker respawn). **Lane tip never moved from `571a240f`**, so the merged tree is exactly the reviewed artifact. Six lessons recorded in port-lessons.
+- Orchestrator verified independently: fresh scratch worktree on the merged tree (build 0W/0E, 897/35/0), then re-verified the exact tree pushed AFTER the reconciliation commit (wave-18 rule). Gate evidence not trusted.
+- Named limits carried, not closed: demo+auto-close hole open by decree; only the data root protected; guard scans `client/src/**/*.cs` literals only; non-`Program.Main` harness paths unprotected; **Linux unproven (zero WSL distros)**. Next unused task ID: **SP-065**. Next claimable: board row 49 part (2), which must pin 897/35/0.
+
+## Wave 21 authoring phase (2026-08-13, superseded by the land above)
 
 - **First phase run under the unattended loop** (`client/tools/port-loop.ps1`): the shell owns waiting, one fresh pi session per phase. This session did phase B only (reconcile → consult → author → launch detached → exit); it did NOT monitor the batch.
 - **SP-064 = board row 38** (harness entry points must REFUSE to run unsealed). Gate in the real `Program.Main` path after the SP-057 override block and before composition-root construction; ONE registry for the classification; a guard test that fails on any unclassified startup flag literal; real-process proof both directions (refusal leaves `%APPDATA%\CcpClient` byte-identical under path-hashed manifests + SP-057 positive controls; plain unsealed launch still opens a window and exits 0).
