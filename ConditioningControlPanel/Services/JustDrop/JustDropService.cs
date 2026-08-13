@@ -198,7 +198,7 @@ namespace ConditioningControlPanel.Services.JustDrop
                     case "session-complete":
                         App.Logger?.Information("JustDrop bridge: session-complete order={Order} size={Size} duration={Duration}s",
                             orderCode ?? "?", sizeId ?? "?", durationSec ?? 0);
-                        AwardSessionComplete();
+                        AwardSessionComplete(orderCode);
                         break;
 
                     default:
@@ -216,26 +216,53 @@ namespace ConditioningControlPanel.Services.JustDrop
 
         /// <summary>
         /// The one thing a finished drop changes in the app: XP, and a toast saying so.
+        ///
+        /// <para><b>Once per order, ever.</b> This used to pay on every <c>session-complete</c> with
+        /// no idea whether it was a first play or a fifth, which made a single 8-minute drop an
+        /// unbounded XP faucet the moment anything could replay it. The web side already draws this
+        /// line for its own currency - host-bridge.ts says plainly that replays and embedded plays
+        /// never pay Pocket Money - so paying XP for them was the desktop disagreeing with the
+        /// contract it was implementing. A replay still gets a toast, because silence would read as
+        /// the session not having registered.</para>
+        ///
         /// <para>AddXP self-guards (not logged in, idle anti-cheat, skill multipliers), so there is
-        /// nothing to pre-check here - but it can still throw, and a throw from a web message must
+        /// nothing else to pre-check - but it can still throw, and a throw from a web message must
         /// not take the door down, so each half is caught separately: a failed grant should not
         /// cost the user the toast, and a failed toast should not cost them the XP.</para>
         /// </summary>
-        private static void AwardSessionComplete()
+        /// <param name="orderCode">
+        /// The order this run belongs to. A missing code is treated as ALREADY CREDITED - not as a
+        /// fresh one. A page that stops sending codes must not silently become a faucet, and the
+        /// only run that legitimately has no code is one we cannot tell apart from a replay anyway.
+        /// </param>
+        private static void AwardSessionComplete(string? orderCode)
         {
-            try
+            var code = orderCode?.Trim();
+            bool firstPlay = !string.IsNullOrEmpty(code) && CreditedOrders.TryCredit(code!);
+
+            if (firstPlay)
             {
-                // XPSource.Other, matching Programs / Quests / Pop Quiz / the Intake. NOT
-                // XPSource.Session: that source is the session engine's, and borrowing it would
-                // make companion bonuses and quest counters read a web drop as a local session.
-                App.Progression?.AddXP(SessionCompleteXp, XPSource.Other);
+                try
+                {
+                    // XPSource.Other, matching Programs / Quests / Pop Quiz / the Intake. NOT
+                    // XPSource.Session: that source is the session engine's, and borrowing it would
+                    // make companion bonuses and quest counters read a web drop as a local session.
+                    App.Progression?.AddXP(SessionCompleteXp, XPSource.Other);
+                }
+                catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete XP failed"); }
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete XP failed"); }
+            else
+            {
+                App.Logger?.Information("JustDrop: session-complete for {Order} paid nothing (replay)",
+                    string.IsNullOrEmpty(code) ? "(no code)" : code);
+            }
 
             try
             {
-                App.Notifications?.Show(Loc.GetF("jd_toast_session_complete", SessionCompleteXp),
-                    NotificationType.Success, TimeSpan.FromSeconds(6));
+                var message = firstPlay
+                    ? Loc.GetF("jd_toast_session_complete", SessionCompleteXp)
+                    : Loc.Get("jd_toast_session_replayed");
+                App.Notifications?.Show(message, NotificationType.Success, TimeSpan.FromSeconds(6));
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete toast failed"); }
         }

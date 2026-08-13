@@ -702,6 +702,17 @@ namespace ConditioningControlPanel
 
                 foreach (var ui in _exclusiveCards)
                 {
+                    // Just Drop is the one card that can be ABSENT rather than veiled. Every other
+                    // feature on this shelf exists for everybody and is merely gated by tier, so a
+                    // padlock is the honest treatment; this one does not exist at all until the
+                    // server opens the door, and advertising it would be selling a thing that
+                    // cannot be bought. Everything below still runs for it, so the card is fully
+                    // painted the moment it is revealed mid-session.
+                    if (string.Equals(ui.Feature.Key, "justdrop", StringComparison.Ordinal))
+                        ui.Card.Visibility = Services.JustDrop.JustDropService.DoorAvailable
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+
                     // Mod-aware titles (Drone mod -> "Drone Takeover", etc.).
                     ui.Title.Text = $"{ui.Feature.Emoji} {ExclusiveTitle(ui.Feature)}";
                     // ...and mod-aware art. Assigned in place on the existing Image: the shelf is

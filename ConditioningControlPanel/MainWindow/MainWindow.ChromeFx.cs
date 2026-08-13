@@ -88,7 +88,7 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorJustDrop, DoorWebApp, DoorSettings,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorWebApp, DoorSettings,
                     BtnSettings,
                     BtnNavStudio, BtnPresets, BtnNavHaptics,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
@@ -96,9 +96,6 @@ namespace ConditioningControlPanel
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
                     BtnDiscordTab, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
                     BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
-                    // Withheld by default: the hover FX subscribe harmlessly to a Collapsed row,
-                    // and the row is revealed in place when the server flag lands.
-                    BtnNavJustDrop,
                 };
                 return all.Where(b => b != null)!;
             }
@@ -566,7 +563,6 @@ namespace ConditioningControlPanel
             "programs" => BtnPrograms,
             "leaderboard" => BtnLeaderboard,
             "assets" => BtnOpenAssetsTop,
-            "justdrop" => BtnNavJustDrop,
             // The pinned Settings door is its own entry: header and destination in one row.
             "appsettings" => DoorSettings,
             _ => null,

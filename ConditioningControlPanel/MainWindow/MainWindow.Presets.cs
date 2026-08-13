@@ -1551,7 +1551,19 @@ namespace ConditioningControlPanel
             }
 
             var log = e.Log;
-            Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+            Dispatcher.BeginInvoke(() =>
+            {
+                // The run that just ended is a receipt now. Refreshed here rather than only on the
+                // next tab show, so closing the summary drops the user onto a shelf that already
+                // carries it.
+                //
+                // Deliberately AFTER the suppressed-summary return above: a withdrawn session did
+                // write a log, but that path is specified to pass without comment, and a card
+                // appearing on the shelf in the same beat is comment. It lands on the next tab
+                // show like any other.
+                RefreshTakeawayShelf();
+                ShowSessionSummaryWhenClear(log, attempt: 0);
+            });
         }
 
         /// <summary>

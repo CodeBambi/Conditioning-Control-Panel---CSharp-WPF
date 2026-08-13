@@ -6,19 +6,21 @@ using ConditioningControlPanel.Services.JustDrop;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// The Just Drop door's visibility, and nothing else.
+    /// Whether the Just Drop door exists for this account, and telling the app when that changes.
     ///
-    /// <para><b>Withheld by default.</b> <c>DoorJustDrop</c> and <c>DoorPanelJustDrop</c> ship
-    /// <c>Collapsed</c> in MainWindow.xaml, so on a fresh install - and on every launch where the
-    /// server does not answer - the rail below Library simply ends. Nothing here can make the door
-    /// appear except <see cref="JustDropService.DoorAvailable"/> turning true, and nothing the user
-    /// can edit in settings.json feeds that: the flag is a per-launch server GET with a false
-    /// default and no persistence (see JustDropService for why the tier gates' 24h-cache posture
-    /// would be wrong here).</para>
+    /// <para><b>Withheld by default.</b> Nothing can make the door appear except
+    /// <see cref="JustDropService.DoorAvailable"/> turning true, and nothing the user can edit in
+    /// settings.json feeds that: the flag is a per-launch server GET with a false default and no
+    /// persistence (see JustDropService for why the tier gates' 24h-cache posture would be wrong
+    /// here).</para>
     ///
-    /// <para>The refusal itself lives in <c>ShowTab</c>, not here. Hiding the rail rows stops the
-    /// door being <i>found</i>; the guard at the top of ShowTab stops it being <i>reached</i> by
-    /// the callers the rail does not own (bark rules, the dashboard tile, a deep link).</para>
+    /// <para>This used to show and hide a pair of rail rows. It no longer does: the shop is a
+    /// window (<see cref="JustDropHostService"/>), reached from the Play rack, the Exclusives shelf
+    /// and the dashboard tease tile, so what is left here is fanning the flag out to the surfaces
+    /// that render it.</para>
+    ///
+    /// <para>The refusal itself lives in <c>ShowTab</c>, which is also what launches the window -
+    /// one gate, one entry point, every caller.</para>
     /// </summary>
     public partial class MainWindow
     {
@@ -104,23 +106,28 @@ namespace ConditioningControlPanel
             try
             {
                 var available = JustDropService.DoorAvailable;
-                var visibility = available ? Visibility.Visible : Visibility.Collapsed;
 
-                if (DoorJustDrop != null) DoorJustDrop.Visibility = visibility;
-                if (DoorPanelJustDrop != null)
-                {
-                    DoorPanelJustDrop.Visibility = visibility;
-                    if (available && !string.Equals(_expandedDoor, "justdrop", StringComparison.Ordinal))
-                    {
-                        DoorPanelJustDrop.Height = 0;
-                        DoorPanelJustDrop.IsHitTestVisible = false;
-                    }
-                }
+                // No rail rows to show or hide any more - the shop is a window, reached from the
+                // Play rack, the Exclusives shelf and the dashboard tease tile. What is left is
+                // telling the surfaces that DO render the flag.
 
                 // The dashboard's tease tile reads the same flag to know when to take its costume
                 // off. Called here rather than left to the next mosaic repaint so a mid-session
-                // reveal lands on the tile and the rail in the same frame.
+                // reveal lands on every surface in the same frame.
                 ApplyTeaseCard();
+
+                // The Play door's SESSIONS zone carries the card that opens the shop, and it is
+                // hidden on an account the server has not opened the door for. Repainted here for
+                // the same reason the tile is: a mid-session reveal has to land everywhere at once,
+                // or two surfaces disagree about whether the feature exists.
+                try { RefreshPlayCards(); }
+                catch (Exception ex) { App.Logger?.Debug("JustDrop: Play card refresh failed: {E}", ex.Message); }
+
+                // The Session door's Takeaway shelf ends in an "order a drop" card that only
+                // exists while the door does. Rebuilt here for the same reason the tease tile is:
+                // a reveal that lands mid-session must reach every surface that reads the flag,
+                // not just the ones the user happens to open next.
+                RefreshTakeawayShelf();
 
                 App.Logger?.Debug("JustDrop door visibility -> {State}", available ? "visible" : "hidden");
             }

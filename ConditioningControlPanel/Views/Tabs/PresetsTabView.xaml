@@ -237,6 +237,71 @@
             </Style.Triggers>
         </Style>
 
+        <!-- ============================ takeaway shelf ============================ -->
+        <!-- A receipt, not a launcher. Each card is one finished run, and clicking it re-opens the
+             recap the session already produced (SessionCompleteWindow) - it does NOT start anything,
+             which is the whole reason the shelf can sit under a list of things that DO start.
+
+             158x74 with r12, matching SdSessionRow's radius rather than the chips' r11: these read
+             as small session rows turned on their side, not as presets. The 1px vertical margin is
+             hover-lift headroom, same as the chips - the shelf's ScrollViewer viewport is the card
+             height and a 1.02 scale clips silently without it. -->
+        <Style x:Key="SdTakeawayCard" TargetType="Border">
+            <Setter Property="Width" Value="158"/>
+            <Setter Property="Height" Value="74"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="11,9"/>
+            <Setter Property="Margin" Value="0,1,8,1"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The trailing "order a drop" card. Dashed, same footprint, so the shelf ends on an
+             invitation instead of on a hard edge - and so the zone is never visually empty even
+             before the user has finished a single session. -->
+        <Style x:Key="SdTakeawayDoor" TargetType="Border" BasedOn="{StaticResource SdTakeawayCard}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The kind stamp: RUN for a local session recap, and later DROP for a Just Drop order.
+             Consolas because it is structural labelling, and deliberately NOT pink - it carries a
+             semantic colour (completed / partial) that must survive a mod switch, exactly like the
+             difficulty pills above. -->
+        <Style x:Key="SdTakeawayKind" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdTakeawayTitle" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="SdTakeawayMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
         <!-- ============================ medallions ============================ -->
         <!-- The detail panel's stat triple. One shape, three instances: a stacked caption over a
              value, so duration / reward / grade scan as a row instead of as three sentences. -->
@@ -358,6 +423,9 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <!-- Takeaway. Auto, so an empty shelf costs the session list nothing but the
+                         zone header, and a full one costs it exactly one card height. -->
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
@@ -601,6 +669,57 @@
                     </Grid>
                 </Border>
 
+                <!-- ====================== ZONE: TAKEAWAY ======================
+                     What you have already finished, newest first, built by
+                     MainWindow.Takeaway.RefreshTakeawayShelf from SessionLogService's
+                     persisted recaps. Read-only by design: a card OPENS its recap, it
+                     never re-runs anything.
+
+                     Phase 3 of the Session Door Overhaul ships the local RUN cards and the
+                     trailing "order a drop" door only. The DROP cards (replaying a Just Drop
+                     order in a WebView window) are phase 4 and are blocked on two web-side
+                     items - a replay deep link, and a payload that distinguishes a replay from
+                     a first play, without which JustDropService's flat 25 XP per
+                     session-complete becomes an unlimited XP loop.
+                     ============================================================= -->
+                <Border Grid.Row="2" x:Name="TakeawayZone" x:FieldModifier="internal"
+                        Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_takeaway}"/>
+                            <Border Grid.Column="1" Style="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="TxtTakeawayCount" x:FieldModifier="internal"
+                                       Style="{StaticResource SdZoneHint}" Text=""/>
+                        </Grid>
+
+                        <ScrollViewer x:Name="TakeawayScroller" x:FieldModifier="internal"
+                                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                      PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel">
+                            <StackPanel x:Name="TakeawayShelf" x:FieldModifier="internal" Orientation="Horizontal"/>
+                        </ScrollViewer>
+
+                        <!-- Only ever seen when there are no recaps AND the Just Drop door is
+                             withheld, i.e. a fresh install. With the door up, the dashed card is
+                             the empty state and this stays collapsed. -->
+                        <TextBlock x:Name="TxtTakeawayEmpty" x:FieldModifier="internal"
+                                   Text="{loc:Str sd_takeaway_empty}" Visibility="Collapsed"
+                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11.5"
+                                   Margin="2,4,0,6"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ====================== CATALOGUE STRIP ======================
                      What is left of the two placeholder boxes. SessionDropZone,
                      DropZoneIcon and DropZoneStatus all survive by name because
@@ -613,7 +732,7 @@
                      nothing has since drag-drop moved to Window_Drop. They are left
                      alone here rather than deleted; that is a cleanup, not a restyle.
                      ============================================================= -->
-                <Border Grid.Row="2"
+                <Border Grid.Row="3"
                         x:Name="SessionDropZone" x:FieldModifier="internal"
                         Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource PanelAccentBrush}"

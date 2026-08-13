@@ -272,6 +272,10 @@ namespace ConditioningControlPanel
                 // stagger animates it in - see SyncCustomSessionsFromDisk / #614.
                 SyncCustomSessionsFromDisk();
 
+                // Same rule, for the same reason: a run that finished while this tab was collapsed
+                // must be ON the shelf before the stagger animates the shelf in.
+                RefreshTakeawayShelf();
+
                 InitializePresetsFx();
                 StaggerPresetCards();
                 RefreshCardSheen();
@@ -464,6 +468,10 @@ namespace ConditioningControlPanel
                 CollectVisible(PresetsTab?.SessionsPanel, rows);
                 CollectVisible(PresetsTab?.CustomSessionsPanel, rows);
                 StaggerCards(rows);
+
+                // The Takeaway shelf is its own zone and rides its own ramp, so the receipts arrive
+                // as a group rather than as the tail of the session list.
+                StaggerZone(PresetsTab?.TakeawayShelf);
             }
             catch (Exception ex) { App.Logger?.Debug("StaggerPresetCards: {E}", ex.Message); }
 
