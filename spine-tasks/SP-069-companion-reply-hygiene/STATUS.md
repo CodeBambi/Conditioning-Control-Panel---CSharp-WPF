@@ -1,11 +1,11 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Step 4
+**Current Step:** Complete
 **Last Updated:** 2026-08-13 (worker, Step 1 start)
 **Blockers:** none
 
 **Floor at authoring:** 946 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
 `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-068, integrate `f2662cd0`.
-**NEW EXACT COUNTS (this packet): _to be set by the worker_** — bump `floor.json` `total` in the same commit
+**NEW EXACT COUNTS (this packet): 993 unit / 35 headless / 2 skipped** — bump `floor.json` `total` in the same commit
 as the facts that moved it, with the reason in the message. `allowedSkips` is untouched.
 
 **The three layers in one line each (all at the reply seam, upstream of SP-068's link strip):**
@@ -65,17 +65,17 @@ only that layer's own pins go red. SP-067's land proved a shared revert falsely 
 - [x] Landed pipeline/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
 - [x] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
 
-### Step 4: Record + pre-completion consult — 🔶 In progress
-- [ ] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, transcribed patterns, H2 order case, layer order, **monotonicity argument + both adversarial cases**, the union recorded as a deliberate fail-closed divergence, H3 non-lift justification, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
-- [ ] **Honesty cell** — including: no truncation parity claimed (the port sends no token cap); this is the **subtractive half** of WPF's fix and a leaked envelope yields **no reply** where WPF shows one; `AiEnvelopeValidator` still unwired; execution vs reading per layer; whether any **real** model output was exercised or only constructed fixtures; **Linux unproven**; hygiene is lossy by design
-- [ ] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
+### Step 4: Record + pre-completion consult — ✅ Complete
+- [x] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, transcribed patterns, H2 order case, layer order, **monotonicity argument + both adversarial cases**, the union recorded as a deliberate fail-closed divergence, H3 non-lift justification, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
+- [x] **Honesty cell** — including: no truncation parity claimed (the port sends no token cap); this is the **subtractive half** of WPF's fix and a leaked envelope yields **no reply** where WPF shows one; `AiEnvelopeValidator` still unwired; execution vs reading per layer; whether any **real** model output was exercised or only constructed fixtures; **Linux unproven**; hygiene is lossy by design
+- [x] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
+- [x] Pre-completion solo consult; verdict + actual model recorded
+- [x] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
 
-### Step 5: Testing & Verification — ⬜ Not started
-- [ ] Contract testCommand passes through the wrapper (`verify.mjs` exit 0, build 0W/0E, new exact unit count + 35 headless, skip set exactly the 2 pinned Windows-observed names)
-- [ ] 3 consecutive full-suite greens, >= 1 a **cold fresh-worktree first-ever build**; per-run table with counts, skipped names, TRX paths
-- [ ] Bite matrix complete: **four separate reverts, four separate REDs**, each naming the reverted file and the pins that went red, others green
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+### Step 5: Testing & Verification — ✅ Complete
+- [x] Contract testCommand passes through the wrapper (`verify.mjs` exit 0, build 0W/0E, new exact unit count + 35 headless, skip set exactly the 2 pinned Windows-observed names)
+- [x] 3 consecutive full-suite greens, >= 1 a **cold fresh-worktree first-ever build**; per-run table with counts, skipped names, TRX paths
+- [x] Bite matrix complete: **four separate reverts, four separate REDs**, each naming the reverted file and the pins that went red, others green
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
