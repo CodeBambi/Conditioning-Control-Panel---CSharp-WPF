@@ -1,6 +1,6 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Not started
-**Last Updated:** 2026-08-13 (orchestrator, authoring)
+**Current Step:** Step 1
+**Last Updated:** 2026-08-13 (worker, Step 1 start)
 **Blockers:** none
 
 **Floor at authoring:** 946 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -33,8 +33,8 @@ model text on the command-execution path — a different row and a widening.
 **Four layers changed means four bite tests.** Revert H1, H2, H3 and the union rule one at a time and prove
 only that layer's own pins go red. SP-067's land proved a shared revert falsely verifies pins never exercised.
 
-### Step 1: Re-derive the three layers from WPF and prove the ordering is monotone — ⬜ Not started
-- [ ] Update STATUS.md before starting work
+### Step 1: Re-derive the three layers from WPF and prove the ordering is monotone — 🔶 In progress
+- [x] Update STATUS.md before starting work
 - [ ] Per layer: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a)
 - [ ] H2: five patterns **and their order** transcribed; the case that demonstrates the order constructed — or the honest statement that no such case could be constructed
 - [ ] H1: block regex, orphan-closer rule and both character mappings transcribed verbatim; the unterminated-block case decided and justified
