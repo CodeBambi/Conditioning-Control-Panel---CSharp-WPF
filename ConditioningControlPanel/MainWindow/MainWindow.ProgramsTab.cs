@@ -1852,7 +1852,9 @@ namespace ConditioningControlPanel
                         var program = svc?.ActiveProgram;
                         if (svc == null || program == null) return;
 
-                        var completed = svc.TodayRecord?.SessionCompleted == true;
+                        // Not TodayRecord: a boundary-crossing session's credit lands on the
+                        // previous day's record, and today's would call a finished session "early".
+                        var completed = svc.LastProgramSessionCompleted;
 
                         App.Notifications?.Show(
                             completed

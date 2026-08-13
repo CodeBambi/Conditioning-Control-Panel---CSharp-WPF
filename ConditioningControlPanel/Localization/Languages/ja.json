@@ -3589,6 +3589,8 @@
   "programs_toast_session_completed": "{0} - 今日のセッションが完了しました。",
   "programs_toast_session_ended_early": "{0} - 今日のセッションが早期終了したため、完了にはなっていません。",
   "programs_toast_view_today": "今日を見る",
+  "programs_nudge_open": "{0}：今日はまだ終わっていません。",
+  "programs_nudge_day": "{0} - {1}日目：{2}が待っています。",
   "programs_session_start_failed": "今日のセッションを組み立てられませんでした。未達成として記録されたものはありません。",
   "programs_ambient_header": "一日を通して",
   "programs_ambient_progress": "{0} / {1}分",

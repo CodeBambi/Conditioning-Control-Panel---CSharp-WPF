@@ -109,6 +109,14 @@ public class ProgramService : IDisposable
     private DateTime _expectedSessionProgramDate;
 
     /// <summary>
+    /// Whether the most recently built program session's completion credit landed. The end-of-session
+    /// toast must not answer this from TodayRecord: after a boundary-crossing session the credit sits
+    /// on the previous day's record, and today's would read "ended early" for a finished session.
+    /// Reset when a session is built, set by <see cref="NotifySessionCompleted"/>.
+    /// </summary>
+    public bool LastProgramSessionCompleted { get; private set; }
+
+    /// <summary>
     /// A rollover fell due while the program's own session was still running. The clock is held
     /// until the session ends and its completion has been credited - see <see cref="EvaluateRollover"/>.
     /// </summary>
@@ -654,6 +662,7 @@ public class ProgramService : IDisposable
             // crosses the boundary hour, and the completion belongs to the day that was prescribed.
             _expectedSessionDayIndex = day.DayIndex;
             _expectedSessionProgramDate = State.Active?.CurrentDayDate ?? DateTime.Now.Date;
+            LastProgramSessionCompleted = false;
 
             return session;
         }
@@ -864,6 +873,7 @@ public class ProgramService : IDisposable
         var programDate = _expectedSessionDayIndex > 0 ? _expectedSessionProgramDate : enrollment.CurrentDayDate;
 
         var record = enrollment.GetOrCreateRecord(dayIndex, programDate);
+        LastProgramSessionCompleted = true;
         if (record.SessionCompleted) return;
 
         record.SessionCompleted = true;
@@ -1387,8 +1397,8 @@ public class ProgramService : IDisposable
 
             var day = Today;
             var title = day == null
-                ? $"{program.Title}: today is still open."
-                : $"{program.Title} - Day {day.DayIndex}: {day.Title} is still waiting.";
+                ? Localization.Loc.GetF("programs_nudge_open", program.Title)
+                : Localization.Loc.GetF("programs_nudge_day", program.Title, day.DayIndex, day.Title);
 
             App.Notifications?.Show(title, NotificationType.Info, TimeSpan.FromSeconds(12));
 

@@ -3589,6 +3589,8 @@
   "programs_toast_session_completed": "{0} - la sesión de hoy está hecha.",
   "programs_toast_session_ended_early": "{0} - la sesión de hoy terminó antes de tiempo, así que no se ha marcado como hecha.",
   "programs_toast_view_today": "Ver hoy",
+  "programs_nudge_open": "{0}: el dia de hoy sigue abierto.",
+  "programs_nudge_day": "{0} - Dia {1}: {2} sigue esperandote.",
   "programs_session_start_failed": "No se pudo construir la sesión de hoy. No se ha marcado nada como perdido.",
   "programs_ambient_header": "TODO EL DÍA",
   "programs_ambient_progress": "{0} / {1} min",

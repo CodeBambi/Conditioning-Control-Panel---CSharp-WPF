@@ -3596,6 +3596,8 @@
   "programs_toast_session_completed": "{0} - сегодняшняя сессия пройдена.",
   "programs_toast_session_ended_early": "{0} - сегодняшняя сессия прервана, поэтому она не засчитана.",
   "programs_toast_view_today": "Смотреть сегодня",
+  "programs_nudge_open": "{0}: сегодняшний день ещё открыт.",
+  "programs_nudge_day": "{0} - День {1}: {2} всё ещё ждёт.",
   "programs_session_start_failed": "Не удалось собрать сегодняшнюю сессию. Пропуск при этом не засчитан.",
   "programs_ambient_header": "ВЕСЬ ДЕНЬ",
   "programs_ambient_progress": "{0} / {1} мин",

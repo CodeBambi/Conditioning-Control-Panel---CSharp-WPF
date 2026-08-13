@@ -3598,6 +3598,8 @@
   "programs_toast_session_completed": "{0} - die heutige Sitzung ist erledigt.",
   "programs_toast_session_ended_early": "{0} - die heutige Sitzung endete vorzeitig und wurde daher nicht als erledigt markiert.",
   "programs_toast_view_today": "Heute ansehen",
+  "programs_nudge_open": "{0}: Heute ist noch offen.",
+  "programs_nudge_day": "{0} - Tag {1}: {2} wartet noch auf dich.",
   "programs_session_start_failed": "Die heutige Sitzung konnte nicht gebaut werden. Es wurde nichts als verpasst markiert.",
   "programs_ambient_header": "GANZTÄGIG",
   "programs_ambient_progress": "{0} / {1} Min.",
