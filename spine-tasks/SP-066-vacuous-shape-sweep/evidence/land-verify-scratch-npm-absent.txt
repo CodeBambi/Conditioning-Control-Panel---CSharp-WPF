@@ -1,0 +1,11 @@
+verify.mjs: patches tested against 2.8.0, 2.10.0
+FAIL project root missing: C:\Code\land-verify-w23\.pi\npm\node_modules\pi-spine
+Remedy: reinstall pi-spine there, or update manifest engineRoot/installRoot to the install the spine CLI actually loads.
+verify.mjs: [engine] pi-spine 2.10.0 at C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine (5 patches)
+applied  fsync-r-plus-abort [engine]
+applied  fsync-r-plus-lifecycle-archive [engine]
+applied  dotnet-evidence-allowlist [engine]
+applied  worker-tail-at-file [engine]
+applied  t5-reviews-autoclean [engine]
+
+verify.mjs: FAIL — patches not all applied.
