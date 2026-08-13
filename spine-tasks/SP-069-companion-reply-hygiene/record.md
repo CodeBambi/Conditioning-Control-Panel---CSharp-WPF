@@ -148,6 +148,15 @@ orchestrator should add (finding only, NOT applied by this packet):
   cleanly, no stitching. **Actual answering model: `anthropic/claude-opus-5`** (configured solo
   roster in `bpx-consult.json`; the PROMPT's Opus 5 main).
 
+## 7b. Consults (continued)
+
+- **Pre-completion (solo)** — verdict: **proceed, one honesty line to add, no code change**:
+  H2's unconditional whitespace collapse flattens multi-paragraph replies and undoes H1's
+  `Ċ`→newline at the seam — WPF-identical parity, unpinned by any control (a multi-line
+  byte-identical control cannot exist against WPF's own behavior). Added to honesty cell 7 as
+  directed; no code or floor churn. Verdict surfaced cleanly, no stitching. **Actual answering
+  model: `anthropic/claude-opus-5`** (configured solo roster).
+
 ## 8. Implementation summary (per product file, `git diff`)
 
 - `client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs` (**new, the only new product file**):
@@ -238,6 +247,12 @@ No REVISE and no spawn failure occurred; code/final review are the engine's post
 7. **Hygiene is lossy by design** — a stripped fragment cannot be recovered downstream. The
    `H1_LossyBoundary_LegitReplyQuotingTheTagVerbatim_IsStripped` fact pins the boundary case
    (a legitimate reply quoting the tag shape verbatim loses that span — WPF-identical).
+   **H2's unconditional `\s{2,}` → `" "` collapse (WPF :79, WPF-identical) flattens paragraph
+   breaks in EVERY reply** — a multi-paragraph model reply becomes one line, and H1's `Ċ`→newline
+   mapping is collapsed again by H2 at the seam. Parity, not a defect — but user-visible
+   formatting loss on the live chat surface that no fact pins (a multi-line byte-identical
+   control would fail against WPF's own behavior, so it cannot be pinned as a control).
+   Pre-completion consult gap, disclosed by name.
 8. **Moderation-order note:** H3 detection runs before the union moderation (WPF order — leak
    detection lives inside `Parse`, before sanitizing and moderation). A text that is BOTH a leak
    and a raw moderation hit now yields typed `Unavailable` where yesterday it yielded typed
