@@ -439,11 +439,18 @@ namespace ConditioningControlPanel
             }
 
             // A landed server override for the ? box repaints the wall + rail + lockbands: the
-            // rail refresh is the one funnel that already fans out to all three.
+            // rail refresh is the one funnel that already fans out to all three. The Velvet
+            // Vault rides the SAME event (never its own timer) so the FREE TODAY card and the
+            // dashboard's ? box can never name two different features; the call no-ops until
+            // the tab has been built at least once.
             if (App.DailyFree != null)
             {
                 App.DailyFree.TodayChanged += () =>
-                    Dispatcher.BeginInvoke(new Action(RefreshPremiumRail));
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        RefreshPremiumRail();
+                        RefreshExclusivesTab();
+                    }));
             }
 
             // Subscribe to skill tree events

@@ -51,6 +51,19 @@ namespace ConditioningControlPanel.Models
         /// <summary>Optional badge loc key ("exclusives_badge_new" / "exclusives_badge_beta").</summary>
         public string? BadgeLocKey { get; init; }
 
+        /// <summary>
+        /// This exclusive's <see cref="Services.DailyFreeService"/> pool key, or null for the
+        /// entries the daily rotation never names (Blink Trainer, Graded Intake, Lockdown).
+        /// On the day the ? box rotates a key in, the matching vault card renders open and
+        /// wears the gold FREE TODAY pill - see MainWindow.Exclusives.cs.
+        ///
+        /// <para>These keys are API shared with the server override and with
+        /// <c>CardMystery_Click</c> / <c>RailDailyKey</c>; never rename one side alone. They are
+        /// deliberately NOT the ShowTab <see cref="Key"/> ("remote" vs "remotecontrol",
+        /// "takeover" vs "bambitakeover", "voice" vs "shelistening").</para>
+        /// </summary>
+        public string? DailyFreeKey { get; init; }
+
         /// <summary>Normalized (0-1) focal point of the art, where the hover bloom sits.</summary>
         public double FocalX { get; init; } = 0.5;
         public double FocalY { get; init; } = 0.45;
@@ -93,6 +106,7 @@ namespace ConditioningControlPanel.Models
                 // Wide cut for the hero band; the card keeps the 16:9 art above.
                 BannerArtResource = "Resources/features/fyp_banner.png",
                 BadgeLocKey = "exclusives_badge_new",
+                DailyFreeKey = "fyp",
                 // The art's glowing phone sits left of center, low.
                 FocalX = 0.33, FocalY = 0.60,
             },
@@ -108,6 +122,7 @@ namespace ConditioningControlPanel.Models
                 Key = "remotecontrol", Emoji = "🎮",
                 TitleLocKey = "tab_remote_control", TaglineLocKey = "exclusives_tag_remotecontrol",
                 ArtResource = "Resources/features/remote_control.png",
+                DailyFreeKey = "remote",
             },
             new()
             {
@@ -115,6 +130,7 @@ namespace ConditioningControlPanel.Models
                 TitleLocKey = "tab_takeover", TaglineLocKey = "exclusives_tag_bambitakeover",
                 ArtResource = "Resources/features/takeover.png",
                 FocalY = 0.35,
+                DailyFreeKey = "takeover",
             },
             new()
             {
@@ -122,6 +138,8 @@ namespace ConditioningControlPanel.Models
                 TitleLocKey = "tab_shelistening", TaglineLocKey = "exclusives_tag_shelistening",
                 ArtResource = "Resources/features/audio_whispers.png",
                 BadgeLocKey = "exclusives_badge_beta",
+                // Benched from the wheel, but a server override can still hand it out.
+                DailyFreeKey = "voice",
             },
             new()
             {
@@ -143,12 +161,15 @@ namespace ConditioningControlPanel.Models
                 Key = "haptics", Emoji = "💜",
                 TitleLocKey = "tab_haptics", TaglineLocKey = "exclusives_tag_haptics",
                 ArtResource = "Resources/features/vibe.png",
+                // Benched from the wheel, but a server override can still hand it out.
+                DailyFreeKey = "haptics",
             },
             new()
             {
                 Key = "awareness", Emoji = "👁",
                 TitleLocKey = "tab_awareness", TaglineLocKey = "exclusives_tag_awareness",
                 ArtResource = "Resources/features/awareness.png",
+                DailyFreeKey = "awareness",
             },
             new()
             {

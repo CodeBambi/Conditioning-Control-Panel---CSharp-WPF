@@ -33,6 +33,11 @@ namespace ConditioningControlPanel
             public required TextBlock ChipText;
             public required Border Veil;
             public required TextBlock VeilLock;
+            /// <summary>The gold FREE TODAY pill; collapsed on every other day.</summary>
+            public required Border FreePill;
+            public required TextBlock FreePillText;
+            /// <summary>The pill's live pulse, kept so the next repaint can stop it.</summary>
+            public Storyboard? FreeFx;
             public CardSheenAdorner? Sheen;
         }
 
@@ -41,8 +46,44 @@ namespace ConditioningControlPanel
         private bool _exclusivesBuilt;
         private bool _exclusivesSheenRetryQueued;
 
+        /// <summary>The spotlight's FREE TODAY pulse - same contract as ExclusiveCardUi.FreeFx.</summary>
+        private Storyboard? _spotFreeFx;
+
         private static readonly FontFamily FredokaFont =
             new(new Uri("pack://application:,,,/"), "./Fonts/#Fredoka");
+
+        // ---- FREE TODAY livery ---------------------------------------------------------
+        // Gold, deliberately: the same gold the dashboard's ? box gift tag and the rail's
+        // "pass ready" chip wear, so "open for one day only" reads the same everywhere.
+        // Literal colours, never a theme StaticResource - see CLAUDE.md's BAML note.
+        private static readonly Color FreeTodayGold = Color.FromRgb(0xFF, 0xD2, 0x7A);
+
+        /// <summary>A live card's resting edge (violet, 1px).</summary>
+        private static readonly SolidColorBrush ExclusiveEdgeDefault = Freeze(Color.FromArgb(0x4D, 0xB4, 0x78, 0xFF));
+
+        /// <summary>A free-today card's edge: gold, and thicker, so the shelf reads at a glance.</summary>
+        private static readonly SolidColorBrush ExclusiveEdgeFree = Freeze(Color.FromArgb(0xE6, 0xFF, 0xD2, 0x7A));
+
+        /// <summary>The spotlight band's resting edge (pink, 1px), as authored in the view.</summary>
+        private static readonly SolidColorBrush SpotlightEdgeDefault = Freeze(Color.FromArgb(0x66, 0xFF, 0x69, 0xB4));
+
+        private static SolidColorBrush Freeze(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>
+        /// True when this exclusive is today's daily free unlock AND the account does not
+        /// already own it. Mirrors the ? box's rule (MainWindow.Presets.cs): premium accounts
+        /// own the whole pool, so they get the normal unlocked chip and no gift tag - the tag
+        /// only ever means "open to you today, and only today".
+        /// </summary>
+        private static bool IsExclusiveFreeToday(ExclusiveFeature feature, ExclusiveGateState state) =>
+            state == ExclusiveGateState.Locked
+            && feature.DailyFreeKey != null
+            && App.DailyFree?.IsFreeToday(feature.DailyFreeKey) == true;
 
         /// <summary>Spotlight = the first registry entry (the newest exclusive).</summary>
         internal void OpenExclusiveSpotlight() => ShowTab(ExclusiveFeature.All[0].Key);
@@ -203,6 +244,36 @@ namespace ConditioningControlPanel
             };
             host.Children.Add(chip);
 
+            // --- FREE TODAY pill: takes the chip's corner on the one day this feature is
+            //     the daily free unlock. Built for every card (collapsed) rather than on
+            //     demand so the refresh never has to touch the visual tree - only
+            //     visibility, text and the pulse. ---
+            var freePillText = new TextBlock
+            {
+                Text = Loc.Get("mosaic_free_today"),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x1A, 0x05)),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+            };
+            var freePill = new Border
+            {
+                Visibility = Visibility.Collapsed,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 8, 8, 0),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(9, 3, 9, 3),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xF0, 0xC2)),
+                Background = new LinearGradientBrush(
+                    FreeTodayGold, Color.FromRgb(0xFF, 0x9C, 0x4A), 45),
+                // Grows from its own centre; the pill floats over art, so nothing reflows.
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = new ScaleTransform(1, 1),
+            };
+            freePill.Child = freePillText;
+            host.Children.Add(freePill);
+
             // Optional NEW/BETA badge, top-left, in the brand gradient.
             if (feature.BadgeLocKey != null)
             {
@@ -277,7 +348,7 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(0, 0, 16, 16),
                 CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xB4, 0x78, 0xFF)),
+                BorderBrush = ExclusiveEdgeDefault,
                 BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Child = host,
@@ -297,6 +368,8 @@ namespace ConditioningControlPanel
                 ChipText = chipText,
                 Veil = veil,
                 VeilLock = veilLock,
+                FreePill = freePill,
+                FreePillText = freePillText,
             });
             return card;
         }
@@ -485,14 +558,28 @@ namespace ConditioningControlPanel
                 foreach (var mark in _exclusiveTeaserMarks)
                     ApplyVeilLockBreath(mark, true);
 
-                // Spotlight veil follows the same probe.
+                // Spotlight veil follows the same probe - including the daily free unlock, so
+                // the hero can never sit padlocked above its own card wearing FREE TODAY.
                 var spot = ExclusiveFeature.All[0];
+                var spotState = spot.GateState();
+                bool spotFree = IsExclusiveFreeToday(spot, spotState);
                 ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
                 ExclusivesTab.SpotVeil.Visibility =
-                    spot.GateState() == ExclusiveGateState.Locked ? Visibility.Visible : Visibility.Collapsed;
+                    spotState == ExclusiveGateState.Locked && !spotFree ? Visibility.Visible : Visibility.Collapsed;
                 ApplyVeilLockBreath(ExclusivesTab.SpotVeilLock, ExclusivesTab.SpotVeil.Visibility == Visibility.Visible);
 
+                ExclusivesTab.TxtSpotFreeToday.Text = Loc.Get("mosaic_free_today");
+                ExclusivesTab.SpotFreeToday.Visibility = spotFree ? Visibility.Visible : Visibility.Collapsed;
+                ExclusivesTab.SpotlightCard.BorderBrush = spotFree ? ExclusiveEdgeFree : SpotlightEdgeDefault;
+                ExclusivesTab.SpotlightCard.BorderThickness = new Thickness(spotFree ? 2 : 1);
+                _spotFreeFx = ApplyFreeTodayPulse(ExclusivesTab.SpotFreeToday, _spotFreeFx, spotFree);
+
                 RefreshExclusiveTierPlates();
+
+                // Opportunistic server-override check, exactly as RefreshMosaicTierBadges does:
+                // the 6h/10min gates inside make this free on every repaint, so a user parked on
+                // the vault catches a same-day override without this tab owning a clock.
+                _ = App.DailyFree?.RefreshAsync();
             }
             catch (Exception ex)
             {
@@ -502,6 +589,31 @@ namespace ConditioningControlPanel
 
         private void ApplyExclusiveCardState(ExclusiveCardUi ui, ExclusiveGateState state)
         {
+            // The daily free unlock outranks the padlock. On its one day, the pool feature's
+            // card opens exactly like an owned one - no veil, no dimmed art - and swaps its
+            // entitlement chip for the gold FREE TODAY pill. Nothing here enforces anything:
+            // the destination's TierGate call already ORs in DailyFreeService, so the card is
+            // simply telling the truth about a door that really is open.
+            bool freeToday = IsExclusiveFreeToday(ui.Feature, state);
+            if (freeToday)
+            {
+                ui.Veil.Visibility = Visibility.Collapsed;
+                ui.Art.Opacity = 1.0;
+                ui.Chip.Visibility = Visibility.Collapsed;
+                ui.FreePillText.Text = Loc.Get("mosaic_free_today");
+                ui.FreePill.Visibility = Visibility.Visible;
+                ui.Card.BorderBrush = ExclusiveEdgeFree;
+                ui.Card.BorderThickness = new Thickness(2);
+                ApplyVeilLockBreath(ui.VeilLock, false);
+                ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, true);
+                return;
+            }
+
+            ui.FreePill.Visibility = Visibility.Collapsed;
+            ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, false);
+            ui.Card.BorderBrush = ExclusiveEdgeDefault;
+            ui.Card.BorderThickness = new Thickness(1);
+
             switch (state)
             {
                 case ExclusiveGateState.Unlocked:
@@ -571,6 +683,103 @@ namespace ConditioningControlPanel
                 glow.BeginAnimation(DropShadowEffect.OpacityProperty, anim);
             }
             catch (Exception ex) { App.Logger?.Debug("Exclusives lock breath: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The FREE TODAY pill's pulse: a slow opacity breath plus a barely-there 1.06 scale,
+        /// on one controllable <see cref="Storyboard"/> so the next repaint can stop it cleanly
+        /// (a stray Forever clock on a hidden pill is exactly how the motion kill-switch gets
+        /// quietly defeated).
+        ///
+        /// <para><b>Gates, in order:</b> the glow only appears where
+        /// <see cref="PerformanceProfile.AllowGlow"/> says it may, and the clock only starts at
+        /// <see cref="MotionFx.AllowAmbientLoops"/> - Reduced/Off motion and low tiers get a
+        /// static gold pill, which still says everything it needs to. Frame rate is capped at
+        /// <see cref="AmbientFrameRate"/> like every other ambient loop on this tab.</para>
+        /// </summary>
+        /// <param name="existing">The pill's previous storyboard, or null.</param>
+        /// <returns>The new storyboard to remember, or null when nothing is running.</returns>
+        private static Storyboard? ApplyFreeTodayPulse(Border pill, Storyboard? existing, bool on)
+        {
+            try
+            {
+                // Always park first: this is called on every repaint, and a second Begin on a
+                // pill that is already breathing would stack clocks.
+                if (existing != null)
+                {
+                    existing.Stop(pill);
+                    existing.Remove(pill);
+                }
+                pill.BeginAnimation(UIElement.OpacityProperty, null);
+                pill.Opacity = 1.0;
+                if (pill.RenderTransform is ScaleTransform rest) rest.ScaleX = rest.ScaleY = 1.0;
+
+                if (!on)
+                {
+                    pill.ClearValue(UIElement.EffectProperty);
+                    return null;
+                }
+
+                var tier = PerformanceProfile.CurrentTier;
+                if (PerformanceProfile.AllowGlow(tier))
+                {
+                    if (pill.Effect is not DropShadowEffect)
+                    {
+                        pill.Effect = new DropShadowEffect
+                        {
+                            Color = FreeTodayGold,
+                            BlurRadius = Math.Min(16, PerformanceProfile.MaxGlowBlurRadius(tier)),
+                            ShadowDepth = 0,
+                            Opacity = 0.7,
+                        };
+                    }
+                }
+                else
+                {
+                    pill.ClearValue(UIElement.EffectProperty);
+                }
+
+                if (!MotionFx.AllowAmbientLoops) return null;   // static gold pill, no clock
+
+                var sb = new Storyboard();
+
+                var fade = new DoubleAnimation(0.72, 1.0, TimeSpan.FromSeconds(1.9))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                Timeline.SetDesiredFrameRate(fade, AmbientFrameRate);
+                Storyboard.SetTarget(fade, pill);
+                Storyboard.SetTargetProperty(fade, new PropertyPath(UIElement.OpacityProperty));
+                sb.Children.Add(fade);
+
+                if (pill.RenderTransform is ScaleTransform)
+                {
+                    foreach (var axis in new[] { "ScaleX", "ScaleY" })
+                    {
+                        var swell = new DoubleAnimation(1.0, 1.06, TimeSpan.FromSeconds(1.9))
+                        {
+                            AutoReverse = true,
+                            RepeatBehavior = RepeatBehavior.Forever,
+                            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                        };
+                        Timeline.SetDesiredFrameRate(swell, AmbientFrameRate);
+                        Storyboard.SetTarget(swell, pill);
+                        Storyboard.SetTargetProperty(swell, new PropertyPath(
+                            $"(UIElement.RenderTransform).(ScaleTransform.{axis})"));
+                        sb.Children.Add(swell);
+                    }
+                }
+
+                sb.Begin(pill, true);
+                return sb;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Exclusives free-today pulse: {E}", ex.Message);
+                return null;
+            }
         }
 
         private void RefreshExclusiveTierPlates()
