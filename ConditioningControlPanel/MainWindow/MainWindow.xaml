@@ -100,10 +100,10 @@
              2026-08-11 emoji purge: door icons are painted art thumbnails
              (Resources/nav/door_*.png, 64x64 native). 2026-08-12 (CONTRACT.md "Nav rail
              interaction spec"): the row became a medallion tile that grows with the rail -
-             44px r12 tile with a 28px icon while the rail is shut, 56px tile with a 44px icon
-             and a big bottom-aligned name once it opens. Every size in that sentence is
-             animated from MainWindow.NavRail.cs (which also says why the open tile is 56 and
-             not the contract's 64); nothing here animates itself.
+             44px r12 tile with a 36px icon while the rail is shut, 50px tile with a 45px icon
+             and a big centred name once it opens. Every size in that sentence is animated
+             from MainWindow.NavRail.cs (which also says why the open tile is 50 and not the
+             contract's 64); nothing here animates itself.
 
              The row is a FIXED 64px tall in BOTH states on purpose: only the tile inside it
              grows. Animating the row height as well would re-layout the whole rail (and shove
@@ -155,27 +155,31 @@
         </Style>
 
         <!-- The big door name. Width 160 = the open rail (236) minus the 56px medallion column
-             minus 8 left / 12 right, and it is FIXED so the Viewbox inside never re-scales the
+             minus the 10px lead-in, and it is FIXED so the Viewbox inside never re-scales the
              text mid-flyout: the label slides up and fades in at a constant size while the
              rail's own ClipToBounds reveals it. Opacity 0 is the shut state; NavRail.cs owns
              this property (and a TranslateTransform it installs at cache time) from Loaded on.
+             Centred both ways since 2026-08-13 (owner: "bigger and centered"): the host sits
+             mid-row and the name's mod-glow/shimmer fx (built per row in CacheNavDoorRows -
+             a Style Effect would be one shared instance, the stagger's old enemy) breathe
+             around a centred baseline instead of a bottom-left one.
 
              Tag is API: CacheNavRailParts uses it to tell "a label I drive per row, with a
              stagger" apart from "a label the global collapse fade owns" (every entry label).
              No letter-spacing: WPF's TextBlock has no CharacterSpacing (that is a WinUI
              property) and faking tracking by injecting hair spaces breaks CJK shaping and the
-             9 shipped locales, so the contract's ~1.5 tracking is carried by 16px/ExtraBold. -->
+             9 shipped locales, so the contract's ~1.5 tracking is carried by 21px/ExtraBold. -->
         <Style x:Key="NavDoorLabelHost" TargetType="Grid">
             <Setter Property="Tag" Value="navdoorlabel"/>
             <Setter Property="Width" Value="160"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
-            <Setter Property="VerticalAlignment" Value="Bottom"/>
-            <Setter Property="Margin" Value="8,0,0,10"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
             <Setter Property="Opacity" Value="0"/>
         </Style>
 
         <Style x:Key="NavDoorLabelText" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontSize" Value="21"/>
             <Setter Property="FontWeight" Value="ExtraBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="TextWrapping" Value="NoWrap"/>
@@ -521,7 +525,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
                                          re-point the art at the active mod's override. The literal
@@ -537,7 +541,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_home}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -578,7 +582,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorStudio"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -590,7 +594,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_studio}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -659,7 +663,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorCompanion"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -671,7 +675,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_companion}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -737,7 +741,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorPlay"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -749,7 +753,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_play}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -858,7 +862,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorYou"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -870,7 +874,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_you}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -963,7 +967,7 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="28" Height="28"
+                                <Viewbox Grid.Column="0" Width="36" Height="36"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorLibrary"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -975,7 +979,7 @@
                                 </Viewbox>
                                 <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                     <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str nav_door_library}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
@@ -1149,7 +1153,7 @@
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                            <Viewbox Grid.Column="0" Width="28" Height="28"
+                            <Viewbox Grid.Column="0" Width="36" Height="36"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1161,7 +1165,7 @@
                             </Viewbox>
                             <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                 <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                         HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock Text="{loc:Str nav_door_settings}"
                                                Style="{StaticResource NavDoorLabelText}"/>
                                 </Viewbox>

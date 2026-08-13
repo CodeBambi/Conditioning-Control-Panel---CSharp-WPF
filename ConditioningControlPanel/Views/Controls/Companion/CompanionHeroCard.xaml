@@ -302,10 +302,16 @@
                                 </Ellipse>
                             </Grid>
 
-                            <!-- the real portrait, when there is one -->
+                            <!-- The real portrait, when there is one. The source is the avatar
+                                 set's pose-1 TUBE sprite (LoadPortrait) - a tall full-body
+                                 image - so UniformToFill's default centre crop framed the
+                                 torso and beheaded her (owner, 2026-08-13: "avatar preview is
+                                 off center"). AlignmentY=Top keeps the head: the fill scales
+                                 to the circle's width and the crop eats the legs instead. -->
                             <Ellipse Margin="3" Visibility="{Binding Portrait, Converter={StaticResource CmpHasContentToVis}}">
                                 <Ellipse.Fill>
-                                    <ImageBrush ImageSource="{Binding Portrait}" Stretch="UniformToFill"/>
+                                    <ImageBrush ImageSource="{Binding Portrait}" Stretch="UniformToFill"
+                                                AlignmentY="Top"/>
                                 </Ellipse.Fill>
                             </Ellipse>
 

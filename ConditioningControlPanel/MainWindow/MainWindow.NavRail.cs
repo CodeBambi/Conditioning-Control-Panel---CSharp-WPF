@@ -4,8 +4,10 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
@@ -98,10 +100,14 @@ namespace ConditioningControlPanel
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
         /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.
-        /// Open shrank 44 -> 40 with the tile's 56 -> 50 (same 2026-08-13 frame note above), so
-        /// the art keeps breathing room inside the smaller plate.</summary>
-        private const double NavDoorIconCollapsed = 28;
-        private const double NavDoorIconExpanded = 40;
+        /// 2026-08-13 owner pass ("make those images bigger even when in small mode, and reduce
+        /// by about half that grey outline"): the art grew INSIDE the frozen tile sizes, because
+        /// the visible ring of tile plate around the art IS the grey outline - 28 -> 36 shut
+        /// (44px tile: 8px of plate a side became 4) and 40 -> 45 open (50px tile: 5 -> 2.5).
+        /// The tiles themselves cannot grow: 44 is the collapsed strip's breathing room and 50
+        /// is the 3px window-frame clearance the same day's earlier pass bought.</summary>
+        private const double NavDoorIconCollapsed = 36;
+        private const double NavDoorIconExpanded = 45;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
         /// 4px each side where the gradient has already reached zero alpha, so the rail's
@@ -127,6 +133,25 @@ namespace ConditioningControlPanel
         private const int NavDoorLabelFadeMs = 220;
         private const int NavDoorLabelSlideMs = 260;
         private const int NavDoorLabelStaggerMs = 30;
+
+        // Door-name fx (owner, 2026-08-13: the names got "bigger and centered and animated -
+        // something mod themed, try some cool fx"). Two layers, both built per row in
+        // BuildNavDoorLabelFx (a Style-set Effect/Transform is ONE shared instance across the
+        // rows - the same trap the label slide already dodges) and both running ONLY while the
+        // rail is open: the labels sit at Opacity 0 shut, and a Forever clock under an
+        // invisible layer is pure heat.
+        //   - a DropShadowEffect halo on the name in the mod's FxGlow colour, breathing;
+        //   - a white gloss band (an overlay TextBlock's OpacityMask) sweeping each name,
+        //     one row after another, so the rail glints top to bottom.
+        // Reduced motion: static halo at the mid opacity, no sweep - the mod colour still
+        // reads, nothing loops.
+        private const double NavDoorLabelGlowLo = 0.20;
+        private const double NavDoorLabelGlowHi = 0.70;
+        private const double NavDoorLabelGlowStatic = 0.45;
+        private const int NavDoorLabelGlowBreathMs = 1900;
+        private const int NavDoorLabelShimmerSweepMs = 1100;
+        private const int NavDoorLabelShimmerPeriodMs = 3600;
+        private const int NavDoorLabelFxStaggerMs = 140;
 
         /// <summary>Marks the label host grid in MainWindow.xaml (set by the NavDoorLabelHost
         /// style). Two jobs: it is how <see cref="CacheNavDoorRows"/> finds the host, and how
@@ -180,6 +205,14 @@ namespace ConditioningControlPanel
             internal FrameworkElement LabelHost = null!;
             internal TranslateTransform LabelSlide = null!;
             internal TextBlock? Label;
+
+            /// <summary>Mod-glow halo behind the name. Per row: the breath is staggered, and
+            /// re-tinted from ApplyDoorArt on every mod switch.</summary>
+            internal DropShadowEffect? LabelGlow;
+
+            /// <summary>The gloss band's ride: TranslateTransform on the overlay TextBlock's
+            /// OpacityMask brush, swept -1 -> 1 across the name.</summary>
+            internal TranslateTransform? ShimmerSweep;
 
             /// <summary>The door's hue, read straight back off the Button's BorderBrush - the
             /// one place MainWindow.xaml states it, and already what NavActiveBar paints.</summary>
@@ -298,6 +331,14 @@ namespace ConditioningControlPanel
                     var art = ModResourceResolver.ResolveImageDecoded(path, NavDoorArtDecodeWidth);
                     if (art != null) img.Source = art;
                 }
+
+                // This is also the rail's ModChanged repaint hook (MainWindow.xaml.cs), so the
+                // name halos re-tint with the art. Before InitializeNavRail has cached the rows
+                // the list is empty and this is a no-op, which keeps the "safe to call early"
+                // promise above.
+                var glow = FxTheme.GlowColor;
+                foreach (var row in _navDoorRows)
+                    if (row.LabelGlow != null) row.LabelGlow.Color = glow;
             }
             catch (Exception ex)
             {
@@ -367,7 +408,11 @@ namespace ConditioningControlPanel
                     Label = hostPanel.Children.OfType<Viewbox>().FirstOrDefault()?.Child as TextBlock,
                     Hue = btn.BorderBrush ?? Brushes.Transparent,
                 };
-                if (row.Label != null) _navDoorLabelTexts.Add(row.Label);
+                if (row.Label != null)
+                {
+                    _navDoorLabelTexts.Add(row.Label);
+                    BuildNavDoorLabelFx(row, hostPanel);
+                }
                 glow.Fill = BuildNavDoorGlow(btn.BorderBrush as SolidColorBrush);
 
                 // The active bar is a template part; ChromeFx flips its Visibility and nothing
@@ -380,6 +425,131 @@ namespace ConditioningControlPanel
 
                 _navDoorRows.Add(row);
                 RefreshNavDoorActive(row);
+            }
+        }
+
+        /// <summary>
+        /// Builds one door name's two fx layers onto its label host: the mod-glow halo goes
+        /// straight onto the label as its Effect, and the gloss is a SECOND Viewbox+TextBlock
+        /// stacked over the first, carrying a sweeping band as its OpacityMask. The overlay
+        /// clones the label's style and mirrors its Text with a binding: same font and string
+        /// mean the same measure, so the two DownOnly Viewboxes scale identically and the
+        /// gloss lands exactly on the glyphs, in every locale, at every flyout width. It joins
+        /// _navDoorLabelTexts so CacheNavRailParts (which walks AFTER this) leaves it out of
+        /// the global label fade - its visibility is the host's Opacity, same as the name's.
+        /// Appended last, so the "first Viewbox in the host is the label's" lookup above stays
+        /// true; and it lives INSIDE the host, so ChromeFx's NudgeNavIcon (first Viewbox among
+        /// the button content's direct children) never mistakes it for the icon.
+        /// </summary>
+        private void BuildNavDoorLabelFx(NavDoorRow row, Panel host)
+        {
+            try
+            {
+                var label = row.Label!;
+                row.LabelGlow = new DropShadowEffect
+                {
+                    Color = FxTheme.GlowColor,
+                    BlurRadius = 16,
+                    ShadowDepth = 0,
+                    Opacity = 0,
+                };
+                label.Effect = row.LabelGlow;
+
+                row.ShimmerSweep = new TranslateTransform(-1, 0);
+                var band = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0.5),
+                    EndPoint = new Point(1, 0.5),
+                    RelativeTransform = row.ShimmerSweep,
+                };
+                band.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.35));
+                band.GradientStops.Add(new GradientStop(Color.FromArgb(0xB4, 0xFF, 0xFF, 0xFF), 0.50));
+                band.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.65));
+
+                var gloss = new TextBlock
+                {
+                    Style = label.Style,
+                    Foreground = Brushes.White,
+                    OpacityMask = band,
+                    IsHitTestVisible = false,
+                };
+                gloss.SetBinding(TextBlock.TextProperty, new Binding("Text") { Source = label });
+                _navDoorLabelTexts.Add(gloss);
+
+                host.Children.Add(new Viewbox
+                {
+                    Stretch = Stretch.Uniform,
+                    StretchDirection = StretchDirection.DownOnly,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsHitTestVisible = false,
+                    Child = gloss,
+                });
+            }
+            catch (Exception ex)
+            {
+                // The name renders fine without either layer; a row whose fx failed to build
+                // is just a quieter row.
+                App.Logger?.Debug("BuildNavDoorLabelFx: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Starts one row's open-rail name fx: the breathing halo, and the gloss
+        /// sweep once the name has finished rising. Both stagger by row so the rail ripples
+        /// instead of pulsing in lockstep. Reduced motion: static halo, no clocks.</summary>
+        private static void StartNavDoorLabelFx(NavDoorRow row, int index)
+        {
+            if (row.LabelGlow == null) return;
+
+            if (!MotionFx.AllowTransitions)
+            {
+                row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                row.LabelGlow.Opacity = NavDoorLabelGlowStatic;
+                return;
+            }
+
+            var begin = TimeSpan.FromMilliseconds(index * NavDoorLabelFxStaggerMs);
+            row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty,
+                new DoubleAnimation(NavDoorLabelGlowLo, NavDoorLabelGlowHi,
+                    TimeSpan.FromMilliseconds(NavDoorLabelGlowBreathMs))
+                {
+                    BeginTime = begin,
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                });
+
+            if (row.ShimmerSweep == null) return;
+            var sweep = new DoubleAnimationUsingKeyFrames
+            {
+                BeginTime = begin + TimeSpan.FromMilliseconds(NavDoorLabelSlideMs),
+                RepeatBehavior = RepeatBehavior.Forever,
+            };
+            sweep.KeyFrames.Add(new DiscreteDoubleKeyFrame(-1,
+                KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            sweep.KeyFrames.Add(new LinearDoubleKeyFrame(1,
+                KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(NavDoorLabelShimmerSweepMs))));
+            // The rest of the period is the band parked offscreen: sweep, breathe, sweep again.
+            sweep.KeyFrames.Add(new DiscreteDoubleKeyFrame(-1,
+                KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(NavDoorLabelShimmerPeriodMs))));
+            row.ShimmerSweep.BeginAnimation(TranslateTransform.XProperty, sweep);
+        }
+
+        /// <summary>Kills both name-fx clocks and parks the layers dark. Runs on every
+        /// collapse, BEFORE the labels finish fading: two Forever clocks per row under an
+        /// Opacity-0 host would be the exact idle heat the dashboard's motion contract
+        /// exists to prevent.</summary>
+        private static void StopNavDoorLabelFx(NavDoorRow row)
+        {
+            if (row.LabelGlow != null)
+            {
+                row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                row.LabelGlow.Opacity = 0;
+            }
+            if (row.ShimmerSweep != null)
+            {
+                row.ShimmerSweep.BeginAnimation(TranslateTransform.XProperty, null);
+                row.ShimmerSweep.X = -1;
             }
         }
 
@@ -468,6 +638,12 @@ namespace ConditioningControlPanel
                 SetNavRailSize(row.Icon, iconTo, animate);
                 SetNavRailSize(row.Glow, glowTo, animate);
                 SetNavDoorGlow(row, animate);
+
+                // The name fx follow the open state, not the animate flag: an expand that was
+                // snapped (reduced motion) still deserves its static halo, and Start gates its
+                // own clocks on MotionFx.
+                if (expand) StartNavDoorLabelFx(row, i);
+                else StopNavDoorLabelFx(row);
 
                 if (!animate)
                 {
