@@ -1,0 +1,47 @@
+PASS  results directory missing
+      -> CcpClient.Tests: results directory missing (C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\never-created) — the project produced no results at all
+PASS  no .trx in results dir
+      -> CcpClient.Tests: no .trx in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\empty — the project produced no results at all
+PASS  two .trx files
+      -> CcpClient.Tests: 2 .trx files in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\two, expected exactly 1 (a.trx, b.trx)
+PASS  garbage (not XML)
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\garbage\results.trx does not start with an XML declaration — unparseable results
+PASS  truncated mid-write
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\trunc\results.trx does not end with </TestRun> — truncated results (run died mid-write)
+PASS  stale mtime + stale creation
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\stale\results.trx mtime 2026-08-13T04:57:16.350Z predates this run — stale results from a previous run
+PASS  stale creation only (mtime fresh — copy-tool shape)
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\stale-creation\results.trx Times/@creation 2026-08-13T04:57:16.350Z predates this run — stale results from a previous run
+PASS  zero results (filter matched nothing)
+      -> CcpClient.Tests: 0 total results — "no tests ran" must never read as success (filter-excluded / never-ran shape)
+PASS  failed category nonzero
+      -> CcpClient.Tests: 1 failed result(s) — a dirty run is not a floor run
+PASS  outcome not Completed
+      -> CcpClient.Tests: ResultSummary outcome is "Failed", expected "Completed" — the run did not finish cleanly
+PASS  result list vs Counters total mismatch
+      -> CcpClient.Tests: result list has 898 entries but Counters/@total is 900 — inconsistent results
+PASS  result list Passed vs Counters passed mismatch
+      -> CcpClient.Tests: result list Passed(898) != Counters/@passed(896) — inconsistent results
+PASS  exotic outcome in result list
+      -> CcpClient.Tests: Passed(897) + NotExecuted(0) != 898 results — unexpected outcome(s): Warning=1
+PASS  counters not self-closing
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo66-D0IV2m\counters\results.trx <Counters> element is not a self-closing tag — unparseable results
+PASS  result lacking testName (unparseable)
+      -> CcpClient.Tests: a <UnitTestResult> lacks outcome or testName — unparseable results
+PASS  NEW (i) non-allowlisted skip -> RED naming the test
+      -> CcpClient.Tests: FLOOR VIOLATION — unexpected skip: FakeSuite.FakeTests.ConditionalFact is NotExecuted but NOT in allowedSkips. An unexpected skip fails the contract (SP-066 framing e/f). Either fix the precondition so the test runs, or — only under the admission rule in floor.json (machine/OS property, never a quarantine; the SP-057 pin and the named privacy flake are permanently banned) — pin the name in allowedSkips in the SAME commit, naming the machine class where it executes.
+PASS  NEW (iii) total drift +1 -> RED
+      -> CcpClient.Tests: FLOOR VIOLATION — total drift: 899 result(s) (pin total 898). A count drift in EITHER direction fails the contract (SP-065/SP-066). If this change is intentional, bump client/tests/floor/floor.json in the SAME commit and state the reason in the message.
+PASS  NEW (iv) total drift -1 -> RED
+      -> CcpClient.Tests: FLOOR VIOLATION — total drift: 897 result(s) (pin total 898). A count drift in EITHER direction fails the contract (SP-065/SP-066). If this change is intentional, bump client/tests/floor/floor.json in the SAME commit and state the reason in the message.
+PASS  positive control — valid on-floor results accepted (898 passed, 0 skipped)
+PASS  NEW (ii) allowlisted skip -> GREEN (may-skip semantics) (897 passed, 1 skipped)
+PASS  NEW (ii-b) allowlisted THEORY ROW skip (testName carries arguments) -> GREEN via pre-'(' match (897 passed, 1 skipped)
+PASS  new unpinned test project in sln
+      -> test project(s) in client/CcpClient.sln with NO floor pin: CcpClient.NewTests — a suite outside the floor is exactly what SP-065 exists to prevent; pin it in client/tests/floor/floor.json
+PASS  pinned project absent from sln
+      -> pinned project(s) absent from client/CcpClient.sln tests/: CcpClient.GoneTests — stale pin
+PASS  sln with no test projects at all
+      -> no test projects discovered under tests/ in client/CcpClient.sln — the floor refuses to go blind
+PASS  discovery positive control — both real projects discovered (CcpClient.Tests, CcpClient.HeadlessTests)
+ALL PIN-SEMANTICS CASES HELD

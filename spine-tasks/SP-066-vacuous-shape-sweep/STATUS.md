@@ -1,12 +1,12 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 1 — build the detector, produce the raw inventory, design the ledger and pin schema
+**Current Step:** 2 — name-anchored skip pin in the wrapper
 **Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
 **Floor at authoring:** 898 unit / 35 headless / 0 skipped, build 0W/0E (SP-065, integrate `09b4b639`).
 This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted vacuous tests) — state the new exact counts here and bump `client/tests/floor/floor.json` in the SAME commit as every count change.
 
-### Step 1: build the detector, produce the raw inventory, design the ledger and pin schema — 🔄 In Progress
+### Step 1: build the detector, produce the raw inventory, design the ledger and pin schema — ✅ Complete (plan review engine-skipped SP-195)
 - [x] Update STATUS.md before starting work
 - [x] Detector over BOTH test projects classifying: early `return`, all-assertions-nested, no-assertion-token, platform predicate, environment predicate, filesystem-existence predicate — `file:line` + method + shape per site
 - [x] Complete RAW inventory into `evidence/`, reconciled against the framing (a) magnitudes (7 / 12 / 3 / 48 / 53 / 10 / 1)
@@ -15,15 +15,15 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] `floor.json` schema change designed (framing e) + the `allowedSkips` admission rule text (framing f, incl. the two named bans)
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch from reasoning
 
-### Step 2: name-anchored skip pin in the wrapper (BEFORE any conversion) — ⬜ Not Started
+### Step 2: name-anchored skip pin in the wrapper (BEFORE any conversion) — 🔄 In Progress
 > ⚠️ Hydrate: expand from the Step 1 schema decision
-- [ ] `floor.json` → `{ total, allowedSkips[] }` carrying the admission rule + existing `bumpRule` in-file
-- [ ] `check-floor.mjs` enforces: zero bad outcomes, `passed + skipped == total`, every `NotExecuted` `testName` in `allowedSkips`; failure message NAMES the offending test; anchored on the TRX result list
-- [ ] Every pre-existing fail-closed check preserved AND re-demonstrated (one table row per mode)
-- [ ] Non-allowlisted skip → RED naming the test (captured); same skip allowlisted → GREEN (captured)
-- [ ] `total` drift BOTH directions → RED (captured)
-- [ ] Injections removed and removal proven
-- [ ] Schema + wrapper change in ONE commit; floor bumped in that commit if the count moved
+- [x] `floor.json` → `{ total, allowedSkips[] }` carrying the admission rule + existing `bumpRule` in-file
+- [x] `check-floor.mjs` enforces: zero bad outcomes, `passed + skipped == total`, every `NotExecuted` `testName` in `allowedSkips`; failure message NAMES the offending test; anchored on the TRX result list
+- [x] Every pre-existing fail-closed check preserved AND re-demonstrated (one table row per mode)
+- [x] Non-allowlisted skip → RED naming the test (captured); same skip allowlisted → GREEN (captured)
+- [x] `total` drift BOTH directions → RED (captured)
+- [x] Injections removed and removal proven
+- [x] Schema + wrapper change in ONE commit; floor bumped in that commit if the count moved
 
 ### Step 3: disposition every site — ⬜ Not Started
 > ⚠️ Hydrate: one checkbox group per shape class once the Step 1 inventory exists

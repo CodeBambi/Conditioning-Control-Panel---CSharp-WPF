@@ -80,3 +80,46 @@ Admission rule text (lives in `floor.json` itself): a test may be listed ONLY wh
 
 - **Verdict (CORRECTION, three material issues):** (1) class attribution was buggy — last-textual-match assigns facts to sibling nested fakes (`Clock`, `FakeMountTable`, `CollectingLog`, `InventoryFormatException`); resolve the enclosing type by brace range and re-dump. **Applied** — `EnclosingClasses` walks brace-matched spans; inventory re-dumped (94 sites, correct owners). (2) framing-(c) `Assert.NotEmpty` mitigation erases the `assertions-all-nested` shape, so mitigated sites VANISH from detection — presence expectation must be per-entry (`expectDetected`), mitigated sites recorded as expected-absent like `deleted`; counted `for` loops take a reason, not a `NotEmpty`. **Applied** to the ledger/guard design above. (3) check real TRX `testName` before fixing match semantics — theory rows serialize with arguments; match exact on the pre-`(` portion, say so in the file; and demonstrate wrapper verdicts on synthetic fixtures, not a real probe. **Applied** to the wrapper design above.
 - **Actual answering model:** not disclosed by the consult tool's return (SP-063/SP-065 precedent: unverifiable from inside the worker; the worker session runs `kimi-coding/k3` per PI_PROVIDER/PI_MODEL, the packet's routing intent was Opus 5 main / Fable 5 fallback, and no model banner surfaced). The reply arrived COMPLETE — no reasoning-only or mid-sentence truncation (the wave-17/21/22 class) — and the three corrections above are reproduced from the verdict text itself, nothing stitched from reasoning.
+
+## Step 2 — name-anchored skip pin in the wrapper (landed BEFORE any conversion)
+
+`floor.json` per project is now `{ "total": N, "allowedSkips": [...] }`, carrying the admission rule, the may-skip semantics, the testName pre-`(` match rule, and the unchanged `bumpRule` in-file. `check-floor.mjs` enforces: zero bad outcomes (unchanged), result-list count == `total` (drift in EITHER direction RED), every `NotExecuted` `testName` present in `allowedSkips` (RED **naming the test**). Anchored on the TRX result list; `Counters` arithmetic is only used for the pre-existing consistency cross-checks. Counts unchanged by the schema change (898/35/0), so no bump rode the commit.
+
+### Fail-closed re-demonstration table (synthetic fixtures through the REAL exported `verifyProjectResults`/`discoverTestProjects`; harness `evidence/demo-pin-semantics.mjs`, full output `evidence/pin-semantics-table.txt`, exit 0, "ALL PIN-SEMANTICS CASES HELD")
+
+| Mode | Induced condition | Observed |
+|---|---|---|
+| missing results dir | dir never created | RED "results directory missing" |
+| no .trx | empty dir | RED "no .trx" |
+| two .trx | a.trx + b.trx | RED "expected exactly 1" |
+| garbage not XML | plain text file | RED "XML declaration" |
+| truncated mid-write | body cut before `</ResultSummary>` | RED "truncated" |
+| stale mtime + creation | both stamps 1h old | RED "stale results" |
+| stale creation only (fresh mtime) | creation 1h old, mtime now | RED "stale results" |
+| zero results | 0 UnitTestResult | RED "0 total results" |
+| failed category | 1 Failed | RED "failed" |
+| outcome not Completed | ResultSummary Failed | RED "did not finish cleanly" |
+| result list vs Counters total | total=900 vs 898 entries | RED "inconsistent results" |
+| result list Passed vs Counters passed | passed=896 vs 898 Passed | RED "inconsistent results" |
+| exotic outcome | 1 Warning | RED "unexpected outcome" |
+| Counters not self-closing | `></Counters>` | RED "not a self-closing tag" |
+| result lacking testName (new parse check) | name attr dropped | RED "unparseable results" |
+| **NEW (i)** non-allowlisted skip | 1 NotExecuted, pin `allowedSkips: []` | RED "unexpected skip: FakeSuite.FakeTests.ConditionalFact …" — the test is NAMED |
+| **NEW (iii)** total drift +1 | 899 results vs pin 898 | RED "total drift: 899" |
+| **NEW (iv)** total drift -1 | 897 results vs pin 898 | RED "total drift: 897" |
+| positive control | 898 passed, 0 skipped | GREEN |
+| **NEW (ii)** allowlisted skip | same fixture, name listed | GREEN (may-skip semantics) |
+| **NEW (ii-b)** allowlisted theory-row skip | testName carries `(x: 1)` arguments, base name listed | GREEN via pre-`(` match |
+| discovery: unpinned project in sln | synthetic sln + 3rd tests/ project | RED "NO floor pin" |
+| discovery: pinned project absent | stale pin entry | RED "stale pin" |
+| discovery: no test projects | sln without tests/ | RED "refuses to go blind" |
+
+### End-to-end induction (framing j — scoped child-process environment, never a process-wide export)
+
+`CCP_DATA_ROOT=<temp>` set on ONE bash invocation of the wrapper (`evidence/red-induced-skip.txt`, exit 1): the SP-057 pin skipped (`Skipped CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault`, suite 897/1) and the floor went **RED naming exactly that test**. Injection removal proven: the variable was set per-command (bash env prefix, child process only); parent shell `CCP_DATA_ROOT` is `<unset>` before AND after (echoed in the capture). The TRX path is named in the capture (`ccp-floor-1afzwm`).
+
+The allowlisted-GREEN verdict is demonstrated **synthetically only** — deliberately: the only live skip on this machine is the SP-057 pin, which framing (f) permanently BANS from `allowedSkips`, so a real allowlisted-GREEN run cannot exist on this machine without violating the ban. The synthetic fixture exercises the same exported code path with the name listed → GREEN, and the theory-row variant proves the pre-`(` match rule.
+
+Clean real run after the schema change: `evidence/green-schema-change.txt`, exit 0 — `FLOOR OK: CcpClient.Tests: 898/898 total, 0 skipped; CcpClient.HeadlessTests: 35/35 total, 0 skipped`.
+
+Schema change + wrapper change committed as ONE commit (one semantic unit); no count moved, so no bump rode it.
