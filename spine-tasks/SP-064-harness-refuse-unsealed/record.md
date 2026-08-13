@@ -146,4 +146,4 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 ## Engine plan reviews (Review Level 2 — T-2 heading presence recorded per call)
 
 - Step 1: `spine_review_step` — engine-skipped (SP-195: nested reviewer spawn blocked in-worker; the batch engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260813T011635.md`.
-- Step 2: pending call.
+- Step 2: `spine_review_step` — engine-skipped (SP-195, same as Step 1). Artifact: `.reviews/2-20260813T012533.md`.
