@@ -270,6 +270,9 @@ namespace ConditioningControlPanel
             // calls it (and UpdatePatreonUI is what OnPatreonTierChanged, both SubscribeStar
             // paths, ClearAccountData and every login/link flow call), plus UpdateLevelDisplay.
             RefreshAccountChip();
+            // The header profile bubble paints the same identity truth; it rides the same
+            // choke point for the same reason (MainWindow.ProfileBubble.cs).
+            RefreshProfileBubble();
         }
 
         // Tier colours for the account chip. Fixed brand values, not mod-owned: gold is the

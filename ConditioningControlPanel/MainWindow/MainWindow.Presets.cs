@@ -980,16 +980,28 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// Just Drop: the session maker, not built yet (owner, 2026-08-11 — placeholder tile).
+        /// Just Drop: the session shop. Two behaviours, decided by the same flag the rail door
+        /// reads (<c>JustDropService.DoorAvailable</c>) so the tile and the rail can never
+        /// disagree about whether the feature exists.
         ///
-        /// <para>A toast and nothing else, on purpose. The tile is on the wall to announce the
-        /// feature, and there is no window to open; a tile that silently does nothing when
-        /// clicked reads as a bug, and this app has shipped that bug before. When the real
-        /// launcher lands, replace this body with it and drop the SOON badge in
-        /// <see cref="RefreshMosaicTierBadges"/> — nothing else on the wall changes.</para>
+        /// <para><b>Door open:</b> navigate to it, exactly as CardDeeper_Click hands off to the
+        /// rail entry rather than re-implementing the destination.</para>
+        ///
+        /// <para><b>Door withheld:</b> the original placeholder toast, unchanged. A tile that
+        /// silently does nothing when clicked reads as a bug, and this app has shipped that bug
+        /// before. The tile stays on the wall in both states on purpose - it is there to announce
+        /// the feature - which is the one place the withheld door is allowed to be visible at all.
+        /// Drop this branch, and the SOON badge in <see cref="RefreshMosaicTierBadges"/>, when the
+        /// feature is no longer being withheld from anyone.</para>
         /// </summary>
         internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
         {
+            if (Services.JustDrop.JustDropService.DoorAvailable)
+            {
+                ShowTab("justdrop");
+                return;
+            }
+
             // Literal copy, like the tile's own title: naming a placeholder in nine language
             // files buys nine rows to re-translate the day it gets its real name.
             App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
@@ -1011,9 +1023,11 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Nobody has Just Drop, including the owner, so this one never clears. Literal,
-                // like the tile's title - see CardJustDrop_Click.
-                SetTierBadge(dash.CardJustDrop, false, "SOON");
+                // Just Drop wears SOON for exactly as long as its door is withheld. Same flag the
+                // rail door and the tile's own click read, so the badge cannot promise "coming"
+                // while the door is already open (or vice versa). Literal, like the tile's title -
+                // see CardJustDrop_Click.
+                SetTierBadge(dash.CardJustDrop, Services.JustDrop.JustDropService.DoorAvailable, "SOON");
 
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
@@ -1468,6 +1482,22 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The one recap shown non-modally (video still on screen); null whenever the last one
+        /// was modal or has been dismissed. Modal recaps need no tracking - they cannot stack.
+        /// </summary>
+        private SessionCompleteWindow? _liveSessionRecap;
+        private bool _liveSessionRecapTeardownHooked;
+
+        private void CloseLiveSessionRecap()
+        {
+            var stale = _liveSessionRecap;
+            _liveSessionRecap = null;
+            if (stale == null) return;
+            try { stale.Close(); }
+            catch (Exception ex) { App.Logger?.Debug("Closing previous session recap: {E}", ex.Message); }
+        }
+
+        /// <summary>
         /// Shows the session-complete dialog once any in-flight video teardown has finished.
         /// A bubble-triggered bonus video can still be tearing down when the session log
         /// arrives; its dying fullscreen surface renders as a stuck white plane that buries
@@ -1532,6 +1562,22 @@ namespace ConditioningControlPanel
                         };
                         if (videoUp)
                         {
+                            // Non-modal recaps do not block the next session, so two runs ending
+                            // in quick succession would stack two live cards. Keep exactly one.
+                            CloseLiveSessionRecap();
+                            _liveSessionRecap = dialog;
+                            dialog.Closed += (_, _) =>
+                            {
+                                if (ReferenceEquals(_liveSessionRecap, dialog)) _liveSessionRecap = null;
+                            };
+                            if (!_liveSessionRecapTeardownHooked)
+                            {
+                                _liveSessionRecapTeardownHooked = true;
+                                // Owner is null while this window is not yet loaded, and under
+                                // ShutdownMode=OnLastWindowClose an orphaned recap would keep the
+                                // process alive after the main window goes away.
+                                Closed += (_, _) => CloseLiveSessionRecap();
+                            }
                             dialog.ShowActivated = false;
                             dialog.Show();
                         }

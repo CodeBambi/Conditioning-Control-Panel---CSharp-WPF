@@ -842,11 +842,15 @@ namespace ConditioningControlPanel
                 {
                     return _cachedCcpWindowRects;
                 }
-                if (_cachedCcpWindowRects != null && DateTime.Now < _ccpWindowRectsTimeoutBackoffUntil)
+                if (DateTime.Now < _ccpWindowRectsTimeoutBackoffUntil)
                 {
                     // Still inside the back-off from a hop that timed out — serve the stale rects
-                    // without queueing another 2s wait behind the same busy UI thread.
-                    return _cachedCcpWindowRects;
+                    // without queueing another 2s wait behind the same busy UI thread. Not gated on
+                    // a non-null cache: if the very FIRST call is the one that times out there is
+                    // nothing to serve but empty, and requiring non-null here made every subsequent
+                    // scan pay a fresh 2s wait for as long as the UI thread stayed wedged. Empty is
+                    // exactly what the timeout path itself returns in that case.
+                    return _cachedCcpWindowRects ?? Array.Empty<System.Drawing.Rectangle>();
                 }
                 version = _ccpWindowRectsVersion;
             }
@@ -1013,6 +1017,12 @@ namespace ConditioningControlPanel
             lock (_ccpWindowRectsLock)
             {
                 _ccpWindowRectsCacheTime = DateTime.MinValue;
+                // The back-off must never survive an explicit invalidation. This runs ON the UI
+                // thread, which is proof that thread is alive — and the back-off exists only to
+                // avoid re-paying the 2s wait against a wedged one. Leaving it set would make the
+                // stale rects outlive the invalidation that a sub-250ms subliminal flash depends on
+                // to be excluded before the awareness OCR reads our own text back.
+                _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;
                 _ccpWindowRectsVersion++;
             }
         }

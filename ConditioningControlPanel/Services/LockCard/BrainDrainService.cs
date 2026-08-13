@@ -143,15 +143,24 @@ namespace ConditioningControlPanel.Services
 
         public void Stop()
         {
-            if (!_isRunning) return;
-
+            var wasRunning = _isRunning;
             _isRunning = false;
-            _cts?.Cancel();
 
-            // Audio teardown FIRST and inline. App.KillAllAudio can reach us from the panic
-            // fallback thread, and the DispatcherTimer below has UI-thread affinity - stopping it
-            // first would throw there and leave the audio playing. NAudio has no thread affinity.
+            // Audio teardown FIRST, inline, and UNCONDITIONAL. App.KillAllAudio can reach us from
+            // the panic fallback thread, and the DispatcherTimer below has UI-thread affinity -
+            // stopping it first would throw there and leave the audio playing. NAudio has no thread
+            // affinity.
+            // Unlike MindWipe there is no TriggerOnce here (PlayAudioNow is private and only the
+            // _isRunning-gated Timer_Tick reaches it) and PlayAudio's publish IS gated on
+            // _isRunning, so nothing can currently start while stopped - the teardown is ungated
+            // anyway so panic's "always reaches the audio" guarantee is structural rather than a
+            // consequence of that gate staying put.
             StopCurrentAudio();
+
+            // Session/timer/state teardown only matters if there was a session.
+            if (!wasRunning) return;
+
+            _cts?.Cancel();
 
             DispatcherHelper.RunOnUI(() => { try { _timer.Stop(); } catch { } });
 

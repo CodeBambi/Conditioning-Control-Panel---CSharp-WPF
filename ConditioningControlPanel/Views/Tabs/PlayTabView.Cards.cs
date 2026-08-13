@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -20,11 +19,18 @@ namespace ConditioningControlPanel.Views.Tabs
     /// page frame and the one ambient loop, this file owns the cards, and two agents never have to
     /// touch one file.</para>
     ///
-    /// <para>Four clicks are navigation rather than launch — Remote Control, Available Subjects,
-    /// Lockdown and Blink Trainer are <i>pages</i>, and For You is a window that <c>ShowTab</c>
-    /// intercepts. Routing them through <c>ShowTab</c> keeps one gate, one bark and (for Available
-    /// Subjects) one polling lifecycle, which lives in <c>ShowTab</c> and must never be started from
-    /// a card.</para>
+    /// <para>Four clicks are navigation rather than launch — Remote Control, Lockdown, Blink Trainer
+    /// and Graded Intake are <i>pages</i>, and For You is a window that <c>ShowTab</c> intercepts.
+    /// Routing them through <c>ShowTab</c> keeps one gate and one bark.</para>
+    ///
+    /// <para><b>2026-08-12 relayout.</b> Five shims were deleted with their cards — Available
+    /// Subjects, Mantras, Deeper, the Inspection Bureau and the Showcase shelf all came off THIS
+    /// page. The MainWindow handlers they forwarded to (<c>BtnAvailableSubjects_Click</c>,
+    /// <c>StartMantraSession</c>, <c>BtnDeeper_Click</c>, <c>BtnStartBureau_Click</c>,
+    /// <c>ShowTab("exclusives")</c>) are all still there and still called from those features' own
+    /// doors, so nothing was un-shipped; the Play page simply stopped being a second entrance. Do
+    /// not re-add a shim here without re-adding its card, and do not re-add either without deciding
+    /// that this page should own that door again.</para>
     /// </summary>
     public partial class PlayTabView
     {
@@ -49,12 +55,6 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayRemoteControl_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("remotecontrol");
 
-        // ShowTab is what owns the polling lifecycle for this key (StopPolling on every
-        // navigation, EnsureAvailableSubjectsBound + StartPolling only in its own case). The card
-        // navigates and does nothing else.
-        private void BtnPlayAvailableSubjects_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnAvailableSubjects_Click(sender, e);
-
         // ---- EYES ------------------------------------------------------------------------
 
         private void BtnOpenDeviceSettings_Click(object sender, RoutedEventArgs e)
@@ -69,6 +69,11 @@ namespace ConditioningControlPanel.Views.Tabs
         private void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
             => Owner?.ChkFocusGaze_Changed(sender, e);
 
+        // Blink Trainer sits in the EYES zone since the 2026-08-12 relayout (it is a webcam
+        // feature), but the click is unchanged - the same page, through the same handler.
+        private void BtnLabBlinkTrainerOpenNew_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnLabBlinkTrainerOpenNew_Click(sender, e);
+
         // ---- SESSIONS --------------------------------------------------------------------
 
         // All four pass states navigate. The page's gate (RefreshGradedIntakeGate) is what explains
@@ -82,56 +87,20 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayIntakePassHome_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("settings");
 
-        private void BtnLabBlinkTrainerOpenNew_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnLabBlinkTrainerOpenNew_Click(sender, e);
-
         // ShowTab("fyp") - never FypHostService.Launch(). ShowTab intercepts the key and calls
         // OpenFypFeed, which owns the premium gate; it is the same launch path the dashboard rail
         // chip uses, so the two can never drift.
         private void BtnPlayFyp_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("fyp");
 
-        // ---- RITUAL ----------------------------------------------------------------------
-
-        /// <summary>
-        /// The G11 rescue's one piece of glue. <c>MantraWindow.Window_Loaded</c> assumes
-        /// <c>StartSession</c> has already run (it reads <c>CurrentMantra</c> and
-        /// <c>TargetCount</c>), and nothing in the repo ever supplied a rep count — so the card
-        /// reads its picker and MainWindow does the two-step start. The window itself, anti-cheat
-        /// and all, is untouched.
-        /// </summary>
-        private void BtnPlayMantra_Click(object sender, RoutedEventArgs e)
-        {
-            var reps = 25;
-            if (CmbPlayMantraReps?.SelectedItem is ComboBoxItem item
-                && item.Tag is string tag
-                && int.TryParse(tag, out var parsed))
-            {
-                reps = parsed;
-            }
-            Owner?.StartMantraSession(reps);
-        }
-
         private void BtnPlayLockdown_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("lockdown");
 
-        // BtnDeeper_Click, not ShowTab("deeper"): the rail entry also stops the first-visit pulse,
-        // persists HasSeenDeeperTab, refreshes the welcome card and lazy-inits the hub.
-        private void BtnPlayDeeper_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnDeeper_Click(sender, e);
-
         // ---- MORE ------------------------------------------------------------------------
-
-        // G4: the handler survived the 0804 card deletion untouched. This restores the caller.
-        private void BtnStartBureau_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartBureau_Click(sender, e);
 
         // Navigates to the ONE Loom entry (Studio rack -> Spiral module), never launches a second
         // editor. OpenStudioModule is the same helper every dashboard mosaic tile routes through.
         private void BtnPlayLoom_Click(object sender, RoutedEventArgs e)
             => Owner?.OpenStudioModule("spiral");
-
-        private void BtnPlayShowcase_Click(object sender, RoutedEventArgs e)
-            => Owner?.ShowTab("exclusives");
     }
 }

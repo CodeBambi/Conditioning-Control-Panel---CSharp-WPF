@@ -1018,9 +1018,26 @@ namespace ConditioningControlPanel.Services
             foreach (var kvp in live)
             {
                 if (!prescribed.TryGetValue(kvp.Key, out var wasEnabled))
+                {
                     saved[kvp.Key] = kvp.Value;                     // added while the session ran
-                else if (wasEnabled != kvp.Value && saved.ContainsKey(kvp.Key))
-                    saved[kvp.Key] = kvp.Value;                     // re-toggled one of their own
+                }
+                else if (saved.ContainsKey(kvp.Key))
+                {
+                    // Differs from what the session prescribed: an unambiguous re-toggle of one of
+                    // their own phrases.
+                    //
+                    // EQUAL to what the session prescribed is ambiguous, and stays ambiguous: the
+                    // phrase editor is seeded from the LIVE pool, so the user may have ticked the
+                    // box onto the session's value on purpose, or may simply have saved an
+                    // unrelated edit with the session's own value standing. Adopt only the ENABLED
+                    // side of that ambiguity - ApplySessionSettings disables every pre-existing
+                    // phrase and enables only its own, so adopting a `false` here would silence
+                    // the user's whole pool the moment they save any mid-session edit, while
+                    // adopting a `true` at worst leaves one phrase they already own switched on,
+                    // and it is the half the fold actually loses today (ticking a phrase the
+                    // session happens to run too, which then reverted at session end).
+                    if (wasEnabled != kvp.Value || kvp.Value) saved[kvp.Key] = kvp.Value;
+                }
             }
 
             foreach (var key in prescribed.Keys)

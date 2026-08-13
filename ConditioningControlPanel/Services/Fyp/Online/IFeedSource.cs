@@ -45,8 +45,16 @@ internal enum FeedMediaKind
     Any,
     /// <summary>webm/mp4 only. Everything the FYP feed has ever asked for.</summary>
     Video,
-    /// <summary>Static webp/jpg/png only. Flashes, captcha grids, wall cards.</summary>
+    /// <summary>Static webp/jpg/png only, from the provider's PICTURE filter. Intake
+    /// captcha grids, wall cards (matches the web intake, which queries PICTURE).</summary>
     Image,
+    /// <summary>Stills lifted from the provider's GIF filter — what the web feed calls
+    /// "GIFs" (its only non-VIDEO GalleryFilter; scrolller serves GIF posts as silent
+    /// webm/mp4 plus STATIC webp/jpg posters, and an image surface takes the poster).
+    /// Flash images fetch with this and nothing else — owner decision 2026-08-12,
+    /// mirroring the web's filter usage exactly. Entries come out as
+    /// <see cref="RemoteMediaFormats.TypeImage"/>, same shape as <see cref="Image"/>.</summary>
+    GifStill,
 }
 
 /// <summary>One fetched page of feed entries plus the cursor to continue from.</summary>

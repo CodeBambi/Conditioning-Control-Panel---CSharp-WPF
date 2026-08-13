@@ -62,6 +62,11 @@ namespace ConditioningControlPanel.Services.Deeper
         private bool _running;
         private bool _disposed;
 
+        // True once any haptic action (band or one-shot) was dispatched this run.
+        // Stop() uses it to silence the device: one-shot patterns run on the haptic
+        // mixer's own clock and are invisible to the band flush.
+        private bool _hapticDispatched;
+
         // -- Per-play gamification stats (read by the host on PlaybackCompleted) --
         // Webcam trigger type strings, used to flag "webcam-trigger-used".
         private static readonly HashSet<string> WebcamTriggerTypes = new()
@@ -385,6 +390,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _faceLostDuringPlay = false;
             _completedFired = false;
             _maxPlaybackTime = 0;
+            _hapticDispatched = false;
             _runCts = new CancellationTokenSource();
 
             // Prime the cursor to the current playback position so events that
@@ -475,6 +481,16 @@ namespace ConditioningControlPanel.Services.Deeper
             try { App.Overlay?.ResetDeeperOverlayBands(); }
             catch { }
 
+            // One-shot (point-fired) haptics play out on the mixer's own clock and are
+            // not bands, so the flush above can't reach them — a 45s duration-mode
+            // pattern fired just before Stop would keep the toy running for its full
+            // authored length. If this run dispatched any haptic, silence the device.
+            if (_hapticDispatched)
+            {
+                try { _ = App.Haptics?.StopAsync(); }
+                catch (Exception ex) { App.Logger?.Debug("EnhancementEngine stop-haptics: {Error}", ex.Message); }
+            }
+
             // Flip _running first so any in-flight tick / dispatch short-circuits
             // before we start tearing down subscriptions.
             _running = false;
@@ -531,6 +547,14 @@ namespace ConditioningControlPanel.Services.Deeper
                 // strictly before t, so forward-progress fires re-arm correctly.
                 bool seekedBack = _lastTickTime >= 0 && t + 0.05 < _lastTickTime;
                 if (seekedBack)
+                    RewindCursor(t);
+
+                // Detect seek-FORWARD the same way Start() primes the cursor: a jump
+                // far past any source's tick cadence means the user scrubbed ahead,
+                // and draining the skipped point entries would fire every flash /
+                // subliminal / one-shot haptic of the span in a single burst. Skip
+                // them instead; the band reconciler below already handles jump-ins.
+                else if (_lastTickTime >= 0 && t > _lastTickTime + 3.0)
                     RewindCursor(t);
 
                 // Clear the per-entry latch for items whose band the playhead
@@ -979,6 +1003,9 @@ namespace ConditioningControlPanel.Services.Deeper
             CancellationToken ct;
             try { ct = cts?.Token ?? CancellationToken.None; }
             catch (ObjectDisposedException) { ct = CancellationToken.None; }
+
+            if (action is TriggerHapticAction || action is TriggerEffectAction { EffectType: EffectTypes.Haptic })
+                _hapticDispatched = true;
 
             try
             {

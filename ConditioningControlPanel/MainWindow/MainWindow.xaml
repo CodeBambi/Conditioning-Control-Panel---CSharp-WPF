@@ -601,6 +601,17 @@
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🎚️', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str st4_nav_studio}" VerticalAlignment="Center"/>
+                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
+                                        <!-- Literal properties only, no StaticResource: a cross-file style
+                                             reference here is the BAML EndOfStream trap. Sized to the rail's
+                                             own BETA pill (BtnPrograms) and kept narrow because the flyout is
+                                             a hard 176px - see NavRailExpandedWidth's label-floor arithmetic. -->
+                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
+                                                Padding="3,0" Background="#33FF69B4"
+                                                BorderBrush="#FF69B4" BorderThickness="1">
+                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
+                                        </Border>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource NavEntryButton}"
@@ -958,6 +969,19 @@
                                         <TextBlock Text="{loc:Str nav_door_library}"
                                                    Style="{StaticResource NavDoorLabelText}"/>
                                     </Viewbox>
+                                    <!-- v6.8.0 NEW pill: remove in 6.9 -->
+                                    <!-- On the DOOR, not only on its rows: the panel below ships shut
+                                         (Height=0), so a row-only pill is invisible until the door is
+                                         already open. It also stands in for the Phrases row, which has
+                                         no pixels left for a pill of its own. Top-right overlay so the
+                                         DownOnly label Viewbox keeps its full width budget. -->
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                            Margin="0,2,2,0" CornerRadius="6"
+                                            Padding="3,0" Background="#33FF69B4"
+                                            BorderBrush="#FF69B4" BorderThickness="1">
+                                        <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                                   FontWeight="Bold" Foreground="#FF8FC7"/>
+                                    </Border>
                                 </Grid>
                             </Grid>
                         </Button>
@@ -1011,6 +1035,13 @@
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🌐', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str yl7_nav_catalogue}" VerticalAlignment="Center"/>
+                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
+                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
+                                                Padding="3,0" Background="#33FF69B4"
+                                                BorderBrush="#FF69B4" BorderThickness="1">
+                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
+                                        </Border>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavPhrases" Tag="Phrases" Style="{StaticResource NavEntryButton}"
@@ -1027,6 +1058,51 @@
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🎞️', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str yl7_nav_medialog}" VerticalAlignment="Center"/>
+                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
+                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
+                                                Padding="3,0" Background="#33FF69B4"
+                                                BorderBrush="#FF69B4" BorderThickness="1">
+                                            <TextBlock Text="NEW" FontFamily="Consolas" FontSize="8"
+                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== JUST DROP (default: justdrop) =====
+                             WITHHELD BY DEFAULT. Both the header and its panel ship Collapsed and
+                             are revealed only by MainWindow.JustDrop.cs when
+                             JustDropService.DoorAvailable turns true - which needs a server flag
+                             that defaults to false and is never persisted. On a machine the server
+                             has not opened this for, the rail below Library simply ends: no greyed
+                             row and no "coming soon" tease, because the Play door's lockbands are
+                             for things you could buy and this is a thing that does not exist for
+                             you yet.
+
+                             The glyph is the one the dashboard mosaic's Just Drop tile already
+                             carries (SettingsTabView.xaml, CardJustDrop). No PNG exists for this
+                             feature anywhere in the app - real art is a separate pipeline, which
+                             is also why this door keeps the emoji strip rather than the medallion
+                             the art-backed doors moved to. -->
+                        <Button x:Name="DoorJustDrop" Tag="justdrop" Style="{StaticResource NavDoorButton}"
+                                Visibility="Collapsed"
+                                Click="NavDoor_Click" ToolTip="{loc:Str jd_door_tip}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelJustDrop" ClipToBounds="True" Height="0" IsHitTestVisible="False"
+                                Visibility="Collapsed">
+                            <StackPanel x:Name="DoorEntriesJustDrop">
+                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -1331,7 +1407,9 @@
                      tooltip, icon-in-a-Panel content shape and pulse transforms. -->
 
                 <!-- Right side: preset picker (collapsed but live), language pill, update
-                     button, and - since row 2's button grid is gone - Help and Bug Report. -->
+                     button, Help, and the profile bubble (avatar + hover account menu).
+                     Bug Report lives in the title bar (BtnTitleBarBugReport) - the copy that
+                     used to sit here was a duplicate and was removed for the bubble. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,10,0" Visibility="Collapsed"
                               SelectionChanged="CmbPresets_SelectionChanged"
@@ -1582,23 +1660,135 @@
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="BtnMainBugReport" Click="BtnReportBug_Click"
-                            Width="26" Height="26" ToolTip="{loc:Str btn_report_bug}" Margin="6,0,0,0">
+                    <!-- Profile bubble: the user's avatar (Discord photo / preset bust / initials).
+                         Hover opens the account menu below; a direct click jumps to the Profile
+                         tab (key "discord"). It also reacts to app moments - XP pulses, level-up
+                         bounce+burst, flash wobble, achievement glow. All logic lives in
+                         MainWindow.ProfileBubble.cs; the visuals are named here so that partial
+                         can paint and animate them without template digging. -->
+                    <Button x:Name="BtnProfileBubble" Width="34" Height="34" Margin="8,0,0,0"
+                            Click="BtnProfileBubble_Click" Cursor="Hand"
+                            MouseEnter="ProfileBubble_MouseEnter" MouseLeave="ProfileBubble_MouseLeave">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#3D3D60" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
-                                    <Image Width="15" Height="15"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Source="{Binding Source='🐛', Converter={StaticResource EmojiToImageSource}}"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Opacity" Value="0.85"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
+                                <ContentPresenter/>
                             </ControlTemplate>
                         </Button.Template>
+                        <Grid x:Name="ProfileBubbleVisual" Width="34" Height="34" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="ProfileBubbleScale"/>
+                                    <RotateTransform x:Name="ProfileBubbleTilt"/>
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <Ellipse x:Name="ProfileBubbleFill" Margin="3" Fill="#3D3D60"/>
+                            <TextBlock x:Name="ProfileBubbleInitials" Text="?" FontWeight="Bold" FontSize="12"
+                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsHitTestVisible="False"/>
+                            <Ellipse x:Name="ProfileBubbleRing" Stroke="{DynamicResource PinkBrush}"
+                                     StrokeThickness="2" Margin="1"/>
+                            <!-- Celebration ring: opacity-0 until an unlock/level-up flashes it gold. -->
+                            <Ellipse x:Name="ProfileBubbleGlowRing" Stroke="#FFD700" StrokeThickness="2"
+                                     Margin="1" Opacity="0" IsHitTestVisible="False">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#FFD700" BlurRadius="12" ShadowDepth="0" Opacity="0.9"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                        </Grid>
                     </Button>
+                    <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same
+                         recipe as Controls/HelpPopover.cs; placement is Custom (right-aligned
+                         under the bubble) set from MainWindow.ProfileBubble.cs. The transparent
+                         12px shell keeps the popup alive while the cursor crosses the shadow. -->
+                    <Popup x:Name="ProfileBubblePopup" AllowsTransparency="True" StaysOpen="True"
+                           PopupAnimation="Fade" Placement="Custom"
+                           PlacementTarget="{Binding ElementName=BtnProfileBubble}">
+                        <Border Background="Transparent" Padding="12"
+                                MouseEnter="ProfileBubblePopupRoot_MouseEnter"
+                                MouseLeave="ProfileBubblePopupRoot_MouseLeave">
+                            <Border Background="#F0252542" BorderBrush="{DynamicResource PinkBrush}"
+                                    BorderThickness="2" CornerRadius="10" Width="248" Padding="14,12">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.15"/>
+                                </Border.Effect>
+                                <StackPanel>
+                                    <StackPanel.Resources>
+                                        <Style x:Key="ProfileMenuItemStyle" TargetType="Button">
+                                            <Setter Property="Height" Value="30"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                                            <Setter Property="FontSize" Value="12"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bg" Background="Transparent" CornerRadius="6" Padding="10,0">
+                                                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bg" Property="Background" Value="#2D2D50"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </StackPanel.Resources>
+
+                                    <!-- Identity: display name + tier badge (🧪 Lab / 🔒 Premium),
+                                         same truth RefreshAccountChip paints. -->
+                                    <DockPanel>
+                                        <TextBlock x:Name="ProfileMenuBadge" DockPanel.Dock="Right" Text=""
+                                                   FontSize="12" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                   Visibility="Collapsed"/>
+                                        <TextBlock x:Name="ProfileMenuName" FontSize="14" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+
+                                    <!-- Level + XP rail: same numbers as the header XP bar. -->
+                                    <StackPanel x:Name="ProfileMenuXpBlock" Margin="0,10,0,0">
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock x:Name="ProfileMenuLevel" Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="11" FontWeight="Bold"/>
+                                            <TextBlock x:Name="ProfileMenuXp" HorizontalAlignment="Right"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                                        </Grid>
+                                        <Border Background="#1A1A2E" BorderBrush="#3D3D60" BorderThickness="1"
+                                                CornerRadius="4" Height="8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition x:Name="ProfileMenuXpFillCol" Width="0*"/>
+                                                    <ColumnDefinition x:Name="ProfileMenuXpRestCol" Width="1*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Background="{DynamicResource PinkBrush}"
+                                                        CornerRadius="3" Margin="1"/>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock x:Name="ProfileMenuBadges" Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5"/>
+                                    </StackPanel>
+
+                                    <Border Height="1" Background="#3D3D60" Margin="0,10,0,6"/>
+
+                                    <Button Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str tab_profile}" Click="ProfileMenuProfile_Click"/>
+                                    <Button Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str tab_achievements}" Click="ProfileMenuAchievements_Click"/>
+                                    <Button Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str tab_settings}" Click="ProfileMenuSettings_Click"/>
+
+                                    <Border Height="1" Background="#3D3D60" Margin="0,6,0,6"/>
+
+                                    <!-- Logout when signed in, "Sign in" (to Settings > Account) when not;
+                                         RefreshProfileMenu swaps the caption, the handler checks live. -->
+                                    <Button x:Name="ProfileMenuAccountBtn" Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str btn_logout}" Click="ProfileMenuAccount_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Border>
+                    </Popup>
                 </StackPanel>
             </Grid>
         </Border>
@@ -1953,6 +2143,18 @@
              FeaturePopupWindow path keeps building its own separate instances and keeps working.
              Hosts the Haptics page as its "haptics" module. -->
         <views:StudioTabView x:Name="StudioTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Just Drop Tab ("justdrop") — a thin WebView2 host of the web session shop at
+             app.cclabs.app/dashboard/express. The shop, its order book and its share/delete/replay
+             actions are the PAGE's; nothing here duplicates them, by doctrine. The control is
+             constructed with the window like every other tab, but its WebView2 is not built until
+             the door is first opened (JustDropTabView.OnTabShown), so a user who never opens it
+             never pays for a second Chromium.
+
+             Reachable only while JustDropService.DoorAvailable is true — the rail rows above are
+             Collapsed until the server flag says otherwise. -->
+        <views:JustDropTabView x:Name="JustDropTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 
@@ -2414,6 +2616,30 @@
                                         <TextBlock Text="{loc:Str label_hover_over_any_control_for_tooltips_click_a_g}"
                                                    Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                     </StackPanel>
+                                </Border>
+
+                                <!-- What moved in 6.8 - FIRST row on purpose: for an upgrader this is the
+                                     only question they have, and this row is the permanent re-run path for
+                                     the tour the What's New dialog offers once. Copy is hardcoded English
+                                     (same convention as Windows/FeatureIntroPopup) - no new loc keys. -->
+                                <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='🚪', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="What moved in 6.8" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="The 60-second map: the six doors, where your old tabs went, and why left-click and right-click swapped."
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialWhatMoved_Click"
+                                                Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Getting Started -->

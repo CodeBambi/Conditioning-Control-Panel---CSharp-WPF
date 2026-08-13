@@ -583,6 +583,10 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Check and award Perfect Bimbo Week bonus (7, 14, 30 day daily quest streaks)
     /// Base XP: 3000, 6000, 10000 for 7/14/30 day milestones, scaled by level (+2% per level)
+    ///
+    /// GRANTS the XP itself and returns the amount awarded (0 when no milestone is due) — callers
+    /// must not add it again. The grant lives in here so it happens before the paid-once latch is
+    /// persisted; see the note at the grant.
     /// </summary>
     public int CheckPerfectWeekBonus()
     {
@@ -634,11 +638,17 @@ public class SkillTreeService : IDisposable
             return 0;
         }
 
-        settings.LastPerfectWeekStreakAwarded = streak;
-        App.Settings?.Save();
-
         // Scale with player level (+2% per level)
         var scaledXP = (int)Math.Round(baseXP * (1 + playerLevel * 0.02));
+
+        // GRANT FIRST, LATCH SECOND. The latch used to be written (and saved) here before the
+        // caller added the XP, so a crash in between burned the milestone permanently. Ordered
+        // this way a crash between the grant and the latch can at worst pay the milestone twice
+        // — the lesser evil against a bonus the player can never earn again.
+        App.Progression?.AddXP(scaledXP, XPSource.Other);
+
+        settings.LastPerfectWeekStreakAwarded = streak;
+        App.Settings?.Save();
 
         App.Logger?.Information("Perfect Bimbo Week {Milestone} bonus awarded! {XP} XP (base: {BaseXP}, level: {Level})",
             milestone, scaledXP, baseXP, playerLevel);
@@ -874,6 +884,9 @@ public class SkillTreeService : IDisposable
         settings.LastStreakDate = null;
         settings.DailyQuestStreak = 0;
         settings.LastDailyQuestDate = null;
+        // The Perfect Week latch tracks "already paid for streak N" — zeroing the streak without
+        // it would make the rebuilt streak's first milestone look already-paid.
+        settings.LastPerfectWeekStreakAwarded = 0;
 
         // Prune the tree to permanent nodes (fallback when the server didn't send the
         // post-rollover list — with a new server the level_reset handler has already

@@ -564,6 +564,18 @@ namespace ConditioningControlPanel
 
         #region Feature Tutorial Button Handlers
 
+        /// <summary>
+        /// The permanent re-run path for the v6.8 relocation tour. The What's New dialog offers it
+        /// once (its LastSeenVersion gate is one-shot per version); this row in the ? panel is how
+        /// anyone finds it again afterwards, so no AppSettings flag guards either surface.
+        /// </summary>
+        private void BtnTutorialWhatMoved_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (SettingsTab.BrowserContainer != null) SettingsTab.BrowserContainer.Visibility = Visibility.Visible;
+            StartTutorial(TutorialType.UpgradeTour);
+        }
+
         private void BtnTutorialGettingStarted_Click(object sender, RoutedEventArgs e)
         {
             MainTutorialOverlay.Visibility = Visibility.Collapsed;

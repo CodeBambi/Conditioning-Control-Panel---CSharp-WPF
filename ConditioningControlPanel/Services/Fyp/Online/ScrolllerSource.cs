@@ -27,6 +27,9 @@ namespace ConditioningControlPanel.Services.Fyp.Online;
 /// <c>PICTURE</c> filter and map to <c>Type = "image"</c> entries, picked by the same
 /// largest-under-the-cap rule. Video entries additionally carry a
 /// <see cref="FypAssetManifest.Entry.PosterUrl"/> lifted from the stills in the same post.
+/// <see cref="FeedMediaKind.GifStill"/> consumers (flash images) instead ask the
+/// <c>GIF</c> filter — the web feed's exact GalleryFilter for "GIFs" — and take each
+/// post's still poster as an image entry (owner decision 2026-08-12).
 ///
 /// REMOTE STILLS ARE STATIC, FULL STOP (live-verified 2026-08-12, planning Appendix A).
 /// The <c>GIF</c> filter is a misnomer for "animated content" — it returns webm/mp4
@@ -104,7 +107,9 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var items = sub["children"]?["items"] as JArray;
         var iterator = (string?)sub["children"]?["iterator"];
         var entries = new List<FypAssetManifest.Entry>();
-        bool stills = filter == "PICTURE";
+        // GifStill consumers ask the GIF filter but can only RENDER a still, so their
+        // pages map to image entries (the post's poster) instead of video entries.
+        bool stills = filter == "PICTURE" || kind == FeedMediaKind.GifStill;
         if (items != null)
         {
             foreach (var item in items)
@@ -136,6 +141,11 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             // Stills have only one source filter, so there is nothing to rotate.
             case FeedMediaKind.Image:
                 return channel.PictureFilterDead ? null : "PICTURE";
+
+            // GIF pages only (the web feed's exact GalleryFilter for "GIFs") — the caller
+            // renders the still poster each GIF post carries. Never PICTURE, never VIDEO.
+            case FeedMediaKind.GifStill:
+                return channel.GifFilterDead ? null : "GIF";
 
             // VIDEO and GIF alternate so gif-heavy subreddits still produce (scrolller
             // GIFs are silent webm — video entries to the feed either way). A filter that

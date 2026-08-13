@@ -142,6 +142,20 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // The Just Drop door is WITHHELD until the server says otherwise (see
+            // Services/JustDrop/JustDropService.cs). The rail rows are Collapsed in that state,
+            // but ShowTab is reachable from things the rail does not own - a bark rule, the
+            // dashboard mosaic tile, a future Ctrl+K palette - so the refusal lives HERE, at the
+            // one door every caller comes through, and it is a no-op rather than a redirect: the
+            // user asked for a page that does not exist for them, and moving them somewhere else
+            // would be a teleport they did not ask for. Deliberately before the bark hook, so a
+            // door nobody can see never announces itself.
+            if (tab == "justdrop" && !Services.JustDrop.JustDropService.DoorAvailable)
+            {
+                App.Logger?.Debug("ShowTab(justdrop) ignored - the door is not available on this account");
+                return;
+            }
+
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
             // Routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
             try
@@ -218,6 +232,7 @@ namespace ConditioningControlPanel
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
+            if (JustDropTab != null) JustDropTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
             // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
@@ -242,6 +257,15 @@ namespace ConditioningControlPanel
                     // visible - the spin is skipped for an off-screen tile so a background login
                     // callback can't burn the reveal on a control nobody is looking at.
                     RefreshIntakePassTile();
+                    // v6.8.0 door tour: the ? box. NOT the only trigger, and it cannot be - the
+                    // Dashboard is the tab the app LANDS on, painted straight from XAML with no
+                    // ShowTab behind it, so a first-launch user would never reach this line.
+                    // OnDashboardTabVisibilityChanged covers that case (and defers past the
+                    // startup dialogs); this call is what makes the card immediate for someone
+                    // who walks back to Home later in the launch. Double-firing is free: the
+                    // seen-flag and the _opening latch inside FeatureIntroPopup make the second
+                    // attempt a no-op.
+                    MaybeShowFeatureIntro("daily-free", "settings");
                     break;
 
                 case "presets":
@@ -349,6 +373,11 @@ namespace ConditioningControlPanel
                     // from UpdatePatreonUI and from the intake-pass change hook, so the wall is
                     // right whether the user arrived or the entitlement did.
                     RefreshPlayCards();
+                    // v6.8.0 door tour. Fires for the "lab" alias too, on purpose: someone who
+                    // deep-links to the old key is precisely the person who needs to be told the
+                    // Lab page became this wall. Shares the Play door's one-card-per-launch
+                    // budget with the lockdown and blink-trainer cards.
+                    MaybeShowFeatureIntro("play-wall", "play");
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -373,6 +402,12 @@ namespace ConditioningControlPanel
                     DiscordTab.Visibility = Visibility.Visible;
                     AnimateTabIn(DiscordTab);
                     UpdateDiscordTabUI();
+                    // v6.8.0 door tour. The card is about the HEADER bubble, not this tab - but
+                    // this tab is where clicking the bubble lands you, so it is the one place the
+                    // explainer can arrive without ambushing somebody mid-anything. The vat's
+                    // card is the You door's other one (MainWindow.ProfileVat.cs) and the two
+                    // share the door's single per-launch slot.
+                    MaybeShowFeatureIntro("profile-hub", "discord");
                     break;
 
                 case "awareness":
@@ -422,12 +457,13 @@ namespace ConditioningControlPanel
                     // on every entry; the rack can now restore a haptics selection through THIS
                     // case, so it has to call it too or the door could open on an unpainted gate.
                     UpdatePatreonUI();
-                    // NO MaybeShowFeatureIntro here, deliberately. The FeatureIntros roster
-                    // (Windows/FeatureIntroPopup.xaml.cs) has five cards - awareness,
-                    // shelistening, blinktrainer, lockdown, haptics - and none of them describes
-                    // an effects rack. Borrowing one would explain the wrong thing, and writing a
-                    // sixth is the Phase-8 door tour's job, not Phase 4's. The "haptics" card
-                    // still fires from its own case below, unchanged.
+                    // v6.8.0 door tour: the sixth card Phase 4 said it was not going to write.
+                    // The rack REPLACED the dashboard's per-feature popups, so first-timers meet
+                    // a list of rows where they last saw a modal - exactly the case an explainer
+                    // exists for. Shares the Studio door's one-card-per-launch budget with the
+                    // "haptics" card below; whichever fires first, the other waits for a later
+                    // launch.
+                    MaybeShowFeatureIntro("studio-rack", "studio");
                     break;
 
                 // Phase 4: haptics is a MODULE of the Studio rack, so this shows the Studio tab
@@ -482,6 +518,18 @@ namespace ConditioningControlPanel
                     AppSettingsTab.RefreshSections();
                     break;
 
+                // The Just Drop door. Unreachable unless JustDropService.DoorAvailable is true -
+                // the guard at the top of this method is what enforces it, not this case.
+                //
+                // OnTabShown is where the WebView2 is actually built (lazily, on first entry) and
+                // where a previously failed load retries, so it has to run on EVERY show, not just
+                // the first. It is a cheap no-op once the page is up.
+                case "justdrop":
+                    JustDropTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(JustDropTab);
+                    JustDropTab.OnTabShown();
+                    break;
+
                 case "exclusives":
                     ExclusivesTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ExclusivesTab);
@@ -533,6 +581,11 @@ namespace ConditioningControlPanel
             ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
+            // Withheld door: listed here like any other so the accordion, the active indicator and
+            // ExpandDoorForTab all work the moment it is revealed. Its rail rows are Collapsed
+            // until MainWindow.JustDrop.cs shows them, and MeasureDoorPanel already skips
+            // Collapsed entries, so a hidden door contributes nothing to the rail's geometry.
+            ("justdrop",  "justdrop",  new[] { "justdrop" }),
             ("appsettings", "appsettings", new[] { "appsettings" }),
         };
 
@@ -555,6 +608,7 @@ namespace ConditioningControlPanel
             "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
             "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
             "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
+            "justdrop" => (DoorJustDrop, DoorPanelJustDrop, DoorEntriesJustDrop),
             // Pinned, entry-less: a header to light, nothing to expand.
             "appsettings" => (DoorSettings, null, null),
             _ => (null, null, null),
@@ -837,6 +891,10 @@ namespace ConditioningControlPanel
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
 
+        /// <summary>The Just Drop door's only rail entry. ShowTab owns the withheld refusal, so
+        /// this stays a bare navigation like every other row.</summary>
+        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
+
         /// <summary>
         /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows
         /// that needed a handler at all: Mods, Catalogue and Phrase Manager each bind the exact
@@ -880,16 +938,57 @@ namespace ConditioningControlPanel
         /// lockdown + blink trainer), and walking into a door should never mean two modals - the
         /// sibling is left unspent and introduces itself on a later visit.</para>
         /// </summary>
-        private void MaybeShowFeatureIntro(string key)
+        /// <param name="doorTab">
+        /// The TAB whose door owns this card, when the card's key is not itself a tab key. The
+        /// five v6.8.0 cards are named after surfaces rather than tabs ("studio-rack" is a rack,
+        /// "profile-hub" is a header bubble), and NavDoorForTab returns null for a key it cannot
+        /// find - which would silently opt those cards out of the per-door budget and let one
+        /// door hand out two modals in a launch. Pass the tab; the door is derived from it.
+        /// </param>
+        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try
             {
                 if (_sessionEngine?.IsRunning == true) return;
-                FeatureIntroPopup.ShowIfFirstTime(key, this, NavDoorForTab(key));
+                FeatureIntroPopup.ShowIfFirstTime(key, this, NavDoorForTab(doorTab ?? key));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Feature intro hook failed for {Key}", key);
+            }
+        }
+
+        /// <summary>Latched once the Dashboard's card has been queued, so walking back to Home
+        /// arms one settle clock per launch rather than one per visit.</summary>
+        private bool _dashboardIntroQueued;
+
+        /// <summary>
+        /// Called from SettingsTabView's IsVisibleChanged - the Dashboard's own file, the same
+        /// seam DiscordTabView uses for the Profile tab. It exists because Home is the ONE tab
+        /// nothing navigates to: the view ships Visible in MainWindow.xaml and the app lands on
+        /// it, so <c>case "settings"</c> in ShowTab never runs on a first launch and the ? box's
+        /// explainer would never be seen by the people it was written for.
+        ///
+        /// <para>The card is QUEUED here, not shown: this fires while the startup ladder is still
+        /// running (update dialog, What's New, season recap, first-run wizard, guided tour), and
+        /// FeatureIntroPopup.ShowWhenStartupSettles is what waits all of that out before opening
+        /// anything. Suppression there is never fatal - the seen-flag stays unspent and the next
+        /// launch tries again.</para>
+        /// </summary>
+        internal void OnDashboardTabVisibilityChanged(bool visible)
+        {
+            try
+            {
+                if (!visible || _dashboardIntroQueued) return;
+                // A session running at this point means the window was re-shown mid-session, not
+                // a launch. Leave the queue unarmed so a later, quieter visit gets the card.
+                if (_sessionEngine?.IsRunning == true) return;
+                _dashboardIntroQueued = true;
+                FeatureIntroPopup.ShowWhenStartupSettles("daily-free", this, NavDoorForTab("settings"));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Dashboard intro hook failed");
             }
         }
 

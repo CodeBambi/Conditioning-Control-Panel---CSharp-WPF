@@ -88,7 +88,7 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorSettings,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorJustDrop, DoorSettings,
                     BtnSettings,
                     BtnNavStudio, BtnPresets, BtnNavHaptics,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
@@ -96,6 +96,9 @@ namespace ConditioningControlPanel
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
                     BtnDiscordTab, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
                     BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
+                    // Withheld by default: the hover FX subscribe harmlessly to a Collapsed row,
+                    // and the row is revealed in place when the server flag lands.
+                    BtnNavJustDrop,
                 };
                 return all.Where(b => b != null)!;
             }
@@ -226,6 +229,13 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Timer-independent restore of the fade-out's hit-test suppression. Coming BACK to
+                // a tab inside the 100ms fade replaces its opacity clock, so FadeOutgoingTab's
+                // Completed never runs (and its "they came back" guard returns before restoring
+                // anyway) - the tab would then swallow every click for the rest of the session.
+                // Every tab show funnels through here, so this is the one point that always runs.
+                if (tab is FrameworkElement incomingFe) incomingFe.IsHitTestVisible = true;
+
                 CancelStaggerCleanup();
 
                 var level = MotionFx.Level;
@@ -323,7 +333,13 @@ namespace ConditioningControlPanel
                     try
                     {
                         // The user came back to it inside 100ms: its own entrance owns it now.
-                        if (ReferenceEquals(fe, _activeTabElement)) return;
+                        // Hit-testing is still ours to hand back - the entrance does it too, but
+                        // this callback must never be the reason a live tab stays click-through.
+                        if (ReferenceEquals(fe, _activeTabElement))
+                        {
+                            fe.IsHitTestVisible = true;
+                            return;
+                        }
                         fe.BeginAnimation(OpacityProperty, null);
                         fe.Opacity = 1;
                         fe.IsHitTestVisible = true;
@@ -550,6 +566,7 @@ namespace ConditioningControlPanel
             "programs" => BtnPrograms,
             "leaderboard" => BtnLeaderboard,
             "assets" => BtnOpenAssetsTop,
+            "justdrop" => BtnNavJustDrop,
             // The pinned Settings door is its own entry: header and destination in one row.
             "appsettings" => DoorSettings,
             _ => null,

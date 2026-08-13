@@ -234,7 +234,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         break;
 
                     case TriggerEffectAction effect:
-                        await DispatchTriggerEffect(effect, ctx);
+                        await DispatchTriggerEffect(effect, ctx, ct);
                         break;
 
                     case ScreenShakeAction shake:
@@ -327,7 +327,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private async Task DispatchTriggerEffect(TriggerEffectAction effect, EnhancementDispatchContext ctx)
+        private async Task DispatchTriggerEffect(TriggerEffectAction effect, EnhancementDispatchContext ctx, CancellationToken ct)
         {
             try
             {
@@ -359,7 +359,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     case EffectTypes.Bubble:
                         // maxBubbles is no longer per-effect; derive a sensible
                         // burst from the user's BubblesFrequency × segment width.
-                        DispatchBubbleBurst(effect.DurationMs);
+                        DispatchBubbleBurst(effect.DurationMs, ct);
                         break;
 
                     case EffectTypes.Subliminal:
@@ -372,7 +372,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         break;
 
                     case EffectTypes.Speak:
-                        DispatchSpeakEffect(effect, ctx);
+                        DispatchSpeakEffect(effect, ctx, ct);
                         break;
 
                     default:
@@ -441,7 +441,7 @@ namespace ConditioningControlPanel.Services.Deeper
         // hold), Stop tears it down. Restart is a no-op because the session drives its own
         // loop-back seeks (a seek-back inside the band would otherwise re-enter here). One-shot
         // (rule-fired) runs a self-scoped session with no EffectId tracking.
-        private void DispatchSpeakEffect(TriggerEffectAction effect, EnhancementDispatchContext ctx)
+        private void DispatchSpeakEffect(TriggerEffectAction effect, EnhancementDispatchContext ctx, CancellationToken ct)
         {
             switch (effect.Phase)
             {
@@ -484,12 +484,28 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 case EffectPhase.OneShot:
                 default:
-                    new SpeakPromptSession(effect, ctx.Source).Start();
+                {
+                    // One-shot sessions aren't in _speakBands, so band flush can't reach
+                    // them — tie their lifetime to the engine's run token instead. Without
+                    // this, an UntilSatisfied speak fired by a rule kept the mic + its
+                    // loop-region seek timer alive after the engine stopped and the
+                    // player closed. Stop() is idempotent and marshals itself.
+                    var oneShot = new SpeakPromptSession(effect, ctx.Source);
+                    if (ct.CanBeCanceled)
+                        ct.Register(() => { try { oneShot.Stop(); } catch { } });
+                    oneShot.Start();
                     break;
+                }
             }
         }
 
-        private static void DispatchBubbleBurst(int durationMs)
+        // Burst ownership. UI-thread confined (bursts are dispatched and released on
+        // the dispatcher thread). Static because BubbleService is app-global while a
+        // RealActionDispatcher is per-engine: two engines' bursts must share one claim.
+        private static int _bubbleBurstHolds;
+        private static bool _bubbleBurstOwnsService;
+
+        private static void DispatchBubbleBurst(int durationMs, CancellationToken ct)
         {
             // Bubbles have no per-event helper on the service; a brief Start/Stop
             // window with the dispatcher-owned timer keeps the surface area small.
@@ -501,17 +517,41 @@ namespace ConditioningControlPanel.Services.Deeper
             if (dispatcher == null) return;
             try
             {
+                if (ct.IsCancellationRequested) return;
+
+                // Only tear down what a burst actually started: if the user's ambient
+                // Bubbles feature is already running, this burst rides it and the
+                // release below must leave it alone. Overlapping bursts share one
+                // claim, released by the LAST one to end.
+                if (_bubbleBurstHolds == 0)
+                    _bubbleBurstOwnsService = App.Bubbles?.IsRunning != true;
+                _bubbleBurstHolds++;
                 App.Bubbles?.Start();
+
+                bool released = false;
                 var stopTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
                 {
                     Interval = TimeSpan.FromMilliseconds(Math.Max(50, durationMs))
                 };
-                stopTimer.Tick += (_, _) =>
+                void Release()
                 {
+                    if (released) return;
+                    released = true;
                     stopTimer.Stop();
-                    try { App.Bubbles?.Stop(); }
-                    catch (Exception ex) { App.Logger?.Debug("DispatchBubbleBurst stop: {E}", ex.Message); }
-                };
+                    if (_bubbleBurstHolds > 0) _bubbleBurstHolds--;
+                    if (_bubbleBurstHolds == 0 && _bubbleBurstOwnsService)
+                    {
+                        _bubbleBurstOwnsService = false;
+                        try { App.Bubbles?.Stop(); }
+                        catch (Exception ex) { App.Logger?.Debug("DispatchBubbleBurst stop: {E}", ex.Message); }
+                    }
+                }
+                stopTimer.Tick += (_, _) => Release();
+                // Engine Stop cancels the run token: release immediately instead of
+                // spawning bubbles for the rest of the authored duration after the
+                // player is gone. Register marshals back onto the UI thread.
+                if (ct.CanBeCanceled)
+                    ct.Register(() => { try { dispatcher.BeginInvoke((Action)Release); } catch { } });
                 stopTimer.Start();
             }
             catch (Exception ex)

@@ -1,7 +1,5 @@
 using System;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 
@@ -12,9 +10,16 @@ namespace ConditioningControlPanel
     ///
     /// <para>The card wall itself is <c>Views\Tabs\PlayTabView.xaml</c> (frame + slots) and
     /// <c>PlayTabView.Cards.cs</c> (click shims). This file is everything those two are not allowed
-    /// to be: the live state on the wall — tier lockbands, the Graded Intake's four pass states, the
-    /// Goon perk line, the Deeper master switch, the Bureau's account chip — plus the two pieces of
-    /// glue the door owes (the Mantra rescue's session start, and the Bureau folder stamp).</para>
+    /// to be: the live state on the wall — tier lockbands, the Graded Intake's four pass states and
+    /// the Goon perk line.</para>
+    ///
+    /// <para><b>2026-08-12 relayout.</b> Five cards left the Play page (Available Subjects, Mantras,
+    /// Deeper, the Inspection Bureau, the Showcase shelf), and three pieces of this painter went
+    /// with them: the <c>EnableDeeper</c> visibility flip, the Bureau's account chip, and the Bureau
+    /// folder-stamp one-shot. All three read named parts of cards that no longer exist, so they
+    /// could not simply be left pointing at nothing. Nothing was un-shipped — every one of those
+    /// features keeps its own door — and the wall's motion budget is now ZERO one-shots on top of
+    /// the view's single ambient loop.</para>
     ///
     /// <para><b>The bands are presentation, not enforcement.</b> Every verdict below comes from
     /// <see cref="TierGate"/>, which is the same truth the launch handlers consult
@@ -25,30 +30,20 @@ namespace ConditioningControlPanel
     /// lands on the real handler and still raises the "See tiers" toast. That is the whole point:
     /// this door has no smokescreen, because it mixes free, Tier 1 and Tier 2 in one wall.</para>
     ///
-    /// <para><b>Three cards deliberately have no band</b> — Goon (joining is free by design; the two
-    /// paid rungs are named in a sub-line instead of hidden behind a padlock), Bureau (not
-    /// tier-gated at all; the page enforces its own clearance) and Mantra / Available Subjects /
-    /// Showcase / Loom (free).</para>
+    /// <para><b>Two cards deliberately have no band</b> — Goon (joining is free by design; the two
+    /// paid rungs are named in a sub-line instead of hidden behind a padlock) and Loom (free, and a
+    /// signpost to the Studio rather than a launch).</para>
     ///
-    /// <para><b>Motion budget: one one-shot.</b> No Forever clock is started here. The door's single
-    /// ambient loop is <c>RabbitHoleFx</c>, owned and registered by the view; the folder stamp below
-    /// is a ~380ms settle that runs once per session and skips itself entirely under
-    /// <c>MotionLevel.Off</c>.</para>
+    /// <para><b>Motion budget: nothing.</b> No clock, Forever or one-shot, is started here. The
+    /// door's single ambient loop is <c>RabbitHoleFx</c>, owned and registered by the view.</para>
     /// </summary>
     public partial class MainWindow
     {
         // ---- tuning ----------------------------------------------------------------------
 
-        /// <summary>Overshoot the Bureau folder lands from. Restored to the digit from the version
-        /// that shipped before the card was deleted on 0804.</summary>
-        private const double BureauStampScale = 1.15;
-        private const double BureauStampMs = 380;
-
         /// <summary>Opacity of a Goon perk this account has not bought. Dimmed, never hidden and
         /// never disabled: naming the perk is the point (GoonHostService.cs:888-889).</summary>
         private const double GoonPerkLockedOpacity = 0.42;
-
-        private bool _bureauStampPlayed;
 
         // ---- the painter -----------------------------------------------------------------
 
@@ -116,36 +111,11 @@ namespace ConditioningControlPanel
                 // --- Graded Intake: four states, not two ------------------------------------
                 RefreshPlayIntakeCard();
 
-                // --- Deeper: one flag, two entries ------------------------------------------
-                // The same AppSettings.EnableDeeper that drives BtnDeeper's visibility on the rail.
-                // If this card outlived the master switch it would be a second, divergent door.
-                if (tab.PlayDeeperCard != null)
-                {
-                    tab.PlayDeeperCard.Visibility = App.Settings?.Current?.EnableDeeper == true
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
-                }
-
-                // --- Bureau: not a tier question, an account one ----------------------------
-                // Same condition BureauHostService.HasAuth uses (UnifiedId + AuthToken); read here
-                // rather than exposed, because the service's own copy is the authority and a second
-                // public property would be a second answer. Says so on the card instead of letting
-                // the click open a window that shows nothing but a clearance wall.
-                if (tab.PlayBureauNeedsAccount != null)
-                {
-                    var s = App.Settings?.Current;
-                    var hasAccount = !string.IsNullOrEmpty(s?.UnifiedId) && !string.IsNullOrEmpty(s?.AuthToken);
-                    tab.PlayBureauNeedsAccount.Visibility = hasAccount ? Visibility.Collapsed : Visibility.Visible;
-                }
-
-                // --- the one-shot ------------------------------------------------------------
-                // One dispatcher hop at Normal priority (never Loaded - that queue is starved in
-                // this window and the callback would simply never run): on the first navigation the
-                // visibility flag has not finished propagating down to the folder art, so checking
-                // art.IsVisible synchronously here would read false on the very first visit and
-                // spend the one-shot on nothing.
-                Dispatcher.BeginInvoke(new Action(PlayBureauStamp),
-                                       System.Windows.Threading.DispatcherPriority.Normal);
+                // Nothing else on this wall is conditional. The Deeper master-switch flip and the
+                // Bureau's account chip used to live here; both cards left the page on 2026-08-12
+                // and the Deeper flag is still honoured where it always mattered - BtnDeeper's
+                // visibility on the rail (MainWindow.Settings.cs:153 / MainWindow.DeeperTab.cs:132).
+                // Do not reintroduce a second reader of EnableDeeper without a card to hide.
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshPlayCards: {E}", ex.Message); }
         }
@@ -221,7 +191,16 @@ namespace ConditioningControlPanel
         // ---- Mantra (G11 rescue) ---------------------------------------------------------
 
         /// <summary>
-        /// Opens the mantra minigame. The two steps are in this order because
+        /// <b>NO CALLER as of 2026-08-12.</b> The Play page's Mantras card was the only one, and the
+        /// card came off that page in the relayout; <c>MantraWindow</c> is back to the state the G11
+        /// rescue found it in (a window nothing opens). This helper is deliberately LEFT IN PLACE
+        /// rather than deleted, because it is the whole rescue: it is the only code in the repo that
+        /// knows the window needs <c>StartSession(n)</c> to have run before it loads, and re-homing
+        /// the typed mantra game anywhere (a Deeper hub entry, a Library door card, a quest reward)
+        /// costs exactly one <c>StartMantraSession(reps)</c> call. Delete this and that knowledge is
+        /// gone again. Owner call: where the game should live now.
+        ///
+        /// <para>Opens the mantra minigame. The two steps are in this order because
         /// <c>MantraWindow.Window_Loaded</c> reads <c>CurrentMantra</c> and <c>TargetCount</c> off
         /// the service — it has always assumed a session was already running, which is precisely why
         /// a window with no caller could not simply be given one.
@@ -265,48 +244,15 @@ namespace ConditioningControlPanel
             }
         }
 
-        // ---- FX: the Bureau folder stamp -------------------------------------------------
-
-        /// <summary>
-        /// The Bureau folder lands with a thunk the first time it is seen in a session: one 1.15
-        /// overshoot settling to 1.0 with a fade, on the RenderTransform only, so nothing around it
-        /// moves. Restored with the card it belongs to (it was deleted on 0804 rather than left
-        /// pointing at a control that no longer existed).
-        ///
-        /// <para>Once per session, and skipped entirely under <c>MotionLevel.Off</c> — a one-shot
-        /// needs no park hook, which is why it may live outside the ambient registry. It uses
-        /// <c>element.BeginAnimation</c>, never <c>Storyboard.SetTargetName</c>, which silently
-        /// no-ops across the tab UserControl namescopes these elements live in.</para>
-        /// </summary>
-        private void PlayBureauStamp()
-        {
-            if (_bureauStampPlayed) return;
-            try
-            {
-                var art = PlayTab?.PlayBureauFolderArt;
-                if (art == null || !art.IsVisible) return;
-                _bureauStampPlayed = true;
-                if (!MotionFx.AllowTransitions) return;
-
-                var scale = new ScaleTransform(BureauStampScale, BureauStampScale);
-                art.RenderTransformOrigin = new Point(0.5, 0.5);
-                art.RenderTransform = scale;
-
-                var settle = new DoubleAnimation(BureauStampScale, 1.0,
-                                                 TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, settle);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, settle);
-
-                var fade = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                art.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
-            catch (Exception ex) { App.Logger?.Debug("PlayBureauStamp: {E}", ex.Message); }
-        }
+        // ---- FX ---------------------------------------------------------------------------
+        //
+        // Nothing. PlayBureauStamp - the manila-folder "thunk", one 1.15 overshoot per session -
+        // went with the Bureau card on 2026-08-12; it animated PlayBureauFolderArt, a named part of
+        // that card, so it had nowhere left to land. If the Bureau card is ever re-homed onto a
+        // surface that wants it back, the animation is in this file's history
+        // (`git log -p -- ConditioningControlPanel/MainWindow/MainWindow.PlayTab.cs`) and the two
+        // rules it obeyed are the ones to carry with it: element.BeginAnimation, never
+        // Storyboard.SetTargetName (which silently no-ops across the tab UserControl namescopes),
+        // and skip entirely under MotionLevel.Off.
     }
 }

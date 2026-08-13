@@ -23,19 +23,21 @@
          commands, i.e. the feature could be turned ON for a user with no
          switch anywhere in the app to turn it back off. That is the gap.
 
-         TWO HALVES, ONE SETTING - read this before changing the copy:
-          - AUDIO (Services/LockCard/BrainDrainService.cs) is fully alive.
+         TWO HALVES, TWO DIALS - read this before changing the copy:
+          - AUDIO (Services/LockCard/BrainDrainService.cs).
             BrainDrainIntensity is its per-minute trigger probability and
-            BrainDrainHighRefresh picks the 500ms vs 5s tick. Everything on
-            this panel drives that, and only that.
+            BrainDrainHighRefresh picks the 500ms vs 5s tick.
           - VISUAL (the screen blur, OverlayService.StartBrainDrainBlur) is
-            WITHHELD behind OverlayService.BrainDrainWithheld while the
-            effect is reworked, and early-returns for every caller.
-         So the rework notice at the top is not decoration: it is the one
-         thing that stops this panel advertising a dead blur. It is driven
-         straight off that same flag - no second gate, no new mechanism -
-         so flipping OverlayService.BrainDrainWithheld to false hides the
-         notice and nothing else on this panel has to change.
+            LIVE again post-rework: it renders on the shared compositor
+            (Services/Compositor/BrainDrainLayer + capture pump). Its
+            strength is BrainDrainBlurStrength (its OWN setting - the
+            rework split it off the audio probability) and
+            BrainDrainMeltEnabled adds the Perlin "melting glass" warp.
+            Both apply live through OverlayService's settings hook; the
+            melt flip bounces the overlay there (pump flag is per-run).
+         The rework notice at the top is still driven straight off
+         OverlayService.BrainDrainWithheld (now false, so it stays hidden);
+         it is the kill-switch's honest half if the flag ever flips back.
 
          Root MUST stay a Panel (StackPanel): MainWindow.SessionFeatureLock
          .cs:365 inserts the session-lock banner via
@@ -157,6 +159,47 @@
                                 <TextBlock Grid.Column="2" x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"
                                            FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Blur strength. The VISUAL half's dial (BrainDrainBlurStrength) - the
+                                 dial above is the AUDIO trigger probability, this one is how hard the
+                                 screen blur presses in. Explicit 1-100 range for the same
+                                 Slider-defaults-to-Maximum=10 reason as above. Prescribed dose. -->
+                            <Grid Height="36" ToolTip="{loc:Str st4_braindrain_blur_strength_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_blur_strength}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderBlurStrength" x:FieldModifier="internal"
+                                        feat:SessionLock.Owned="True"
+                                        Minimum="1" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="10,0"
+                                        ValueChanged="SliderBlurStrength_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" x:FieldModifier="internal" Text="50%"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Melting mode. Same overlay, melt variant (BrainDrainMeltEnabled):
+                                 blur + slow Perlin displacement warp. Prescribed dose. -->
+                            <Grid Height="34" ToolTip="{loc:Str st4_braindrain_melt_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_melt}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkMelt" x:FieldModifier="internal"
+                                          feat:SessionLock.Owned="True"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkMelt_Changed" Unchecked="ChkMelt_Changed"/>
                             </Grid>
 
                             <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>

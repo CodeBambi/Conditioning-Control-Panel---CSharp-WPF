@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -103,9 +104,34 @@ namespace ConditioningControlPanel.Views.Tabs
             /// single on/off and must not pretend to" (Visuals had no dashboard dot either).</summary>
             public Func<bool?>? Dot;
 
+            /// <summary>
+            /// RIGHT-click quick-toggle for this row's feature — the dashboard wall's gesture,
+            /// same grammar (left-click selects/opens, right-click flips). Null for a module with
+            /// no single on/off (Visuals), where the gesture must do nothing rather than guess.
+            ///
+            /// <para>Defaulted in <see cref="BuildRack"/> from the rack key itself for every
+            /// module the wall already knows: <c>MainWindow.ToggleWallFeature</c> is keyed on THESE
+            /// keys, so the two surfaces cannot drift. The three that predate it (Haptics,
+            /// Scheduler, Ramp) pass an explicit toggle that flips their panel's own master
+            /// checkbox, which is the premium rail's idiom - the checkbox's real handler runs, so
+            /// its premium gate and its Save run with it.</para>
+            /// </summary>
+            public Action? Toggle;
+
             /// <summary>True when the panel draws its own page header, so the shared detail
             /// header must hide rather than double up (Haptics).</summary>
             public bool OwnHeader;
+
+            /// <summary>
+            /// The tier this module is SOLD at: 0 = free, 1 = premium, 2 = Lab. Presentation
+            /// only — the row wears the tier livery (gold/diamond, Resources\Theme\Brushes.xaml)
+            /// permanently, whoever is looking; the refusal still belongs to the panel's own
+            /// premium gate and <see cref="Services.TierGate"/>. Hand-maintained, like
+            /// <see cref="BarkFeature"/>: there is no per-module verdict to derive it from
+            /// without asking PatreonService a question ("is this ALLOWED?") that answers a
+            /// different question than "what does it COST?".
+            /// </summary>
+            public int Tier;
 
             // Built by BuildRack.
             public RadioButton? Row;
@@ -292,21 +318,35 @@ namespace ConditioningControlPanel.Views.Tabs
             // The dot reads a nested settings object with no INPC, so it refreshes on every
             // Studio show and on every selection rather than live.
             Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null,
-                () => App.Settings?.Current?.Haptics?.Enabled);
+                () => App.Settings?.Current?.Haptics?.Enabled,
+                // No wall key: the mosaic never carried Haptics (the premium rail chip does), and
+                // its enable lives on the nested Haptics settings object. Flip the page's own
+                // master box so MainWindow.ChkHapticsEnabled_Changed runs - including the
+                // premium gate that reverts the box for a free account.
+                toggle: () => FlipMasterCheckBox(PanelHaptics?.ChkHapticsEnabled),
+                // The rack's one paid module (the premium gate above is the enforcement this
+                // livery advertises). Same bar as the rail chip's RailLockBand: Tier 1.
+                tier: 1);
 
             _layout.Add("st4_studio_group_timing");
             // Both fire the popup's single "SchedulerRamp" key so the existing rules keep firing.
+            // Neither is a wall tile either, and neither drives a service directly (the 30s
+            // SchedulerTimer_Tick and the session ramp read the flags), so the honest quick-toggle
+            // is the panel's own enable box - it writes the flag and Saves in one place.
             Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
-                () => App.Settings?.Current?.SchedulerEnabled);
+                () => App.Settings?.Current?.SchedulerEnabled,
+                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled));
             Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
-                () => App.Settings?.Current?.IntensityRampEnabled);
+                () => App.Settings?.Current?.IntensityRampEnabled,
+                toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.ChkEnabled));
 
             RenderRackRows();
             RefreshRackLabels();
             RefreshDots();
 
             void Add(string key, string glyph, string? art, string english, string locKey, UIElement? host,
-                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = true)
+                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = true,
+                     Action? toggle = null, int tier = 0)
             {
                 var entry = new StudioRackEntry
                 {
@@ -320,6 +360,11 @@ namespace ConditioningControlPanel.Views.Tabs
                     BarkFeature = bark,
                     Dot = dot,
                     OwnHeader = ownHeader,
+                    Tier = tier,
+                    // Default: route the rack key straight into the dashboard's own quick-toggle.
+                    // Derived rather than hand-listed per row so adding a wall tile for a module
+                    // (or a module for a wall tile) cannot leave the rack behind.
+                    Toggle = toggle ?? (WallToggleKeys.Contains(key) ? () => ToggleWallFeature(key) : null),
                 };
                 _entries.Add(entry);
                 _layout.Add(entry);
@@ -396,7 +441,14 @@ namespace ConditioningControlPanel.Views.Tabs
                     Tag = e.Key,
                     Content = content,
                 };
+                // BorderBrush is the template's TierRim (RackEntryStyle nulls it for free
+                // rows), so a tiered row wears a permanent gold/diamond outline.
+                if (e.Tier > 0) e.Row.BorderBrush = TierLiveryBrush(e.Tier);
                 e.Row.Click += RackEntry_Click;
+                // Right-click = quick-toggle, the same second gesture the dashboard tiles carry.
+                // On the ROW, not on the dot: the dot is 7px, and the gesture belongs to the
+                // whole entry. Rows with no Toggle fall through unhandled (Visuals).
+                e.Row.MouseRightButtonUp += RackEntry_RightClick;
                 // Instant, storyboard-free state swap. Wired to Checked/Unchecked rather than
                 // driven from SelectEntry so the swap can never drift out of step with
                 // IsChecked - the RadioButton group also unchecks the outgoing row by itself.
@@ -469,6 +521,17 @@ namespace ConditioningControlPanel.Views.Tabs
                     VerticalAlignment = VerticalAlignment.Center,
                 };
             }
+            // Tier livery on the chip: the metal on the chip's own frame (and, for the art-less
+            // chips, a tinted well behind the glyph), so the mark survives even where the row
+            // rim is faint. Presentation only — see StudioRackEntry.Tier.
+            if (e.Tier > 0)
+            {
+                chip.BorderBrush = TierLiveryBrush(e.Tier);
+                if (chipArt == null)
+                    chip.Background = new SolidColorBrush(e.Tier >= 2
+                        ? Color.FromRgb(0x1E, 0x33, 0x40)    // deep ice under diamond
+                        : Color.FromRgb(0x3D, 0x33, 0x1E));  // dark amber under gold
+            }
             Grid.SetColumn(chip, 0);
             grid.Children.Add(chip);
 
@@ -480,6 +543,38 @@ namespace ConditioningControlPanel.Views.Tabs
             Grid.SetColumn(e.Label, 1);
             grid.Children.Add(e.Label);
 
+            // v6.8.0 NEW pill: remove in 6.9
+            // Brain Drain came back from the dead in this release, so the rack row that
+            // hosts it says so for one cycle. Literal colours, no TryFindResource: this is
+            // the same pink the rail's pills use and it must not depend on a theme key.
+            // The extra column is added to THIS row's grid only (the grid is per-row), and
+            // the dot below takes the last column rather than a hard-coded 2, so a
+            // badged row keeps icon | label | pill | dot in that order.
+            if (string.Equals(e.Key, "braindrain", StringComparison.OrdinalIgnoreCase))
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var newPill = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(4, 0, 4, 0),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = "NEW",
+                        FontFamily = new FontFamily("Consolas"),
+                        FontSize = 9,
+                        FontWeight = FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7)),
+                    },
+                };
+                Grid.SetColumn(newPill, 2);
+                grid.Children.Add(newPill);
+            }
+
             if (e.Dot != null)
             {
                 e.DotShape = new Ellipse
@@ -489,7 +584,9 @@ namespace ConditioningControlPanel.Views.Tabs
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(6, 0, 2, 0),
                 };
-                Grid.SetColumn(e.DotShape, 2);
+                // Last column, not a fixed 2: the NEW pill above inserts a column on the row
+                // it badges (v6.8.0). Unbadged rows still resolve to 2.
+                Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
                 grid.Children.Add(e.DotShape);
             }
 
@@ -744,6 +841,128 @@ namespace ConditioningControlPanel.Views.Tabs
                 SelectEntry(key, announce: true, animate: true);
         }
 
+        // =====================================================================================
+        //  right-click quick-toggle — the dashboard's gesture, on the rack
+        // =====================================================================================
+
+        /// <summary>
+        /// The rack keys <c>MainWindow.ToggleWallFeature</c> handles. Its cases were written
+        /// against THESE keys ("Keys are the Studio rack's", MainWindow.Presets.cs), so the wall
+        /// tile and the rack row flip one flag through one method: there is no second state store
+        /// and no second set of service start/stop calls to fall out of step.
+        ///
+        /// <para>An unknown key is a quiet no-op over there, so a typo here costs a dead gesture,
+        /// never a wrong write.</para>
+        /// </summary>
+        private static readonly HashSet<string> WallToggleKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "flash", "video", "subliminal", "spiral", "pinkfilter", "bubbles",
+            "bubblecount", "lockcard", "bouncingtext", "mindwipe", "braindrain",
+        };
+
+        /// <summary>
+        /// Right-click on a rack row flips that module on/off without selecting it — left-click
+        /// still owns selection, exactly as left-click still owns "open" on the wall.
+        ///
+        /// <para>Selection is deliberately untouched: a quick-toggle that also yanked the detail
+        /// pane to a different module would make the gesture unusable for turning three things on
+        /// in a row, and it would fire a FeatureOpened bark for a panel nobody asked to see.</para>
+        /// </summary>
+        private void RackEntry_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not RadioButton rb || rb.Tag is not string key) return;
+            var entry = EntryFor(key);
+            if (entry?.Toggle == null) return;   // Visuals: no single on/off, so no gesture
+
+            e.Handled = true;
+
+            bool? before = SafeDotState(entry);
+            try { entry.Toggle(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Studio rack quick-toggle failed for {Key}", key); }
+
+            // One beat late, at Normal priority (never Loaded — it starves here, see BindDotListener):
+            // a refusal can undo the write (the haptics premium gate flips IsChecked back) or never
+            // make it (the session-lock refusal writes nothing at all). Reading AFTER lets the row
+            // react to what actually happened rather than to what was asked for.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+            {
+                try
+                {
+                    RefreshDots();
+                    if (SafeDotState(entry) != before) PingDot(entry.DotShape);
+                }
+                catch (Exception ex) { App.Logger?.Debug("StudioTabView rack toggle repaint: {E}", ex.Message); }
+            }));
+        }
+
+        private static bool? SafeDotState(StudioRackEntry entry)
+        {
+            if (entry.Dot == null) return null;
+            try { return entry.Dot(); } catch { return null; }
+        }
+
+        /// <summary>Routes to the dashboard wall's own quick-toggle, which owns the session-lock
+        /// refusal, the per-feature service start/stop and the Save.</summary>
+        private void ToggleWallFeature(string key)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature(key);
+        }
+
+        /// <summary>
+        /// Flips a module's own master enable box so the panel's real handler runs — the premium
+        /// rail's <c>ToggleTabCheckBox</c> idiom, with one addition: a DISABLED box is left alone.
+        /// <c>IsChecked</c> ignores <c>IsEnabled</c>, and a greyed master toggle is how the session
+        /// feature lock says "the session owns this dial" — so without the guard the rack would be
+        /// the one surface that could flip a locked switch.
+        /// </summary>
+        private static void FlipMasterCheckBox(CheckBox? cb)
+        {
+            if (cb == null || !cb.IsEnabled) return;
+            cb.IsChecked = !(cb.IsChecked ?? false);
+        }
+
+        /// <summary>
+        /// A 260ms pop on the row's state dot, fired only when the flag REALLY moved. The dot
+        /// already carries the on/off language; this just makes a change land on a row the user is
+        /// not looking straight at, since right-click never moves the selection.
+        ///
+        /// <para>Quiet-surface safe (PLAN §2.7): one-shot, gated on <see cref="MotionFx"/>,
+        /// <c>FillBehavior.Stop</c> plus an explicit clear, so no clock survives it.</para>
+        /// </summary>
+        private static void PingDot(Ellipse? dot)
+        {
+            if (dot == null || !MotionFx.AllowTransitions) return;
+            try
+            {
+                if (dot.RenderTransform is not ScaleTransform scale)
+                {
+                    scale = new ScaleTransform(1, 1);
+                    dot.RenderTransformOrigin = new Point(0.5, 0.5);
+                    dot.RenderTransform = scale;
+                }
+
+                var pop = new DoubleAnimation(2.0, 1.0, TimeSpan.FromMilliseconds(260))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
+                };
+                pop.Completed += (_, __) =>
+                {
+                    try
+                    {
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                        scale.ScaleX = 1;
+                        scale.ScaleY = 1;
+                    }
+                    catch { }
+                };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+            catch (Exception ex) { App.Logger?.Debug("StudioTabView.PingDot: {E}", ex.Message); }
+        }
+
         /// <summary>
         /// Shows exactly one module. Idempotent, and safe to call for the already-selected key —
         /// re-selecting deliberately re-announces, because opening a feature popup twice used to
@@ -792,9 +1011,32 @@ namespace ConditioningControlPanel.Views.Tabs
             if (target == null) return;
 
             if (DetailHeader != null)
+            {
                 DetailHeader.Visibility = target.OwnHeader ? Visibility.Collapsed : Visibility.Visible;
+                // The header echoes the row's tier livery, so the detail pane says "this is
+                // the paid one" in the same metal the rack does. #2A2A46 = the header's own
+                // XAML literal, restored verbatim for free modules.
+                DetailHeader.BorderBrush = target.Tier > 0
+                    ? TierLiveryBrush(target.Tier)
+                    : new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x46));
+            }
             if (TxtDetailIcon != null) TxtDetailIcon.Text = target.Glyph;
             if (TxtDetailTitle != null) TxtDetailTitle.Text = LabelFor(target);
+        }
+
+        /// <summary>
+        /// The tier livery for a paid module's chrome: gold = Tier 1, diamond = Tier 2, from
+        /// the shared theme (Resources\Theme\Brushes.xaml) with a flat literal fallback in the
+        /// established tier tones, because a missing brush must degrade to a duller rim, never
+        /// to a throw inside row construction.
+        /// </summary>
+        private Brush TierLiveryBrush(int tier)
+        {
+            var key = tier >= 2 ? "Tier2DiamondBorderBrush" : "Tier1GoldBorderBrush";
+            return (Brush?)TryFindResource(key)
+                   ?? new SolidColorBrush(tier >= 2
+                       ? Color.FromRgb(0x8F, 0xD4, 0xEF)
+                       : Color.FromRgb(0xF0, 0xC2, 0x4B));
         }
 
         /// <summary>
@@ -937,6 +1179,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 // Both states own a dot; the checked row is showing the tile's one.
                 Paint(e.DotShape);
                 Paint(e.TileDot);
+
+                // Same sentence on the whole row for the rows the right-click gesture can flip:
+                // the dot is 7px of hover target, and after a quick-toggle the row the cursor is
+                // already sitting on should be able to answer "did that take?" itself. Existing
+                // keys only - no new string enters the nine language files for this.
+                if (e.Row != null && e.Toggle != null)
+                    e.Row.ToolTip = tip;
 
                 void Paint(Ellipse? dot)
                 {

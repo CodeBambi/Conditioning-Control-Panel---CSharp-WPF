@@ -195,9 +195,13 @@ namespace ConditioningControlPanel
                 s.StreakFixCharges = 0; // per-account, server-authoritative balance
                 s.HighestLevelEver = 0;
 
-                // Quest streak
+                // Quest streak. The Perfect Week latch goes with it: leaving it standing means an
+                // incoming account whose cloud streak happens to equal the old account's latch has
+                // its milestone silently eaten (the latch is a "already paid for THIS streak" mark
+                // and it belongs to the account being cleared).
                 s.DailyQuestStreak = 0;
                 s.LastDailyQuestDate = null;
+                s.LastPerfectWeekStreakAwarded = 0;
 
                 // Streak shields
                 s.StreakShieldsRemaining = 0;
