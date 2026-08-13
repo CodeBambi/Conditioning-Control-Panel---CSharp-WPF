@@ -51,6 +51,18 @@ truncation + raw-JSON leak"; upstream fix `932d829a`, 2026-08-07). Single lane. 
      than a fast-forward (the wave-25 tree-identity finding, paid again here avoidably).
 4. **Confirm the record's honesty cell says plainly:** no truncation parity claimed; the port refuses a
    leaked envelope where WPF salvages it; `AiEnvelopeValidator` is still unwired; Linux unproven.
+5. **THE MODERATION-SURFACE GAP — the packet does not answer this and the land must (found by the
+   post-launch consult, verified against the tree).** The union rule needs a surface argument for its
+   SECOND `EvaluateOutput` call. A worker with good instincts will want a *distinct* surface id for the
+   hygienic evaluation — but `AiModerationSurfaces` lives in `AiModerationBoundary.cs`, which is **not in
+   File Scope**, and `AiModerationCoverageTests.cs:242-243` **pins the exact counts** (6 Wired / 5
+   Reserved). So adding one goes **RED loudly**, and the cheap way out is bumping a landed honesty pin.
+   **THE RULING, decided here so the land does not invent one under pressure: reuse the EXISTING
+   `outputSurface` (`AiOperationPipeline.cs:245`) for both evaluations. A distinct hygienic surface is OUT
+   OF SCOPE and is a separate filing.** At land, check three things: `AiModerationBoundary.cs` is
+   untouched; the 6/5 counts at `AiModerationCoverageTests.cs:242-243` are unchanged; and no new surface
+   literal was invented anywhere. If the worker stopped-and-reported on this instead, **that was correct
+   behaviour** — file the surface question, do not treat the stop as a failure.
 
 ## Standing land discipline (unchanged, learned the hard way)
 
@@ -100,7 +112,14 @@ truncation + raw-JSON leak"; upstream fix `932d829a`, 2026-08-07). Single lane. 
   verdict surfaced complete on the FIRST call (6th consecutive wave). **Never stitch a verdict out of
   reasoning**; an unstitched non-verdict is a MISSING consult. Use `mode: "solo"` explicitly (T-7).
 - **Verify the advisor's checkable claims before encoding them.** Done this wave: `Evaluate` is a pure
-  token scan (`:279-296`), and `BuildBody` sends no token cap (`:252-258`).
+  token scan (`:279-296`), and `BuildBody` sends no token cap (`:252-258`). Also done for the
+  post-launch consult: the moderation-surface gap is real, and checking it turned up something the
+  advisor did not have — the coverage test pins the surface COUNTS, so the failure mode is loud rather
+  than silent, and the hazard is the tempting fix, not the miss.
+- **T-18, 7th occurrence, logged this phase:** the post-launch completion consult returned a complete
+  verdict and then **truncated mid-sentence** while describing the remedy (`"Base already mo"`). The
+  verdict was usable and was NOT stitched out of the reasoning — the actionable half had already
+  surfaced. Add this occurrence to row T-18 at land.
 
 ## Claimable work after this lands (the board is authority, this is a pointer)
 
