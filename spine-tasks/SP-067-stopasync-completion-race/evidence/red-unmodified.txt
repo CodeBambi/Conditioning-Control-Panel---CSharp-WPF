@@ -1,0 +1,6 @@
+# SP-067 RED — unmodified product code @ ed2846bd
+# command: dotnet run probe.cs 500 (heartbeat interval 1ms, start -> immediate stop)
+iterations=500
+Completed: count=495 zeroTick=495 ticked=0 minTicks=0 maxTicks=0
+Cancelled: count=5 zeroTick=0 ticked=5 minTicks=1 maxTicks=1
+other=0 timeouts=0

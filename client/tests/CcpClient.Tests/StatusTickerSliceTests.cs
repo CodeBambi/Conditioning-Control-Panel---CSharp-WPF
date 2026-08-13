@@ -92,6 +92,27 @@ public class StatusTickerSliceTests
     }
 
     [Fact]
+    public async Task SetEnabled_ThenImmediatelyDisabled_CompletesCancelled_ZeroTick()
+    {
+        var (root, _, _) = RealRoot();
+        var host = await BootAsync(root);
+        var ticker = host.Participants.OfType<StatusTickerParticipant>().Single();
+
+        ticker.SetEnabled(true);
+        var completion = ticker.Completion;
+        ticker.SetEnabled(false); // immediate: the token is cancelled before (or during) the loop's first check
+
+        // Zero-tick regression pin (SP-067): deterministic because BOTH exits agree — the
+        // OCE path and the token-observed post-loop return both yield Cancelled.
+        // What breaks it: a post-loop `return OperationOutcome.Completed.Instance` shape
+        // returning here (the SP-067 heartbeat defect class).
+        Assert.NotNull(completion);
+        Assert.IsType<OperationOutcome.Cancelled>(await completion!);
+
+        await host.ShutdownAsync();
+    }
+
+    [Fact]
     public async Task ToggleBeforePhase3Start_Throws_ToggleOn_WithoutStart_IsACompositionBug()
     {
         // Construction starts nothing (SP-003 §4.4): toggling a never-started participant

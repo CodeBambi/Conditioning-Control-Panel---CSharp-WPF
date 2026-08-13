@@ -203,6 +203,25 @@ public class AsyncLifecycleTests
         Assert.IsType<OperationOutcome.Cancelled>(await heartbeat.Completion!);
     }
 
+    [Fact]
+    public async Task Heartbeat_StoppedBeforeFirstTick_CompletesCancelled_ZeroTick()
+    {
+        var registry = new OperationRegistry();
+        var boundary = new UiDispatchBoundary();
+        var heartbeat = new HeartbeatParticipant(registry.OwnerFor("Heartbeat"), boundary, TimeSpan.FromMilliseconds(10));
+
+        await heartbeat.StartAsync(CancellationToken.None);
+        await heartbeat.StopAsync(); // immediate: the token is cancelled before (or during) the loop's first check
+
+        // Zero-tick regression pin (SP-067): deterministic because BOTH exits now agree —
+        // the OCE path (loop ticked, then Delay observed the token) and the zero-tick
+        // post-loop return both yield Cancelled; no interleaving is being controlled.
+        // What breaks it: the defective post-loop `return OperationOutcome.Completed.Instance`
+        // shape returning — reachable only with the token already cancelled (contract §2).
+        Assert.NotNull(heartbeat.Completion);
+        Assert.IsType<OperationOutcome.Cancelled>(await heartbeat.Completion!);
+    }
+
     private sealed class ResourceLostException(string message) : Exception(message);
 
     private sealed class FakeUiDispatch : IUiDispatch

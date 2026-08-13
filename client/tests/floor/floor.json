@@ -1,7 +1,7 @@
 {
   "projects": {
     "CcpClient.Tests": {
-      "total": 900,
+      "total": 903,
       "allowedSkips": [
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
@@ -25,5 +25,5 @@
   "skipSemantics": "May-skip, not must-skip: a listed test that runs and passes on a machine where its precondition holds is green. Matching is exact on the pre-'(' portion of the TRX result testName (xunit theory rows serialize with arguments, e.g. Class.Method(x: 1)); a name with no parens matches whole. Anchor is the TRX result list, never Counters arithmetic (SP-065: the arithmetic does not close over skips).",
   "admissionRule": "allowedSkips is NOT a quarantine list (SP-066 framing f). A test may be listed ONLY when its precondition is a property of the machine or OS that cannot be satisfied by configuration during a contract run, and the listing commit names the machine class where it DOES execute. Two named permanent bans: (1) CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault — the SP-057 pin; its skip means someone exported CCP_DATA_ROOT process-wide, the vacuous 896/1 green SP-062 closed; (2) CcpClient.Tests.ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery — the named flake guarding a privacy boundary (route classes only, never a filename or query); reproduce and fix at the source, never quarantine.",
   "bumpRule": "Bump total only in the SAME commit as the test change that moves the count; the commit message states the reason. Never widen, disable, or special-case to make a step pass (SP-065 framing e). Adding a name to allowedSkips requires the admission rule above, in the same commit, naming the machine class.",
-  "lastMovedBy": "SP-066 Step 4: +2 unit facts (VacuousShapeGuardTests shape guard; FloorWrapperGuardTests auditor T-17 pin) — 898->900 unit in the same commit as the tests. Earlier Step 3: five OS-gated conversions into allowedSkips (total unchanged). Step 2: schema {passed,skipped} -> {total, allowedSkips}. Documentation only — the mechanism cannot verify this field or that the pinned number is the RIGHT number."
+  "lastMovedBy": "SP-067 Step 3: +3 unit facts (zero-tick Cancelled regression pins at HeartbeatParticipant, StatusTickerParticipant, AvatarAnimationEngine — the StopAsync completion-race class) — 900->903 unit in the same commit as the tests. Prior: SP-066 Step 4: +2 unit facts (VacuousShapeGuardTests shape guard; FloorWrapperGuardTests auditor T-17 pin) — 898->900 unit in the same commit as the tests. Earlier Step 3: five OS-gated conversions into allowedSkips (total unchanged). Step 2: schema {passed,skipped} -> {total, allowedSkips}. Documentation only — the mechanism cannot verify this field or that the pinned number is the RIGHT number."
 }
