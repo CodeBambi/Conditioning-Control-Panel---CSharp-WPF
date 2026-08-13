@@ -202,6 +202,20 @@ namespace ConditioningControlPanel
             ArmVat(glass);
             glass.SetLip(read.Lip);
 
+            // THE EXPLAINER, and this is the only line in the app that may fire it. Past this
+            // point the jar demonstrably exists for this account - both disarm exits are above -
+            // so the card can never describe a portrait that is still a plain 104px avatar.
+            //
+            // _vatOnScreen as well, because ApplyDescentToVat is also reached from
+            // OnDescentBlockChanged: a block landing from the post-sync hook can arm the vat
+            // while the user is three tabs away, and a modal about a jar they cannot see is
+            // worse than no modal at all. That path leaves the card unspent and the next visit
+            // to the Trainer Card - which always re-runs this method - shows it.
+            //
+            // NOT called from ArmVat: that method is idempotent, so a vat armed off-screen would
+            // consume its only chance to introduce itself.
+            if (_vatOnScreen) MaybeShowFeatureIntro("descent-vat", "discord");
+
             switch (read.Kind)
             {
                 case VatReadKind.Seed:

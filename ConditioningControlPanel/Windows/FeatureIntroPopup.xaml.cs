@@ -88,6 +88,77 @@ namespace ConditioningControlPanel
         internal static void ShowCelebrationIfFirstTime(Window? owner) =>
             ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
 
+        /// <summary>Keys with a settle timer already running, so a tab that is shown twice during
+        /// startup arms one clock and not two.</summary>
+        private static readonly HashSet<string> _settling = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
+        /// from XAML before anything navigates, so its card has no ShowTab case to ride and would
+        /// otherwise open in the middle of the startup ladder - update dialog, What's New, season
+        /// recap, the first-run wizard, then the guided tour.
+        ///
+        /// <para>So it waits. A 1s clock re-tests the same conditions App.xaml.cs waits on before
+        /// its own startup offers, calls <see cref="ShowCore"/> once they are clear, and keeps
+        /// ticking until the card is actually spent - which also lets it outlast the 10-minute
+        /// pacing cooldown if another card got in first. Gives up after five minutes (the wizard
+        /// can legitimately take that long) leaving the seen-flag UNSPENT, so the next launch
+        /// simply tries again.</para>
+        /// </summary>
+        internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey)
+        {
+            try
+            {
+                if (!FeatureIntros.All.ContainsKey(key)) return;
+                if (App.Settings?.Current?.SeenFeatureIntros.Contains(key) == true) return;
+                if (!_settling.Add(key)) return;
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) { _settling.Remove(key); return; }
+
+                int ticks = 0;
+                var timer = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.Background, dispatcher)
+                {
+                    Interval = TimeSpan.FromSeconds(1),
+                };
+                timer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        var live = App.Settings?.Current;
+                        if (live == null || live.SeenFeatureIntros.Contains(key) || ++ticks > 300)
+                        {
+                            timer.Stop();
+                            _settling.Remove(key);
+                            return;
+                        }
+
+                        // Same three gates the startup ladder uses elsewhere. The tutorial is
+                        // also checked inside ShowCore; it is repeated here so a tour that runs
+                        // long simply keeps the clock ticking instead of burning a try.
+                        if (App.IsUpdateDialogActive
+                            || MainWindow.IsStartupDialogShowing
+                            || App.Tutorial?.IsActive == true) return;
+
+                        ShowCore(key, owner, paced: true, doorKey: doorKey);
+                    }
+                    catch (Exception ex)
+                    {
+                        timer.Stop();
+                        _settling.Remove(key);
+                        App.Logger?.Warning(ex, "Feature intro settle tick failed for {Key}", key);
+                    }
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                _settling.Remove(key);
+                App.Logger?.Warning(ex, "Feature intro settle gate failed for {Key}", key);
+            }
+        }
+
         private static void ShowCore(string key, Window? owner, bool paced, string? doorKey)
         {
             try
@@ -112,12 +183,13 @@ namespace ConditioningControlPanel
                         var live = App.Settings?.Current;
                         if (live == null || live.SeenFeatureIntros.Contains(key)) return;
 
-                        // The celebration is queued during startup, where the What's New and
-                        // update dialogs also live. Both were checked before queueing, but they
-                        // can open in between - recheck at open time and yield (unspent; every
-                        // launch retries) rather than stack a modal on a modal.
-                        if (key == CelebrationKey &&
-                            (App.IsUpdateDialogActive || MainWindow.IsStartupDialogShowing)) return;
+                        // Never stack a modal on a modal. Written for the celebration, which is
+                        // queued during startup where the What's New and update dialogs also
+                        // live; kept for EVERY key since v6.8.0, because the Dashboard's card is
+                        // queued from a tab that is already visible at launch (see
+                        // ShowWhenStartupSettles). Yielding here costs nothing: the flag is spent
+                        // below this line, so a suppressed card is retried on a later visit.
+                        if (App.IsUpdateDialogActive || MainWindow.IsStartupDialogShowing) return;
 
                         var popup = new FeatureIntroPopup(content);
                         if (owner != null && owner.IsLoaded) popup.Owner = owner;
@@ -402,6 +474,109 @@ namespace ConditioningControlPanel
                     "Switch back to your own assets whenever you like. The choice lives at the top of the Assets tab."
                 },
                 Footer = "Free for everyone - an empty assets folder should never be a dead end. It is adult content, so only switch it on if you want to see it."
+            },
+
+            // ------------------------------------------------------------------------------
+            // v6.8.0 door tour. The restructure moved surfaces users already knew, so these five
+            // explain a RELOCATION as much as a feature - which is why each one says where the
+            // thing used to be. Their keys are NOT tab keys (a rack is not a tab, a bubble is not
+            // a tab), so every trigger passes its owning tab explicitly to MaybeShowFeatureIntro;
+            // see the doorTab overload in MainWindow.TabNavigation.cs.
+            // ------------------------------------------------------------------------------
+
+            ["studio-rack"] = new FeatureIntroContent
+            {
+                Key = "studio-rack",
+                Glyph = "🎛️",
+                RailTitle = "The Studio",
+                Title = "🎛️  The Studio Rack",
+                Tagline = "Every effect in one rack, instead of a popup for each.",
+                Accent = "#9B8CFF",
+                Bullets = new[]
+                {
+                    "The dashboard popups are gone. Flashes, subliminals, bubbles, bouncing text and the rest are all rows in the list down the left.",
+                    "Left-click a row to open its panel. Right-click it to flip that effect on or off without opening anything at all.",
+                    "The dot on each row is live: at a glance you can see everything that is currently running.",
+                    "Dashboard tiles land here too, on the module you clicked. Same dials, one room."
+                },
+                Footer = "Free. Haptics is a module of this rack now, and still introduces itself when you open it."
+            },
+
+            ["play-wall"] = new FeatureIntroContent
+            {
+                Key = "play-wall",
+                Glyph = "🎪",
+                RailTitle = "The Play Wall",
+                Title = "🎪  The Play Wall",
+                Tagline = "The Lab moved in here, and brought the whole toy box.",
+                Accent = "#FF9F45",
+                Bullets = new[]
+                {
+                    "This is where the Lab page went. Down the Rabbit Hole sits across the top, and every other big toy is a card below it.",
+                    "TOGETHER is the things you do with someone else, EYES is anything your webcam watches, SESSIONS is anything on a timer, and MORE is the odds and ends.",
+                    "The rail on the left holds the rest of this door: Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer and Remote Control.",
+                    "Locked cards still say what they are, so you can always read the room before you buy into it."
+                },
+                Footer = "The door is free to walk through. Some of what is behind it is premium, and each card says so on its face."
+            },
+
+            ["profile-hub"] = new FeatureIntroContent
+            {
+                Key = "profile-hub",
+                Glyph = "🫧",
+                RailTitle = "Your Bubble",
+                Title = "🫧  The Header Bubble",
+                Tagline = "That little avatar in the top-right corner is you.",
+                Accent = "#6EA8FF",
+                Bullets = new[]
+                {
+                    "Hover it and an account panel drops down: your name and tier, your level and XP bar, your badges, and quick jumps to Profile, Achievements and Settings.",
+                    "Click it instead of hovering and you land straight on this Trainer Card.",
+                    "It reacts while you play. XP pulses it, a level-up bounces it, an achievement rings it in gold.",
+                    "The bug button moved to the title bar, up beside minimise. Same report, new address - the bubble took its old seat."
+                },
+                Footer = "Free, and always on screen. Your photo only appears here if profile-picture sharing is switched on."
+            },
+
+            ["daily-free"] = new FeatureIntroContent
+            {
+                Key = "daily-free",
+                Glyph = "🎁",
+                RailTitle = "Free Today",
+                Title = "🎁  Today's Free Feature",
+                Tagline = "One premium feature, genuinely free, every single day.",
+                Accent = "#FFD700",
+                Bullets = new[]
+                {
+                    "The box on the Dashboard names today's pick. Hover it and the tile turns over to show you what you have got.",
+                    "It really is unlocked: click through and the feature simply works. No trial, no timer, nothing to enter.",
+                    "The gold tag is how you spot it. At midnight the wheel turns and tomorrow's feature takes its place.",
+                    "The same feature never comes back inside three days, so the box is worth a look every morning."
+                },
+                Footer = "Free for everyone. If you already have premium you own the whole pool anyway, and the box just says hello."
+            },
+
+            // Written now, dark for almost everybody: the vat ships behind the server's rollout
+            // dial and the trigger (MainWindow.ProfileVat.ApplyDescentToVat) only fires once the
+            // jar is actually armed AND on screen, so a card for a thing that does not exist can
+            // never appear. Says nothing about the companion's avatar tube - different feature,
+            // different window, and confusing the two is the one mistake this copy must not make.
+            ["descent-vat"] = new FeatureIntroContent
+            {
+                Key = "descent-vat",
+                Glyph = "🫙",
+                RailTitle = "The Vat",
+                Title = "🫙  The Vat",
+                Tagline = "Today's XP, poured into glass.",
+                Accent = "#66E0C0",
+                Bullets = new[]
+                {
+                    "Your portrait is inside a jar on the Trainer Card now, and how full that jar is, is what you have earned today.",
+                    "Earn while you are looking at it and the faucet swings in and pours. The percentage under the glass is the same number, said plainly.",
+                    "It fills against a daily cap that grows with your level, so a full jar always means the same thing: you are done for today.",
+                    "Overnight it empties, and tomorrow you start pouring again."
+                },
+                Footer = "Rolling out gradually. If you can see the jar, you are in."
             },
 
             [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent

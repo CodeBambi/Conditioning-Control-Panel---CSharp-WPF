@@ -144,6 +144,64 @@ namespace ConditioningControlPanel.Services
             SpendXPOnLevels(settings, inOfflineMode);
 
             XPChanged?.Invoke(this, settings.PlayerXP);
+
+            AnnounceFirstWebXpClaim(amount);
+        }
+
+        /// <summary>Seen-list key for the one-time web XP notice. Deliberately parked in
+        /// <c>SeenFeatureIntros</c> even though this is a toast and not a card: that list is a
+        /// generic "this install has been told" set, and borrowing it costs no new settings
+        /// property. There is no matching entry in <c>FeatureIntros.All</c>, so nothing can ever
+        /// open a modal for it.</summary>
+        private const string WebXpNoticeKey = "web-xp";
+
+        /// <summary>
+        /// THE FIRST TIME ONLY: a plain toast explaining where the XP came from.
+        ///
+        /// <para>Web XP arrives silently through the /v2/user/sync handshake, which means a user
+        /// who earned it on the site can watch the desktop bar jump - or a whole level land - for
+        /// no reason they performed. That reads as a bug, and it has been reported as one before.
+        /// One sentence, once per install, and never again.</para>
+        ///
+        /// <para>A toast rather than a <c>FeatureIntroPopup</c> card on purpose: a sync
+        /// can settle at any moment, including mid-session, and the notification surface is the
+        /// only one in the app that cannot interrupt anything. It also needs no session guard
+        /// for the same reason.</para>
+        /// </summary>
+        private static void AnnounceFirstWebXpClaim(double amount)
+        {
+            try
+            {
+                if (App.Settings?.Current?.SeenFeatureIntros.Contains(WebXpNoticeKey) == true) return;
+
+                // The claim is applied from ProfileSyncService's async pipeline, so the toast
+                // (which builds real WPF elements) has to be marshalled - and the seen-flag is
+                // spent on that thread too, next to the show, so two syncs racing can only ever
+                // produce one notice.
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        var live = App.Settings?.Current;
+                        if (live == null || live.SeenFeatureIntros.Contains(WebXpNoticeKey)) return;
+                        live.SeenFeatureIntros.Add(WebXpNoticeKey);
+                        App.Settings?.Save();
+
+                        // Literal English, like every other one-shot explainer in the app (see
+                        // the note on FeatureIntroContent) - nine translated rows for a string
+                        // each install sees exactly once is not a trade worth making.
+                        App.Notifications?.Show(
+                            $"+{amount:0} XP from your web account - descending is account-wide now.",
+                            NotificationType.Success,
+                            TimeSpan.FromSeconds(9));
+                    }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Web XP notice failed to show"); }
+                }));
+            }
+            catch (Exception ex) { App.Logger?.Debug("Web XP notice gate failed: {E}", ex.Message); }
         }
 
         /// <summary>

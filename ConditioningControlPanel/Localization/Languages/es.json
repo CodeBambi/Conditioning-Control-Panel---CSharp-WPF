@@ -4023,6 +4023,7 @@
   "nav_door_settings": "Ajustes",
   "account_chip_sign_in": "Iniciar sesión",
   "account_chip_signed_in": "Sesión iniciada",
+  "profile_bubble_achievements": "{0}/{1} logros",
   "tooltip_account_chip": "Cuenta y suscripción",
   "tooltip_mod_chip": "Mod activo",
   "tiergate_denied_premium": "{0} es para colaboradores - cualquier nivel de Patreon lo desbloquea.",

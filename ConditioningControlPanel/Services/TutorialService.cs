@@ -130,7 +130,8 @@ namespace ConditioningControlPanel.Services
         DeeperEditorInteractiveLocalAudio, // Interactive on-rails Local Audio walkthrough - Part 1
         DeeperEditorInteractiveLocalAudioPart2, // Part 2 - runs in DeeperEditorWindow (audio mode: waveform preview, audio-only triggers)
         DeeperEditorInteractiveLocalVideo, // Interactive on-rails Local Video walkthrough - Part 1
-        DeeperEditorInteractiveLocalVideoPart2 // Part 2 - runs in DeeperEditorWindow (video mode: showcases AttentionLost gaze trigger)
+        DeeperEditorInteractiveLocalVideoPart2, // Part 2 - runs in DeeperEditorWindow (video mode: showcases AttentionLost gaze trigger)
+        UpgradeTour     // "What moved in 6.8" - the 6.7.4 -> 6.8 relocation map for upgraders
     }
 
     public class TutorialService
@@ -179,7 +180,33 @@ namespace ConditioningControlPanel.Services
             // ("lab" would still resolve — ExpandDoorForTab canonicalises the alias — but a door
             // map that names a deleted view is how the next reader learns the wrong thing.)
             ["BtnLab"] = "play",
-            ["BtnPatreonExclusives"] = "exclusives"
+            ["BtnPatreonExclusives"] = "exclusives",
+
+            // The rest of the rail, backfilled. Every key below is a live x:Name in
+            // MainWindow.xaml and every VALUE is a live ShowTab key that NavDoorMap
+            // (MainWindow.TabNavigation.cs) files under the named door - a step that spotlights
+            // one of these entries now opens the door that actually contains it instead of
+            // whichever door happened to be open.
+            // Studio door:
+            ["BtnNavStudio"] = "studio",
+            ["BtnNavHaptics"] = "haptics",
+            // Companion door:
+            ["BtnNavAwareness"] = "awareness",
+            ["BtnNavBambiTakeover"] = "bambitakeover",
+            ["BtnNavSheListening"] = "shelistening",
+            // Play door:
+            ["BtnNavGradedIntake"] = "gradedintake",
+            ["BtnNavLockdown"] = "lockdown",
+            ["BtnNavBlinkTrainer"] = "blinktrainer",
+            ["BtnNavRemoteControl"] = "remotecontrol",
+            // Library door. These four entries open DIALOGS rather than tabs (BtnManageMods_Click,
+            // BtnCatalogue_Click, BtnManagePhrases_Click, BtnNavMediaLog_Click), so they have no
+            // ShowTab key of their own - "assets" is the Library door's only/default tab and is
+            // what resolves the door, exactly as BtnOpenAssetsTop does above.
+            ["BtnNavMods"] = "assets",
+            ["BtnNavCatalogue"] = "assets",
+            ["BtnNavPhrases"] = "assets",
+            ["BtnNavMediaLog"] = "assets"
         };
 
         public event EventHandler<TutorialStep>? StepChanged;
@@ -255,6 +282,7 @@ namespace ConditioningControlPanel.Services
                 TutorialType.DeeperEditorInteractiveLocalAudioPart2 => CreateDeeperEditorInteractiveLocalAudioPart2Steps(),
                 TutorialType.DeeperEditorInteractiveLocalVideo => CreateDeeperEditorInteractiveLocalVideoSteps(),
                 TutorialType.DeeperEditorInteractiveLocalVideoPart2 => CreateDeeperEditorInteractiveLocalVideoPart2Steps(),
+                TutorialType.UpgradeTour => CreateUpgradeTourSteps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -667,6 +695,181 @@ namespace ConditioningControlPanel.Services
             };
         }
 
+        /// <summary>
+        /// "What moved in 6.8" - the tour written for someone who already knew 6.7.4. It answers
+        /// one question per step ("where did my tab go", "why does clicking do the other thing")
+        /// rather than teaching the app, so it is deliberately short and never opens a dialog.
+        ///
+        /// <para>Same two mechanical rules as <see cref="CreateFullTourSteps"/>: a door step is
+        /// never <c>Center</c> (UpdateSpotlight early-returns for centred cards before it measures
+        /// anything), and <c>RequiresTab</c> carries the door's DEFAULT tab so
+        /// <see cref="DoorTabKeyFor"/> hands the right key to ExpandDoorForTab.</para>
+        ///
+        /// <para>Every TargetElementName below is a live x:Name - a name that does not resolve
+        /// degrades SILENTLY to an unspotlit centred card, which is how three steps of the old
+        /// tours rotted unnoticed (see the Phase 8 notes on "BtnProgression" and "FlashSection").
+        /// The two dashboard targets live inside <c>SettingsTabView</c>, which TutorialOverlay
+        /// reaches because FindElementByName walks the visual tree rather than trusting a single
+        /// namescope. <c>MysteryFlipHost</c>, not <c>CardMystery</c>: the card itself is collapsed
+        /// while the plate is showing its reveal face (MainWindow.DashboardFx flips it on hover),
+        /// and a Collapsed target has no bounds.</para>
+        /// </summary>
+        private List<TutorialStep> CreateUpgradeTourSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "ut_welcome",
+                    Icon = "~",
+                    Title = "Everything Moved",
+                    Description = "v6.8 rebuilt the whole layout, so nothing is quite where you left it.\n\n" +
+                                  "Here is the 60-second map. Nine short steps and you will know where all of " +
+                                  "your old tabs went.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_rail",
+                    Icon = ">",
+                    Title = "The Tab Strip Became A Rail",
+                    Description = "The two rows of tabs are gone. Everything now lives behind six doors down " +
+                                  "the left edge, with Settings pinned at the bottom.\n\n" +
+                                  "Hover the rail and it opens; click a door and its pages fold out underneath it.",
+                    // The rail Border itself (MainWindow.xaml) - the whole column is the point here,
+                    // not any one door. RequiresTab lands us on Home so the Home door is the open one.
+                    TargetElementName = "NavSidebar",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_map",
+                    Icon = "?",
+                    Title = "Where Your Tabs Went",
+                    Description = "Old tab  ->  its door now\n\n" +
+                                  "• Dashboard  ->  Home\n" +
+                                  "• Presets, Haptics, the tile popups  ->  Studio\n" +
+                                  "• Companion, Takeover, She's Listening, Awareness  ->  Companion\n" +
+                                  "• Lab, Deeper, Exclusives, Graded Intake, Lockdown,\n" +
+                                  "   Blink Trainer, Remote Control, Available Subjects  ->  Play\n" +
+                                  "• Profile, Quests, Achievements, Enhancements,\n" +
+                                  "   Programs, Leaderboard  ->  You\n" +
+                                  "• Assets, Mods, Catalogue, Phrase Manager, Media Log  ->  Library\n\n" +
+                                  "Two renames worth knowing: the Lab page is gone (its contents are cards on " +
+                                  "the Play wall), and Enhancements is now the Skill Tree.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_studio",
+                    Icon = ">",
+                    Title = "Studio",
+                    Description = "Every dashboard tile used to pop open its own little window. Those windows " +
+                                  "are gone: the tile now opens the matching module in this rack, where all of " +
+                                  "the settings live side by side.\n\n" +
+                                  "Presets & Sessions and Haptics are entries of this door too.",
+                    TargetElementName = "DoorStudio",
+                    RequiresTab = "studio",
+                    // The rack restores whatever module was last selected, so pick one that matches
+                    // the tile this tour spotlights two steps later.
+                    OnBeforeTab = () => FocusStudioRack("flash"),
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_play",
+                    Icon = ">",
+                    Title = "Play",
+                    Description = "The Lab tab no longer exists. Everything it held is a card on this wall, " +
+                                  "next to Deeper, Exclusives, Graded Intake, Lockdown, the Blink Trainer, " +
+                                  "Remote Control and Available Subjects.\n\n" +
+                                  "Locked cards stay visible on purpose, so you can see what a thing is before " +
+                                  "you decide whether you want it.",
+                    TargetElementName = "DoorPlay",
+                    RequiresTab = "play",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_you",
+                    Icon = ">",
+                    Title = "You",
+                    Description = "Your Profile, Quests, Achievements, Programs and the Leaderboard, all under " +
+                                  "one door.\n\n" +
+                                  "Enhancements moved here as well, under its new name: the Skill Tree.",
+                    TargetElementName = "DoorYou",
+                    RequiresTab = "discord",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_settings",
+                    Icon = "⚙",
+                    Title = "Settings, In Eight Sections",
+                    Description = "Pinned to the bottom of the rail and rebuilt: General, Audio, Devices, " +
+                                  "Performance, Notifications, Account, Data and Updates.\n\n" +
+                                  "Devices is the one that catches people out. Your webcam, your microphone, " +
+                                  "the blink kill switch, gaze restriction, the panic key and the global hotkeys " +
+                                  "are all configured there now, and nowhere else.",
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
+                    // Runs after the tab switch, so the page behind the spotlight is already showing
+                    // the section the card is talking about.
+                    OnActivate = AppSettingsTutorialPrep.Focus("devices"),
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_gestures",
+                    Icon = "!",
+                    Title = "Your Clicks Swapped",
+                    Description = "This is the one that will surprise you.\n\n" +
+                                  "LEFT-click a dashboard tile (or a rail chip) to OPEN its page.\n" +
+                                  "RIGHT-click it to turn that feature on or off without leaving Home.\n\n" +
+                                  "In 6.7.4 it was the other way round. Muscle memory will fight you for an " +
+                                  "evening, then it will not.",
+                    TargetElementName = "CardFlash",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_daily_free",
+                    Icon = "?",
+                    Title = "The ? Box",
+                    Description = "Not decoration, and not a tease: one premium feature is genuinely free for " +
+                                  "everyone, all day, every day. Hover the box to see which one today is.\n\n" +
+                                  "It changes at midnight, so it is worth a look each time you open the app.",
+                    TargetElementName = "MysteryFlipHost",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_palette",
+                    Icon = "⌨",
+                    Title = "Ctrl+K Finds Anything",
+                    Description = "Six doors is a lot to remember, so you do not have to.\n\n" +
+                                  "Press Ctrl+K anywhere in the app, type a few letters of a setting - " +
+                                  "\"panic\", \"blink\", \"volume\" - and it takes you straight to it.\n\n" +
+                                  "If you only keep one thing from this tour, keep this one.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_done",
+                    Icon = "✓",
+                    Title = "That's The Whole Map",
+                    Description = "Doors on the left, gestures swapped, Ctrl+K for everything else.\n\n" +
+                                  "You can replay this tour any time from the ? button - it is the first row " +
+                                  "in there, \"What moved in 6.8\".",
+                    TargetElementName = "BtnMainHelp",
+                    TextPosition = TutorialStepPosition.Left
+                }
+            };
+        }
+
         private List<TutorialStep> CreateSettingsSteps()
         {
             return new List<TutorialStep>
@@ -916,12 +1119,16 @@ namespace ConditioningControlPanel.Services
                     Description = "No feature is locked behind a level - every effect is yours from " +
                                   "level 1, in the Studio rack.\n" +
                                   "Levels buy the extras instead:\n" +
-                                  "• Skill points for the Skill Tree (You ▸ Skill Tree)\n" +
+                                  "• Skill points to spend in the Skill Tree - it lives behind the You door, " +
+                                  "under the name Enhancements used to have\n" +
                                   "• Rank titles and stat pills on your XP bar\n" +
                                   "• Extra companion personalities at higher levels",
                     // Phase 8: the old copy listed Lvl 5/10/20/75 gates that were removed long ago
                     // (gap-report T-4). RequiresTab stays "progression" - the key is API, and its
                     // redirect lands on Home, which is the right backdrop for a levelling beat.
+                    // Deliberately a copy fix, not a re-target: this is a centred card standing on
+                    // Home, and the Skill Tree view has no stable x:Name worth spotlighting, so the
+                    // card names the door instead of pretending to point at it.
                     RequiresTab = "progression",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -1298,10 +1505,11 @@ namespace ConditioningControlPanel.Services
                     Id = "pat_ai",
                     Icon = "🤖",
                     Title = "AI Chat",
-                    Description = "Chat with your AI companion!\n" +
-                                  "• Double-click the avatar to chat\n" +
+                    Description = "Signing in here is what switches her AI on. The chat itself lives over in " +
+                                  "the Companion door:\n" +
+                                  "• Double-click the avatar in her tube to chat\n" +
                                   "• She remembers conversation context\n" +
-                                  "• Personality adapts to your interactions",
+                                  "• Her personality is chosen in Companion ▸ Workshop",
                     RequiresTab = "appsettings",
                     OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
@@ -1311,7 +1519,8 @@ namespace ConditioningControlPanel.Services
                     Id = "pat_awareness",
                     Icon = "👁",
                     Title = "Window Awareness",
-                    Description = "Your companion knows what you're doing:\n" +
+                    Description = "Over in the Companion door, the Awareness entry lets her notice what " +
+                                  "you're doing:\n" +
                                   "• Detects active windows\n" +
                                   "• Comments on your activity\n" +
                                   "• Privacy: Only window titles are read",
@@ -1324,7 +1533,8 @@ namespace ConditioningControlPanel.Services
                     Id = "pat_slut",
                     Icon = "🔥",
                     Title = "Slut Mode",
-                    Description = "Enable explicit AI responses:\n" +
+                    Description = "Explicit AI responses, switched on with her other permissions over in " +
+                                  "the Companion door:\n" +
                                   "• More provocative messages\n" +
                                   "• Adult-themed interactions\n" +
                                   "• Toggle on/off anytime",
@@ -1352,7 +1562,11 @@ namespace ConditioningControlPanel.Services
                     Id = "ava_tube",
                     Icon = "🔮",
                     Title = "The Avatar Tube",
-                    Description = "Your companion lives in the tube on the right side.\n" +
+                    // AvatarTubeWindow.Windowing.cs UpdatePosition hangs the attached tube to the
+                    // LEFT of the main window (newLeft = parent.Left - width - offset), so the old
+                    // "right side" was simply wrong.
+                    Description = "Your companion lives in the glass tube attached to the left edge of the " +
+                                  "main window.\n" +
                                   "She's always there watching and reacting to what happens in the app.",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -1381,11 +1595,18 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "ava_evolution",
                     Icon = "🌟",
-                    Title = "Evolution",
-                    Description = "Your avatar evolves as you level up!\n" +
-                                  "Different appearance stages unlock at:\n" +
-                                  "• Level 1, 10, 25, 50, 75\n" +
-                                  "Keep leveling to see all forms!",
+                    Title = "Her Looks",
+                    // The old copy listed Level 1/10/25/50/75 gates that no longer exist:
+                    // AvatarTubeWindow.Avatar.cs IsAvatarSetUnlocked returns true unconditionally
+                    // ("Feature level gating has been removed - every avatar set is always
+                    // unlocked") and GetAvatarSetForLevel returns a constant. The arrows are
+                    // BtnPrevAvatar / BtnNextAvatar, shown by UpdateNavigationArrows whenever more
+                    // than one set is available.
+                    Description = "She has a whole wardrobe of looks, and none of them are locked - " +
+                                  "every one is available from the start.\n" +
+                                  "• Use the little arrows beside the tube to flip through them\n" +
+                                  "• The look you pick is remembered\n" +
+                                  "Installing a mod can change the line-up entirely - mods bring their own.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1729,12 +1950,20 @@ namespace ConditioningControlPanel.Services
                 {
                     Id = "aw_advanced",
                     Icon = "\uD83D\uDD27",
-                    Title = "Advanced Editor",
-                    Description = "When you want more control \u2014 swap the clicker sound, change the praise line, " +
-                                  "add XP per fire, send time to a Chaster lock \u2014 open the Advanced editor.\n\n" +
+                    Title = "Your Keyword Triggers",
+                    Description = "This panel is your keyword list \u2014 every word the engine listens for, and what " +
+                                  "it does when it catches one.\n\n" +
+                                  "Want more control (swap the clicker sound, change the praise line, add XP per " +
+                                  "fire, send time to a Chaster lock)? The \"Customize individual triggers " +
+                                  "(advanced)\" link just below opens the full editor.\n\n" +
                                   "Hit Next to peek inside.",
                     RequiresTab = "awareness",
-                    TargetElementName = "LnkAwarenessAdvanced",
+                    // A <Hyperlink> can NEVER be a spotlight target: it is a FrameworkContentElement,
+                    // and TutorialOverlay.FindElementByName only walks FrameworkElements - so the old
+                    // "LnkAwarenessAdvanced" target resolved to nothing and this step silently
+                    // degraded to an unspotlit card. KeywordPanel (the KeywordTriggersPanel at
+                    // Views/Tabs/AwarenessTabView.xaml:483) is the surface the copy introduces.
+                    TargetElementName = "KeywordPanel",
                     TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep

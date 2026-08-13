@@ -314,7 +314,13 @@ namespace ConditioningControlPanel
                     {
                         IsStartupDialogShowing = false;
                     }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
+                    // host + avatar animations) that Loaded-priority items are starved and
+                    // silently never run - the same starvation that stopped the first-launch tour
+                    // ever starting (see MainWindow.xaml.cs, the first-launch branch's comment).
+                    // A recap that never posts also never clears IsStartupDialogShowing, so this
+                    // one is worse than a missing card.
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
             catch (Exception ex)
             {
@@ -356,18 +362,43 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Version changed from {OldVersion} to {NewVersion}, showing What's New",
                         string.IsNullOrEmpty(lastSeenVersion) ? "(none)" : lastSeenVersion, currentVersion);
 
+                    // Claim the flag HERE, at queue time, not inside the lambda below: everything
+                    // that waits on it (the mod picker, the update dialog, FeatureIntroPopup) can
+                    // otherwise run in the gap between this method returning and the dispatcher
+                    // getting round to the dialog. MainWindow.xaml.cs papers over that gap with a
+                    // Task.Delay(1500) before it starts watching; claiming up front is what makes
+                    // the flag honest. The finally below is the single place it is released.
+                    IsStartupDialogShowing = true;
+                    App.Logger?.Information("What's New dialog queued, setting IsStartupDialogShowing=true");
+
                     // Delay slightly to let the window fully load
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         try
                         {
-                            // Set flag BEFORE showing MessageBox so update dialog knows to wait
-                            IsStartupDialogShowing = true;
-                            App.Logger?.Information("What's New dialog showing, setting IsStartupDialogShowing=true");
-
                             var whatsNew = new WhatsNewDialog(
                                 $"What's New in v{currentVersion}",
-                                Services.UpdateService.CurrentPatchNotes)
+                                Services.UpdateService.CurrentPatchNotes,
+                                // The upgrade tour offer. No extra AppSettings flag guards it: the
+                                // LastSeenVersion gate above already scopes this dialog to one
+                                // showing per version, and the ? help panel carries the permanent
+                                // re-run row.
+                                tourAction: () =>
+                                {
+                                    // The dialog posts this at Normal priority AFTER ShowDialog
+                                    // unwinds, so the finally below has already released the flag.
+                                    // Asserting it here anyway is deliberate: the tour opens its own
+                                    // window, and a tour that starts while anything still believes a
+                                    // startup dialog is up is how the overlay ends up underneath a
+                                    // modal nobody can see.
+                                    IsStartupDialogShowing = false;
+                                    try { StartTutorial(Services.TutorialType.UpgradeTour); }
+                                    catch (Exception ex)
+                                    {
+                                        App.Logger?.Warning(ex, "Could not start the v6.8 upgrade tour");
+                                    }
+                                },
+                                tourButtonText: "Show me around (60s)")
                             {
                                 Owner = this
                             };
@@ -390,7 +421,13 @@ namespace ConditioningControlPanel
                             IsStartupDialogShowing = false;
                             App.Logger?.Information("What's New dialog dismissed, setting IsStartupDialogShowing=false");
                         }
-                    }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
+                    // host + avatar animations) that Loaded-priority items are starved and
+                    // silently never run - the documented reason the first-launch tour never
+                    // started (see MainWindow.xaml.cs, the first-launch branch's comment). Since
+                    // the flag is now claimed at queue time, a starved lambda would also leave
+                    // IsStartupDialogShowing stuck true.
+                    }), System.Windows.Threading.DispatcherPriority.Normal);
                 }
             }
             catch (Exception ex)

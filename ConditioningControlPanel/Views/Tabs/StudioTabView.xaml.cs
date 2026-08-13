@@ -396,6 +396,38 @@ namespace ConditioningControlPanel.Views.Tabs
                 Grid.SetColumn(e.Label, 1);
                 grid.Children.Add(e.Label);
 
+                // v6.8.0 NEW pill: remove in 6.9
+                // Brain Drain came back from the dead in this release, so the rack row that
+                // hosts it says so for one cycle. Literal colours, no TryFindResource: this is
+                // the same pink the rail's pills use and it must not depend on a theme key.
+                // The extra column is added to THIS row's grid only (the grid is per-row), and
+                // the dot below now takes the last column rather than a hard-coded 2, so a
+                // badged row keeps icon | label | pill | dot in that order.
+                if (string.Equals(e.Key, "braindrain", StringComparison.OrdinalIgnoreCase))
+                {
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    var newPill = new Border
+                    {
+                        CornerRadius = new CornerRadius(6),
+                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
+                        BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                        BorderThickness = new Thickness(1),
+                        Padding = new Thickness(4, 0, 4, 0),
+                        Margin = new Thickness(6, 0, 0, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Child = new TextBlock
+                        {
+                            Text = "NEW",
+                            FontFamily = new FontFamily("Consolas"),
+                            FontSize = 9,
+                            FontWeight = FontWeights.Bold,
+                            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7)),
+                        },
+                    };
+                    Grid.SetColumn(newPill, 2);
+                    grid.Children.Add(newPill);
+                }
+
                 if (e.Dot != null)
                 {
                     e.DotShape = new Ellipse
@@ -405,7 +437,9 @@ namespace ConditioningControlPanel.Views.Tabs
                         VerticalAlignment = VerticalAlignment.Center,
                         Margin = new Thickness(6, 0, 2, 0),
                     };
-                    Grid.SetColumn(e.DotShape, 2);
+                    // Last column, not a fixed 2: the NEW pill above inserts a column on the row
+                    // it badges (v6.8.0). Unbadged rows still resolve to 2.
+                    Grid.SetColumn(e.DotShape, grid.ColumnDefinitions.Count - 1);
                     grid.Children.Add(e.DotShape);
                 }
 

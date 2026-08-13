@@ -411,6 +411,10 @@ namespace ConditioningControlPanel
                 App.Achievements.AchievementUnlocked += OnAchievementUnlockedInMainWindow;
             }
 
+            // Header profile bubble: avatar face, hover account menu, live reactions
+            // (XP pulse / level-up burst / flash wobble). MainWindow.ProfileBubble.cs.
+            InitializeProfileBubble();
+
             // Subscribe to quest events
             if (App.Quests != null)
             {
