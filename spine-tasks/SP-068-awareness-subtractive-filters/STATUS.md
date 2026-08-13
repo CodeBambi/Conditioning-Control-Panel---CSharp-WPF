@@ -1,10 +1,10 @@
 ## STATUS: SP-068 — Three subtractive privacy filters over the landed awareness and reply paths
-**Current Step:** Step 4 — Record + pre-completion consult
-**Last Updated:** 2026-08-13 (worker, steps 1-3 complete; step 4 in progress)
+**Current Step:** Complete — all 5 steps done
+**Last Updated:** 2026-08-13 (worker, all steps complete; .DONE)
 **Blockers:** none
 
 **Floor at authoring:** 903 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-067, integrate `75a09d61`.
-**NEW EXACT COUNTS (this packet):** to be recorded by the worker — this packet adds facts; bump `total` in the same commit as the tests that move it.
+**NEW EXACT COUNTS (this packet): 946 unit / 35 headless / 2 skipped on Windows** (the same 2 pinned Linux-gated names), build 0W/0E — floor bumped 903→946 in the same commit as the +43 facts.
 
 **The three filters in one line each:**
 - **F1 (audit row A6, ADOPT):** private/incognito window titles are dropped before anything is counted or packaged — WPF has **two** marker lists to reconcile into **one** port definition.
@@ -42,7 +42,7 @@
 - [x] Landed awareness/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
 - [x] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
 
-### Step 4: Record + pre-completion consult — 🔄 In progress
+### Step 4: Record + pre-completion consult — ✅ Complete
 - [x] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, marker reconciliation, blank-title decision, scrubber values + not-ported cap, F3 insertion point + persistence delta, emptied-reply typing, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
 - [x] **Honesty cell** — including: F1/F2 harden a path with **no product consumer today** (F3's path is live); execution vs reading per filter; this is **three rows of one audit table filtered at authoring**, not a verdict on Her Room, and row `:46` stays OPEN; deferred halves named (sigil unwrap, C3 title rewrite, 120-char cap, headed rows A11/D6/D11); **Linux unproven**; filters are lossy by design
 - [x] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
