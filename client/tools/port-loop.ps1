@@ -26,6 +26,8 @@ param(
     [int]$MaxHours = 12,
     [string]$Model = 'anthropic/claude-opus-5',
     [string]$Prompt = 'client/port.txt',
+    [string]$AuditModel = 'kimi-coding/kimi-for-coding-highspeed',
+    [switch]$NoAudit,
     [switch]$DryRun
 )
 
@@ -85,9 +87,62 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     Write-Loop "running phase in a fresh session -> $log"
     if ($DryRun) { Write-Loop "DRYRUN: $pi -p --model $Model @$Prompt"; continue }
 
+    $headBefore = (& git rev-parse HEAD).Trim()
     & $pi -p --model $Model -xt ask_user "@$Prompt" *>&1 | Tee-Object -FilePath $log | Out-Null
     $code = $LASTEXITCODE
-    Write-Loop "phase exit=$code"
+    $headAfter = (& git rev-parse HEAD).Trim()
+    Write-Loop "phase exit=$code head $($headBefore.Substring(0,8)) -> $($headAfter.Substring(0,8))"
+
+    # 3. BLIND AUDIT — only when the phase moved HEAD.
+    #
+    # A fresh extension-less, read-only pi process re-derives the floor from the pushed tree.
+    # It cannot see the phase's conversation, has no spine/consult/MCP tools, and cannot write
+    # anything: it can only read the repo and run commands. That is the whole point — every
+    # failure this project has actually shipped (stale gate evidence, a red base, a vacuously
+    # green pin) was self-certified by the same context that produced it. Design borrowed from
+    # pi-goal-list-loop-audit's detached auditor; the package itself is NOT installed (it drives
+    # its own goal queue and would compete with spine and the task board).
+    if ($code -eq 0 -and $headAfter -ne $headBefore -and -not $NoAudit) {
+        $auditLog = Join-Path $logDir ("{0:000}-audit.log" -f $i)
+        Write-Loop "blind audit of $($headAfter.Substring(0,8)) -> $auditLog"
+
+        $auditPrompt = @'
+You are a BLIND AUDITOR. You did not do this work and cannot see the session that did. Judge
+only what the repository proves right now. Do not fix anything, do not commit, do not write files.
+
+In C:/Code/Conditioning-Control-Panel---CSharp-WPF on branch feat/crossplatform:
+
+1. Read the NEWEST entry of client/docs/port-digest.md and the newest wave section of
+   spine-tasks/CONTEXT.md. Note the exact unit/headless test counts they claim.
+2. Run, and read the real output:
+     dotnet build client/CcpClient.sln -c Debug --nologo
+     dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
+     dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
+3. Check: build 0 warnings 0 errors; the counts EXACTLY match the claim; SKIPPED is 0 (a skip is
+   a failure here even though the exit code is 0 - it is the vacuous-green class); `git status
+   --short` is empty; HEAD equals origin/feat/crossplatform (run `git fetch origin` first).
+
+FAIL if any check fails, if a claimed count and the observed count differ in either direction,
+or if you cannot verify a claim. Passing tests do not excuse a mismatched number.
+
+Your LAST line must be exactly one of:
+VERDICT: PASS
+VERDICT: FAIL - <one line naming the check, the claimed value and the observed value>
+'@
+
+        & $pi -p -ne -ns -nc -np --no-session -t read,bash,grep,find,ls --model $AuditModel $auditPrompt *>&1 |
+            Tee-Object -FilePath $auditLog | Out-Null
+
+        $verdict = (Select-String -Path $auditLog -Pattern '^VERDICT:' | Select-Object -Last 1).Line
+        if (-not $verdict) { $verdict = 'VERDICT: FAIL - auditor produced no verdict line' }
+        Write-Loop "audit -> $verdict"
+
+        if ($verdict -notmatch '^VERDICT:\s*PASS') {
+            Set-Content -Path $stopFile -Value "blind audit failed at $headAfter`n$verdict`nlog: $auditLog"
+            Write-Loop "halting for an operator - the tree does not support its own claims"
+            break
+        }
+    }
 
     if ($code -ne 0) {
         $consecutiveFailures++
