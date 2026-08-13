@@ -567,7 +567,15 @@ namespace ConditioningControlPanel
                         // the patch notes silently lost the picker until the next launch (play-test
                         // scenario C caught exactly that). Past 5 min we still defer to next launch,
                         // which ModPickerShown=false keeps armed.
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        //
+                        // App.Tutorial.IsActive is in the predicate since v6.8.0: What's New clears
+                        // IsStartupDialogShowing in its finally BEFORE the "Show me around (60s)"
+                        // action it queued gets to run, so without this check the picker opened
+                        // modally ON TOP of the running upgrade tour's spotlight (flagged in the
+                        // 0812 build review). The tour is minutes at most, well inside the 5-min
+                        // budget this loop already spends on the patch notes.
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
+                                                    || App.Tutorial?.IsActive == true); i++)
                         {
                             await Task.Delay(500);
                         }
@@ -577,7 +585,8 @@ namespace ConditioningControlPanel
                             await Task.Delay(500);
                         }
 
-                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing && IsLoaded)
+                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing
+                            && App.Tutorial?.IsActive != true && IsLoaded)
                         {
                             // Pre-ticks the card for the mod they were already running, so one press
                             // restores what the installer removed.

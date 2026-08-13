@@ -88,7 +88,7 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorJustDrop, DoorSettings,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorJustDrop, DoorWebApp, DoorSettings,
                     BtnSettings,
                     BtnNavStudio, BtnPresets, BtnNavHaptics,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,

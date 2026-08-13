@@ -597,6 +597,21 @@ namespace ConditioningControlPanel
             ("appsettings", "appsettings", new[] { "appsettings" }),
         };
 
+        /// <summary>
+        /// v6.8.0: rail doors that LAUNCH instead of navigating - full medallion treatment, no
+        /// tab, no NavDoorMap row (a map row drags in a default tab, a ShowTab case and a
+        /// palette door row, none of which a browser link has). CacheNavDoorRows walks
+        /// NavDoorMap + this list so the tile growth, label rise and fx animate for them too;
+        /// the "you are here" ring never lights because ChromeFx never targets them.
+        /// Each needs its own Click handler - NavDoor_Click on an unmapped Tag is a logged no-op.
+        /// </summary>
+        internal static readonly string[] NavLauncherDoors = { "webapp" };
+
+        /// <summary>Where the Web App door (and every other web nudge) points. The dashboard
+        /// root, not the link-device page: sign-in and device linking are both discoverable from
+        /// there, and the safe-room rule applies on arrival.</summary>
+        internal const string WebAppUrl = "https://app.cclabs.app";
+
         /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
         /// The accordion computes its open height from this instead of forcing a measure pass,
         /// so the two MUST stay in step.</summary>
@@ -619,6 +634,9 @@ namespace ConditioningControlPanel
             "justdrop" => (DoorJustDrop, DoorPanelJustDrop, DoorEntriesJustDrop),
             // Pinned, entry-less: a header to light, nothing to expand.
             "appsettings" => (DoorSettings, null, null),
+            // Launcher door (NavLauncherDoors): a header to animate, nothing to expand and no
+            // tab to light - it opens the web app in the browser.
+            "webapp" => (DoorWebApp, null, null),
             _ => (null, null, null),
         };
 
@@ -852,8 +870,26 @@ namespace ConditioningControlPanel
             }
             // Every door in the rail is in NavDoorMap, Settings included since Phase 2. A Tag
             // that matches nothing is an authoring mistake, not a navigation - say so and stay
-            // put rather than teleporting the user to the Dashboard.
+            // put rather than teleporting the user to the Dashboard. (Launcher doors like
+            // DoorWebApp never route here - they carry their own Click.)
             App.Logger?.Warning("NavDoor_Click: no NavDoorMap entry for door {Door}", door);
+        }
+
+        /// <summary>
+        /// The Web App door (v6.8.0, One Account). A launcher, not a navigation: it opens the
+        /// web dashboard in the default browser through BrowserLauncher - the 4-strategy opener
+        /// with the clipboard fallback, because this door exists for people who have never been
+        /// to the web side and "nothing happened" is the one first impression it must not make.
+        /// Visiting the web also retires the One Account banner beat: the nudge worked.
+        /// </summary>
+        private void DoorWebApp_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Helpers.BrowserLauncher.OpenUrlOrPrompt(WebAppUrl, "open the CC Labs web app");
+                RetireWebBannerBeat();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "DoorWebApp_Click failed"); }
         }
 
         /// <summary>
@@ -993,6 +1029,12 @@ namespace ConditioningControlPanel
                 if (_sessionEngine?.IsRunning == true) return;
                 _dashboardIntroQueued = true;
                 FeatureIntroPopup.ShowWhenStartupSettles("daily-free", this, NavDoorForTab("settings"));
+                // v6.8.0 One Account. Same settle path, same owning door, queued second: the
+                // Home door's one-card-per-launch budget means daily-free introduces itself on
+                // the first quiet launch and this card takes the NEXT one - a deliberate drip,
+                // not a pile-up. Fresh installs get it too, which matters: they never see
+                // What's New, so this card is their first mention of the web at all.
+                FeatureIntroPopup.ShowWhenStartupSettles("one-account", this, NavDoorForTab("settings"));
             }
             catch (Exception ex)
             {

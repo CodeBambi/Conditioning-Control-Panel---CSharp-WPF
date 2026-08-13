@@ -32,8 +32,25 @@ namespace ConditioningControlPanel
     {
         #region Banner Rotation
 
+        /// <summary>
+        /// Seen-list key for the One Account banner beat (and the surfaces that retire it). It
+        /// rides <see cref="Models.AppSettings.SeenFeatureIntros"/> rather than a new bool - the
+        /// same registry the intro cards spend - but it is NOT a card key: FeatureIntros.All has
+        /// no entry for it, so nothing can ever open a modal for it.
+        /// </summary>
+        internal const string WebBannerSeenKey = "banner-web";
+
+        /// <summary>
+        /// The rotation, built once at init instead of per tick. Two beats forever (support +
+        /// welcome-back) plus the v6.8.0 One Account beat while it is still unspent - see
+        /// <see cref="RetireWebBannerBeat"/>, which is the only thing that rebuilds this.
+        /// </summary>
+        private TextBlock[] _bannerBeats = Array.Empty<TextBlock>();
+
         private void InitializeBannerRotation()
         {
+            _bannerBeats = BuildBannerBeats();
+
             // Start the rotation timer (switches every 4 seconds)
             _bannerRotationTimer = new DispatcherTimer
             {
@@ -46,6 +63,19 @@ namespace ConditioningControlPanel
 
             // Always start rotation now (support + welcome-back; the thanks beat was retired 0813)
             _bannerRotationTimer.Start();
+        }
+
+        /// <summary>
+        /// Support + welcome-back always; the One Account beat only while unspent. The array is
+        /// what the tick indexes, so a beat that is not in it simply never fades in - its
+        /// TextBlock stays exactly as MainWindow.xaml authored it (Opacity 0, hit-test off).
+        /// </summary>
+        private TextBlock[] BuildBannerBeats()
+        {
+            var spent = App.Settings?.Current?.SeenFeatureIntros.Contains(WebBannerSeenKey) == true;
+            return spent
+                ? new[] { TxtBannerPrimary, TxtBannerSecondary }
+                : new[] { TxtBannerPrimary, TxtBannerSecondary, TxtBannerWeb };
         }
 
         private void UpdateBannerWelcomeMessage()
@@ -438,10 +468,13 @@ namespace ConditioningControlPanel
 
         private void BannerRotationTimer_Tick(object? sender, EventArgs e)
         {
-            // The two banner textblocks. 0813 retired a third beat (the PlatinumPuppets thanks
-            // hyperlink) along with the banner's own canvas row - support + welcome-back are the
-            // whole rotation now, so the modulus below is 2.
-            var banners = new[] { TxtBannerPrimary, TxtBannerSecondary };
+            // The rotation follows _bannerBeats (built at init, rebuilt only by
+            // RetireWebBannerBeat): support + welcome-back always, plus the v6.8.0 One Account
+            // beat while it is unspent. 0813 retired the PlatinumPuppets thanks beat along with
+            // the banner's own canvas row; the modulus follows the array, never a literal.
+            var banners = _bannerBeats;
+            if (banners.Length < 2) return;
+            if (_bannerCurrentIndex >= banners.Length) _bannerCurrentIndex = 0;
 
             // Determine which one to fade out and which to fade in
             var fadeOutTarget = banners[_bannerCurrentIndex];
@@ -497,6 +530,77 @@ namespace ConditioningControlPanel
             if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)
             {
                 _bannerRotationTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// The One Account beat's hyperlink. BrowserLauncher rather than the raw
+        /// HandleHyperlinkClick shell-execute: this line exists for people who have never touched
+        /// the web side, which is exactly the population the no-default-browser fallback was
+        /// built for (ccp-bugs #373/#374/#378/#404). Acting on the nudge also retires it.
+        /// </summary>
+        private void BannerWebLink_Click(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            e.Handled = true;
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(e.Uri?.AbsoluteUri, "open the CC Labs web app");
+            RetireWebBannerBeat();
+        }
+
+        /// <summary>
+        /// Spends the One Account banner beat and takes it out of the live rotation. Called from
+        /// every surface that counts as "the nudge worked": the beat's own hyperlink, the Web App
+        /// door, and the one-account intro card's CTA. Idempotent - once the key is spent the
+        /// rebuild is a no-op two-beat array either way.
+        ///
+        /// <para>If the beat is on screen at the moment it is retired, it hands its slot to the
+        /// support beat with the same 500ms crossfade the rotation uses, so the banner never
+        /// blinks empty. Any other beat on screen keeps its turn: the index is re-found in the
+        /// rebuilt array rather than reset.</para>
+        /// </summary>
+        internal void RetireWebBannerBeat()
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings != null && !settings.SeenFeatureIntros.Contains(WebBannerSeenKey))
+                {
+                    settings.SeenFeatureIntros.Add(WebBannerSeenKey);
+                    App.Settings?.Save();
+                }
+
+                if (_bannerBeats.Length == 0 || Array.IndexOf(_bannerBeats, TxtBannerWeb) < 0) return;
+
+                var current = _bannerCurrentIndex < _bannerBeats.Length
+                    ? _bannerBeats[_bannerCurrentIndex]
+                    : TxtBannerPrimary;
+                _bannerBeats = new TextBlock[] { TxtBannerPrimary, TxtBannerSecondary };
+
+                if (ReferenceEquals(current, TxtBannerWeb))
+                {
+                    // The retired beat is the one on screen - crossfade it out to the support
+                    // beat rather than leaving a spent nudge parked in the banner.
+                    _bannerCurrentIndex = 0;
+                    var fade = TimeSpan.FromMilliseconds(500);
+                    var ease = new System.Windows.Media.Animation.QuadraticEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
+                    };
+                    TxtBannerWeb.BeginAnimation(UIElement.OpacityProperty,
+                        new System.Windows.Media.Animation.DoubleAnimation(0, fade) { EasingFunction = ease });
+                    TxtBannerPrimary.BeginAnimation(UIElement.OpacityProperty,
+                        new System.Windows.Media.Animation.DoubleAnimation(1, fade) { EasingFunction = ease });
+                    TxtBannerWeb.IsHitTestVisible = false;
+                    TxtBannerPrimary.IsHitTestVisible = true;
+                }
+                else
+                {
+                    var idx = Array.IndexOf(_bannerBeats, current);
+                    _bannerCurrentIndex = idx >= 0 ? idx : 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RetireWebBannerBeat failed; the beat rotates on until next launch");
             }
         }
 

@@ -1148,6 +1148,46 @@
                          See Controls/SpiralRailHost.cs - especially the airspace note. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
+                    <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
+                         launchers) - it opens app.cclabs.app in the default browser, so it has its
+                         own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
+                         would log-and-stay, and the "you are here" ring must never light for a
+                         door you cannot be in. The medallion keeps the full four-child shape
+                         (see DoorHome) because CacheNavDoorRows walks it via NavLauncherDoors. -->
+                    <Button x:Name="DoorWebApp" Tag="webapp" Style="{StaticResource NavDoorButton}"
+                            Background="#225EC8F2" BorderBrush="#5EC8F2"
+                            Click="DoorWebApp_Click" ToolTip="{loc:Str tooltip_nav_door_webapp}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                     IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Column="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorWebApp"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_webapp.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str nav_door_webapp}"
+                                               Style="{StaticResource NavDoorLabelText}"/>
+                                </Viewbox>
+                            </Grid>
+                        </Grid>
+                    </Button>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
                             Background="#225CE0A5" BorderBrush="#5CE0A5"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
@@ -1507,6 +1547,24 @@
                                        TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                        Opacity="0" IsHitTestVisible="False"
                                        Text="{loc:Str login_welcome_back}"/>
+                            <!-- v6.8.0 One Account beat. In the rotation ONLY until acted on:
+                                 InitializeBannerRotation includes it while SeenFeatureIntros lacks
+                                 "banner-web", and RetireWebBannerBeat spends that key from the
+                                 hyperlink here, the Web App door, and the one-account card's CTA.
+                                 An inline Hyperlink, never a printed URL (comms rule: the banner
+                                 carries no addresses). Remove the whole beat in 6.9 with the NEW
+                                 pills. -->
+                            <TextBlock x:Name="TxtBannerWeb" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="0" IsHitTestVisible="False">
+                                <Run Text="{loc:Str label_banner_web_xp}"/>
+                                <Run Text=" "/>
+                                <Hyperlink NavigateUri="https://app.cclabs.app" RequestNavigate="BannerWebLink_Click">
+                                    <Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold"/>
+                                </Hyperlink>
+                            </TextBlock>
                             <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
                                  message changes. Its own ClipToBounds host so the band can't
                                  escape the card - deliberately NOT ClipToBounds on the shared

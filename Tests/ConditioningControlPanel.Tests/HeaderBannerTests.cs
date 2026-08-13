@@ -47,10 +47,12 @@ public class HeaderBannerTests
         Assert.DoesNotContain("PlatinumPuppets", xaml);
         Assert.DoesNotContain("label_a_special_thanks_to_platinum_puppets_for_prov", xaml);
 
-        // The two surviving beats are each exactly one element. A second copy is how a rotation
-        // ends up fading a TextBlock nobody can see.
+        // Every beat is exactly one element. A second copy is how a rotation ends up fading a
+        // TextBlock nobody can see. (TxtBannerWeb is the v6.8.0 One Account beat - conditional
+        // in the ROTATION, always singular in the markup.)
         Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerPrimary\""));
         Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerSecondary\""));
+        Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerWeb\""));
     }
 
     [Fact]
@@ -71,18 +73,64 @@ public class HeaderBannerTests
     }
 
     [Fact]
-    public void TheRotationIsATwoBeatCrossfade()
+    public void TheRotationFollowsTheBeatsArray()
     {
+        // v6.8.0: the rotation reads _bannerBeats, built once at init - support + welcome-back
+        // always, plus the One Account beat while SeenFeatureIntros lacks "banner-web". The tick
+        // must never rebuild the array itself (the conditional lives in BuildBannerBeats and
+        // RetireWebBannerBeat is the only writer after init).
         var marquee = ReadSource("MainWindow", "MainWindow.Marquee.cs");
         var tick = Regex.Match(marquee, @"void BannerRotationTimer_Tick\(.*?\n        \}", RegexOptions.Singleline);
         Assert.True(tick.Success, "BannerRotationTimer_Tick has moved or changed shape");
 
-        Assert.Contains("new[] { TxtBannerPrimary, TxtBannerSecondary }", tick.Value);
+        Assert.Contains("var banners = _bannerBeats;", tick.Value);
+        Assert.DoesNotContain("new[]", tick.Value);
 
         // The modulus follows the array rather than a hard-coded count: a literal % 3 over a
-        // two-element array throws on the first tick, four seconds after launch.
+        // two-element array throws on the first tick, four seconds after launch. And the tick
+        // guards both a degenerate array and a stale index (RetireWebBannerBeat shrinks the
+        // array mid-session).
         Assert.Contains("% banners.Length", tick.Value);
         Assert.DoesNotContain("% 3", tick.Value);
+        Assert.Contains("banners.Length < 2", tick.Value);
+        Assert.Contains("_bannerCurrentIndex >= banners.Length", tick.Value);
+
+        // The builder carries the conditional: spent = two beats, unspent = three.
+        var builder = Regex.Match(marquee, @"TextBlock\[\] BuildBannerBeats\(\).*?\n        \}", RegexOptions.Singleline);
+        Assert.True(builder.Success, "BuildBannerBeats has moved or changed shape");
+        Assert.Contains("WebBannerSeenKey", builder.Value);
+        Assert.Contains("new[] { TxtBannerPrimary, TxtBannerSecondary }", builder.Value);
+        Assert.Contains("new[] { TxtBannerPrimary, TxtBannerSecondary, TxtBannerWeb }", builder.Value);
+    }
+
+    [Fact]
+    public void TheOneAccountBeatRetiresFromEverySurfaceThatCounts()
+    {
+        // "The nudge worked" has three shapes: the beat's own hyperlink, the Web App door, and
+        // the one-account card's CTA. All three must spend the same key through
+        // RetireWebBannerBeat, or the beat keeps nagging people who already went.
+        var marquee = ReadSource("MainWindow", "MainWindow.Marquee.cs");
+        Assert.Contains("internal const string WebBannerSeenKey = \"banner-web\";", marquee);
+        Assert.Contains("internal void RetireWebBannerBeat()", marquee);
+
+        var link = Regex.Match(marquee, @"void BannerWebLink_Click\(.*?\n        \}", RegexOptions.Singleline);
+        Assert.True(link.Success, "BannerWebLink_Click has moved or changed shape");
+        // BrowserLauncher, never a bare Process.Start: the no-default-browser machines are
+        // exactly who this nudge is for.
+        Assert.Contains("BrowserLauncher", link.Value);
+        Assert.Contains("RetireWebBannerBeat()", link.Value);
+
+        var tabNav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
+        var door = Regex.Match(tabNav, @"void DoorWebApp_Click\(.*?\n        \}", RegexOptions.Singleline);
+        Assert.True(door.Success, "DoorWebApp_Click has moved or changed shape");
+        Assert.Contains("BrowserLauncher", door.Value);
+        Assert.Contains("RetireWebBannerBeat()", door.Value);
+
+        var intros = ReadSource("Windows", "FeatureIntroPopup.xaml.cs");
+        var card = Regex.Match(intros, "\\[\"one-account\"\\].*?\\n            \\},", RegexOptions.Singleline);
+        Assert.True(card.Success, "the one-account intro card is gone from FeatureIntros.All");
+        Assert.Contains("BrowserLauncher", card.Value);
+        Assert.Contains("RetireWebBannerBeat()", card.Value);
     }
 
     // =====================================================================================
@@ -111,6 +159,7 @@ public class HeaderBannerTests
         Assert.True(block.Success, "HeaderBannerHost is no longer the header cluster's column-5 host");
         Assert.Contains("x:Name=\"TxtBannerPrimary\"", block.Value);
         Assert.Contains("x:Name=\"TxtBannerSecondary\"", block.Value);
+        Assert.Contains("x:Name=\"TxtBannerWeb\"", block.Value);
 
         // The sheen moved with them - MainWindow.ChromeFx.SweepBannerSheen drives all three names.
         foreach (var name in new[] { "BannerSheenHost", "BannerSheen", "BannerSheenSlide" })
@@ -136,10 +185,11 @@ public class HeaderBannerTests
         Assert.Contains("MaxWidth=", block.Value);
         Assert.Contains("HorizontalAlignment=\"Center\"", block.Value);
 
-        // Trim, never wrap: a wrapping beat is the other way this row grows.
+        // Trim, never wrap: a wrapping beat is the other way this row grows. Three since
+        // v6.8.0 - the One Account beat trims like its siblings.
         var body = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
                                RegexOptions.Singleline).Value;
-        Assert.Equal(2, Regex.Matches(body, "TextTrimming=\"CharacterEllipsis\"").Count);
+        Assert.Equal(3, Regex.Matches(body, "TextTrimming=\"CharacterEllipsis\"").Count);
         Assert.DoesNotContain("TextWrapping", body);
     }
 
