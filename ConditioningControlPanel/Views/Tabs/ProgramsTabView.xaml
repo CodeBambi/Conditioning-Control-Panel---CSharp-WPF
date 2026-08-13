@@ -501,6 +501,29 @@
                                                 </Border.RenderTransform>
                                             </Border>
                                         </Grid>
+
+                                        <!-- T4 only: a comet running the rail. Clipped to the
+                                             track by its host, so the head can never appear
+                                             outside the line it is supposed to be travelling
+                                             along, and Collapsed (not merely transparent) at
+                                             every tier below Ignited - a collapsed element is
+                                             one WPF never asks to render. The fill is a
+                                             head-and-tail gradient built from the program accent
+                                             in code; the slide is one frame-capped ambient
+                                             clock, started and stopped in
+                                             MainWindow.ProgramsFx.cs. -->
+                                        <Grid x:Name="RailCometHost" x:FieldModifier="internal"
+                                              ClipToBounds="True" Visibility="Collapsed">
+                                            <Rectangle x:Name="RailComet" x:FieldModifier="internal"
+                                                       Width="130" HorizontalAlignment="Left"
+                                                       IsHitTestVisible="False" Opacity="0">
+                                                <Rectangle.RenderTransform>
+                                                    <TranslateTransform x:Name="RailCometSlide"
+                                                                        x:FieldModifier="internal"
+                                                                        X="-140"/>
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                        </Grid>
                                     </Grid>
 
                                     <ItemsControl x:Name="ProgramDayStrip" x:FieldModifier="internal">
@@ -545,6 +568,25 @@
                                                                  RenderTransformOrigin="0.5,0.5">
                                                             <Ellipse.RenderTransform>
                                                                 <ScaleTransform x:Name="PipGlowScale" ScaleX="1" ScaleY="1"/>
+                                                            </Ellipse.RenderTransform>
+                                                        </Ellipse>
+                                                        <!-- The day-complete IGNITE flare. A second
+                                                             element on purpose: the halo above runs a
+                                                             Forever clock on its own Opacity and
+                                                             Scale, and a one-shot aimed at those same
+                                                             properties would replace that clock
+                                                             outright (SnapshotAndReplace) and leave
+                                                             today's node dead afterwards.
+                                                             Sized 52 like the halo, deliberately: that
+                                                             is the width the 62px node area and the
+                                                             28-day cell were tuned for. -->
+                                                        <Ellipse x:Name="PipIgnite" Width="52" Height="52" Opacity="0"
+                                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                 IsHitTestVisible="False"
+                                                                 Fill="{Binding IgniteBrush}"
+                                                                 RenderTransformOrigin="0.5,0.5">
+                                                            <Ellipse.RenderTransform>
+                                                                <ScaleTransform x:Name="PipIgniteScale" ScaleX="0.6" ScaleY="0.6"/>
                                                             </Ellipse.RenderTransform>
                                                         </Ellipse>
                                                         <Border Width="{Binding NodeSize}" Height="{Binding NodeSize}"
@@ -608,6 +650,45 @@
                                                             </BeginStoryboard>
                                                         </DataTrigger.EnterActions>
                                                     </DataTrigger>
+
+                                                    <!-- Day complete: the day's own node ignites,
+                                                         once. Ignite is set by the code-behind only
+                                                         on the rebuild where the day flipped to done
+                                                         (the same once-per-day guard the banner pop
+                                                         rides), so this can no more replay than the
+                                                         task card's pop can. One-shot INTERACTION
+                                                         motion, so unlike the halo above it survives
+                                                         Reduced and only Off removes it - and the
+                                                         carrier is what carries that decision. -->
+                                                    <DataTrigger Binding="{Binding Ignite}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard Timeline.DesiredFrameRate="30">
+                                                                    <DoubleAnimationUsingKeyFrames
+                                                                            Storyboard.TargetName="PipIgnite"
+                                                                            Storyboard.TargetProperty="Opacity">
+                                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0"/>
+                                                                        <LinearDoubleKeyFrame Value="0.95" KeyTime="0:0:0.18"/>
+                                                                        <LinearDoubleKeyFrame Value="0" KeyTime="0:0:0.9"/>
+                                                                    </DoubleAnimationUsingKeyFrames>
+                                                                    <DoubleAnimation Storyboard.TargetName="PipIgniteScale"
+                                                                                     Storyboard.TargetProperty="ScaleX"
+                                                                                     From="0.6" To="1.35" Duration="0:0:0.9">
+                                                                        <DoubleAnimation.EasingFunction>
+                                                                            <CubicEase EasingMode="EaseOut"/>
+                                                                        </DoubleAnimation.EasingFunction>
+                                                                    </DoubleAnimation>
+                                                                    <DoubleAnimation Storyboard.TargetName="PipIgniteScale"
+                                                                                     Storyboard.TargetProperty="ScaleY"
+                                                                                     From="0.6" To="1.35" Duration="0:0:0.9">
+                                                                        <DoubleAnimation.EasingFunction>
+                                                                            <CubicEase EasingMode="EaseOut"/>
+                                                                        </DoubleAnimation.EasingFunction>
+                                                                    </DoubleAnimation>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                    </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -658,6 +739,47 @@
                                            Grid.ColumnSpan="2" IsHitTestVisible="False"
                                            Opacity="0.4" RadiusX="14" RadiusY="14"
                                            Margin="-22,-20,-22,-6"/>
+
+                                <!-- ============ the ignition rig, over the band ============
+                                     Three hit-test-invisible layers sharing the wash's bleed
+                                     margins, so every one of them lines up with the hero band's
+                                     real edges rather than with the padding box. They sit ABOVE
+                                     the wash and BELOW the copy: the FX are a lighting rig over
+                                     the art, never a replacement for it, and no spark is ever
+                                     allowed in front of a word. -->
+
+                                <!-- T2+: the particle field. An AmbientFxCanvas is added here on
+                                     first use (MainWindow.ProgramsFx.cs) - that control already
+                                     owns the whole "stop the clock when nobody can see it" rule
+                                     set: loaded, visible, window active, window not minimised.
+                                     Empty and clockless below Charged. -->
+                                <Grid x:Name="TodayFxLayer" x:FieldModifier="internal"
+                                      Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                      Margin="-22,-20,-22,-6"/>
+
+                                <!-- Day complete: an accent wave washing out across the band. A
+                                     Rectangle whose RADIAL BRUSH grows, not an ellipse that
+                                     scales - a scaled ellipse big enough to cover a 1400px band
+                                     hangs a thousand pixels past the panel on every side, and
+                                     this one is bounded by its own layer by construction. -->
+                                <Rectangle x:Name="TodayWave" x:FieldModifier="internal"
+                                           Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                           Opacity="0" RadiusX="14" RadiusY="14"
+                                           Margin="-22,-20,-22,-6"/>
+
+                                <!-- The floating "+XP" on a day that just completed. Parked at
+                                     opacity 0 and hit-test invisible, so between days it is an
+                                     empty TextBlock in an overlay cell: no layout influence, no
+                                     clock, nothing to see. -->
+                                <TextBlock x:Name="TxtTodayXpFloat" x:FieldModifier="internal"
+                                           Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                           Opacity="0" FontSize="26" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.RenderTransform>
+                                        <TranslateTransform x:Name="TodayXpFloatSlide"
+                                                            x:FieldModifier="internal" Y="0"/>
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -1069,7 +1191,14 @@
                                                     <Border Grid.Column="2" Width="22" Height="22" CornerRadius="11"
                                                             VerticalAlignment="Top" HorizontalAlignment="Right"
                                                             Visibility="{Binding DoneChipVisibility}"
-                                                            Background="{Binding StatusBrush}">
+                                                            Background="{Binding StatusBrush}"
+                                                            RenderTransformOrigin="0.5,0.5">
+                                                        <!-- Popped by the JustCompleted storyboard below.
+                                                             Rests at 1, so a card that was already done
+                                                             when the tab opened renders settled. -->
+                                                        <Border.RenderTransform>
+                                                            <ScaleTransform x:Name="TaskDoneChipScale" ScaleX="1" ScaleY="1"/>
+                                                        </Border.RenderTransform>
                                                         <TextBlock Text="✓" Foreground="{Binding DoneChipForeground}"
                                                                    FontSize="12" FontWeight="Bold"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -1131,6 +1260,25 @@
                                                                                  From="0.93" To="1" Duration="0:0:0.35">
                                                                     <DoubleAnimation.EasingFunction>
                                                                         <BackEase EasingMode="EaseOut" Amplitude="0.6"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <!-- Ignition rig: the tick itself pops in
+                                                                     with the card. Added to the moment the
+                                                                     card already had rather than shipped as
+                                                                     a second storyboard - the two must never
+                                                                     be able to fire apart. -->
+                                                                <DoubleAnimation Storyboard.TargetName="TaskDoneChipScale"
+                                                                                 Storyboard.TargetProperty="ScaleX"
+                                                                                 From="0.2" To="1" Duration="0:0:0.42">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <BackEase EasingMode="EaseOut" Amplitude="0.9"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetName="TaskDoneChipScale"
+                                                                                 Storyboard.TargetProperty="ScaleY"
+                                                                                 From="0.2" To="1" Duration="0:0:0.42">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <BackEase EasingMode="EaseOut" Amplitude="0.9"/>
                                                                     </DoubleAnimation.EasingFunction>
                                                                 </DoubleAnimation>
                                                             </Storyboard>
@@ -1265,7 +1413,11 @@
                     <!-- GRADUATED                                                          -->
                     <!-- ================================================================= -->
                     <StackPanel x:Name="ProgramsGraduatedPanel" x:FieldModifier="internal" Visibility="Collapsed">
-                        <Border Padding="24,22" CornerRadius="12"
+                        <!-- Named so the ignition rig can hand the finish card the run's own accent
+                             and crossfade it to gold (MainWindow.ProgramsFx.cs). The PinkBrush here
+                             is the resting value for a card nobody has graduated onto yet. -->
+                        <Border x:Name="ProgramsGraduatedCard" x:FieldModifier="internal"
+                                Padding="24,22" CornerRadius="12"
                                 Background="{DynamicResource ElevatedSurfaceBrush}"
                                 BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                             <StackPanel>
@@ -1294,5 +1446,61 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+
+        <!-- ===================================================================
+             THE IGNITION RIG's two panel-wide surfaces. Both are siblings of the
+             scrolling content, never children of it: they must not scroll, must
+             not measure, and must never take a click. Everything about them -
+             brush, opacity, whether they exist at all - is driven from the one
+             heat scalar in MainWindow.ProgramsFx.cs.
+             =================================================================== -->
+
+        <!-- T4 / boss day: a soft inner edge glow around the whole tab. Fill is a
+             frozen radial built from the program accent in code and the resting
+             opacity is 0, so at every tier below Ignited this is a rectangle that
+             paints nothing and holds no clock. -->
+        <!-- Margin and radius track the SectionPanel style exactly (Margin 0,0,0,8,
+             CornerRadius 12): these two overlays are siblings of that panel, not
+             children of it, so anything else leaves the glow hanging 8px below
+             the surface it is supposed to be lighting. -->
+        <Rectangle x:Name="ProgramsEdgeGlow" x:FieldModifier="internal"
+                   IsHitTestVisible="False" Opacity="0" Margin="0,0,0,8"
+                   RadiusX="12" RadiusY="12"/>
+
+        <!-- Chapter-cleared seal stamp. Collapsed until a chapter is actually
+             cleared, then ~1.6s of scale-and-fade and back to collapsed - it is a
+             one-shot, so it is gated on AllowTransitions and snaps away entirely
+             when motion is off (the chapter is still announced by the run header
+             re-titling itself, which is information, not decoration).
+             Copy is the chapter's own authored name plus its day range: this
+             surface adds no new localisation keys. -->
+        <Grid x:Name="ProgramsSealHost" x:FieldModifier="internal"
+              IsHitTestVisible="False" Visibility="Collapsed" Opacity="0"
+              Margin="0,0,0,8">
+            <Rectangle x:Name="ProgramsSealScrim" x:FieldModifier="internal"
+                       RadiusX="12" RadiusY="12" Fill="#B0000000"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        RenderTransformOrigin="0.5,0.5">
+                <StackPanel.RenderTransform>
+                    <ScaleTransform x:Name="ProgramsSealScale" x:FieldModifier="internal"
+                                    ScaleX="1" ScaleY="1"/>
+                </StackPanel.RenderTransform>
+                <Border x:Name="ProgramsSealRing" x:FieldModifier="internal"
+                        Width="104" Height="104" CornerRadius="52" BorderThickness="3"
+                        HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtProgramsSealGlyph" x:FieldModifier="internal"
+                               Text="✓" FontSize="48" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock x:Name="TxtProgramsSealTitle" x:FieldModifier="internal"
+                           FontSize="30" FontWeight="Bold" Margin="0,18,0,0"
+                           TextAlignment="Center" MaxWidth="620" TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtProgramsSealSub" x:FieldModifier="internal"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0"
+                           TextAlignment="Center" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

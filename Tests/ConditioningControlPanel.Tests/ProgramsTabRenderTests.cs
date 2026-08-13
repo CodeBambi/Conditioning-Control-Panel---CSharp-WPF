@@ -187,6 +187,160 @@ public class ProgramsTabRenderTests
     }
 
     // =====================================================================================
+    //  the ignition rig
+    // =====================================================================================
+
+    /// <summary>
+    /// The single most breakable thing in the restyle: the day-complete flare must live on its OWN
+    /// element.
+    ///
+    /// <para>Today's node runs a <c>Forever</c> clock on PipGlow's Opacity and Scale. Point the
+    /// one-shot flare at those same properties - which is the obvious "why do we need two ellipses"
+    /// simplification - and WPF's default SnapshotAndReplace handoff does not layer the two, it
+    /// REPLACES the loop. The node then flares once and is dead for the rest of the day, with no
+    /// error, no binding failure and nothing in the log.</para>
+    /// </summary>
+    [Fact]
+    public void TheIgniteFlareRunsOnItsOwnElementNotOnTheBreathingHalo()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            var template = tab.ProgramDayStrip.ItemTemplate;
+            Assert.True(template != null, "the day rail lost its item template");
+
+            var triggers = template!.Triggers.OfType<DataTrigger>().ToList();
+            var ignite = triggers.FirstOrDefault(t => (t.Binding as Binding)?.Path.Path == "Ignite");
+            Assert.True(ignite != null,
+                "the day-complete ignite trigger is gone - a completed day's node no longer flares");
+
+            var storyboard = ignite!.EnterActions.OfType<BeginStoryboard>().FirstOrDefault()?.Storyboard;
+            Assert.True(storyboard != null, "the ignite storyboard is gone");
+
+            var targets = storyboard!.Children
+                .Select(Storyboard.GetTargetName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList();
+
+            Assert.NotEmpty(targets);
+            foreach (var target in targets)
+            {
+                Assert.True(target!.StartsWith("PipIgnite", StringComparison.Ordinal),
+                    $"the ignite flare animates '{target}' - anything on PipGlow REPLACES today's "
+                    + "breathing loop instead of layering over it, and the node dies after one flare");
+            }
+
+            // And the breathing halo is still on its own carrier, untouched by any of this.
+            Assert.Contains(triggers, t => (t.Binding as Binding)?.Path.Path == "Breathe");
+        });
+    }
+
+    /// <summary>
+    /// Every surface the rig added is INERT until the heat asks for it. This is what "T0 COLD is
+    /// exactly today's flat UI" means in practice, and it is the state a brand-new enrollment, a
+    /// reduced-motion machine and the browse list all sit in - i.e. most of the time, for most
+    /// users. A rig element that paints or measures at rest is a regression nobody would see on the
+    /// ignited screenshots this was designed against.
+    /// </summary>
+    [Fact]
+    public void TheIgnitionSurfacesAreInertAtRest()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            Realize(tab, TabWidth, 1600);
+
+            Assert.Equal(0, tab.ProgramsEdgeGlow.Opacity);
+            Assert.Null(tab.ProgramsEdgeGlow.Fill);
+            Assert.Equal(Visibility.Collapsed, tab.ProgramsSealHost.Visibility);
+            Assert.Equal(Visibility.Collapsed, tab.RailCometHost.Visibility);
+            Assert.Equal(0, tab.RailComet.Opacity);
+            Assert.Equal(0, tab.TodayWave.Opacity);
+            Assert.Equal(0, tab.TxtTodayXpFloat.Opacity);
+
+            // The particle layer is empty until a Charged day builds one into it, so a cold run
+            // carries no Skia surface at all - not a paused one.
+            Assert.Equal(0, tab.TodayFxLayer.Children.Count);
+
+            // None of it may ever eat a click: the seal covers the whole tab while it plays, and the
+            // edge glow covers it permanently at T4.
+            foreach (var overlay in new UIElement[]
+                     {
+                         tab.ProgramsEdgeGlow, tab.ProgramsSealHost, tab.TodayFxLayer,
+                         tab.TodayWave, tab.TxtTodayXpFloat, tab.RailComet,
+                     })
+            {
+                Assert.False(overlay.IsHitTestVisible,
+                    "an ignition overlay is hit-testable - it will swallow clicks meant for the tab");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The 28-day clip guard again, this time with the flare present and today's node carrying every
+    /// layer at once. The flare is deliberately sized to the halo (52px) rather than to how big it
+    /// looks at full scale: a wider element picks up WPF's automatic layout clip in a ~49px cell and
+    /// renders sheared, which is exactly the bug the rail's geometry was retuned to fix.
+    /// </summary>
+    [Fact]
+    public void TheDayRailStillClipsNothingWithTheIgniteFlareOnIt()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            tab.ProgramsRunPanel.Visibility = Visibility.Visible;
+            tab.RailWidthColumn.MaxWidth = double.PositiveInfinity;
+            tab.RailSpacerColumn.Width = new GridLength(0);
+
+            var pips = Pips(28, 9);
+            pips[8].Breathe = true;
+            pips[8].Ignite = true;
+            pips[8].IgniteBrush = Brushes.HotPink;
+
+            tab.ProgramDayStrip.ItemsSource = pips;
+            Realize(tab, TabWidth, 1600);
+
+            var nodes = Descendants(tab.ProgramDayStrip)
+                .OfType<Grid>()
+                .Where(g => Math.Abs(g.Height - 82) < 0.01)
+                .ToList();
+
+            Assert.Equal(28, nodes.Count);
+            foreach (var node in nodes)
+                Assert.True(LayoutInformation.GetLayoutClip(node) == null,
+                    "the ignite flare re-introduced the 28-day layout clip on the day rail");
+        });
+    }
+
+    /// <summary>
+    /// The done tick pops with the card it belongs to, off the SAME carrier and inside the SAME
+    /// storyboard. Two storyboards on one moment can be started apart - by a rebuild landing between
+    /// them, or by one trigger being edited and the other forgotten - and the tick then appears a
+    /// beat after the card it is meant to be part of.
+    /// </summary>
+    [Fact]
+    public void TheDoneTickPopsInsideTheCardsOwnCompletionStoryboard()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            var template = tab.TodayTaskList.ItemTemplate;
+            Assert.True(template != null, "the task list lost its item template");
+
+            var trigger = template!.Triggers.OfType<DataTrigger>()
+                .FirstOrDefault(t => (t.Binding as Binding)?.Path.Path == "JustCompleted");
+            Assert.True(trigger != null, "the task completion trigger is gone");
+
+            var storyboard = trigger!.EnterActions.OfType<BeginStoryboard>().FirstOrDefault()?.Storyboard;
+            Assert.True(storyboard != null, "the task completion storyboard is gone");
+
+            var targets = storyboard!.Children.Select(Storyboard.GetTargetName).ToList();
+            Assert.Contains("TaskCardScale", targets);
+            Assert.Contains("TaskDoneChipScale", targets);
+        });
+    }
+
+    // =====================================================================================
     //  the run header's identity slot
     // =====================================================================================
 

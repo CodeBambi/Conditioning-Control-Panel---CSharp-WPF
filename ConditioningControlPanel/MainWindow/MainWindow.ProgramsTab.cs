@@ -574,6 +574,11 @@ namespace ConditioningControlPanel
                 tab.ProgramsRunPanel.Visibility = run ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // The ignition rig's edge glow is a sibling of the WHOLE view, not a child of the run
+            // panel, so leaving the run state has to park it explicitly - a withdraw otherwise leaves
+            // a lit rim burning around the browse list, with its clock still ticking.
+            if (!run) StopProgramIgnitionLoops();
+
             if (run && !runWasVisible && tab.IsVisible) StartProgramRunEntrance(tab);
         }
 
@@ -687,8 +692,23 @@ namespace ConditioningControlPanel
         {
             var tab = ProgramsTab;
             var svc = App.Programs;
-            var accent = ProgramAccentBrush(program.AccentColor);
             var chapter = svc?.TodayChapter;
+
+            // ---- the ignition rig's three decisions, all taken BEFORE anything is dressed ----
+            //
+            // 1. Did the day just close? The rail is built below and the node that ignites is the
+            //    one whose day it was, so this cannot be a by-product of building the Today panel.
+            // 2. Did a chapter just close? Asked before the accent is recomputed, so the seal wears
+            //    the colour of the chapter it is sealing while the panel fades to the next one's.
+            // 3. What is the heat? Every tier decision downstream reads it, including the rail's.
+            NoteProgramDayCompletion(enrollment, tab.IsVisible);
+            NoteProgramChapterSeal(program, enrollment, tab.IsVisible);
+
+            // ONE shared, mutable brush for the whole run (MainWindow.ProgramsFx.cs) rather than a
+            // frozen one per element: it is what lets a chapter hand-over crossfade the entire
+            // surface together instead of hard-cutting it on the next repaint.
+            var accent = ProgramRunAccent(program, chapter, enrollment);
+            ComputeProgramHeat(program, enrollment, svc?.Today);
 
             // Identity slot. The sigil is the accent masked by white-RGB/alpha art, so it can only
             // ever be the program's own colour; with no art at all the original 4px bar comes back
@@ -762,6 +782,11 @@ namespace ConditioningControlPanel
 
             BuildProgramDayStrip(program, enrollment, accent);
             BuildProgramTodayPanel(program, enrollment, accent);
+
+            // Last, deliberately: the rig re-points the brushes the two builders above just
+            // overwrote (the hero wash, the sigil halo, the Today card's border), so it has to run
+            // after them or it would be undone by its own repaint.
+            ApplyProgramIgnition(tab, enrollment);
         }
 
         private void BuildProgramDayStrip(ProgramDefinition program, ProgramEnrollment enrollment, Brush accent)
@@ -786,7 +811,13 @@ namespace ConditioningControlPanel
                 .GroupBy(d => d.DayIndex)
                 .ToDictionary(g => g.Key, g => g.First());
             var glowBrush = ProgramRadialGlowBrush(accent, 170);
-            var breathingAllowed = Services.MotionFx.AllowAmbientLoops;
+            var igniteBrush = ProgramRadialGlowBrush(accent, 220);
+
+            // The pip's pulse is a T1 effect: at COLD the rail is as still as it was before the
+            // ignition rig existed, halo and all. ANDed with the app's reduced-motion gate, exactly
+            // as it was, so neither switch can be bypassed by the other.
+            var breathingAllowed = Services.MotionFx.AllowAmbientLoops
+                                   && _programTier >= Helpers.ProgramHeatTier.Warm;
 
             for (int i = 1; i <= program.LengthDays; i++)
             {
@@ -858,6 +889,15 @@ namespace ConditioningControlPanel
                 }
 
                 if (isMilestone) pip.NodeSize += 6;
+
+                // Day complete: this node flares, once. The decision was taken at the top of
+                // BuildProgramRunPanel (NoteProgramDayCompletion) because the rail is built before
+                // the panel that observes the flip; the field is consumed here and nowhere else.
+                if (_programIgniteDay == i && Services.MotionFx.AllowTransitions)
+                {
+                    pip.Ignite = true;
+                    pip.IgniteBrush = igniteBrush;
+                }
 
                 // The day's title on every tooltip: hovering the track reads as a table of
                 // contents, which is most of what a reward track is for.
@@ -965,21 +1005,21 @@ namespace ConditioningControlPanel
 
             tab.TodayCompleteBanner.Visibility = record.DayCompleted ? Visibility.Visible : Visibility.Collapsed;
 
-            // Pop the banner once per day, the moment the day flips to done. The field remembers
-            // the popped day even when the tab is hidden, so backgrounded completions don't replay
-            // the pop on the next visit - they just show the banner already settled.
+            // Pop the banner once per day, the moment the day flips to done. The guard itself now
+            // lives in NoteProgramDayCompletion, called at the top of BuildProgramRunPanel - the
+            // rail is built before this panel and its node has to ignite on the same rebuild - but
+            // the contract is unchanged: the popped day is remembered even when the tab is hidden,
+            // so a backgrounded completion shows the banner already settled rather than replaying
+            // a celebration nobody was there for.
             var runKey = ProgramRunKey(enrollment);
-            var dayKey = $"{runKey}:{enrollment.CurrentDay}";
-            if (record.DayCompleted && !string.Equals(_programDayCompletePopped, dayKey, StringComparison.Ordinal))
+            if (_programDayJustCompleted)
             {
-                _programDayCompletePopped = dayKey;
-                if (tab.IsVisible)
-                {
-                    PopProgramScale(tab.TodayCompleteBannerScale);
-                    // Event FX (PR-5): the burst rides the same once-per-day guard as the pop, so
-                    // a day that completed in the background never replays it later.
-                    CelebrateProgramDayComplete(tab.TodayCompleteBanner);
-                }
+                PopProgramScale(tab.TodayCompleteBannerScale);
+                // Event FX (PR-5): the burst rides the same once-per-day guard as the pop. Sized by
+                // heat now, so a day-1 tick is a polite pop and a boss day is the full thing.
+                CelebrateProgramDayComplete(tab.TodayCompleteBanner);
+                // Ignition rig: the accent wave across the band and the day's real XP floating off it.
+                PlayProgramDayCompleteMoment(tab, day);
             }
 
             // --- Session slot ---
@@ -1139,6 +1179,13 @@ namespace ConditioningControlPanel
             }
 
             tab.TodayTaskList.ItemsSource = items;
+
+            // The sparks for any card that just ticked. The template's own storyboards do the card
+            // pop and the done-chip pop off the same JustCompleted carrier; this is the one part a
+            // DataTemplate cannot do, and it anchors on containers that do not exist until the
+            // dispatcher has run the generator (see CelebrateProgramTaskCompletions).
+            CelebrateProgramTaskCompletions(tab, items);
+
             tab.TxtTodayNoTasks.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             tab.TxtRitualPrivacyNote.Visibility = hasRitual ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1584,6 +1631,14 @@ namespace ConditioningControlPanel
                 _programRunKeySeen = key;
                 _programDayCompletePopped = null;
                 _programTasksSeenIncomplete.Clear();
+
+                // The ignition rig's own one-shots and its cached scenery hang off the same run
+                // identity: a new run gets a new accent (hard cut, there is nothing to fade from),
+                // an unsealed chapter history and an uncelebrated graduation.
+                _programChapterSealed = null;
+                _programChapterBaselineRun = null;
+                _programGraduationCelebrated = null;
+                _programFxSignature = null;
             }
             catch { /* bookkeeping must never break a repaint */ }
         }
@@ -1610,6 +1665,10 @@ namespace ConditioningControlPanel
                 if (!tab.IsVisible)
                 {
                     StopProgramSessionSheen();
+                    // The Skia particle layer parks itself on the same signal, but WPF's own clocks
+                    // do not - a Forever storyboard keeps ticking behind a collapsed tab forever.
+                    // Clearing the FX signature is what re-arms them on the way back in.
+                    StopProgramIgnitionLoops();
                     return;
                 }
 
@@ -1727,12 +1786,26 @@ namespace ConditioningControlPanel
         /// </summary>
         private void EnsureProgramSessionSheen(ProgramsTabView tab)
         {
-            if (_programSheenActive) return;
-
             // Ambient clock, so it only runs at MotionLevel.Full on a tier that allows ambient
             // motion - the same gate the Dashboard banner's own sweep asks (MainWindow.ProgramBanner
             // .cs). The fallback is the bar without a highlight passing over it, which is the bar.
-            if (!Services.MotionFx.AllowAmbientLoops) return;
+            //
+            // Ignition rig: the sheen is a T1 effect and its CADENCE is the heat - 4.2s cold down to
+            // 2.0s ignited, against the flat 2.8s that shipped. A cold day's bar is simply a bar.
+            var wanted = Helpers.ProgramHeat.SheenSweepSeconds(_programHeat);
+            var allowed = Services.MotionFx.AllowAmbientLoops
+                          && _programTier >= Helpers.ProgramHeatTier.Warm;
+
+            if (!allowed)
+            {
+                StopProgramSessionSheen();
+                return;
+            }
+
+            // Already sweeping at the right pace: leave the clock exactly where it is. Restarting it
+            // on every rebuild is the per-credit churn this whole pass exists to avoid.
+            if (_programSheenActive && Math.Abs(_programSheenSeconds - wanted) < 0.05) return;
+            if (_programSheenActive) StopProgramSessionSheen();
 
             try
             {
@@ -1740,10 +1813,11 @@ namespace ConditioningControlPanel
                 var width = tab.SessionBarHost.ActualWidth;
                 if (width < 80) return;
 
-                var sweep = new DoubleAnimation(-160, width + 60, TimeSpan.FromSeconds(2.8))
+                var sweep = new DoubleAnimation(-160, width + 60, TimeSpan.FromSeconds(wanted))
                 {
                     RepeatBehavior = RepeatBehavior.Forever
                 };
+                _programSheenSeconds = wanted;
                 Timeline.SetDesiredFrameRate(sweep, AmbientFrameRate);
                 tab.SessionSheen.Opacity = 1; // the gradient itself is translucent
                 tab.SessionSheenSlide.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, sweep);
@@ -1896,6 +1970,9 @@ namespace ConditioningControlPanel
             tab.TxtGraduatedSub.Text = Loc.GetF("programs_graduated_sub", program.Title);
             tab.TxtGraduatedStats.Text = Loc.GetF("programs_graduated_stats",
                 enrollment.AttemptNumber, enrollment.PerfectDayCount, program.LengthDays);
+
+            // The end of the ignition curve: the run's accent hands over to gold, once.
+            CelebrateProgramGraduation(tab, program, enrollment);
         }
 
         // -----------------------------------------------------------------------------------
