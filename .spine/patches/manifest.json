@@ -97,6 +97,13 @@
       "anchor": "- [ ] Run FULL test suite: `[test command from project config]`\n- [ ] Run coverage gate: `[testWithCoverage command, e.g. npm run coverage:check]`",
       "replacement": "- [ ] Run FULL test suite: `[test command from project config]`\n- [ ] **Failure-name capture (CCP local amendment, wave-10 land consult):** full-suite dotnet runs MUST attach a TRX logger (`--logger \"trx;LogFileName=<task-evidence>.trx\"`) or equivalently lossless output so EVERY failure yields a test name. A transient red with an uncaptured name is not evidence (wave-4 T-3 + SP-048 occurrences: 'watched; unreproduced ×3' without a name). One red + a name = a class you can fix; one red without a name = folklore.\n- [ ] Run coverage gate: `[testWithCoverage command, e.g. npm run coverage:check]`",
       "note": "Mandate lossless failure capture in the Testing & Verification template step (TRX logger). Wave-10 land consult recurrence-rule item (second uncaptured flake name)."
+    },
+    {
+      "id": "skill-floor-wrapper-testcommand",
+      "target": "skills/create-spine-tasks/references/prompt-template.md",
+      "anchor": "> Review Level 0 + Size S may set `testCommand` to `` `true` ``.\n\n## Steps",
+      "replacement": "> Review Level 0 + Size S may set `testCommand` to `` `true` ``.\n> **Full-suite invocation (CCP local amendment, SP-065 / board row 49 part 2):** any `testCommand` that runs the client test suite MUST invoke it as `node client/tests/floor/check-floor.mjs`, never a bare `dotnet test`. The wrapper owns BOTH test projects, writes TRX outside the worktree, and fails the CONTRACT on an unexpected skip or an off-floor count (pin: `client/tests/floor/floor.json`) — a bare `dotnet test` exits 0 on `897 passed / 1 skipped`, the detection path that missed the wave-18 red base. `FloorWrapperGuardTests` enforces this for every packet with ID >= SP-065 and names the violating `file:line`.\n\n## Steps",
+      "note": "SP-065 land obligation (2): future packets inherit the floor wrapper in their testCommand. Anchored across the Contract-guidance/## Steps boundary because (a) skill-trx-failure-names already consumed the Testing-step region and (b) an anchor that survives verbatim inside its own replacement verifies as DRIFTED forever (caught at this land by verify.mjs). Project-tree-only like the other skill patches: workers load skills from the repo .pi tree."
     }
   ]
 }
