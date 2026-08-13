@@ -1972,7 +1972,7 @@ namespace ConditioningControlPanel
                 enrollment.AttemptNumber, enrollment.PerfectDayCount, program.LengthDays);
 
             // The end of the ignition curve: the run's accent hands over to gold, once.
-            CelebrateProgramGraduation(tab, enrollment);
+            CelebrateProgramGraduation(tab, program, enrollment);
         }
 
         // -----------------------------------------------------------------------------------

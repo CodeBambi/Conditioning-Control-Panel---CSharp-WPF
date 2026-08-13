@@ -451,7 +451,11 @@ namespace ConditioningControlPanel
                 _programSigilScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 _programSigilScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
 
-                if (_programTier < ProgramHeatTier.Warm || !ambient)
+                // Four of the five shipped programs have no sigil art, and the halo is collapsed with
+                // it - so this gate is the common case, not the edge one. A Forever clock on a
+                // collapsed element is invisible work that runs for the length of the run.
+                if (_programTier < ProgramHeatTier.Warm || !ambient
+                    || glow.Visibility != Visibility.Visible)
                 {
                     glow.Opacity = ProgramSigilRestOpacity;
                     _programSigilScale.ScaleX = _programSigilScale.ScaleY = 1;
@@ -1098,7 +1102,8 @@ namespace ConditioningControlPanel
         /// and giving it one would mean rebuilding a screen this pass is not allowed to restructure.
         /// The gold hand-over lands on the surface the user is actually looking at.</para>
         /// </summary>
-        private void CelebrateProgramGraduation(ProgramsTabView tab, ProgramEnrollment enrollment)
+        private void CelebrateProgramGraduation(ProgramsTabView tab, ProgramDefinition program,
+                                                ProgramEnrollment enrollment)
         {
             try
             {
@@ -1107,8 +1112,11 @@ namespace ConditioningControlPanel
                 _programGraduationCelebrated = key;
 
                 // The card wears the shared accent either way, so a re-entry to a finished run is
-                // gold too - it just does not re-play the fade or the sparks.
-                _programAccent ??= new SolidColorBrush(ProgramAccentColorNow());
+                // gold too - it just does not re-play the fade or the sparks. Seeded from the
+                // PROGRAM's own accent when there is no brush yet, which is the normal path: a run
+                // that graduated before the app was last closed opens straight onto this panel, so
+                // the run view never ran and there is nothing to have left one behind.
+                _programAccent ??= new SolidColorBrush(ProgramAccentColor(program.AccentColor));
                 _programAccentRunKey = key;
                 tab.ProgramsGraduatedCard.BorderBrush = _programAccent;
 
