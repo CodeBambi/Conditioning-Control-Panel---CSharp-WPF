@@ -1615,6 +1615,13 @@ public static partial class BuiltInPrograms
     ///
     /// The spiral pair is tuned so day 11 - the first day this template runs - starts it around
     /// minute 24 of a 45-minute session, so it arrives in the last third rather than greeting you.
+    ///
+    /// The flash ramp was re-authored on the 180-clamp pass: FlashPerHourEnd ran 66 -> 265, which put
+    /// day 18 at 197 an hour against an AppSettings.FlashFrequency clamp of 180, and left days 11-17
+    /// (146-177) with three units of headroom for the whole of KP-Verdict to escalate into. Now
+    /// 53 -> 180, landing 104 / 111 / 118 / 123 / 124 / 137 across days 11, 12, 13, 14, 17 and 18 -
+    /// wider day-to-day steps than the old pair gave, inside what the engine will run, and with room
+    /// left above for the last ten days.
     /// </summary>
     private static ProgramSessionTemplate KpHabit() => new()
     {
@@ -1626,7 +1633,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 34,
-            FlashPerHourEnd = 66,
+            FlashPerHourEnd = 53,
             FlashImages = 2,
             FlashOpacity = 30,
             FlashOpacityEnd = 50,
@@ -1693,7 +1700,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 145,
-            FlashPerHourEnd = 265,
+            FlashPerHourEnd = 180,
             FlashImages = 3,
             FlashOpacity = 76,
             FlashOpacityEnd = 95,
@@ -1760,6 +1767,15 @@ public static partial class BuiltInPrograms
     /// (days 19-21 and 23-28), so the ceiling deliberately sits above what day 28 reaches - the
     /// replayable graduation hands over can be pushed further later, and this pair cannot be
     /// re-authored once users have it saved.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass, and this template was the worst case in
+    /// the whole set. It ran 75/145 -> 240/580, so the nine days on it started at 184-240 an hour and
+    /// ended at 432-580: every number at both ends above the 180/hour AppSettings.FlashFrequency
+    /// clamp. Days 19 through 28 - "long slow ramps" is the template's entire brief - ran at a flat
+    /// 180 from the first second to the last, and day 28 was identical to day 19 in the field the
+    /// finale was built around. Now 62/98 -> 136/180, landing 115 -> 157 on day 19 and 136 -> 180 on
+    /// day 28, correctly ordered in between, with 180 as the real top of the program rather than a
+    /// number nothing reads. Circe's ramps are still the slowest in the set, which is the point.
     /// </summary>
     private static ProgramSessionTemplate KpVerdict() => new()
     {
@@ -1770,8 +1786,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 75,
-            FlashPerHourEnd = 145,
+            FlashPerHour = 62,
+            FlashPerHourEnd = 98,
             FlashImages = 2,
             FlashOpacity = 42,
             FlashOpacityEnd = 64,
@@ -1850,8 +1866,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 240,
-            FlashPerHourEnd = 580,
+            FlashPerHour = 136,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 80,
             FlashOpacityEnd = 100,

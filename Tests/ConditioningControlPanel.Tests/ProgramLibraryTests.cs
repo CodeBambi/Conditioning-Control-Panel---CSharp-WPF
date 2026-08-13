@@ -201,6 +201,90 @@ public class ProgramLibraryTests
     }
 
     [Fact]
+    public void NoShippedDayAuthorsAFlashRateTheEngineWillClamp()
+    {
+        // AppSettings.FlashFrequency clamps to 1..180 in its setter, and SessionEngine writes the
+        // session's rate through that setter twice - once at start (FlashPerHour) and again every
+        // second of the ramp toward FlashPerHourEnd. So anything a template authors above 180 is not
+        // "a very high rate", it is 180, silently.
+        //
+        // That is invisible in the source and invisible in every other test, and it had eaten the
+        // entire top of the curve: 43 of the 91 shipped days were over, including every day of both
+        // 28-day programs' back halves. Kept days 19-28 all ran at a flat 180 - the finale of a
+        // four-week paid program with its escalation deleted by a property setter. The Takeover's
+        // chapter 4, the four days a user tells someone else about, were pixel-identical to day 18.
+        //
+        // Raising the clamp is an owner call. Until then, authoring above it is writing numbers
+        // nothing reads, and this test is the thing that says so out loud.
+        const int engineClamp = 180;
+        var offenders = new List<string>();
+
+        foreach (var program in Library)
+        foreach (var day in program.AllDays)
+        {
+            var settings = ProgramSessionBuilder.LerpSettings(
+                program.GetTemplate(day.SessionTemplateId)!.Floor,
+                program.GetTemplate(day.SessionTemplateId)!.Ceiling,
+                day.Intensity);
+
+            if (day.Overrides is { Count: > 0 })
+                ProgramSessionBuilder.ApplyOverrides(settings, day.Overrides);
+
+            if (settings.FlashPerHour > engineClamp || settings.FlashPerHourEnd > engineClamp)
+            {
+                offenders.Add(
+                    $"{program.Id} day {day.DayIndex} ({day.SessionTemplateId} @ i {day.Intensity:0.00}) " +
+                    $"lands on {settings.FlashPerHour} -> {settings.FlashPerHourEnd}/hour");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            $"Days authoring a flash rate above the engine's {engineClamp}/hour clamp - the excess is " +
+            "discarded by AppSettings.FlashFrequency, so the authored escalation does not happen:\n  " +
+            string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void FlashEscalationIsRealWithinEveryTemplateBand()
+    {
+        // The companion to the clamp test, and the reason the fix was a re-author rather than a
+        // Math.Min. Flooring everything at 180 would have passed the test above while leaving the
+        // days flat, which is the bug. So: a template used on more than one day must actually move
+        // its flash rate between its lowest and highest intensity day, and the within-session ramp
+        // must climb rather than fall.
+        foreach (var program in Library)
+        {
+            var byTemplate = program.AllDays.GroupBy(d => d.SessionTemplateId);
+
+            foreach (var group in byTemplate)
+            {
+                var template = program.GetTemplate(group.Key)!;
+
+                var landings = group
+                    .Select(d => (d.DayIndex, d.Intensity,
+                        Settings: ProgramSessionBuilder.LerpSettings(template.Floor, template.Ceiling, d.Intensity)))
+                    .ToList();
+
+                foreach (var (dayIndex, _, settings) in landings)
+                {
+                    Assert.True(settings.FlashPerHour <= settings.FlashPerHourEnd,
+                        $"{program.Id} day {dayIndex} ramps flashes DOWNWARD, {settings.FlashPerHour} -> {settings.FlashPerHourEnd}/hour.");
+                }
+
+                if (landings.Count < 2) continue;
+
+                var lowest = landings.OrderBy(l => l.Intensity).First();
+                var highest = landings.OrderBy(l => l.Intensity).Last();
+                if (Math.Abs(highest.Intensity - lowest.Intensity) < 0.001) continue;
+
+                Assert.True(highest.Settings.FlashPerHourEnd > lowest.Settings.FlashPerHourEnd,
+                    $"{program.Id} template '{group.Key}' ends on {lowest.Settings.FlashPerHourEnd}/hour at its " +
+                    $"lowest day and {highest.Settings.FlashPerHourEnd}/hour at its highest - the band is flat.");
+            }
+        }
+    }
+
+    [Fact]
     public void EveryProgramHasAGraduationBadgeAndAContractPhrase()
     {
         foreach (var program in Library)

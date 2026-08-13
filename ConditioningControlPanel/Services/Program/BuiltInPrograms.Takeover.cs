@@ -1512,8 +1512,18 @@ public static partial class BuiltInPrograms
     /// TK-Uniform - video and flash heavy, hydra on. Hydra is the identity here: clicking a flash
     /// spawns more of them, so the one interaction the user has left actively makes it worse. The
     /// spiral arrives with this template too.
-    /// Band: i .41 (day 11) to i .76 (day 20), plus day 27's held breath at .74. Unchanged by the
-    /// retune - this template's band barely moved, and its pair was already sized for it.
+    /// Band: i .41 (day 11) to i .76 (day 20), plus day 27's held breath at .74.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass and it is the biggest change in the file.
+    /// It ran 45/80 -> 200/380, which put every single day this template touches - 11, 12, 13, 14, 16,
+    /// 17, 20 and 27 - above the 180/hour AppSettings.FlashFrequency clamp at the END of its ramp
+    /// (203, 221, 233, 245, 221, 254, 308, 302). Eight days of a 28-day program spent the back half of
+    /// every session pinned at a flat 180, and days 12, 13, 14 and 16 were indistinguishable from one
+    /// another for it. Now 51/99 -> 122/145, landing 80 -> 118, 84 -> 121, 87 -> 122, 90 -> 124,
+    /// 92 -> 126, 105 -> 134 and 104 -> 133. Smaller numbers, and for the first time an actual
+    /// ordering - the old ones only *looked* like escalation in the source.
+    /// Both halves of the pair now sit under the clamp, so this template cannot author a rate the
+    /// engine will discard at any intensity.
     /// </summary>
     private static ProgramSessionTemplate TkUniform() => new()
     {
@@ -1524,8 +1534,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 45,
-            FlashPerHourEnd = 80,
+            FlashPerHour = 51,
+            FlashPerHourEnd = 99,
             FlashImages = 2,
             FlashOpacity = 35,
             FlashOpacityEnd = 55,
@@ -1591,8 +1601,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 200,
-            FlashPerHourEnd = 380,
+            FlashPerHour = 122,
+            FlashPerHourEnd = 145,
             FlashImages = 4,
             FlashOpacity = 80,
             FlashOpacityEnd = 100,
@@ -1661,6 +1671,15 @@ public static partial class BuiltInPrograms
     /// program ever runs a template past what it was authored for - and days 25, 26 and 28 reach past
     /// the lerp with Overrides rather than by inflating this pair, which would have dragged every
     /// other chapter-4 day up with them.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass. It ran 90/180 -> 260/620, so the eight
+    /// days on this template started at 202-260 an hour and ended at 470-620 - every number at both
+    /// ends above the 180/hour AppSettings.FlashFrequency clamp. Chapter 4, the four days a user
+    /// describes to someone else, ran at a flat 180 for every second of every session, and day 28 was
+    /// pixel-identical to day 18 in the one field the whole curve was supposed to escalate. Now
+    /// 66/115 -> 125/180: day 18 lands 105 -> 158 and day 28 lands 125 -> 180, with the six days
+    /// between them properly ordered, and 180 is exactly the top of what the engine will run - the
+    /// program's real ceiling rather than a number on paper.
     /// </summary>
     private static ProgramSessionTemplate TkBambiTime() => new()
     {
@@ -1671,8 +1690,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 90,
-            FlashPerHourEnd = 180,
+            FlashPerHour = 66,
+            FlashPerHourEnd = 115,
             FlashImages = 3,
             FlashOpacity = 50,
             FlashOpacityEnd = 70,
@@ -1745,8 +1764,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 260,
-            FlashPerHourEnd = 620,
+            FlashPerHour = 125,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 85,
             FlashOpacityEnd = 100,
