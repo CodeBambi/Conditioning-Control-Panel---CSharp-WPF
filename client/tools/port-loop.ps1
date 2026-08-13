@@ -49,6 +49,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $stopFile = Join-Path $repo '.spine\STOP'
 $started = Get-Date
 $consecutiveFailures = 0
+$auditPending = $false   # set when a HEAD-moving phase ends while a batch is in flight
 
 function Write-Loop($msg) {
     $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $msg
@@ -74,6 +75,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     Write-Loop "iteration $i — spine macroPhase=$macro"
 
     if ($macro -eq 'executing' -or $macro -eq 'planning') {
+        if ($auditPending) { Write-Loop "audit deferred — batch in flight (lanes are building; a main-checkout suite run would only contend for CPU)" }
         Write-Loop "batch in flight — shell waits (no model resident)"
         if (-not $DryRun) {
             & $spine wait --until completed,needs_integrate,failed,aborted,needs_retry --timeout 4h 2>&1 |
@@ -102,7 +104,17 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     # green pin) was self-certified by the same context that produced it. Design borrowed from
     # pi-goal-list-loop-audit's detached auditor; the package itself is NOT installed (it drives
     # its own goal queue and would compete with spine and the task board).
-    if ($code -eq 0 -and $headAfter -ne $headBefore -and -not $NoAudit) {
+    if ($code -eq 0 -and $headAfter -ne $headBefore -and -not $NoAudit) { $auditPending = $true }
+
+    # Audit only while spine is idle: a full build+suite in the main checkout while lanes are
+    # building contends for CPU for no gain (wave-21 launch phase raised this). Deferred audits
+    # run at the next idle iteration; the claims under audit are in the tree either way.
+    $macroNow = try { ((& $spine status --json 2>&1 | Out-String) | ConvertFrom-Json).macroPhase } catch { 'unknown' }
+    if ($auditPending -and $macroNow -ne 'idle') {
+        Write-Loop "audit deferred to the next idle iteration (spine macroPhase=$macroNow)"
+    }
+    elseif ($auditPending) {
+        $auditPending = $false
         $auditLog = Join-Path $logDir ("{0:000}-audit.log" -f $i)
         Write-Loop "blind audit of $($headAfter.Substring(0,8)) -> $auditLog"
 
@@ -133,7 +145,7 @@ VERDICT: FAIL - <one line naming the check, the claimed value and the observed v
         & $pi -p -ne -ns -nc -np --no-session -t read,bash,grep,find,ls --model $AuditModel $auditPrompt *>&1 |
             Tee-Object -FilePath $auditLog | Out-Null
 
-        $verdict = (Select-String -Path $auditLog -Pattern '^VERDICT:' | Select-Object -Last 1).Line
+        $verdict = (Select-String -Path $auditLog -Pattern '^VERDICT:' -ErrorAction SilentlyContinue | Select-Object -Last 1).Line
         if (-not $verdict) { $verdict = 'VERDICT: FAIL - auditor produced no verdict line' }
         Write-Loop "audit -> $verdict"
 
