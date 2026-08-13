@@ -1,16 +1,16 @@
 ## STATUS: SP-065 — Mechanical skip/count detection that fails the CONTRACT
-**Current Step:** 0 (authored, not started)
-**Last Updated:** 2026-08-13 (orchestrator, authoring)
+**Current Step:** 1 (probe the runner surface, choose the mechanism, design the guard)
+**Last Updated:** 2026-08-13 (worker, Step 1 in progress)
 **Blockers:** none
 
-### Step 1: probe the runner surface, choose the mechanism, design the guard — NOT STARTED
-- [ ] Update STATUS.md before starting work
-- [ ] Probe `dotnet test --help`, xunit v3 `failSkips`, MTP `--minimum-expected-tests` — exact invocation + exact response each
-- [ ] Choose the mechanism; reject the other two on their real failure modes (exactly-N skips; zero-results/never-ran/filtered-out)
-- [ ] Wrapper design: invocation of both projects, results OUTSIDE the worktree, full fail-closed list, exit codes, success summary
-- [ ] Pin-file design: not-ignored location, schema, per-project passed/skipped, what a bump requires
-- [ ] Half-install guard design: walk, `>= SP-065` ID rule, `file:line` shape, why it cannot skip
-- [ ] Pre-approach solo consult (T-7: `mode: "solo"`) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch
+### Step 1: probe the runner surface, choose the mechanism, design the guard — IN PROGRESS
+- [x] Update STATUS.md before starting work
+- [x] Probe `dotnet test --help`, xunit v3 `failSkips`, MTP `--minimum-expected-tests` — exact invocation + exact response each
+- [x] Choose the mechanism; reject the other two on their real failure modes (exactly-N skips; zero-results/never-ran/filtered-out)
+- [x] Wrapper design: invocation of both projects, results OUTSIDE the worktree, full fail-closed list, exit codes, success summary
+- [x] Pin-file design: not-ignored location, schema, per-project passed/skipped, what a bump requires
+- [x] Half-install guard design: walk, `>= SP-065` ID rule, `file:line` shape, why it cannot skip
+- [x] Pre-approach solo consult (T-7: `mode: "solo"`) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch
 
 ### Step 2: implement the wrapper and the pin, prove BOTH verdicts — NOT STARTED
 - [ ] Wrapper at exactly `client/tests/floor/check-floor.mjs`; pin beside it; `git ls-files` tracking proof
