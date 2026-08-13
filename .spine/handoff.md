@@ -52,6 +52,20 @@ hard boundary and its whole justification.
 6. **Budget the board-row update INTO the land.** ENABLER 2 keeps `task-board.md` out of worker scope, and
    SP-001's gap recurred at SP-067 (its three-dot diff touched zero files under `client/docs/`).
 
+## LAND OBLIGATIONS FOR THIS WAVE (post-launch consult — you have no memory of them otherwise)
+
+1. **File the consult-truncation tooling row.** Six occurrences, still no board row. The recurrence rule (same
+   lesson twice → file a bounded tooling task) is being broken by the orchestrator itself, and "cap the reply" is
+   a **procedural mitigation** — the class that already failed at SP-052 and SP-057. File it; do not fix it in the land.
+2. **Append the wave-25 lessons to `client/docs/port-lessons.md` AT LAND, never mid-batch.** That file is in
+   spine `referenceDocs` (`.spine/spine-config.json:97`, verified), so editing it while a batch runs **mutates a
+   live worker's input**. Two entries owed: (a) the consult-truncation class + the reply-cap workaround;
+   (b) **a landed audit ages into a map, not a citation** — re-derive by symbol, record found-vs-given.
+3. **Update board row `:46` at land, and bound the claim.** It still reads OPEN with no in-flight marker. SP-068
+   discharges three filtered rows of its audit table; it does **not** answer the audit's 12 owner questions, so
+   the row stays OPEN for them. ENABLER 2 makes this the orchestrator's edit — SP-001's gap already recurred at
+   SP-067, so it is named here to avoid a third miss.
+
 ## Standing land discipline (unchanged, learned the hard way)
 
 - **Never trust the gate's own evidence (T-3, six occurrences).** Verify the merged state yourself in a scratch

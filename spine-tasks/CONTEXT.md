@@ -26,6 +26,12 @@
 
 **Machine posture at authoring:** laptop; **MCP 0/3 connected** (`avalonia-docs`/`avalonia-live` cached only, `avalonia-ui` not connected) — no AXAML in this packet, so the A-013 advisory step is not a gate and this is a named limit, never a blocker; **zero WSL distros, so Linux stays a standing named gate**. Base floor at launch: **903 unit / 35 headless / 2 named skips, 0W/0E**.
 
+**LAND OBLIGATIONS FOR THIS WAVE (post-launch consult, solo Opus 5 — the next phase inherits these and has no memory of this one):**
+
+1. **File the consult-truncation tooling row.** The class is at **six** occurrences (waves 17, 21, 22, 23, 24-adjacent, and wave 25's own decomposition call) and still has **no board row**. The port's own recurrence rule — the same lesson twice means file a bounded tooling task rather than absorbing it — is being broken by the orchestrator, wave after wave. "Ask narrowly and cap the reply" is a **procedural mitigation**, which is precisely the class that already failed at SP-052 and SP-057. File it as a row at land; do not widen the land into fixing it.
+2. **Append the wave-25 lessons to `client/docs/port-lessons.md` AT LAND — not before.** That file is in spine `referenceDocs` (`.spine/spine-config.json:97`, verified), so **editing it while a batch is running mutates a live worker's input.** Two entries are owed: (a) the consult-truncation class and the reply-cap workaround; (b) **a landed audit ages into a map, not a citation** — SP-060's line cites were already stale at wave 25 (`AwarenessObserverPolicy.cs:319-327` is `ResolveOwnProcessName`) while every semantic was still present, so audits must be re-derived by **symbol** with found-vs-given recorded.
+3. **Update board row `:46` at land and say what it does not mean.** The row still reads **OPEN** with no in-flight marker. SP-068 discharges three filtered rows of its audit table; it does **not** answer the audit's 12 owner questions, and the row stays OPEN for them. ENABLER 2 keeps `task-board.md` out of worker scope, so this update is the orchestrator's — and SP-001's gap already recurred at SP-067, so it is named here to avoid a third miss.
+
 ---
 
 ## Current State
