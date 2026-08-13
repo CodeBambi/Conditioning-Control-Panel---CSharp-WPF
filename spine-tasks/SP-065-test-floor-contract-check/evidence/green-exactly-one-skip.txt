@@ -1,0 +1,34 @@
+attempt 1 (operator arithmetic error in the TEMP pin: 896/1 against a 898-total suite -> correctly RED, exit 1):
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-pvxye1
+FLOOR CHECK FAILED (SP-065):
+  CcpClient.Tests: executed(897) + notExecuted(0) != total(898) — inconsistent counters
+  --- CcpClient.Tests dotnet output tail ---
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:02.47]     CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault [SKIP]
+  Skipped CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault [1 ms]
+Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-pvxye1\CcpClient.Tests\results.trx
+
+Passed!  - Failed:     0, Passed:   897, Skipped:     1, Total:   898, Duration: 35 s - CcpClient.Tests.dll (net10.0)
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-pvxye1
+WRAPPER-EXIT=1
+
+attempt 2 (correct temp pin 897 passed / 1 skipped):
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-5E7zGu
+FLOOR CHECK FAILED (SP-065):
+  CcpClient.Tests: executed(897) + notExecuted(0) != total(898) — inconsistent counters
+  --- CcpClient.Tests dotnet output tail ---
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:03.45]     CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault [SKIP]
+  Skipped CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault [1 ms]
+Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-5E7zGu\CcpClient.Tests\results.trx
+
+Passed!  - Failed:     0, Passed:   897, Skipped:     1, Total:   898, Duration: 35 s - CcpClient.Tests.dll (net10.0)
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-5E7zGu
+WRAPPER-EXIT=1
+pin restored to 898/0 (git checkout)
+attempt 3 (post-fix wrapper, temp pin 897 passed / 1 skipped, induced skip):
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-2jiwFv
+FLOOR OK: CcpClient.Tests: 897/897 passed, 1/1 skipped; CcpClient.HeadlessTests: 35/35 passed, 0/0 skipped
+results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-2jiwFv
+WRAPPER-EXIT=0
+pin restored to 898/0
