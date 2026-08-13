@@ -20,17 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT = path.resolve(HERE, "..", "..");
 const PIN_PATH = path.join(HERE, "floor.json");
-
-const PROJECTS = [
-  {
-    name: "CcpClient.Tests",
-    csproj: path.join(CLIENT, "tests", "CcpClient.Tests", "CcpClient.Tests.csproj"),
-  },
-  {
-    name: "CcpClient.HeadlessTests",
-    csproj: path.join(CLIENT, "tests", "CcpClient.HeadlessTests", "CcpClient.HeadlessTests.csproj"),
-  },
-];
+const SLN_PATH = path.join(CLIENT, "CcpClient.sln");
 
 const STALE_SKEW_MS = 15_000;
 // Counter categories that must be zero for a run to mean anything (framing b/g).
@@ -55,13 +45,48 @@ function readPin() {
   } catch (err) {
     fail(`pin file ${PIN_PATH} is not parseable JSON: ${err.message}`);
   }
-  for (const p of PROJECTS) {
-    const entry = pin?.projects?.[p.name];
+  if (!pin || typeof pin !== "object" || !pin.projects || typeof pin.projects !== "object") {
+    fail(`pin file ${PIN_PATH} has no "projects" object`);
+  }
+  for (const [name, entry] of Object.entries(pin.projects)) {
     if (!entry || !Number.isInteger(entry.passed) || !Number.isInteger(entry.skipped)) {
-      fail(`pin file ${PIN_PATH} has no integer {passed, skipped} entry for ${p.name}`);
+      fail(`pin file ${PIN_PATH} has no integer {passed, skipped} entry for ${name}`);
     }
   }
   return pin;
+}
+
+// Test-project DISCOVERY from the solution (pre-completion consult hole: a hardcoded list
+// lets a NEW test project join the sln and silently sit outside the floor). Every csproj
+// under the sln's tests/ folder must be pinned, and every pin must exist in the sln —
+// both directions fail closed. Exported for the fail-closed demonstration harness.
+export function discoverTestProjects(slnText, pin) {
+  const discovered = new Map(); // project name -> sln-relative csproj path
+  for (const m of slnText.matchAll(/Project\("[^"]*"\)\s*=\s*"[^"]*"\s*,\s*"([^"]+\.csproj)"/g)) {
+    const rel = m[1].replace(/\\/g, "/");
+    if (!rel.startsWith("tests/")) {
+      continue;
+    }
+    const name = path.posix.basename(rel, ".csproj");
+    discovered.set(name, rel);
+  }
+  if (discovered.size === 0) {
+    fail("no test projects discovered under tests/ in client/CcpClient.sln — the floor refuses to go blind");
+  }
+  const pinned = new Set(Object.keys(pin.projects));
+  const unpinned = [...discovered.keys()].filter((n) => !pinned.has(n));
+  if (unpinned.length > 0) {
+    fail(`test project(s) in client/CcpClient.sln with NO floor pin: ${unpinned.join(", ")} — ` +
+      "a suite outside the floor is exactly what SP-065 exists to prevent; pin it in client/tests/floor/floor.json");
+  }
+  const missing = [...pinned].filter((n) => !discovered.has(n));
+  if (missing.length > 0) {
+    fail(`pinned project(s) absent from client/CcpClient.sln tests/: ${missing.join(", ")} — stale pin`);
+  }
+  return [...discovered.entries()].map(([name, rel]) => ({
+    name,
+    csproj: path.join(CLIENT, ...rel.split("/")),
+  }));
 }
 
 // Exported for the fail-closed demonstration harness; the contract path calls this with
@@ -112,6 +137,9 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   }
 
   const countersTag = xml.match(/<Counters\s+[^>]*\/>/)?.[0];
+  if (!countersTag) {
+    fail(`${projectName}: ${trxPath} <Counters> element is not a self-closing tag — unparseable results`);
+  }
   const counters = {};
   for (const m of countersTag.matchAll(/(\w+)="(-?\d+)"/g)) {
     counters[m[1]] = Number(m[2]);
@@ -130,14 +158,40 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
       fail(`${projectName}: ${counters[key]} ${key} result(s) — a dirty run is not a floor run`);
     }
   }
-  if (counters.executed + counters.notExecuted !== counters.total) {
-    fail(`${projectName}: executed(${counters.executed}) + notExecuted(${counters.notExecuted}) != total(${counters.total}) — inconsistent counters`);
-  }
-  if (counters.passed !== counters.executed) {
-    fail(`${projectName}: passed(${counters.passed}) != executed(${counters.executed}) with zero bad categories — inconsistent counters`);
-  }
 
-  const skipped = counters.notExecuted;
+  // Per-test outcomes from the RESULT LIST are authoritative. Empirically on this stack
+  // (xunit.runner.visualstudio 3.1.5, probe ccp-floor-5E7zGu): a dynamically-skipped test
+  // (Assert.SkipWhen) yields a UnitTestResult with outcome="NotExecuted" while
+  // Counters/@notExecuted stays 0 and @executed excludes it — the Counters arithmetic does
+  // NOT close over skips (executed + notExecuted = 897 != total 898 with one skip). So the
+  // skip count and all consistency checks anchor on the result list, never on Counters
+  // arithmetic.
+  const outcomes = {};
+  for (const m of xml.matchAll(/<UnitTestResult\s[^>]*\boutcome="([^"]+)"/g)) {
+    outcomes[m[1]] = (outcomes[m[1]] ?? 0) + 1;
+  }
+  const resultCount = Object.values(outcomes).reduce((a, b) => a + b, 0);
+  if (resultCount === 0) {
+    fail(`${projectName}: 0 <UnitTestResult> entries — "no tests ran" must never read as success`);
+  }
+  if (resultCount !== counters.total) {
+    fail(`${projectName}: result list has ${resultCount} entries but Counters/@total is ${counters.total} — inconsistent results`);
+  }
+  const BAD_OUTCOMES = ["Failed", "Error", "Timeout", "Aborted", "NotRunnable", "Inconclusive", "PassedButRunAborted", "Disconnected"];
+  for (const key of BAD_OUTCOMES) {
+    if (outcomes[key]) {
+      fail(`${projectName}: ${outcomes[key]} ${key} outcome(s) in the result list — a dirty run is not a floor run`);
+    }
+  }
+  const passed = outcomes.Passed ?? 0;
+  const skipped = outcomes.NotExecuted ?? 0;
+  if (passed !== counters.passed) {
+    fail(`${projectName}: result list Passed(${passed}) != Counters/@passed(${counters.passed}) — inconsistent results`);
+  }
+  if (passed + skipped !== resultCount) {
+    const exotic = Object.entries(outcomes).filter(([k]) => k !== "Passed" && k !== "NotExecuted").map(([k, v]) => `${k}=${v}`).join(", ");
+    fail(`${projectName}: Passed(${passed}) + NotExecuted(${skipped}) != ${resultCount} results — unexpected outcome(s): ${exotic || "none named"}`);
+  }
   if (counters.passed !== pinEntry.passed || skipped !== pinEntry.skipped) {
     fail(
       `${projectName}: FLOOR VIOLATION — passed ${counters.passed} (pin ${pinEntry.passed}), ` +
@@ -171,19 +225,29 @@ function runProject(project, runDir) {
 export function main() {
   const runStartMs = Date.now();
   const pin = readPin();
+  let projects;
+  try {
+    projects = discoverTestProjects(fs.readFileSync(SLN_PATH, "utf8"), pin);
+  } catch (err) {
+    if (err instanceof FloorError) {
+      console.error(`FLOOR CHECK FAILED (SP-065):\n  ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccp-floor-"));
   console.log(`floor run results directory: ${runDir}`);
 
   const failures = [];
   const summaries = [];
-  for (const project of PROJECTS) {
+  for (const project of projects) {
     let exitCode = 1;
     let output = "";
     let resultsDir = path.join(runDir, project.name);
     try {
       ({ exitCode, output, resultsDir } = runProject(project, runDir));
       if (exitCode !== 0) {
-        fail(`dotnet test exited ${exitCode} for ${projectName(project)} — runner-level failure (see tail below)`);
+        fail(`dotnet test exited ${exitCode} for ${project.name} — runner-level failure (see tail below)`);
       }
       const summary = verifyProjectResults(project.name, resultsDir, pin.projects[project.name], runStartMs);
       summaries.push(`${project.name}: ${summary.passed}/${pin.projects[project.name].passed} passed, ${summary.skipped}/${pin.projects[project.name].skipped} skipped`);
@@ -209,10 +273,6 @@ export function main() {
   console.log(`FLOOR OK: ${summaries.join("; ")}`);
   console.log(`results directory: ${runDir}`);
   return 0;
-}
-
-function projectName(project) {
-  return project.name;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -56,7 +56,17 @@ public partial class FloorWrapperGuardTests
             }
 
             var numberMatch = PacketNumber().Match(segments[0]);
-            if (!numberMatch.Success || int.Parse(numberMatch.Groups[1].Value) < FirstBoundPacketNumber)
+            if (!numberMatch.Success)
+            {
+                // A directory holding a PROMPT.md whose name does not parse as SP-<n>-... would
+                // silently escape the ID rule — fail closed, same refusal-to-go-blind principle
+                // as the missing-contract-row check below.
+                violations.Add($"{normalized}:1: packet directory '{segments[0]}' does not parse as SP-<number>-... — " +
+                    "the floor-wrapper guard refuses to go blind on an unparseable packet ID (SP-065)");
+                continue;
+            }
+
+            if (int.Parse(numberMatch.Groups[1].Value) < FirstBoundPacketNumber)
             {
                 continue; // grandfathered by the explicit ID rule (never a suppression list)
             }

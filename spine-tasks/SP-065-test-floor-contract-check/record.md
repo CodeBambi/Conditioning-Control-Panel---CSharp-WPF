@@ -303,7 +303,38 @@ This task writes **zero product code** and closes **no product capability**.
 - **Pre-approach (Step 1), mode solo**: reasoning only, NO verdict text surfaced; actual
   answering model not surfaced. Recorded verbatim in Step 1; adopted reasoning observations
   are marked "consult-reasoning point" there. Nothing stitched.
-- **Pre-completion**: below, appended after the call.
+- **Pre-completion**: reasoning only, NO verdict text surfaced; actual answering model not
+  surfaced. Nothing stitched. The reasoning surfaced four concrete holes; all four were
+  closed or dispositioned BEFORE the 3-green table ran:
+  1. **Hardcoded project list** (a new test project in the sln would silently sit outside
+     the floor) → wrapper now DISCOVERS test projects from `client/CcpClient.sln` and fails
+     closed on an unpinned discovery, a stale pin, or an empty discovery
+     (`discoverTestProjects`, three fail-closed cases + positive control in the harness).
+  2. **Exactly-N claim was asserted, not proven** → demonstrated end-to-end: temp pin
+     `{passed: 897, skipped: 1}` + induced skip → `FLOOR OK ... 897/897 passed, 1/1
+     skipped`, exit 0 (`evidence/green-exactly-one-skip.txt`). This demonstration also
+     CAUGHT A REAL WRAPPER BUG (see below).
+  3. **Guard blind spot: unparseable packet directory name** would escape the ID rule →
+     now a violation (refuse-to-go-blind, same principle as the missing-contract-row check).
+  4. **Non-self-closing `<Counters>`** would TypeError instead of a named FloorError →
+     explicit check + harness case.
+
+### Wrapper bug found BY the exactly-N demonstration (recorded per the no-stitch rule: this
+is empirical, not consult-stitched)
+
+The first exactly-N run false-REDDED: `executed(897) + notExecuted(0) != total(898)`.
+Inspection of the real trx (ccp-floor-5E7zGu) showed that on xunit.runner.visualstudio
+3.1.5 a dynamically-skipped test (`Assert.SkipWhen`) gets `outcome="NotExecuted"` in the
+result list while `Counters/@notExecuted` stays **0** and `@executed` excludes it — the
+Counters arithmetic **does not close over skips** on this stack. The wrapper now anchors
+the skip count and all consistency checks on the **result list** (`<UnitTestResult
+outcome=...` tally), with Counters cross-checks only where they hold (total, passed, bad
+categories). Regression positive in the harness: the exact failing shape
+(897 passed + 1 skip, adapter-blind counters) is ACCEPTED under pin {897, 1}.
+
+(Bonus honesty: attempt 1 of the exactly-N demo also failed because I set the temp pin to
+896/1 against a 898-total suite — operator arithmetic error, correctly RED. Both attempts
+are preserved in the evidence file.)
 
 ### Engine-review presence summary (T-2)
 

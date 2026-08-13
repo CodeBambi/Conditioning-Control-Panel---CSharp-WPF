@@ -1,28 +1,43 @@
 PASS  results directory missing
-      -> CcpClient.Tests: results directory missing (C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\never-created) — the project produced no results at all
+      -> CcpClient.Tests: results directory missing (C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\never-created) — the project produced no results at all
 PASS  no .trx in results dir
-      -> CcpClient.Tests: no .trx in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\empty — the project produced no results at all
+      -> CcpClient.Tests: no .trx in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\empty — the project produced no results at all
 PASS  two .trx files
-      -> CcpClient.Tests: 2 .trx files in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\two, expected exactly 1 (a.trx, b.trx)
+      -> CcpClient.Tests: 2 .trx files in C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\two, expected exactly 1 (a.trx, b.trx)
 PASS  garbage (not XML)
-      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\garbage\results.trx does not start with an XML declaration — unparseable results
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\garbage\results.trx does not start with an XML declaration — unparseable results
 PASS  truncated mid-write
-      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\trunc\results.trx does not end with </TestRun> — truncated results (run died mid-write)
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\trunc\results.trx does not end with </TestRun> — truncated results (run died mid-write)
 PASS  stale mtime + stale creation
-      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\stale\results.trx mtime 2026-08-13T02:56:35.155Z predates this run — stale results from a previous run
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\stale\results.trx mtime 2026-08-13T03:17:53.333Z predates this run — stale results from a previous run
 PASS  stale creation only (mtime fresh — copy-tool shape)
-      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-qMguZk\stale-creation\results.trx Times/@creation 2026-08-13T02:56:35.155Z predates this run — stale results from a previous run
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\stale-creation\results.trx Times/@creation 2026-08-13T03:17:53.333Z predates this run — stale results from a previous run
 PASS  zero results (filter matched nothing)
       -> CcpClient.Tests: 0 total results — "no tests ran" must never read as success (filter-excluded / never-ran shape)
 PASS  failed category nonzero
       -> CcpClient.Tests: 1 failed result(s) — a dirty run is not a floor run
 PASS  outcome not Completed
       -> CcpClient.Tests: ResultSummary outcome is "Failed", expected "Completed" — the run did not finish cleanly
-PASS  inconsistent arithmetic
-      -> CcpClient.Tests: executed(897) + notExecuted(0) != total(900) — inconsistent counters
+PASS  result list vs Counters total mismatch
+      -> CcpClient.Tests: result list has 897 entries but Counters/@total is 900 — inconsistent results
+PASS  result list Passed vs Counters passed mismatch
+      -> CcpClient.Tests: result list Passed(897) != Counters/@passed(896) — inconsistent results
+PASS  exotic outcome in result list
+      -> CcpClient.Tests: Passed(896) + NotExecuted(0) != 897 results — unexpected outcome(s): Warning=1
+PASS  counters not self-closing
+      -> CcpClient.Tests: C:\Users\Micha\AppData\Local\Temp\ccp-floor-demo-BQnGm2\counters\results.trx <Counters> element is not a self-closing tag — unparseable results
 PASS  off-floor count (pin 897, got 896)
       -> CcpClient.Tests: FLOOR VIOLATION — passed 896 (pin 897), skipped 0 (pin 0). A count drift in EITHER direction or an unexpected skip fails the contract (SP-065). If this change is intentional, bump client/tests/floor/floor.json in the SAME commit and state the reason in the message.
-PASS  unexpected skip (pin 0, got 1)
+PASS  unexpected skip (pin 0, got 1) — result-list skip, counters blind
       -> CcpClient.Tests: FLOOR VIOLATION — passed 896 (pin 897), skipped 1 (pin 0). A count drift in EITHER direction or an unexpected skip fails the contract (SP-065). If this change is intentional, bump client/tests/floor/floor.json in the SAME commit and state the reason in the message.
 PASS  positive control — valid on-floor results accepted (897 passed, 0 skipped)
+PASS  REGRESSION positive — one skip, adapter-blind counters, pin {897,1} accepted
+      (the exact ccp-floor-5E7zGu shape that false-redded the first wrapper version) (897 passed, 1 skipped)
+PASS  new unpinned test project in sln
+      -> test project(s) in client/CcpClient.sln with NO floor pin: CcpClient.NewTests — a suite outside the floor is exactly what SP-065 exists to prevent; pin it in client/tests/floor/floor.json
+PASS  pinned project absent from sln
+      -> pinned project(s) absent from client/CcpClient.sln tests/: CcpClient.GoneTests — stale pin
+PASS  sln with no test projects at all
+      -> no test projects discovered under tests/ in client/CcpClient.sln — the floor refuses to go blind
+PASS  discovery positive control — both real projects discovered (CcpClient.Tests, CcpClient.HeadlessTests)
 ALL FAIL-CLOSED CASES HELD
