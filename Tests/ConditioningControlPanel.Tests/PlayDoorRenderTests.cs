@@ -557,6 +557,113 @@ public class PlayDoorRenderTests
         return dir!.FullName;
     }
 
+    // =====================================================================================
+    //  tier livery: the stamped signs, and the FREE TODAY re-stamp
+    // =====================================================================================
+
+    /// <summary>
+    /// Wheel keys that legitimately have no card on this door, so their free day is announced on
+    /// the dashboard and in the vault instead. Listed rather than inferred: the whole point of the
+    /// test below is to make ADDING a wheel key a decision somebody has to write down.
+    /// </summary>
+    private static readonly string[] PoolKeysWithNoPlayCard = { "takeover", "awareness" };
+
+    [Fact]
+    public void TheTieredPlayCardsWearTheirOwnTiersSign()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+
+            // Gold on the two premium cards, diamond on the door's one Lab hero. A sign wearing
+            // the wrong tier is a price tag quoting the wrong price.
+            Assert.Equal(1, page.PlayBadgeFyp.Tier);
+            Assert.Equal(1, page.PlayBadgeRemote.Tier);
+            Assert.Equal(2, page.PlayBadgeDtrh.Tier);
+        });
+    }
+
+    [Fact]
+    public void EveryFeatureOnTheDailyWheelEitherHasAStampedPlayCardOrIsKnownNotTo()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+
+            var stamped = new Dictionary<string, ConditioningControlPanel.Controls.TierBadge>
+            {
+                ["fyp"] = page.PlayBadgeFyp,
+                ["remote"] = page.PlayBadgeRemote,
+            };
+
+            // The failure this catches: someone appends a key to DailyFreeService.Pool whose
+            // feature DOES have a Play card. The card's lockband would clear on its free day (the
+            // band already passes its key to TierGate) and nothing would replace it - the wall
+            // would go quiet on the one day the feature is free.
+            foreach (var key in DailyFreeService.Pool)
+            {
+                if (PoolKeysWithNoPlayCard.Contains(key)) continue;
+                Assert.True(stamped.ContainsKey(key),
+                    $"'{key}' is on the daily-free wheel with no Play badge wired to it, and is not "
+                    + "on the list of wheel keys known to have no card on this door");
+                Assert.True(stamped[key].Tier > 0, $"the '{key}' badge carries no tier to stamp over");
+            }
+
+            // ...and the exemption list cannot rot either: a key dropped from the wheel must not
+            // go on being excused here.
+            foreach (var key in PoolKeysWithNoPlayCard)
+                Assert.Contains(key, DailyFreeService.Pool);
+        });
+    }
+
+    [Fact]
+    public void APlayCardsSignGetsRestampedOnItsFreeDayAndPlainAgainAfterwards()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+            var badge = page.PlayBadgeFyp;
+
+            // What MainWindow.PlayTab.cs writes on the day the wheel lands on For You.
+            badge.FreeToday = true;
+
+            Assert.Equal(Visibility.Visible, badge.StampImage.Visibility);
+            // The tier sign stays, dimmed - "this normally costs Tier 1, except today". A sign
+            // that vanished would leave the card claiming the feature was always free.
+            Assert.Equal(Visibility.Visible, badge.TierImage.Visibility);
+            Assert.True(badge.TierImage.Opacity < 0.5,
+                $"the re-stamped sign is still at {badge.TierImage.Opacity} - the stamp has nothing to overrule");
+
+            // Midnight, or a patron logging in.
+            badge.FreeToday = false;
+
+            Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);
+            Assert.Equal(1.0, badge.TierImage.Opacity, 3);
+        });
+    }
+
+    [Fact]
+    public void APlayCardWearsNoStampUntilItIsToldItIsFree()
+    {
+        OnStaThread(() =>
+        {
+            // The resting state of the whole wall: signs, no stamps. In a test host App.DailyFree
+            // is null, which is also the early-startup case - and a badge that stamped itself by
+            // default would put FREE TODAY on all four gold cards at once.
+            var page = new PlayTabView();
+            Realize(page);
+
+            foreach (var badge in new[] { page.PlayBadgeFyp, page.PlayBadgeRemote, page.PlayBadgeDtrh })
+            {
+                Assert.False(badge.FreeToday);
+                Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);
+            }
+        });
+    }
+
     /// <summary>
     /// The product's own C# sources. Build output is skipped for the obvious reason, and
     /// <c>.claude/</c> because a developer's git worktrees live under it — those are other

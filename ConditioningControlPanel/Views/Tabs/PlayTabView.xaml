@@ -401,7 +401,13 @@
                              top edge, so a right-hand badge would land on it at every hero height.
                              The left corner is open art at any size (the title block is centred
                              too), which is why the mirror is here and nowhere else. -->
-                        <fx:TierBadge Tier="2" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        <!-- Named for the same reason as the Remote badge, with one difference:
+                             "dtrh" is NOT on the wheel. It is an override-only key (the owner's
+                             promo Saturdays), which is exactly why the lockband above already
+                             passes it to TierGate.RequiresLab - so the day the server names it,
+                             the band clears and this sign gets the stamp, together. -->
+                        <fx:TierBadge x:Name="PlayBadgeDtrh" x:FieldModifier="internal"
+                                      Tier="2" HorizontalAlignment="Left" VerticalAlignment="Top"
                                       Margin="-2,-2,0,0" Panel.ZIndex="9"/>
 
                         <Grid x:Name="SlotDtrh" x:FieldModifier="internal" Margin="28,24,28,24">
@@ -669,7 +675,14 @@
                                      be the thing that goes dim behind the scrim. Nothing about the
                                      band's contract changes: still collapsed by default, still
                                      hit-test invisible, still clockless. -->
-                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="1"/>
+                                <!-- NAMED because "remote" is on the daily-free wheel
+                                     (DailyFreeService.Pool): MainWindow.PlayTab.cs stamps FREE
+                                     TODAY over this sign on the day it comes up. The four badges
+                                     that are not named - Blink, Lockdown, Gaze, Focus Gaze - are
+                                     not on the wheel and cannot be named by a server override
+                                     either, so a field for them would be dead weight. -->
+                                <fx:TierBadge x:Name="PlayBadgeRemote" x:FieldModifier="internal"
+                                              Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockRemote" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -1108,7 +1121,8 @@
                                         </Button.Resources>
                                     </Button>
                                 </Grid>
-                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="1"/>
+                                <fx:TierBadge x:Name="PlayBadgeFyp" x:FieldModifier="internal"
+                                              Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockFyp" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">

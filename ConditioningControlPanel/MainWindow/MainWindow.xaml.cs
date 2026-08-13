@@ -450,6 +450,12 @@ namespace ConditioningControlPanel
                     {
                         RefreshPremiumRail();
                         RefreshExclusivesTab();
+                        // The Play wall rides it too, for its lockbands AND its FREE TODAY
+                        // re-stamps (MainWindow.PlayTab.cs). It is not reached by the rail
+                        // refresh - that funnel covers the rail and the mosaic - and the two Play
+                        // cards on the wheel (For You, Remote Control) would otherwise go on
+                        // wearing yesterday's answer until the user re-entered the door.
+                        RefreshPlayCards();
                     }));
             }
 
