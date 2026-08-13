@@ -27,7 +27,9 @@ namespace ConditioningControlPanel.Views.Tabs
 
             // WPF's ClipToBounds is rectangular; rounded corners need explicit
             // clip geometry that tracks the element's size.
-            RoundClipOnResize(SpotArtHost, 14);
+            // 12, not 14: the spotlight card wears the round-4 velvet edge (2px), so the
+            // host inside it has the card's inner radius, not its outer one.
+            RoundClipOnResize(SpotArtHost, 12);
         }
 
         private void LoadBackdrop()

@@ -8,6 +8,32 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <!-- Velvet Kit 2 · round 4 — hue identity, LOCAL literals only (a fresh
+             cross-dictionary StaticResource in Resources/Theme/* trips WPF's deferred-BAML
+             EndOfStreamException). Enhancements runs the house pink, so the SOLID hue is
+             taken from {DynamicResource PinkBrush} instead of a literal - mods retint it -
+             and only the alpha'd wash/border, which have no theme siblings, live here. -->
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40FF69B4"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+            <GradientStop Color="#14FF69B4" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <!-- ================================================================
+         NO 72px HERO HERE, ON PURPOSE. Every other round-4 tab opens with one;
+         this tab cannot afford it. The whole UI is laid out inside MainWindow's
+         fixed 1585x901 DesignCanvas, so this tab's height is a CONSTANT ~620dip
+         that no window resize gives back - and the skill tree already spends
+         ~505 of it (460 canvas + scrollbar + chrome) with vertical scrolling
+         disabled, leaving the secret rail its budgeted ~90. A hero row would
+         squeeze row 0 and silently clip the bottom path of the tree. The tree
+         canvas also draws its own 500dip stats header at x=20 (CreateSkillTreeHeader),
+         so a second header band would duplicate it as well as overflow.
+         Round 4 on this tab is therefore the card + token half of the recipe.
+         ================================================================ -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -24,7 +50,14 @@
             <Border x:Name="ActiveBonusesPanel" x:FieldModifier="internal"/>
         </StackPanel>
 
-        <Border x:Name="SkillTreeOuterBorder" x:FieldModifier="internal" Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,10">
+        <!-- The board. Background stays a literal AND stays local: DrawSkillTree overwrites
+             it with the animated gradient (CreateAnimatedSkillTreeBrush) on every rebuild and
+             MainWindow.Animations.cs type-tests it, so it must not become a theme brush.
+             The velvet edge costs 4dip of height, bought back from Padding (5→4) and the
+             margins (5/10 → 3/8) so the tree's height budget is unchanged. -->
+        <Border x:Name="SkillTreeOuterBorder" x:FieldModifier="internal" Background="#151528" CornerRadius="12"
+                BorderBrush="{StaticResource VelvetCardBorderBrush}" BorderThickness="2"
+                Padding="4" Margin="20,3,20,8">
             <Grid ClipToBounds="True">
                 <!-- ============================================================ -->
                 <!-- The tab's one ambient particle loop, behind the tree.        -->
@@ -73,33 +106,46 @@
         <!-- the cards (SecretCardHeight in MainWindow.Enhancements.cs)   -->
         <!-- and why the section title sits beside them, not above.       -->
         <!-- ============================================================ -->
-        <Border Grid.Row="1" Background="#151528" CornerRadius="12" Padding="14,6,14,8" Margin="20,0,20,10">
+        <!-- Round-4 dense card: house chrome (SettingCardStyle) + hue wash + the 3px edge
+             bar, with the section's own Margin kept as a local value so the rail still sits
+             in the tab's 20dip gutter. Net height change is -1dip: the 2px edge is paid for
+             by the tighter inner margin and the 10→8 bottom. -->
+        <Border Grid.Row="1" Style="{StaticResource SettingCardStyle}" Margin="20,0,20,8">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
-                    <helpers:EmojiTextBlock Text="{loc:Str label_secret_skills}"
-                                            Foreground="{DynamicResource PinkBrush}"
-                                            FontSize="12" FontWeight="Bold"/>
-                    <TextBlock Text="{loc:Str label_secret_skills_sub}"
-                               Foreground="#8A8AA0" FontSize="9" FontStyle="Italic"
-                               Margin="0,1,0,0"/>
-                </StackPanel>
-                <WrapPanel x:Name="SecretSkills" x:FieldModifier="internal" Grid.Column="1"
-                           Orientation="Horizontal" VerticalAlignment="Center"/>
+                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,8" CornerRadius="0,2,2,0"
+                        Background="{DynamicResource PinkBrush}"/>
+                <Grid Margin="16,5,16,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <helpers:EmojiTextBlock Text="{loc:Str label_secret_skills}"
+                                                Foreground="{DynamicResource PinkBrush}"
+                                                FontSize="12" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str label_secret_skills_sub}"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="9" FontStyle="Italic"
+                                   Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="SecretSkills" x:FieldModifier="internal" Grid.Column="1"
+                               Orientation="Horizontal" VerticalAlignment="Center"/>
+                </Grid>
             </Grid>
         </Border>
 
-        <!-- Login Required Overlay -->
-        <Border x:Name="EnhancementsLoginOverlay" x:FieldModifier="internal" Grid.RowSpan="2" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
+        <!-- Login Required Overlay. Still the LAST sibling of the root Grid and still
+             RowSpan=2, so the gate covers the tree AND the secret rail. Round 4 only gives
+             it the hue edge + the theme text tokens. -->
+        <Border x:Name="EnhancementsLoginOverlay" x:FieldModifier="internal" Grid.RowSpan="2" Background="#E6151528" CornerRadius="12"
+                BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
+                Margin="20,3,20,8" Visibility="Collapsed">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
                 <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,15" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,10"/>
                 <TextBlock Text="{loc:Str label_log_in_with_discord_or_patreon_to_access_enha}"
-                           Foreground="#AA99AA" FontSize="14" HorizontalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" HorizontalAlignment="Center"
                            TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
             </StackPanel>
         </Border>

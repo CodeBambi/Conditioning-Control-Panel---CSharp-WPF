@@ -5,474 +5,611 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <!-- Velvet Kit 2 · round 4. She's Listening runs the Audio family's coral. LOCAL literals on
+         purpose: nothing here may be lifted into Resources/Theme/* - a fresh cross-dictionary
+         StaticResource insert trips WPF's deferred-BAML EndOfStreamException and takes every
+         styled control in the app with it. -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TabHueBrush" Color="#FF7E6B"/>
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40FF7E6B"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+            <GradientStop Color="#14FF7E6B" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="36,28,36,28" MaxWidth="1180" HorizontalAlignment="Center">
+        <!-- Root Grid, not a StackPanel: the premium gate is the LAST sibling here so the bar
+             covers the whole page (hero + both columns + the cheat-sheet) instead of only the
+             controls column it used to sit over. -->
+        <Grid Margin="36,24,36,28" MaxWidth="1180" HorizontalAlignment="Center">
+            <StackPanel>
 
-            <!-- Header -->
-            <Grid Margin="0,0,0,22">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
-                       Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"/>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock Text="She's Listening" Foreground="White" FontSize="26" FontWeight="Bold"/>
-                    <TextBlock Text="The mic is open. She hears every word." Foreground="{DynamicResource TextMutedBrush}" FontSize="14"/>
-                </StackPanel>
-            </Grid>
+                <!-- ══ HERO ═══════════════════════════════════════════════════════════════════
+                     Replaces the 44px-emoji header row. Title + one-line subtitle left, the art
+                     plate right, and the master arm/disarm switch riding the glass pill over it.
+                     BtnSL_MicMaster keeps its name, handler and code-painted Content/Foreground
+                     (MainWindow.SheListening.cs · RefreshSheListeningStatus). -->
+                <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,12">
+                    <Grid>
+                        <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
+                            <Border.Background>
+                                <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                    <ImageBrush.ImageSource>
+                                        <BitmapImage UriSource="pack://application:,,,/Resources/features/audio_whispers.png" DecodePixelWidth="480"/>
+                                    </ImageBrush.ImageSource>
+                                </ImageBrush>
+                            </Border.Background>
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#00000000" Offset="0"/>
+                                    <GradientStop Color="#E6000000" Offset="0.55"/>
+                                </LinearGradientBrush>
+                            </Border.OpacityMask>
+                        </Border>
 
-            <!-- Description card -->
-            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="24,20" Margin="0,0,0,22">
-                <StackPanel>
-                    <TextBlock Text="WHAT IS THIS" Foreground="{DynamicResource PinkBrush}"
-                               FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                    <TextBlock Foreground="White" FontSize="15" TextWrapping="Wrap" LineHeight="22" Margin="0,0,0,8"
-                               Text="Control the app with your voice — and let her hear you obey. Call her name, ask for an effect, and she does it. She can also prompt you to say things back to her. Everything runs offline on your device: nothing is recorded, nothing is sent."/>
-                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap" LineHeight="20"
-                               Text="Hit Start listening and she's on — works whether or not Takeover is running. The safety word stops everything at any time."/>
-                </StackPanel>
-            </Border>
+                        <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                            <TextBlock Text="She's Listening" FontSize="17" FontWeight="Bold"
+                                       Foreground="{StaticResource TextLightBrush}"/>
+                            <TextBlock Text="The mic is open. She hears every word." FontSize="11.5"
+                                       Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                        </StackPanel>
 
-            <!-- Controls (2/3) + how-it-works (1/3) -->
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*"/>
-                    <ColumnDefinition Width="22"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"
+                                CornerRadius="99" Background="#8C131320"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="4,3,4,3">
+                            <Button x:Name="BtnSL_MicMaster" x:FieldModifier="internal"
+                                    Content="▶  Start listening"
+                                    Style="{DynamicResource OutlineButton}"
+                                    BorderThickness="0" Foreground="#90EE90"
+                                    FontWeight="Bold" FontSize="13" Padding="14,6"
+                                    Click="BtnSL_MicMaster_Click"
+                                    ToolTip="Turn the offline mic on or off — wake word (&quot;Hey Bambi&quot;) + voice commands. Works whether or not Takeover is running."/>
+                        </Border>
+                    </Grid>
+                </Border>
 
-                <!-- Controls column + gating overlay -->
-                <Grid Grid.Column="0">
-                    <StackPanel>
+                <!-- ══ CAPPED SETTINGS COLUMN + SIDE ART ══════════════════════════════════════
+                     Round 3 idiom: the reading column stops at 780px so a slider is not a 1100px
+                     runway, and the width that buys back becomes one art plate instead of dead
+                     margin. Below 1000px the art column goes to zero (Features/AdaptiveSideArt.cs)
+                     - which is why every instructional card lives in column 0, not the rail. -->
+                <Grid feat:AdaptiveSideArt.CollapseBelow="1000">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MaxWidth="780"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
 
-                        <!-- Status strip -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#3A2A4A"
-                                BorderThickness="1" CornerRadius="14" Padding="22,18" Margin="0,0,0,14">
+                    <StackPanel Grid.Column="0">
+
+                        <!-- What is this -->
+                        <Border Style="{StaticResource SettingCardStyle}">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="18"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
-                                    <Ellipse x:Name="SL_StatusDot" x:FieldModifier="internal" Width="64" Height="64" Fill="#3A3A52"
-                                             Stroke="#5A4A6A" StrokeThickness="2"/>
-                                    <Image Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Source="{Binding Source='🎤', Converter={StaticResource EmojiToImageSource}}"/>
-                                </Grid>
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <TextBlock x:Name="SL_StatusTitle" x:FieldModifier="internal" Text="Checking microphone…"
-                                               Foreground="White" FontSize="16" FontWeight="Bold"/>
-                                    <TextBlock x:Name="SL_StatusSub" x:FieldModifier="internal" Text=""
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <TextBlock Text="WHAT IS THIS" Foreground="{StaticResource TabHueBrush}"
+                                               FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <TextBlock Foreground="{StaticResource TextLightBrush}" FontSize="13" TextWrapping="Wrap"
+                                               LineHeight="20" Margin="0,0,0,6"
+                                               Text="Control the app with your voice — and let her hear you obey. Call her name, ask for an effect, and she does it. She can also prompt you to say things back to her. Everything runs offline on your device: nothing is recorded, nothing is sent."/>
+                                    <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="18"
+                                               Text="Hit Start listening and she's on — works whether or not Takeover is running. The safety word stops everything at any time."/>
                                 </StackPanel>
-                                <!-- Master mic switch: start/stop voice control independent of Takeover -->
-                                <Button x:Name="BtnSL_MicMaster" x:FieldModifier="internal" Grid.Column="4"
-                                        Content="▶  Start listening" Background="#2A1A3A" Foreground="#90EE90"
-                                        FontWeight="Bold" FontSize="15" Padding="22,12" VerticalAlignment="Center"
-                                        Click="BtnSL_MicMaster_Click"
-                                        ToolTip="Turn the offline mic on or off — wake word (&quot;Hey Bambi&quot;) + voice commands. Works whether or not Takeover is running."/>
                             </Grid>
                         </Border>
 
-                        <!-- Voice controls -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="20,16" Margin="0,0,0,14">
-                            <StackPanel>
-                                <TextBlock Text="Voice controls" Foreground="{DynamicResource PinkBrush}"
-                                           FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
-
-                                <!-- Hardware + voice-mode summary. These four rows used to be live
-                                     editors (device combo + refresh, wake-word toggle + phrases,
-                                     push-to-talk toggle + key, headphones switch) that mirrored onto
-                                     a Collapsed block on the Takeover tab. Phase 2 of the UX
-                                     restructure gave the microphone one owner - Settings → Devices -
-                                     so these are READ-ONLY now: display, no two-way binding, painted
-                                     by RefreshSheListeningDeviceChips. What stays live on this page
-                                     is what belongs to it: the master switch, sensitivity, spoken
-                                     mantras, wake calibration, the test and the consent card. -->
-                                <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                        CornerRadius="8" Padding="14,11" Margin="0,2,0,4">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,8">
-                                            <!-- Same keys the Settings ▸ Devices page uses for the same
-                                                 four rows, so one microphone never reads in two
-                                                 languages on two pages. The glyphs stay OUTSIDE the
-                                                 strings - a translator should never have to carry an
-                                                 emoji through nine files. -->
-                                            <TextBlock Text="{loc:Str set2_devices_mic_title}" FontSize="11" FontWeight="Bold"
-                                                       Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
-                                            <Button x:Name="BtnSL_OpenDeviceSettings" HorizontalAlignment="Right"
-                                                    Content="{loc:Str set2_configure_in_settings}"
-                                                    Padding="10,4" FontSize="10" Background="#3A2A4A" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                    BorderThickness="0" Cursor="Hand"
-                                                    Click="BtnSL_OpenDeviceSettings_Click"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,2">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="🎚" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
-                                                <TextBlock Text="{loc:Str set2_devices_mic_input}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                            </StackPanel>
-                                            <TextBlock x:Name="TxtSL_MicDeviceChip" x:FieldModifier="internal"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       Text="System default" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="280"/>
-                                        </Grid>
-                                        <Grid Margin="0,2">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="👂" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
-                                                <TextBlock Text="{loc:Str rf_sl_chip_wake_word}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                            </StackPanel>
-                                            <TextBlock x:Name="TxtSL_WakeWordChip" x:FieldModifier="internal"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="280"/>
-                                        </Grid>
-                                        <Grid Margin="0,2">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="🎙" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
-                                                <TextBlock Text="{loc:Str rf_sl_chip_ptt}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                            </StackPanel>
-                                            <TextBlock x:Name="TxtSL_PttChip" x:FieldModifier="internal"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                        </Grid>
-                                        <Grid Margin="0,2">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="🎧" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
-                                                <TextBlock Text="{loc:Str rf_sl_chip_headphones}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                            </StackPanel>
-                                            <TextBlock x:Name="TxtSL_HeadphonesChip" x:FieldModifier="internal"
-                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                       Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Mic sensitivity (the loudness gate for commands & mantras; NOT the wake word) -->
-                                <Grid Margin="0,8,0,2" ToolTip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word — use Calibrate for that.">
+                        <!-- ══ THE HEARTBEAT ══════════════════════════════════════════════════
+                             The mic disc is this page's live organ: SL_StatusDot's Fill and the
+                             two status lines are painted by RefreshSheListeningStatus, and the
+                             breathing glow behind it comes from SetSheListeningStatusPulse
+                             (MainWindow.TabFxTakeoverLabStatus.cs, large blur - keep it 64px). -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <Grid Margin="16,12,16,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="16"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <TextBlock Text="🔉 Mic sensitivity" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                        <TextBlock Text="How softly you can speak (commands &amp; mantras)." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
+                                        <Ellipse x:Name="SL_StatusDot" x:FieldModifier="internal" Width="64" Height="64" Fill="#3A3A52"
+                                                 Stroke="{StaticResource TabHueBorderBrush}" StrokeThickness="2"/>
+                                        <Image Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎤', Converter={StaticResource EmojiToImageSource}}"/>
+                                    </Grid>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock x:Name="SL_StatusTitle" x:FieldModifier="internal" Text="Checking microphone…"
+                                                   Foreground="{StaticResource TextLightBrush}" FontSize="15" FontWeight="Bold"/>
+                                        <TextBlock x:Name="SL_StatusSub" x:FieldModifier="internal" Text=""
+                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <Slider x:Name="SldSL_MicSensitivity" x:FieldModifier="internal" Grid.Column="1" VerticalAlignment="Center"
-                                            Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"
-                                            ValueChanged="SldSL_MicSensitivity_ValueChanged"/>
-                                    <TextBlock x:Name="TxtSL_MicSensitivity" x:FieldModifier="internal" Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0"
-                                               FontSize="11" FontWeight="Bold" Foreground="#C9A0FF" MinWidth="38" TextAlignment="Right" Text="—"/>
                                 </Grid>
+                            </Grid>
+                        </Border>
 
-                                <Border Height="1" Background="#2E2E48" Margin="0,10"/>
+                        <!-- ══ VOICE CONTROLS ═════════════════════════════════════════════════ -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,10">
+                                    <TextBlock Text="Voice controls" Foreground="{StaticResource TabHueBrush}"
+                                               FontSize="10" FontWeight="Bold" Margin="0,0,0,8"/>
 
-                                <!-- Spoken mantras -->
-                                <Grid Margin="0,2" ToolTip="She speaks an in-theme line asking you to repeat a phrase, listens for it offline, then gives a custom response. First time on asks for mic consent.">
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="🎤 Spoken mantras" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                        <TextBlock x:Name="SL_MantrasHint" x:FieldModifier="internal" Text="She asks you to repeat a phrase; the mic opens only when she prompts you." FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkSL_Mantras" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkSL_Mantras_Changed" Unchecked="ChkSL_Mantras_Changed"/>
-                                </Grid>
+                                    <!-- Hardware + voice-mode summary. These four rows used to be live
+                                         editors (device combo + refresh, wake-word toggle + phrases,
+                                         push-to-talk toggle + key, headphones switch) that mirrored onto
+                                         a Collapsed block on the Takeover tab. Phase 2 of the UX
+                                         restructure gave the microphone one owner - Settings → Devices -
+                                         so these are READ-ONLY now: display, no two-way binding, painted
+                                         by RefreshSheListeningDeviceChips. What stays live on this page
+                                         is what belongs to it: the master switch, sensitivity, spoken
+                                         mantras, wake calibration, the test and the consent card. -->
+                                    <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                                            BorderThickness="1" CornerRadius="8" Padding="12,9" Margin="0,0,0,2">
+                                        <StackPanel>
+                                            <Grid Margin="0,0,0,7">
+                                                <!-- Same keys the Settings ▸ Devices page uses for the same
+                                                     four rows, so one microphone never reads in two
+                                                     languages on two pages. The glyphs stay OUTSIDE the
+                                                     strings - a translator should never have to carry an
+                                                     emoji through nine files. -->
+                                                <TextBlock Text="{loc:Str set2_devices_mic_title}" FontSize="10" FontWeight="Bold"
+                                                           Foreground="{StaticResource TabHueBrush}" VerticalAlignment="Center"/>
+                                                <Button x:Name="BtnSL_OpenDeviceSettings" HorizontalAlignment="Right"
+                                                        Content="{loc:Str set2_configure_in_settings}"
+                                                        Style="{DynamicResource OutlineButton}"
+                                                        BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                        Foreground="{DynamicResource TextSecondaryBrush}"
+                                                        FontWeight="SemiBold" Padding="10,3" FontSize="10"
+                                                        Click="BtnSL_OpenDeviceSettings_Click"/>
+                                            </Grid>
 
-                                <Border Height="1" Background="#2E2E48" Margin="0,10"/>
+                                            <Grid Margin="0,2">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🎚" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{loc:Str set2_devices_mic_input}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtSL_MicDeviceChip" x:FieldModifier="internal"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           Text="System default" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="280"/>
+                                            </Grid>
+                                            <Grid Margin="0,2">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="👂" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{loc:Str rf_sl_chip_wake_word}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtSL_WakeWordChip" x:FieldModifier="internal"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="280"/>
+                                            </Grid>
+                                            <Grid Margin="0,2">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🎙" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{loc:Str rf_sl_chip_ptt}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtSL_PttChip" x:FieldModifier="internal"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            </Grid>
+                                            <Grid Margin="0,2">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="🎧" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,5,0"/>
+                                                    <TextBlock Text="{loc:Str rf_sl_chip_headphones}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtSL_HeadphonesChip" x:FieldModifier="internal"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           Text="Off" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
 
-                                <!-- Reliable wake (sherpa-onnx KWS) — open-source, offline, no key; far better at the OOV name "Bambi" -->
-                                <Grid Margin="22,6,0,2" ToolTip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine — much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
-                                    <Grid>
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <!-- Mic sensitivity (the loudness gate for commands & mantras; NOT the wake word).
+                                         36px row - the second line of prose it used to carry is the tooltip, verbatim. -->
+                                    <Grid Height="36" Background="Transparent" ToolTip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word — use Calibrate for that.">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="🔉 Mic sensitivity" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Slider x:Name="SldSL_MicSensitivity" x:FieldModifier="internal" Grid.Column="1" VerticalAlignment="Center"
+                                                Margin="14,0"
+                                                Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"
+                                                ValueChanged="SldSL_MicSensitivity_ValueChanged"/>
+                                        <TextBlock x:Name="TxtSL_MicSensitivity" x:FieldModifier="internal" Grid.Column="2"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                                                   TextAlignment="Right" Text="—"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <!-- Spoken mantras. SL_MantrasHint stays a live element (it is x:Named), so this
+                                         row is a two-line label rather than a bare 34px toggle row. -->
+                                    <Grid MinHeight="34" Background="Transparent" ToolTip="She speaks an in-theme line asking you to repeat a phrase, listens for it offline, then gives a custom response. First time on asks for mic consent.">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                            <TextBlock Text="🎤 Spoken mantras" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextLightBrush}"/>
+                                            <TextBlock x:Name="SL_MantrasHint" x:FieldModifier="internal"
+                                                       Text="She asks you to repeat a phrase; the mic opens only when she prompts you."
+                                                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" x:Name="ChkSL_Mantras" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkSL_Mantras_Changed" Unchecked="ChkSL_Mantras_Changed"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <!-- Reliable wake (sherpa-onnx KWS) — open-source, offline, no key; far better at the OOV name "Bambi".
+                                         TxtSL_WakeEngineStatus is code-painted (status + live calibration progress). -->
+                                    <Grid Background="Transparent" ToolTip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine — much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="✨ Reliable wake" FontSize="11" Foreground="#C9A0FF" VerticalAlignment="Center"/>
-                                                <TextBlock Text="open-source, offline, no key" FontSize="9" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                                <TextBlock Text="✨ Reliable wake" FontSize="13" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Text="open-source, offline, no key" FontSize="9"
+                                                           Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                             </StackPanel>
-                                            <TextBlock x:Name="TxtSL_WakeEngineStatus" x:FieldModifier="internal" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                            <TextBlock x:Name="TxtSL_WakeEngineStatus" x:FieldModifier="internal" FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextWrapping="Wrap"
                                                        Text="Drop the sherpa-onnx KWS model into Resources\Models\sherpa-kws\ to enable (see the README there)."/>
                                         </StackPanel>
-                                        <Button x:Name="BtnSL_Calibrate" x:FieldModifier="internal" Grid.Column="1" Content="🎚 Calibrate" FontSize="11" Padding="10,4" Margin="8,0,0,0"
-                                                VerticalAlignment="Top" Background="#3A2A4A" Foreground="#C9A0FF" BorderThickness="0" Cursor="Hand"
+                                        <Button x:Name="BtnSL_Calibrate" x:FieldModifier="internal" Grid.Column="1"
+                                                Content="🎚 Calibrate" FontSize="11" Padding="10,4"
+                                                VerticalAlignment="Center"
+                                                Style="{DynamicResource OutlineButton}"
+                                                BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                Foreground="{StaticResource TabHueBrush}"
                                                 Click="BtnSL_Calibrate_Click"
                                                 ToolTip="Tune the wake word to your own voice and mic — say 'Hey Bambi' a few times and it finds the right sensitivity. Re-run any time (new mic, noisy room)."/>
                                     </Grid>
-                                </Grid>
-
-
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Try it -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="20,12">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="Try it" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
-                                    <TextBlock Text="Fire a spoken mantra now (needs a mic + the offline model)." Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                 </StackPanel>
-                                <Button x:Name="BtnSL_TestMantra" Grid.Column="1" Content="🎤 Test mantra" Background="#3A2A4A" Foreground="#90EE90" FontWeight="Bold" FontSize="13"
-                                        Padding="14,8" Click="BtnSL_TestMantra_Click" ToolTip="Fire a spoken mantra now."/>
                             </Grid>
                         </Border>
 
-                        <!-- Mic consent / privacy — mirrors the webcam "Revoke consent" button on the Lab tab.
-                             Only shown once consent has been given (RefreshSheListeningTab toggles it). -->
-                        <Border x:Name="SL_PrivacyCard" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="20,12" Margin="0,14,0,0">
+                        <!-- ══ TRY IT + PRIVACY ═══════════════════════════════════════════════
+                             One card, two rows. SL_PrivacyCard keeps its name AND its Border type -
+                             RefreshSheListeningTab flips its Visibility once consent exists - so the
+                             divider lives INSIDE it and disappears with it. -->
+                        <Border Style="{StaticResource SettingCardStyle}">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Text="Privacy" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
-                                    <TextBlock Text="Take back your mic consent — every voice feature turns off and she asks again next time."
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,10">
+
+                                    <Grid Background="Transparent">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                            <TextBlock Text="Try it" Foreground="{StaticResource TextLightBrush}"
+                                                       FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Fire a spoken mantra now (needs a mic + the offline model)."
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnSL_TestMantra" Grid.Column="1" Content="🎤 Test mantra"
+                                                Style="{DynamicResource OutlineButton}"
+                                                BorderBrush="{StaticResource TabHueBorderBrush}" Foreground="#90EE90"
+                                                FontWeight="Bold" FontSize="12" Padding="14,7" VerticalAlignment="Center"
+                                                Click="BtnSL_TestMantra_Click" ToolTip="Fire a spoken mantra now."/>
+                                    </Grid>
+
+                                    <!-- Mic consent / privacy — mirrors the webcam "Revoke consent" button on the Lab tab.
+                                         Only shown once consent has been given (RefreshSheListeningTab toggles it). -->
+                                    <Border x:Name="SL_PrivacyCard" x:FieldModifier="internal" Visibility="Collapsed"
+                                            Background="Transparent" BorderThickness="0" Padding="0" Margin="0">
+                                        <StackPanel>
+                                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,8"/>
+                                            <Grid Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                    <TextBlock Text="Privacy" Foreground="{StaticResource TextLightBrush}"
+                                                               FontSize="13" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="Take back your mic consent — every voice feature turns off and she asks again next time."
+                                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <Button x:Name="BtnSL_RevokeConsent" Grid.Column="1" Content="Revoke consent"
+                                                        ToolTip="Stops the mic, turns off wake word, push-to-talk, spoken mantras and voice lock cards, and clears your consent. You'll be re-prompted next time you enable a voice feature."
+                                                        Style="{DynamicResource OutlineButton}"
+                                                        Foreground="{DynamicResource DangerBrush}" BorderBrush="{DynamicResource DangerBrush}"
+                                                        Padding="11,6" VerticalAlignment="Center"
+                                                        FontSize="11" FontWeight="SemiBold" Click="BtnSL_RevokeConsent_Click"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
-                                <Button x:Name="BtnSL_RevokeConsent" Grid.Column="1" Content="Revoke consent"
-                                        ToolTip="Stops the mic, turns off wake word, push-to-talk, spoken mantras and voice lock cards, and clears your consent. You'll be re-prompted next time you enable a voice feature."
-                                        Padding="11,6" VerticalAlignment="Center"
-                                        Background="Transparent" Foreground="{DynamicResource DangerBrush}"
-                                        BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnSL_RevokeConsent_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                </Button>
                             </Grid>
                         </Border>
 
+                        <!-- ══ HOW IT WORKS ═══════════════════════════════════════════════════
+                             Instructional, so it stays in column 0: the rail collapses below
+                             1000px and nothing that teaches the feature may vanish with it. -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Image Width="13" Height="13" VerticalAlignment="Center" Margin="0,0,6,0"
+                                               Source="{Binding Source='💡', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="How it works" Foreground="{StaticResource TabHueBrush}"
+                                                   FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <TextBlock Text="1. Start listening" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="Tap Start listening (here or the dashboard Voice chip) to turn the mic on. No need to start Takeover."
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
+
+                                    <TextBlock Text="2. Call her, then ask" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="Say your wake word (or press push-to-talk), then a command — like 'show me some bubbles'."
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
+
+                                    <TextBlock Text="3. She obeys" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="If she doesn't catch a command, she gives you a mantra to say instead."
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,4"/>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,8,0,10"/>
+
+                                    <Border Background="#22FF69B4" CornerRadius="6" Padding="10,8">
+                                        <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17"
+                                                   Text="🛟 Safety word: say &quot;red&quot; (or &quot;stop everything&quot;) any time to stop all effects."/>
+                                    </Border>
+
+                                    <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16" FontStyle="Italic"
+                                               Text="Fully offline. Audio is processed on your device and never recorded or sent anywhere."/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
-                    <!-- Translucent gating overlay (free users) -->
-                    <Border x:Name="SheListeningGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
-                            CornerRadius="10" IsHitTestVisible="True">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="Premium feature" FontSize="22"
-                                       FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Support to unlock voice control." FontSize="14"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnSL_GateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
-                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
-                                <helpers:EmojiTextBlock Text="🔓 Unlock with Patreon"/>
-                            </Button>
-                        </StackPanel>
+                    <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
+                         clips its Background to CornerRadius but does NOT clip child content, so a
+                         child Image would square off the rounded corners (round-2 lesson). Pinned
+                         top with a fixed height - column 0 is far taller than any plate should be. -->
+                    <Border Grid.Column="1" Margin="12,0,0,0" CornerRadius="14"
+                            BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                            VerticalAlignment="Top" Height="520">
+                        <Border.Background>
+                            <ImageBrush Stretch="UniformToFill">
+                                <ImageBrush.ImageSource>
+                                    <BitmapImage UriSource="pack://application:,,,/Resources/features/audio_whispers.png"
+                                                 DecodePixelWidth="800"/>
+                                </ImageBrush.ImageSource>
+                            </ImageBrush>
+                        </Border.Background>
+                        <Border CornerRadius="12">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                    <GradientStop Color="#66000000" Offset="0"/>
+                                    <GradientStop Color="#00000000" Offset="0.45"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
                     </Border>
                 </Grid>
 
-                <!-- How it works (column 2) -->
-                <Border Grid.Column="2" VerticalAlignment="Top"
-                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                        BorderThickness="1" CornerRadius="10" Padding="18,16">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                            <Image Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,8,0"
-                                   Source="{Binding Source='💡', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="How it works" Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                <!-- ══ COMMAND CHEAT-SHEET (full width — genuinely rich content, not a dial rack) ══ -->
+                <Border Style="{StaticResource SettingCardStyle}" Margin="0,12,0,0">
+                    <Grid>
+                        <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,12" CornerRadius="0,2,2,0"
+                                Background="{StaticResource TabHueBrush}"/>
+                        <StackPanel Margin="20,14,20,16">
+                            <TextBlock Text="WHAT YOU CAN SAY" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4" TextWrapping="Wrap"
+                                       Text="Call her with your wake word (or push-to-talk), then say a command. Each line shows a few ways to say the same thing — any of them work:"/>
+                            <TextBlock Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"
+                                       Text="Tip: most effects also take a plain “&lt;name&gt; on” / “&lt;name&gt; off” (e.g. “spiral on”, “bubbles off”)."/>
+
+                            <!-- Safety word, up top where it belongs -->
+                            <Border Background="#22FF69B4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                    CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="20"
+                                               Text="“red”  ·  “stop everything”  ·  “make it stop”  ·  “all stop”"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="28"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- ── Left column ─────────────────────────────────────────── -->
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock Text="🫧  Bubbles" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me some bubbles” · “bubbles on” · “give me bubbles”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bubbles” · “no more bubbles” · “bubbles off”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="📺  Video" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="play "/><Run Text="“show me a video” · “play a video” · “put on a video”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="stop "/><Run Text="“stop the video” · “no more videos” · “video off”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="pause "/><Run Text="“pause the video” · “resume the video” · “keep playing”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="✨  Flash" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“flash me” · “one flash” · “give me a flash”"/>
+
+                                    <TextBlock Text="🌀  Spiral" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me the spiral” · “spiral on” · “bring up the spiral”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the spiral” · “hide the spiral” · “spiral off”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="🩷  Pink filter" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“make it pink” · “go pink” · “pink filter on”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“make it normal” · “stop the pink filter” · “pink filter off”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="💬  Subliminals" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me subliminals” · “subliminals on” · “start the subliminals”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the subliminals” · “no more subliminals” · “subliminals off”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="🔤  Bouncing text" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me bouncing text” · “bouncing text on” · “start the bouncing text”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bouncing text” · “no more bouncing text” · “bouncing text off”"/>
+                                    </TextBlock>
+
+                                </StackPanel>
+
+                                <!-- ── Right column ────────────────────────────────────────── -->
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock Text="🧠  Mind wipe" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“wipe my mind” · “empty my head” · “blank my mind”"/>
+
+                                    <TextBlock Text="🔒  Lock card" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“lock me” · “give me a lock card” · “lock me up”"/>
+
+                                    <TextBlock Text="📝  Pop quiz" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“quiz me” · “test me” · “ask me a question”"/>
+
+                                    <TextBlock Text="⚡  Keyword triggers" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“trigger words on” · “keyword triggers on” · “start the keyword triggers”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“trigger words off” · “stop the keyword triggers”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="🎯  Quick toys" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="freeze "/><Run Text="“freeze” · “freeze me” · “hold still”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="shake "/><Run Text="“shake the screen” · “shake it” · “make it shake”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="count "/><Run Text="“count for me” · “counting game” · “make me count”"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="🌊  Go deeper" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“deeper” · “take me deeper” · “drop me down”"/>
+
+                                    <TextBlock Text="🎀  Takeover" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21">
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“take over” · “take control” · “you’re in charge”"/><LineBreak/>
+                                        <Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“give me control back” · “stop the takeover” · “release control”"/>
+                                    </TextBlock>
+
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,16,0,14"/>
+
+                            <!-- ── Session, audio & handy verbs ────────────────────────────── -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="28"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="⏸  Session" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“pause” · “resume” · “keep going”"/>
+
+                                    <TextBlock Text="🔊  Volume" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“louder” · “quieter” · “mute”"/>
+
+                                    <TextBlock Text="💗  Mantra" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
+                                               Text="“give me a mantra” · “say a mantra” · “give me something to say”"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="🔁  Again" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“again” · “one more” · “harder”  (repeats the last thing)"/>
+
+                                    <TextBlock Text="❓  Help" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
+                                               Text="“what can I say” · “what can you do” · “commands”"/>
+
+                                    <TextBlock Text="🎤  Stop the mic" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
+                                               Text="“stop listening” · “mic off” · “you can stop listening”"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,16,0,0">
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16"
+                                           Text="Short, plain phrases recognize best. You can stack commands in one breath — say one, then another without calling her name again. If she mishears, she’ll give you a mantra to say instead."/>
+                            </Border>
                         </StackPanel>
-
-                        <TextBlock Text="1. Start listening" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
-                        <TextBlock Text="Tap Start listening (here or the dashboard Voice chip) to turn the mic on. No need to start Takeover." Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,12"/>
-
-                        <TextBlock Text="2. Call her, then ask" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
-                        <TextBlock Text="Say your wake word (or press push-to-talk), then a command — like 'show me some bubbles'." Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,12"/>
-
-                        <TextBlock Text="3. She obeys" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
-                        <TextBlock Text="If she doesn't catch a command, she gives you a mantra to say instead." Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,4"/>
-
-                        <Border Height="1" Background="#2E2E48" Margin="0,8,0,12"/>
-
-                        <Border Background="#22FF69B4" CornerRadius="6" Padding="10,8">
-                            <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17"
-                                       Text="🛟 Safety word: say &quot;red&quot; (or &quot;stop everything&quot;) any time to stop all effects."/>
-                        </Border>
-
-                        <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16" FontStyle="Italic"
-                                   Text="Fully offline. Audio is processed on your device and never recorded or sent anywhere."/>
-                    </StackPanel>
+                    </Grid>
                 </Border>
-            </Grid>
 
-            <!-- Command cheat-sheet (the centerpiece) -->
-            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="24,20" Margin="0,22,0,0">
-                <StackPanel>
-                    <TextBlock Text="WHAT YOU CAN SAY" Foreground="{DynamicResource PinkBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4" TextWrapping="Wrap"
-                               Text="Call her with your wake word (or push-to-talk), then say a command. Each line shows a few ways to say the same thing — any of them work:"/>
-                    <TextBlock Foreground="#6E6E86" FontSize="11" Margin="0,0,0,16" TextWrapping="Wrap"
-                               Text="Tip: most effects also take a plain “&lt;name&gt; on” / “&lt;name&gt; off” (e.g. “spiral on”, “bubbles off”)."/>
+            </StackPanel>
 
-                    <!-- Safety word, up top where it belongs -->
-                    <Border Background="#22FF69B4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                            CornerRadius="8" Padding="14,10" Margin="0,0,0,18">
-                        <StackPanel>
-                            <TextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#E8C8DA" FontSize="12" LineHeight="20"
-                                       Text="“red”  ·  “stop everything”  ·  “make it stop”  ·  “all stop”"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="28"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- ── Left column ─────────────────────────────────────────── -->
-                        <StackPanel Grid.Column="0">
-
-                            <TextBlock Text="🫧  Bubbles" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“show me some bubbles” · “bubbles on” · “give me bubbles”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“stop the bubbles” · “no more bubbles” · “bubbles off”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="📺  Video" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="play "/><Run Text="“show me a video” · “play a video” · “put on a video”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="stop "/><Run Text="“stop the video” · “no more videos” · “video off”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="pause "/><Run Text="“pause the video” · “resume the video” · “keep playing”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="✨  Flash" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“flash me” · “one flash” · “give me a flash”"/>
-
-                            <TextBlock Text="🌀  Spiral" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“show me the spiral” · “spiral on” · “bring up the spiral”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“stop the spiral” · “hide the spiral” · “spiral off”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="🩷  Pink filter" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“make it pink” · “go pink” · “pink filter on”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“make it normal” · “stop the pink filter” · “pink filter off”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="💬  Subliminals" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“show me subliminals” · “subliminals on” · “start the subliminals”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“stop the subliminals” · “no more subliminals” · “subliminals off”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="🔤  Bouncing text" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“show me bouncing text” · “bouncing text on” · “start the bouncing text”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“stop the bouncing text” · “no more bouncing text” · “bouncing text off”"/>
-                            </TextBlock>
-
-                        </StackPanel>
-
-                        <!-- ── Right column ────────────────────────────────────────── -->
-                        <StackPanel Grid.Column="2">
-
-                            <TextBlock Text="🧠  Mind wipe" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“wipe my mind” · “empty my head” · “blank my mind”"/>
-
-                            <TextBlock Text="🔒  Lock card" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“lock me” · “give me a lock card” · “lock me up”"/>
-
-                            <TextBlock Text="📝  Pop quiz" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“quiz me” · “test me” · “ask me a question”"/>
-
-                            <TextBlock Text="⚡  Keyword triggers" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“trigger words on” · “keyword triggers on” · “start the keyword triggers”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“trigger words off” · “stop the keyword triggers”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="🎯  Quick toys" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14">
-                                <Run Foreground="#7E7E96" Text="freeze "/><Run Text="“freeze” · “freeze me” · “hold still”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="shake "/><Run Text="“shake the screen” · “shake it” · “make it shake”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="count "/><Run Text="“count for me” · “counting game” · “make me count”"/>
-                            </TextBlock>
-
-                            <TextBlock Text="🌊  Go deeper" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“deeper” · “take me deeper” · “drop me down”"/>
-
-                            <TextBlock Text="🎀  Takeover" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21">
-                                <Run Foreground="#7E7E96" Text="on "/><Run Text="“take over” · “take control” · “you’re in charge”"/><LineBreak/>
-                                <Run Foreground="#7E7E96" Text="off "/><Run Text="“give me control back” · “stop the takeover” · “release control”"/>
-                            </TextBlock>
-
-                        </StackPanel>
-                    </Grid>
-
-                    <Border Height="1" Background="#2E2E48" Margin="0,18,0,16"/>
-
-                    <!-- ── Session, audio & handy verbs ────────────────────────────── -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="28"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="⏸  Session" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“pause” · “resume” · “keep going”"/>
-
-                            <TextBlock Text="🔊  Volume" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“louder” · “quieter” · “mute”"/>
-
-                            <TextBlock Text="💗  Mantra" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21"
-                                       Text="“give me a mantra” · “say a mantra” · “give me something to say”"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="🔁  Again" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“again” · “one more” · “harder”  (repeats the last thing)"/>
-
-                            <TextBlock Text="❓  Help" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21" Margin="0,0,0,14"
-                                       Text="“what can I say” · “what can you do” · “commands”"/>
-
-                            <TextBlock Text="🎤  Stop the mic" Foreground="White" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
-                            <TextBlock Foreground="#C0C0D0" FontSize="12" LineHeight="21"
-                                       Text="“stop listening” · “mic off” · “you can stop listening”"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Border Background="#1F1430" BorderBrush="#3A2A4A" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,18,0,0">
-                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16"
-                                   Text="Short, plain phrases recognize best. You can stack commands in one breath — say one, then another without calling her name again. If she mishears, she’ll give you a mantra to say instead."/>
-                    </Border>
+            <!-- Translucent gating overlay (free users). Last sibling of the root Grid so it covers
+                 the hero, both columns and the cheat-sheet. Its content is pinned near the top: the
+                 page is several screens tall, and a padlock centred in THAT is a padlock nobody
+                 sees. RefreshPremiumGate flips Visibility; PremiumGateFx re-parents Child, finds the
+                 first Image (padlock) and the first ButtonBase (CTA) - keep both, keep one Child. -->
+            <Border x:Name="SheListeningGate" x:FieldModifier="internal" Visibility="Collapsed"
+                    Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
+                    CornerRadius="16" IsHitTestVisible="True">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,120,0,0">
+                    <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Text="Premium feature" FontSize="22"
+                               FontWeight="Bold" Foreground="{StaticResource TextLightBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Support to unlock voice control." FontSize="14"
+                               Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                    <Button Click="BtnSL_GateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
+                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                        <helpers:EmojiTextBlock Text="🔓 Unlock with Patreon"/>
+                    </Button>
                 </StackPanel>
             </Border>
-
-        </StackPanel>
+        </Grid>
     </ScrollViewer>
 </UserControl>

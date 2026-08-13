@@ -1244,14 +1244,18 @@ namespace ConditioningControlPanel
         private void RefreshTierCardHighlight()
         {
             if (RemoteControlTab.TierCardLight == null || RemoteControlTab.TierCardStandard == null || RemoteControlTab.TierCardFull == null) return;
-            var dim = new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x48));
-            var active = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+            // Velvet Kit 2 round 4: the tab's hue is signal cyan, and the tier cards are the one
+            // place its selection state is painted from code. Idle is the 0x40 border alpha the
+            // whole kit uses, selected is the full hue. Thickness stays 2 on every card so picking
+            // a tier cannot nudge the row's layout.
+            var dim = new SolidColorBrush(Color.FromArgb(0x40, 0x5E, 0xD4, 0xE8));
+            var active = new SolidColorBrush(Color.FromRgb(0x5E, 0xD4, 0xE8));
             RemoteControlTab.TierCardLight.BorderBrush = dim;
-            RemoteControlTab.TierCardLight.BorderThickness = new Thickness(1);
+            RemoteControlTab.TierCardLight.BorderThickness = new Thickness(2);
             RemoteControlTab.TierCardStandard.BorderBrush = dim;
-            RemoteControlTab.TierCardStandard.BorderThickness = new Thickness(1);
+            RemoteControlTab.TierCardStandard.BorderThickness = new Thickness(2);
             RemoteControlTab.TierCardFull.BorderBrush = dim;
-            RemoteControlTab.TierCardFull.BorderThickness = new Thickness(1);
+            RemoteControlTab.TierCardFull.BorderThickness = new Thickness(2);
 
             var idx = RemoteControlTab.CmbRemoteTier?.SelectedIndex ?? 0;
             Border? activeCard = idx switch
