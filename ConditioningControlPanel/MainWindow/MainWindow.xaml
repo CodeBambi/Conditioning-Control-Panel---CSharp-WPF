@@ -260,7 +260,11 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <!-- 2: was the full-width support banner. 0813 nested that banner into the
+                     header row (HeaderBannerHost) and pinned this row to 0 - the height it
+                     used to cost is now tab canvas in row 4. Kept as a row, not deleted, so
+                     rows 3/4/5 keep the indices every Grid.Row below is authored against. -->
+                <RowDefinition Height="0"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -1198,15 +1202,25 @@
                      200px cap the TextBlock used to own on its own: with room to spare the
                      level pill still hugs the title exactly as before, and when the window
                      narrows the title ellipsizes instead of the cluster shouldering the tabs
-                     out of the header. HorizontalAlignment=Left keeps the cluster from
-                     spreading across the (now much wider) star column. -->
-                <Grid Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                     out of the header. HorizontalAlignment used to be Left here; 0813 dropped it
+                     so the cluster stretches and column 5 (the support banner, moved out of its
+                     own row) can claim the leftover width between the version text and the
+                     right-hand chrome. Nothing spreads: columns 0-4 are still Auto/capped, and
+                     the banner is the only thing that grows. -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MaxWidth="200"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <!-- 5: support banner. Star, so it is the FIRST thing to give width
+                             back; the right-hand chrome (language pill, update button) lives in
+                             an Auto column of the outer grid and can never be pushed out.
+                             2*, not *, because column 1 is capped at 200 anyway: the weight is
+                             what keeps the support line off an ellipsis once the update button
+                             is showing. -->
+                        <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
@@ -1418,6 +1432,70 @@
                                       Data="M8,1 L2,4 V9.5 C2,13 5,15.5 8,17 C11,15.5 14,13 14,9.5 V4 Z M8,15 C5.8,13.8 4,11.8 4,9.5 V5.2 L8,3 L12,5.2 V9.5 C12,11.8 10.2,13.8 8,15 Z"/>
                             </Viewbox>
                         </StackPanel>
+                    </Border>
+
+                    <!-- Support/welcome banner (0813). It used to own canvas row 2 outright, a
+                         full-width strip whose only job was two rotating one-liners; the row is
+                         gone and the banner now rides the header's leftover width, between the
+                         version text and the right-hand chrome. Sizing rules that keep that
+                         honest: Height 26 is BELOW the 28px mod capsule already in this row, so
+                         the banner can never grow the header; the host is centred in a star
+                         column that collapses before any Auto column, so the language pill and
+                         update button cannot be pushed out; and both beats trim with an
+                         ellipsis rather than wrap, so a narrow window loses banner text and
+                         nothing else. The third beat (the Platinum Puppets thanks hyperlink) was
+                         retired with the row - see MainWindow.Marquee.cs, where the rotation is
+                         now a two-beat crossfade. -->
+                    <Border Grid.Column="5" x:Name="HeaderBannerHost"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                            CornerRadius="13" Padding="12,0" Height="26" MaxWidth="620"
+                            Margin="12,0,12,0"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid>
+                            <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="1">
+                                <Run Text="{loc:Str label_if_you_love_the_project_please}"/>
+                                <Run Text="{loc:Str label_consider_supporting_it}" FontWeight="Bold"/>
+                                <Run Text=" "/>
+                                <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
+                                    <Run Text="https://linktr.ee/CodeBambi"/>
+                                </Hyperlink>
+                            </TextBlock>
+                            <TextBlock x:Name="TxtBannerSecondary" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="0" IsHitTestVisible="False"
+                                       Text="{loc:Str login_welcome_back}"/>
+                            <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
+                                 message changes. Its own ClipToBounds host so the band can't
+                                 escape the card - deliberately NOT ClipToBounds on the shared
+                                 Grid, which would start clipping the banner text itself.
+                                 Hit-test invisible so the hyperlinks underneath keep working.
+                                 Driven from MainWindow.ChromeFx.cs. -->
+                            <Grid x:Name="BannerSheenHost" ClipToBounds="True" IsHitTestVisible="False">
+                                <Border x:Name="BannerSheen" Width="110" HorizontalAlignment="Left" Opacity="0"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Offset="0" Color="#00FFFFFF"/>
+                                            <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                                            <GradientStop Offset="1" Color="#00FFFFFF"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform>
+                                        <TransformGroup>
+                                            <SkewTransform AngleX="-20"/>
+                                            <TranslateTransform x:Name="BannerSheenSlide"/>
+                                        </TransformGroup>
+                                    </Border.RenderTransform>
+                                </Border>
+                            </Grid>
+                        </Grid>
                     </Border>
                 </Grid>
 
@@ -1812,72 +1890,11 @@
             </Grid>
         </Border>
 
-        <!-- Row 2: the support/marquee banner. Phase 1 deleted the second tab-button grid
-             that used to share this row, so the banner now spans the header outright.
-             Its fixed-width host requirement still holds - see MainWindow.Marquee.cs. -->
-        <Border Grid.Row="2" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="10,6">
-            <Grid>
-                <!-- Banner -->
-                <Border Background="{DynamicResource SurfaceBgBrush}"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="12,8">
-                    <Grid>
-                        <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="1">
-                            <Run Text="{loc:Str label_if_you_love_the_project_please}"/>
-                            <Run Text="{loc:Str label_consider_supporting_it}" FontWeight="Bold"/>
-                            <Run Text=" "/>
-                            <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
-                                <Run Text="https://linktr.ee/CodeBambi"/>
-                            </Hyperlink>
-                        </TextBlock>
-                        <TextBlock x:Name="TxtBannerSecondary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="0" IsHitTestVisible="False"
-                                   Text="{loc:Str login_welcome_back}"/>
-                        <TextBlock x:Name="TxtBannerTertiary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic" FontWeight="Bold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="0" IsHitTestVisible="False">
-                            <Hyperlink NavigateUri="https://www.patreon.com/c/PlatinumPuppets" RequestNavigate="HandleHyperlinkClick">
-                                <Run Text="{loc:Str label_a_special_thanks_to_platinum_puppets_for_prov}"/>
-                            </Hyperlink>
-                        </TextBlock>
-                        <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the message
-                             changes. Its own ClipToBounds host so the band can't escape the card -
-                             deliberately NOT ClipToBounds on the shared Grid, which would start
-                             clipping the banner text itself. Hit-test invisible so the hyperlinks
-                             underneath keep working. Driven from MainWindow.ChromeFx.cs. -->
-                        <Grid x:Name="BannerSheenHost" ClipToBounds="True" IsHitTestVisible="False">
-                            <Border x:Name="BannerSheen" Width="110" HorizontalAlignment="Left" Opacity="0"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Offset="0" Color="#00FFFFFF"/>
-                                        <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
-                                        <GradientStop Offset="1" Color="#00FFFFFF"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                                <Border.RenderTransform>
-                                    <TransformGroup>
-                                        <SkewTransform AngleX="-20"/>
-                                        <TranslateTransform x:Name="BannerSheenSlide"/>
-                                    </TransformGroup>
-                                </Border.RenderTransform>
-                            </Border>
-                        </Grid>
-                    </Grid>
-                </Border>
-
-                <!-- Phase 1: the row-2 tab-button grid moved into the nav rail (canvas column 0);
-                     Help and Bug Report were re-homed to the row-1 right cluster. -->
-
-            </Grid>
-        </Border>
-
+        <!-- Canvas row 2 is EMPTY on purpose (0813). It carried the full-width support/marquee
+             banner; the banner is now nested in the header row beside the version text
+             (HeaderBannerHost, above), and the ~53px this row cost went back to the tab
+             canvas in row 4. The row DEFINITION survives, pinned to 0, so every Grid.Row
+             below it keeps its index. -->
         <!-- XP Progress Bar + Stat Pills - Row 3 -->
         <Grid Grid.Row="3" Grid.Column="1" Margin="15,10,15,5">
             <!-- Main content with XP bar and stat pills -->
