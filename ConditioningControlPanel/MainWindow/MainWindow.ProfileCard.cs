@@ -89,6 +89,11 @@ namespace ConditioningControlPanel
             try
             {
                 _profileViewingSelf = isSelf;
+                // THE SPIRAL PLATE rides the same switch (MainWindow.ProfileSpiral.cs): a
+                // searched card must never wear your descent. Called BEFORE the early
+                // return below, so a missing "back to me" chip cannot strand the plate on
+                // somebody else's card.
+                RefreshProfileSpiralPlate();
                 if (DiscordTab?.BtnProfileBackToMe == null) return;
                 DiscordTab.BtnProfileBackToMe.Visibility = isSelf ? Visibility.Collapsed : Visibility.Visible;
             }

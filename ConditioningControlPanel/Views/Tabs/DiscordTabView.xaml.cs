@@ -116,6 +116,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.TxtProfileSearch_KeyDown(sender, e);
         }
+        /// <summary>The Trainer Card's spiral plate. Opens the expanded map window - the
+        /// same door the nav rail's miniature uses (MainWindow.ProfileSpiral.cs).</summary>
+        private void ProfileSpiralPlate_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OpenSpiralMapFromProfile();
+        }
         private void ProfileAchievementTile_Click(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw
