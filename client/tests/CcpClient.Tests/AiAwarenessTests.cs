@@ -449,4 +449,142 @@ public class AiAwarenessTests
         var state = Assert.IsType<CapabilityState.Unavailable>(unavailable.State);
         Assert.Equal(CapabilityReasonCodes.UnknownCapability, state.Reason.Code);
     }
+
+    // ---- SP-068 F1: incognito hard-drop at the packaging seam (audit row A6) ----
+
+    [Fact]
+    public async Task Packaging_IncognitoTitle_HardDrop_TypedPrivacyFiltered_ZeroTransmission()
+    {
+        var h = new Harness();
+        await h.AdmitProviderAsync();
+
+        var result = await h.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "Some Page — InPrivate", "0m"));
+
+        var dropped = Assert.IsType<AiAwarenessRoutingResult.Dropped>(result);
+        Assert.Equal(AiAwarenessDropKind.PrivacyFiltered, dropped.Kind);
+        Assert.Equal(0, h.Pipeline.SendAttempts);
+        Assert.Equal(0, h.Provider.Calls);
+        Assert.Contains(h.Diagnostics.Records, r => r.StableCode == "dropped:privacy-filtered");
+        // Content-free (contract §12): the title never enters any diagnostic record.
+        Assert.DoesNotContain("Some Page", h.AllDiagnosticText());
+
+        // Negative control in pair: a clean title on a fresh harness is still admitted.
+        var clean = new Harness();
+        await clean.AdmitProviderAsync();
+        Assert.IsType<AiAwarenessRoutingResult.Visible>(
+            await clean.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "Some Page", "0m")));
+    }
+
+    [Fact]
+    public async Task TryPackage_IncognitoTitle_False_NullRequest_NullRefusal()
+    {
+        var h = new Harness();
+        await h.AdmitProviderAsync();
+
+        // Defence in depth at the packager itself (WPF re-checks inside the shared rules):
+        // never packaged, and typed as NOT a moderation verdict (refusal is null).
+        var blocked = AiAwarenessContextPackaging.TryPackage(
+            new AiAwarenessContext("cat", "app", "x — InPrivate", "5s"),
+            h.Boundary, out var blockedRequest, out var refusal);
+        Assert.False(blocked);
+        Assert.Null(blockedRequest);
+        Assert.Null(refusal);
+
+        // Negative control: a clean title still packages.
+        var clean = AiAwarenessContextPackaging.TryPackage(
+            new AiAwarenessContext("cat", "app", "title", "5s"),
+            h.Boundary, out var cleanRequest, out _);
+        Assert.True(clean);
+        Assert.NotNull(cleanRequest);
+    }
+
+    // ---- SP-068 F2: title scrubbing at the packaging seam (audit row A10) ----
+
+    [Fact]
+    public async Task Packaging_ScrubsTitle_ShapePreserved_RawNeverTransmitted()
+    {
+        var h = new Harness();
+        await h.AdmitProviderAsync();
+
+        var result = await h.Service.RunReactionAsync(
+            new AiAwarenessContext("Social", "Browser", "Some Page user@example.com 123456", "0m"));
+
+        Assert.IsType<AiAwarenessRoutingResult.Visible>(result);
+        // The assembled wire title is the scrubbed one; the raw title never leaves.
+        Assert.Equal("[Category: Social | App: Browser | Title: Some Page | Duration: 0m]", h.Provider.LastRequest?.Prompt);
+        Assert.DoesNotContain("user@example.com", h.Provider.LastRequest?.Prompt);
+        Assert.DoesNotContain("123456", h.Provider.LastRequest?.Prompt);
+    }
+
+    [Fact]
+    public async Task Packaging_TitleScrubbedToEmpty_CarriesNoTitle()
+    {
+        var h = new Harness();
+        await h.AdmitProviderAsync();
+
+        var result = await h.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "user@example.com", "0m"));
+
+        // WPF ResolveTitle→null semantics (AwarenessPrivacyRules.cs:455-466): the frame
+        // proceeds TITLE-FREE — narrower than carrying anything.
+        Assert.IsType<AiAwarenessRoutingResult.Visible>(result);
+        Assert.Equal("[Category: Social | App: Browser | Title:  | Duration: 0m]", h.Provider.LastRequest?.Prompt);
+    }
+
+    [Fact]
+    public async Task Packaging_ModerationSeesTheRawTitle_BlockedEvenWhenScrubWouldEmptyIt()
+    {
+        // Order pin (pre-approach consult): moderation evaluates the RAW field first. A
+        // title the scrub alone would erase must still block — otherwise F2 would WIDEN
+        // flow (a reaction transmitted where the landed behavior transmits nothing).
+        const string forbidden = "forbidden-token";
+        var policy = new AiModerationPolicy([new AiModerationRule("test-cat", AiModerationAction.Block, [forbidden])]);
+        var h = new Harness(policy);
+        await h.AdmitProviderAsync();
+
+        var result = await h.Service.RunReactionAsync(
+            new AiAwarenessContext("cat", "app", $"{forbidden}@example.com", "0m"));
+
+        Assert.Equal(AiAwarenessDropKind.RefusedByModeration, Assert.IsType<AiAwarenessRoutingResult.Dropped>(result).Kind);
+        Assert.Equal(0, h.Pipeline.SendAttempts);
+        Assert.Equal(0, h.Provider.Calls);
+    }
+
+    // ---- SP-068 F3: the strip on the awareness reply paths (audit row C3, strip half) ----
+
+    [Fact]
+    public async Task Reaction_ReplyWithInventedUrl_StrippedBeforeApplication()
+    {
+        var h = new Harness();
+        h.Provider.Reply = new AiReply.Generated("Hello there. Check https://example.com/x now! Bye.", AiEndpointClass.Loopback);
+        await h.AdmitProviderAsync();
+
+        var result = await h.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "Some Page", "0m"));
+
+        var visible = Assert.IsType<AiAwarenessRoutingResult.Visible>(result);
+        var generated = Assert.IsType<AiReply.Generated>(visible.Reply);
+        Assert.Equal("Hello there. Bye.", generated.Text);
+        Assert.DoesNotContain("https://example.com", h.AllDiagnosticText());
+        Assert.Equal(0, h.Memory.Appends); // awareness turns are never persisted (unchanged)
+    }
+
+    [Fact]
+    public async Task KeywordReply_EmptiedByStrip_TypedFallbackWithCanned_TypedDropWithout()
+    {
+        var h = new Harness();
+        h.Provider.Reply = new AiReply.Generated("https://example.com/only-link", AiEndpointClass.Loopback);
+        await h.AdmitProviderAsync();
+
+        // WPF chat parity (CompanionBrain.cs:279-284): nothing but invented links → "same
+        // treatment as a canned fallback" — the keyword route's canned text, typed Fallback.
+        var withCanned = await h.Service.RunKeywordCommentAsync("t1", "testword", fallbackText: "canned app phrase");
+        var fallback = Assert.IsType<AiReply.Fallback>(Assert.IsType<AiAwarenessRoutingResult.Visible>(withCanned).Reply);
+        Assert.Equal("canned app phrase", fallback.Text);
+        Assert.Equal("keyword-fallback", fallback.Code);
+
+        // Without canned text the emptied reply is a typed drop, never an empty bubble.
+        h.Now = h.Now.AddHours(1); // clear all cooldowns
+        var withoutCanned = await h.Service.RunKeywordCommentAsync("t2", "testword");
+        Assert.Equal(AiAwarenessDropKind.ProviderUnavailable, Assert.IsType<AiAwarenessRoutingResult.Dropped>(withoutCanned).Kind);
+        Assert.Equal(0, h.Memory.Appends);
+    }
 }

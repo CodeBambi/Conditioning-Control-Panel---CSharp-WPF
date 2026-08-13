@@ -238,6 +238,73 @@ public class AiMemoryPipelineTests
         Assert.Empty(h.Memory.ReadRecent(10));
     }
 
+    // ---- SP-068 F3: the unsanctioned-link strip on the interactive persist path (audit row C3) ----
+
+    [Fact]
+    public async Task InteractiveReply_InventedUrlStripped_StrippedTextPersisted_FileContentProof()
+    {
+        using var h = new Harness();
+        await h.AdmitProviderAsync(new AiReply.Generated(
+            "Sure thing! Visit https://example.com/vid for it. Take care.", AiEndpointClass.Loopback));
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("hello companion"));
+
+        // The strip fires BEFORE persist and before application (WPF CompanionBrain.cs:269:
+        // before the text reaches the bubble, history, or disk).
+        var generated = Assert.IsType<AiReply.Generated>(result.Reply);
+        Assert.Equal("Sure thing! Take care.", generated.Text);
+        Assert.IsType<OperationOutcome.Completed>(await h.Memory.SaveImmediate());
+
+        // File-content proof: the STRIPPED text is on disk; the invented URL never hit disk.
+        var content = h.MemoryFileContent();
+        Assert.NotNull(content);
+        Assert.Contains("Sure thing! Take care.", content);
+        Assert.DoesNotContain("https://example.com", content);
+        Assert.Equal(
+            [new AiMemoryTurn(AiMemoryRole.User, "hello companion"), new AiMemoryTurn(AiMemoryRole.Assistant, "Sure thing! Take care.")],
+            h.Memory.ReadRecent(10));
+    }
+
+    [Fact]
+    public async Task InteractiveReply_NothingButInventedLinks_TypedUnavailable_NeverPersisted_ZeroFileContent()
+    {
+        using var h = new Harness();
+        await h.AdmitProviderAsync(new AiReply.Generated("https://example.com/only-link", AiEndpointClass.Loopback));
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("hello companion"));
+
+        // WPF CompanionBrain.cs:279-284: nothing but invented links → no reply at all,
+        // typed from the EXISTING vocabulary (no new AiReply case). The turn pair is never
+        // appended — the port's equivalent of WPF's user-turn rollback.
+        Assert.IsType<OperationOutcome.Completed>(result.Outcome);
+        var unavailable = Assert.IsType<AiReply.Unavailable>(result.Reply);
+        Assert.Equal("reply-stripped-empty", unavailable.Code);
+        await h.Memory.FlushAsync(TimeSpan.FromSeconds(5)); // quiescence: nothing may be in flight
+        Assert.Null(h.MemoryFileContent());
+        Assert.Empty(h.Memory.ReadRecent(10));
+        // Content-free (contract §12): the stable code rides the diagnostic; the URL never does.
+        Assert.Contains(h.Diagnostics.Records, r => r.StableCode == "reply-stripped-empty" && r.Outcome == AiDiagnosticOutcome.Unavailable);
+        Assert.DoesNotContain(h.Diagnostics.Records, r => (r.StableCode ?? string.Empty).Contains("example.com"));
+    }
+
+    [Fact]
+    public async Task InteractiveReply_WithoutUrls_PassesThroughUnchanged_Persisted()
+    {
+        // Negative control: a URL-free reply is byte-identical through the strip (a filter
+        // that eats everything cannot satisfy the pins above).
+        using var h = new Harness();
+        await h.AdmitProviderAsync(new AiReply.Generated("clean reply, no links", AiEndpointClass.Loopback));
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("hello companion"));
+
+        var generated = Assert.IsType<AiReply.Generated>(result.Reply);
+        Assert.Equal("clean reply, no links", generated.Text);
+        Assert.IsType<OperationOutcome.Completed>(await h.Memory.SaveImmediate());
+        Assert.Equal(
+            [new AiMemoryTurn(AiMemoryRole.User, "hello companion"), new AiMemoryTurn(AiMemoryRole.Assistant, "clean reply, no links")],
+            h.Memory.ReadRecent(10));
+    }
+
     private sealed class ListLogSink : ILogSink
     {
         public List<string> Messages { get; } = [];

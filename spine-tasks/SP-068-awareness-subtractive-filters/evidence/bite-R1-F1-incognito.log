@@ -1,0 +1,11 @@
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-i1ekis
+FLOOR CHECK FAILED (SP-065):
+  dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  --- CcpClient.Tests dotnet output tail ---
+[xUnit.net 00:00:02.52]     CcpClient.Tests.AiPrivacyFilterTests.LooksIncognito_MarkersFromEitherWpfList_Drop(title: "YOUTUBE — INCOGNITO MODE") [FAIL]
+[xUnit.net 00:00:02.52]     CcpClient.Tests.AiPrivacyFilterTests.LooksIncognito_MarkersFromEitherWpfList_Drop(title: "private tab — docs") [FAIL]
+[xUnit.net 00:00:02.52]     CcpClient.Tests.AiPrivacyFilterTests.LooksIncognito_MarkersFromEitherWpfList_Drop(title: "Mi ventana privada — Firefox") [FAIL]
+[xUnit.net 00:00:02.64]     CcpClient.Tests.AiPrivacyFilterTests.ClassifyCapturedTitle_IncognitoMarker_DropIncognito [FAIL]
+[xUnit.net 00:00:03.85]     CcpClient.Tests.AiAwarenessTests.TryPackage_IncognitoTitle_False_NullRequest_NullRefusal [FAIL]
+[xUnit.net 00:00:03.96]     CcpClient.Tests.AiAwarenessTests.Packaging_IncognitoTitle_HardDrop_TypedPrivacyFiltered_ZeroTransmission [FAIL]
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-i1ekis

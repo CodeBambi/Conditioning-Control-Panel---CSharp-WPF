@@ -327,6 +327,30 @@ public sealed class AiOperationPipeline
                         softHitCode = "soft-hit:output";
                         break;
                 }
+
+                // SP-068 F3 (audit row C3, strip half): model-invented URLs are removed
+                // BEFORE the text reaches memory, the bubble, or disk (WPF
+                // AiTextHygiene.StripUnsanctionedLinks applied at CompanionBrain.cs:269
+                // chat / :356 reaction; the port issues the model no links, so every
+                // reply URL is unsanctioned here). After output moderation, before
+                // persist/apply: the strip only removes whole sentences and collapses
+                // whitespace, so the moderated text is a strict superset of anything that
+                // can leave. Emptied reply (WPF CompanionBrain.cs:279-284 "nothing but
+                // invented links — no reply at all"): typed Unavailable from the EXISTING
+                // vocabulary, and the turn pair is NEVER appended (the port's equivalent
+                // of WPF's user-turn rollback — both appends live in the block below, so
+                // skipping it keeps the pair atomic).
+                var stripped = AiPrivacyFilters.StripUnsanctionedLinks(generated.Text);
+                if (stripped.Length == 0)
+                {
+                    reply = new AiReply.Unavailable("reply-stripped-empty");
+                    return OperationOutcome.Completed.Instance;
+                }
+
+                if (!string.Equals(stripped, generated.Text, StringComparison.Ordinal))
+                {
+                    produced = generated with { Text = stripped };
+                }
             }
 
             // Memory persist (admission §4 rule 5; SP-040 slice c4 — discharges c3 inventory

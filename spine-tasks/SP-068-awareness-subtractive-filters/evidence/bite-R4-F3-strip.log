@@ -1,0 +1,11 @@
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-YfzwNe
+FLOOR CHECK FAILED (SP-065):
+  dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  --- CcpClient.Tests dotnet output tail ---
+[xUnit.net 00:00:02.48]     CcpClient.Tests.AiPrivacyFilterTests.StripUnsanctionedLinks_WwwVariant_Removed [FAIL]
+[xUnit.net 00:00:02.49]     CcpClient.Tests.AiPrivacyFilterTests.StripUnsanctionedLinks_AllLinksReply_Empties [FAIL]
+[xUnit.net 00:00:02.72]     CcpClient.Tests.AiMemoryPipelineTests.InteractiveReply_InventedUrlStripped_StrippedTextPersisted_FileContentProof [FAIL]
+[xUnit.net 00:00:02.79]     CcpClient.Tests.AiMemoryPipelineTests.InteractiveReply_NothingButInventedLinks_TypedUnavailable_NeverPersisted_ZeroFileContent [FAIL]
+[xUnit.net 00:00:03.68]     CcpClient.Tests.AiAwarenessTests.Reaction_ReplyWithInventedUrl_StrippedBeforeApplication [FAIL]
+[xUnit.net 00:00:03.72]     CcpClient.Tests.AiAwarenessTests.KeywordReply_EmptiedByStrip_TypedFallbackWithCanned_TypedDropWithout [FAIL]
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-YfzwNe
