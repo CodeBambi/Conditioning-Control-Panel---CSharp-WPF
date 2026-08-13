@@ -377,8 +377,12 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // NOT OutsideSession, and it used to be, which made the Today card print
+                        // "today's session will not produce this on its own" directly underneath a
+                        // day whose own override switches the filter on at minute 2. The session
+                        // delivers all twenty minutes and then some: 30 minutes, filter from minute
+                        // 2, worst case 25 minutes of it after the +/-3 start jitter.
                         Id = "d8_pink",
-                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Keep the pink filter on for 20 minutes",
                         Verifier = QuestCategory.PinkFilter,
@@ -419,6 +423,15 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession stays, and the override above stays with it - they are not
+                        // in contradiction, which is worth writing down because they look like they
+                        // are. The override exists so the session does not *switch video off*
+                        // (ApplySessionSettings writes false into live AppSettings and stops the
+                        // service for anything the template omits). What it cannot do is supply the
+                        // fifteen minutes: video credit is actual playback of the user's own files
+                        // at VideosPerHour cadence, and one clip an hour across 36 usable minutes is
+                        // a minute or two. So the session unblocks the feature and the user's own
+                        // evening fills the counter, which is exactly what the how-to line says.
                         Id = "d9_video",
                         OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
@@ -995,6 +1008,12 @@ public static partial class BuiltInPrograms
     /// this is the template for the days where the ritual is makeup rather than grooming and the user
     /// is sitting in front of a mirror anyway.
     /// Band: i .32 (day 6) to i .49 (day 11). Ceiling pulled out x1.10 on the retune.
+    ///
+    /// FlashPerHourEnd ceiling pulled back in from 303 to 225 on the 180-clamp pass. It was not
+    /// clipping on its own days (day 11 landed at 177), but it was eating the entire headroom: with
+    /// day 11 at 177 there were three units left for days 12, 13 and 14 to escalate into before the
+    /// engine's 180/hour clamp flattened them. Days 6/7/10/11 now end on 109 / 115 / 123 / 138, which
+    /// leaves PR-Show somewhere to climb to.
     /// </summary>
     private static ProgramSessionTemplate PrDress() => new()
     {
@@ -1073,7 +1092,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 168,
-            FlashPerHourEnd = 303,
+            FlashPerHourEnd = 225,
             FlashImages = 4,
             FlashOpacity = 79,
             FlashOpacityEnd = 100,
@@ -1142,6 +1161,14 @@ public static partial class BuiltInPrograms
     /// floor, so days 13 and 14 each carry one Overrides entry and this pair is authored for the *feel*
     /// of the last week rather than as an escalation device. Day 12 gets its perceptible change for
     /// free by being the first day this template appears at all.
+    ///
+    /// The flash ramp was re-authored on the 180-clamp pass: FlashPerHourEnd ran 175 -> 300, which put
+    /// days 12/13/14 at 246 / 255 / 263 an hour, and AppSettings.FlashFrequency clamps at 180. All
+    /// three days therefore ran at a flat 180 for the whole back half of every session - the finale of
+    /// a paid program, with its escalation deleted by a setter. Now 140 -> 180, landing 163 / 166 /
+    /// 168, above PR-Dress's day 11 (138) and inside what the engine will actually run. The program
+    /// still tops out below the two 28-day flagships (180), which is the same deliberate choice the
+    /// .70 intensity cap makes.
     /// </summary>
     private static ProgramSessionTemplate PrShow() => new()
     {
@@ -1153,7 +1180,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 95,
-            FlashPerHourEnd = 175,
+            FlashPerHourEnd = 140,
             FlashImages = 3,
             FlashOpacity = 52,
             FlashOpacityEnd = 72,
@@ -1227,7 +1254,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 150,
-            FlashPerHourEnd = 300,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 74,
             FlashOpacityEnd = 96,

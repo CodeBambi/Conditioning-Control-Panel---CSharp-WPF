@@ -147,7 +147,12 @@ public static partial class BuiltInPrograms
         Subtitle = "Two words, over and over, until they stop being words",
         AccentColor = "#FFB6C1",
         RewardId = "tk_ch1_banked",
-        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP - stay in your subliminal pool for good.",
+        // Softened from "...stay in your subliminal pool for good." Nothing writes them there - the
+        // reward is recorded as an id in enrollment.BankedRewards and no code path adds a phrase to
+        // the user's own pool - and unlike the program's other reward copy that one named a surface
+        // the user can go and open, so it reads as a bug rather than as flavour. "Installed" is the
+        // program's own fiction and stays.
+        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP. Yours from here, and a restart can't take them back.",
         Days = new List<ProgramDay>
         {
             // ---- Day 1 -------------------------------------------------------------------------
@@ -163,11 +168,21 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // Arithmetic, not taste. Flash credit is one per IMAGE (FlashService tracks
+                        // once per spawned window), and TK-Bubble at i .05 runs 12 -> 21 an hour with
+                        // FlashImages 1, so half an hour offers about eight. Twenty-five - what this
+                        // shipped as - was three times what day 1 could produce, on the first evening
+                        // of a 28-day purchase, with the counter visibly stalling at 8/25 and no
+                        // OutsideSession flag to send the user anywhere else.
+                        //
+                        // Six leaves room for the +/-30% the flash timer jitters each interval by.
+                        // Raising TK-Bubble's rate is not on the table: "half an hour where almost
+                        // nothing happens" is the day.
                         Id = "d1_flash",
                         Kind = ProgramTaskKind.AutoVerified,
-                        Description = "See 25 flash images",
+                        Description = "See 6 flash images",
                         Verifier = QuestCategory.Flash,
-                        TargetValue = 25
+                        TargetValue = 6
                     }
                 }
             },
@@ -475,7 +490,7 @@ public static partial class BuiltInPrograms
             {
                 DayIndex = 13,
                 Title = "Twenty Minutes of Watching",
-                Blurb = "An hour tonight, and twenty solid minutes of it are just eyes on the screen. Five more than Sunday. Don't multitask - she'll know~",
+                Blurb = "An hour tonight, and twenty solid minutes of watching to go with it. Five more than Sunday. Don't multitask - she'll know~",
                 SessionTemplateId = "TK-Uniform",
                 SessionMinutes = 60,
                 Intensity = 0.51,
@@ -483,7 +498,18 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession, like every other video task in the set (day 10 here, and
+                        // First Week day 5), and for a reason that is structural rather than a
+                        // shortfall: QuestCategory.Video credits *actual playback minutes of the
+                        // user's own files*, and mandatory videos start at VideosPerHour - two an
+                        // hour here - so the session itself can only ever contribute single-digit
+                        // minutes no matter how long it runs. Twenty minutes of watching is the
+                        // user's own evening; the session's own clips land on top of it.
+                        //
+                        // The ladder is 15 (day 10) -> 20 -> 25 (day 19) -> 30 (day 26), and the
+                        // blurbs name each step, so it is not a number to trim casually.
                         Id = "d13_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 20 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -677,7 +703,9 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 13. The session's own clips run underneath it.
                         Id = "d19_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 25 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -927,7 +955,17 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 13, and the top of the ladder.
+                        //
+                        // OWNER CALL flagged in the fix report: 75 minutes of session plus 30 of
+                        // watching is 105 minutes of seated time on one day, over this program's own
+                        // 90-minute MaxDailyMinutes. That load is not new - the day has always asked
+                        // for thirty minutes the session could not supply - but the flag makes it
+                        // visible. Fixing it properly means either dropping day 26 to a 60-minute
+                        // session or breaking the 15/20/25/30 ladder the blurbs name, and both are
+                        // content decisions rather than corrections.
                         Id = "d26_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 30 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -1479,8 +1517,18 @@ public static partial class BuiltInPrograms
     /// TK-Uniform - video and flash heavy, hydra on. Hydra is the identity here: clicking a flash
     /// spawns more of them, so the one interaction the user has left actively makes it worse. The
     /// spiral arrives with this template too.
-    /// Band: i .41 (day 11) to i .76 (day 20), plus day 27's held breath at .74. Unchanged by the
-    /// retune - this template's band barely moved, and its pair was already sized for it.
+    /// Band: i .41 (day 11) to i .76 (day 20), plus day 27's held breath at .74.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass and it is the biggest change in the file.
+    /// It ran 45/80 -> 200/380, which put every single day this template touches - 11, 12, 13, 14, 16,
+    /// 17, 20 and 27 - above the 180/hour AppSettings.FlashFrequency clamp at the END of its ramp
+    /// (203, 221, 233, 245, 221, 254, 308, 302). Eight days of a 28-day program spent the back half of
+    /// every session pinned at a flat 180, and days 12, 13, 14 and 16 were indistinguishable from one
+    /// another for it. Now 51/99 -> 122/145, landing 80 -> 118, 84 -> 121, 87 -> 122, 90 -> 124,
+    /// 92 -> 126, 105 -> 134 and 104 -> 133. Smaller numbers, and for the first time an actual
+    /// ordering - the old ones only *looked* like escalation in the source.
+    /// Both halves of the pair now sit under the clamp, so this template cannot author a rate the
+    /// engine will discard at any intensity.
     /// </summary>
     private static ProgramSessionTemplate TkUniform() => new()
     {
@@ -1491,8 +1539,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 45,
-            FlashPerHourEnd = 80,
+            FlashPerHour = 51,
+            FlashPerHourEnd = 99,
             FlashImages = 2,
             FlashOpacity = 35,
             FlashOpacityEnd = 55,
@@ -1558,8 +1606,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 200,
-            FlashPerHourEnd = 380,
+            FlashPerHour = 122,
+            FlashPerHourEnd = 145,
             FlashImages = 4,
             FlashOpacity = 80,
             FlashOpacityEnd = 100,
@@ -1628,6 +1676,15 @@ public static partial class BuiltInPrograms
     /// program ever runs a template past what it was authored for - and days 25, 26 and 28 reach past
     /// the lerp with Overrides rather than by inflating this pair, which would have dragged every
     /// other chapter-4 day up with them.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass. It ran 90/180 -> 260/620, so the eight
+    /// days on this template started at 202-260 an hour and ended at 470-620 - every number at both
+    /// ends above the 180/hour AppSettings.FlashFrequency clamp. Chapter 4, the four days a user
+    /// describes to someone else, ran at a flat 180 for every second of every session, and day 28 was
+    /// pixel-identical to day 18 in the one field the whole curve was supposed to escalate. Now
+    /// 66/115 -> 125/180: day 18 lands 105 -> 158 and day 28 lands 125 -> 180, with the six days
+    /// between them properly ordered, and 180 is exactly the top of what the engine will run - the
+    /// program's real ceiling rather than a number on paper.
     /// </summary>
     private static ProgramSessionTemplate TkBambiTime() => new()
     {
@@ -1638,8 +1695,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 90,
-            FlashPerHourEnd = 180,
+            FlashPerHour = 66,
+            FlashPerHourEnd = 115,
             FlashImages = 3,
             FlashOpacity = 50,
             FlashOpacityEnd = 70,
@@ -1712,8 +1769,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 260,
-            FlashPerHourEnd = 620,
+            FlashPerHour = 125,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 85,
             FlashOpacityEnd = 100,

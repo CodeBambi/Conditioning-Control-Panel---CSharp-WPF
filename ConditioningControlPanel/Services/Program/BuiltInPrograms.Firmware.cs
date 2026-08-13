@@ -175,11 +175,22 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // The number is arithmetic, not taste. Flash credit is one per IMAGE
+                        // (FlashService tracks once per spawned window), and FW-Boot at i .05 runs
+                        // 10 -> 18 injections an hour with FlashImages 1, so thirty minutes offers
+                        // about seven. Thirty - what this shipped as - was four times what cycle 1
+                        // could ever produce, on the first day of a paid program, with no
+                        // OutsideSession flag to tell the Unit to go and find them elsewhere.
+                        //
+                        // Five, not seven: FlashService jitters each interval +/-30%, so a target
+                        // sitting at 100% of the expected count fails a coin flip's worth of runs.
+                        // Raising FW-Boot's rate instead is not available - "if a first-time Unit
+                        // notices this running, it is authored wrong" is the template's whole brief.
                         Id = "c1_injections",
                         Kind = ProgramTaskKind.AutoVerified,
-                        Description = "Process 30 data injections. [LOG] OPTICAL INPUT CALIBRATION",
+                        Description = "Process 5 data injections. [LOG] OPTICAL INPUT CALIBRATION",
                         Verifier = QuestCategory.Flash,
-                        TargetValue = 30
+                        TargetValue = 5
                     }
                 }
             },
@@ -456,7 +467,16 @@ public static partial class BuiltInPrograms
                     // text-replacement pass is relied on.
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // OutsideSession, and this is the fiction rather than a concession: the whole
+                    // point of cycle 11 is that "the green filter is no longer session-scoped, it
+                    // stays over the display for the working day". Cycles 11-13 could not hit sixty
+                    // minutes from the session alone anyway (45m and 60m sessions, filter from
+                    // minute 2-3), and an unreachable ambient is not merely cosmetic - it lets
+                    // ProgramService.SettleAmbientShortfallDay settle the cycle at rollover with the
+                    // day XP withheld, so the Unit is underpaid for a cycle it completed in full.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -485,7 +505,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -530,7 +553,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -566,7 +592,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 RewardDescription = "[INSTALL COMPLETE] Unit designation issued. System log exported to the diary as a text file.",
                 Tasks = new List<ProgramTask>
@@ -1016,6 +1045,11 @@ public static partial class BuiltInPrograms
     /// The vortex floor/ceiling pair is tuned so cycle 6 starts it around minute 22 - the Unit met
     /// the vortex by hand on cycle 4, and here it finds it already running, which is the whole
     /// tutorial shape.
+    ///
+    /// FlashPerHourEnd ceiling pulled in from 300 to 235 on the 180-clamp pass. Cycle 11 was landing
+    /// on 193 an hour and AppSettings.FlashFrequency clamps at 180, so the top of cycle 11's ramp was
+    /// being thrown away - and cycles 12-14 had nowhere legal left to escalate into. Cycles
+    /// 6/7/10/11 now end on 133 / 138 / 145 / 160.
     /// </summary>
     private static ProgramSessionTemplate FwOverwrite() => new()
     {
@@ -1094,7 +1128,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 170,
-            FlashPerHourEnd = 300,
+            FlashPerHourEnd = 235,
             FlashImages = 3,
             FlashOpacity = 76,
             FlashOpacityEnd = 95,
@@ -1160,6 +1194,16 @@ public static partial class BuiltInPrograms
     /// injections at saturation. Used at i .62 / .68 / .75 (cycles 12-14), so the ceiling sits above
     /// anything the install ever reaches - the replayable that graduation hands over can be pushed
     /// further later, and this pair cannot be re-authored once Units have it saved.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass. It ran 90/170 -> 260/620, which put
+    /// cycles 12/13/14 at 192 -> 440, 206 -> 476 and 218 -> 508 an hour: every one of those numbers
+    /// is above the 180/hour AppSettings.FlashFrequency clamp at BOTH ends, so all three cycles ran
+    /// at a flat 180 from the first second to the last. The install's entire final module had no
+    /// flash escalation at all, in either direction. Now 62/126 -> 155/193, landing 118 -> 166,
+    /// 125 -> 172 and 132 -> 176: real ramps, ordered, above cycle 11's 108 -> 160, and inside what
+    /// the engine will run. The FlashPerHourEnd ceiling of 193 is the one value in this file above
+    /// the clamp; it is reachable only at i .95+, which this template never sees (max .75), and
+    /// ProgramLibraryTests pins every shipped day against the clamp.
     /// </summary>
     private static ProgramSessionTemplate FwOverride() => new()
     {
@@ -1170,8 +1214,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 90,
-            FlashPerHourEnd = 170,
+            FlashPerHour = 62,
+            FlashPerHourEnd = 126,
             FlashImages = 2,
             FlashOpacity = 45,
             FlashOpacityEnd = 68,
@@ -1250,8 +1294,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 260,
-            FlashPerHourEnd = 620,
+            FlashPerHour = 155,
+            FlashPerHourEnd = 193,
             FlashImages = 4,
             FlashOpacity = 82,
             FlashOpacityEnd = 100,

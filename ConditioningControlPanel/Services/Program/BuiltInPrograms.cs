@@ -130,7 +130,15 @@ public static partial class BuiltInPrograms
                     Subtitle = "Six easy days and one that isn't",
                     AccentColor = "#FF69B4",
                     RewardId = "first_week_preset",
-                    RewardDescription = "The \"First Week\" preset - day seven, saved permanently, replayable whenever you want it back.",
+                    // Softened from "The \"First Week\" preset - day seven, saved permanently,
+                    // replayable whenever you want it back." Nothing implements that: CompleteChapter
+                    // records the RewardId in enrollment.BankedRewards and no code path turns a
+                    // banked id into a saved session, so a free user finishing the funnel went
+                    // looking for a preset that was never written. Banking IS real, so the copy now
+                    // promises exactly the part that happens. See the fix report - eleven sibling
+                    // reward lines across the paid programs make the same class of promise and are
+                    // left alone pending the owner call on building the grant.
+                    RewardDescription = "Day seven, banked - it's yours, and a restart can't take it back.",
                     Days = new List<ProgramDay>
                     {
                         // ---- Day 1 ---------------------------------------------------------------
@@ -359,7 +367,9 @@ public static partial class BuiltInPrograms
                             SessionTemplateId = "BW-Deep",
                             SessionMinutes = 60,
                             Intensity = 0.75,
-                            RewardDescription = "Good Girl badge, and day seven saved as a preset you keep.",
+                            // Kept in step with the chapter line above - the preset it promised does
+                            // not get written.
+                            RewardDescription = "Good Girl badge, and day seven banked - yours to keep.",
                             Tasks = new List<ProgramTask>
                             {
                                 new ProgramTask
@@ -1051,9 +1061,17 @@ public static partial class BuiltInPrograms
     /// what lets the day-7 blurb say "you've done every piece of this by hand already" without lying.
     ///
     /// Lands on, at i .75:
-    ///   FlashPerHour        180 -> 480      FlashImages            4     FlashOpacity     70 -> 90
+    ///   FlashPerHour        110 -> 165      FlashImages            4     FlashOpacity     70 -> 90
     ///   SubliminalPerMin      9  (5 frames) LockCardStartMinute    8     LockCardFreq  5/hour
     ///   MindWipe          mult 3, vol 51    BubbleCountStartMinute 11    VideosPerHour    2
+    ///
+    /// THE FLASH CEILING IS 180/HOUR AND IT IS NOT NEGOTIABLE FROM HERE. SessionEngine writes both
+    /// FlashPerHour and every step of the ramp through AppSettings.FlashFrequency, whose setter clamps
+    /// to 1..180, so the pair this template used to carry - 180 -> 480 at i .75 - was not a ramp at
+    /// all. It was a flat line at 180 for the whole hour, and the boss's escalation simply did not
+    /// happen. 110 -> 165 is a real climb, and it still sits clear of day 5's 80 -> 141.
+    /// Raising the engine clamp is an owner call; authoring above it is just writing numbers nothing
+    /// reads. ProgramLibraryTests.NoShippedDayAuthorsAFlashRateTheEngineWillClamp pins this.
     /// LockCardFrequency is deliberately 2 -> 6 rather than 1 -> 4: the old pair landed 3/hour, which
     /// over the 52 minutes after the first card is scheduled expects ~2.6 cards for a task that asks
     /// for 3. 5/hour expects ~4, so the boss's own task is completable inside the boss.
@@ -1143,8 +1161,11 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 220,
-            FlashPerHourEnd = 600,
+            // Both halves of the pair sit at or below the 180/hour engine clamp, so this template is
+            // structurally incapable of authoring a rate the app will throw away - at any intensity,
+            // not merely at the .75 day 7 happens to use.
+            FlashPerHour = 127,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 80,
             FlashOpacityEnd = 100,
