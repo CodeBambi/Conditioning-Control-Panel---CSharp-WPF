@@ -1,0 +1,1 @@
+refusing to start: --dtrh-m2test is a HARNESS-ONLY entry point (automated evidence capture / failure injection) and CCP_DATA_ROOT is not set — set CCP_DATA_ROOT=<fully-qualified absolute directory> so the run is isolated from the real user profile (SP-057 seam; SP-064 makes it mandatory for harness entries)
