@@ -115,16 +115,31 @@ public class AiTextHygieneTests
         Assert.Equal("hello world", AiTextHygiene.StripMetadataTags("  hello  [App: x]   world  "));
     }
 
-    [Fact]
-    public void H2_OrderPin_NestedTruncation_ProvesFixedOrder()
+    [Theory]
+    // record.md §2 (corrected after final-review REVISE): three inputs whose output provably
+    // changes under permutation of the five patterns — verified by executing the transcribed
+    // regexes over all 120 permutations.
+    // Case 1 (closed passes BEFORE ReactionCategoryTag — 40/120 perms break):
+    //   WPF order: ClosedCategoryTag consumes "[Category: a [Media/Streaming]" (its [^\]]*
+    //   stops at the FIRST ']') leaving " b]". If ReactionCategoryTag runs before BOTH closed
+    //   passes it eats "[Media/Streaming]" first, and a closed pass then consumes the whole
+    //   "[Category: a  b]" → "".
+    [InlineData("[Category: a [Media/Streaming] b]", "b]")]
+    // Case 2 (UnclosedKnownTag AFTER ReactionCategoryTag — 60/120 perms break):
+    //   WPF order: ReactionCategoryTag removes "[Media/Streaming]" leaving "[App x ", which
+    //   UnclosedKnownTag eats → "". If UnclosedKnownTag runs FIRST it cannot match (the ']'
+    //   blocks its end anchor), the reaction tag is removed after it has passed, and
+    //   "[App x" survives.
+    [InlineData("[App x [Media/Streaming]", "")]
+    // Case 3 (UnclosedKeyedTag AFTER ReactionCategoryTag — 60/120 perms break): same shape
+    //   with an unknown keyword, so only UnclosedKeyedTag can eat the fragment.
+    [InlineData("[Foo: x [Media/Streaming]", "")]
+    // Provably UNOBSERVABLE pairings (stated honestly in record.md §2): ClosedCategoryTag vs
+    // ClosedMetadataTag (the former's matches are a subset of the latter's) and the two
+    // unclosed passes against each other commute on every constructible input.
+    public void H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder(string input, string expected)
     {
-        // record.md §2: "[Category: [Foo]: bar" (a truncated tag nested inside another — the
-        // WPF :48-52 comment documents truncation cutting a tag before its bracket).
-        //   WPF order (closed passes FIRST): ClosedCategoryTag eats "[Category: [Foo]" → ": bar".
-        //   Permuted (unclosed passes first): UnclosedKeyedTag eats "[Foo]: bar" leaving
-        //   "[Category: ", which UnclosedKnownTag then eats → "".
-        // Pinning ": bar" fails any permutation of the five patterns.
-        Assert.Equal(": bar", AiTextHygiene.StripMetadataTags("[Category: [Foo]: bar"));
+        Assert.Equal(expected, AiTextHygiene.StripMetadataTags(input));
     }
 
     [Theory]

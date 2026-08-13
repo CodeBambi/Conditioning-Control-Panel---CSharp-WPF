@@ -1,11 +1,11 @@
-floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-JHbuvQ
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-Pqm090
 FLOOR CHECK FAILED (SP-065):
   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
   --- CcpClient.Tests dotnet output tail ---
-[xUnit.net 00:00:02.53]     CcpClient.Tests.AiTextHygieneTests.H2_EachOfTheFiveShapes_Removed(input: "nice [Media/Streaming] pick", expected: "nice pick") [FAIL]
-[xUnit.net 00:00:02.54]     CcpClient.Tests.AiTextHygieneTests.H2_WhitespaceCollapse_AndTrim [FAIL]
-[xUnit.net 00:00:02.59]     CcpClient.Tests.AiTextHygieneTests.H2_OrderPin_NestedTruncation_ProvesFixedOrder [FAIL]
-[xUnit.net 00:00:02.63]     CcpClient.Tests.AiTextHygieneTests.H2_PortTrigger_AwarenessContextLineEcho_Stripped [FAIL]
-[xUnit.net 00:00:03.57]     CcpClient.Tests.AiReplyHygienePipelineTests.H3_ComposedWithThePortsOwnTrigger_StillDetected [FAIL]
-[xUnit.net 00:00:03.67]     CcpClient.Tests.AiReplyHygienePipelineTests.TriggerEcho_StrippedBeforeBubbleAndMemory [FAIL]
-results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-JHbuvQ
+[xUnit.net 00:00:03.92]     CcpClient.Tests.AiTextHygieneTests.H2_EachOfTheFiveShapes_Removed(input: "nice [Media/Streaming] pick", expected: "nice pick") [FAIL]
+[xUnit.net 00:00:03.92]     CcpClient.Tests.AiTextHygieneTests.H2_WhitespaceCollapse_AndTrim [FAIL]
+[xUnit.net 00:00:03.95]     CcpClient.Tests.AiTextHygieneTests.H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder(input: "[Category: a [Media/Streaming] b]", expected: "b]") [FAIL]
+[xUnit.net 00:00:03.95]     CcpClient.Tests.AiTextHygieneTests.H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder(input: "[App x [Media/Streaming]", expected: "") [FAIL]
+[xUnit.net 00:00:03.95]     CcpClient.Tests.AiTextHygieneTests.H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder(input: "[Foo: x [Media/Streaming]", expected: "") [FAIL]
+[xUnit.net 00:00:03.96]     CcpClient.Tests.AiTextHygieneTests.H2_PortTrigger_AwarenessContextLineEcho_Stripped [FAIL]
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-Pqm090

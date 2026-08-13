@@ -1,12 +1,21 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Complete
-**Last Updated:** 2026-08-13 (worker, Step 1 start)
+**Current Step:** Complete (post-REVISE fix landed)
+**Last Updated:** 2026-08-13 (worker, final-review REVISE addressed)
 **Blockers:** none
+
+**Post-`.DONE` engine reviews:** Step-5 code review APPROVE; final review **REVISE** — the H2
+order pin provably passed under all 120 permutations of the five patterns. Fixed: the pin was
+replaced with three permutation-distinguishing cases (`H2_OrderPin_ThreePermutationDistinguishers_ProveFixedOrder`),
+`record.md` §2/§9 corrected, the R2 bite re-run (12 red, exactly the H2 set), floor bumped
+993→995 in the same commit as the tests. Full contract chain re-run green twice after the fix
+(995/995 unit, 35/35 headless, exactly the 2 pinned skips, build 0W/0E).
 
 **Floor at authoring:** 946 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
 `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-068, integrate `f2662cd0`.
-**NEW EXACT COUNTS (this packet): 993 unit / 35 headless / 2 skipped** — bump `floor.json` `total` in the same commit
+**NEW EXACT COUNTS (this packet): 995 unit / 35 headless / 2 skipped** — bump `floor.json` `total` in the same commit
 as the facts that moved it, with the reason in the message. `allowedSkips` is untouched.
+(Originally 993; +2 from the post-REVISE order-pin replacement — one non-biting pin replaced by
+three permutation-distinguishing cases.)
 
 **The three layers in one line each (all at the reply seam, upstream of SP-068's link strip):**
 - **H1 — reasoning-block strip + tokenizer artifacts:** `<think>`/`<thinking>`/`<reasoning>`/`<thought>`
