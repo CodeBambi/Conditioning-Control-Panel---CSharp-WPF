@@ -96,6 +96,12 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayLockdown_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("lockdown");
 
+        // ShowTab("justdrop") - never JustDropHostService.LaunchShop(). Same rule as the FYP card
+        // above: ShowTab intercepts the key, owns the withheld refusal, and is the path the
+        // dashboard tease tile and the Ctrl+K palette row already take.
+        private void BtnPlayJustDrop_Click(object sender, RoutedEventArgs e)
+            => Owner?.ShowTab("justdrop");
+
         // ---- MORE ------------------------------------------------------------------------
 
         // Navigates to the ONE Loom entry (Studio rack -> Spiral module), never launches a second

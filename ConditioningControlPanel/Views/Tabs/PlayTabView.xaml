@@ -988,7 +988,15 @@
                         </Border.Background>
                     </Border>
                 </Grid>
-                <UniformGrid Rows="1" Columns="3">
+                <!-- Columns FIXED at 3 (see the note on the first zone), but Rows deliberately
+                     UNSET here, unlike its neighbours. This zone is the one whose card count
+                     varies: Just Drop is Collapsed until the server opens it, and UniformGrid does
+                     not give a Collapsed child a cell. With Rows unset it derives them as
+                     ceil(visible / 3), so three cards sit on one row and the fourth starts a second
+                     one - where a hard Rows="1" would arrange the fourth card outside the grid, and
+                     a hard Rows="2" would leave everyone who does NOT have the door staring at an
+                     empty half-height row. -->
+                <UniformGrid Columns="3">
                     <!-- Four gate states, not two (Premium / Available / Spent / NeedsLogin). The
                          card carries the band; the PAGE keeps RefreshGradedIntakeGate and the
                          launch. Every state navigates to ShowTab("gradedintake") - a Spent user
@@ -1130,6 +1138,65 @@
                                         <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource PlayLockTeaser}"/>
                                     </StackPanel>
                                 </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- JUST DROP. One of the two places the shop is reached from now that it has
+                         no rail door (the other is the Exclusives shelf) - and this is the one that
+                         matters, because someone in the SESSIONS zone is already looking for a
+                         session to run.
+
+                         The whole slot is Collapsed until the server opens the door for this
+                         account (RefreshPlayCards reads JustDropService.DoorAvailable). That is a
+                         hide, NOT a lockband: a lockband is for something you could buy, and this
+                         is something that does not exist for you yet. -->
+                    <Grid x:Name="SlotJustDrop" x:FieldModifier="internal" Visibility="Collapsed">
+                        <Border Style="{StaticResource PlayCardT2}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayJustDropHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/justdrop.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str jd_door_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_justdrop}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <!-- ShowTab("justdrop"), never JustDropHostService.LaunchShop():
+                                         ShowTab intercepts that key, owns the withheld refusal and
+                                         is the same launch path the dashboard tease tile and the
+                                         Ctrl+K palette row use. Exactly the rule the FYP card above
+                                         follows, and for the same reason. -->
+                                    <Button Grid.Row="3" x:Name="BtnPlayJustDrop" Content="{loc:Str btn_open}" Cursor="Hand"
+                                            HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayJustDrop_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <fx:TierBadge x:Name="PlayBadgeJustDrop" x:FieldModifier="internal"
+                                              Style="{StaticResource PlayTierBadge}" Tier="2"/>
                             </Grid>
                         </Border>
                     </Grid>

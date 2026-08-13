@@ -129,6 +129,19 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
+                // "justdrop" is not a tab either - ShowTab intercepts the key and launches the
+                // shop window (JustDropHostService). Deliberately NOT first: the spotlight is
+                // All[0] and a hero band for a door most accounts cannot open yet would be an ad
+                // for nothing. MainWindow.Exclusives hides this card outright while
+                // JustDropService.DoorAvailable is false - a hide, not a veil, because a veil
+                // means "buy this" and this one is not for sale yet.
+                Key = "justdrop", Emoji = "🎚", Tier = 2,
+                TitleLocKey = "jd_door_title", TaglineLocKey = "exclusives_tag_justdrop",
+                ArtResource = "Resources/features/justdrop.png",
+                FocalX = 0.5, FocalY = 0.5,
+            },
+            new()
+            {
                 Key = "blinktrainer", Emoji = "💫", Tier = 1,
                 TitleLocKey = "tab_blink_trainer", TaglineLocKey = "exclusives_tag_blinktrainer",
                 ArtResource = "Resources/features/blink_trainer.png",

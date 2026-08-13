@@ -133,17 +133,24 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // The Just Drop door is WITHHELD until the server says otherwise (see
-            // Services/JustDrop/JustDropService.cs). The rail rows are Collapsed in that state,
-            // but ShowTab is reachable from things the rail does not own - a bark rule, the
-            // dashboard mosaic tile, a future Ctrl+K palette - so the refusal lives HERE, at the
-            // one door every caller comes through, and it is a no-op rather than a redirect: the
-            // user asked for a page that does not exist for them, and moving them somewhere else
-            // would be a teleport they did not ask for. Deliberately before the bark hook, so a
-            // door nobody can see never announces itself.
-            if (tab == "justdrop" && !Services.JustDrop.JustDropService.DoorAvailable)
+            // "justdrop" is a WINDOW too, exactly like "fyp" above - it stopped being a tab when
+            // the shop moved into its own ChaosWebViewHost (Services/JustDrop/JustDropHostService).
+            // The key survives as a launcher because half the app already speaks it: the dashboard
+            // tease tile, the Ctrl+K palette row and any bark rule all route through ShowTab, and
+            // giving them each a different entry point would be four ways to open one shop.
+            //
+            // The withheld refusal stays HERE, at the one door every caller comes through, and is
+            // still a no-op rather than a redirect: the user asked for a page that does not exist
+            // for them, and moving them somewhere else would be a teleport they did not ask for.
+            // Deliberately before the bark hook, so a door nobody can see never announces itself.
+            if (tab == "justdrop")
             {
-                App.Logger?.Debug("ShowTab(justdrop) ignored - the door is not available on this account");
+                if (!Services.JustDrop.JustDropService.DoorAvailable)
+                {
+                    App.Logger?.Debug("ShowTab(justdrop) ignored - the door is not available on this account");
+                    return;
+                }
+                Services.JustDrop.JustDropHostService.LaunchShop();
                 return;
             }
 
@@ -223,7 +230,6 @@ namespace ConditioningControlPanel
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
-            if (JustDropTab != null) JustDropTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
             // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
@@ -526,18 +532,6 @@ namespace ConditioningControlPanel
                     AppSettingsTab.RefreshSections();
                     break;
 
-                // The Just Drop door. Unreachable unless JustDropService.DoorAvailable is true -
-                // the guard at the top of this method is what enforces it, not this case.
-                //
-                // OnTabShown is where the WebView2 is actually built (lazily, on first entry) and
-                // where a previously failed load retries, so it has to run on EVERY show, not just
-                // the first. It is a cheap no-op once the page is up.
-                case "justdrop":
-                    JustDropTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(JustDropTab);
-                    JustDropTab.OnTabShown();
-                    break;
-
                 case "exclusives":
                     ExclusivesTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ExclusivesTab);
@@ -589,11 +583,6 @@ namespace ConditioningControlPanel
             ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
-            // Withheld door: listed here like any other so the accordion, the active indicator and
-            // ExpandDoorForTab all work the moment it is revealed. Its rail rows are Collapsed
-            // until MainWindow.JustDrop.cs shows them, and MeasureDoorPanel already skips
-            // Collapsed entries, so a hidden door contributes nothing to the rail's geometry.
-            ("justdrop",  "justdrop",  new[] { "justdrop" }),
             ("appsettings", "appsettings", new[] { "appsettings" }),
         };
 
@@ -631,7 +620,6 @@ namespace ConditioningControlPanel
             "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
             "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
             "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
-            "justdrop" => (DoorJustDrop, DoorPanelJustDrop, DoorEntriesJustDrop),
             // Pinned, entry-less: a header to light, nothing to expand.
             "appsettings" => (DoorSettings, null, null),
             // Launcher door (NavLauncherDoors): a header to animate, nothing to expand and no
@@ -935,9 +923,6 @@ namespace ConditioningControlPanel
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
 
-        /// <summary>The Just Drop door's only rail entry. ShowTab owns the withheld refusal, so
-        /// this stays a bare navigation like every other row.</summary>
-        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
 
         /// <summary>
         /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows

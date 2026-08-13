@@ -295,74 +295,112 @@ namespace ConditioningControlPanel
                 PresetsTab.TxtDetailSubtitle.Text = App.Mods?.MakeModAware(_selectedPreset.Description) ?? _selectedPreset.Description;
         }
 
+        /// <summary>
+        /// One chip in the Presets strip.
+        ///
+        /// <para><b>Styled from the tab, not from here (Session Door Overhaul, 2026-08-13).</b> The
+        /// geometry and every colour now come from <c>SdPresetChip</c> / <c>SdPresetChipSelected</c>
+        /// in PresetsTabView.xaml, reached through <see cref="TryFindTabStyle"/>. That is what makes
+        /// the strip re-tint on a mod switch: the old card hard-coded #2A2A4A / #3C3C64 / a
+        /// 2px border and was the reason this page stayed Bambi-coloured on a drone build.</para>
+        ///
+        /// <para>Hover is a Style trigger now, not two handlers. Nothing here may set BorderBrush or
+        /// Background as a LOCAL value - a local value outranks a trigger in WPF's precedence order,
+        /// so painting the border by hand would silently kill the hover the style provides.</para>
+        /// </summary>
         private Border CreatePresetCard(Models.Preset preset)
         {
             var isSelected = _selectedPreset?.Id == preset.Id;
-            var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
-            
+
             var card = new Border
             {
-                Background = new SolidColorBrush(isSelected ? Color.FromRgb(60, 60, 100) : Color.FromRgb(42, 42, 74)),
-                BorderBrush = isSelected ? pinkBrush : (Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96))),
-                BorderThickness = new Thickness(2),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(8),
-                // 1px of vertical margin is headroom for the hover lift: the row sits in a
-                // ScrollViewer whose viewport is exactly the card height, and WPF would clip the
-                // top and bottom of a 1.02 scale without so much as a warning.
-                Margin = new Thickness(0, 1, 6, 1),
-                Width = 100,
-                Height = 70,
-                Cursor = Cursors.Hand,
+                // The margin is NOT in the style: it is hover headroom, and the style is shared with
+                // a chip whose geometry the XAML owns. 1px top/bottom because the strip's
+                // ScrollViewer viewport is exactly the chip height and WPF clips a 1.02 scale
+                // without so much as a warning.
+                Margin = new Thickness(0, 1, 7, 1),
                 Tag = preset.Id
             };
+            var chipStyle = TryFindTabStyle(isSelected ? "SdPresetChipSelected" : "SdPresetChip");
+            if (chipStyle != null) card.Style = chipStyle;
+            else
+            {
+                // The tab's resources are unreachable (the view was never loaded). Fall back to
+                // theme brushes rather than to the literals this method used to carry.
+                card.Background = Application.Current.Resources["SurfaceBgBrush"] as Brush;
+                card.BorderBrush = Application.Current.Resources[isSelected ? "PinkBrush" : "PanelAccentBrush"] as Brush;
+                card.BorderThickness = new Thickness(isSelected ? 2 : 1);
+                card.CornerRadius = new CornerRadius(11);
+                card.Padding = new Thickness(9, 8, 9, 8);
+                card.Width = 96;
+                card.Height = 70;   // keep in step with SdPresetChip - see its comment
+                card.Cursor = Cursors.Hand;
+            }
             PreparePresetCardFx(card);
 
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
-            card.MouseEnter += (s, e) => {
-                if (_selectedPreset?.Id != preset.Id)
-                    card.BorderBrush = pinkBrush;
-            };
-            card.MouseLeave += (s, e) => {
-                if (_selectedPreset?.Id != preset.Id)
-                    card.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
-            };
-            
+
             var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
-            
-            // Name
+
             var nameText = new TextBlock
             {
                 Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
-                Foreground = Brushes.White,
+                Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? Brushes.White,
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 10,
+                FontSize = 11,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             stack.Children.Add(nameText);
-            
-            // Badge
-            var badge = new TextBlock
-            {
-                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
-                Foreground = preset.IsDefault ? pinkBrush : new SolidColorBrush(Color.FromRgb(100, 200, 100)),
-                FontSize = 7,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 1, 0, 0)
-            };
-            stack.Children.Add(badge);
-            
-            // Quick stats (icons only for compact view)
-            var statsPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+            // Feature glyphs. Still emoji - they are the same five the detail pane uses, and a
+            // 96px chip has no room for words.
+            var statsPanel = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
             if (preset.FlashEnabled) AddStatIcon(statsPanel, "⚡", 10);
             if (preset.MandatoryVideosEnabled) AddStatIcon(statsPanel, "🎬", 10);
             if (preset.SubliminalEnabled) AddStatIcon(statsPanel, "💭", 10);
             if (preset.SpiralEnabled) AddStatIcon(statsPanel, "🌀", 10);
             if (preset.LockCardEnabled) AddStatIcon(statsPanel, "🔒", 10);
             stack.Children.Add(statsPanel);
-            
+
+            // DEFAULT / CUSTOM in Consolas, matching the zone tags: on this page mono means
+            // "structural label", never content.
+            var badge = new TextBlock
+            {
+                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
+                Foreground = preset.IsDefault
+                    ? Application.Current.Resources["PinkBrush"] as Brush
+                    : Application.Current.Resources["SuccessGreenBrush"] as Brush,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 8,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            stack.Children.Add(badge);
+
             card.Child = stack;
             return card;
+        }
+
+        /// <summary>
+        /// Looks a Style up in the Presets tab's OWN resource dictionary.
+        ///
+        /// <para>The card vocabulary for this page lives in PresetsTabView.xaml rather than in
+        /// Resources/Theme, so <c>MainWindow.FindResource</c> cannot see it - the window is above
+        /// the view, and resource lookup walks upward. <c>FrameworkElement.TryFindResource</c> on
+        /// the VIEW checks the view's dictionary first, which is exactly what is wanted, and falls
+        /// through to the app dictionaries if the key is not there.</para>
+        ///
+        /// <para>Returns null (never throws) when the tab has not been built yet, so callers can
+        /// fall back rather than crash a list rebuild.</para>
+        /// </summary>
+        private Style? TryFindTabStyle(string key)
+        {
+            try { return PresetsTab?.TryFindResource(key) as Style; }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("TryFindTabStyle({Key}) failed: {E}", key, ex.Message);
+                return null;
+            }
         }
         
         private void AddStatIcon(WrapPanel panel, string icon, int size = 12)
@@ -1513,7 +1551,19 @@ namespace ConditioningControlPanel
             }
 
             var log = e.Log;
-            Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+            Dispatcher.BeginInvoke(() =>
+            {
+                // The run that just ended is a receipt now. Refreshed here rather than only on the
+                // next tab show, so closing the summary drops the user onto a shelf that already
+                // carries it.
+                //
+                // Deliberately AFTER the suppressed-summary return above: a withdrawn session did
+                // write a log, but that path is specified to pass without comment, and a card
+                // appearing on the shelf in the same beat is comment. It lands on the next tab
+                // show like any other.
+                RefreshTakeawayShelf();
+                ShowSessionSummaryWhenClear(log, attempt: 0);
+            });
         }
 
         /// <summary>
