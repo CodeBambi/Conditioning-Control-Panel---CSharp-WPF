@@ -1,6 +1,6 @@
 ## STATUS: SP-068 — Three subtractive privacy filters over the landed awareness and reply paths
-**Current Step:** Not started
-**Last Updated:** 2026-08-13 (orchestrator, authoring)
+**Current Step:** Step 1 — Re-derive the three behaviors from WPF and clear the boundary
+**Last Updated:** 2026-08-13 (worker, step 1 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 903 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-067, integrate `75a09d61`.
@@ -15,17 +15,17 @@
 
 **Three filters mean three bite tests.** Revert one filter at a time and prove only its own pins go red. SP-067's land proved a shared revert falsely verifies pins that were never exercised.
 
-### Step 1: Re-derive the three behaviors from WPF and clear the boundary — ⬜ Not started
-- [ ] Update STATUS.md before starting work
-- [ ] Per filter: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a — the audit's cites are already proven stale)
-- [ ] F1: WPF's two incognito marker lists reconciled (agree or differ, exactly how); single port-side definition decided
-- [ ] F1: empirically established whether an empty/whitespace title can be a **successful** capture in the port; blank case decided explicitly with its reason
-- [ ] F2: scrubber values transcribed with WPF cites; the 120-char projection cap stated as deliberately not ported, with the reason (no cloud provider — admission §2 rule 6)
-- [ ] F3: insertion point derived against WPF's rule and the port's contract ordering; what reaches memory before vs after stated
-- [ ] F3: emptied-reply outcome chosen from the **existing** `AiReply` vocabulary and justified; if none is honest → **stop and report**
-- [ ] Boundary clearance written per filter: observed / retained / transmitted / logged, before vs after — every delta **less or equal**
-- [ ] Any `ai-operation-contract.md` wording the filters need is **named, not written** (framing c)
-- [ ] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning
+### Step 1: Re-derive the three behaviors from WPF and clear the boundary — 🔄 In progress
+- [x] Update STATUS.md before starting work
+- [x] Per filter: WPF mechanism located **by symbol name**; anchor found recorded beside anchor given; divergences noted (framing a — the audit's cites are already proven stale)
+- [x] F1: WPF's two incognito marker lists reconciled (agree or differ, exactly how); single port-side definition decided
+- [x] F1: empirically established whether an empty/whitespace title can be a **successful** capture in the port; blank case decided explicitly with its reason
+- [x] F2: scrubber values transcribed with WPF cites; the 120-char projection cap stated as deliberately not ported, with the reason (no cloud provider — admission §2 rule 6)
+- [x] F3: insertion point derived against WPF's rule and the port's contract ordering; what reaches memory before vs after stated
+- [x] F3: emptied-reply outcome chosen from the **existing** `AiReply` vocabulary and justified; if none is honest → **stop and report**
+- [x] Boundary clearance written per filter: observed / retained / transmitted / logged, before vs after — every delta **less or equal**
+- [x] Any `ai-operation-contract.md` wording the filters need is **named, not written** (framing c)
+- [x] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning
 
 ### Step 2: Implement the three filters — narrowing only — ⬜ Not started
 - [ ] F1 applied at the port's title seam before the title can be packaged or returned; WPF cite in a comment
