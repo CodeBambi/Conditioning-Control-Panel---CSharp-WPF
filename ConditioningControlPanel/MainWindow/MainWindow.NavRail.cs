@@ -85,19 +85,23 @@ namespace ConditioningControlPanel
         // shut. Nothing here changes the row PITCH: door rows are a fixed 64px tall in both
         // states (see the NavDoorButton style), only what sits inside them grows.
 
-        /// <summary>The rounded (r12) tile behind the door art. Open is 56, not the CONTRACT's
-        /// 64: the tile is centred on the 56px collapsed strip (which is frozen, and moving the
-        /// centre sideways on expand is a jitter nobody asked for), so 64 would hang 4px off the
-        /// window's left edge and have its rounded corners sliced flat by the rail's clip. 56 is
-        /// the widest medallion that strip can hold whole - and it still reads as the "64px
-        /// medallion zone", because the door name starts at 64 either way.</summary>
+        /// <summary>The rounded (r12) tile behind the door art. Open was 56 - the full collapsed
+        /// strip, flush with the window's left edge - until the 3px accent window frame landed
+        /// (2026-08-13, GlassWindowEdge in MainWindow.xaml): a 56px tile sat underneath the frame
+        /// and read as crowding it. 50 keeps the tile centred on the frozen 56px strip (moving
+        /// the centre sideways on expand is a jitter nobody asked for) with 3px clear each side,
+        /// so its left edge meets the frame's inner edge instead of disappearing under it. It
+        /// still reads as the "64px medallion zone", because the door name starts at 64 either
+        /// way.</summary>
         private const double NavDoorTileCollapsed = 44;
-        private const double NavDoorTileExpanded = 56;
+        private const double NavDoorTileExpanded = 50;
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
-        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.</summary>
+        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.
+        /// Open shrank 44 -> 40 with the tile's 56 -> 50 (same 2026-08-13 frame note above), so
+        /// the art keeps breathing room inside the smaller plate.</summary>
         private const double NavDoorIconCollapsed = 28;
-        private const double NavDoorIconExpanded = 44;
+        private const double NavDoorIconExpanded = 40;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
         /// 4px each side where the gradient has already reached zero alpha, so the rail's

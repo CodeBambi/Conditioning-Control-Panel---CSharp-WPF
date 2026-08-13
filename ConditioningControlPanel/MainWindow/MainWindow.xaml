@@ -28,7 +28,7 @@
     </Window.CommandBindings>
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="0" 
+        <WindowChrome CaptionHeight="0"
                       ResizeBorderThickness="5"
                       GlassFrameThickness="0"
                       CornerRadius="0"
@@ -1173,7 +1173,11 @@
         </Border>
 
         <!-- Header Bar - Row 1 -->
-        <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="15,8">
+        <!-- 2026-08-13: was an opaque PanelBg slab; its square edges read as sharp corners
+             against the darker base coat. Every child is a self-contained rounded pill, so
+             the slab is simply transparent now and the pills float on the window background
+             like the cards below do. -->
+        <Border Grid.Row="1" Grid.Column="1" Background="Transparent" Padding="15,8">
             <Grid>
                 <!-- #857 note, kept for the record: navigation used to live here in an Auto
                      column and had to size to content BEFORE the identity cluster, or the
@@ -1857,7 +1861,9 @@
         <!-- Row 2: the support/marquee banner. Phase 1 deleted the second tab-button grid
              that used to share this row, so the banner now spans the header outright.
              Its fixed-width host requirement still holds - see MainWindow.Marquee.cs. -->
-        <Border Grid.Row="2" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="10,6">
+        <!-- 2026-08-13: opaque slab dropped here too (see Header Bar) - the banner inside
+             carries its own rounded border, the host just positions it. -->
+        <Border Grid.Row="2" Grid.Column="1" Background="Transparent" Padding="10,6">
             <Grid>
                 <!-- Banner -->
                 <Border Background="{DynamicResource SurfaceBgBrush}"
@@ -3009,5 +3015,14 @@
             </Border.RenderTransform>
         </Border>
     </Grid>
+
+    <!-- 2026-08-13: accent window frame. A 3px edge so the app pops off the desktop instead
+         of melting into whatever sits behind it. Rides PinkBrush = the mod accent, so it
+         re-tints with the mod. CornerRadius matches the DWMWCP_ROUND corner DWM already
+         clips the window to. Below EventFxHost (9998) and the fullscreen browser overlay
+         (9999) on purpose. -->
+    <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" Panel.ZIndex="9997"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
+            IsHitTestVisible="False"/>
     </Grid>
 </Window>
