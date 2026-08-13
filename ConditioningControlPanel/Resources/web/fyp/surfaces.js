@@ -26,6 +26,9 @@ const COMMIT_VELOCITY = 0.8;  // px/ms
 // follows the pointer (browser-FYP parity).
 const DRAG_LOCK_PX = 8;
 const VELOCITY_WINDOW_MS = 120; // release velocity reads the last ~120ms only
+// Resistance on a trade drag toward a side with nothing to offer (pool too
+// small) — the same give as the pager's feed-edge rubber-band, same reason.
+const DRAG_RUBBER = 0.35;
 const ERROR_ADVANCE_MS = 1200; // never machine-gun a broken pack
 const MAX_ERROR_SWAPS = 3;     // per mounted slot; then the visible fail state stays
 const MORPH_FADE_OUT_MS = 220;
@@ -365,19 +368,60 @@ function createTileSlot(page, tileIndex, ctx) {
     slot.classList.toggle('blurred', !!t.blurred);
   }
 
-  function surfaceCtx(t, preview) {
+  function surfaceCtx(t, preview, peek) {
     return {
       advances: t.advances,
       autoAdvance: ctx.isAutoAdvance(),
       preview: !!preview,
       onEnded: () => ctx.onAdvance(),
       onError: (cut, detail) => {
+        // The host learns about every broken file (#562 strikes), but only the
+        // LIVE occupant self-heals — a broken PEEK must not swap the healthy
+        // tile it is merely riding beside (slideFromPeek re-checks on promote).
         ctx.onMediaError?.(cut.asset, detail);
-        scheduleErrorSwap();
+        if (!peek) scheduleErrorSwap();
       },
       onAssetMeta: ctx.onAssetMeta,
       report: ctx.report,
     };
+  }
+
+  // ---- trade peek (the drag strip) ----
+  // What a horizontal drag shows before it commits: the candidate each
+  // direction would deal, mounted as preview surfaces (paused first frame,
+  // muted, zero dwell) parked exactly one tile-width to each side. The feed
+  // caches the candidates per tile (pinned to the cut's surfaceKey), so the
+  // elements here survive a spring-back and the next drag shows the same
+  // pictures; a commit promotes the peeked element in place — the user lands
+  // on the very frame they were looking at.
+  let peekEls = null; // { forKey, next: { cut, surf }|null, back: { cut, surf }|null }
+
+  function clearPeekEls() {
+    if (!peekEls) return;
+    peekEls.next?.surf.stop();  // zero dwell — reports nothing
+    peekEls.back?.surf.stop();
+    peekEls = null;
+  }
+
+  /** Resolve + mount both candidates (idempotent; cheap after the first call). */
+  function ensurePeekEls() {
+    if (!tile || !surface) return;
+    if (peekEls && peekEls.forKey !== tile.cut.surfaceKey) clearPeekEls();
+    if (!peekEls) peekEls = { forKey: tile.cut.surfaceKey, next: null, back: null };
+    for (const dir of ['next', 'back']) {
+      const cut = ctx.onPeek(tileIndex, dir);
+      const held = peekEls[dir];
+      if (held && (!cut || held.cut.surfaceKey !== cut.surfaceKey)) {
+        held.surf.stop();
+        peekEls[dir] = null;
+      }
+      if (cut && !peekEls[dir]) {
+        const surf = createSurface({ ...cut, fit: tile.fit }, surfaceCtx(tile, true, true));
+        surf.el.style.transform = `translateX(${dir === 'next' ? '' : '-'}100%)`;
+        clip.insertBefore(surf.el, clip.firstChild); // under the live surface
+        peekEls[dir] = { cut, surf };
+      }
+    }
   }
 
   function mount(t, preview) {
@@ -385,6 +429,7 @@ function createTileSlot(page, tileIndex, ctx) {
     tile = t;
     errorSwaps = 0;
     clearErrorSwap();
+    clearPeekEls(); // pinned to the old cut; a remount means someone new
     applyRect(t);
     if (surface) { surface.stop(); surface = null; }
     const s = createSurface({ ...t.cut, fit: t.fit }, surfaceCtx(t, preview));
@@ -397,6 +442,7 @@ function createTileSlot(page, tileIndex, ctx) {
   function unmount() {
     mountGen++;
     clearErrorSwap();
+    clearPeekEls();
     if (surface) { surface.stop(); surface = null; }
     tile = null;
   }
@@ -433,17 +479,74 @@ function createTileSlot(page, tileIndex, ctx) {
     }, SWAP_MS + 40);
   }
 
+  /**
+   * Commit a swap whose incoming is ALREADY on the strip: the peeked preview
+   * slides the rest of the way in and is promoted in place (play() on its
+   * warm, already-seeked element) — the user lands on the exact frame the
+   * drag was showing. The sibling of slideTo, for the peeked path.
+   */
+  function slideFromPeek(cut, dir, held) {
+    const t = tile;
+    if (!t || !surface) return;
+    const gen = mountGen;
+    const w = slot.clientWidth || 1;
+    const outgoing = surface;
+    outgoing.setMuted(true); // the incoming tile carries audio from now on
+    tile = { ...t, cut };
+    const incoming = held.surf;
+    peekEls[dir] = null; // detach before clearing — the promotee must survive
+    clearPeekEls();      // the other side was pinned to the old cut
+    incoming.setPreview(false); // plays while it rides in (slideTo parity)
+    sliding = true;
+    // Two frames: the strip position is inline already; let style flushes land.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      outgoing.el.style.transition = `transform ${SWAP_MS}ms ease-out`;
+      incoming.el.style.transition = `transform ${SWAP_MS}ms ease-out`;
+      outgoing.el.style.transform = `translateX(${dir === 'next' ? -w : w}px)`;
+      incoming.el.style.transform = 'translateX(0)';
+    }));
+    // transitionend is lossy under load — settle on a timer instead.
+    setTimeout(() => {
+      outgoing.stop(); // reports the outgoing cut's dwell
+      sliding = false;
+      if (gen !== mountGen) { incoming.stop(); return; } // slot re-mounted mid-slide
+      incoming.el.style.transition = '';
+      surface = incoming;
+      // The peek was born with the flags of its resolve moment; settle on now.
+      surface.setAutoAdvance(ctx.isAutoAdvance() && !!tile.advances);
+      if (surface.failed) scheduleErrorSwap(); // promoted a dead file (#562)
+      ctx.applyAudio();
+    }, SWAP_MS + 40);
+  }
+
   function springBack() {
     if (!surface) return;
-    surface.el.style.transition = 'transform 200ms ease-out';
-    surface.el.style.transform = 'translateX(0)';
-    setTimeout(() => { if (surface) surface.el.style.transition = ''; }, 240);
+    // The whole strip goes home together: live surface to 0, peeks back to
+    // their parked edges (they stay mounted — the next drag shows the same
+    // pictures without a resolve).
+    const parts = [[surface.el, 'translateX(0)']];
+    if (peekEls?.next) parts.push([peekEls.next.surf.el, 'translateX(100%)']);
+    if (peekEls?.back) parts.push([peekEls.back.surf.el, 'translateX(-100%)']);
+    for (const [pEl, tf] of parts) {
+      pEl.style.transition = 'transform 200ms ease-out';
+      pEl.style.transform = tf;
+    }
+    setTimeout(() => { for (const [pEl] of parts) pEl.style.transition = ''; }, 240);
   }
 
   function commit(dir) {
     const cut = ctx.onSwap(tileIndex, dir);
     if (!cut) { springBack(); return; }
-    slideTo(cut, dir);
+    // The feed installs exactly what it peeked, so a held strip element with
+    // the same identity IS the incoming surface; anything else (chevron or
+    // eye-blink with no prior drag, stale pin) takes the classic cross-slide.
+    const held = peekEls?.[dir];
+    if (held && held.cut.surfaceKey === cut.surfaceKey) {
+      slideFromPeek(cut, dir, held);
+    } else {
+      clearPeekEls();
+      slideTo(cut, dir);
+    }
   }
 
   // Pointer drag. The first DRAG_LOCK_PX of travel lock an axis: 'x' is the
@@ -496,8 +599,23 @@ function createTileSlot(page, tileIndex, ctx) {
       dragAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
     }
     if (dragAxis === 'x') {
+      // The strip: live surface + both peeked candidates ride the drag as one
+      // piece, so the trade is visible BEFORE it commits and reversible until
+      // release. A side with no candidate rubber-bands instead of revealing
+      // the tile's backing.
+      ensurePeekEls();
+      const offer = dx < 0 ? peekEls?.next : peekEls?.back;
+      const eff = offer ? dx * DRAG_RESISTANCE : dx * DRAG_RUBBER;
       surface.el.style.transition = 'none';
-      surface.el.style.transform = `translateX(${dx * DRAG_RESISTANCE}px)`;
+      surface.el.style.transform = `translateX(${eff}px)`;
+      if (peekEls?.next) {
+        peekEls.next.surf.el.style.transition = 'none';
+        peekEls.next.surf.el.style.transform = `translateX(calc(100% + ${eff}px))`;
+      }
+      if (peekEls?.back) {
+        peekEls.back.surf.el.style.transition = 'none';
+        peekEls.back.surf.el.style.transform = `translateX(calc(-100% + ${eff}px))`;
+      }
     } else {
       ctx.onPageDragMove(dy);
     }
@@ -583,9 +701,9 @@ function createTileSlot(page, tileIndex, ctx) {
  * One feed page. Created for every composition in the window; media mounts in
  * 'preview' (paused first frame — the pager's neighbours) or 'live' (playing).
  * ctx:
- *   { onAdvance(compKey), onSwap(compKey, i, dir), onTapAudio(compKey, i),
- *     onAssetMeta, report, isAutoAdvance(), isMuted(), audioGlow() -> bool,
- *     audioFocus() -> index|null, isPagerBusy() -> bool,
+ *   { onAdvance(compKey), onSwap(compKey, i, dir), onPeek(compKey, i, dir),
+ *     onTapAudio(compKey, i), onAssetMeta, report, isAutoAdvance(), isMuted(),
+ *     audioGlow() -> bool, audioFocus() -> index|null, isPagerBusy() -> bool,
  *     onPageDragMove(compKey, dy), onPageDragEnd(compKey, dy, vy) }
  */
 export function createPage(comp, ctx) {
@@ -627,6 +745,7 @@ export function createPage(comp, ctx) {
       isPagerBusy: ctx.isPagerBusy,
       onAdvance: () => ctx.onAdvance(comp.key),
       onSwap: (idx, dir) => ctx.onSwap(comp.key, idx, dir),
+      onPeek: (idx, dir) => ctx.onPeek(comp.key, idx, dir),
       onTapAudio: (idx) => { ctx.onTapAudio(comp.key, idx); applyAudio(); },
       onPageDragMove: (dy) => ctx.onPageDragMove(comp.key, dy),
       onPageDragEnd: (dy, vy) => ctx.onPageDragEnd(comp.key, dy, vy),

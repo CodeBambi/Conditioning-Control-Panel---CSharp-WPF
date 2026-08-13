@@ -208,6 +208,12 @@ const pageCtx = {
     if (cut && tileIndex === 0 && feed.comps[activeIdx]?.key === compKey) updateCaption();
     return cut;
   },
+  // The trade drag's face-up card: what a swap WOULD deal, resolved without
+  // moving the ring or the history. The slot renders it riding the strip;
+  // a commit installs this very cut (feed.swapTile honours the peek).
+  onPeek(compKey, tileIndex, dir) {
+    return feed.peekTile(compKey, tileIndex, dir);
+  },
   onTapAudio(compKey, tileIndex) {
     const comp = feed.comps.find((c) => c.key === compKey);
     if (comp?.tiles[tileIndex]?.cut.asset.type !== 'video') return;

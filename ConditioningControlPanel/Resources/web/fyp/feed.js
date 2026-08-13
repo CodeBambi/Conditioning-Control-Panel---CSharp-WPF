@@ -267,6 +267,18 @@ export function createFeed(getAspect) {
   let comps = [];
   let compSeq = 0;
   const history = new Map(); // `${compKey}:${tileIndex}` -> Cut[]
+  // What a drag on one tile is showing before commit (the browser feed's
+  // peekTile map, via the mobile port). Pinned to the cut it was resolved
+  // against — every swap/morph/rebuild regenerates surfaceKeys, so a stale
+  // peek can never install. The ring and the history stack do NOT move at
+  // peek time: an unclaimed candidate rejoins the deck untouched.
+  const peeks = new Map(); // `${compKey}:${tileIndex}` -> { surfaceKey, next?: Cut, back?: { cut, stackIdx } }
+
+  function dropPeeksFor(compKey) {
+    for (const k of peeks.keys()) {
+      if (k.startsWith(compKey + ':')) peeks.delete(k);
+    }
+  }
 
   function activePool() {
     return assets.filter((a) => a.type === 'video' || (includeGifs && a.type === 'gif'));
@@ -304,11 +316,11 @@ export function createFeed(getAspect) {
   }
 
   /**
-   * Fresh weighted pick for one tile: orientation want, page-wide exclusion, and
-   * the outgoing cut pushed onto the tile's history stack. Shared by the 'next'
-   * direction and by 'back' when there is no history to replay.
+   * Fresh weighted pick for one tile: orientation want + page-wide exclusion.
+   * PURE — no ring movement, no history push — so the peek path and the commit
+   * path can share it without a peek leaving fingerprints on the deck.
    */
-  function freshSwap(comp, tileIndex, hKey) {
+  function pickFreshFor(comp, tileIndex) {
     const tile = comp.tiles[tileIndex];
     const stacked = comp.layout !== 'random' && comp.tiles.length > 1;
     let want;
@@ -319,9 +331,11 @@ export function createFeed(getAspect) {
     if (!stacked && pickPool.length < 2) pickPool = candidates;
     const exclude = new Set(comp.tiles.map((t) => t.cut.segId)); // no dupes on the page
     exclude.add(tile.cut.segId);
-    const pick = pickWithMix(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
-    if (!pick) return null;
+    return pickWithMix(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
+  }
 
+  /** The outgoing cut joins the tile's replay stack (bounded both ways). */
+  function pushHistory(hKey, cut) {
     let stack = history.get(hKey);
     if (!stack) {
       if (history.size >= HISTORY_KEYS_MAX) {
@@ -332,13 +346,8 @@ export function createFeed(getAspect) {
       stack = [];
       history.set(hKey, stack);
     }
-    stack.push(tile.cut);
+    stack.push(cut);
     if (stack.length > HISTORY_MAX) stack.splice(0, stack.length - HISTORY_MAX);
-
-    remember(recent.ring, pick.segId);
-    const cut = toCut(pick);
-    comp.tiles[tileIndex] = { ...tile, cut };
-    return cut;
   }
 
   return {
@@ -362,6 +371,7 @@ export function createFeed(getAspect) {
       if (reset) {
         recent.ring = [];
         history.clear();
+        peeks.clear();
         comps = makeCompositions(PAGE_SIZE);
         // Online ids churn every session and never enter stats (see main.js report),
         // so pruning against LOCAL ids only keeps library stats intact in online mode.
@@ -410,43 +420,121 @@ export function createFeed(getAspect) {
           for (const k of history.keys()) {
             if (k.startsWith(d.key + ':')) history.delete(k);
           }
+          dropPeeksFor(d.key);
         }
       }
       return { appended: appended.length, trimmed: excess };
     },
 
     /**
-     * Swap one tile's cut. dir 'next' = fresh weighted pick, 'back' = pop the
-     * tile's history (replaying the exact same window). A 'back' with nothing
-     * left to replay (first item, or a stack of dead assets) is NOT refused: it
-     * falls through to a fresh pick, so the gesture always yields content and
-     * the caller animates it in whichever direction the user swiped. Returns
-     * null only when the pool itself can offer nothing — the surface springs back.
+     * Resolve what a swap WOULD deal, without dealing it: the drag-peek renders
+     * this riding the strip, and swapTile installs the very same cut on commit.
+     * Cached per tile and pinned to the current cut's surfaceKey, so an aborted
+     * drag shows the same pictures next time, and any swap/morph invalidates by
+     * construction. 'back' answers the topmost alive history entry (found
+     * without popping); a dry stack falls through to a fresh deal — mirroring
+     * exactly what a committed 'back' does. Null = that side has nothing to
+     * offer; the drag rubber-bands there.
+     */
+    peekTile(compKey, tileIndex, dir) {
+      const comp = comps.find((c) => c.key === compKey);
+      const tile = comp?.tiles[tileIndex];
+      if (!comp || !tile) return null;
+      const hKey = `${compKey}:${tileIndex}`;
+      let entry = peeks.get(hKey);
+      if (entry?.surfaceKey !== tile.cut.surfaceKey) {
+        entry = { surfaceKey: tile.cut.surfaceKey };
+        peeks.set(hKey, entry);
+      }
+      if (dir === 'back') {
+        if (!entry.back) {
+          const stack = history.get(hKey);
+          if (stack?.length) {
+            const alive = new Set(candidates.map((c) => c.assetId));
+            for (let i = stack.length - 1; i >= 0; i--) {
+              if (alive.has(stack[i].asset.id)) {
+                // Fresh surfaceKey NOW, so the peeked cut and the committed one
+                // are a single identity; same segId/lenSec/seed replays the
+                // exact window the user swiped away from.
+                entry.back = { cut: { ...stack[i], surfaceKey: nextSurfaceKey() }, stackIdx: i };
+                break;
+              }
+            }
+          }
+          if (!entry.back) {
+            // nothing to go back to: 'back' deals fresh (swapTile parity), so
+            // the peek must show that same fresh deal
+            const pick = pickFreshFor(comp, tileIndex);
+            if (pick) entry.back = { cut: toCut(pick), stackIdx: -1 };
+          }
+        }
+        return entry.back?.cut ?? null;
+      }
+      if (!entry.next) {
+        const pick = pickFreshFor(comp, tileIndex);
+        if (pick) entry.next = toCut(pick);
+      }
+      return entry.next ?? null;
+    },
+
+    /**
+     * Swap one tile's cut. dir 'next' = fresh weighted pick, 'back' = replay
+     * the tile's history (the exact same window). The drag that led here
+     * normally peeked, and the contract is to install EXACTLY the peeked cut —
+     * the user lands on the picture they were looking at; the resolve paths
+     * below only cover a commit that never peeked (chevron click, eye blink).
+     * A 'back' with nothing left to replay is NOT refused: it falls through to
+     * a fresh pick, so the gesture always yields content. Ring and history
+     * move HERE, never at peek time. Returns null only when the pool itself
+     * can offer nothing — the surface springs back.
      */
     swapTile(compKey, tileIndex, dir) {
       const comp = comps.find((c) => c.key === compKey);
       const tile = comp?.tiles[tileIndex];
       if (!comp || !tile) return null;
       const hKey = `${compKey}:${tileIndex}`;
+      const peeked = peeks.get(hKey);
+      const peek = peeked?.surfaceKey === tile.cut.surfaceKey ? peeked : undefined;
+      let cut = null;
+      let fresh = true; // a fresh deal pushes the outgoing cut onto the stack
 
       if (dir === 'back') {
         const stack = history.get(hKey);
-        const alive = new Set(candidates.map((c) => c.assetId));
-        let popped = null;
-        while (stack && stack.length) {
-          const c = stack.pop();
-          if (alive.has(c.asset.id)) { popped = c; break; } // skip cuts whose asset left the pool
+        if (peek?.back) {
+          if (peek.back.stackIdx >= 0) {
+            // Cut the stack at the peeked entry (anything above it was dead at
+            // peek time); a peeked dry-stack 'back' is a fresh deal instead.
+            stack?.splice(peek.back.stackIdx);
+            fresh = false;
+          }
+          cut = peek.back.cut;
+        } else {
+          // no peek: pop as before, skipping cuts whose asset left the pool
+          const alive = new Set(candidates.map((c) => c.assetId));
+          let popped = null;
+          while (stack && stack.length) {
+            const c = stack.pop();
+            if (alive.has(c.asset.id)) { popped = c; break; }
+          }
+          // Same segId/lenSec/seed => the exact same window replays; fresh
+          // surfaceKey so the old surface unmounts (reporting its dwell).
+          if (popped) { cut = { ...popped, surfaceKey: nextSurfaceKey() }; fresh = false; }
         }
-        if (!popped) return freshSwap(comp, tileIndex, hKey); // nothing to go back to
-        // Same segId/lenSec/seed => the exact same window replays; fresh surfaceKey
-        // so the old surface unmounts (reporting its dwell).
-        const restored = { ...popped, surfaceKey: nextSurfaceKey() };
-        remember(recent.ring, restored.segId);
-        comp.tiles[tileIndex] = { ...tile, cut: restored };
-        return restored;
+      } else if (peek?.next) {
+        cut = peek.next;
       }
-
-      return freshSwap(comp, tileIndex, hKey);
+      if (!cut) {
+        const pick = pickFreshFor(comp, tileIndex);
+        if (!pick) return null;
+        cut = toCut(pick);
+      }
+      if (fresh) pushHistory(hKey, tile.cut);
+      remember(recent.ring, cut.segId);
+      // The tile is someone new now: its peeks were pinned to the old cut, so
+      // drop the entry (the pin would refuse them anyway; this frees the slot).
+      peeks.delete(hKey);
+      comp.tiles[tileIndex] = { ...tile, cut };
+      return cut;
     },
 
     /** Re-compose a random-layout page in place (fresh layout + clips). Returns
@@ -459,6 +547,7 @@ export function createFeed(getAspect) {
       for (const k of history.keys()) {
         if (k.startsWith(compKey + ':')) history.delete(k);
       }
+      dropPeeksFor(compKey); // every tile is someone new — stale peeks go too
       comp.gen++;
       comp.tiles = tiles;
       return tiles;
