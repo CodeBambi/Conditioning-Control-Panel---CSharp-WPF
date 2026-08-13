@@ -1,5 +1,5 @@
 ## STATUS: SP-067 — The StopAsync completion race: a cancelled heartbeat that reports Completed
-**Current Step:** Step 1 (in progress)
+**Current Step:** Step 2 (in progress)
 **Last Updated:** 2026-08-13 (worker, lane-1)
 **Blockers:** none
 
@@ -8,7 +8,7 @@
 
 **The defect in one line:** `HeartbeatParticipant.TickLoopAsync` (`client/src/CcpClient.Desktop/Lifecycle/Participants.cs:108`) returns `OperationOutcome.Completed` from a post-loop `return` that is reachable **only** when the token is cancelled — contradicting `async-lifecycle-fault-contract.md` §2:25 and §3.4. The correct shape already exists at `StatusTickerParticipant.cs:150-152`.
 
-### Step 1: Reproduce the race and name the mechanism — RED before any fix — 🔄 In Progress
+### Step 1: Reproduce the race and name the mechanism — RED before any fix — ✅ Complete (plan review absent by design, SP-195; engine reviews post-.DONE)
 - [x] Update STATUS.md before starting work
 - [x] Contract lines (§2:25, §3.4) read **in the file** and quoted in `record.md` with line numbers
 - [x] Bounded-loop probe driving `HeartbeatParticipant` start→stop, recording the terminal outcome per iteration, run against **unmodified** product code
@@ -17,13 +17,13 @@
 - [x] Zero-tick determinism (framing e) stated with the measurement behind it
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply, ask narrowly) — verdict + **ACTUAL answering model**; record exactly what surfaced, never stitch a verdict from reasoning
 
-### Step 2: Fix at the source, and sweep the class — ⬜ Not Started
-> ⚠️ Hydrate: expand the sweep checkboxes once Step 1's enumeration of `Task<OperationOutcome>` methods exists
-- [ ] `HeartbeatParticipant.TickLoopAsync` post-loop return fixed using the **existing in-repo shape**, comment citing the contract section
-- [ ] Step-1 probe re-run against fixed code: `Completed` gone across >= the iteration count that produced the RED; GREEN saved beside the RED
-- [ ] Every `Task<OperationOutcome>` method in `client/src/**` swept and dispositioned in the record (correct-and-why, or divergent-and-fixed); counts re-derived and reconciled against framing (f)
-- [ ] Framing (g) clearance: `LastOutcome` / `Completion` / `Completed` grepped against heartbeat and teardown paths; result stated; any real dependency reported as a finding
-- [ ] Zero behavior changed beyond the cancellation-exit outcome value; per-file `git diff` summary in the record
+### Step 2: Fix at the source, and sweep the class — 🔄 In Progress
+> Sweep executed: 10 methods + 2 inline op bodies + WriteOnce, all dispositioned in record.md Step 2
+- [x] `HeartbeatParticipant.TickLoopAsync` post-loop return fixed using the **existing in-repo shape**, comment citing the contract section
+- [x] Step-1 probe re-run against fixed code: `Completed` gone across >= the iteration count that produced the RED; GREEN saved beside the RED
+- [x] Every `Task<OperationOutcome>` method in `client/src/**` swept and dispositioned in the record (correct-and-why, or divergent-and-fixed); counts re-derived and reconciled against framing (f)
+- [x] Framing (g) clearance: `LastOutcome` / `Completion` / `Completed` grepped against heartbeat and teardown paths; result stated; any real dependency reported as a finding
+- [x] Zero behavior changed beyond the cancellation-exit outcome value; per-file `git diff` summary in the record
 
 ### Step 3: Bind the class so it cannot return — ⬜ Not Started
 - [ ] Zero-tick fact at `HeartbeatParticipant` (start → stop immediately → owned completion is `Cancelled`)

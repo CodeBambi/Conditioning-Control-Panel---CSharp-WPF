@@ -105,6 +105,10 @@ public sealed class HeartbeatParticipant : IBackgroundParticipant
             await Task.Delay(_interval, token).ConfigureAwait(false);
         }
 
-        return OperationOutcome.Completed.Instance;
+        // Typed terminal outcome: observing the token at the loop check is Cancelled too —
+        // identical semantics to the OCE path RunAsync maps (async contract §2).
+        return token.IsCancellationRequested
+            ? OperationOutcome.Cancelled.Instance
+            : OperationOutcome.Completed.Instance;
     }
 }
