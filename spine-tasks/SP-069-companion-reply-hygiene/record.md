@@ -148,6 +148,116 @@ orchestrator should add (finding only, NOT applied by this packet):
   cleanly, no stitching. **Actual answering model: `anthropic/claude-opus-5`** (configured solo
   roster in `bpx-consult.json`; the PROMPT's Opus 5 main).
 
-## 8. Engine-review presence (T-2)
+## 8. Implementation summary (per product file, `git diff`)
 
-(filled per step as reviews return)
+- `client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs` (**new, the only new product file**):
+  `Clean` (H1), `StripMetadataTags` (H2), `LooksLikeEnvelopeLeak` (H3) — exactly one definition
+  per rule, WPF cite in a comment per rule, H2's five patterns declared in their fixed order
+  with the order called out as semantic. No logging, no state, pure string predicates/transforms.
+- `client/src/CcpClient.Desktop/Ai/AiOperationPipeline.cs` (the seam, `produced is
+  AiReply.Generated` block only): H1 → H2 → H3 detection union (`MalformedOutput`, early return
+  before persist) → union moderation (raw first, hygienic second when the text changed; Block if
+  either; raw SoftHit wins the marker; output blocks still never escalate) → SP-068's link strip
+  on the hygienic text, unmoved and unmodified → emptied reply → existing
+  `Unavailable("reply-stripped-empty")` with the atomic turn-pair rule intact → final text
+  assigned compared against the RAW text so hygiene-only changes persist. No edit outside these
+  two files (`git status --short` proof: only the two product files, two test files, floor.json,
+  and this task folder ever appear).
+- Own-diff grep for new log/diagnostic/persist/network calls: the only hits are comment text
+  and STATUS.md wording — zero new observation calls. No reply fragment, stripped tag, or leaked
+  JSON is logged anywhere, including test helpers (the tests assert in memory; the memory-file
+  assertions read the product's own persistence path, which is the sink under test).
+
+## 9. Bite matrix (framing i) — four separate reverts, four separate RED sets
+
+Procedure per SP-068 precedent: neutralize exactly one mechanism in product source, rebuild
+0W/0E, run the FULL suite through the wrapper, capture wrapper log + TRX (`.trx.txt` — `*.trx`
+is gitignored, SP-068 land lesson), restore with `git checkout`, verify green between reverts.
+An intermediate partial R1 (block regex only) was redone with the whole-`Clean` neutralization
+precisely because the first attempt left the orphan-closer and artifact pins unexercised — the
+SP-067 lesson applied to this packet's own evidence.
+
+| Revert | Source reverted | RED set (exactly these, from the TRX) | Everything else |
+|---|---|---|---|
+| R1 (H1) | `AiTextHygiene.Clean` — early `return text` | **15 red**: 4 `H1_ReasoningBlock_EachTagName` rows + `H1_ReasoningBlock_CaseInsensitive` + `H1_UnterminatedBlock_EatsToEndOfString` + `H1_OrphanClosingTag_Removed` + `H1_TokenizerArtifact_GSpace` + `H1_TokenizerArtifact_CNewline` + `H1_LossyBoundary` + seam: `UnionRule_TokenJoinedAcrossTagBoundary`, `UnionRule_TokenJoinedByArtifactCharacter`, `HygieneEmptiedReply`, both `SoftHit_*` seam facts | 976 passed — H2/H3/union-reverse pins all green |
+| R2 (H2) | `AiTextHygiene.StripMetadataTags` — early `return text` | **10 red**: 5 `H2_EachOfTheFiveShapes` rows + `H2_PortTrigger` + `H2_WhitespaceCollapse_AndTrim` + `H2_OrderPin_NestedTruncation` + seam: `TriggerEcho_StrippedBeforeBubbleAndMemory`, `H3_ComposedWithThePortsOwnTrigger` | 981 passed — H2 negative controls green (identity satisfies byte-identical controls; the shape pins carry the removal proof) |
+| R3 (H3) | `AiTextHygiene.LooksLikeEnvelopeLeak` — early `return false` | **6 red**: 3 `H3_EnvelopeLeak_Detected` rows + seam: `H3_LeakedEnvelope_TypedMalformedOutput`, `H3_DetectionIsUnion_TagTail`, `H3_ComposedWithThePortsOwnTrigger` | 985 passed — H3 negative controls green (a dead detector returns false, which the controls expect; the detect rows carry the proof) |
+| R4 (union rule) | `AiOperationPipeline.cs` — hygienic `EvaluateOutput` block disabled | **3 red**: `UnionRule_TokenJoinedAcrossTagBoundary`, `UnionRule_TokenJoinedByArtifactCharacter`, `SoftHit_VisibleOnlyAfterHygiene` — exactly the pins only the hygienic half can trip | 988 passed — reverse-direction (raw-scan) union pins green |
+
+After R4 was undone: rebuild 0W/0E + wrapper **FLOOR OK 993/993** — the tree is restored, not
+stuck on a revert. Evidence: `evidence/bite-R{1..4}-*.log` + `evidence/bite-R{1..4}-*.trx.txt`.
+
+## 10. Run table
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped (names) | TRX |
+|---|---|---|---|---|---|---|
+| pre-bump (expected floor fail) | lane-1 | warm | 993 vs pinned 946 → floor correctly demanded the bump | — | — | ccp-floor-zryU24 |
+| post-bump gate | lane-1 | warm | 993/993 | 35/35 | the 2 pinned Linux-gated names | ccp-floor (console) |
+| bite R1/R2/R3/R4 | lane-1 | warm | RED sets exactly per the matrix (15/10/6/3) | — | — | evidence/bite-R*.trx.txt |
+| restoration check | lane-1 | warm | 993/993 | 35/35 | the 2 pinned names | (post-R4 rebuild + wrapper) |
+| **G1 (contract testCommand)** | lane-1 | warm | 993/993 | 35/35 | the 2 pinned names | ccp-floor-3itA2i |
+| **G2 (COLD)** | C:/Code/CCP-SP069-coldcheck (fresh worktree @ abc53009, first-ever build 0W/0E, removed after) | **cold** | 993/993 | 35/35 | the 2 pinned names | ccp-floor-lCY4z3 (log: evidence/g2-cold-floor.log) |
+| **G3** | lane-1 | warm | 993/993 | 35/35 | the 2 pinned names | ccp-floor-K1esCH (log: evidence/g3-warm-floor.log) |
+
+Three consecutive full-suite greens at 993 unit / 35 headless / exactly the 2 pinned
+Windows-observed skips, G2 a cold fresh-checkout first-ever build. The named flake
+(`ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`) did NOT fire in any
+run — nothing to record, nothing retried.
+
+## 11. Engine-review presence (T-2)
+
+| Step | `spine_review_step` call | Outcome |
+|---|---|---|
+| 1 | `type=plan` | **skipped by engine design** (SP-195: nested reviewer spawn blocked inside worker; `.reviews/1-20260813T131420.md`) — engine runs reviews after `.DONE` |
+| 2 | `type=plan` | skipped, same (`.reviews/2-20260813T132504.md`) |
+| 3 | `type=plan` | skipped, same (`.reviews/3-20260813T141359.md`) |
+
+No REVISE and no spawn failure occurred; code/final review are the engine's post-`.DONE` phases.
+
+## 12. Honesty cell
+
+1. **No truncation parity is claimed.** WPF's `932d829a` also raised `MaxTokens` 100→350; the
+   port sends NO token cap at all (`LoopbackOllamaProvider.BuildBody` emits `{model, messages,
+   stream:false, think:false}` — verified at authoring), so there is no port counterpart. The
+   unclosed-tag patterns are still ported because a local model can cut its own reply mid-tag
+   without any cap.
+2. **This is the subtractive half of WPF's fix.** WPF salvages a leaked envelope
+   (`TryLiftResponseField`); the port refuses it. A user whose model emits an envelope gets NO
+   reply where WPF shows one — a deliberate fail-closed choice (contract §8 zero repair), not an
+   oversight.
+3. **`AiEnvelopeValidator` remains unwired**; this packet did not change that, and no model text
+   moved toward the command-execution path.
+4. **Execution vs reading:** all three layers, the union rule, and the seam wiring were verified
+   by EXECUTION (47 new facts + four bite reverts). WPF anchors and WPF's moderation ordering
+   were verified by reading (table in §1). `EvaluateOutput`'s purity was verified by reading
+   (`AiModerationBoundary.cs:279-296`).
+5. **No real local model output was exercised** — only constructed fixtures (including the exact
+   `AiAwarenessService.cs:229` shape). No field evidence is claimed.
+6. **Linux unproven** — zero WSL distros on this machine; the two pinned skips stay pinned. No
+   Linux run is faked.
+7. **Hygiene is lossy by design** — a stripped fragment cannot be recovered downstream. The
+   `H1_LossyBoundary_LegitReplyQuotingTheTagVerbatim_IsStripped` fact pins the boundary case
+   (a legitimate reply quoting the tag shape verbatim loses that span — WPF-identical).
+8. **Moderation-order note:** H3 detection runs before the union moderation (WPF order — leak
+   detection lives inside `Parse`, before sanitizing and moderation). A text that is BOTH a leak
+   and a raw moderation hit now yields typed `Unavailable` where yesterday it yielded typed
+   `Refused` — either way nothing is displayed, persisted, or executed; the refusal set only
+   grew.
+9. **Pre-existing, recorded, not fixed** (pre-approach consult note 3): SP-068's
+   `StripUnsanctionedLinks` performs its own post-moderation `\s{2,}` collapse, which can join
+   tokens the output gate never saw as joined. `AiPrivacyFilters.cs` is out of scope; named here
+   for the orchestrator as a candidate board finding.
+
+## 13. Intended board filings (for the orchestrator at land; no row state set by the worker)
+
+- **The SP-069 companion-reply-hygiene row** (wave 26, run alone): mark DONE with evidence —
+  three layers landed in `AiTextHygiene.cs` (one definition per rule, WPF cites), union
+  moderation at the reply seam recorded as a deliberate fail-closed divergence from WPF's
+  sanitized-only moderation, H3 detection-only with the non-lift pinned, floor 946→993 in the
+  same commit as the facts, four bite reverts (15/10/6/3 REDs) under
+  `spine-tasks/SP-069-companion-reply-hygiene/evidence/`, 3 greens incl. 1 cold, Linux unproven
+  (named gate), no truncation parity claimed.
+- **Candidate new finding row:** `ai-operation-contract.md` §7 rule 1 wording (§6 above) — the
+  union rule should be written into the contract by a docs-owning packet.
+- **Candidate new finding row:** SP-068's link-strip `\s{2,}` collapse can join tokens
+  post-moderation (honesty cell 9) — pre-existing, out of scope here.
