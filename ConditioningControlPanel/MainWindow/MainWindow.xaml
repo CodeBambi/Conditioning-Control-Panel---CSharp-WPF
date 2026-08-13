@@ -1322,10 +1322,15 @@
                              single most-asked "where is it?" control in the app. Gear + caption
                              live inside the template so one hit area covers both.
                              Height 28 is free vertical room - the Row 1 tab buttons in column 1
-                             are already Height 32, so this cannot grow the header row.
-                             LineHeight/BlockLineHeight pins each line so the 28px never clips. -->
+                             are already Height 32, so this cannot grow the header row. 0813 turned
+                             the stacked gear-over-caption into a one-line wordmark (the gear IS
+                             the O of "MOD"), so the 28px now holds a single line with room to
+                             spare and nothing needs a pinned LineHeight to avoid clipping.
+                             AutomationProperties.Name keeps the localized string on the control
+                             for screen readers - the visible letters are split across runs. -->
                         <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
                                 ToolTip="{loc:Str tooltip_manage_mods}"
+                                AutomationProperties.Name="{loc:Str label_mod_manager}"
                                 Margin="4,0,0,0" Height="28" VerticalAlignment="Center"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand">
                             <Button.Template>
@@ -1335,16 +1340,39 @@
                                     <Border x:Name="capsule" CornerRadius="4" Padding="5,1"
                                             Background="{DynamicResource TransparentPink20Brush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                       Foreground="{DynamicResource PinkBrush}"
-                                                       HorizontalAlignment="Center"
-                                                       LineHeight="15" LineStackingStrategy="BlockLineHeight"/>
-                                            <TextBlock Text="{loc:Str label_mod_manager}" FontSize="8" FontWeight="Bold"
-                                                       Foreground="{DynamicResource PinkBrush}"
-                                                       HorizontalAlignment="Center"
-                                                       LineHeight="9" LineStackingStrategy="BlockLineHeight"/>
-                                        </StackPanel>
+                                        <!-- The wordmark. Sizes are measured, not eyeballed. Segoe UI
+                                             Bold at 11 has a 7.97px cap band running from 0.13 BELOW
+                                             the baseline to 7.83 above it, so its optical centre is
+                                             3.85 above the baseline. The MDL2 gear's ink is 0.994em
+                                             tall and fills its whole advance, so FontSize 10 draws a
+                                             9.94px glyph whose inner body reads at about cap height
+                                             with the teeth as the overshoot a round letter wants next
+                                             to a flat-topped M and D.
+                                             It shares ONE TextBlock with the letters, so the text
+                                             engine baselines it instead of a guessed margin: an
+                                             InlineUIContainer bottom-aligns to the baseline, and at
+                                             this font the glyph's own baseline IS its box bottom. The
+                                             -1 bottom margin then drops it to a 4.00 centre, i.e.
+                                             onto the cap band's 3.85 to within a sixth of a pixel,
+                                             instead of leaving the whole overshoot above the baseline.
+                                             The 0.7 side margins are the side bearings a real "O"
+                                             would have and this glyph does not.
+                                             The three inlines are written with NO whitespace between
+                                             them on purpose: a line break there collapses to a real
+                                             space and the button reads "M (gear) D MANAGER".
+                                             The letters are literal because label_mod_manager is the
+                                             string "MOD MANAGER" in all nine language files; the key
+                                             is still bound, as this button's AutomationProperties.Name. -->
+                                        <TextBlock FontSize="11" FontWeight="Bold" TextWrapping="NoWrap"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"><Run Text="M"/><InlineUIContainer
+                                                       BaselineAlignment="Baseline"><TextBlock
+                                                           Text="&#xE713;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="10" FontWeight="Normal"
+                                                           Foreground="{DynamicResource PinkBrush}"
+                                                           Margin="0.7,0,0.7,-1"/></InlineUIContainer><Run
+                                                       Text="D MANAGER"/></TextBlock>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
