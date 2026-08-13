@@ -1,7 +1,7 @@
 ## STATUS: SP-070 — Audio comes back when the endpoint comes back
 
-**Current Step:** 3
-**Last Updated:** 2026-08-14 (worker, Step 3 in progress)
+**Current Step:** 4
+**Last Updated:** 2026-08-14 (worker, Step 4 in progress; Step 3 contract green 1005/1005 + 35/35)
 **Blockers:** none
 
 **Floor at authoring:** 996 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -62,21 +62,21 @@ device, no new seam.**
 - [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete (contract green through the wrapper; bite matrix 3 reverts / 3 REDs under `evidence/`)
 
-- [ ] The user story as a fact: dead endpoint → refused → endpoint returns → audio plays again
-- [ ] Failure counting + reset on success
-- [ ] Cooldown enforced BEFORE the attempt (init call count does not move)
-- [ ] Single-flight (N concurrent attempts → exactly one init call)
-- [ ] No busy loop (exactly one attempt per cooldown window)
-- [ ] Panic and teardown facts
-- [ ] Negative control: healthy session unaffected — one init call, no extra device calls or log lines
-- [ ] Bite matrix: three separate reverts, three separate REDs, others green, each captured under `evidence/`
-- [ ] Landed arbitration facts unchanged in meaning; zero assertions weakened
-- [ ] `floor.json` `total` bumped in the same commit as the facts
+- [x] The user story as a fact: dead endpoint → refused → endpoint returns → audio plays again
+- [x] Failure counting + reset on success
+- [x] Cooldown enforced BEFORE the attempt (init call count does not move)
+- [x] Single-flight (N concurrent attempts → exactly one init call)
+- [x] No busy loop (exactly one attempt per cooldown window)
+- [x] Panic and teardown facts
+- [x] Negative control: healthy session unaffected — one init call, no extra device calls or log lines
+- [x] Bite matrix: three separate reverts, three separate REDs, others green, each captured under `evidence/`
+- [x] Landed arbitration facts unchanged in meaning; zero assertions weakened
+- [x] `floor.json` `total` bumped in the same commit as the facts
 
 ### Step 4: Record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] `record.md` complete (anchors found-vs-given, non-items, FACT 1, FACT 2, design, knobs, clearance
       table, bite matrix, floor bump, run table, consults + actual models, engine-review presence,

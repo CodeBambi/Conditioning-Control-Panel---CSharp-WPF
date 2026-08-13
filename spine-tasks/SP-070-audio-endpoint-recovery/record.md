@@ -180,3 +180,167 @@ overrides teardown, panic, or an explicit stop.
   4. **Threshold-as-log-line: acceptable, argued** — one line only; reset-on-success pinned
      BEHAVIOURALLY (streak restarts at 1: after a success, one failure must NOT produce the
      escalation line or a still-armed-from-before window), not just by log text.
+
+## Step 2 — implementation (one product file)
+
+`git diff` summary for `client/src/CcpClient.Desktop/Audio/SoundArbitration.cs` (+138 lines,
+the only product file touched):
+
+- `SoundArbitrationOptions`: + `RecoveryCooldown = 30s` (WPF `OutputCooldown`,
+  AudioService.Playback.cs:104) and + `RecoveryFailureThreshold = 5` (WPF
+  `OutputFailuresToTrip`, :101), beside `MaxSfxVoices`.
+- New state: `_consecutiveInitFailures`, `_suppressedUntilUtc`, `_reprobeInFlight`,
+  `_recoveryTimer` — all guarded by `_gate`.
+- `Initialize`: both failure sites now call `RecordInitFailureLocked` (suppress + streak++ +
+  arm window from `_clock`; trip line on the healthy→suppressed transition, ONE escalation
+  line at `streak == threshold`); the success path additionally resets streak + window and
+  logs the recovery line once when it lifts suppression (WPF `NoteOutputSuccess` parity).
+- `ReadyLocked`: suppression checked BEFORE `!_initialized` (consult finding 1 — a failed
+  STARTUP init otherwise strands the recovery behind "not initialised"); on an
+  expired-cooldown refusal it kicks the single-flight one-shot probe via
+  `_clock.Schedule(TimeSpan.Zero, RunRecoveryProbe)` — the caller is refused typed
+  IMMEDIATELY, never blocked; refusal reasons made honest ("re-probe after cooldown" /
+  "re-probe in flight", distinct from "not initialised" and "arbitration torn down").
+- `RunRecoveryProbe`: drops the timer handle and re-checks `_tornDown`/suppression under
+  `_gate`, then calls `Initialize(_preferredDeviceName)` OUTSIDE the gate (NAME, never an
+  Id); whole body try/catch-all (a throw degrades to a typed failed probe) +
+  `finally { _reprobeInFlight = false; }` (consult finding 2).
+- `Dispose`: cancels a pending `_recoveryTimer` and clears `_reprobeInFlight` — no recovery
+  after teardown.
+- `PanicReset`, channel ownership, ducking, queueing, pacing, the SFX cap: **untouched**
+  (zero diff lines in those regions).
+- Docs/comments updated where the old text claimed session-permanence or cited the
+  offset-aged `AudioService.cs:129-131`.
+
+**Own-diff observation grep** (`git diff` `^+` lines searched for log/persist/network/path/
+diagnostic additions): exactly 4 new `_log` call sites — trip, escalation, kick, recovery —
+all transition-only, all hardware-endpoint class (device NAMEs only, already logged today,
+SP-017 A6); zero new persistence, zero network calls, zero user data, zero file paths, zero
+per-refused-play lines.
+
+No edit outside File Scope: `git status`/`git diff` show only `SoundArbitration.cs`,
+`SoundArbitrationTests.cs`, `floor.json`, and this task folder.
+
+## Step 3 — the facts (all constructed on `FakeBackend` + `ManualClock`: no device, no real time)
+
+9 new facts in `SoundArbitrationTests.cs` (30 total in the file, 21 landed facts untouched):
+
+1. `Recovery_EndpointReturns_AfterCooldownNextPlay_PlaysAgain` — the user story: zero
+   endpoints at init → play refused (honest "re-probe after cooldown") → endpoint appears →
+   cooldown elapses → next play attempt refused typed "re-probe in flight" and kicks the
+   probe → probe succeeds → suppression cleared, recovery line logged once, the following
+   play STARTS. Also pins: preferred NAME (null) re-used, never an Id.
+2. `Recovery_FailureCounting_EscalatesAtThreshold_SuccessResets` — streak 2..4: no
+   escalation; streak 5: exactly ONE escalation line; streak 6: none; success resets; one
+   post-reset failure produces a fresh trip line and NO escalation (behavioural reset pin,
+   consult finding 4).
+3. `Recovery_CooldownEnforcedBeforeAttempt_InitCountDoesNotMove` — 80 refused cross-channel
+   plays with the window unexpired: enumeration count never moves.
+4. `Recovery_SingleFlight_ConcurrentAttempts_OneInitCall` — 32 concurrent cross-channel
+   attempts → exactly ONE backend init call; then the probe still recovers when the endpoint
+   returns.
+5. `Recovery_RepeatedFailure_ExactlyOneAttemptPerCooldownWindow` — 3 windows: in-window
+   hammering adds nothing, exactly one probe per window, startup + 3 = 4 enumerations total.
+6. `Recovery_Panic_NothingResurrected_ExplicitStopUntouched` — panicked player stays
+   stopped/disposed across a full suppress→recover cycle; queue stays cleared; a
+   post-recovery play constructs a NEW player.
+7. `Recovery_Teardown_NoProbeAfterDispose_Ever` — a scheduled probe cancelled by `Dispose`
+   never fires; post-teardown plays refuse "arbitration torn down" and never re-probe.
+8. `Recovery_HealthySession_NoExtraDeviceCalls_NoNewLogLines` — negative control: healthy
+   session (plays across all channels, queue + pacing advance, panic) → 1 enumeration, 1
+   init, zero recovery log lines, never suppressed.
+9. `Recovery_ProbeThrows_DegradesTyped_FlagClears_NoEscape` — a backend throwing from
+   `TryInit` on the timer thread: nothing escapes, suppression re-armed, flag cleared, a
+   later window recovers (consult finding 2 pin).
+
+`FakeBackend` extended (test file only): `InitCallCount`, `EnumerateCallCount`,
+`TryInitError`, `ThrowOnTryInit`. The one removed line in the file's diff is the fake's
+old `EnumerateDevices() => Devices` one-liner — zero landed assertions touched.
+
+## Step 3 — bite matrix (three separate reverts, three separate REDs; full text under `evidence/`)
+
+| Revert (alone) | Reverted line | RED set | Others green |
+|---|---|---|---|
+| 1. suppression-clearing | `Initialize` success path: `_audioDisabledForSession = false;` removed | the 5 recovery pins (EndpointReturns, FailureCounting, SingleFlight, Panic, ProbeThrows) | CooldownEnforced, RepeatedFailure, Teardown, HealthySession + all 21 landed |
+| 2. single-flight guard | `ReadyLocked`: `if (!_reprobeInFlight)` removed | SingleFlight only | all 8 other recovery facts + all 21 landed |
+| 3. cooldown gate | `ReadyLocked`: the due check replaced by `if (true)` | CooldownEnforced, RepeatedFailure + EndpointReturns (traversal collateral — its honest-reason and no-fire-without-attempt asserts depend on the gate by construction; the two pure cooldown pins isolate the mechanism) | FailureCounting, SingleFlight, Panic, ProbeThrows, Teardown, HealthySession + all 21 landed |
+
+**Bite-2 repair (SP-067-class catch, recorded honestly):** the single-flight pin as first
+written kept the endpoint PRESENT during the probe burst and passed even with the guard
+reverted — the probe callback's not-suppressed no-op absorbed duplicate schedules. Fixed by
+keeping the endpoint DOWN during the burst so duplicate schedules produce duplicate backend
+init calls; with the intact guard the strengthened pin is green, with the reverted guard red
+(`evidence/bite-2-single-flight.md`).
+
+## Step 3 — floor bump
+
+`floor.json` `total` 996 → 1005 (+9 unit facts) in the SAME commit as the tests
+(`feat(SP-070): complete Step 3 ...`, reason in the message and `lastMovedBy`).
+`allowedSkips`, `admissionRule`, `skipSemantics` untouched; the skip set observed on the
+contract run is exactly the 2 Windows-observed pinned names
+(`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
+`ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`).
+
+## Engine-review presence (per call, T-2)
+
+| Step | `spine_review_step type=plan` result |
+|---|---|
+| 1 | SKIPPED in-worker — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `spawnFailed: false`; artifact `.reviews/1-20260813T233803.md` |
+| 2 | SKIPPED in-worker — same SP-195 message; `spawnFailed: false`; artifact `.reviews/2-20260813T234204.md` |
+| 3 | (called at the step boundary — same expected skip; see STATUS) |
+
+Engine code + final review therefore run after `.DONE`, per FR-WORK-07/SP-195.
+
+## Docs findings (read-only check)
+
+`runtime-capability-contract.md` and `async-lifecycle-fault-contract.md` were checked: neither
+quotes the old "audio disabled for the session" reason nor describes session-permanent
+disable, so no wording change is owed. The expiring-disable state is carried by the typed
+`SoundOutcome.Unavailable` reasons in code. **Finding for the orchestrator (no edit made):**
+if either contract doc ever gains an audio-state table, the honest states are now:
+`not initialised` / `endpoint down (re-probe after cooldown)` / `endpoint down (re-probe in
+flight)` / `arbitration torn down`.
+
+## Intended board filings (no row state set — ENABLER 2)
+
+1. The SP-070 row itself: land evidence = this record (recovery shipped, bounded-restoration
+   bound held, bite matrix, 1005/1005 + 35/35).
+2. NEW ROW: "Port the `IMMNotificationClient` endpoint watcher (WPF
+   `AudioService.Playback.cs:553`) — re-arm/recover the instant a device returns instead of
+   waiting for the next play attempt after the cooldown." Windows-only native code; headed/
+   manual gate; unprovable headless on the authoring machine.
+3. `upstream-sync.md` §C: the d33b5d8d backlog line is now PARTIALLY discharged — breaker +
+   lazy re-probe ported (SP-070); the endpoint watcher remains owed as row 2; the one-shot
+   MTA worker and the 10-concurrent cap are recorded non-items (never re-file).
+
+## Honesty cell
+
+1. **Recovery only — no endpoint watcher.** The watcher is not ported, so recovery waits for
+   the next play attempt after the cooldown rather than firing the instant a device returns;
+   a user who never triggers another sound will not hear the recovery happen. Additionally
+   (FACT 1's price): the play attempt that DISCOVERS the expired cooldown is itself refused
+   (typed) — recovery lands on the FOLLOWING attempt, because the discovering thread can be
+   the UI thread and must never block on a native probe.
+2. **No real audio-endpoint death was exercised.** Every fact is constructed through
+   `FakeBackend`; what is proven is the state machine, not the driver's behavior when it
+   dies (including whether SoundFlow/miniaudio `EnumerateDevices`/`TryInit` fail fast or
+   block on a dead Windows audio service — the reason the probe runs off the discovering
+   thread). MANUAL GATE: kill/restart the Windows Audio Endpoint Builder service (or unplug
+   the only headset) with the DTRH host open, wait >30s, trigger a bark — audio should
+   return without relaunch.
+3. **Execution vs reading:** all 9 facts were verified by EXECUTION (and by three executed
+   reverts each). WPF anchors and the play-seam call chain were verified by READING (greps
+   and full-file reads cited above). No claim rests on an unexecuted port behavior.
+4. **Linux unproven** — zero WSL distros on this machine; no Linux run claimed or faked.
+   The recovery mechanism is platform-independent (injected clock + backend seam), but that
+   is an argument, not evidence.
+5. **Direction:** this change is RESTORATIVE, not subtractive. The bound that keeps it safe:
+   a recovery may only restore what a healthy endpoint would already have permitted — it
+   clears suppression and resets the streak, nothing else — and it never overrides teardown
+   (cancelled probe + `_tornDown` checks), panic (disjoint state, proven), or an explicit
+   stop (untouched paths).
+
+## Flake watch
+
+The named flake `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` did
+NOT fire in any run of this packet (runs 1+ below); nothing was retried away.
