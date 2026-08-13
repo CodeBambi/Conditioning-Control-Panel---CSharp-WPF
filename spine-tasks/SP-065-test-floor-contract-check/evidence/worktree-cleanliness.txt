@@ -1,0 +1,13 @@
+command: git status --porcelain --ignored=matching -uall  (before) -> wrapper run -> (after)
+diff before/after: (empty = no new ignored entries)
+exit=0
+grep -icE 'trx|testresult' after-listing: 0 (no results artifacts anywhere in the worktree, tracked or ignored)
+
+wrapper run output:
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-q5x8z0
+FLOOR OK: CcpClient.Tests: 897/897 passed, 0/0 skipped; CcpClient.HeadlessTests: 35/35 passed, 0/0 skipped
+results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-q5x8z0
+
+results dir contents + sha256 (evidence can hash them, framing d):
+4bf8774b08acc0763a7f5057342ec89bd0780898a879874a5ff193f51ca9b1f5 *C:/Users/Micha/AppData/Local/Temp/ccp-floor-q5x8z0/CcpClient.Tests/results.trx
+627f9a3af17808441e345cf0a2c483a0c22fcb77a470ae45ec4244b4915ccb15 *C:/Users/Micha/AppData/Local/Temp/ccp-floor-q5x8z0/CcpClient.HeadlessTests/results.trx
