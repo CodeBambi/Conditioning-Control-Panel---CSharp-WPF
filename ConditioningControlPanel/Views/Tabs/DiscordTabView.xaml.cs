@@ -101,6 +101,16 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnViewMyProfile_Click(sender, e);
         }
+        /// <summary>
+        /// The link-notice button reuses the Privacy panel's login/link flow verbatim - that
+        /// handler drives BtnDiscordTabLogin (which lives on the long-lived panel instance and
+        /// is therefore addressable whether or not the dialog is open).
+        /// </summary>
+        private void BtnDiscordTabLogin_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnDiscordTabLogin_Click(sender, e);
+        }
         private void BtnProfilePrivacy_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

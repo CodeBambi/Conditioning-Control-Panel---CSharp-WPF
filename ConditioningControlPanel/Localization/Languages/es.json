@@ -774,6 +774,7 @@
   "label_not_connected": "No Conectado",
   "label_login_to_unlock_exclusive_features": "Inicia sesión para desbloquear funciones exclusivas",
   "label_link_discord_for_community_features": "Vincula Discord para funciones de comunidad",
+  "profile_link_discord_notice": "Vincula tu Discord para desbloquear las funciones de perfil: tu tarjeta pública, los anclajes de la vitrina y el uso compartido con la comunidad.",
   "label_link_accounts": "Vincular Cuentas",
   "label_link_both_providers_to_access_your_account_fr": "Vincula ambos proveedores para acceder a tu cuenta desde cualquier método de inicio de sesión.",
   "btn_link_patreon": "⭐ Vincular Patreon",

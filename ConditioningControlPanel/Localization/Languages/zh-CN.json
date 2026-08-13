@@ -1459,6 +1459,7 @@
   "label_not_connected": "未连接",
   "label_login_to_unlock_exclusive_features": "登录以解锁专属功能",
   "label_link_discord_for_community_features": "关联 Discord 以使用社区功能",
+  "profile_link_discord_notice": "关联 Discord 即可解锁个人资料功能：公开卡片、展示柜置顶和社区分享。",
   "label_link_accounts": "关联账号",
   "label_link_both_providers_to_access_your_account_fr": "关联两个平台以便从任一登录方式访问你的账号。",
   "btn_link_patreon": "⭐ 关联 Patreon",

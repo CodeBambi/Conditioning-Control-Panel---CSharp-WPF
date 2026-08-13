@@ -775,6 +775,7 @@
   "label_not_connected": "Nicht verbunden",
   "label_login_to_unlock_exclusive_features": "Anmelden, um exklusive Funktionen freizuschalten",
   "label_link_discord_for_community_features": "Discord verknüpfen für Community-Funktionen",
+  "profile_link_discord_notice": "Verknüpfe dein Discord, um Profilfunktionen freizuschalten: deine öffentliche Karte, Showcase-Pins und Community-Sharing.",
   "label_link_accounts": "Konten verknüpfen",
   "label_link_both_providers_to_access_your_account_fr": "Verknüpfe beide Anbieter, um von beiden Anmeldemethoden auf dein Konto zuzugreifen.",
   "btn_link_patreon": "⭐ Patreon verknüpfen",

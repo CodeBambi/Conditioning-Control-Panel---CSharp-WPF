@@ -774,6 +774,7 @@
   "label_not_connected": "未接続",
   "label_login_to_unlock_exclusive_features": "ログインして限定機能を解除",
   "label_link_discord_for_community_features": "Discordを連携してコミュニティ機能にアクセス",
+  "profile_link_discord_notice": "Discordを連携するとプロフィール機能が使えます: 公開カード、ショーケースのピン、コミュニティ共有。",
   "label_link_accounts": "アカウント連携",
   "label_link_both_providers_to_access_your_account_fr": "両方のプロバイダーを連携して、どちらのログイン方法からでもアカウントにアクセス。",
   "btn_link_patreon": "⭐ Patreon連携",
