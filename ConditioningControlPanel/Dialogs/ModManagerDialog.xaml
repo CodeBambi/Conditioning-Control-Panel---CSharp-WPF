@@ -83,6 +83,18 @@
                             <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
                             <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#C0C0C0" TextWrapping="Wrap" Margin="0,0,0,15"/>
 
+                            <!-- Read-only art summary. The manifest's previewImage had never been
+                                 rendered anywhere in the app before this; it is a mod-relative path
+                                 inside the mod's own folder, so both rows are hidden for built-ins
+                                 and anything without an InstalledPath. -->
+                            <Border x:Name="PreviewImagePanel" Background="{DynamicResource PanelAccentBrush}"
+                                    CornerRadius="8" Padding="6" Margin="0,0,0,10"
+                                    HorizontalAlignment="Left" Visibility="Collapsed">
+                                <Image x:Name="ImgModPreview" MaxWidth="260" MaxHeight="146" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock x:Name="TxtArtOverrides" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                                       TextWrapping="Wrap" Margin="0,0,0,15" Visibility="Collapsed"/>
+
                             <!-- Content pack row: built-in mods whose media (voice lines, portraits,
                                  DTRH barks) lives in a release-hosted pack that is not downloaded yet.
                                  Hidden entirely on full/dev installs and for user mods. -->

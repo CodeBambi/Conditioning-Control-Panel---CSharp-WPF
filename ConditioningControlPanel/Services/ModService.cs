@@ -1487,14 +1487,30 @@ namespace ConditioningControlPanel.Services
             var json = JsonConvert.SerializeObject(template, Formatting.Indented);
             File.WriteAllText(Path.Combine(outputFolder, "mod.json"), json);
 
-            // Create resource subdirectories
+            // Create resource subdirectories.
+            //
+            // These mirror the app's own Resources/ tree, because mod art is pure PATH
+            // SHADOWING: a file at resources/<path> replaces the embedded Resources/<same
+            // path>. An empty folder here is the hint for where each kind of art goes -- the
+            // folders a hand-built mod never discovers are the ones it never overrides.
             var resourcesDir = Path.Combine(outputFolder, "resources");
             Directory.CreateDirectory(resourcesDir);
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "achievements"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "features"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "skills"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "spirals"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "Cards"));
+            foreach (var sub in new[]
+                     {
+                         "achievements",   // trophy-case badges
+                         "features",       // feature icons, dashboard tiles, Play wall heroes
+                         "skills",         // skill tree nodes
+                         "spirals",        // spiral overlay frames
+                         "Cards",          // session-complete cards
+                         "nav",            // left rail doors (door_*.png)
+                         "programs",       // program heroes / plates / banners / sigils
+                         "quests",         // daily + weekly quest art
+                         "intake",         // weekly pass cards (pass_card*.png)
+                         "exclusives",     // vault backdrop and friends
+                     })
+            {
+                Directory.CreateDirectory(Path.Combine(resourcesDir, sub));
+            }
 
             _log?.Information("Mod template generated at {Path}", outputFolder);
         }
