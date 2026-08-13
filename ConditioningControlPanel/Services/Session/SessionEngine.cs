@@ -272,9 +272,16 @@ namespace ConditioningControlPanel.Services
         }
         
         /// <summary>
-        /// Stops the current session
+        /// Stops the current session.
         /// </summary>
-        public void StopSession(bool completed = false)
+        /// <param name="completed">The session reached its end. Awards XP and never counts as abandoned.</param>
+        /// <param name="suppressAbandonTracking">
+        /// End the session without charging it to the abandoned-session counters. For the one case
+        /// where the app, not the user, ended it: withdrawing from a training program tears the
+        /// program's own session down as part of leaving, and leaving is a supported, free exit.
+        /// Every other caller leaves this alone - a session the user walked out of is still abandoned.
+        /// </param>
+        public void StopSession(bool completed = false, bool suppressAbandonTracking = false)
         {
             if (!_isRunning) return;
 
@@ -326,6 +333,11 @@ namespace ConditioningControlPanel.Services
             // Force-unduck audio before restoring settings (subliminals/flashes may have left it ducked)
             App.Audio?.ForceUnduck();
 
+            // Hand the flash trio back before the restore. Unconditional and ahead of
+            // RestoreSettings, which returns early when there is no snapshot - a session overlay
+            // left parked would keep overriding the user's own values for the rest of the run.
+            App.Settings?.Current?.ClearSessionFlashRamp();
+
             // Restore original settings
             RestoreSettings();
             
@@ -336,7 +348,7 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetIdleActivity();
 
             // Track abandoned session if not completed
-            if (!completed)
+            if (!completed && !suppressAbandonTracking)
             {
                 App.Achievements?.TrackSessionAbandoned();
             }
@@ -553,26 +565,38 @@ namespace ConditioningControlPanel.Services
             var curve = settings.RampCurve ?? App.Settings.Current.RampCurve;
             var progress = RampCurves.ApplyCurve(elapsedMinutes / totalMinutes, curve);
 
-            // Flash opacity ramp
+            // Flash trio: opacity ramp, frequency ramp, and the session's fixed scale.
+            //
+            // Parked on the settings object as a session overlay rather than written into it, for
+            // the reason spelled out under the pink filter below: these are the USER's persisted
+            // values, and an app kill mid-session used to freeze a ramp maximum into settings.json
+            // for good. FlashService still reads the ramped numbers - the getters prefer the
+            // overlay - while the file, the sliders and RestoreSettings keep the user's own.
+            int? rampedOpacity = null;
+            int? rampedFrequency = null;
+            int? rampedScale = null;
+
             if (settings.FlashEnabled && settings.FlashOpacity != settings.FlashOpacityEnd)
             {
                 _currentFlashOpacity = Lerp(settings.FlashOpacity, settings.FlashOpacityEnd, progress);
-                App.Settings.Current.FlashOpacity = (int)_currentFlashOpacity;
+                rampedOpacity = (int)_currentFlashOpacity;
             }
-            
+
             // Flash frequency ramp (for sessions like Good Girls Don't Cum)
             if (settings.FlashEnabled && settings.FlashPerHour != settings.FlashPerHourEnd)
             {
-                var currentFreq = Lerp(settings.FlashPerHour, settings.FlashPerHourEnd, progress);
-                App.Settings.Current.FlashFrequency = (int)currentFreq;
+                rampedFrequency = (int)Lerp(settings.FlashPerHour, settings.FlashPerHourEnd, progress);
             }
-            
-            // Flash scale (apply once at start if set)
+
+            // Flash scale (fixed for the whole session when the preset sets one)
             if (settings.FlashEnabled && settings.FlashScale != 100)
             {
-                App.Settings.Current.ImageScale = settings.FlashScale;
+                rampedScale = settings.FlashScale;
             }
-            
+
+            App.Settings?.Current?.SetSessionFlashRamp(rampedOpacity, rampedFrequency, rampedScale);
+
+
             // Pink filter ramp (only after randomized start minute).
             // Drive the overlay DIRECTLY (same path as Deeper enhancement ramps) instead of
             // writing the ramped value into App.Settings.Current.PinkFilterOpacity: that value
