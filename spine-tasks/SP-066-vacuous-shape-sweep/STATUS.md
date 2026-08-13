@@ -1,5 +1,5 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 4 — the shape guard, and the T-17 auditor edit
+**Current Step:** 5 — record + pre-completion consult
 **Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
@@ -33,15 +33,15 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] Zero assertions weakened / tolerances widened / tests quarantined — proven by per-file `git diff` review summarized in the record
 - [x] Ledger committed with cleared entries; `floor.json` bumped in the same commit as any count change, reason in the message
 
-### Step 4: the shape guard, and the T-17 auditor edit — 🔄 In Progress
-- [ ] Guard test fails with `file:line` for any site absent from the ledger; repo-root walk; NEVER skips (missing directory = failure)
-- [ ] Captured RED from a probe fact with a silenced assertion; probe removed and removal proven
-- [ ] Guard's own honesty stated in the test file and the record (shape guard; runtime vacuity invisible)
-- [ ] `client/tools/port-audit-prompt.md:12-13` invokes `node client/tests/floor/check-floor.mjs`; non-zero exit = audit FAIL naming the reason; port-workflow:204 `CCP_DATA_ROOT` note added
-- [ ] Test pins that the auditor prompt invokes the wrapper and contains NO bare `dotnet test`
-- [ ] `git ls-files client/tools/port-audit-prompt.md` pasted into the record; NO new file created under `client/tools/`
+### Step 4: the shape guard, and the T-17 auditor edit — ✅ Complete (plan review engine-skipped SP-195)
+- [x] Guard test fails with `file:line` for any site absent from the ledger; repo-root walk; NEVER skips (missing directory = failure)
+- [x] Captured RED from a probe fact with a silenced assertion; probe removed and removal proven
+- [x] Guard's own honesty stated in the test file and the record (shape guard; runtime vacuity invisible)
+- [x] `client/tools/port-audit-prompt.md:12-13` invokes `node client/tests/floor/check-floor.mjs`; non-zero exit = audit FAIL naming the reason; port-workflow:204 `CCP_DATA_ROOT` note added
+- [x] Test pins that the auditor prompt invokes the wrapper and contains NO bare `dotnet test`
+- [x] `git ls-files client/tools/port-audit-prompt.md` pasted into the record; NO new file created under `client/tools/`
 
-### Step 5: record + pre-completion consult — ⬜ Not Started
+### Step 5: record + pre-completion consult — 🔄 In Progress
 - [ ] `record.md` complete: detector + exact surface, inventory reconciliation, ledger verdicts, schema change + both new verdicts + preserved fail-closed table, deletions with the behavior left unverified, residuals with filing intent, `git ls-files` proof, 3-run table with NEW exact counts, consults + ACTUAL answering models, engine-review presence per step, intended board filings (no row state set)
 - [ ] Honesty cell with all six required items (lexical detector / shape-only guard / `allowedSkips` records intent / ledger reasons are unchecked judgment / T-17 auditor proof NOT delivered / Linux unproven)
 - [ ] Named flake, if it fired: recorded BY NAME with run number + TRX path; not retried away, not allowlisted

@@ -29,6 +29,18 @@
       "reason": "loop source is an in-test literal/collection expression — emptying it is an edit to this test itself; Assert.NotEmpty pin added per framing (c) as a compile-visible belt"
     },
     {
+      "key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
+      "path": "CcpClient.Tests/AiAwarenessTests.cs",
+      "line": 414,
+      "method": "AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
+    },
+    {
       "key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",
       "path": "CcpClient.Tests/AiAwarenessTests.cs",
       "line": 387,
@@ -42,22 +54,10 @@
       "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
-      "key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
-      "path": "CcpClient.Tests/AiAwarenessTests.cs",
-      "line": 414,
-      "method": "AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
-      "shapes": [
-        "platform-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
-    },
-    {
-      "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.Missing_OnFirstLoad_EmptyAndNoFileCreated",
+      "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.ConsentDenied_WriteIsTypedNoOp_NothingOnDisk_NeverThrows",
       "path": "CcpClient.Tests/AiMemoryStoreTests.cs",
-      "line": 49,
-      "method": "AiMemoryStoreTests.Missing_OnFirstLoad_EmptyAndNoFileCreated",
+      "line": 125,
+      "method": "AiMemoryStoreTests.ConsentDenied_WriteIsTypedNoOp_NothingOnDisk_NeverThrows",
       "shapes": [
         "fs-predicate"
       ],
@@ -70,18 +70,6 @@
       "path": "CcpClient.Tests/AiMemoryStoreTests.cs",
       "line": 63,
       "method": "AiMemoryStoreTests.CorruptDocument_QuarantinedOnceAtStartup_TypedDegraded_BytesPreserved",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.ConsentDenied_WriteIsTypedNoOp_NothingOnDisk_NeverThrows",
-      "path": "CcpClient.Tests/AiMemoryStoreTests.cs",
-      "line": 125,
-      "method": "AiMemoryStoreTests.ConsentDenied_WriteIsTypedNoOp_NothingOnDisk_NeverThrows",
       "shapes": [
         "fs-predicate"
       ],
@@ -114,6 +102,18 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.Missing_OnFirstLoad_EmptyAndNoFileCreated",
+      "path": "CcpClient.Tests/AiMemoryStoreTests.cs",
+      "line": 49,
+      "method": "AiMemoryStoreTests.Missing_OnFirstLoad_EmptyAndNoFileCreated",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
       "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.NewerSchema_ClearKeepsDocument_EmptiesInMemory_TypedDegraded",
       "path": "CcpClient.Tests/AiMemoryStoreTests.cs",
       "line": 293,
@@ -138,18 +138,6 @@
       "reason": "loop source is an in-test literal/collection expression — emptying it is an edit to this test itself; Assert.NotEmpty pin added per framing (c) as a compile-visible belt"
     },
     {
-      "key": "CcpClient.Tests/AiModerationCoverageTests.cs::AiModerationCoverageTests.Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
-      "path": "CcpClient.Tests/AiModerationCoverageTests.cs",
-      "line": 67,
-      "method": "AiModerationCoverageTests.Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
-      "shapes": [
-        "assertions-all-nested"
-      ],
-      "expectDetected": false,
-      "verdict": "fixed",
-      "reason": "loop source is a runtime registry/enum that a future edit could empty silently (compiles, suite green, assertions never run); Assert.NotEmpty pin added per framing (c) — breaks when the source is empty"
-    },
-    {
       "key": "CcpClient.Tests/AiModerationCoverageTests.cs::AiModerationCoverageTests.Boundary_PureLocalEvaluation_NoNetworkSurface",
       "path": "CcpClient.Tests/AiModerationCoverageTests.cs",
       "line": 291,
@@ -162,10 +150,22 @@
       "reason": "loop source is an in-test literal/collection expression — emptying it is an edit to this test itself; Assert.NotEmpty pin added per framing (c) as a compile-visible belt"
     },
     {
-      "key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.VocabularyTypes_SerializeRoundTrip",
+      "key": "CcpClient.Tests/AiModerationCoverageTests.cs::AiModerationCoverageTests.Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
+      "path": "CcpClient.Tests/AiModerationCoverageTests.cs",
+      "line": 67,
+      "method": "AiModerationCoverageTests.Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": false,
+      "verdict": "fixed",
+      "reason": "loop source is a runtime registry/enum that a future edit could empty silently (compiles, suite green, assertions never run); Assert.NotEmpty pin added per framing (c) — breaks when the source is empty"
+    },
+    {
+      "key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.CommandData_RoundTrips",
       "path": "CcpClient.Tests/AiOperationContractTests.cs",
-      "line": 401,
-      "method": "AiOperationContractTests.VocabularyTypes_SerializeRoundTrip",
+      "line": 456,
+      "method": "AiOperationContractTests.CommandData_RoundTrips",
       "shapes": [
         "no-assertion"
       ],
@@ -174,10 +174,10 @@
       "reason": "assertions live in the called helper RoundTrip<T> (helper-hoisted false positive — Assert.Equal at AiOperationContractTests.cs:491); Assert.NotEmpty belt added before the sample loop per framing (c)"
     },
     {
-      "key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.CommandData_RoundTrips",
+      "key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.VocabularyTypes_SerializeRoundTrip",
       "path": "CcpClient.Tests/AiOperationContractTests.cs",
-      "line": 456,
-      "method": "AiOperationContractTests.CommandData_RoundTrips",
+      "line": 401,
+      "method": "AiOperationContractTests.VocabularyTypes_SerializeRoundTrip",
       "shapes": [
         "no-assertion"
       ],
@@ -210,18 +210,6 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
-      "key": "CcpClient.Tests/CapabilityTests.cs::CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
-      "path": "CcpClient.Tests/CapabilityTests.cs",
-      "line": 94,
-      "method": "CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
-      "shapes": [
-        "assertions-all-nested"
-      ],
-      "expectDetected": false,
-      "verdict": "fixed",
-      "reason": "loop source is a runtime registry/enum that a future edit could empty silently (compiles, suite green, assertions never run); Assert.NotEmpty pin added per framing (c) — breaks when the source is empty"
-    },
-    {
       "key": "CcpClient.Tests/CapabilityTests.cs::CapabilityTests.RealCompositionRoot_CapabilityProbesPhase_PopulatesStatesViaRealProbes",
       "path": "CcpClient.Tests/CapabilityTests.cs",
       "line": 335,
@@ -234,10 +222,22 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
-      "key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
+      "key": "CcpClient.Tests/CapabilityTests.cs::CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
+      "path": "CcpClient.Tests/CapabilityTests.cs",
+      "line": 94,
+      "method": "CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": false,
+      "verdict": "fixed",
+      "reason": "loop source is a runtime registry/enum that a future edit could empty silently (compiles, suite green, assertions never run); Assert.NotEmpty pin added per framing (c) — breaks when the source is empty"
+    },
+    {
+      "key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
       "path": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs",
-      "line": 27,
-      "method": "ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
+      "line": 41,
+      "method": "ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
       "shapes": [
         "platform-predicate",
         "dynamic-skip"
@@ -247,10 +247,10 @@
       "reason": "early-return OS gate converted to Assert.Skip* so the skip REPORTS; pinned by name in floor.json allowedSkips under the admission rule (OS property, not satisfiable by configuration; machine class named there). "
     },
     {
-      "key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
+      "key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
       "path": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs",
-      "line": 41,
-      "method": "ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
+      "line": 27,
+      "method": "ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
       "shapes": [
         "platform-predicate",
         "dynamic-skip"
@@ -368,28 +368,16 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
     },
     {
-      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideTests.ResolveDataRoot_ValidAbsolutePath_NormalizesAndCreates",
+      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideEnvTests.Override_BadValue_ThrowsTypedAtComposition_NeverRealProfile",
       "path": "CcpClient.Tests/DataRootOverrideTests.cs",
-      "line": 59,
-      "method": "DataRootOverrideTests.ResolveDataRoot_ValidAbsolutePath_NormalizesAndCreates",
+      "line": 200,
+      "method": "DataRootOverrideEnvTests.Override_BadValue_ThrowsTypedAtComposition_NeverRealProfile",
       "shapes": [
-        "fs-predicate"
+        "env-predicate"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault",
-      "path": "CcpClient.Tests/DataRootOverrideTests.cs",
-      "line": 69,
-      "method": "DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault",
-      "shapes": [
-        "dynamic-skip"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "the SP-062 pin: the Assert.SkipWhen IS the loud tripwire by design (a process-wide CCP_DATA_ROOT export must report, never read green). PERMANENTLY BANNED from allowedSkips (framing f)"
+      "reason": "the env predicate IS the seam under test: the test SETS and restores CCP_DATA_ROOT itself (ProcessEnvCollection-isolated); no machine state can silence it"
     },
     {
       "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideEnvTests.Override_IsHonoredByEveryCensusedConsumer",
@@ -417,16 +405,28 @@
       "reason": "the env predicate IS the seam under test: the test SETS and restores CCP_DATA_ROOT itself (ProcessEnvCollection-isolated); no machine state can silence it"
     },
     {
-      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideEnvTests.Override_BadValue_ThrowsTypedAtComposition_NeverRealProfile",
+      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault",
       "path": "CcpClient.Tests/DataRootOverrideTests.cs",
-      "line": 200,
-      "method": "DataRootOverrideEnvTests.Override_BadValue_ThrowsTypedAtComposition_NeverRealProfile",
+      "line": 69,
+      "method": "DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault",
       "shapes": [
-        "env-predicate"
+        "dynamic-skip"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "the env predicate IS the seam under test: the test SETS and restores CCP_DATA_ROOT itself (ProcessEnvCollection-isolated); no machine state can silence it"
+      "reason": "the SP-062 pin: the Assert.SkipWhen IS the loud tripwire by design (a process-wide CCP_DATA_ROOT export must report, never read green). PERMANENTLY BANNED from allowedSkips (framing f)"
+    },
+    {
+      "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideTests.ResolveDataRoot_ValidAbsolutePath_NormalizesAndCreates",
+      "path": "CcpClient.Tests/DataRootOverrideTests.cs",
+      "line": 59,
+      "method": "DataRootOverrideTests.ResolveDataRoot_ValidAbsolutePath_NormalizesAndCreates",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
       "key": "CcpClient.Tests/DtrhBridgeDiffTests.cs::DtrhBridgeDiffTests.Derivative_RetainsEveryOriginalLine_ExceptTheNamedTransportLines",
@@ -454,18 +454,6 @@
       "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
-      "key": "CcpClient.Tests/DtrhLoomStudioTests.cs::DtrhLoomStudioTests.Reveal_ExistingSpiral_LaunchesOsSeam",
-      "path": "CcpClient.Tests/DtrhLoomStudioTests.cs",
-      "line": 98,
-      "method": "DtrhLoomStudioTests.Reveal_ExistingSpiral_LaunchesOsSeam",
-      "shapes": [
-        "platform-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
-    },
-    {
       "key": "CcpClient.Tests/DtrhLoomStudioTests.cs::DtrhLoomStudioTests.Delete_RoundTrip_ResultThenList",
       "path": "CcpClient.Tests/DtrhLoomStudioTests.cs",
       "line": 189,
@@ -476,6 +464,18 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
+      "key": "CcpClient.Tests/DtrhLoomStudioTests.cs::DtrhLoomStudioTests.Reveal_ExistingSpiral_LaunchesOsSeam",
+      "path": "CcpClient.Tests/DtrhLoomStudioTests.cs",
+      "line": 98,
+      "method": "DtrhLoomStudioTests.Reveal_ExistingSpiral_LaunchesOsSeam",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
       "key": "CcpClient.Tests/DtrhLoomTests.cs::DtrhLoomTests.Save_List_Delete_Lifecycle_WithSidecar",
@@ -503,30 +503,6 @@
       "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
-      "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.FreshStart_SummariesEmpty_InFixedSlotOrder_NoFilesCreated",
-      "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
-      "line": 17,
-      "method": "DtrhSaveSlotsTests.FreshStart_SummariesEmpty_InFixedSlotOrder_NoFilesCreated",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.DescendInto_EmptySlot_PersistsImmediately_AndSurvivesReload",
-      "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
-      "line": 40,
-      "method": "DtrhSaveSlotsTests.DescendInto_EmptySlot_PersistsImmediately_AndSurvivesReload",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
       "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.Corruption_Quarantined_FlaggedDefaults_NeverSilent",
       "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
       "line": 105,
@@ -551,6 +527,30 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.DescendInto_EmptySlot_PersistsImmediately_AndSurvivesReload",
+      "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
+      "line": 40,
+      "method": "DtrhSaveSlotsTests.DescendInto_EmptySlot_PersistsImmediately_AndSurvivesReload",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
+      "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.FreshStart_SummariesEmpty_InFixedSlotOrder_NoFilesCreated",
+      "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
+      "line": 17,
+      "method": "DtrhSaveSlotsTests.FreshStart_SummariesEmpty_InFixedSlotOrder_NoFilesCreated",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
       "key": "CcpClient.Tests/DtrhSaveSlotsTests.cs::DtrhSaveSlotsTests.SelectSlot_PersistsImmediately",
       "path": "CcpClient.Tests/DtrhSaveSlotsTests.cs",
       "line": 245,
@@ -561,6 +561,18 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
+      "key": "CcpClient.Tests/DtrhWatchdogTests.cs::DtrhWatchdogTests.ProcessFailedAttach_TypedUnavailable_NeverThrows_NeverFakes",
+      "path": "CcpClient.Tests/DtrhWatchdogTests.cs",
+      "line": 171,
+      "method": "DtrhWatchdogTests.ProcessFailedAttach_TypedUnavailable_NeverThrows_NeverFakes",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
       "key": "CcpClient.Tests/DtrhWatchdogTests.cs::DtrhWatchdogTests.Tick_LiveSessionWithRegularBeats_NeverFires",
@@ -575,16 +587,16 @@
       "reason": "counted for-loop with a constant in-test bound (600 beats); the loop cannot be empty without editing the literal (pre-approach consult carve-out: counted loops take a reason, not a NotEmpty)"
     },
     {
-      "key": "CcpClient.Tests/DtrhWatchdogTests.cs::DtrhWatchdogTests.ProcessFailedAttach_TypedUnavailable_NeverThrows_NeverFakes",
-      "path": "CcpClient.Tests/DtrhWatchdogTests.cs",
-      "line": 171,
-      "method": "DtrhWatchdogTests.ProcessFailedAttach_TypedUnavailable_NeverThrows_NeverFakes",
+      "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest",
+      "path": "CcpClient.Tests/FloorWrapperGuardTests.cs",
+      "line": 0,
+      "method": "FloorWrapperGuardTests.AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest",
       "shapes": [
-        "platform-predicate"
+        "fs-predicate"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
+      "reason": "fs usage is the Assert.True(File.Exists(promptPath)) never-skip checkpoint at depth 0 — the auditor pin refuses to skip by design"
     },
     {
       "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper",
@@ -647,6 +659,18 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
+      "path": "CcpClient.Tests/PersistenceTests.cs",
+      "line": 153,
+      "method": "PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
       "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.CorruptFile_Quarantined_OriginalBytesPreserved_FlaggedDefaults",
       "path": "CcpClient.Tests/PersistenceTests.cs",
       "line": 20,
@@ -671,34 +695,10 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
-      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.StaleTemp_BesideValidMain_Deleted",
+      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved",
       "path": "CcpClient.Tests/PersistenceTests.cs",
-      "line": 79,
-      "method": "PersistenceTests.StaleTemp_BesideValidMain_Deleted",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
-      "path": "CcpClient.Tests/PersistenceTests.cs",
-      "line": 153,
-      "method": "PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.Replace_RaisesNotification_BeforePersisting_IsolatesThrowingHandlers",
-      "path": "CcpClient.Tests/PersistenceTests.cs",
-      "line": 176,
-      "method": "PersistenceTests.Replace_RaisesNotification_BeforePersisting_IsolatesThrowingHandlers",
+      "line": 264,
+      "method": "PersistenceTests.CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved",
       "shapes": [
         "fs-predicate"
       ],
@@ -719,6 +719,30 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.Replace_RaisesNotification_BeforePersisting_IsolatesThrowingHandlers",
+      "path": "CcpClient.Tests/PersistenceTests.cs",
+      "line": 176,
+      "method": "PersistenceTests.Replace_RaisesNotification_BeforePersisting_IsolatesThrowingHandlers",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
+      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.StaleTemp_BesideValidMain_Deleted",
+      "path": "CcpClient.Tests/PersistenceTests.cs",
+      "line": 79,
+      "method": "PersistenceTests.StaleTemp_BesideValidMain_Deleted",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
       "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.WriteFailure_TypedRecoverableOutcome_MainFileUntouched",
       "path": "CcpClient.Tests/PersistenceTests.cs",
       "line": 244,
@@ -731,30 +755,16 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
-      "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved",
-      "path": "CcpClient.Tests/PersistenceTests.cs",
-      "line": 264,
-      "method": "PersistenceTests.CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved",
+      "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
+      "path": "CcpClient.Tests/SecretStoreTests.cs",
+      "line": 95,
+      "method": "SecretStoreTests.ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
       "shapes": [
-        "fs-predicate"
+        "platform-predicate"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
-      "path": "CcpClient.Tests/SecretStoreTests.cs",
-      "line": 18,
-      "method": "SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
-      "shapes": [
-        "platform-predicate",
-        "fs-predicate",
-        "dynamic-skip"
-      ],
-      "expectDetected": true,
-      "verdict": "platform-skip-converted",
-      "reason": "early-return OS gate converted to Assert.Skip* so the skip REPORTS; pinned by name in floor.json allowedSkips under the admission rule (OS property, not satisfiable by configuration; machine class named there). fixed: Assert.NotEmpty(Directory.EnumerateFiles(root)) added before the plaintext-scan loop — breaks when the store writes no file (filesystem enumeration over a possibly-empty root was runtime-vacuous-capable); ALSO platform-skip-converted (see shapes)"
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
     },
     {
       "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked",
@@ -771,18 +781,6 @@
       "reason": "early-return OS gate converted to Assert.Skip* so the skip REPORTS; pinned by name in floor.json allowedSkips under the admission rule (OS property, not satisfiable by configuration; machine class named there). "
     },
     {
-      "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
-      "path": "CcpClient.Tests/SecretStoreTests.cs",
-      "line": 95,
-      "method": "SecretStoreTests.ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
-      "shapes": [
-        "platform-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard"
-    },
-    {
       "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.SettingsDocument_CarriesSecretNames_NeverValues",
       "path": "CcpClient.Tests/SecretStoreTests.cs",
       "line": 118,
@@ -797,22 +795,24 @@
       "reason": "early-return OS gate converted to Assert.Skip* so the skip REPORTS; pinned by name in floor.json allowedSkips under the admission rule (OS property, not satisfiable by configuration; machine class named there). "
     },
     {
+      "key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
+      "path": "CcpClient.Tests/SecretStoreTests.cs",
+      "line": 18,
+      "method": "SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
+      "shapes": [
+        "platform-predicate",
+        "fs-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "early-return OS gate converted to Assert.Skip* so the skip REPORTS; pinned by name in floor.json allowedSkips under the admission rule (OS property, not satisfiable by configuration; machine class named there). fixed: Assert.NotEmpty(Directory.EnumerateFiles(root)) added before the plaintext-scan loop — breaks when the store writes no file (filesystem enumeration over a possibly-empty root was runtime-vacuous-capable); ALSO platform-skip-converted (see shapes)"
+    },
+    {
       "key": "CcpClient.Tests/StatusTickerSliceTests.cs::StatusTickerSliceTests.Restart_RestoresFlag_AndRestartsOperation_ThroughRealCompositionRoot",
       "path": "CcpClient.Tests/StatusTickerSliceTests.cs",
       "line": 129,
       "method": "StatusTickerSliceTests.Restart_RestoresFlag_AndRestartsOperation_ThroughRealCompositionRoot",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
-    },
-    {
-      "key": "CcpClient.Tests/TeardownFlushTests.cs::TeardownFlushTests.Shutdown_CleanStore_WritesNothing",
-      "path": "CcpClient.Tests/TeardownFlushTests.cs",
-      "line": 48,
-      "method": "TeardownFlushTests.Shutdown_CleanStore_WritesNothing",
       "shapes": [
         "fs-predicate"
       ],
@@ -833,6 +833,18 @@
       "reason": "File.Exists is captured into the fake's FileExistedAtStop field and asserted through it after Stop — recording, not guarding"
     },
     {
+      "key": "CcpClient.Tests/TeardownFlushTests.cs::TeardownFlushTests.Shutdown_CleanStore_WritesNothing",
+      "path": "CcpClient.Tests/TeardownFlushTests.cs",
+      "line": 48,
+      "method": "TeardownFlushTests.Shutdown_CleanStore_WritesNothing",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+    },
+    {
       "key": "CcpClient.Tests/TestTimingGuardTests.cs::TestTimingGuardTests.NoWallClockWaitsOutsideTheApprovedHelper",
       "path": "CcpClient.Tests/TestTimingGuardTests.cs",
       "line": 81,
@@ -845,34 +857,10 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
     },
     {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree",
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 53,
-      "method": "UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree",
-      "shapes": [
-        "no-assertion"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "assertions live in the called guard machinery RunGuard (helper-hoisted false positive — RunGuard asserts/fails on any violation)"
-    },
-    {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_UnknownUpstreamTree_Fails_NamingTreeCountAndAction",
-      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 341,
-      "method": "UpstreamPayloadInventoryTests.Fixture_UnknownUpstreamTree_Fails_NamingTreeCountAndAction",
-      "shapes": [
-        "assertions-all-nested"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
-    },
-    {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_StaleInventoryEntry_Fails_NamingEntry",
-      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 363,
-      "method": "UpstreamPayloadInventoryTests.Fixture_StaleInventoryEntry_Fails_NamingEntry",
+      "line": 447,
+      "method": "UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
       "shapes": [
         "assertions-all-nested"
       ],
@@ -893,10 +881,58 @@
       "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
     },
     {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_MissingInventory_Fails_NeverASkip",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 467,
+      "method": "UpstreamPayloadInventoryTests.Fixture_MissingInventory_Fails_NeverASkip",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+    },
+    {
       "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_MissingWpfTree_UnreachableBranch_StillAssertsWellFormedness",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
       "line": 407,
       "method": "UpstreamPayloadInventoryTests.Fixture_MissingWpfTree_UnreachableBranch_StillAssertsWellFormedness",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+    },
+    {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_ReachableBranch_EmptyWebTree_Fails_NotAPass",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 481,
+      "method": "UpstreamPayloadInventoryTests.Fixture_ReachableBranch_EmptyWebTree_Fails_NotAPass",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+    },
+    {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_StaleInventoryEntry_Fails_NamingEntry",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 363,
+      "method": "UpstreamPayloadInventoryTests.Fixture_StaleInventoryEntry_Fails_NamingEntry",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+    },
+    {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_UnknownUpstreamTree_Fails_NamingTreeCountAndAction",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 341,
+      "method": "UpstreamPayloadInventoryTests.Fixture_UnknownUpstreamTree_Fails_NamingTreeCountAndAction",
       "shapes": [
         "assertions-all-nested"
       ],
@@ -917,40 +953,28 @@
       "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
     },
     {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 447,
-      "method": "UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
+      "line": 53,
+      "method": "UpstreamPayloadInventoryTests.RealRepo_InventoryCoversEveryUpstreamPayloadTree",
       "shapes": [
-        "assertions-all-nested"
+        "no-assertion"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+      "reason": "assertions live in the called guard machinery RunGuard (helper-hoisted false positive — RunGuard asserts/fails on any violation)"
     },
     {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_MissingInventory_Fails_NeverASkip",
-      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 467,
-      "method": "UpstreamPayloadInventoryTests.Fixture_MissingInventory_Fails_NeverASkip",
+      "key": "CcpClient.Tests/VacuousShapeGuardTests.cs::VacuousShapeGuardTests.EverySilencingShapeSite_IsDispositionedInTheLedger",
+      "path": "CcpClient.Tests/VacuousShapeGuardTests.cs",
+      "line": 34,
+      "method": "VacuousShapeGuardTests.EverySilencingShapeSite_IsDispositionedInTheLedger",
       "shapes": [
-        "assertions-all-nested"
+        "fs-predicate"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
-    },
-    {
-      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_ReachableBranch_EmptyWebTree_Fails_NotAPass",
-      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
-      "line": 481,
-      "method": "UpstreamPayloadInventoryTests.Fixture_ReachableBranch_EmptyWebTree_Fails_NotAPass",
-      "shapes": [
-        "assertions-all-nested"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
+      "reason": "fs usage is the FindRepoRoot anchor probe + the Assert.True(File.Exists(ledgerPath)) never-skip checkpoint at depth 0 — the guard never skips by design"
     }
   ]
 }

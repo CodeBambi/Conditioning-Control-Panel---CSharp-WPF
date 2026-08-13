@@ -104,6 +104,25 @@ public partial class FloorWrapperGuardTests
             "floor-wrapper routing guard violations:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
+    [Fact]
+    public void AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest()
+    {
+        // T-17 (SP-066 framing i): the blind auditor is the one check meant to catch a lying
+        // land; a bare `dotnet test` in its prompt would retain the exact detection path this
+        // wrapper replaced (an unexpected skip reads green there). The prompt must invoke the
+        // wrapper, carry the CCP_DATA_ROOT warning, and contain NO bare dotnet test.
+        var promptPath = Path.Combine(FindRepoRoot(), "client", "tools", "port-audit-prompt.md");
+        Assert.True(File.Exists(promptPath),
+            $"port-audit-prompt.md not found at {promptPath} — the auditor pin refuses to skip");
+        var prompt = File.ReadAllText(promptPath);
+        Assert.Contains("node client/tests/floor/check-floor.mjs", prompt);
+        Assert.Contains("CCP_DATA_ROOT", prompt); // the wrapper must never be given one (:204)
+        Assert.False(DotnetTest().IsMatch(prompt),
+            "port-audit-prompt.md contains a bare `dotnet test` invocation — the auditor must run the suite "
+            + "through node client/tests/floor/check-floor.mjs (T-17); a bare invocation keeps the vacuous-green "
+            + "detection path SP-065 replaced");
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

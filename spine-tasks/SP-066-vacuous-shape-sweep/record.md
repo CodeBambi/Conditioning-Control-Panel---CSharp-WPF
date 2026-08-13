@@ -123,3 +123,67 @@ The allowlisted-GREEN verdict is demonstrated **synthetically only** — deliber
 Clean real run after the schema change: `evidence/green-schema-change.txt`, exit 0 — `FLOOR OK: CcpClient.Tests: 898/898 total, 0 skipped; CcpClient.HeadlessTests: 35/35 total, 0 skipped`.
 
 Schema change + wrapper change committed as ONE commit (one semantic unit); no count moved, so no bump rode it.
+
+## Step 3 — disposition of every site
+
+Raw inventory: 79 sites incl. the temporary dump harness itself (`ZzVacuousShapeInventoryDump` — excluded from the ledger; it existed only to run the detector and was deleted after each capture). **78 real sites, every one verdicted.** Ledger: `client/tests/floor/vacuous-shape-ledger.json` (80 entries after Step 4 added the two guard facts' own entries; keyed by `path::OuterClass[.Nested].Method`, line informational only).
+
+Verdict totals: **not-vacuous 67, platform-skip-converted 5, fixed 6, deleted 0, residual 0** (plus the 2 guard-self entries = not-vacuous). Zero tests deleted — no behavior left unverified by deletion. Zero residuals — no site needed work beyond this packet.
+
+### platform-skip-converted (5) — the early-return silencers now REPORT
+
+| Site | Conversion | Skip fires on | Executes on (machine class) |
+|---|---|---|---|
+| `ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh` | `Assert.SkipUnless(IsWindows)` | Linux contract runs | Windows |
+| `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps` | `Assert.SkipWhen(IsWindows)` | **this machine** | Linux (WSL gate / Linux CI) |
+| `SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext` | `Assert.SkipUnless(IsWindows)` (+ framing-c NotEmpty, see fixed) | Linux contract runs | Windows |
+| `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked` | `Assert.SkipUnless(IsLinux)` | **this machine** | Linux (WSL2 evidence box / Linux CI) |
+| `SecretStoreTests.SettingsDocument_CarriesSecretNames_NeverValues` | `Assert.SkipUnless(IsWindows)` | Linux contract runs | Windows |
+
+All five names are in `floor.json` `allowedSkips` under the admission rule (OS property, cannot be satisfied by configuration during a contract run), each with its machine class named in `allowedSkipsMachineClasses` in the same file. The SP-057 pin and the named privacy flake are NOT listed and never will be. The Step 2 schema change landed BEFORE these conversions (framing d) — the first conversion commit went green through the new pin, not through a widened count.
+
+### fixed (6) — runtime-vacuous-capable loops given a failing-when-broken pin (framing c)
+
+| Site | Pin added | What breaks it |
+|---|---|---|
+| `DtrhBridgeDiffTests.Derivative_RetainsEveryOriginalLine_...` | `Assert.NotEmpty(removed)` + `Assert.NotEmpty(kept)` | upstream diff drifts so nothing is removed/kept — the "except the named transport lines" half was over a runtime LINQ diff of real files |
+| `SecretStoreTests.WindowsDpapi_RoundTrip_...` | `Assert.NotEmpty(Directory.EnumerateFiles(root))` before the plaintext scan | the store writes no file — filesystem enumeration over a possibly-empty root |
+| `AiModerationCoverageTests.Inventory_EveryWiredSurface_...` | `Assert.NotEmpty(AiModerationSurfaces.All)` | a future edit emptying the surface registry |
+| `AvatarPackTests.Definitions_AreNonUniform_...` | `Assert.NotEmpty(SyntheticAvatarPacks.All)` | an emptied pack registry |
+| `HarnessEntryPointGateTests.HarnessEntries_AreSingledOut_...` | `Assert.NotEmpty(HarnessEntryPoints.All)` | an emptied flag registry (the count pin covers the Harness subset; this covers All) |
+| `AiAwarenessCooldownTests.EmptyRegistry_AdmitsAllFourClasses` | `Assert.NotEmpty(Enum.GetValues<AiCooldownKind>())` | an emptied cooldown-kind enum |
+| `CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed` | `Assert.NotEmpty(registry.Names)` | (belt — source is in-test registrations, but the loop is over the runtime registry) |
+
+(6 substantive + the literal-source belts below — ledger verdicts assign `fixed` where runtime vacuity was reachable, `not-vacuous` + belt where the source is an in-test literal.)
+
+### not-vacuous belts (framing c applied to in-test literal sources)
+
+`AiAwarenessTests.Packaging_BlockingPolicyOnAnyField` (`Assert.NotEmpty(cases)`), `AiModerationBoundaryTests.Verdicts_SerializationRoundTrip_WithSurface` (`Assert.NotEmpty(samples)`), `AiModerationCoverageTests.Boundary_PureLocalEvaluation_NoNetworkSurface` (hoisted `boundaryTypes` + `Assert.NotEmpty`), `AiOperationContractTests.VocabularyTypes_SerializeRoundTrip` (`Assert.NotEmpty(VerdictSamples())`) and `CommandData_RoundTrips` (`Assert.NotEmpty(samples)`) — loop sources are in-test literals whose emptying is a visible edit to the test itself; the pin makes it compile-visible anyway. The two AiOperationContractTests facts' real assertions live in the helper `RoundTrip<T>` (`Assert.Equal` at AiOperationContractTests.cs:491) — the detector's no-assertion reading is the framing-(b) false positive, dispositioned by naming the helper.
+
+### not-vacuous reason classes (no edit)
+
+- **fs-predicate sites (44 incl. guards):** every `File.Exists`/`Directory.Exists` use is (a) inside `Assert.True/False` at body depth 0 — the predicate IS the assertion, absence fails, never silences (mechanical per-use proof: every fs use in every fs-flagged site was classified asserted / finally-cleanup / anchor / recorded); (b) `finally`-block cleanup (`if (Directory.Exists(root)) Directory.Delete(...)`) — no assertion depends on it; (c) the `FindRepoRoot` anchor probe + `Assert.True(Directory.Exists(...))` never-skip checkpoint in the guard tests; (d) `TeardownFlushTests.Flush_ExceedsBoundedWait` — captured into the fake's `FileExistedAtStop` field, asserted through it after Stop.
+- **env-predicate (3, `DataRootOverrideEnvTests`):** the env var IS the seam under test — the test sets and restores `CCP_DATA_ROOT` itself (ProcessEnvCollection-isolated); no machine state can silence it.
+- **platform-arm sites without early return (7):** `TitleProbe_PlatformTypedState`, `TitleObservation_GatedByConsentAndCapability`, `TryRecover_NoMatchingChildren`, `Reveal_ExistingSpiral_LaunchesOsSeam`, `ReadOsClientAreaAnimation_OnThisBox`, `ProcessFailedAttach_TypedUnavailable`, `ForCurrentPlatform_ReturnsPlatformBackend` — exhaustive if/else arms over the two supported OSes, every arm asserts; the predicate is the branch mechanism.
+- **dynamic-skip (1):** the SP-062 pin — the `Assert.SkipWhen` IS the loud tripwire by design; permanently banned from `allowedSkips` (framing f).
+- **`UpstreamPayloadInventoryTests` (9):** `RealRepo_...` assertions live in `RunGuard` (helper-hoisted false positive); the 8 `Fixture_...` facts assert inside the `act:` lambda that `WithFixtureRepo` invokes exactly once — not a loop/conditional (the detector's lambda=guarding rule is a deliberate conservative over-flag, dispositioned by reason).
+- **`DtrhWatchdogTests.Tick_LiveSessionWithRegularBeats`:** counted `for` loop, constant bound 600 (pre-approach consult carve-out: counted loops take a reason, not a NotEmpty).
+
+### Zero-weakening proof
+
+`git diff` of every touched test file reviewed line-by-line: the only REMOVED lines are the five early-return guards (converted to `Assert.Skip*` — strictly stronger: the test now REPORTS its skip and the floor pins it by name), one inline `foreach` header hoisted to a named variable (with a NotEmpty added), and detector-internal lines. No assertion was weakened, no tolerance widened, no test quarantined, no `[Fact]` removed. Detector refinement (guarding-brace classification: try/finally/catch/using/lock transparent; only if/else/foreach/for/while/switch/lambda guard) rode the Step 3 commit and is stated in its message.
+
+
+## Step 4 — the shape guard, and the T-17 auditor edit
+
+- **Guard:** `VacuousShapeGuardTests.EverySilencingShapeSite_IsDispositionedInTheLedger` — repo-root walk, never skips (missing ledger = failure, empty ledger = failure), file:line violations; compares the detector surface against the ledger in BOTH directions plus shape-set equality, with `expectDetected` per entry (consult correction #2). Duplicate ledger keys violate. Its own honesty (shape guard; cannot see helper-hoisted assertions or empty-collection loops) is stated in its XML doc.
+- **Captured RED:** probe fact `ZzVacuousShapeProbe.Probe_SilencedByEarlyReturn` (`if (!OperatingSystem.IsWindows()) return;` before its only assertion) → guard FAILED naming `CcpClient.Tests/ZzVacuousShapeProbe.cs:9` with shapes `[early-return, platform-predicate]` (`evidence/guard-red-probe.txt`, "Failed!"). Probe then deleted; guard green on rebuild; `git status --short` proves the probe file was never committed and is gone.
+- The guard ALSO bit its own new fact on first run (its `FindRepoRoot` anchor reads as fs-predicate) — caught, ledgered with the anchor reason, green. The class guards itself.
+- **T-17 (bounded, framing i):** `client/tools/port-audit-prompt.md` step 2 now invokes `node client/tests/floor/check-floor.mjs` after the build; a non-zero exit is an audit FAIL naming the wrapper's reason; the `CCP_DATA_ROOT` never-set note (port-workflow.md:204) is in the prompt; the skip check now reads "any skipped tests are exactly the names pinned in allowedSkips". NO other file under `client/tools/` touched, NO new file created there.
+- **Mechanical pin:** `FloorWrapperGuardTests.AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest` asserts the prompt invokes the wrapper, carries the `CCP_DATA_ROOT` warning, and contains NO bare `dotnet test` (same DotnetTest regex the packet guard uses).
+- **`git ls-files client/tools/port-audit-prompt.md` proof** (force-added under the `.gitignore:168` bare `tools/` rule — the edit is in the tracked tree):
+
+      $ git ls-files client/tools/port-audit-prompt.md
+      client/tools/port-audit-prompt.md
+
+- Floor bumped 898 -> 900 unit in this step's commit (+2 facts: the shape guard + the auditor pin), reason in the message; headless unchanged 35; allowedSkips unchanged (5 names).
