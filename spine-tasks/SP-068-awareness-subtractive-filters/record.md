@@ -110,6 +110,12 @@ No new datum is observed (no process name, app id, window class, dwell time — 
 - **Pre-flight check 1 (ran):** this machine's real foreground title is non-blank (length 18) and matches zero union markers — the landed `TitleObservation_GatedByConsentAndCapability_TitleNeverLogged` pin (asserts `Observed` from the real foreground window) is not flipped by F1's observation-seam filter. Title content itself not recorded (privacy discipline; length only).
 - **Pre-flight check 2 (ran):** no exhaustive switch / `Enum.GetValues` over `AiAwarenessDropKind` anywhere (the only `GetValues` in the tree is over `AiCooldownKind`, AiAwarenessCooldownTests.cs:34-35); `AiOperationContractTests` round-trips fixed `AiReply` instances, not a case enumeration. Adding `AiAwarenessDropKind.PrivacyFiltered` breaks no shape pin.
 
+**Pre-completion (solo; narrow, capped at 200 words).** Complete, un-truncated verdict; the tool response does not surface the answering model's identity. Verdict: **"Otherwise sound. Proceed to greens"** — with three gaps, all closed before `.DONE`:
+
+1. **Evidence TRX was gitignored (mechanical, CLOSED).** `.gitignore:91` ignores `*.trx`; the four `bite-R*.trx` files were silently skipped by `git add` and would have surfaced as new ignored artifacts at the Step 5 porcelain check. Renamed to `*.trx.txt` and committed; the `.log` files (with the failing-name lists) were already tracked.
+2. **F3 over-application named as a decision (CLOSED — stated here).** WPF strips in `CompanionBrain` only (chat :269 + reaction :356); WPF's `KeywordTriggerService` path never stripped. The port's strip sits at the ONE pipeline seam every reply flows through, so it also covers awareness **keyword** comments. This is a deliberate narrowing divergence: an invented URL is unsanctioned wherever it appears, the strip is the same rule, and routing keyword replies around it would be a second dialect. Recorded as a decision, not an accident.
+3. **F3's live-surface effect stated (CLOSED — here and honesty cell 8).** An emptied interactive reply now renders the existing unavailable presentation `The companion is unavailable (reply-stripped-empty).` where WPF substituted a canned companion phrase (the port has no canned-phrase source at the pipeline seam). "Narrowing only" governs data flow; this user-visible rendering change is named, not hidden. Also stated: **F2 scrubs the Title field only** — Category/App/Duration pass through untouched (audit row A10's scope).
+
 ## 8. Implementation + bite evidence
 
 **Implementation (Step 2, committed):**
@@ -120,8 +126,46 @@ Per-file product diff summary (`git diff --stat`): `AiAwarenessService.cs` +57/-
 
 **Verification after implementation:** build 0W/0E; full floor wrapper run BEFORE any new facts: **903/903 unit, 35/35 headless, 2 skipped (exactly the pinned Windows-observed names)** — every landed pin unweakened, including the real-foreground observation test and the exact-shape packaging test.
 
-(to be filled — bite matrix, floor bump, run table)
+**Binding (Step 3, committed `736f4baf`):** +43 facts — 33 pure-filter facts in the new `AiPrivacyFilterTests.cs`, 7 awareness-seam facts appended to `AiAwarenessTests.cs`, 3 interactive/memory-seam facts appended to `AiMemoryPipelineTests.cs` (the real-store harness with file-content proof). Every filter carries a negative control (plain title / clean reply passes through unchanged). **Floor: 903 → 946 in the same commit** (`floor.json` `total` + `lastMovedBy` reason; `allowedSkips`, `admissionRule`, `skipSemantics` untouched).
+
+**Landed-pin strictness proof:** `git diff HEAD~1 -- AiAwarenessTests.cs AiMemoryPipelineTests.cs` shows **zero deleted lines** — additions only; every landed assertion is byte-identical. The full wrapper run with the filters in place and before the new facts (903/903) plus the green run at 946 prove the landed awareness/moderation pins assert exactly what they asserted before.
+
+**Bite matrix (framing j) — one revert at a time, each RED captured under `evidence/` (log + TRX):**
+
+| Revert | Source reverted | RED set (exactly these, from the TRX) | Everything else |
+|---|---|---|---|
+| R1 (F1 incognito) | `AiPrivacyFilters.LooksIncognito` neutralized (`return false`) | **11 red**: 8 `LooksIncognito_MarkersFromEitherWpfList_Drop` rows + `ClassifyCapturedTitle_IncognitoMarker_DropIncognito` + `Packaging_IncognitoTitle_HardDrop_TypedPrivacyFiltered_ZeroTransmission` + `TryPackage_IncognitoTitle_False_NullRequest_NullRefusal` | 933 passed — blank, F2, F3 pins all green |
+| R2 (F1 blank, extra rigor beyond the required three) | `ClassifyCapturedTitle` blank guard removed (blank → Carry) | **3 red**: the 3 `ClassifyCapturedTitle_BlankTitle_DropBlank` rows | 941 passed |
+| R3 (F2 scrub) | `SanitizeTitleForWire` returns the raw title | **8 red**: all 6 scrub-value facts + `Packaging_ScrubsTitle_ShapePreserved_RawNeverTransmitted` + `Packaging_TitleScrubbedToEmpty_CarriesNoTitle` | 936 passed — negative controls and the moderation-raw order pin green (both correct under a no-op scrub) |
+| R4 (F3 strip) | `StripUnsanctionedLinks` returns the text unchanged | **8 red**: 4 strip-semantics facts + `Reaction_ReplyWithInventedUrl_StrippedBeforeApplication` + `KeywordReply_EmptiedByStrip_TypedFallbackWithCanned_TypedDropWithout` + both interactive memory pins | 936 passed — the no-URL controls green |
+
+After the fourth revert was undone: rebuild 0W/0E + wrapper **FLOOR OK 946/946** — the tree is restored, not stuck on a revert.
 
 ## 9. Honesty cell
 
-(to be filled at Step 4 — including: F1/F2 harden a path with NO product consumer today (framing k); F3's path is live; three rows of one audit table filtered at authoring; row :46 stays OPEN; deferred halves; Linux unproven; filters are lossy by design)
+1. **F1 and F2 harden a path with NO product consumer today (framing k).** `ObserveForegroundTitle` (AiAwarenessService.cs:531 region) and `RunReactionAsync` (:497 region) are called only from tests; the only product-side wiring is the `awareness-context-fields` moderation surface registration (AiModerationBoundary.cs:110). F1/F2 harden the boundary a future consumer will inherit — **no user-visible privacy improvement is claimed for them.** F3 differs: its path is LIVE (the companion window's interactive replies flow through the pipeline seam that now strips).
+2. **Execution vs reading, per filter:** F1 marker semantics, F2 scrub values, and F3 strip semantics were verified by EXECUTION (43 new facts, four bite reverts). The F1 observation-seam wiring against a REAL foreground window (`ObserveForegroundTitle` → `ClassifyCapturedTitle`) is verified by reading + the landed real-capture test still passing; no test can manufacture a foreground window with an incognito title on this box, so the pure classifier carries the pins and the seam wiring is one switch arm. WPF anchors were verified by reading (table in §1).
+3. **Provenance:** this packet is **three rows of one audit table filtered at authoring** (§5: Size S, dependency none, unit-evidence-only → six rows; three need headed evidence and are deferred). It is NOT the audit's verdict on Her Room, NOT "the six adopts", and NOT an adoption of upstream's redesign. Board row `:46` stays **OPEN**; its 12 owner questions are untouched. C3 is a MERGE row; only its strip half landed.
+4. **Deferred by name, with reasons:** `UnwrapSpokenSigil` (sigil unwrap — the audit sizes "Strip only" as dependency-free; the port's prompt path emits no bark-echo sigil); the C3 off-pool title rewrite (needs a media pool the port does not have); the 120-char projection cap (cloud wire path; no cloud provider exists under admission §2 rule 6); the three headed-evidence rows A11 (one-hour pause), D6 (two-step inline confirm), D11 (transcript window) — deferred to a machine with the owner's evidence display.
+5. **Linux unproven:** zero WSL distros on this machine; no Linux run was faked. The filters themselves are pure string rules (platform-neutral); the title CAPTURE they guard is typed Unavailable on Linux by the landed capability.
+6. **Lossy by design:** a dropped title, a scrubbed-away email, and a stripped sentence cannot be recovered downstream — that is the point of a subtractive filter, and it means a false positive (e.g. WPF's documented marker over-match) permanently discards that frame/reply fragment. WPF accepts the same tradeoff ("a false positive costs one joke"); the port inherits it verbatim, including the recorded near-miss control (`Privateering tactics…` passes; a title genuinely containing a marker phrase does not).
+7. **The named flake** `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` did NOT fire in any run of this packet (runs enumerated in §10). Nothing was retried, quarantined, or allowlisted; `allowedSkips` is untouched.
+8. **User-visible effects, stated (pre-completion consult gap 3):** F3's path is live — a URL-carrying reply now reaches the bubble stripped, and an emptied reply renders `The companion is unavailable (reply-stripped-empty).` (the surface's existing unavailable presentation) instead of a WPF canned phrase; no canned-phrase source exists at the port's pipeline seam. F2 scrubs **Title only**; Category/App/Duration are untouched (A10's scope). F1/F2's awareness path has no product consumer (cell 1), so those two change no live surface.
+
+**Intended board filings (ENABLER 2 — named, no row state set):** row `:46` — append evidence: "SP-068 landed F1/F2/F3 (three subtractive filters from this row's own audit §5 filter): incognito union-list drop + blank-title decision at the title seams, verbatim title scrub at packaging, unsanctioned-link strip before memory/bubble/disk; floor 946; honesty: F1/F2's path has no product consumer yet; A11/D6/D11 and the C3 unwrap/rewrite halves remain deferred; the row stays OPEN with owner questions unanswered." A port-lessons candidate: "WPF carries TWO divergent incognito marker lists (35/35, 15 shared) — the port ported the union; audits should assume list-valued rules diverge across WPF files until proven otherwise."
+
+**Contract wording named for the orchestrator (framing c — the file is untouched):** (1) §7 rule 1 could name the subtractive hygiene strip as part of reply application; (2) §4 rule 3's drop taxonomy could name the `PrivacyFiltered` drop kind. Neither is required for honesty — §7 ordering is preserved and §12's schema is untouched (the new codes are content-free stable tokens).
+
+## 10. Run table + engine-review presence
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped (names) | TRX |
+|---|---|---|---|---|---|---|
+| pre-facts (Step 2 gate) | lane-1 | warm | 903/903 | 35/35 | the 2 pinned Linux-gated names | ccp-floor-UGPBlr |
+| facts added, pre-bump (expected floor fail) | lane-1 | warm | 946 vs pinned 903 → floor correctly demanded the bump | — | — | ccp-floor-7KO2SW |
+| G1 | lane-1 | warm | 946/946 | 35/35 | the 2 pinned names | ccp-floor-tN99a6 |
+| bite R1/R2/R3/R4 | lane-1 | warm | RED sets exactly per the matrix (11/3/8/8) | — | — | evidence/bite-R*.trx.txt (renamed — `*.trx` is gitignored, pre-completion consult gap 1) |
+| G2 (post-revert restoration) | lane-1 | warm | 946/946 | 35/35 | the 2 pinned names | (Step 5 table) |
+
+**Engine-review presence (T-2):** `spine_review_step` called after Steps 1, 2, 3 — each returned `skipped: true` ("Nested reviewer spawn blocked inside pi worker session… the batch engine runs reviews after worker success (SP-195)"), `spawnFailed: false`, artifacts under `.reviews/`. No in-worker review verdicts exist by design; code/final review is engine-run after `.DONE`.
+
+(to be completed at Step 5 — G3 cold run, contract testCommand, diff/status checks)

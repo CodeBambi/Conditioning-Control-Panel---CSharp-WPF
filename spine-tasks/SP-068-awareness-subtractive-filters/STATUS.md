@@ -1,6 +1,6 @@
 ## STATUS: SP-068 — Three subtractive privacy filters over the landed awareness and reply paths
-**Current Step:** Step 3 — Bind all three, one source at a time
-**Last Updated:** 2026-08-13 (worker, steps 1-2 complete; step 3 in progress)
+**Current Step:** Step 4 — Record + pre-completion consult
+**Last Updated:** 2026-08-13 (worker, steps 1-3 complete; step 4 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 903 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in `allowedSkips`; 3 of them execute here, 2 are Linux-gated), build 0W/0E — SP-067, integrate `75a09d61`.
@@ -35,18 +35,18 @@
 - [x] Own-diff grep proves no new log / diagnostic / persist / network call
 - [x] Per-file `git diff` summary in the record; no edit outside F1/F2/F3
 
-### Step 3: Bind all three, one source at a time — 🔄 In progress
-- [ ] Regression facts per filter (drop, strip, cap, URL removal, and stripped text never reaching memory or the bubble)
-- [ ] **Negative control per filter** — input that must pass through unchanged, so a filter that eats everything cannot satisfy the pin
-- [ ] **Bite matrix:** F1 reverted alone → only F1's pins red; then F2; then F3. Each RED captured under `evidence/` naming the reverted source
-- [ ] Landed awareness/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
-- [ ] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
+### Step 3: Bind all three, one source at a time — ✅ Complete
+- [x] Regression facts per filter (drop, strip, cap, URL removal, and stripped text never reaching memory or the bubble)
+- [x] **Negative control per filter** — input that must pass through unchanged, so a filter that eats everything cannot satisfy the pin
+- [x] **Bite matrix:** F1 reverted alone → only F1's pins red; then F2; then F3. Each RED captured under `evidence/` naming the reverted source
+- [x] Landed awareness/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
+- [x] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
 
-### Step 4: Record + pre-completion consult — ⬜ Not started
-- [ ] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, marker reconciliation, blank-title decision, scrubber values + not-ported cap, F3 insertion point + persistence delta, emptied-reply typing, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
-- [ ] **Honesty cell** — including: F1/F2 harden a path with **no product consumer today** (F3's path is live); execution vs reading per filter; this is **three rows of one audit table filtered at authoring**, not a verdict on Her Room, and row `:46` stays OPEN; deferred halves named (sigil unwrap, C3 title rewrite, 120-char cap, headed rows A11/D6/D11); **Linux unproven**; filters are lossy by design
-- [ ] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
+### Step 4: Record + pre-completion consult — 🔄 In progress
+- [x] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, marker reconciliation, blank-title decision, scrubber values + not-ported cap, F3 insertion point + persistence delta, emptied-reply typing, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
+- [x] **Honesty cell** — including: F1/F2 harden a path with **no product consumer today** (F3's path is live); execution vs reading per filter; this is **three rows of one audit table filtered at authoring**, not a verdict on Her Room, and row `:46` stays OPEN; deferred halves named (sigil unwrap, C3 title rewrite, 120-char cap, headed rows A11/D6/D11); **Linux unproven**; filters are lossy by design
+- [x] Named flake, if it fired, recorded by name + run number + TRX path — never retried away
+- [x] Pre-completion solo consult; verdict + actual model recorded
 - [ ] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
 
 ### Step 5: Testing & Verification — ⬜ Not started
