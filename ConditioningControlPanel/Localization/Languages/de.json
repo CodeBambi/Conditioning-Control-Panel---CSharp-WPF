@@ -937,6 +937,7 @@
   "profile_xp_progress": "{0} / {1} XP",
   "profile_faucet_tip_held": "{0} XP warten - zum Eingießen klicken",
   "profile_faucet_tip_empty": "Alles eingegossen",
+  "profile_vat_help_tip": "Dein Kessel ist dein tägliches XP-Glas - alles, was du heute verdienst, wird darin gesammelt, und an einem richtig guten Tag kann es über MAX hinaus überlaufen.\n\nUm Mitternacht leert es sich, und mit jedem Level wird es größer.\n\nDer Hahn hält, was du seit dem letzten Ausgießen verdient hast - wenn er wackelt, wartet XP. Klick ihn an, um auszugießen.\n\nAlles nur Anzeige: deine XP zählen immer sofort, ausgegossen oder nicht.",
   "profile_record_title": "Die Akte",
   "profile_showcase_title": "Vitrine",
   "profile_showcase_hint": "bis zu 4 anheften",

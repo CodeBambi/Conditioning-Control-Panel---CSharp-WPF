@@ -937,6 +937,7 @@
   "profile_xp_progress": "{0} / {1} XP",
   "profile_faucet_tip_held": "{0} XP en attente - cliquez pour verser",
   "profile_faucet_tip_empty": "Tout est versé",
+  "profile_vat_help_tip": "Ta cuve est ton bocal d'XP quotidien : tout ce que tu gagnes aujourd'hui s'y accumule, et lors d'une très bonne journée elle peut déborder au-delà du MAX.\n\nElle se vide à minuit et grandit à chaque niveau.\n\nLe robinet retient ce que tu as gagné depuis le dernier versement : quand il tremble, de l'XP attend. Clique pour verser.\n\nC'est un simple indicateur visuel : ton XP est toujours compté dès que tu le gagnes, versé ou non.",
   "profile_record_title": "Le Dossier",
   "profile_showcase_title": "Vitrine",
   "profile_showcase_hint": "épingle jusqu'à 4",

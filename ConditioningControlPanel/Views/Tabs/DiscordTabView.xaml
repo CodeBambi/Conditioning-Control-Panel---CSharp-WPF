@@ -306,6 +306,29 @@
                                                          Fill="#FF69B4" Stroke="#FFF0F7" StrokeThickness="1"
                                                          Visibility="Collapsed"/>
                                             </Grid>
+
+                                            <!-- "?" explainer beside the faucet (owner ask 0813):
+                                                 the one place the vat gets words. Positioned by
+                                                 ArmFaucet next to the tap; the tooltip explains the
+                                                 daily jar and that the hold is VISUAL ONLY - XP is
+                                                 counted the moment it is earned, poured or not. -->
+                                            <Border x:Name="ProfileVatHelpBadge" x:FieldModifier="internal"
+                                                    Width="16" Height="16" CornerRadius="8"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                    Visibility="Collapsed" Cursor="Help"
+                                                    Background="#CC252542" BorderBrush="#FF69B4" BorderThickness="1"
+                                                    ToolTipService.InitialShowDelay="150"
+                                                    ToolTipService.ShowDuration="60000">
+                                                <TextBlock Text="?" Foreground="#FFB3D6" FontSize="10" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Margin="0,-1,0,0"/>
+                                                <Border.ToolTip>
+                                                    <ToolTip MaxWidth="340">
+                                                        <TextBlock Text="{loc:Str profile_vat_help_tip}"
+                                                                   TextWrapping="Wrap" MaxWidth="320"/>
+                                                    </ToolTip>
+                                                </Border.ToolTip>
+                                            </Border>
                                         </Grid>
 
                                         <!-- Percent only, deliberately wordless: loc keys for the

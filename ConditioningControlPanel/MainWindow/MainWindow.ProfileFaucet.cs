@@ -40,6 +40,7 @@ namespace ConditioningControlPanel
         // ever retuned.
 
         private const double FaucetSpoutXInBox = 27;
+        private const double FaucetBoxWidth = 40;
         private const double FaucetBoxHeight = 42;
 
         // ---- state ------------------------------------------------------------
@@ -75,6 +76,15 @@ namespace ConditioningControlPanel
                 faucet.Margin = new Thickness(left, top, 0, 0);
                 faucet.Visibility = Visibility.Visible;
 
+                // The "?" explainer rides the tap: just right of the art box, level
+                // with the handle, in the jar's empty headspace above the lip.
+                var help = DiscordTab?.ProfileVatHelpBadge;
+                if (help != null)
+                {
+                    help.Margin = new Thickness(left + FaucetBoxWidth + 2, top + 2, 0, 0);
+                    help.Visibility = Visibility.Visible;
+                }
+
                 glass.ExternalSpoutXFraction = (left + FaucetSpoutXInBox) / jarW;
 
                 UpdateFaucetPresentation();
@@ -93,6 +103,9 @@ namespace ConditioningControlPanel
 
                 var faucet = DiscordTab?.ProfileVatFaucet;
                 if (faucet != null) faucet.Visibility = Visibility.Collapsed;
+
+                var help = DiscordTab?.ProfileVatHelpBadge;
+                if (help != null) help.Visibility = Visibility.Collapsed;
 
                 var glass = DiscordTab?.ProfileVatGlass;
                 if (glass != null) glass.ExternalSpoutXFraction = null;

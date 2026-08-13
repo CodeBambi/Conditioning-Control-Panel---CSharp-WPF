@@ -1636,6 +1636,7 @@
   "profile_xp_progress": "{0} / {1} 经验值",
   "profile_faucet_tip_held": "{0} 经验值等待中 - 点击倒入",
   "profile_faucet_tip_empty": "已全部倒入",
+  "profile_vat_help_tip": "你的罐子是每日XP储罐：今天赚到的所有XP都会存进去，状态特别好的日子甚至能溢过MAX线。\n\n它会在午夜清空，并随着你升级而变大。\n\n水龙头存着你上次倒入之后赚到的XP：它晃动就说明有XP在等。点击即可倒入。\n\n这只是视觉效果：XP在你获得的那一刻就已计入，倒不倒都一样。",
   "profile_record_title": "档案记录",
   "profile_showcase_title": "陈列柜",
   "profile_showcase_hint": "最多置顶 4 项",

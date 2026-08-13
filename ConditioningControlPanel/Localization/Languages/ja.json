@@ -936,6 +936,7 @@
   "profile_xp_progress": "{0} / {1} XP",
   "profile_faucet_tip_held": "{0} XPが待機中 - クリックして注ぐ",
   "profile_faucet_tip_empty": "すべて注ぎました",
+  "profile_vat_help_tip": "このタンクは1日のXPジャーです。今日獲得したXPはすべてここに貯まり、絶好調の日はMAXを超えてあふれることもあります。\n\n深夜0時に空になり、レベルアップするたびに大きくなります。\n\n蛇口は前回注いでから獲得したXPを溜めています。揺れていたらXPが待っている合図。クリックすると注がれます。\n\nこれはあくまで見た目の演出です。XPは獲得した瞬間に必ず加算されます。",
   "profile_record_title": "記録",
   "profile_showcase_title": "ショーケース",
   "profile_showcase_hint": "最大4つをピン留め",

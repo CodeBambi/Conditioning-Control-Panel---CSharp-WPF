@@ -1855,6 +1855,7 @@
   "profile_xp_progress": "{0} / {1} XP",
   "profile_faucet_tip_held": "{0} XP waiting - click to pour",
   "profile_faucet_tip_empty": "All poured",
+  "profile_vat_help_tip": "Your vat is your daily XP jar - everything you earn today gets banked into it, and on a really good day it can spill past MAX.\n\nIt empties at midnight and grows bigger as you level up.\n\nThe faucet holds what you've earned since your last pour - when it wobbles, XP is waiting. Click it to pour.\n\nIt's a visual indicator only: your XP is always counted the moment you earn it, poured or not.",
   "profile_record_title": "The Record",
   "profile_showcase_title": "Showcase",
   "profile_showcase_hint": "pin up to 4",

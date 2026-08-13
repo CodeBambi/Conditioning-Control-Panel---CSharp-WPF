@@ -936,6 +936,7 @@
   "profile_xp_progress": "{0} / {1} XP",
   "profile_faucet_tip_held": "{0} XP en espera - haz clic para verter",
   "profile_faucet_tip_empty": "Todo vertido",
+  "profile_vat_help_tip": "Tu tanque es tu frasco diario de XP: todo lo que ganas hoy se acumula ahí, y en un día muy bueno puede desbordar el MAX.\n\nSe vacía a medianoche y crece cada vez que subes de nivel.\n\nEl grifo guarda lo que has ganado desde el último vertido: cuando tiembla, hay XP esperando. Haz clic para verterlo.\n\nEs solo un indicador visual: tu XP siempre cuenta desde el momento en que lo ganas, vertido o no.",
   "profile_record_title": "El Registro",
   "profile_showcase_title": "Vitrina",
   "profile_showcase_hint": "fija hasta 4",
