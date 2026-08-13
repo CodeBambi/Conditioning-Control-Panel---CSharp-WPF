@@ -69,7 +69,7 @@ namespace ConditioningControlPanel
 
                 double x0 = jarW * 0.10;            // the jar's left wall (VatGlassCanvas.JarX0)
                 double yT = jarH * 0.175;           // the lip line (VatGlassCanvas.JarYTop)
-                double left = Math.Round(x0 - 12);  // flange straddles the corner
+                double left = Math.Round(x0 - 8);   // flange straddles the corner (owner nudge 0813: +4px right)
                 double top = Math.Round(yT - (FaucetBoxHeight - 6));  // base sits ON the lip
 
                 faucet.Margin = new Thickness(left, top, 0, 0);

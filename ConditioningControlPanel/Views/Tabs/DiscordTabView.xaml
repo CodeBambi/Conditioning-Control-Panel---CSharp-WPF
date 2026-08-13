@@ -232,8 +232,12 @@
                                                  position (derived from the jar ratios in ArmVat),
                                                  wobble/tilt/hover animations, tooltip text, sfx and
                                                  haptics. Drawn in XAML (no bitmap): metallic grays
-                                                 with the app's pink accent on the handle. -->
+                                                 with the app's pink accent on the handle.
+                                                 ZIndex -1 tucks it BEHIND the glass (owner call
+                                                 2026-08-13) — safe because the canvas is hit-test
+                                                 invisible, so hover/click still reach the tap. -->
                                             <Grid x:Name="ProfileVatFaucet" x:FieldModifier="internal"
+                                                  Panel.ZIndex="-1"
                                                   Width="40" Height="42" HorizontalAlignment="Left"
                                                   VerticalAlignment="Top" Visibility="Collapsed"
                                                   Cursor="Hand" Background="Transparent"
