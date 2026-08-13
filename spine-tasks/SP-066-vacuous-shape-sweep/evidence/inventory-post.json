@@ -1,27 +1,7 @@
 [
   {
-    "Path": "CcpClient.Tests/AiAwarenessCooldownTests.cs",
-    "Line": 27,
-    "ClassName": "AiAwarenessCooldownTests",
-    "MethodName": "EmptyRegistry_AdmitsAllFourClasses",
-    "Key": "CcpClient.Tests/AiAwarenessCooldownTests.cs::AiAwarenessCooldownTests.EmptyRegistry_AdmitsAllFourClasses",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
     "Path": "CcpClient.Tests/AiAwarenessTests.cs",
-    "Line": 238,
-    "ClassName": "AiAwarenessTests",
-    "MethodName": "Packaging_BlockingPolicyOnAnyField_ZeroTransmission_TypedDrop",
-    "Key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.Packaging_BlockingPolicyOnAnyField_ZeroTransmission_TypedDrop",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AiAwarenessTests.cs",
-    "Line": 384,
+    "Line": 387,
     "ClassName": "AiAwarenessTests",
     "MethodName": "TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",
     "Key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",
@@ -32,7 +12,7 @@
   },
   {
     "Path": "CcpClient.Tests/AiAwarenessTests.cs",
-    "Line": 411,
+    "Line": 414,
     "ClassName": "AiAwarenessTests",
     "MethodName": "TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
     "Key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged",
@@ -101,66 +81,6 @@
     ]
   },
   {
-    "Path": "CcpClient.Tests/AiModerationBoundaryTests.cs",
-    "Line": 45,
-    "ClassName": "AiModerationBoundaryTests",
-    "MethodName": "Verdicts_SerializationRoundTrip_WithSurface",
-    "Key": "CcpClient.Tests/AiModerationBoundaryTests.cs::AiModerationBoundaryTests.Verdicts_SerializationRoundTrip_WithSurface",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AiModerationCoverageTests.cs",
-    "Line": 67,
-    "ClassName": "AiModerationCoverageTests",
-    "MethodName": "Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
-    "Key": "CcpClient.Tests/AiModerationCoverageTests.cs::AiModerationCoverageTests.Inventory_EveryWiredSurface_HasAnExecutableAssertion_EveryReservedSurface_NamesItsSeam",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AiModerationCoverageTests.cs",
-    "Line": 291,
-    "ClassName": "AiModerationCoverageTests",
-    "MethodName": "Boundary_PureLocalEvaluation_NoNetworkSurface",
-    "Key": "CcpClient.Tests/AiModerationCoverageTests.cs::AiModerationCoverageTests.Boundary_PureLocalEvaluation_NoNetworkSurface",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AiOperationContractTests.cs",
-    "Line": 401,
-    "ClassName": "AiOperationContractTests",
-    "MethodName": "VocabularyTypes_SerializeRoundTrip",
-    "Key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.VocabularyTypes_SerializeRoundTrip",
-    "Shapes": [
-      "no-assertion"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AiOperationContractTests.cs",
-    "Line": 456,
-    "ClassName": "AiOperationContractTests",
-    "MethodName": "CommandData_RoundTrips",
-    "Key": "CcpClient.Tests/AiOperationContractTests.cs::AiOperationContractTests.CommandData_RoundTrips",
-    "Shapes": [
-      "no-assertion"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/AvatarPackTests.cs",
-    "Line": 277,
-    "ClassName": "AvatarPackTests",
-    "MethodName": "Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource",
-    "Key": "CcpClient.Tests/AvatarPackTests.cs::AvatarPackTests.Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
     "Path": "CcpClient.Tests/BarkPipelineTests.cs",
     "Line": 562,
     "ClassName": "BarkPipelineTests",
@@ -172,17 +92,7 @@
   },
   {
     "Path": "CcpClient.Tests/CapabilityTests.cs",
-    "Line": 94,
-    "ClassName": "CapabilityTests",
-    "MethodName": "StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
-    "Key": "CcpClient.Tests/CapabilityTests.cs::CapabilityTests.StartupCancelled_LeavesRemainingProbesHonestlyNotProbed",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
-    "Path": "CcpClient.Tests/CapabilityTests.cs",
-    "Line": 332,
+    "Line": 335,
     "ClassName": "CapabilityTests",
     "MethodName": "RealCompositionRoot_CapabilityProbesPhase_PopulatesStatesViaRealProbes",
     "Key": "CcpClient.Tests/CapabilityTests.cs::CapabilityTests.RealCompositionRoot_CapabilityProbesPhase_PopulatesStatesViaRealProbes",
@@ -197,19 +107,19 @@
     "MethodName": "Windows_DelegatesToTheSameEngineLoadAsDtrh",
     "Key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
     "Shapes": [
-      "early-return",
-      "platform-predicate"
+      "platform-predicate",
+      "dynamic-skip"
     ]
   },
   {
     "Path": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs",
-    "Line": 40,
+    "Line": 41,
     "ClassName": "ChaosTunnelCapabilityTests",
     "MethodName": "Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
     "Key": "CcpClient.Tests/ChaosTunnelCapabilityTests.cs::ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
     "Shapes": [
-      "early-return",
-      "platform-predicate"
+      "platform-predicate",
+      "dynamic-skip"
     ]
   },
   {
@@ -354,16 +264,6 @@
     ]
   },
   {
-    "Path": "CcpClient.Tests/DtrhBridgeDiffTests.cs",
-    "Line": 41,
-    "ClassName": "DtrhBridgeDiffTests",
-    "MethodName": "Derivative_RetainsEveryOriginalLine_ExceptTheNamedTransportLines",
-    "Key": "CcpClient.Tests/DtrhBridgeDiffTests.cs::DtrhBridgeDiffTests.Derivative_RetainsEveryOriginalLine_ExceptTheNamedTransportLines",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
     "Path": "CcpClient.Tests/DtrhExitFlowTests.cs",
     "Line": 125,
     "ClassName": "DtrhProfileLockTests",
@@ -496,16 +396,6 @@
     ]
   },
   {
-    "Path": "CcpClient.Tests/HarnessEntryPointGateTests.cs",
-    "Line": 20,
-    "ClassName": "HarnessEntryPointGateTests",
-    "MethodName": "HarnessEntries_AreSingledOut_TableDrivenOverRegistry",
-    "Key": "CcpClient.Tests/HarnessEntryPointGateTests.cs::HarnessEntryPointGateTests.HarnessEntries_AreSingledOut_TableDrivenOverRegistry",
-    "Shapes": [
-      "assertions-all-nested"
-    ]
-  },
-  {
     "Path": "CcpClient.Tests/HarnessEntryPointGuardTests.cs",
     "Line": 27,
     "ClassName": "HarnessEntryPointGuardTests",
@@ -622,26 +512,26 @@
     "MethodName": "WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
     "Key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
     "Shapes": [
-      "early-return",
       "platform-predicate",
-      "fs-predicate"
+      "fs-predicate",
+      "dynamic-skip"
     ]
   },
   {
     "Path": "CcpClient.Tests/SecretStoreTests.cs",
-    "Line": 60,
+    "Line": 64,
     "ClassName": "SecretStoreTests",
     "MethodName": "LinuxProbe_TypedOutcome_NeverFaked",
     "Key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked",
     "Shapes": [
       "assertions-all-nested",
-      "early-return",
-      "platform-predicate"
+      "platform-predicate",
+      "dynamic-skip"
     ]
   },
   {
     "Path": "CcpClient.Tests/SecretStoreTests.cs",
-    "Line": 89,
+    "Line": 95,
     "ClassName": "SecretStoreTests",
     "MethodName": "ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
     "Key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.ForCurrentPlatform_ReturnsPlatformBackend_WithProbe",
@@ -651,14 +541,14 @@
   },
   {
     "Path": "CcpClient.Tests/SecretStoreTests.cs",
-    "Line": 112,
+    "Line": 118,
     "ClassName": "SecretStoreTests",
     "MethodName": "SettingsDocument_CarriesSecretNames_NeverValues",
     "Key": "CcpClient.Tests/SecretStoreTests.cs::SecretStoreTests.SettingsDocument_CarriesSecretNames_NeverValues",
     "Shapes": [
-      "early-return",
       "platform-predicate",
-      "fs-predicate"
+      "fs-predicate",
+      "dynamic-skip"
     ]
   },
   {

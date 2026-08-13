@@ -1,5 +1,5 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 2 — name-anchored skip pin in the wrapper
+**Current Step:** 3 — disposition every site
 **Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
@@ -15,7 +15,7 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] `floor.json` schema change designed (framing e) + the `allowedSkips` admission rule text (framing f, incl. the two named bans)
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch from reasoning
 
-### Step 2: name-anchored skip pin in the wrapper (BEFORE any conversion) — 🔄 In Progress
+### Step 2: name-anchored skip pin in the wrapper (BEFORE any conversion) — ✅ Complete (plan review engine-skipped SP-195)
 > ⚠️ Hydrate: expand from the Step 1 schema decision
 - [x] `floor.json` → `{ total, allowedSkips[] }` carrying the admission rule + existing `bumpRule` in-file
 - [x] `check-floor.mjs` enforces: zero bad outcomes, `passed + skipped == total`, every `NotExecuted` `testName` in `allowedSkips`; failure message NAMES the offending test; anchored on the TRX result list
@@ -25,7 +25,7 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] Injections removed and removal proven
 - [x] Schema + wrapper change in ONE commit; floor bumped in that commit if the count moved
 
-### Step 3: disposition every site — ⬜ Not Started
+### Step 3: disposition every site — 🔄 In Progress
 > ⚠️ Hydrate: one checkbox group per shape class once the Step 1 inventory exists
 - [ ] EVERY inventory entry verdicted: `not-vacuous` / `platform-skip-converted` / `fixed` / `deleted` / `residual` — none left unverdicted
 - [ ] `Assert.NotEmpty` (or explicit count assertion) before every loop-only assertion body dispositioned `not-vacuous` (framing c)

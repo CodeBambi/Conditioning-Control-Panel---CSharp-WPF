@@ -62,6 +62,9 @@ public class DtrhBridgeDiffTests
         };
 
         var removed = original.Where(line => !derivative.Contains(line)).ToArray();
+        // SP-066 framing (c): both loops carry the only assertions — pin both sources
+        // non-empty so a drifted diff (nothing removed / nothing kept) turns RED, not vacuous.
+        Assert.NotEmpty(removed);
         foreach (var line in removed)
         {
             Assert.Contains(line, admittedReplacements);
@@ -69,6 +72,7 @@ public class DtrhBridgeDiffTests
 
         // Every other original line survives, in order (subsequence check).
         var kept = original.Except(admittedReplacements).ToArray();
+        Assert.NotEmpty(kept);
         var position = 0;
         foreach (var line in kept)
         {

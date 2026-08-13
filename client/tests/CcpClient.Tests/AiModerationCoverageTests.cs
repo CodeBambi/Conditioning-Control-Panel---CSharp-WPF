@@ -69,6 +69,9 @@ public class AiModerationCoverageTests
         var h = new Harness(Policy);
         await h.AdmitProviderAsync();
 
+        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // non-empty so a future edit emptying it turns the coverage test RED, not vacuous.
+        Assert.NotEmpty(AiModerationSurfaces.All);
         foreach (var surface in AiModerationSurfaces.All)
         {
             if (surface.Disposition == AiModerationSurfaceDisposition.Reserved)
@@ -292,7 +295,12 @@ public class AiModerationCoverageTests
     {
         // Structural proof: the boundary mechanism (policy, escalation, boundary) holds no
         // network-capable dependency — only documents, counters, and clocks.
-        foreach (var type in new[] { typeof(AiModerationBoundary), typeof(AiModerationEscalation), typeof(AiModerationPolicy) })
+        // SP-066 framing (c): the loops carry the only assertions — pin the source
+        // non-empty first (per-ctor parameter emptiness is inherent to the subject: a
+        // parameterless ctor is legitimate and simply has nothing to check).
+        var boundaryTypes = new[] { typeof(AiModerationBoundary), typeof(AiModerationEscalation), typeof(AiModerationPolicy) };
+        Assert.NotEmpty(boundaryTypes);
+        foreach (var type in boundaryTypes)
         {
             foreach (var ctor in type.GetConstructors())
             {

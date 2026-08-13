@@ -50,6 +50,9 @@ public class AiModerationBoundaryTests
             new AiModerationVerdict.SoftHit("cat-1") { SurfaceId = "surface-1" },
             new AiModerationVerdict.Block("cat-2") { SurfaceId = "surface-2" },
         ];
+        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // non-empty so an empty sample set can never silence them invisibly.
+        Assert.NotEmpty(samples);
         foreach (var verdict in samples)
         {
             var json = JsonSerializer.Serialize(verdict, verdict.GetType());

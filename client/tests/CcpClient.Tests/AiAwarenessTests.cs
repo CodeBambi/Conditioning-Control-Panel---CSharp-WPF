@@ -248,6 +248,9 @@ public class AiAwarenessTests
             ["cat", "app", forbidden, "0m"],
             ["cat", "app", "title", forbidden],
         ];
+        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // non-empty so an empty case set can never silence them invisibly.
+        Assert.NotEmpty(cases);
         foreach (var fields in cases)
         {
             var h = new Harness(policy);

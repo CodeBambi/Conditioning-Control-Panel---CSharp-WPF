@@ -178,10 +178,11 @@ public static partial class VacuousShapeDetector
 
         var assertions = new List<(int Offset, int Depth)>();
         var skipTokens = false;
-        // depth 0 = a direct statement of the method body; >0 = inside a conditional/loop/using.
-        // The brace body's own opening brace must not count (it sits at body[0]); expression
-        // bodies carry no brace, so the base is 0 for them.
-        var baseDepth = body.Length > 0 && body[0] == '{' ? 1 : 0;
+        // depth 0 = a direct statement of the method body; >0 = inside a GUARDING block
+        // (if/else/foreach/for/while/switch/lambda — the shapes that can silence an
+        // assertion). try/finally/catch/using/lock/method/class/init braces do NOT guard:
+        // an assertion inside try{} with cleanup in finally cannot be silenced by it.
+        // The method body's own brace classifies non-guarding, so no base correction.
         foreach (Match m in AssertCall().Matches(body))
         {
             if (m.Groups[1].Value.StartsWith("Skip", StringComparison.Ordinal))
@@ -190,7 +191,7 @@ public static partial class VacuousShapeDetector
                 continue;
             }
 
-            assertions.Add((m.Index, DepthAt(body, m.Index) - baseDepth));
+            assertions.Add((m.Index, DepthAt(body, m.Index)));
         }
 
         var returns = BareReturn().Matches(body).Select(m => m.Index).ToArray();
@@ -247,6 +248,11 @@ public static partial class VacuousShapeDetector
             if (c.Index >= offset) break;
             var open = text.IndexOf('{', c.Index + c.Length);
             if (open < 0 || open >= offset) continue; // attribute sits before this class body
+            // A bodyless declaration (`class X;` — e.g. a CollectionDefinition) has no body
+            // brace of its own; the next '{' belongs to a LATER type. If a ';' or '}' stands
+            // between the declaration and the brace, this match does not own that brace.
+            var between = text[(c.Index + c.Length)..open];
+            if (between.Contains(';') || between.Contains('}')) continue;
             var depth = 0;
             var close = open;
             while (close < text.Length)
@@ -265,16 +271,67 @@ public static partial class VacuousShapeDetector
         return chain;
     }
 
+    /// <summary>Guarding depth at <paramref name="offset"/>: counts only braces whose block
+    /// can SILENCE the statements inside (conditional/loop/lambda). try/finally/catch/using/
+    /// lock/method/class/initializer braces are transparent to the count.</summary>
     private static int DepthAt(string body, int offset)
     {
+        var stack = new Stack<bool>(); // true = guarding brace
         var depth = 0;
         for (var i = 0; i < offset; i++)
         {
-            if (body[i] == '{') depth++;
-            else if (body[i] == '}') depth--;
+            if (body[i] == '{')
+            {
+                var guarding = IsGuardingBrace(body, i);
+                stack.Push(guarding);
+                if (guarding) depth++;
+            }
+            else if (body[i] == '}' && stack.Count > 0)
+            {
+                if (stack.Pop()) depth--;
+            }
         }
 
         return depth;
+    }
+
+    private static bool IsGuardingBrace(string text, int braceAt)
+    {
+        var j = braceAt - 1;
+        while (j >= 0 && char.IsWhiteSpace(text[j])) j--;
+        if (j < 0) return false;
+
+        if (j >= 1 && text[j] == '>' && text[j - 1] == '=') return true; // lambda body => { }
+
+        // Word-terminated blocks without a parameter list: else / try / finally / do.
+        if (char.IsLetter(text[j]))
+        {
+            var end = j + 1;
+            while (j >= 0 && char.IsLetterOrDigit(text[j])) j--;
+            var word = text[(j + 1)..end];
+            return word is "else"; // try/finally/do and declarations do not guard
+        }
+
+        if (text[j] != ')') return false; // initializer / property / other
+
+        // Find the keyword before the matching '(': if/foreach/for/while/switch guard;
+        // using/lock/catch/fixed and method declarations do not.
+        var parens = 1;
+        var k = j - 1;
+        while (k >= 0 && parens > 0)
+        {
+            if (text[k] == ')') parens++;
+            else if (text[k] == '(') parens--;
+            k--;
+        }
+
+        if (k < 0) return false;
+        var wend = k + 1;
+        while (wend > 0 && char.IsWhiteSpace(text[wend - 1])) wend--;
+        var wstart = wend;
+        while (wstart > 0 && char.IsLetterOrDigit(text[wstart - 1])) wstart--;
+        var keyword = text[wstart..wend];
+        return keyword is "if" or "foreach" or "for" or "while" or "switch";
     }
 
     /// <summary>Blank comments and string/char literals (contents replaced with spaces,
