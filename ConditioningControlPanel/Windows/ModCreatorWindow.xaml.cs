@@ -194,6 +194,7 @@ namespace ConditioningControlPanel
             ("skills", "Skills"),
             ("avatars", "Avatars"),
             ("uiassets", "UI Assets"),
+            ("uiart", "UI Art"),
             ("audio", "Audio"),
             ("browser", "Browser"),
             ("triggers", "Triggers"),
@@ -354,6 +355,7 @@ namespace ConditioningControlPanel
             BuildImageSlotsSection("skills", "Skills", "Icons for the nodes in the skill tree. Each icon represents a specific unlockable skill. Use square PNGs. Skill display names are changed via Text Replacements.", SkillSlots);
             BuildAvatarsSection();
             BuildImageSlotsSection("uiassets", "UI Assets", "Miscellaneous UI images: Bubble is the floating orb in the pop minigame, Tube is the glass container around the avatar, Spiral GIF is the hypnotic overlay animation, and Logo replaces the app logo.", UiAssetSlots);
+            BuildUiArtSection();
             BuildAudioSection();
             BuildBrowserSection();
             BuildTriggersSection();
@@ -361,7 +363,8 @@ namespace ConditioningControlPanel
             BuildPhrasesSection();
             BuildReplacementsSection();
             // Newer content types, one partial-class file per panel
-            // (ModCreatorWindow.Pools.cs, .Personalities.cs, .Advanced.cs,
+            // (ModCreatorWindow.UiArt.cs -- built above with the other image
+            // slots -- plus .Pools.cs, .Personalities.cs, .Advanced.cs,
             // .Barks.cs, .Mantras.cs, .EventAudio.cs, .Portraits.cs, .Emotes.cs).
             BuildPoolsSection();
             BuildPersonalitiesSection();
@@ -1869,9 +1872,19 @@ namespace ConditioningControlPanel
             return container;
         }
 
-        private void SetImageSlot(string key, string filePath)
+        /// <param name="validate">
+        /// True for a file the author just picked or dropped: the extension has to match the
+        /// slot key (the key IS the filename inside the package, so a JPEG accepted for a .png
+        /// slot ships bytes that lie about their format), and anything oversized asks first.
+        /// False for programmatic fills -- loading a .ccpmod or the active mod walks
+        /// resources/&lt;key&gt;, so the extension matches by construction and a per-file prompt
+        /// during a bulk load would be a wall of dialogs.
+        /// </param>
+        private void SetImageSlot(string key, string filePath, bool validate = true)
         {
             if (!_imageControls.ContainsKey(key)) return;
+
+            if (validate && !PassesImageSlotChecks(key, filePath)) return;
 
             try
             {
@@ -1903,6 +1916,41 @@ namespace ConditioningControlPanel
             catch { /* invalid image file */ }
         }
 
+        /// <summary>
+        /// Gate for an author-picked image: hard-rejects a format that does not match the slot's
+        /// filename, then asks before accepting a very large file. Rules live in
+        /// <see cref="ModImageSlotRules"/> (ModCreatorWindow.UiArt.cs); this only talks to the user.
+        /// Returns false to leave the slot exactly as it was.
+        /// </summary>
+        private bool PassesImageSlotChecks(string key, string filePath)
+        {
+            var mismatch = ModImageSlotRules.DescribeExtensionMismatch(key, filePath);
+            if (mismatch != null)
+            {
+                MessageBox.Show(this, mismatch, "Wrong file type",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            try
+            {
+                var size = new FileInfo(filePath).Length;
+                if (ModImageSlotRules.IsOversized(size))
+                {
+                    var answer = MessageBox.Show(this,
+                        $"\"{Path.GetFileName(filePath)}\" is {ModImageSlotRules.FormatSize(size)}.\n\n" +
+                        "Large art bloats your .ccpmod and costs memory every time the app decodes it. " +
+                        "Most of these slots are 1376x768 or smaller, which is well under 4 MB as a PNG.\n\n" +
+                        "Use it anyway?",
+                        "Large image", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (answer != MessageBoxResult.Yes) return false;
+                }
+            }
+            catch { /* unreadable size is not a reason to block the pick */ }
+
+            return true;
+        }
+
         private void ClearImageSlot(string key)
         {
             if (!_imageControls.ContainsKey(key)) return;
@@ -1926,10 +1974,17 @@ namespace ConditioningControlPanel
 
         private void BrowseImageForSlot(string key)
         {
+            // Lead with the slot's own extension: it is the only one SetImageSlot accepts, so
+            // offering "all images" first just walks the author into the rejection dialog.
+            var ext = Path.GetExtension(key);
+            var filter = string.IsNullOrEmpty(ext)
+                ? "Image Files|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|All Files|*.*"
+                : $"{ext.TrimStart('.').ToUpperInvariant()} Files|*{ext}|All Files|*.*";
+
             var ofd = new OpenFileDialog
             {
                 Title = $"Select image for {Path.GetFileName(key)}",
-                Filter = "Image Files|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|All Files|*.*",
+                Filter = filter,
             };
             if (ofd.ShowDialog() == true)
                 SetImageSlot(key, ofd.FileName);
@@ -2001,7 +2056,7 @@ namespace ConditioningControlPanel
                     {
                         var imgPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
                         if (File.Exists(imgPath))
-                            SetImageSlot(key, imgPath);
+                            SetImageSlot(key, imgPath, validate: false);
                     }
                     LoadAudioFromResources(resourcesDir);
                     LoadSideFilesFrom(resourcesDir);
@@ -2496,7 +2551,7 @@ namespace ConditioningControlPanel
                     {
                         var imgPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
                         if (File.Exists(imgPath))
-                            SetImageSlot(key, imgPath);
+                            SetImageSlot(key, imgPath, validate: false);
                     }
                     LoadAudioFromResources(resourcesDir);
                     LoadSideFilesFrom(resourcesDir);

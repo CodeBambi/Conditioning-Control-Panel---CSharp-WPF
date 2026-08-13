@@ -2015,6 +2015,13 @@ namespace ConditioningControlPanel
                     ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024),
+                    // The page hero and the Loom strip. Both brushes were named and left mutable
+                    // by the 0812 remake but never fed, so a .ccpmod overriding features/dtrh.png
+                    // or features/loom.png repainted every OTHER surface that uses those files and
+                    // left the two biggest ones on the embedded art. 1024 for the hero because it
+                    // is the full-width banner at the top of the wall; 512 for the strip.
+                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024),
+                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512),
                 };
                 foreach (var (path, brush, decodeWidth) in playHeroMap)
                 {
@@ -2040,29 +2047,14 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Loads a resource image (mod override first, embedded fallback) at a capped decode
-        /// size. ModResourceResolver.ResolveImage decodes at full resolution and caches, which
-        /// is wrong for the rail's marquee PNGs — this goes through ResolveUri instead so the
-        /// mod override still wins but DecodePixelWidth is honoured. Returns null on failure.
+        /// size. Thin delegate to <see cref="ModResourceResolver.ResolveImageDecoded"/> since the
+        /// mod-awareness sweep promoted the body into the resolver - the name stays because ~7
+        /// call sites in this window and its partials read better with it, and because the
+        /// resolver is now the only place that knows the cache key (which carries the width).
+        /// Returns null on failure, which is also how "the mod ships no such variant" is read.
         /// </summary>
-        private static BitmapImage? LoadModImageDecoded(string resourcePath, int decodeWidth)
-        {
-            try
-            {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(ModResourceResolver.ResolveUri(resourcePath), UriKind.Absolute);
-                bitmap.DecodePixelWidth = decodeWidth;
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                return bitmap;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("LoadModImageDecoded failed for {Path}: {Error}", resourcePath, ex.Message);
-                return null;
-            }
-        }
+        private static ImageSource? LoadModImageDecoded(string resourcePath, int decodeWidth)
+            => ModResourceResolver.ResolveImageDecoded(resourcePath, decodeWidth);
 
         private void BtnManageMods_Click(object sender, RoutedEventArgs e)
         {
@@ -2657,6 +2649,21 @@ namespace ConditioningControlPanel
                 });
                 // Re-load mod-aware feature images (description card images, VHS card)
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(LoadFeatureImages);
+                // The nav rail's seven door medallions are mod art too (nav/door_*.png).
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyDoorArt);
+                // THE ACCENT PALETTE. ApplyActiveModChange also calls this, but it is not on every
+                // path that changes the active mod: uninstalling the mod you are wearing makes
+                // ModService activate CCP Default by itself (ModService.UninstallMod), and that
+                // route never reaches ApplyActiveModChange - so the whole app kept the uninstalled
+                // mod's accent until the next restart. ModChanged is the authoritative signal, so
+                // the palette hangs off it as well.
+                //
+                // Running twice on a manual switch is deliberate and cheap: the body is a pure
+                // rewrite of ~40 Application.Resources entries (idempotent by construction), and
+                // the one thing it calls out to, RefreshChromeFx, is self-guarded and re-entrant.
+                // No last-applied-mod guard, because that would also suppress the legitimate
+                // re-apply after a mod is reinstalled under the same id with new theme colors.
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(RefreshThemeAwareElements);
             }
 
             // Re-apply code-behind strings when language changes (section headers, feature names, etc.)

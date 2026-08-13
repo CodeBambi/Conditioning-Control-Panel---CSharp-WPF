@@ -52,22 +52,13 @@ namespace ConditioningControlPanel
             ShowTab("quests");
         }
 
-        private void BtnPrograms_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTab("programs");
-
-            // The pulse is spent the moment the tab is found, whether or not the explainer shows.
-            if (App.Settings?.Current is { } s && !s.HasSeenProgramsTab)
-            {
-                s.HasSeenProgramsTab = true;
-                StopProgramsTabPulse();
-                App.Settings?.Save();
-            }
-
-            // Last, and deliberately after ShowTab: the explainer opens on top of the tab the user
-            // just landed on, so dismissing it leaves them looking at the thing it described.
-            ProgramsIntroPopup.ShowIfFirstTime(this);
-        }
+        // The rail button carries nothing of its own any more: spending HasSeenProgramsTab and
+        // opening the first-run explainer both moved into ShowTab's "programs" arm, because this was
+        // never the only way in. The Dashboard's Today card and the session-end toast both call
+        // ShowTab("programs") directly and used to bypass both - so the pulse kept announcing a tab
+        // the user had already been using, and the explainer was skipped for exactly the people who
+        // arrived without clicking the rail.
+        private void BtnPrograms_Click(object sender, RoutedEventArgs e) => ShowTab("programs");
 
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
         {
@@ -302,6 +293,23 @@ namespace ConditioningControlPanel
                     ProgramsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ProgramsTab);
                     RefreshProgramsUI();
+
+                    // Here rather than in BtnPrograms_Click: the Dashboard's Today card and the
+                    // session-end toast both arrive through ShowTab, and both used to skip the
+                    // explainer entirely while leaving the rail still pulsing at a tab the user was
+                    // already looking at. The pulse is spent the moment the tab is reached by ANY
+                    // route, whether or not the explainer itself shows.
+                    if (App.Settings?.Current is { } programsSettings && !programsSettings.HasSeenProgramsTab)
+                    {
+                        programsSettings.HasSeenProgramsTab = true;
+                        StopProgramsTabPulse();
+                        App.Settings?.Save();
+                    }
+
+                    // Last, and deliberately after the tab is up: the explainer opens on top of the
+                    // tab the user just landed on, so dismissing it leaves them looking at the thing
+                    // it described. Its own seen-flag and _opening latch make repeat calls no-ops.
+                    ProgramsIntroPopup.ShowIfFirstTime(this);
                     break;
 
                 case "enhancements":

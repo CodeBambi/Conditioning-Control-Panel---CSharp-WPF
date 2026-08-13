@@ -66,6 +66,14 @@ namespace ConditioningControlPanel
         /// A mod switch changes her name, her portrait, her flavor line and the mod chip, so the
         /// page re-reads. (It used to drop the sheen adorner instead — the sheen is gone; the
         /// re-read is what actually mattered and was previously done nowhere.)
+        ///
+        /// <para>The five-card PICKER grid rides the same hook. Its names go through MakeModAware,
+        /// the active card's border is the mod accent, and a mod can hide a whole avatar set
+        /// (IsCompanionSupported) — so a switch made while sitting on this tab left a card visible
+        /// that the new mod does not support, wearing the previous mod's name and accent. Nothing
+        /// else was repainting it: the picker is only written by SyncCompanionTabUI, which runs on
+        /// tab show. That also makes the "hook is installed on first show" ordering harmless — a mod
+        /// switched before this tab was ever opened is picked up by that very first sync.</para>
         /// </summary>
         private void OnCompanionFxModChanged(object? sender, ModPackage mod)
         {
@@ -77,6 +85,8 @@ namespace ConditioningControlPanel
                     return;
                 }
                 CompanionRoom?.Sync();
+                UpdateCompanionCardsUI();
+                UpdateCompanionPromptLabels();
             }
             catch (Exception ex) { App.Logger?.Debug("OnCompanionFxModChanged: {E}", ex.Message); }
         }

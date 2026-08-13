@@ -205,7 +205,12 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. You hand it over.",
         AccentColor = "#8A0F5E",
         RewardId = "kept_ch1_offering",
+        // The collar half has no surface behind it yet: every collar in the cosmetics registry is a
+        // mod-owned adornment behind its own achievement gate, and minting a new one is art plus a
+        // registry row plus a server entry, none of which this lane owns. It stays as a ledger line;
+        // the half that actually writes something is the session below.
         RewardDescription = "Her collar on your profile, and the day-7 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 1 -------------------------------------------------------------------------
@@ -413,6 +418,21 @@ public static partial class BuiltInPrograms
         AccentColor = "#B01684",
         RewardId = "kept_ch2_ache",
         RewardDescription = "A phrase pack in her words, and the day-14 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
+
+        // "In her words" literally: every line is a key of the Locked manifest's own SubliminalPool
+        // (see BuiltInMods.LockedId), so each one arrives with its linked whisper audio and haptic
+        // pattern rather than as a silent stranger. The chapter's templates run fifteen; the pack is
+        // the six that are about HER, because "a phrase pack" is not "the whole pool".
+        RewardPhrases = new List<string>
+        {
+            "MINE",
+            "SHE HOLDS THE KEY",
+            "ACHE FOR HER",
+            "KEPT AND HAPPY",
+            "STAY LOCKED",
+            "THANK HER"
+        },
         Days = new List<ProgramDay>
         {
             // ---- Day 8 -------------------------------------------------------------------------
@@ -506,7 +526,17 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession, like day 4's video task, and for a structural reason
+                        // rather than a shortfall: QuestCategory.Video credits actual playback
+                        // minutes of the user's own files, and KP-Habit starts mandatory videos at
+                        // one an hour, so a 45-minute session can only ever contribute a minute or
+                        // two of playback. The blurb already says it out loud - "twenty minutes of
+                        // it, and the session brings its own on top" - and the flag makes the Today
+                        // card say the same thing instead of implying the session will do the work.
+                        //
+                        // The ladder is 15 (day 4) -> 20 -> 25 (day 18) -> 30 (day 25).
                         Id = "d11_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 20 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -641,7 +671,10 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. It stops being something you do.",
         AccentColor = "#E81CA8",
         RewardId = "kept_ch3_habit",
+        // The avatar-set half is fiction with no client surface: avatar sets ship as mod content,
+        // not as something a program can mint. Ledger line only; the session is the real half.
         RewardDescription = "An avatar set of her, and the day-21 session saved. Banked - a restart cannot take it back.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 15 ------------------------------------------------------------------------
@@ -749,7 +782,9 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 11. The session's own playback runs underneath it.
                         Id = "d18_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 25 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -878,7 +913,10 @@ public static partial class BuiltInPrograms
         Subtitle = "Seven days. Then it isn't yours to call.",
         AccentColor = "#FF6EC7",
         RewardId = "kept_ch4_decision",
+        // The badge half is real and lands elsewhere: chapter 4 ends on day 28, which is graduation,
+        // and ProgramService.Graduate unlocks GraduationBadgeId ("kept_graduate").
         RewardDescription = "The Kept badge, and the day-28 session unlocked permanently.",
+        RewardSavesFinalSession = true,
         Days = new List<ProgramDay>
         {
             // ---- Day 22 ------------------------------------------------------------------------
@@ -1017,7 +1055,10 @@ public static partial class BuiltInPrograms
                         // the roadmap's haptics steps are spent and there is no haptics verifier -
                         // so this takes the longest single stretch of her video in the program
                         // instead, which is verified.
+                        // OutsideSession - see day 11, and the top of the ladder. 60 minutes of
+                        // session plus 30 of watching sits exactly on the 90-minute daily cap.
                         Id = "d25_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 30 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -1600,6 +1641,13 @@ public static partial class BuiltInPrograms
     ///
     /// The spiral pair is tuned so day 11 - the first day this template runs - starts it around
     /// minute 24 of a 45-minute session, so it arrives in the last third rather than greeting you.
+    ///
+    /// The flash ramp was re-authored on the 180-clamp pass: FlashPerHourEnd ran 66 -> 265, which put
+    /// day 18 at 197 an hour against an AppSettings.FlashFrequency clamp of 180, and left days 11-17
+    /// (146-177) with three units of headroom for the whole of KP-Verdict to escalate into. Now
+    /// 53 -> 180, landing 104 / 111 / 118 / 123 / 124 / 137 across days 11, 12, 13, 14, 17 and 18 -
+    /// wider day-to-day steps than the old pair gave, inside what the engine will run, and with room
+    /// left above for the last ten days.
     /// </summary>
     private static ProgramSessionTemplate KpHabit() => new()
     {
@@ -1611,7 +1659,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 34,
-            FlashPerHourEnd = 66,
+            FlashPerHourEnd = 53,
             FlashImages = 2,
             FlashOpacity = 30,
             FlashOpacityEnd = 50,
@@ -1678,7 +1726,7 @@ public static partial class BuiltInPrograms
         {
             FlashEnabled = true,
             FlashPerHour = 145,
-            FlashPerHourEnd = 265,
+            FlashPerHourEnd = 180,
             FlashImages = 3,
             FlashOpacity = 76,
             FlashOpacityEnd = 95,
@@ -1745,6 +1793,15 @@ public static partial class BuiltInPrograms
     /// (days 19-21 and 23-28), so the ceiling deliberately sits above what day 28 reaches - the
     /// replayable graduation hands over can be pushed further later, and this pair cannot be
     /// re-authored once users have it saved.
+    ///
+    /// The flash pair was re-authored on the 180-clamp pass, and this template was the worst case in
+    /// the whole set. It ran 75/145 -> 240/580, so the nine days on it started at 184-240 an hour and
+    /// ended at 432-580: every number at both ends above the 180/hour AppSettings.FlashFrequency
+    /// clamp. Days 19 through 28 - "long slow ramps" is the template's entire brief - ran at a flat
+    /// 180 from the first second to the last, and day 28 was identical to day 19 in the field the
+    /// finale was built around. Now 62/98 -> 136/180, landing 115 -> 157 on day 19 and 136 -> 180 on
+    /// day 28, correctly ordered in between, with 180 as the real top of the program rather than a
+    /// number nothing reads. Circe's ramps are still the slowest in the set, which is the point.
     /// </summary>
     private static ProgramSessionTemplate KpVerdict() => new()
     {
@@ -1755,8 +1812,8 @@ public static partial class BuiltInPrograms
         Floor = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 75,
-            FlashPerHourEnd = 145,
+            FlashPerHour = 62,
+            FlashPerHourEnd = 98,
             FlashImages = 2,
             FlashOpacity = 42,
             FlashOpacityEnd = 64,
@@ -1835,8 +1892,8 @@ public static partial class BuiltInPrograms
         Ceiling = new SessionSettings
         {
             FlashEnabled = true,
-            FlashPerHour = 240,
-            FlashPerHourEnd = 580,
+            FlashPerHour = 136,
+            FlashPerHourEnd = 180,
             FlashImages = 4,
             FlashOpacity = 80,
             FlashOpacityEnd = 100,

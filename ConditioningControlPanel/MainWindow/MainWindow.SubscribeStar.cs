@@ -43,6 +43,8 @@ namespace ConditioningControlPanel
                     // features unlock/relock based on the combined entitlement.
                     UpdatePatreonUI();
                     UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                    // Same shared gate, same staleness: see the note in OnPatreonTierChanged.
+                    if (ProgramsTab != null) RefreshProgramsUI();
                     MaybeShowPremiumCelebration();
                 }
                 catch (Exception ex)

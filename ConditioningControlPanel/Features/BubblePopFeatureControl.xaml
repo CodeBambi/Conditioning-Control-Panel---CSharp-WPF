@@ -16,7 +16,7 @@
             <Grid>
                 <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                     <Border.Background>
-                        <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                        <ImageBrush x:Name="HeroArtBrush" Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                             <ImageBrush.ImageSource>
                                 <BitmapImage UriSource="pack://application:,,,/Resources/features/Bubble_pop.png" DecodePixelWidth="480"/>
                             </ImageBrush.ImageSource>
@@ -209,7 +209,7 @@
                     BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                     VerticalAlignment="Stretch" MinHeight="200">
                 <Border.Background>
-                    <ImageBrush Stretch="UniformToFill">
+                    <ImageBrush x:Name="SideArtBrush" Stretch="UniformToFill">
                         <ImageBrush.ImageSource>
                             <BitmapImage UriSource="pack://application:,,,/Resources/features/Bubble_pop.png"
                                          DecodePixelWidth="800"/>

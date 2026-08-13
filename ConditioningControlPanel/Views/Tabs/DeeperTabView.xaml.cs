@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -13,12 +14,84 @@ namespace ConditioningControlPanel.Views.Tabs
             // FX lifecycle (PR-4b): the header glyph's drift starts when the tab appears and is
             // parked the moment it is collapsed again.
             IsVisibleChanged += DeeperTabView_IsVisibleChanged;
+            Loaded += DeeperTabView_Loaded;
+            Unloaded += DeeperTabView_Unloaded;
         }
 
         private void DeeperTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OnDeeperTabVisibilityChanged(IsVisible);
+        }
+
+        // ==== mod-aware feature art =====================================================
+        // Both deeper.png plates author a pack:// URI in XAML, which is the BASE art and stays
+        // as the fallback. A mod shipping resources/features/deeper.png has to repaint them,
+        // and only ModChanged is authoritative about that: ApplyActiveModChange is never reached
+        // when the ACTIVE mod is uninstalled (ModService activates the fallback itself), which
+        // used to leave the dead mod's art on screen.
+        //
+        // SOURCES ONLY. The side plate's explicit Height=520 + VerticalAlignment=Top is load-
+        // bearing (a background-only Border has no natural height, and a Stretch-aligned one
+        // gets centred in the leftover column space, which floated the art mid-page). Nothing
+        // below touches layout.
+
+        /// <summary>Guards against a double subscription if Loaded fires again after a re-parent.</summary>
+        private bool _modArtHooked;
+
+        private void DeeperTabView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged += OnModChangedArt;
+                _modArtHooked = true;
+            }
+            ApplyFeatureArt();
+        }
+
+        private void DeeperTabView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged -= OnModChangedArt;
+                _modArtHooked = false;
+            }
+        }
+
+        // ModChanged can be raised off the UI thread; marshal before touching the brushes.
+        private void OnModChangedArt(object? sender, Models.ModPackage mod)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(ApplyFeatureArt));
+                return;
+            }
+            ApplyFeatureArt();
+        }
+
+        /// <summary>
+        /// Repaints the hero and side-art plates from the active mod's deeper.png, if it has one.
+        /// A null resolve is left alone deliberately: the plate degrades to its authored pack://
+        /// art rather than to an empty rectangle.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            try
+            {
+                const string Art = "features/deeper.png";
+
+                var hero = ModResourceResolver.ResolveImageDecoded(Art, 480);
+                if (hero != null && DeeperHeroArtBrush != null && !DeeperHeroArtBrush.IsFrozen)
+                    DeeperHeroArtBrush.ImageSource = hero;
+
+                var side = ModResourceResolver.ResolveImageDecoded(Art, 800);
+                if (side != null && DeeperSideArtBrush != null && !DeeperSideArtBrush.IsFrozen)
+                    DeeperSideArtBrush.ImageSource = side;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperTabView feature art: {E}", ex.Message);
+            }
         }
 
         // Row hover lift. Composed with (not a replacement for) the row's existing IsMouseOver

@@ -273,6 +273,28 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The Presets tab's mod-switch repaint, called by the sweep in MainWindow.UiUpdates.cs
+        /// (immediately if the tab is on screen, otherwise off the dirty flag on its next show).
+        ///
+        /// <para>Every card is rebuilt because both halves of it are mod-derived: the name goes
+        /// through MakeModAware and the selected card's border is PinkBrush. The detail pane is only
+        /// re-titled when a PRESET is what it is showing - the pane is shared with sessions, and
+        /// calling SelectPreset here would yank a user who had a session open back onto a preset.</para>
+        /// </summary>
+        private void RefreshPresetsModVisuals()
+        {
+            RefreshPresetsList();
+
+            if (_selectedPreset == null) return;
+            if (PresetsTab?.PresetDetailScroller?.Visibility != Visibility.Visible) return;
+
+            if (PresetsTab.TxtDetailTitle != null)
+                PresetsTab.TxtDetailTitle.Text = App.Mods?.MakeModAware(_selectedPreset.Name) ?? _selectedPreset.Name;
+            if (PresetsTab.TxtDetailSubtitle != null)
+                PresetsTab.TxtDetailSubtitle.Text = App.Mods?.MakeModAware(_selectedPreset.Description) ?? _selectedPreset.Description;
+        }
+
         private Border CreatePresetCard(Models.Preset preset)
         {
             var isSelected = _selectedPreset?.Id == preset.Id;

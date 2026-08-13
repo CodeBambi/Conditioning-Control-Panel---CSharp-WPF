@@ -17,7 +17,7 @@
                 <Grid ClipToBounds="True">
                     <Border Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0">
                         <Border.Background>
-                            <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                            <ImageBrush x:Name="HeroArtBrush" Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                                 <ImageBrush.ImageSource>
                                     <BitmapImage UriSource="pack://application:,,,/Resources/features/Phrase_Lock.png"
                                                  DecodePixelWidth="480"/>
@@ -174,7 +174,7 @@
                         BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                         VerticalAlignment="Stretch" MinHeight="200">
                     <Border.Background>
-                        <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush x:Name="SideArtBrush" Stretch="UniformToFill">
                             <ImageBrush.ImageSource>
                                 <BitmapImage UriSource="pack://application:,,,/Resources/features/Phrase_Lock.png"
                                              DecodePixelWidth="800"/>

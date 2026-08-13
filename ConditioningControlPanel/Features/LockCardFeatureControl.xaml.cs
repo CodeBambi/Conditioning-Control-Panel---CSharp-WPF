@@ -23,9 +23,20 @@ namespace ConditioningControlPanel.Features
         // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
         private SettingsHook? _settingsHook;
 
-        private void OnLoaded(object sender, RoutedEventArgs e) => RebindToCurrentSettings();
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            RebindToCurrentSettings();
+            // The hero and side plates are mod art; the rack hosts this control permanently, so a
+            // mod switch must repaint them (a popup instance never lived long enough to care).
+            ApplyFeatureArt();
+            if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+        }
 
-        private void OnUnloaded(object sender, RoutedEventArgs e) => _settingsHook?.Unhook();
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            _settingsHook?.Unhook();
+            if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
 
         /// <inheritdoc/>
         public void RebindToCurrentSettings()
@@ -227,5 +238,58 @@ namespace ConditioningControlPanel.Features
             };
             dialog.ShowDialog();
         }
+
+        // =====================================================================================
+        //  feature art (mod-aware)
+        // =====================================================================================
+
+        /// <summary>
+        /// This page's art under <c>Resources/features/</c>. Verbatim the file the XAML already
+        /// declares as its pack:// default on both plates - naming it here changes WHICH lookup
+        /// runs, never WHICH file is asked for.
+        /// </summary>
+        private const string FeatureArtPath = "features/Phrase_Lock.png";
+
+        /// <summary>
+        /// Pushes the (possibly mod-overridden) feature art into the 72px hero plate and the tall
+        /// side plate. Both plates author a pack:// default in XAML, so a null resolve here leaves
+        /// the built-in art standing rather than blanking the plate - the same degrade rule
+        /// <c>RemoteControlTabView.ApplyFeatureArt</c> follows.
+        ///
+        /// <para>Two widths, not one: the hero is 240px wide and the side plate is a full-height
+        /// column, and <see cref="Services.ModResourceResolver.ResolveImageDecoded"/> keys its cache on the
+        /// width, so each is decoded once for the whole session per mod.</para>
+        ///
+        /// <para>The brushes are mutated in place. Swapping the <c>Border.Background</c> object
+        /// would work too and would throw away the XAML-declared Stretch/AlignmentX/Opacity with
+        /// it; a frozen brush would silently never repaint at all, which is why they are named
+        /// rather than declared inline as literals.</para>
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            try
+            {
+                var hero = Services.ModResourceResolver.ResolveImageDecoded(FeatureArtPath, 480);
+                if (hero != null && HeroArtBrush is { IsFrozen: false }) HeroArtBrush.ImageSource = hero;
+
+                var side = Services.ModResourceResolver.ResolveImageDecoded(FeatureArtPath, 800);
+                if (side != null && SideArtBrush is { IsFrozen: false }) SideArtBrush.ImageSource = side;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("LockCardFeatureControl.ApplyFeatureArt: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// ModChanged can be raised off the UI thread, so every body it reaches is marshalled.
+        /// Subscribed on Loaded and dropped on Unloaded: the rack hosts this control
+        /// PERMANENTLY, so an unbalanced hook would accumulate one dead handler per re-host.
+        /// </summary>
+        private void OnModChanged(object? sender, Models.ModPackage mod)
+        {
+            Dispatcher.BeginInvoke(new Action(ApplyFeatureArt));
+        }
+
     }
 }

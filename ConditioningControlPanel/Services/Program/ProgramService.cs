@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -30,10 +31,26 @@ public class ProgramChapterEventArgs : EventArgs
     public ProgramDefinition Program { get; }
     public ProgramChapter Chapter { get; }
 
-    public ProgramChapterEventArgs(ProgramDefinition program, ProgramChapter chapter)
+    /// <summary>The banked reward's id, lifted off the chapter so a subscriber never has to dig.</summary>
+    public string? RewardId => Chapter.RewardId;
+
+    /// <summary>Player-facing description of what the chapter banked.</summary>
+    public string? RewardDescription => Chapter.RewardDescription;
+
+    /// <summary>
+    /// The enrollment already held this reward when the chapter completed - i.e. this is a later
+    /// attempt re-finishing a chapter whose reward was banked on an earlier one. A subscriber that
+    /// grants anything MUST check this: banked rewards deliberately survive
+    /// <see cref="ProgramEnrollment.RestartForNewAttempt"/>, so without the flag every restart
+    /// would re-grant chapter 1 the moment the user reached it again.
+    /// </summary>
+    public bool AlreadyBanked { get; }
+
+    public ProgramChapterEventArgs(ProgramDefinition program, ProgramChapter chapter, bool alreadyBanked = false)
     {
         Program = program;
         Chapter = chapter;
+        AlreadyBanked = alreadyBanked;
     }
 }
 
@@ -66,10 +83,44 @@ public class ProgramService : IDisposable
     private readonly DispatcherTimer? _clockTimer;
     private readonly List<Action> _engineUnsubscribe = new();
 
-    private bool _isDirty;
+    /// <summary>
+    /// Bumped by every <see cref="MarkDirty"/>, and only ever caught up to by a write that actually
+    /// landed. The old boolean was cleared BEFORE the async write ran, so a sharing violation - or
+    /// any of the swallowed IO failures below - lost the change silently AND left Dispose with
+    /// nothing to flush. A counter also survives a MarkDirty that arrives while a save is in
+    /// flight: the write records the generation it serialised, never the current one.
+    /// </summary>
+    private long _dirtyGeneration;
+    private long _savedGeneration;
+
+    /// <summary>Serialises every write to <see cref="_statePath"/>, sync and async alike.</summary>
+    private readonly object _writeLock = new();
 
     /// <summary>Id of the session the program launched, so an unrelated session can't tick the day.</summary>
     private string? _expectedSessionId;
+
+    /// <summary>
+    /// The day the launched session was built FOR. A session started at 03:30 finishes after the
+    /// 04:00 boundary, by which point "today" is a different day and a different record: crediting
+    /// whatever TodayRecord resolves to at completion time stamped the finished day Missed, spent a
+    /// day off for it, and filed the completion against tomorrow. Credit the day the work was for.
+    /// </summary>
+    private int _expectedSessionDayIndex;
+    private DateTime _expectedSessionProgramDate;
+
+    /// <summary>
+    /// Whether the most recently built program session's completion credit landed. The end-of-session
+    /// toast must not answer this from TodayRecord: after a boundary-crossing session the credit sits
+    /// on the previous day's record, and today's would read "ended early" for a finished session.
+    /// Reset when a session is built, set by <see cref="NotifySessionCompleted"/>.
+    /// </summary>
+    public bool LastProgramSessionCompleted { get; private set; }
+
+    /// <summary>
+    /// A rollover fell due while the program's own session was still running. The clock is held
+    /// until the session ends and its completion has been credited - see <see cref="EvaluateRollover"/>.
+    /// </summary>
+    private bool _rolloverDeferred;
 
     /// <summary>
     /// The engine handed over by <see cref="AttachSessionEngine"/>, kept so leaving the program can
@@ -109,9 +160,8 @@ public class ProgramService : IDisposable
             _saveTimer.Tick += (_, _) =>
             {
                 if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
-                if (!_isDirty) return;
+                if (!HasUnsavedChanges) return;
 
-                _isDirty = false;
                 SaveAsync();
             };
             _saveTimer.Start();
@@ -123,6 +173,7 @@ public class ProgramService : IDisposable
             {
                 if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                 EvaluateRollover();
+                CheckNudge();
             };
             _clockTimer.Start();
         }
@@ -154,14 +205,41 @@ public class ProgramService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Today's ledger row, or null when there is no run or the day has never been touched.
+    ///
+    /// Deliberately non-mutating. It used to call GetOrCreateRecord, so every repaint of the Today
+    /// card inserted a row into the persisted dictionary - without MarkDirty, so the insert either
+    /// vanished or rode out on an unrelated save, and it happened even for Graduated and Withdrawn
+    /// runs where the day the row claims does not exist. Everything that legitimately needs a row
+    /// asks for one through <see cref="EnsureTodayRecord"/>, which marks the state dirty.
+    /// </summary>
     public ProgramDayRecord? TodayRecord
     {
         get
         {
             var enrollment = State.Active;
             if (enrollment == null) return null;
-            return enrollment.GetOrCreateRecord(enrollment.CurrentDay, enrollment.CurrentDayDate);
+            return enrollment.GetRecord(enrollment.CurrentDay);
         }
+    }
+
+    /// <summary>
+    /// Today's ledger row, created if this is the first thing that happened today. Only for paths
+    /// that are actually recording something - see <see cref="TodayRecord"/> for why reading must
+    /// never create.
+    /// </summary>
+    private ProgramDayRecord? EnsureTodayRecord()
+    {
+        var enrollment = State.Active;
+        if (enrollment is not { State: ProgramEnrollmentState.Active or ProgramEnrollmentState.Paused }) return null;
+
+        var existing = enrollment.GetRecord(enrollment.CurrentDay);
+        if (existing != null) return existing;
+
+        var created = enrollment.GetOrCreateRecord(enrollment.CurrentDay, enrollment.CurrentDayDate);
+        MarkDirty();
+        return created;
     }
 
     public ProgramChapter? TodayChapter
@@ -191,6 +269,16 @@ public class ProgramService : IDisposable
         if (State.Active is { State: ProgramEnrollmentState.Active or ProgramEnrollmentState.Paused })
         {
             reason = "Another program is already running.";
+            return false;
+        }
+
+        // A lapsed run is not finished, it is waiting on a decision (restart or withdraw), and both
+        // of those are already on screen. Enrolling straight over it discarded the whole attempt -
+        // records, attempt number, banked rewards - with no archive and no prompt. A GRADUATED run
+        // stays enrollable: it is done, and Enroll archives it exactly the way DismissGraduated does.
+        if (State.Active is { State: ProgramEnrollmentState.Lapsed })
+        {
+            reason = "Finish or leave the lapsed program first.";
             return false;
         }
 
@@ -241,6 +329,16 @@ public class ProgramService : IDisposable
         };
 
         enrollment.GetOrCreateRecord(1, enrollment.CurrentDayDate);
+
+        // Whatever was standing there is finished (CanEnroll rejects everything else), so file it
+        // in History the way DismissGraduated would rather than dropping it on the floor. The
+        // ledger is the only record a completed run leaves.
+        if (State.Active != null)
+        {
+            State.History.Add(State.Active);
+            App.Logger?.Information("Archived the previous {State} run of {Program} before enrolling",
+                State.Active.State, State.Active.ProgramId);
+        }
 
         State.Active = enrollment;
         MarkDirty();
@@ -339,7 +437,10 @@ public class ProgramService : IDisposable
         // is still on screen. "Withdraw" has to mean the program stops, not just that its bookkeeping
         // stops. Done first so the stop unwinds against a still-coherent enrollment - see
         // StopProgramSessionIfRunning for the two bugs this closes.
-        StopProgramSessionIfRunning("withdraw");
+        // The session is being ended BY the withdrawal, not walked out on: it must not read as an
+        // abandoned session against the achievement tracker. Leaving a program is a supported exit
+        // that costs nothing, and charging it to "Relapse"-style counters made it quietly costly.
+        StopProgramSessionIfRunning("withdraw", suppressAbandonTracking: true);
 
         enrollment.State = ProgramEnrollmentState.Withdrawn;
         State.History.Add(enrollment);
@@ -385,6 +486,22 @@ public class ProgramService : IDisposable
         if (enrollment == null || program == null) return;
         if (enrollment.State != ProgramEnrollmentState.Active) return;
 
+        // Never judge a day while the user is still inside it. The 04:00 boundary lands in the
+        // middle of the sessions this app is actually used for: a 03:30 start crosses it, and the
+        // one-minute poll would stamp the day Missed, spend the allowance (or lapse the run) and
+        // re-point TodayRecord at tomorrow - all while the session that completes the day is on
+        // screen. Held here and re-run from OnSessionEnded once the completion is credited.
+        if (IsProgramSessionInFlight)
+        {
+            if (!_rolloverDeferred)
+            {
+                _rolloverDeferred = true;
+                App.Logger?.Information("Program {Program}: rollover held - day {Day}'s session is still running",
+                    program.Id, enrollment.CurrentDay);
+            }
+            return;
+        }
+
         var today = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
 
         // Settle the outgoing day before it is judged. Only the day that was current can carry
@@ -402,6 +519,25 @@ public class ProgramService : IDisposable
             program.LengthDays,
             enrollment.DaysOffRemaining,
             enrollment.IsDayComplete);
+
+        if (result.ClockWentBackwards)
+        {
+            // The anchor is in the future, so the gap stays negative and every later evaluation
+            // returns early: the run parks on this day forever and no amount of waiting fixes it.
+            // A clock correction is not an absence - re-anchor and say so, spend nothing.
+            App.Logger?.Warning(
+                "Program {Program}: system clock moved backwards ({Anchor:yyyy-MM-dd} -> {Today:yyyy-MM-dd}) - re-anchoring day {Day}, nothing spent",
+                program.Id, enrollment.CurrentDayDate, today, enrollment.CurrentDay);
+
+            enrollment.CurrentDayDate = today;
+            var reanchored = enrollment.GetOrCreateRecord(enrollment.CurrentDay, today);
+            reanchored.ProgramDate = today;
+
+            MarkDirty();
+            Save();
+            RaiseTodayChanged();
+            return;
+        }
 
         if (!result.Advanced) return;
 
@@ -442,10 +578,48 @@ public class ProgramService : IDisposable
 
         MarkDirty();
         Save();
-        RaiseTodayChanged();
 
         App.Logger?.Information("Program {Program} rolled over to day {Day} (missed {Missed}, days off left {Left})",
             program.Id, enrollment.CurrentDay, result.MissedDays.Count, enrollment.DaysOffRemaining);
+
+        // The clock reports RanPastEnd when the absence swallowed the rest of the program. Nothing
+        // read it, so an unbounded absence on the final day cost one day off and then parked the run
+        // on that day indefinitely - never graduating, never lapsing, with no exit but Withdraw.
+        var closedOut = result.RanPastEnd && ResolveRunPastEnd(program, enrollment);
+        if (!closedOut) RaiseTodayChanged();
+    }
+
+    /// <summary>
+    /// Decide what an absence that outran the program means. Returns true when the run has been
+    /// closed out (graduated), false when it stays open on the final day.
+    ///
+    /// The final day is already finished -> graduate, because the only thing that was ever missing
+    /// was someone opening the app. Otherwise the user is left standing on the final day, which the
+    /// normal Return Day / allowance path above has already priced; the run is one day's work from
+    /// finishing rather than parked forever.
+    /// </summary>
+    private bool ResolveRunPastEnd(ProgramDefinition program, ProgramEnrollment enrollment)
+    {
+        var finalDay = program.GetDay(program.LengthDays);
+        var finalRecord = enrollment.GetRecord(program.LengthDays);
+
+        if (finalDay != null && finalRecord is { DayCompleted: true }
+            && enrollment.State == ProgramEnrollmentState.Active)
+        {
+            App.Logger?.Information(
+                "Program {Program}: absence ran past the end and the final day was already complete - graduating",
+                program.Id);
+
+            Graduate(program, enrollment, finalDay, finalRecord);
+            Save();
+            RaiseTodayChanged();
+            return true;
+        }
+
+        App.Logger?.Information(
+            "Program {Program}: absence ran past the end - the run stands on final day {Day}, still to be finished",
+            program.Id, program.LengthDays);
+        return false;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -475,7 +649,7 @@ public class ProgramService : IDisposable
             var session = ProgramSessionBuilder.Build(program, day);
 
             // A Return Day is deliberately gentler than the day it replaces.
-            var record = TodayRecord;
+            var record = EnsureTodayRecord();
             if (record?.IsReturnDay == true)
             {
                 session.DurationMinutes = ReturnDayMinutes(session.DurationMinutes);
@@ -483,6 +657,13 @@ public class ProgramService : IDisposable
             }
 
             _expectedSessionId = session.Id;
+
+            // Pin the day this session was built for. The session outlives the day whenever it
+            // crosses the boundary hour, and the completion belongs to the day that was prescribed.
+            _expectedSessionDayIndex = day.DayIndex;
+            _expectedSessionProgramDate = State.Active?.CurrentDayDate ?? DateTime.Now.Date;
+            LastProgramSessionCompleted = false;
+
             return session;
         }
         catch (Exception ex)
@@ -505,6 +686,25 @@ public class ProgramService : IDisposable
         && _expectedSessionId != null
         && string.Equals(session.Id, _expectedSessionId, StringComparison.Ordinal);
 
+    /// <summary>The program's own session is on screen right now. Reads in-memory state only.</summary>
+    private bool IsProgramSessionInFlight
+    {
+        get
+        {
+            try
+            {
+                var engine = _engine;
+                return engine?.IsRunning == true && IsProgramSession(engine.CurrentSession);
+            }
+            catch
+            {
+                // A dead engine must never wedge the clock shut - a rollover we run one minute
+                // early is survivable, one we never run again is not.
+                return false;
+            }
+        }
+    }
+
     /// <summary>
     /// Ends the running session if - and only if - it is the one this program started, and forgets
     /// the expected id either way. Returns true if a session was actually stopped.
@@ -525,7 +725,7 @@ public class ProgramService : IDisposable
     /// session while a program happens to be enrolled, walking away from the program is not
     /// permission to kill something the program did not start.
     /// </summary>
-    public bool StopProgramSessionIfRunning(string reason)
+    public bool StopProgramSessionIfRunning(string reason, bool suppressAbandonTracking = false)
     {
         try
         {
@@ -538,7 +738,7 @@ public class ProgramService : IDisposable
             // Raises SessionStopped synchronously, which is what re-derives the feature lock and
             // resets the bottom bar. Clear the id AFTER the stop so anything listening on that
             // event can still tell the session apart from a foreign one while it unwinds.
-            engine.StopSession();
+            engine.StopSession(suppressAbandonTracking: suppressAbandonTracking);
             return true;
         }
         catch (Exception ex)
@@ -549,6 +749,7 @@ public class ProgramService : IDisposable
         finally
         {
             _expectedSessionId = null;
+            _expectedSessionDayIndex = 0;
         }
     }
 
@@ -573,6 +774,13 @@ public class ProgramService : IDisposable
             engine.SessionCompleted += completed;
             _engineUnsubscribe.Add(() => engine.SessionCompleted -= completed);
 
+            // A held rollover has to be released on ANY end, not just a completion: a session the
+            // user stops at 04:05 would otherwise keep the clock shut until the next minute tick,
+            // and a stop during shutdown would never release it at all.
+            EventHandler stopped = (_, _) => OnSessionEnded();
+            engine.SessionStopped += stopped;
+            _engineUnsubscribe.Add(() => engine.SessionStopped -= stopped);
+
             _engine = engine;
 
             App.Logger?.Debug("ProgramService: attached to SessionEngine");
@@ -593,6 +801,10 @@ public class ProgramService : IDisposable
 
             _expectedSessionId = null;
             NotifySessionCompleted();
+
+            // Spent. A later call must fall back to the current day rather than credit a day the
+            // run has long since moved past.
+            _expectedSessionDayIndex = 0;
         }
         catch (Exception ex)
         {
@@ -600,23 +812,94 @@ public class ProgramService : IDisposable
         }
     }
 
-    /// <summary>Mark today's session slot done. Only reachable from a completed program session.</summary>
+    /// <summary>
+    /// Releases a rollover held by <see cref="EvaluateRollover"/> once the session it was waiting on
+    /// has ended.
+    ///
+    /// Posted rather than run inline: SessionStopped is raised PART WAY through StopSession, before
+    /// the completion event that credits the day. Running the clock here would judge the day a
+    /// moment before its completion landed - which is the whole bug the hold exists to prevent.
+    /// Background priority is the same "StopSession has fully unwound" beat the Programs tab uses.
+    /// </summary>
+    private void OnSessionEnded()
+    {
+        try
+        {
+            if (!_rolloverDeferred) return;
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
+            {
+                _rolloverDeferred = false;
+                return;
+            }
+
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (!_rolloverDeferred) return;
+                    _rolloverDeferred = false;
+                    EvaluateRollover();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "ProgramService: held rollover failed to run");
+                }
+            }), DispatcherPriority.Background);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "ProgramService: session end handling failed");
+            _rolloverDeferred = false;
+        }
+    }
+
+    /// <summary>
+    /// Mark the session slot done for the day the session was PRESCRIBED for. Only reachable from a
+    /// completed program session.
+    ///
+    /// The day is taken from <see cref="_expectedSessionDayIndex"/>, not from wherever the clock has
+    /// since moved to: a session begun at 03:30 finishes past the 04:00 boundary and belongs to the
+    /// day it was built for. Falls back to the current day for a completion that arrives with no
+    /// pinned day (a caller outside the build path).
+    /// </summary>
     public void NotifySessionCompleted()
     {
         var enrollment = State.Active;
         if (enrollment is not { State: ProgramEnrollmentState.Active }) return;
 
-        var record = TodayRecord;
-        if (record == null || record.SessionCompleted) return;
+        var dayIndex = _expectedSessionDayIndex > 0 ? _expectedSessionDayIndex : enrollment.CurrentDay;
+        var programDate = _expectedSessionDayIndex > 0 ? _expectedSessionProgramDate : enrollment.CurrentDayDate;
+
+        var record = enrollment.GetOrCreateRecord(dayIndex, programDate);
+        LastProgramSessionCompleted = true;
+        if (record.SessionCompleted) return;
 
         record.SessionCompleted = true;
         record.SessionCompletedAt = DateTime.Now;
+
+        // The day was on its way to being judged an absence when the work landed. Completing it
+        // has to undo that verdict, not sit alongside it, or the record reads as missed AND done.
+        if (record.Missed)
+        {
+            App.Logger?.Information(
+                "Program {Program} day {Day}: completion arrived for a day already stamped missed - clearing the miss",
+                enrollment.ProgramId, dayIndex);
+            record.Missed = false;
+            if (record.DayOffSpent)
+            {
+                record.DayOffSpent = false;
+                enrollment.DaysOffRemaining++;
+            }
+        }
+
         MarkDirty();
 
         App.Logger?.Information("Program {Program} day {Day}: session slot completed",
-            enrollment.ProgramId, enrollment.CurrentDay);
+            enrollment.ProgramId, dayIndex);
 
-        CheckDayCompletion();
+        CheckDayCompletion(dayIndex);
         RaiseTodayChanged();
     }
 
@@ -637,10 +920,11 @@ public class ProgramService : IDisposable
         var day = Today;
         if (enrollment is not { State: ProgramEnrollmentState.Active } || day == null) return;
 
-        var record = TodayRecord;
+        var record = EnsureTodayRecord();
         if (record == null || record.DayCompleted) return;
 
         var progressed = false;
+        var taskFinished = false;
 
         foreach (var task in day.Tasks)
         {
@@ -654,9 +938,10 @@ public class ProgramService : IDisposable
             record.TaskProgress[task.Id] = current;
             progressed = true;
 
-            if (current >= Math.Max(1, task.TargetValue))
+            if (current >= EffectiveTarget(day, task, record))
             {
                 record.CompletedTaskIds.Add(task.Id);
+                taskFinished = true;
                 App.Logger?.Information("Program {Program} day {Day}: task '{Task}' completed",
                     enrollment.ProgramId, day.DayIndex, task.Id);
             }
@@ -673,7 +958,55 @@ public class ProgramService : IDisposable
         MarkDirty();
         CheckDayCompletion();
         RaiseTodayChanged();
+
+        // Verified work is the one thing in this file the user cannot redo: the signal came and
+        // went. The 30s timer could drop up to half a minute of it on a crash, so a finished task
+        // is written now. Progress ticks still ride the timer - they arrive far too often to
+        // justify a disk write each.
+        if (taskFinished) Save();
     }
+
+    /// <summary>
+    /// The target a task is actually judged against today.
+    ///
+    /// A Return Day shortens the session to <see cref="ReturnDayMinutes"/> but the day's tasks were
+    /// authored against the full run. For minute-denominated verifiers that made several authored
+    /// days arithmetically unpassable exactly when the user was being forgiven - Takeover d4_pink
+    /// asks for 15 pink-filter minutes of a 45 minute session starting at minute 11, which a 27
+    /// minute Return Day cannot deliver no matter what the user does. Scaled by the same factor the
+    /// session was, rounded up, never below 1. The authored definition is never mutated: programs
+    /// are shared data and the Return Day is a property of this run's day, not of the program.
+    ///
+    /// Event-denominated verifiers (flashes, bubbles, lock cards) are left alone - they arrive at a
+    /// rate the shorter session already throttles, and scaling them twice would forgive the day.
+    /// </summary>
+    public static int EffectiveTarget(ProgramDay day, ProgramTask task, ProgramDayRecord? record)
+    {
+        var authored = Math.Max(1, task.TargetValue);
+
+        if (record?.IsReturnDay != true) return authored;
+        if (task.Kind != ProgramTaskKind.AutoVerified) return authored;
+        if (task.Verifier is not { } verifier || !MinuteDenominatedVerifiers.Contains(verifier)) return authored;
+
+        var authoredMinutes = Math.Max(1, day.SessionMinutes);
+        var returnMinutes = ReturnDayMinutes(authoredMinutes);
+        if (returnMinutes >= authoredMinutes) return authored;
+
+        var scaled = (int)Math.Ceiling(authored * (returnMinutes / (double)authoredMinutes));
+        return Math.Max(1, Math.Min(authored, scaled));
+    }
+
+    /// <summary>
+    /// Verifiers whose TargetValue counts MINUTES of runtime rather than events. Mirrors the
+    /// MinuteDenominated flags in ProgramDefinition.SessionFeatureVerifiers - the two must agree,
+    /// or a day passes authoring validation and then cannot be finished (or the reverse).
+    /// </summary>
+    private static readonly HashSet<QuestCategory> MinuteDenominatedVerifiers = new()
+    {
+        QuestCategory.Video,
+        QuestCategory.Spiral,
+        QuestCategory.PinkFilter,
+    };
 
     /// <summary>
     /// Complete a ritual task. Self-attested; the photo is always filed to the local diary folder and
@@ -697,7 +1030,7 @@ public class ProgramService : IDisposable
             t.Kind == ProgramTaskKind.Ritual && string.Equals(t.Id, taskId, StringComparison.OrdinalIgnoreCase));
         if (task == null) return false;
 
-        var record = TodayRecord;
+        var record = EnsureTodayRecord();
         if (record == null || record.CompletedTaskIds.Contains(task.Id)) return false;
 
         if (!string.IsNullOrWhiteSpace(photoPath))
@@ -745,6 +1078,10 @@ public class ProgramService : IDisposable
 
         CheckDayCompletion();
         RaiseTodayChanged();
+
+        // Same reasoning as the verified-task write in TrackVerifier: a ritual is a photograph the
+        // user took once. Losing it to the 30s window is not a thing that can be repeated.
+        Save();
         return true;
     }
 
@@ -753,7 +1090,74 @@ public class ProgramService : IDisposable
     /// the task stops blocking the day - they keep their progress and can finish. Which premium
     /// tasks swap to free equivalents on a lapsed pledge is still an open product decision.
     /// </summary>
-    public bool IsTaskBlocked(ProgramTask task) => task.RequiresPremium && !HasPremium;
+    public bool IsTaskBlocked(ProgramTask task)
+    {
+        if (task.RequiresPremium && !HasPremium) return true;
+
+        // A non-optional task the machine cannot possibly satisfy blocks the day invisibly: the
+        // Today card shows an unticked box, the user does everything asked, and the day never
+        // completes. Blocked tasks are already excluded from RequiredTasks, so naming the missing
+        // capability here is what lets the day finish.
+        if (task.Kind != ProgramTaskKind.AutoVerified) return false;
+
+        return task.Verifier switch
+        {
+            // BlinkTrainerService.Start() refuses outright without webcam consent, so the signal
+            // can never arrive. Consent is a pure settings read - deliberately NOT a device
+            // enumeration, which walks DirectShow and can block the UI thread for seconds.
+            QuestCategory.BlinkTrainer => !HasWebcamCapability,
+
+            // BubbleCountService picks from the videos folder (plus active content packs). An empty
+            // library means the minigame never plays a video and the counter never moves.
+            QuestCategory.BubbleCount => !HasVideoLibrary,
+
+            _ => false
+        };
+    }
+
+    private bool HasWebcamCapability
+    {
+        get
+        {
+            try { return WebcamTrackingService.IsConsentCurrent(); }
+            catch { return true; }   // unknown is not blocked - never forgive a day on a guess
+        }
+    }
+
+    // Probed at most once a minute: IsTaskBlocked runs from RequiredTasks, which the Today card
+    // calls on every repaint, and a recursive directory walk on that path would be felt.
+    private bool _hasVideoLibrary = true;
+    private DateTime _videoLibraryProbedAt = DateTime.MinValue;
+
+    private bool HasVideoLibrary
+    {
+        get
+        {
+            if ((DateTime.Now - _videoLibraryProbedAt).TotalSeconds < 60) return _hasVideoLibrary;
+            _videoLibraryProbedAt = DateTime.Now;
+
+            try
+            {
+                var videosPath = Path.Combine(App.EffectiveAssetsPath, "videos");
+                var extensions = new[] { ".mp4", ".webm", ".avi", ".mkv", ".mov", ".wmv" };
+
+                // EnumerateFiles, not GetFiles: this stops at the first hit instead of materialising
+                // a library that can run to thousands of files.
+                _hasVideoLibrary =
+                    (Directory.Exists(videosPath)
+                     && Directory.EnumerateFiles(videosPath, "*.*", SearchOption.AllDirectories)
+                         .Any(f => extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)))
+                    || (App.ContentPacks?.GetAllActivePackVideos().Count ?? 0) > 0;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Program video-library probe failed: {Error}", ex.Message);
+                _hasVideoLibrary = true;   // unknown is not blocked
+            }
+
+            return _hasVideoLibrary;
+        }
+    }
 
     /// <summary>Tasks that must be done for the day to count.</summary>
     public IEnumerable<ProgramTask> RequiredTasks(ProgramDay day) =>
@@ -766,14 +1170,23 @@ public class ProgramService : IDisposable
     // Completion, rewards, graduation
     // ---------------------------------------------------------------------------------------
 
-    private void CheckDayCompletion()
+    /// <summary>
+    /// Judge one day. <paramref name="dayIndex"/> defaults to the day the run is standing on; the
+    /// session-credit path passes the day the session was prescribed for, which is not the same day
+    /// once a session crosses the boundary hour.
+    /// </summary>
+    private void CheckDayCompletion(int dayIndex = 0)
     {
         var enrollment = State.Active;
         var program = ActiveProgram;
-        var day = Today;
-        var record = TodayRecord;
+        if (enrollment == null || program == null) return;
 
-        if (enrollment == null || program == null || day == null || record == null) return;
+        if (dayIndex <= 0) dayIndex = enrollment.CurrentDay;
+
+        var day = program.GetDay(dayIndex);
+        var record = enrollment.GetRecord(dayIndex);
+
+        if (day == null || record == null) return;
         if (record.DayCompleted) return;
         if (!record.SessionCompleted) return;
 
@@ -872,13 +1285,34 @@ public class ProgramService : IDisposable
 
         enrollment.CompletedChapterIds.Add(chapter.Id);
 
-        // Banked permanently. A later restart must never revoke this.
-        if (!string.IsNullOrWhiteSpace(chapter.RewardId) && !enrollment.BankedRewards.Contains(chapter.RewardId))
-            enrollment.BankedRewards.Add(chapter.RewardId);
+        // RestartForNewAttempt clears CompletedChapterIds but deliberately keeps BankedRewards, so
+        // a second attempt reaching chapter 1 lands here again for a reward the user already owns.
+        // The event still fires - the UI wants to celebrate the chapter either way - but it is
+        // flagged, because a subscriber that grants on the raise would hand out the same reward
+        // once per attempt.
+        var alreadyBanked = !string.IsNullOrWhiteSpace(chapter.RewardId)
+                            && enrollment.BankedRewards.Contains(chapter.RewardId!);
+
+        if (!string.IsNullOrWhiteSpace(chapter.RewardId) && !alreadyBanked)
+            enrollment.BankedRewards.Add(chapter.RewardId!);
 
         MarkDirty();
-        App.Logger?.Information("Program {Program} chapter '{Chapter}' complete", program.Id, chapter.Id);
-        ChapterCompleted?.Invoke(this, new ProgramChapterEventArgs(program, chapter));
+
+        if (string.IsNullOrWhiteSpace(chapter.RewardId))
+        {
+            App.Logger?.Information("Program {Program} chapter '{Chapter}' complete (no reward)",
+                program.Id, chapter.Id);
+        }
+        else
+        {
+            App.Logger?.Information(
+                "Program {Program} chapter '{Chapter}' complete - reward '{Reward}' {Verb} ({Description})",
+                program.Id, chapter.Id, chapter.RewardId,
+                alreadyBanked ? "was already banked" : "banked",
+                chapter.RewardDescription ?? "no description");
+        }
+
+        ChapterCompleted?.Invoke(this, new ProgramChapterEventArgs(program, chapter, alreadyBanked));
     }
 
     private void Graduate(ProgramDefinition program, ProgramEnrollment enrollment, ProgramDay day, ProgramDayRecord record)
@@ -918,6 +1352,65 @@ public class ProgramService : IDisposable
         }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // The daily nudge
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The reminder the user chose an hour for at enrollment. NudgeHour was persisted from day one
+    /// and read by nothing, so every run silently promised a nudge it never sent.
+    ///
+    /// Fires at most once per program-date (latched on the enrollment, so a restart inside the
+    /// nudge hour cannot repeat it), only while the run is Active, only when the hour has actually
+    /// arrived, and never once the day is already done - the point is to catch a day that is about
+    /// to be lost, not to congratulate. Rides the existing one-minute clock tick rather than adding
+    /// a timer, so it survives sleep and clock changes exactly like the rollover does.
+    /// </summary>
+    private void CheckNudge()
+    {
+        try
+        {
+            var enrollment = State.Active;
+            var program = ActiveProgram;
+            if (enrollment is not { State: ProgramEnrollmentState.Active } || program == null) return;
+            if (enrollment.NudgeHour < 0 || enrollment.NudgeHour > 23) return;
+
+            var now = DateTime.Now;
+            if (now.Hour != enrollment.NudgeHour) return;
+
+            var programDate = ProgramClock.ProgramDate(now, enrollment.DayBoundaryHour);
+            if (enrollment.LastNudgeDate == programDate) return;
+
+            var record = enrollment.GetRecord(enrollment.CurrentDay);
+            if (record?.DayCompleted == true)
+            {
+                // Latch anyway: the day is done, and re-checking it every minute until midnight
+                // only risks nudging if something later un-completes it.
+                enrollment.LastNudgeDate = programDate;
+                MarkDirty();
+                return;
+            }
+
+            enrollment.LastNudgeDate = programDate;
+            MarkDirty();
+            Save();
+
+            var day = Today;
+            var title = day == null
+                ? Localization.Loc.GetF("programs_nudge_open", program.Title)
+                : Localization.Loc.GetF("programs_nudge_day", program.Title, day.DayIndex, day.Title);
+
+            App.Notifications?.Show(title, NotificationType.Info, TimeSpan.FromSeconds(12));
+
+            App.Logger?.Information("Program {Program}: nudged for day {Day} at {Hour}:00",
+                program.Id, enrollment.CurrentDay, enrollment.NudgeHour);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "Program nudge failed");
+        }
+    }
+
     private void RaiseTodayChanged()
     {
         try { TodayChanged?.Invoke(this, EventArgs.Empty); }
@@ -928,12 +1421,28 @@ public class ProgramService : IDisposable
     // Persistence
     // ---------------------------------------------------------------------------------------
 
-    public void MarkDirty() => _isDirty = true;
+    public void MarkDirty() => Interlocked.Increment(ref _dirtyGeneration);
+
+    private bool HasUnsavedChanges =>
+        Interlocked.Read(ref _dirtyGeneration) != Interlocked.Read(ref _savedGeneration);
+
+    /// <summary>
+    /// Records that <paramref name="generation"/> reached disk. Never moves the mark backwards: a
+    /// slow write finishing after a faster newer one must not re-open changes that are already
+    /// safe, and must not close changes made after the snapshot it wrote.
+    /// </summary>
+    private void MarkSaved(long generation)
+    {
+        while (true)
+        {
+            var current = Interlocked.Read(ref _savedGeneration);
+            if (generation <= current) return;
+            if (Interlocked.CompareExchange(ref _savedGeneration, generation, current) == current) return;
+        }
+    }
 
     private ProgramState LoadState()
     {
-        var tmpPath = _statePath + ".tmp";
-
         if (File.Exists(_statePath))
         {
             try
@@ -947,79 +1456,121 @@ public class ProgramService : IDisposable
             }
         }
 
-        if (File.Exists(tmpPath))
+        // Every leftover temp, newest first: writes use a unique temp name, so an interrupted save
+        // can leave more than one behind.
+        foreach (var candidate in LeftoverTempFiles())
         {
             try
             {
-                var json = File.ReadAllText(tmpPath);
+                var json = File.ReadAllText(candidate);
                 var recovered = JsonSerializer.Deserialize<ProgramState>(json);
-                if (recovered != null)
-                {
-                    App.Logger?.Warning("Recovered program state from .tmp file");
-                    try { File.Move(tmpPath, _statePath, overwrite: true); } catch { }
-                    return recovered;
-                }
+                if (recovered == null) continue;
+
+                App.Logger?.Warning("Recovered program state from {Temp}", candidate);
+                try { File.Move(candidate, _statePath, overwrite: true); } catch { }
+                return recovered;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to recover program state from .tmp file");
+                App.Logger?.Error(ex, "Failed to recover program state from {Temp}", candidate);
             }
         }
 
         return new ProgramState();
     }
 
-    public void Save()
+    private IEnumerable<string> LeftoverTempFiles()
     {
         try
         {
             var dir = Path.GetDirectoryName(_statePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return Array.Empty<string>();
 
-            var json = JsonSerializer.Serialize(State, new JsonSerializerOptions { WriteIndented = true });
+            return Directory.GetFiles(dir, Path.GetFileName(_statePath) + "*.tmp")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
 
-            // Atomic: .tmp then rename, so a crash mid-write cannot cost someone their run.
-            var tmpPath = _statePath + ".tmp";
-            File.WriteAllText(tmpPath, json);
-            File.Move(tmpPath, _statePath, overwrite: true);
-            _isDirty = false;
+    /// <summary>Serialise now, write now. For the paths that must not lose the change.</summary>
+    public void Save()
+    {
+        long generation;
+        string json;
+
+        try
+        {
+            generation = Interlocked.Read(ref _dirtyGeneration);
+            json = JsonSerializer.Serialize(State, new JsonSerializerOptions { WriteIndented = true });
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to save program state");
+            App.Logger?.Error(ex, "Failed to serialize program state");
+            return;
         }
+
+        WriteState(json, generation);
     }
 
     /// <summary>Serialize on the UI thread, write off it - same split QuestService uses.</summary>
     private void SaveAsync()
     {
+        long generation;
+        string json;
+
         try
         {
-            var json = JsonSerializer.Serialize(State, new JsonSerializerOptions { WriteIndented = true });
-            var path = _statePath;
-            var tmpPath = path + ".tmp";
-
-            _ = Task.Run(() =>
-            {
-                try
-                {
-                    var dir = Path.GetDirectoryName(path);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                        Directory.CreateDirectory(dir);
-
-                    File.WriteAllText(tmpPath, json);
-                    File.Move(tmpPath, path, overwrite: true);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Error(ex, "Failed to save program state");
-                }
-            });
+            generation = Interlocked.Read(ref _dirtyGeneration);
+            json = JsonSerializer.Serialize(State, new JsonSerializerOptions { WriteIndented = true });
         }
         catch (Exception ex)
         {
             App.Logger?.Error(ex, "Failed to serialize program state");
+            return;
+        }
+
+        _ = Task.Run(() => WriteState(json, generation));
+    }
+
+    /// <summary>
+    /// The single writer. Both entry points funnel through it under one lock, with a temp name
+    /// unique to the write.
+    ///
+    /// Before this, the sync and async paths raced on a SHARED programs.json.tmp: two overlapping
+    /// saves could File.Move each other's half-written temp over the real file, or fail with a
+    /// sharing violation that was swallowed - and because the dirty flag had already been cleared
+    /// optimistically, the lost change was never retried and Dispose had nothing to flush. The
+    /// generation is only banked on a write that actually landed.
+    /// </summary>
+    private void WriteState(string json, long generation)
+    {
+        var tmpPath = _statePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+
+        try
+        {
+            lock (_writeLock)
+            {
+                var dir = Path.GetDirectoryName(_statePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                // Atomic: temp then rename, so a crash mid-write cannot cost someone their run.
+                File.WriteAllText(tmpPath, json);
+                File.Move(tmpPath, _statePath, overwrite: true);
+            }
+
+            MarkSaved(generation);
+        }
+        catch (Exception ex)
+        {
+            try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+            // Deliberately does NOT bank the generation: the change stays dirty, the 30s timer
+            // retries, and Dispose still flushes it.
+            App.Logger?.Error(ex, "Failed to save program state");
         }
     }
 
@@ -1037,6 +1588,6 @@ public class ProgramService : IDisposable
         // reach into either, and shutdown is not a moment to be calling StopSession.
         _engine = null;
 
-        if (_isDirty) Save();
+        if (HasUnsavedChanges) Save();
     }
 }

@@ -22,14 +22,34 @@ namespace ConditioningControlPanel.Tests;
 /// own behaviour is TierBadgeRenderTests.</para>
 ///
 /// <para><b>The failure this exists to catch</b> is a tiered card quietly falling back to the
-/// untiered violet hairline - the rim, the sign and the re-stamp are three separate writes, and any
-/// one of them going missing still compiles, still renders, and just silently stops charging for
-/// the feature.</para>
+/// untiered hairline - the rim, the sign and the re-stamp are three separate writes, and any one of
+/// them going missing still compiles, still renders, and just silently stops charging for the
+/// feature.</para>
+///
+/// <para><b>And its mirror, after the mod-aware sweep merged:</b> the untiered edge now follows the
+/// active mod, the livery still must not. A tiered card that came back wearing the mod accent would
+/// mean the tier mark had started taking colour from the mod chain, which is the one thing commerce
+/// chrome may never do.</para>
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class ExclusivesRenderTests
 {
     private static void OnStaThread(Action body) => WpfRenderHarness.OnStaThread(body);
+
+    /// <summary>
+    /// Stands in for the mod-derived resting edge the vault passes in
+    /// (<c>MainWindow.Exclusives.cs</c>'s <c>ExclusiveEdgeDefault()</c>). Deliberately NOT the
+    /// shipped violet: these tests assert that a tiered card overwrites the untiered edge, and an
+    /// arbitrary colour makes that assertion honest on any mod, not just Bambi.
+    /// </summary>
+    private static readonly SolidColorBrush ModEdge = Frozen(Color.FromArgb(0x4D, 0x33, 0xCC, 0x88));
+
+    private static SolidColorBrush Frozen(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
+    }
 
     private static Border Card() => new()
     {
@@ -37,7 +57,7 @@ public class ExclusivesRenderTests
         Height = 200,
         CornerRadius = new CornerRadius(12),
         BorderThickness = new Thickness(1),
-        BorderBrush = VaultLivery.EdgeDefault,
+        BorderBrush = ModEdge,
     };
 
     private static void Realize(FrameworkElement element, double width = 336, double height = 200)
@@ -98,12 +118,15 @@ public class ExclusivesRenderTests
             var badge = new TierBadge { MotionOverride = false };
             Realize(new Grid { Children = { card, badge } });
 
-            var pill = VaultLivery.Apply(card, badge, tier: 1, freeToday: false);
+            var pill = VaultLivery.Apply(card, badge, tier: 1, freeToday: false, ModEdge);
 
             // Reference equality with the theme brush, not a colour match: the point of a livery is
             // that the vault wears the SAME metal as the Play wall and the Studio rack, and a
             // hand-mixed lookalike would sail through a colour check.
             Assert.Same(Application.Current!.TryFindResource("Tier1GoldBorderBrush"), card.BorderBrush);
+            // ...and it does NOT wear the mod's accent, which is what it was handed as the untiered
+            // resting edge. Tier livery is commerce chrome: constant across mods, always.
+            Assert.NotSame(ModEdge, card.BorderBrush);
             Assert.Equal(VaultLivery.CardRim, card.BorderThickness.Left, 3);
             Assert.Equal(1, TierFxBorder.GetTier(card));
             // The band must ride the same weight as the stroke or it misses the metal entirely.
@@ -122,7 +145,7 @@ public class ExclusivesRenderTests
             Realize(new Grid { Children = { band, badge } });
 
             VaultLivery.Apply(band, badge, tier: 1, freeToday: false,
-                              rim: VaultLivery.SpotlightRim, untieredEdge: VaultLivery.SpotlightEdgeDefault);
+                              ModEdge, rim: VaultLivery.SpotlightRim);
 
             Assert.Equal(VaultLivery.SpotlightRim, band.BorderThickness.Left, 3);
             Assert.True(VaultLivery.SpotlightRim > VaultLivery.CardRim,
@@ -136,9 +159,9 @@ public class ExclusivesRenderTests
         OnStaThread(() =>
         {
             var card = Card();
-            var pill = VaultLivery.Apply(card, badge: null, tier: 0, freeToday: false);
+            var pill = VaultLivery.Apply(card, badge: null, tier: 0, freeToday: false, ModEdge);
 
-            Assert.Same(VaultLivery.EdgeDefault, card.BorderBrush);
+            Assert.Same(ModEdge, card.BorderBrush);
             Assert.Equal(1, card.BorderThickness.Left, 3);
             Assert.Equal(0, TierFxBorder.GetTier(card));
             Assert.False(pill);
@@ -158,7 +181,7 @@ public class ExclusivesRenderTests
             var badge = new TierBadge { MotionOverride = false };
             Realize(new Grid { Children = { card, badge } });
 
-            var pill = VaultLivery.Apply(card, badge, tier: 1, freeToday: true);
+            var pill = VaultLivery.Apply(card, badge, tier: 1, freeToday: true, ModEdge);
 
             Assert.False(pill, "the tiered card asked for the pill it was supposed to replace");
             Assert.True(badge.FreeToday);
@@ -179,7 +202,7 @@ public class ExclusivesRenderTests
             // Graded Intake shape: no sign to stamp over, so the pill is still the only way this
             // surface can say "open today".
             var card = Card();
-            var pill = VaultLivery.Apply(card, badge: null, tier: 0, freeToday: true);
+            var pill = VaultLivery.Apply(card, badge: null, tier: 0, freeToday: true, ModEdge);
 
             Assert.True(pill);
             Assert.Same(VaultLivery.EdgeFree, card.BorderBrush);
@@ -196,8 +219,8 @@ public class ExclusivesRenderTests
             var badge = new TierBadge { MotionOverride = false };
             Realize(new Grid { Children = { card, badge } });
 
-            VaultLivery.Apply(card, badge, tier: 2, freeToday: true);
-            VaultLivery.Apply(card, badge, tier: 2, freeToday: false);
+            VaultLivery.Apply(card, badge, tier: 2, freeToday: true, ModEdge);
+            VaultLivery.Apply(card, badge, tier: 2, freeToday: false, ModEdge);
 
             Assert.False(badge.FreeToday);
             Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);

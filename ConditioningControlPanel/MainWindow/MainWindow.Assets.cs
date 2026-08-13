@@ -1510,6 +1510,13 @@ namespace ConditioningControlPanel
                 preset.Name, presetDisabledCount, activeImages, activeVideos);
         }
 
+        // MOD-AWARENESS SWEEP, lane E: the accent reads in this handler and in
+        // BtnSavePhrasePreset_Click below are NOT stale-until-reload, and are deliberately left out
+        // of the mod-switch sweep in MainWindow.UiUpdates.cs. Both build their dialog inside the
+        // Click handler and throw it away when it closes, so GetAccentColorHex is re-read every time
+        // one opens - there is no long-lived control here holding a colour from a previous mod. The
+        // long-lived surfaces on this tab (the asset tree and the pack cards) are rebuilt by
+        // RefreshAssetTree / RefreshPacksAsync on every show of the tab.
         internal void BtnSaveAssetPreset_Click(object sender, RoutedEventArgs e)
         {
             // Get current counts

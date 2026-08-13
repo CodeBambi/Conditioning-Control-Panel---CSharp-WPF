@@ -31,6 +31,15 @@ namespace ConditioningControlPanel.Services
         private static readonly ILogger? _log = App.Logger;
         private static readonly ConcurrentDictionary<string, ImageSource?> _cache = new();
 
+        /// <summary>
+        /// Second cache, for <see cref="ResolveImageDecoded"/>. Separate rather than shared with
+        /// <see cref="_cache"/> because its key carries the decode width as well: the same path
+        /// is legitimately resolved at 128 (a nav medallion), 512 (a Play hero) and 1024 (a wide
+        /// tile) in one session, and a width-blind key would hand the second caller whatever
+        /// resolution the first one happened to ask for.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, ImageSource?> _decodedCache = new();
+
         /// <summary>Folder under UserDataPath holding downloaded event skins, one dir per skin id.</summary>
         private const string EventSkinRoot = "event_skins";
 
@@ -121,6 +130,98 @@ namespace ConditioningControlPanel.Services
 
             _cache[cacheKey] = result;
             return result;
+        }
+
+        /// <summary>
+        /// Same chain as <see cref="ResolveImage"/> (event skin → active mod → embedded), but the
+        /// bitmap is decoded at a cap instead of at full resolution. <see cref="ResolveImage"/>
+        /// decodes every pixel the file has, which is the wrong answer for card headers and nav
+        /// medallions: the rail's neon PNGs cost a few MB apiece as thumbnails that way.
+        ///
+        /// <para>It goes through <see cref="ResolveUri"/> rather than repeating the probe, so the
+        /// override precedence can never drift from <see cref="ResolveImage"/>'s.</para>
+        ///
+        /// <para><b>The cache key carries the width.</b> See <see cref="_decodedCache"/> - and note
+        /// that a null result is cached too, deliberately: <c>MainWindow.ModTileVariant</c> reads
+        /// "null" as "this mod ships no themed variant", and that answer is per (skin, mod, path),
+        /// exactly what the key already scopes.</para>
+        /// </summary>
+        /// <param name="resourcePath">Relative path within Resources/, e.g. "features/dtrh.png".</param>
+        /// <param name="decodeWidth">
+        /// DecodePixelWidth cap. Zero or less means "no cap", which is a full decode and therefore
+        /// routed to <see cref="ResolveImage"/> so both callers share one cache entry.
+        /// </param>
+        /// <returns>A frozen ImageSource, or null when nothing in the chain could be loaded.</returns>
+        public static ImageSource? ResolveImageDecoded(string resourcePath, int decodeWidth)
+        {
+            if (string.IsNullOrEmpty(resourcePath)) return null;
+
+            // Reject path traversal attempts (same rule as ResolveImage - ResolveUri would
+            // otherwise hand back the pack:// form and we would decode the wrong file).
+            if (resourcePath.Contains("..") || Path.IsPathRooted(resourcePath)) return null;
+
+            resourcePath = resourcePath.Replace('\\', '/');
+
+            if (decodeWidth <= 0) return ResolveImage(resourcePath);
+
+            var cacheKey = $"{EventSkinId}:{App.Mods?.ActiveModId}:{resourcePath}:{decodeWidth}";
+            if (_decodedCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+
+            ImageSource? result = null;
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(ResolveUri(resourcePath), UriKind.Absolute);
+                bitmap.DecodePixelWidth = decodeWidth;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                result = bitmap;
+            }
+            catch (Exception ex)
+            {
+                // Not a warning: a miss here is also how "the mod has no themed variant of this
+                // file" is detected, and that is a normal answer, not a fault.
+                _log?.Debug("ResolveImageDecoded failed for {Path}: {Error}", resourcePath, ex.Message);
+            }
+
+            _decodedCache[cacheKey] = result;
+            return result;
+        }
+
+        /// <summary>
+        /// Resolve art that a caller is holding as a pack path (or a whole pack URI) rather than
+        /// as a Resources-relative one - the shape XAML authors and quest/definition JSON use.
+        /// Trims the "Resources/" (or full "pack://application:,,,/Resources/") prefix and then
+        /// delegates, so a mod override wins for exactly the same paths it already wins for.
+        /// Precedent for the trim: MainWindow.GetModeAwareQuestImagePath.
+        /// </summary>
+        /// <param name="packRelativePath">
+        /// "nav/door_home.png", "Resources/nav/door_home.png" or
+        /// "pack://application:,,,/Resources/nav/door_home.png" - all three mean the same file.
+        /// </param>
+        /// <param name="decodeWidth">Decode cap; 0 (the default) means full resolution.</param>
+        public static ImageSource? ResolvePackPath(string packRelativePath, int decodeWidth = 0)
+        {
+            if (string.IsNullOrEmpty(packRelativePath)) return null;
+
+            var path = packRelativePath.Replace('\\', '/');
+
+            const string PackPrefix = "pack://application:,,,/Resources/";
+            if (path.StartsWith(PackPrefix, StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(PackPrefix.Length);
+
+            path = path.TrimStart('/');
+
+            const string ResourcesPrefix = "Resources/";
+            if (path.StartsWith(ResourcesPrefix, StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(ResourcesPrefix.Length);
+
+            if (path.Length == 0) return null;
+
+            return decodeWidth > 0 ? ResolveImageDecoded(path, decodeWidth) : ResolveImage(path);
         }
 
         /// <summary>
@@ -264,11 +365,13 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Clear the image cache (call when mod switches).
+        /// Clear the image caches (call when mod switches). BOTH caches - a decoded entry that
+        /// survived a switch would repaint the old mod's art at the new mod's call site.
         /// </summary>
         public static void ClearCache()
         {
             _cache.Clear();
+            _decodedCache.Clear();
         }
     }
 }

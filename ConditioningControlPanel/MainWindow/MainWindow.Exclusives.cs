@@ -7,7 +7,6 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
-using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Features;
@@ -51,6 +50,24 @@ namespace ConditioningControlPanel
 
         private readonly List<ExclusiveCardUi> _exclusiveCards = new();
         private readonly List<TextBlock> _exclusiveTeaserMarks = new();
+
+        /// <summary>The three teaser cards' outer borders, kept for the accent re-tint.</summary>
+        private readonly List<Border> _exclusiveTeaserCards = new();
+
+        /// <summary>
+        /// Every accent-derived gradient stop this tab builds in code, with the alpha it was
+        /// authored at and which half of the accent pair it belongs to. The vault's badges, pills
+        /// and edges were literal Bambi pink/violet, so a Dronification user got a green room with
+        /// pink furniture; keeping the stops lets the mod-switch refresh re-tint them in place
+        /// instead of rebuilding the shelf. Code-behind brushes only - no theme dictionary is
+        /// touched (a fresh cross-dictionary StaticResource in Resources/Theme/*.xaml is what kills
+        /// the render suites).
+        /// </summary>
+        private readonly List<(GradientStop Stop, byte Alpha, bool Partner)> _exclusiveAccentStops = new();
+
+        /// <summary>Title drop-shadows (cards and teasers) that wear the accent.</summary>
+        private readonly List<DropShadowEffect> _exclusiveAccentShadows = new();
+
         private bool _exclusivesBuilt;
         private bool _exclusivesSheenRetryQueued;
 
@@ -65,6 +82,126 @@ namespace ConditioningControlPanel
         // "pass ready" chip wear, so "open for one day only" reads the same everywhere.
         // Literal colours, never a theme StaticResource - see CLAUDE.md's BAML note.
         private static readonly Color FreeTodayGold = Color.FromRgb(0xFF, 0xD2, 0x7A);
+
+        // The FREE TODAY gold edge moved to Features\VaultLivery.cs (VaultLivery.EdgeFree) along
+        // with the rest of the livery vocabulary - same literal, one home. It is still deliberately
+        // NOT re-tinted below: "gold means open for one day only" is a contract this tab, the
+        // dashboard's ? box and the rail all keep.
+
+        private static SolidColorBrush Freeze(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        // ---- mod accent chrome ---------------------------------------------------------
+        // Everything below is decor, and decor follows the active mod. The two exceptions stay
+        // literal on purpose: the FREE TODAY gold above ("gold means one day only" is a contract
+        // the dashboard and the rail also keep), and the tier plates, which are commerce.
+
+        /// <summary>
+        /// The vault's primary accent: the active mod's FX glow, which is the same chain
+        /// (fxPalette → theme.filterColor → theme.accentColor → #FF69B4) the sheen, the padlock
+        /// breath and the hover bloom already read. Bambi resolves to the #FF69B4 these surfaces
+        /// used to hardcode, so the flagship mod looks unchanged.
+        /// </summary>
+        private static Color VaultAccent() => FxTheme.GlowColor;
+
+        /// <summary>The teaser "?" silhouette's alpha over the dark plate.</summary>
+        private const byte TeaserMarkAlpha = 0x8C;
+
+        /// <summary>
+        /// The second half of the vault's gradient pair. The shipped pair is #FF69B4 → #B478FF,
+        /// which is a -59 degree hue rotation at the same saturation and value, so that is exactly
+        /// what this applies to whatever accent the mod supplies. Deriving it (rather than reading
+        /// a second mod colour) keeps the two-tone identity: every FxTheme slot falls back to the
+        /// same accent, so a mod that only sets accentColor would otherwise flatten every gradient
+        /// on the tab into one colour.
+        /// </summary>
+        private const double VaultPartnerHueShift = -59.0;
+
+        internal static Color VaultPartner(Color accent) => ShiftHue(accent, VaultPartnerHueShift);
+
+        private static Color VaultPartner() => VaultPartner(VaultAccent());
+
+        // WithAlpha(Color, byte) - the vault's chrome is all one hue at several alphas - already
+        // exists on this partial class (MainWindow.ProgramBanner.cs); reused rather than duplicated.
+
+        /// <summary>
+        /// Rotates a colour's hue by <paramref name="degrees"/>, preserving saturation, value and
+        /// alpha. Round-trips through HSV rather than nudging channels so a green accent shifts to
+        /// a neighbouring green-yellow the way pink shifts to violet.
+        /// </summary>
+        internal static Color ShiftHue(Color c, double degrees)
+        {
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            double delta = max - min;
+
+            double h;
+            if (delta <= 0.0) h = 0;                                   // grey: hue is arbitrary
+            else if (max == r) h = 60 * (((g - b) / delta) % 6);
+            else if (max == g) h = 60 * (((b - r) / delta) + 2);
+            else h = 60 * (((r - g) / delta) + 4);
+
+            h = (h + degrees) % 360;
+            if (h < 0) h += 360;
+
+            double v = max;
+            double s = max <= 0 ? 0 : delta / max;
+
+            double chroma = v * s;
+            double x = chroma * (1 - Math.Abs((h / 60.0) % 2 - 1));
+            double m = v - chroma;
+
+            (double R, double G, double B) rgb = h switch
+            {
+                < 60 => (chroma, x, 0),
+                < 120 => (x, chroma, 0),
+                < 180 => (0, chroma, x),
+                < 240 => (0, x, chroma),
+                < 300 => (x, 0, chroma),
+                _ => (chroma, 0, x),
+            };
+
+            static byte Byte(double v01) => (byte)Math.Clamp(Math.Round((v01) * 255), 0, 255);
+            return Color.FromArgb(c.A, Byte(rgb.R + m), Byte(rgb.G + m), Byte(rgb.B + m));
+        }
+
+        /// <summary>A live card's resting edge (the partner hue, 1px) - was a literal #4DB478FF.</summary>
+        private static SolidColorBrush ExclusiveEdgeDefault() => Freeze(WithAlpha(VaultPartner(), 0x4D));
+
+        /// <summary>The spotlight band's resting edge (the accent, 1px) - was a literal #66FF69B4.</summary>
+        private static SolidColorBrush SpotlightEdgeDefault() => Freeze(WithAlpha(VaultAccent(), 0x66));
+
+        /// <summary>
+        /// An accent → partner gradient, with both stops registered for re-tinting. Every
+        /// badge/pill gradient on this tab is built through here so the mod-switch refresh has one
+        /// list to walk.
+        /// </summary>
+        private LinearGradientBrush AccentGradient(byte alphaA, byte alphaB, double angle = 45)
+        {
+            var a = new GradientStop(WithAlpha(VaultAccent(), alphaA), 0.0);
+            var b = new GradientStop(WithAlpha(VaultPartner(), alphaB), 1.0);
+            _exclusiveAccentStops.Add((a, alphaA, false));
+            _exclusiveAccentStops.Add((b, alphaB, true));
+            return new LinearGradientBrush(new GradientStopCollection { a, b }, angle);
+        }
+
+        /// <summary>An accent drop-shadow registered for re-tinting (title plates).</summary>
+        private DropShadowEffect AccentTitleShadow(double blur = 10, double opacity = 0.7)
+        {
+            var fx = new DropShadowEffect
+            {
+                Color = VaultAccent(),
+                BlurRadius = blur,
+                ShadowDepth = 0,
+                Opacity = opacity,
+            };
+            _exclusiveAccentShadows.Add(fx);
+            return fx;
+        }
 
         /// <summary>
         /// True when this exclusive is today's daily free unlock AND the account does not
@@ -146,8 +283,10 @@ namespace ConditioningControlPanel
                     banner = art != null;
                 }
 
-                art ??= LoadPackImage(spot.ArtResource);
-                img.Source = art;
+                art ??= LoadPackImage(ExclusiveArtPath(spot));
+                // Assigned in place: the hero Image is built once in XAML and carries the Ken
+                // Burns ScaleTransform, so a mod switch swaps the source, never the element.
+                if (art != null) img.Source = art;
 
                 // UniformToFill centres its crop, which is exactly right for banner
                 // art composed around the central horizontal band. Card art used as a
@@ -171,7 +310,7 @@ namespace ConditioningControlPanel
             // --- art, rounded-clipped, slightly zoomable on hover ---
             var art = new Image
             {
-                Source = LoadPackImage(feature.ArtResource),
+                Source = LoadPackImage(ExclusiveArtPath(feature)),
                 Stretch = Stretch.UniformToFill,
                 RenderTransformOrigin = new Point(0.5, 0.5),
             };
@@ -187,13 +326,7 @@ namespace ConditioningControlPanel
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 15,
                 Foreground = Brushes.White,
-                Effect = new DropShadowEffect
-                {
-                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
-                    BlurRadius = 10,
-                    ShadowDepth = 0,
-                    Opacity = 0.7,
-                },
+                Effect = AccentTitleShadow(),
             };
             var tagline = new TextBlock
             {
@@ -281,8 +414,7 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(8, 8, 0, 0),
                     CornerRadius = new CornerRadius(10),
                     Padding = new Thickness(8, 2, 8, 2),
-                    Background = new LinearGradientBrush(
-                        Color.FromRgb(0xFF, 0x69, 0xB4), Color.FromRgb(0xB4, 0x78, 0xFF), 45),
+                    Background = AccentGradient(0xFF, 0xFF),
                     Child = new TextBlock
                     {
                         Text = Loc.Get(feature.BadgeLocKey),
@@ -321,9 +453,7 @@ namespace ConditioningControlPanel
                             CornerRadius = new CornerRadius(10),
                             Padding = new Thickness(10, 4, 10, 4),
                             HorizontalAlignment = HorizontalAlignment.Center,
-                            Background = new LinearGradientBrush(
-                                Color.FromArgb(0xE6, 0xFF, 0x69, 0xB4),
-                                Color.FromArgb(0xD9, 0xB4, 0x78, 0xFF), 45),
+                            Background = AccentGradient(0xE6, 0xD9),
                             Child = new TextBlock
                             {
                                 Text = Loc.Get("exclusives_chip_lab"),
@@ -363,7 +493,10 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(0, 0, 16, 16),
                 CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E)),
-                BorderBrush = VaultLivery.EdgeDefault,
+                // Mod-aware resting edge (lane B): the shelf's furniture follows the active mod.
+                // A tiered card overwrites this with its livery on the first refresh - the livery
+                // is commerce and stays constant across mods - but the untiered cards keep it.
+                BorderBrush = ExclusiveEdgeDefault(),
                 BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Child = host,
@@ -408,7 +541,7 @@ namespace ConditioningControlPanel
                 FontFamily = FredokaFont,
                 FontSize = 64,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromArgb(0x8C, 0xFF, 0x69, 0xB4)),
+                Foreground = Freeze(WithAlpha(VaultAccent(), TeaserMarkAlpha)),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 // Sit in the open area above the title plate, like the art focal.
@@ -425,13 +558,7 @@ namespace ConditioningControlPanel
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 15,
                 Foreground = Brushes.White,
-                Effect = new DropShadowEffect
-                {
-                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
-                    BlurRadius = 10,
-                    ShadowDepth = 0,
-                    Opacity = 0.7,
-                },
+                Effect = AccentTitleShadow(),
             };
             var tagline = new TextBlock
             {
@@ -466,8 +593,7 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(8, 8, 0, 0),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(8, 2, 8, 2),
-                Background = new LinearGradientBrush(
-                    Color.FromRgb(0xFF, 0x69, 0xB4), Color.FromRgb(0xB4, 0x78, 0xFF), 45),
+                Background = AccentGradient(0xFF, 0xFF),
                 Child = new TextBlock
                 {
                     Text = Loc.Get("exclusives_badge_soon"),
@@ -496,7 +622,7 @@ namespace ConditioningControlPanel
                 CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(Color.FromRgb(0x14, 0x11, 0x26)),
                 // Dimmer edge than a live card: present, but clearly not open yet.
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xB4, 0x78, 0xFF)),
+                BorderBrush = Freeze(WithAlpha(VaultPartner(), 0x33)),
                 BorderThickness = new Thickness(1),
                 Child = fill,
             };
@@ -505,6 +631,7 @@ namespace ConditioningControlPanel
             // no navigation - there is nowhere to go yet.
             card.MouseEnter += (_, _) => { try { MotionFx.HoverLift(card, true); } catch { } };
             card.MouseLeave += (_, _) => { try { MotionFx.HoverLift(card, false); } catch { } };
+            _exclusiveTeaserCards.Add(card);
             return card;
         }
 
@@ -525,11 +652,14 @@ namespace ConditioningControlPanel
                 {
                     card.Effect ??= new DropShadowEffect
                     {
-                        Color = FxTheme.GlowColor,
                         BlurRadius = Math.Min(24, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
                         ShadowDepth = 0,
                         Opacity = 0.55,
                     };
+                    // Re-read every hover, not just on the ??= that created it: the effect is
+                    // cached on the card for the life of the window, so a bloom born under one
+                    // mod kept that mod's colour forever (same defect as the veil padlock).
+                    if (card.Effect is DropShadowEffect bloom) bloom.Color = FxTheme.GlowColor;
                 }
                 else
                 {
@@ -553,6 +683,12 @@ namespace ConditioningControlPanel
         /// Repaints every entitlement surface on the tab (chips, veils, tier plates,
         /// mod-aware Takeover title). Called from UpdatePatreonUI and on tab show,
         /// mirroring the old RefreshExclusivesSubmenuLocks contract.
+        ///
+        /// <para>It is ALSO the tab's mod-switch repaint: ApplyModFeatureNames calls it from
+        /// ModService.ModChanged (Dispatcher.Invoke'd, so this always runs on the UI thread), and
+        /// the resolver's caches are cleared before that event fires. Everything a mod can change
+        /// - art, accent chrome, the sheen's tint - is therefore re-applied here rather than only
+        /// at build time, which is what it used to be.</para>
         /// </summary>
         internal void RefreshExclusivesTab()
         {
@@ -562,10 +698,17 @@ namespace ConditioningControlPanel
 
             try
             {
+                RetintVaultChrome();
+
                 foreach (var ui in _exclusiveCards)
                 {
                     // Mod-aware titles (Drone mod -> "Drone Takeover", etc.).
                     ui.Title.Text = $"{ui.Feature.Emoji} {ExclusiveTitle(ui.Feature)}";
+                    // ...and mod-aware art. Assigned in place on the existing Image: the shelf is
+                    // built once, so without this a .ccpmod's cards stayed on the embedded art
+                    // until the app was restarted. Null keeps whatever is painted.
+                    var art = LoadPackImage(ExclusiveArtPath(ui.Feature));
+                    if (art != null) ui.Art.Source = art;
                     ApplyExclusiveCardState(ui, ui.Feature.GateState());
                 }
 
@@ -580,6 +723,13 @@ namespace ConditioningControlPanel
                 var spotState = spot.GateState();
                 bool spotFree = IsExclusiveFreeToday(spot, spotState);
                 ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
+                ApplySpotlightArt(spot);   // banner/card art, in place on the hero Image
+
+                // The header plate's vault art. ImageSource is swapped ON the existing brush -
+                // replacing the brush would drop the OpacityMask fade the header is composed with.
+                var heroArt = ModTileVariant("vault", ExclusiveHeroDecodeWidth);
+                if (heroArt != null && ExclusivesTab.VaultHeroBrush is { IsFrozen: false } heroBrush)
+                    heroBrush.ImageSource = heroArt;
                 ExclusivesTab.SpotVeil.Visibility =
                     spotState == ExclusiveGateState.Locked && !spotFree ? Visibility.Visible : Visibility.Collapsed;
                 ApplyVeilLockBreath(ExclusivesTab.SpotVeilLock, ExclusivesTab.SpotVeil.Visibility == Visibility.Visible);
@@ -587,15 +737,21 @@ namespace ConditioningControlPanel
                 // Hero weight of the same livery the shelf wears (4px, not the cards' 3), plus the
                 // stamped sign. A tiered spotlight says its free day with the re-stamp, so the
                 // gold pill is only asked for when the hero has no badge to stamp over.
+                // Hero weight of the same livery the shelf wears (4px, not the cards' 3), plus the
+                // stamped sign. The band's resting edge is the mod-aware one (lane B); the livery
+                // that overwrites it on a tiered spotlight is not, by design. VaultLivery.Apply
+                // owns BOTH writes, which is why the old unconditional BorderBrush/Thickness pair
+                // is gone rather than moved - two writers is how the two states drift apart.
                 bool spotPill = VaultLivery.Apply(
                     ExclusivesTab.SpotlightCard, ExclusivesTab.SpotTierBadge,
-                    spot.Tier, spotFree, VaultLivery.SpotlightRim, VaultLivery.SpotlightEdgeDefault);
+                    spot.Tier, spotFree, SpotlightEdgeDefault(), VaultLivery.SpotlightRim);
 
                 ExclusivesTab.TxtSpotFreeToday.Text = Loc.Get("mosaic_free_today");
                 ExclusivesTab.SpotFreeToday.Visibility = spotPill ? Visibility.Visible : Visibility.Collapsed;
                 _spotFreeFx = ApplyFreeTodayPulse(ExclusivesTab.SpotFreeToday, _spotFreeFx, spotPill);
 
                 RefreshExclusiveTierPlates();
+                RestartExclusiveSheens();
 
                 // Opportunistic server-override check, exactly as RefreshMosaicTierBadges does:
                 // the 6h/10min gates inside make this free on every repaint, so a user parked on
@@ -606,6 +762,73 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "RefreshExclusivesTab failed");
             }
+        }
+
+        /// <summary>
+        /// Re-tints every accent-derived surface this tab paints in code, plus the three the view
+        /// authors in XAML (the spotlight title's shadow, its NEW badge and its unlock pill).
+        /// Called at the top of every refresh, so it lands on a mod switch, a tier change and a
+        /// tab revisit alike - the cost is a couple of dozen colour writes.
+        ///
+        /// <para><b>Not re-tinted, deliberately:</b> the FREE TODAY gold family (a documented
+        /// contract - gold means "open for one day only" here, on the dashboard's ? box and on the
+        /// rail alike) and the tier plates (commerce, not decor). The view's vault-gold TabHue*
+        /// keys are the same tier livery and stay put.</para>
+        /// </summary>
+        private void RetintVaultChrome()
+        {
+            try
+            {
+                var accent = VaultAccent();
+                var partner = VaultPartner(accent);
+
+                foreach (var (stop, alpha, isPartner) in _exclusiveAccentStops)
+                    stop.Color = WithAlpha(isPartner ? partner : accent, alpha);
+
+                foreach (var fx in _exclusiveAccentShadows)
+                    fx.Color = accent;
+
+                foreach (var mark in _exclusiveTeaserMarks)
+                    mark.Foreground = Freeze(WithAlpha(accent, TeaserMarkAlpha));
+
+                foreach (var teaser in _exclusiveTeaserCards)
+                    teaser.BorderBrush = Freeze(WithAlpha(partner, 0x33));
+
+                // XAML-authored, so these are reached by name rather than by list.
+                TintShadow(ExclusivesTab.TxtSpotTitle, accent);
+                TintGradient(ExclusivesTab.SpotBadgeFill, accent, partner);
+                TintGradient(ExclusivesTab.SpotVeilPillFill, accent, partner);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Exclusives chrome re-tint: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Recolours an element's drop-shadow. A XAML-authored Freezable may arrive frozen
+        /// depending on where the parser found it, so this clones rather than assuming: a throwing
+        /// re-tint would abort the rest of the repaint.
+        /// </summary>
+        private static void TintShadow(UIElement element, Color color)
+        {
+            if (element?.Effect is not DropShadowEffect shadow) return;
+            if (!shadow.IsFrozen) { shadow.Color = color; return; }
+
+            var thawed = shadow.Clone();
+            thawed.Color = color;
+            element.Effect = thawed;
+        }
+
+        /// <summary>
+        /// Rewrites a two-stop accent gradient's colours in place, keeping each stop's authored
+        /// alpha. Frozen brushes are skipped rather than replaced - the caller holds them through
+        /// the view's generated field, and swapping the brush would not reach the Border anyway.
+        /// </summary>
+        private static void TintGradient(GradientBrush? brush, Color accent, Color partner)
+        {
+            if (brush == null || brush.IsFrozen || brush.GradientStops.Count < 2) return;
+            var a = brush.GradientStops[0];
+            var b = brush.GradientStops[1];
+            a.Color = WithAlpha(accent, a.Color.A);
+            b.Color = WithAlpha(partner, b.Color.A);
         }
 
         private void ApplyExclusiveCardState(ExclusiveCardUi ui, ExclusiveGateState state)
@@ -620,7 +843,10 @@ namespace ConditioningControlPanel
             // Rim + badge in one place for both branches, so a tiered card cannot end a repaint
             // wearing the untiered violet edge. Returns true only when there is no badge to
             // re-stamp, which is the one case still needing the old gold pill.
-            bool wantPill = VaultLivery.Apply(ui.Card, ui.Badge, ui.Feature.Tier, freeToday);
+            // The untiered resting edge is the mod-aware one (lane B) and is passed IN rather than
+            // looked up, so the one place that knows the vault's accent is the vault.
+            bool wantPill = VaultLivery.Apply(ui.Card, ui.Badge, ui.Feature.Tier, freeToday,
+                                              ExclusiveEdgeDefault());
 
             if (freeToday)
             {
@@ -636,6 +862,9 @@ namespace ConditioningControlPanel
 
             ui.FreePill.Visibility = Visibility.Collapsed;
             ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, false);
+            // No BorderBrush/Thickness pair here any more: VaultLivery.Apply above already wrote
+            // the rim for this branch too, with the mod-aware edge on untiered cards and the
+            // (mod-agnostic) livery on tiered ones.
 
             switch (state)
             {
@@ -690,12 +919,15 @@ namespace ConditioningControlPanel
                 {
                     padlock.Effect = glow = new DropShadowEffect
                     {
-                        Color = FxTheme.GlowColor,
                         BlurRadius = Math.Min(20, PerformanceProfile.MaxGlowBlurRadius(tier)),
                         ShadowDepth = 0,
                         Opacity = 0.8,
                     };
                 }
+                // Unconditional, not just on the create branch: the effect survives every repaint,
+                // so a padlock built under one mod kept that mod's glow for the life of the app.
+                // The effect is code-built and never frozen, so this is a plain write.
+                glow.Color = FxTheme.GlowColor;
                 var anim = new DoubleAnimation(0.35, 0.9, TimeSpan.FromSeconds(3.4))
                 {
                     AutoReverse = true,
@@ -919,6 +1151,37 @@ namespace ConditioningControlPanel
         /// </summary>
         private int _exclusivesSheenRetries;
 
+        /// <summary>
+        /// THE HEADLINE BUG. A <see cref="CardSheenAdorner"/> reads its tint at
+        /// <see cref="CardSheenAdorner.Start"/>, and the adorners are built once and then only
+        /// re-Started when the tab is entered - so switching from Dronification's green to
+        /// BambiSleep left every card glimmering green until the app was restarted. The mod-switch
+        /// repaint has to restart them itself.
+        ///
+        /// <para>Stop-then-Start rather than a bespoke re-tint entry point: Start already re-reads
+        /// the theme, and this way there is exactly one place a sheen's colour comes from. Only
+        /// runs while the tab is on screen with ambient motion allowed - off-tab sheens are parked
+        /// by StopExclusivesMotion and will be re-tinted by the Start on the way back in, and
+        /// starting a clock the motion gate refused is how the kill-switch gets defeated.</para>
+        ///
+        /// <para>The spotlight wears no sheen (AttachExclusiveSheens only decorates shelf cards);
+        /// its Ken Burns drift is colourless, so there is nothing there to re-tint.</para>
+        /// </summary>
+        private void RestartExclusiveSheens()
+        {
+            try
+            {
+                if (ExclusivesTab?.Visibility != Visibility.Visible || !MotionFx.AllowAmbientLoops) return;
+                foreach (var ui in _exclusiveCards)
+                {
+                    if (ui.Sheen == null) continue;
+                    ui.Sheen.Stop();
+                    ui.Sheen.Start();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Exclusives sheen restart: {E}", ex.Message); }
+        }
+
         private void AttachExclusiveSheens()
         {
             bool missing = false;
@@ -967,31 +1230,49 @@ namespace ConditioningControlPanel
                 : Loc.Get(feature.TitleLocKey);
 
         /// <summary>
-        /// Loads pack-embedded art, or null if the resource is absent/undecodable -
-        /// callers rely on that null to fall back (see <see cref="ApplySpotlightArt"/>),
-        /// so this must never throw. OnLoad caching means a missing resource throws
-        /// inside EndInit, right here, and not later on the render thread.
+        /// The art path this feature's card should paint. Normally the registry's own
+        /// <see cref="ExclusiveFeature.ArtResource"/> - except for Takeover, whose art forks by
+        /// filename under BambiSleep exactly as it does in LoadFeatureImages (MainWindow.xaml.cs)
+        /// and in ModTileVariant. The registry cannot express that: it is one static entry and the
+        /// fork is a runtime question, so the vault answered "takeover.png" forever while the
+        /// feature's own tab, the wall tile and the description card all showed Bambi's cut.
+        /// A .ccpmod overriding either path still wins - both go through the resolver below.
+        /// </summary>
+        private static string ExclusiveArtPath(ExclusiveFeature feature) =>
+            feature.Key == "bambitakeover" && App.Mods?.ActiveModId == BuiltInMods.BambiSleepId
+                ? "features/bambi takeover.png"
+                : feature.ArtResource;
+
+        /// <summary>
+        /// Card decode cap. A card paints 336 DIP, so this is already ~2x for a 200% display;
+        /// nine sources at 1376x768 native would cost ~32 MB of bitmaps.
+        /// </summary>
+        private const int ExclusiveCardDecodeWidth = 700;
+
+        /// <summary>The header's 240-wide vault plate, matching the XAML's authored DecodePixelWidth.</summary>
+        private const int ExclusiveHeroDecodeWidth = 480;
+
+        /// <summary>
+        /// Resolves card art THROUGH THE MOD CHAIN (event skin → active mod's resources/ →
+        /// embedded pack://), or null if nothing in it decodes - callers rely on that null to fall
+        /// back (see <see cref="ApplySpotlightArt"/>), so this must never throw.
+        ///
+        /// <para>This used to build a raw <c>pack://application:,,,/</c> URI, which meant the one
+        /// tab whose entire job is showing off features was also the one place a .ccpmod's art for
+        /// those features was ignored. <see cref="ModResourceResolver.ResolvePackPath"/> tolerates
+        /// the registry's "Resources/"-prefixed spelling, so no roster data had to change.</para>
         /// </summary>
         /// <param name="decodePixelWidth">
-        /// Bounded decode width. Card art renders at ~340 wide inside the Viewbox; a
-        /// bounded decode keeps nine 1376x768 sources from costing ~32 MB of bitmaps.
-        /// The hero band passes a larger value because it is drawn much wider.
+        /// Bounded decode width; the hero band passes a larger value because it is drawn wider.
         /// </param>
-        private static ImageSource? LoadPackImage(string relativePath, int decodePixelWidth = 700)
+        private static ImageSource? LoadPackImage(string relativePath, int decodePixelWidth = ExclusiveCardDecodeWidth)
         {
             try
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.UriSource = new Uri("pack://application:,,,/" + relativePath, UriKind.Absolute);
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.DecodePixelWidth = decodePixelWidth;
-                bmp.EndInit();
-                // Touching PixelWidth forces any deferred decode failure to surface
-                // here, inside the catch, rather than as an empty Image later.
-                if (bmp.PixelWidth <= 0) return null;
-                bmp.Freeze();
-                return bmp;
+                var art = ModResourceResolver.ResolvePackPath(relativePath, decodePixelWidth);
+                if (art == null)
+                    App.Logger?.Warning("Exclusives art missing: {Path}", relativePath);
+                return art;
             }
             catch (Exception ex)
             {

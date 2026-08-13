@@ -39,7 +39,8 @@
                     <Grid>
                         <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                             <Border.Background>
-                                <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                <ImageBrush x:Name="SheListeningHeroArtBrush"
+                                            Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                                     <ImageBrush.ImageSource>
                                         <BitmapImage UriSource="pack://application:,,,/Resources/features/audio_whispers.png" DecodePixelWidth="480"/>
                                     </ImageBrush.ImageSource>
@@ -405,7 +406,7 @@
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                             VerticalAlignment="Top" Height="520">
                         <Border.Background>
-                            <ImageBrush Stretch="UniformToFill">
+                            <ImageBrush x:Name="SheListeningSideArtBrush" Stretch="UniformToFill">
                                 <ImageBrush.ImageSource>
                                     <BitmapImage UriSource="pack://application:,,,/Resources/features/audio_whispers.png"
                                                  DecodePixelWidth="800"/>

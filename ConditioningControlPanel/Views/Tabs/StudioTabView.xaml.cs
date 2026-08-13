@@ -154,6 +154,21 @@ namespace ConditioningControlPanel.Views.Tabs
             /// or null. Exactly one entry can hold one at a time — see
             /// <see cref="SetTileComet"/>.</summary>
             public PerimeterCometAdorner? Comet;
+
+            /// <summary>
+            /// The two brushes that paint this row's feature art: the 28px resting chip and the
+            /// 56px active tile. Held so <see cref="RefreshRackArt"/> can write a new
+            /// <c>ImageSource</c> into the SAME brush on a mod switch.
+            ///
+            /// <para><b>Deliberately not frozen.</b> They used to be, which is precisely why a
+            /// <c>.ccpmod</c> that overrides <c>features/flash.png</c> was invisible on the rack:
+            /// a frozen brush cannot take the new bitmap, and swapping the brush object out would
+            /// mean re-finding every Border that holds one. One decode at
+            /// <see cref="RackArtDecodeWidth"/> feeds both (the chip centre-crops it), so the
+            /// resolver's width-keyed cache serves this row once, not twice.</para>
+            /// </summary>
+            public ImageBrush? ChipArtBrush;
+            public ImageBrush? TileArtBrush;
         }
 
         private readonly List<StudioRackEntry> _entries = new();
@@ -172,14 +187,75 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <summary>The rack key currently showing. Survives leaving and re-entering the door.</summary>
         internal string SelectedRackKey => _selected;
 
+        /// <summary>
+        /// One decode width for both rack art states. The chip is 28px and centre-crops what it
+        /// is given; the active tile is 56px tall and right-anchored across ~230px. 256 covers
+        /// the tile on a 2x display and is the ONLY width either state asks for, so
+        /// <see cref="ModResourceResolver.ResolveImageDecoded"/>'s width-keyed cache holds one
+        /// entry per module rather than two.
+        /// </summary>
+        private const int RackArtDecodeWidth = 256;
+
+        /// <summary>
+        /// Every code-built brush/effect on this page whose colour is the mod accent rather than
+        /// a fixed house colour. Each build site registers a closure that re-writes its own
+        /// colours from a Color; <see cref="RetintChrome"/> replays the whole list on a mod
+        /// switch. A list of closures rather than a list of brushes because the sites disagree
+        /// about WHAT to do with the accent (an alpha ramp, a hue-rotated partner, a
+        /// lightened foreground) and that knowledge belongs next to the brush that needs it.
+        ///
+        /// <para>Registering also means the brush must NOT be frozen. That is the whole trade:
+        /// a frozen brush is cheaper and silently never repaints.</para>
+        ///
+        /// <para>Two things are deliberately absent. <c>PerimeterCometAdorner</c>'s coral is a
+        /// house constant owned by the adorner, and the tier livery (gold/diamond) is a
+        /// commercial mark, not a theme colour.</para>
+        /// </summary>
+        private readonly List<Action<Color>> _accentTints = new();
+
+        /// <summary>
+        /// The accent this page paints with. <see cref="FxTheme.GlowColor"/> rather than a
+        /// <c>TryFindResource</c> because it is a plain static read that already falls back to
+        /// #FF69B4 on a missing key, so nothing here can be broken by a theme dictionary — which
+        /// is the property the NEW pill's original literal was protecting.
+        /// </summary>
+        private static Color Accent
+        {
+            get { try { return FxTheme.GlowColor; } catch { return Color.FromRgb(0xFF, 0x69, 0xB4); } }
+        }
+
         public StudioTabView()
         {
             InitializeComponent();
+            // Before BuildRack: the per-row closures it registers are appended to these.
+            RegisterChromeTints();
             BuildRack();
             // Land on the default without announcing it: nothing is on screen yet, and the
             // FeatureOpened bark belongs to the moment the user can actually see the panel.
             SelectEntry(DefaultRackKey, announce: false, animate: false);
+            // Seeds the accent for whichever mod is ALREADY active at construction; the same
+            // call from RepaintModAwareChrome handles every switch after that.
+            RetintChrome();
             Loaded += OnLoaded;
+        }
+
+        /// <summary>
+        /// Registers the two page-level chrome objects that carry the accent. Row-level ones
+        /// (the group rules, the NEW pill) register themselves as they are built.
+        /// </summary>
+        private void RegisterChromeTints()
+        {
+            // The hue-wash: 0x40 warm -> 0x1F accent, where "warm" is the accent hue-rotated
+            // +38°. See HueRotate for why that single number reproduces the original
+            // #FF7E6B/#FF69B4 pair - the wash was always one colour and a rotation, it was just
+            // written out as two literals, which is what froze it pink.
+            _accentTints.Add(c =>
+            {
+                ChipHueWashBrush.GradientStops[0].Color = WithAlpha(HueRotate(c, 38), 0x40);
+                ChipHueWashBrush.GradientStops[1].Color = WithAlpha(c, 0x1F);
+            });
+
+            _accentTints.Add(c => DotGlow.Color = c);
         }
 
         // =====================================================================================
@@ -236,8 +312,131 @@ namespace ConditioningControlPanel.Views.Tabs
         /// </summary>
         internal void RepaintModAwareChrome()
         {
-            try { RefreshRackLabels(); RefreshDots(); RefreshDetailHeader(); }
-            catch (Exception ex) { App.Logger?.Debug("StudioTabView.RepaintModAwareChrome: {E}", ex.Message); }
+            // Art and colour as well as text. A mod ships THREE kinds of chrome for this page -
+            // the feature names, the features/*.png tiles behind the rows and the accent the
+            // code-built gradients are mixed from - and until the rack art pass was added here a
+            // .ccpmod override of features/flash.png was invisible on the rack under any mod.
+            // Each is independently guarded: a throw painting the art must not cost the labels.
+            Try(RefreshRackLabels, nameof(RefreshRackLabels));
+            Try(RefreshRackArt, nameof(RefreshRackArt));
+            Try(ApplyDoorIcon, nameof(ApplyDoorIcon));
+            Try(RetintChrome, nameof(RetintChrome));
+            Try(RefreshDots, nameof(RefreshDots));       // after RetintChrome: it reads DotGlow
+            Try(RefreshDetailHeader, nameof(RefreshDetailHeader));
+
+            static void Try(Action a, string what)
+            {
+                try { a(); }
+                catch (Exception ex) { App.Logger?.Debug("StudioTabView.RepaintModAwareChrome/{What}: {E}", what, ex.Message); }
+            }
+        }
+
+        /// <summary>
+        /// Re-resolves every row's feature art and writes it into the brushes the rows are
+        /// already painted with. Mutates <c>ImageSource</c> in place rather than swapping brush
+        /// objects: the chip Border and the tile's art layer were built in the constructor and
+        /// nothing else holds a handle to them.
+        ///
+        /// <para>A null resolve KEEPS the current art. "The new mod ships no override and the
+        /// embedded file failed to decode this time" must cost nothing; blanking the row would
+        /// turn a transient decode failure into a permanently empty rack.</para>
+        ///
+        /// <para>Rows whose art was null at build time (the three art-less modules, or a module
+        /// whose file was missing) have no brush to write into and stay on their emoji chip -
+        /// a mod cannot conjure a tile that was never constructed. That is the one thing this
+        /// pass does not fix, and it is a build-time shape, not a colour.</para>
+        /// </summary>
+        private void RefreshRackArt()
+        {
+            foreach (var e in _entries)
+            {
+                if (e.Art == null) continue;
+                var art = LoadFeatureArt(e.Art, RackArtDecodeWidth);
+                if (art == null) continue;
+                if (e.ChipArtBrush is { IsFrozen: false } chip) chip.ImageSource = art;
+                if (e.TileArtBrush is { IsFrozen: false } tile) tile.ImageSource = art;
+            }
+        }
+
+        /// <summary>
+        /// The page-header door medallion. Same file the nav rail's Studio door uses, so a mod
+        /// that reskins the rail reskins this too instead of leaving the header on stock art.
+        /// Null resolve leaves the XAML-declared pack:// default standing.
+        /// </summary>
+        private void ApplyDoorIcon()
+        {
+            var art = ModResourceResolver.ResolveImageDecoded("nav/door_studio.png", 128);
+            if (art != null && ImgStudioDoorIcon != null) ImgStudioDoorIcon.Source = art;
+        }
+
+        /// <summary>
+        /// Replays every registered accent closure with the mod's current accent. Cheap and
+        /// idempotent - the closures only write colours - so it runs from the constructor as
+        /// well, which is what seeds the rack for the mod that is already active at startup.
+        /// </summary>
+        private void RetintChrome()
+        {
+            var accent = Accent;
+            foreach (var tint in _accentTints)
+            {
+                try { tint(accent); }
+                catch (Exception ex) { App.Logger?.Debug("Studio accent tint: {E}", ex.Message); }
+            }
+        }
+
+        // ---- accent maths --------------------------------------------------------------------
+
+        /// <summary>The same colour at a different alpha.</summary>
+        private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+
+        /// <summary>
+        /// Blend toward white. <c>Lighten(#FF69B4, 0.25)</c> is <c>#FF8FC7</c> to the byte - which
+        /// is exactly the relationship the NEW pill's two literals encoded, now expressed as the
+        /// transform instead of as a second hard-coded pink.
+        /// </summary>
+        private static Color Lighten(Color c, double t)
+        {
+            static byte Mix(byte v, double f) => (byte)Math.Clamp(Math.Round(v + (255 - v) * f), 0, 255);
+            return Color.FromArgb(c.A, Mix(c.R, t), Mix(c.G, t), Mix(c.B, t));
+        }
+
+        /// <summary>
+        /// Rotate a colour's hue, keeping saturation and value. The chip hue-wash used to run
+        /// coral <c>#FF7E6B</c> → pink <c>#FF69B4</c>; measured in HSV those two differ ONLY in
+        /// hue, by +38° (S 0.580 vs 0.588, V 1.0 both). So the wash is not two colours, it is one
+        /// accent and a hue rotation — and written that way it follows the mod instead of staying
+        /// pink under a purple one, while still reproducing the original pair (to within a byte)
+        /// for the default accent.
+        /// </summary>
+        private static Color HueRotate(Color c, double degrees)
+        {
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            double d = max - min;
+
+            double h;
+            if (d <= 0) h = 0;
+            else if (max == r) h = 60 * (((g - b) / d) % 6);
+            else if (max == g) h = 60 * (((b - r) / d) + 2);
+            else h = 60 * (((r - g) / d) + 4);
+
+            h = ((h + degrees) % 360 + 360) % 360;
+            double s = max <= 0 ? 0 : d / max, v = max;
+
+            double cc = v * s;
+            double x = cc * (1 - Math.Abs((h / 60) % 2 - 1));
+            double m = v - cc;
+            (double R, double G, double B) t = h switch
+            {
+                < 60 => (cc, x, 0),
+                < 120 => (x, cc, 0),
+                < 180 => (0, cc, x),
+                < 240 => (0, x, cc),
+                < 300 => (x, 0, cc),
+                _ => (cc, 0, x),
+            };
+            static byte B255(double v) => (byte)Math.Clamp(Math.Round(v * 255), 0, 255);
+            return Color.FromArgb(c.A, B255(t.R + m), B255(t.G + m), B255(t.B + m));
         }
 
         /// <summary>
@@ -407,15 +606,25 @@ namespace ConditioningControlPanel.Views.Tabs
                         });
                     capRow.Children.Add(caption);
 
+                    // The rule is an ACCENT ramp, not a pink one: same alphas (0x55 -> 0x00), the
+                    // hue taken from the active mod and re-taken on every switch. Registered
+                    // unfrozen with _accentTints; see that field for why nothing here freezes.
+                    var ruleBrush = new LinearGradientBrush(
+                        Color.FromArgb(0x55, 0xFF, 0x69, 0xB4),
+                        Color.FromArgb(0x00, 0xFF, 0x69, 0xB4),
+                        0);
+                    _accentTints.Add(c =>
+                    {
+                        ruleBrush.GradientStops[0].Color = WithAlpha(c, 0x55);
+                        ruleBrush.GradientStops[1].Color = WithAlpha(c, 0x00);
+                    });
+
                     var rule = new Border
                     {
                         Height = 1,
                         Margin = new Thickness(8, 1, 2, 0),
                         VerticalAlignment = VerticalAlignment.Center,
-                        Background = new LinearGradientBrush(
-                            Color.FromArgb(0x55, 0xFF, 0x69, 0xB4),
-                            Color.FromArgb(0x00, 0xFF, 0x69, 0xB4),
-                            0),
+                        Background = ruleBrush,
                     };
                     Grid.SetColumn(rule, 1);
                     capRow.Children.Add(rule);
@@ -497,16 +706,19 @@ namespace ConditioningControlPanel.Views.Tabs
             chip.SetResourceReference(Border.BorderBrushProperty, "GlassBorderBrush");
             RenderOptions.SetBitmapScalingMode(chip, BitmapScalingMode.HighQuality);
 
-            var chipArt = LoadFeatureArt(e.Art, 56);
+            // RackArtDecodeWidth, not 56: the tile below asks for the same file at the same width,
+            // so the two states share one resolver cache entry and one decode.
+            var chipArt = LoadFeatureArt(e.Art, RackArtDecodeWidth);
             if (chipArt != null)
             {
+                // NOT frozen - RefreshRackArt writes the mod's override into this exact brush.
                 var brush = new ImageBrush(chipArt)
                 {
                     Stretch = Stretch.UniformToFill,
                     AlignmentX = AlignmentX.Center,
                     AlignmentY = AlignmentY.Center,
                 };
-                brush.Freeze();
+                e.ChipArtBrush = brush;
                 chip.Background = brush;
             }
             else
@@ -545,19 +757,34 @@ namespace ConditioningControlPanel.Views.Tabs
 
             // v6.8.0 NEW pill: remove in 6.9
             // Brain Drain came back from the dead in this release, so the rack row that
-            // hosts it says so for one cycle. Literal colours, no TryFindResource: this is
-            // the same pink the rail's pills use and it must not depend on a theme key.
+            // hosts it says so for one cycle. Still no TryFindResource - the original note's
+            // point was that this pill must not depend on a theme key that might be missing -
+            // but the three colours are now MIXED FROM THE MOD ACCENT rather than hard-coded
+            // pink, because a pink pill on a purple mod's rack is the exact bug this lane is
+            // for. Accent comes from FxTheme, which is a static read with its own #FF69B4
+            // fallback, so a missing key still cannot break it. The lighten factor reproduces
+            // the old #FF8FC7 from the old #FF69B4 to the byte.
             // The extra column is added to THIS row's grid only (the grid is per-row), and
             // the dot below takes the last column rather than a hard-coded 2, so a
             // badged row keeps icon | label | pill | dot in that order.
             if (string.Equals(e.Key, "braindrain", StringComparison.OrdinalIgnoreCase))
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var pillBack = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4));
+                var pillRim = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+                var pillText = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7));
+                _accentTints.Add(c =>
+                {
+                    pillBack.Color = WithAlpha(c, 0x33);
+                    pillRim.Color = c;
+                    pillText.Color = Lighten(c, 0.25);
+                });
+
                 var newPill = new Border
                 {
                     CornerRadius = new CornerRadius(6),
-                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                    Background = pillBack,
+                    BorderBrush = pillRim,
                     BorderThickness = new Thickness(1),
                     Padding = new Thickness(4, 0, 4, 0),
                     Margin = new Thickness(6, 0, 0, 0),
@@ -568,7 +795,7 @@ namespace ConditioningControlPanel.Views.Tabs
                         FontFamily = new FontFamily("Consolas"),
                         FontSize = 9,
                         FontWeight = FontWeights.Bold,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xC7)),
+                        Foreground = pillText,
                     },
                 };
                 Grid.SetColumn(newPill, 2);
@@ -609,7 +836,7 @@ namespace ConditioningControlPanel.Views.Tabs
         /// </summary>
         private Grid? BuildArtTile(StudioRackEntry e)
         {
-            var art = LoadFeatureArt(e.Art, 256);
+            var art = LoadFeatureArt(e.Art, RackArtDecodeWidth);
             if (art == null) return null;
 
             var corners = new CornerRadius(3, 8, 8, 3);
@@ -624,13 +851,15 @@ namespace ConditioningControlPanel.Views.Tabs
                 Visibility = Visibility.Collapsed,
             };
 
+            // NOT frozen - RefreshRackArt writes the mod's override into this exact brush on a
+            // mod switch. The mask and the scrim below stay frozen: neither is mod-aware.
             var artBrush = new ImageBrush(art)
             {
                 Stretch = Stretch.UniformToFill,
                 AlignmentX = AlignmentX.Right,
                 AlignmentY = AlignmentY.Center,
             };
-            artBrush.Freeze();
+            e.TileArtBrush = artBrush;
 
             // Painted as a Border BACKGROUND, not an Image child: a Border clips its own
             // background to CornerRadius, but does not clip child elements to it.
@@ -760,26 +989,29 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         /// <summary>
-        /// Decodes a <c>Resources/features/</c> PNG at the size it will actually be drawn at.
+        /// Resolves a <c>Resources/features/</c> PNG at the size it will actually be drawn at.
         /// The source tiles are ~1024px square; handing WPF twelve of those undecimated for a
-        /// 28px chip is the classic way to spend 50MB on a sidebar. Frozen so the brushes built
-        /// from them are freezable too, and so nothing pins them to this thread.
-        /// <para>Null in, null out - and a decode failure is null as well rather than a throw:
-        /// a missing art file must cost the row its picture, not the whole rack.</para>
+        /// 28px chip is the classic way to spend 50MB on a sidebar.
+        ///
+        /// <para><b>Through the resolver, not through a hand-built pack:// URI.</b> This method
+        /// used to concatenate <c>pack://application:,,,/Resources/features/</c> itself, which
+        /// meant the rack was the ONE surface that ignored mod art: a <c>.ccpmod</c> shipping
+        /// <c>resources/features/flash.png</c> repainted the dashboard tile, the feature page and
+        /// the popup chrome, and left the rack row on the built-in picture under every mod.
+        /// <see cref="ModResourceResolver.ResolveImageDecoded"/> is the same event-skin → mod →
+        /// embedded chain every other art call site already uses, and it caches per (skin, mod,
+        /// path, width) so repeat resolves on a mod switch cost nothing.</para>
+        ///
+        /// <para>Null in, null out - and a resolve failure is null as well rather than a throw:
+        /// a missing art file must cost the row its picture, not the whole rack. Callers treat
+        /// null on a REPAINT as "keep what is on screen" - see <see cref="RefreshRackArt"/>.</para>
         /// </summary>
-        private static BitmapImage? LoadFeatureArt(string? file, int decodePixelWidth)
+        private static ImageSource? LoadFeatureArt(string? file, int decodePixelWidth)
         {
             if (string.IsNullOrWhiteSpace(file)) return null;
             try
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.UriSource = new Uri("pack://application:,,,/Resources/features/" + file, UriKind.Absolute);
-                bmp.DecodePixelWidth = decodePixelWidth;
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                bmp.Freeze();
-                return bmp;
+                return ModResourceResolver.ResolveImageDecoded("features/" + file, decodePixelWidth);
             }
             catch (Exception ex)
             {
@@ -788,11 +1020,17 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
-        /// <summary>Hue-wash behind the emoji of an art-less module's chip: 135°, warm to pink.</summary>
-        private static readonly LinearGradientBrush ChipHueWashBrush = Frozen(new LinearGradientBrush(
+        /// <summary>
+        /// Hue-wash behind the emoji of an art-less module's chip: 135°, warm to accent.
+        /// Instance, and NOT frozen, because <see cref="RetintChrome"/> re-mixes it from the mod
+        /// accent - see <see cref="RegisterChromeTints"/> for the warm end's derivation.
+        /// Shared by the three art-less chips, which is the same multi-element sharing any
+        /// resource brush does.
+        /// </summary>
+        private readonly LinearGradientBrush ChipHueWashBrush = new(
             Color.FromArgb(0x40, 0xFF, 0x7E, 0x6B),
             Color.FromArgb(0x1F, 0xFF, 0x69, 0xB4),
-            new Point(0, 0), new Point(1, 1)));
+            new Point(0, 0), new Point(1, 1));
 
         /// <summary>
         /// Fades the active tile's art out toward the left so it dissolves into the panel instead
@@ -1146,19 +1384,21 @@ namespace ConditioningControlPanel.Views.Tabs
         };
 
         /// <summary>
-        /// The lit dot's halo. Hoisted to one frozen instance rather than allocated per dot per
-        /// repaint (RefreshDots runs on every settings write that moves a dot, on every selection
-        /// and on every Studio show). Still not an animation, so there is nothing here for the
-        /// motion kill-switch to reach.
+        /// The lit dot's halo. Hoisted to one instance rather than allocated per dot per repaint
+        /// (RefreshDots runs on every settings write that moves a dot, on every selection and on
+        /// every Studio show). Still not an animation, so there is nothing here for the motion
+        /// kill-switch to reach.
+        /// <para>Instance and unfrozen now: the halo is the mod accent, and a frozen effect is
+        /// exactly the shape that goes on glowing pink forever under a purple mod.</para>
         /// </summary>
-        private static readonly System.Windows.Media.Effects.DropShadowEffect DotGlow =
-            Frozen(new System.Windows.Media.Effects.DropShadowEffect
+        private readonly System.Windows.Media.Effects.DropShadowEffect DotGlow =
+            new()
             {
                 Color = Color.FromRgb(0xFF, 0x69, 0xB4),
                 BlurRadius = 7,
                 ShadowDepth = 0,
                 Opacity = 0.85,
-            });
+            };
 
         private void RefreshDots()
         {
@@ -1213,6 +1453,10 @@ namespace ConditioningControlPanel.Views.Tabs
             // (StudioTabView.<Area>.cs). Each is idempotent and self-guarding.
             HookHapticsModule();
             RefreshRackLabels();
+            // The header medallion is mod art like the nav rail's. Done here rather than in the
+            // ctor for symmetry with the repaint path; the XAML default covers the gap.
+            try { ApplyDoorIcon(); }
+            catch (Exception ex) { App.Logger?.Debug("StudioTabView door icon: {E}", ex.Message); }
             RefreshDots();
             // Only now does an adorner layer exist for the rows built in the constructor.
             RefreshTileComets();

@@ -42,15 +42,17 @@ namespace ConditioningControlPanel.Features
         /// reads as pinned ON the card. Shared with the chip clearance check above.</summary>
         internal const double CardBadgeTopMargin = -6;
 
-        /// <summary>A live card's resting edge (violet, 1px) - what an untiered card wears.</summary>
-        internal static readonly SolidColorBrush EdgeDefault = Frozen(Color.FromArgb(0x4D, 0xB4, 0x78, 0xFF));
-
-        /// <summary>An UNTIERED free-today card's edge: gold, and thicker. A tiered card never
-        /// reaches this - it keeps its livery and says the free day with the re-stamp instead.</summary>
+        /// <summary>
+        /// An UNTIERED free-today card's edge: gold, and thicker. A tiered card never reaches this -
+        /// it keeps its livery and says the free day with the re-stamp instead.
+        ///
+        /// <para>The one edge in here that is a literal. Everything else a vault surface RESTS in
+        /// follows the active mod (MainWindow.Exclusives.cs's <c>ExclusiveEdgeDefault()</c> /
+        /// <c>SpotlightEdgeDefault()</c>, the mod-aware sweep's lane B), and is therefore passed in
+        /// rather than owned here. This one stays gold because "gold means open for one day only"
+        /// is a contract shared with the dashboard's ? box and the rail.</para>
+        /// </summary>
         internal static readonly SolidColorBrush EdgeFree = Frozen(Color.FromArgb(0xE6, 0xFF, 0xD2, 0x7A));
-
-        /// <summary>The spotlight band's resting edge (pink), as authored in the view.</summary>
-        internal static readonly SolidColorBrush SpotlightEdgeDefault = Frozen(Color.FromArgb(0x66, 0xFF, 0x69, 0xB4));
 
         /// <summary>
         /// Dresses one vault surface: the rim it wears, and the tier sign stamped on its art.
@@ -59,17 +61,28 @@ namespace ConditioningControlPanel.Features
         /// the gold pill are for surfaces with no tier sign; where there IS one, the free day is
         /// said by the re-stamp (the sign dims and the pink stamp lands over it), because a livery
         /// that changed colour for a day would stop being a livery.</para>
+        ///
+        /// <para><b>Mod-awareness stops at the livery.</b> <paramref name="untieredEdge"/> is the
+        /// caller's mod-derived accent (the 2026-08-13 mod-aware sweep re-tints the vault's
+        /// furniture so a Dronification user does not get a green room with pink trim), and it is
+        /// REQUIRED rather than defaulted precisely so no call site can quietly fall back to a
+        /// literal and un-tint itself. What it can never reach is the tier rim above: a tier mark
+        /// is commerce, not decor, so it does not take colour from the mod chain.</para>
+        ///
+        /// <para>This is also the ONLY writer of these two properties on a vault surface. The
+        /// pre-merge code set them again at each call site; two writers is how a tiered card ends
+        /// up wearing the untiered edge on one of its states.</para>
         /// </summary>
         /// <param name="card">The surface's own Border - it keeps painting the resting rim.</param>
         /// <param name="badge">Its tier sign, or null on an untiered surface.</param>
         /// <param name="tier">The livery tier. NOT an entitlement check.</param>
         /// <param name="freeToday">True when this feature is today's daily free pick.</param>
+        /// <param name="untieredEdge">Mod-aware resting edge, for an untiered surface.</param>
         /// <param name="rim">Rim weight; hero surfaces pass <see cref="SpotlightRim"/>.</param>
-        /// <param name="untieredEdge">Resting edge for an untiered surface.</param>
         /// <returns>True when the caller should fall back to the gold FREE TODAY pill, i.e. this
         /// surface has no sign to re-stamp.</returns>
         internal static bool Apply(Border card, TierBadge? badge, int tier, bool freeToday,
-                                   double rim = CardRim, Brush? untieredEdge = null)
+                                   Brush untieredEdge, double rim = CardRim)
         {
             if (tier > 0)
             {
@@ -82,7 +95,7 @@ namespace ConditioningControlPanel.Features
             else
             {
                 TierFxBorder.SetTier(card, 0);
-                card.BorderBrush = freeToday ? EdgeFree : (untieredEdge ?? EdgeDefault);
+                card.BorderBrush = freeToday ? EdgeFree : untieredEdge;
                 card.BorderThickness = new Thickness(freeToday ? 2 : 1);
             }
 

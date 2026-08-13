@@ -317,6 +317,32 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("ApplyProfilePins: {E}", ex.Message); }
         }
 
+        /// <summary>
+        /// Re-resolves the Showcase's featured tiles through <see cref="ModResourceResolver"/> after
+        /// a mod switch. Called by the sweep in MainWindow.UiUpdates.cs.
+        ///
+        /// <para>It re-derives the pinned ids from the tiles that are ALREADY on the shelf rather
+        /// than re-reading your own loadout, because the card on screen is not always yours: a
+        /// searched profile renders someone else's pins, and repainting those from settings would
+        /// quietly show them your loadout. Re-running <see cref="ApplyProfilePins"/> with the ids it
+        /// last rendered repaints art and mod-aware titles for whichever card is up, and is a no-op
+        /// on an empty shelf.</para>
+        /// </summary>
+        internal void RefreshShowcasePinArt()
+        {
+            try
+            {
+                if (DiscordTab?.ProfilePinnedShowcase?.ItemsSource is not System.Collections.IEnumerable source)
+                    return;
+
+                var ids = source.OfType<ProfileAchievementTile>().Select(t => t.Id).ToList();
+                if (ids.Count == 0) return;
+
+                ApplyProfilePins(ids);
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshShowcasePinArt: {E}", ex.Message); }
+        }
+
         // ============================== customize dialog ==============================
 
         /// <summary>

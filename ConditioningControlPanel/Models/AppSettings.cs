@@ -716,10 +716,16 @@ namespace ConditioningControlPanel.Models
             set { _flashEnabled = value; OnPropertyChanged(); }
         }
 
+        // [JsonProperty] on the field + [JsonIgnore] on the property: the FILE keeps the user's own
+        // value while the getter can hand readers a session's live ramp. Same JSON key as before, so
+        // existing settings.json round-trips unchanged. See SetSessionFlashRamp.
+        [JsonProperty("FlashFrequency")]
         private int _flashFrequency = 10; // Flashes per hour (1-180)
+
+        [JsonIgnore]
         public int FlashFrequency
         {
-            get => _flashFrequency;
+            get => _sessionFlashFrequency ?? _flashFrequency;
             set { _flashFrequency = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
         }
 
@@ -789,23 +795,59 @@ namespace ConditioningControlPanel.Models
             set { _simultaneousImages = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        [JsonProperty("ImageScale")]
         private int _imageScale = 100; // 50-250% (100 = normal size, 200 = double, etc)
+
         /// <summary>
         /// Image scale as percentage. 50 = half size, 100 = normal, 200 = double size.
         /// Base size is 40% of monitor, then multiplied by this percentage.
         /// </summary>
+        [JsonIgnore]
         public int ImageScale
         {
-            get => _imageScale;
+            get => _sessionImageScale ?? _imageScale;
             set { _imageScale = Math.Clamp(value, 50, 250); OnPropertyChanged(); }
         }
 
+        [JsonProperty("FlashOpacity")]
         private int _flashOpacity = 100; // 10-100%
+
+        [JsonIgnore]
         public int FlashOpacity
         {
-            get => _flashOpacity;
+            get => _sessionFlashOpacity ?? _flashOpacity;
             set { _flashOpacity = Math.Clamp(value, 10, 100); OnPropertyChanged(); }
         }
+
+        // ---- Session ramp overlay (never persisted) ----
+
+        [JsonIgnore] private int? _sessionFlashOpacity;
+        [JsonIgnore] private int? _sessionFlashFrequency;
+        [JsonIgnore] private int? _sessionImageScale;
+
+        /// <summary>
+        /// Park a session's live flash values over the user's own, or pass nulls to hand them back.
+        ///
+        /// SessionEngine ramps flash opacity, frequency and scale every second. Those used to be
+        /// written straight into the persisted fields, so an app kill or crash mid-session froze the
+        /// ramp's maximum into settings.json permanently - the same shape of bug as the pink filter's
+        /// "screen keeps getting more pink and stays that way" (#471, #476), whose ramp was moved off
+        /// this path for exactly this reason. RestoreSettings only heals a CLEAN stop.
+        ///
+        /// Readers (FlashService) see the ramped value because the getters prefer the overlay; the
+        /// file, the settings sliders and every restore path still see the user's own. Deliberately
+        /// silent - no PropertyChanged - so a running session does not drag the user's sliders around
+        /// mid-ramp, matching how the pink and spiral ramps already behave.
+        /// </summary>
+        public void SetSessionFlashRamp(int? opacity, int? frequency, int? imageScale)
+        {
+            _sessionFlashOpacity = opacity.HasValue ? Math.Clamp(opacity.Value, 10, 100) : null;
+            _sessionFlashFrequency = frequency.HasValue ? Math.Clamp(frequency.Value, 1, 180) : null;
+            _sessionImageScale = imageScale.HasValue ? Math.Clamp(imageScale.Value, 50, 250) : null;
+        }
+
+        /// <summary>Hand the flash values back to the user. Safe to call when none were taken.</summary>
+        public void ClearSessionFlashRamp() => SetSessionFlashRamp(null, null, null);
 
         private int _fadeDuration = 40; // 0-200 (0-2 seconds, stored as percentage)
         public int FadeDuration

@@ -691,6 +691,16 @@ namespace ConditioningControlPanel
 
                 // Refresh title (applies text replacements)
                 UpdateTitleDisplay(App.Settings?.Current?.PlayerLevel ?? 1);
+
+                // The right-click quick menu is mod-coloured AND mod-worded: the "Talk to ...",
+                // Takeover and Personality rows are painted in the accent and named through
+                // GetTalkToLabel / GetTakeoverLabel / GetPersonalityDisplayName, every one of them
+                // captured when the row was last written. MainWindow.ApplyActiveModChange calls this
+                // too, but only on the top-bar/manage-mods path - uninstalling the mod you are
+                // wearing makes ModService activate the fallback itself and never reaches it, so the
+                // menu belongs on ModChanged with the rest of the tube. Idempotent: it writes
+                // headers, foregrounds and enablement, and rebuilds the personality submenu.
+                UpdateQuickMenuState();
             }
             catch (Exception ex)
             {

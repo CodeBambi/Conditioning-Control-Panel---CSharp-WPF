@@ -541,6 +541,9 @@ namespace ConditioningControlPanel
         /// <summary>Multi-day Training Programs runtime. Fully qualified because the namespace
         /// segment <c>Program</c> collides with the <c>Program</c> type in C# name resolution.</summary>
         public static Services.Program.ProgramService Programs { get; private set; } = null!;
+        /// <summary>Turns a banked chapter reward into the thing it promised - a filed session, an
+        /// installed phrase - and answers what the user owns.</summary>
+        public static Services.Program.ProgramRewardService ProgramRewards { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
@@ -1821,6 +1824,11 @@ namespace ConditioningControlPanel
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
+            // Must follow Programs (it subscribes to ChapterCompleted and catches up on everything
+            // already banked). Its constructor never toasts, so being ahead of App.Notifications is
+            // fine; the session it may file lands before MainWindow's SessionManager enumerates the
+            // CustomSessions folder, which is exactly when it wants to be there.
+            ProgramRewards = new Services.Program.ProgramRewardService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
 
@@ -4456,6 +4464,7 @@ Application State:
             ContentPacks?.Dispose();
             ReleaseContent?.Dispose();
             Roadmap?.Dispose();
+            ProgramRewards?.Dispose();
             Programs?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();

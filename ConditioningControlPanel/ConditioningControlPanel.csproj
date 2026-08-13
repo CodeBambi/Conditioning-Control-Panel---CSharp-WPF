@@ -217,13 +217,10 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- Exclusives tab art (vault backdrop), loaded off disk by Views/Tabs/ExclusivesTabView -->
-    <None Remove="assets\exclusives\*.png" />
-    <Content Include="assets\exclusives\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
+    <!-- The Exclusives vault backdrop used to live at assets\exclusives\ as loose Content and
+         was loaded off AppContext.BaseDirectory - outside Resources\, so no .ccpmod could ever
+         shadow it. It moved to Resources\exclusives\ (declared as <Resource> further down) and
+         now resolves through ModResourceResolver like every other mod-skinnable image. -->
   </ItemGroup>
 
   <!-- WebView2Loader.dll must be on disk - the WebView2 SDK loads it outside .NET's single-file extraction -->
@@ -373,6 +370,11 @@
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
     <Resource Include="Resources\programs\*.png" />
+
+    <!-- Velvet Vault room art. Resource, NOT Content: ModResourceResolver's last link is a
+         pack:// URI, so a Content-only file resolves to nothing once the mod and event probes
+         miss (that is exactly how this backdrop was unreachable to mods before). -->
+    <Resource Include="Resources\exclusives\*.png" />
 
     <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
          loader is pack:// only, and these must never fall under the Resources\cosmetics\**
