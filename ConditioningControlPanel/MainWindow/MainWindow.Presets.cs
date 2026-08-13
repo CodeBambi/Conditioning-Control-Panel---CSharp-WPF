@@ -1077,6 +1077,19 @@ namespace ConditioningControlPanel
                     if (art != null) dash.MysteryRevealArtBrush.ImageSource = art;
                 }
 
+                // The re-stamp: today's feature's tier sign, dimmed, with the FREE TODAY stamp
+                // slammed over it. Only for accounts that are actually being given something -
+                // premium owns the pool, so its reveal face carries no sign at all rather than a
+                // tier badge with nothing stamped on it, which would read as a price on a door
+                // that is already open.
+                if (dash.MysteryRevealBadge != null)
+                {
+                    bool premium = App.Patreon?.HasPremiumAccess == true;
+                    int tier = premium ? 0 : MysteryFeatureTier(key);
+                    dash.MysteryRevealBadge.Tier = tier;
+                    dash.MysteryRevealBadge.FreeToday = tier > 0;
+                }
+
                 // The plate's hover flip and its gold breath are hooked/armed off the same
                 // repaint triggers this method already has (Home shown, patron status, override
                 // landing). One-shot latched, so it is safe to hammer - see DashboardFx 2c.
@@ -1098,6 +1111,24 @@ namespace ConditioningControlPanel
             // nobody translates (same call as the Play door's lockband).
             "dtrh" => "Down the Rabbit Hole",
             _ => null,
+        };
+
+        /// <summary>
+        /// The LIVERY tier of a DailyFreeService key: which sign the reveal face wears before the
+        /// FREE TODAY stamp lands on it. Every pool feature is a Tier 1 exclusive except the
+        /// descent, which is the wall's Tier 2 door (Play's DTRH hero wears the same diamond).
+        /// An unknown key gets 0, i.e. no sign - the same silence the box falls back to when it
+        /// cannot name the day's feature either.
+        ///
+        /// <para>Kept beside <see cref="MysteryFeatureName"/> and <see cref="MysteryFeatureArtPath"/>
+        /// on purpose: three switches over one key set, so adding a pool feature is three lines in
+        /// one place rather than a hunt.</para>
+        /// </summary>
+        private static int MysteryFeatureTier(string? key) => key switch
+        {
+            "dtrh" => 2,
+            "takeover" or "awareness" or "haptics" or "voice" or "fyp" or "remote" => 1,
+            _ => 0,
         };
 
         /// <summary>

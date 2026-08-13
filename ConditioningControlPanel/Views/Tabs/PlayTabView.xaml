@@ -97,8 +97,21 @@
                  (the lockbands below only exist while locked). Own hover triggers, because
                  a derived style's trigger outranks the base one: hover brightens the metal
                  instead of falling back to the mod accent. -->
+            <!-- LIVING METAL (2026-08-13). The rim went 1px -> 3px and picked up a traveling
+                 highlight band: fx:TierFxBorder attaches an adorner that laps the stroke (gold
+                 clockwise 6.5s, diamond counter-clockwise 5s, both tightening and brightening on
+                 hover). RimThickness must MATCH BorderThickness or the band misses the metal.
+                 The band is the only animated part: the resting rim is still this gradient, which
+                 is exactly what a reduced-motion / Performance-tier user keeps - the adorner draws
+                 nothing at all rather than substituting a second look.
+                 Thickening the border does NOT move the art: PlayCardArtPlate's -22 margin cancels
+                 PlayCard's 22 Padding, so the plate lands on the border's inner edge whatever the
+                 stroke weighs. -->
             <Style x:Key="PlayCardT1" TargetType="Border" BasedOn="{StaticResource PlayCard}">
                 <Setter Property="BorderBrush" Value="{DynamicResource Tier1GoldBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="3"/>
+                <Setter Property="fx:TierFxBorder.Tier" Value="1"/>
+                <Setter Property="fx:TierFxBorder.RimThickness" Value="3"/>
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
                         <Setter Property="BorderBrush" Value="{DynamicResource Tier1GoldHoverBrush}"/>
@@ -107,11 +120,25 @@
             </Style>
             <Style x:Key="PlayCardT2" TargetType="Border" BasedOn="{StaticResource PlayCard}">
                 <Setter Property="BorderBrush" Value="{DynamicResource Tier2DiamondBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="3"/>
+                <Setter Property="fx:TierFxBorder.Tier" Value="2"/>
+                <Setter Property="fx:TierFxBorder.RimThickness" Value="3"/>
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
                         <Setter Property="BorderBrush" Value="{DynamicResource Tier2DiamondHoverBrush}"/>
                     </Trigger>
                 </Style.Triggers>
+            </Style>
+            <!-- The badge stamped on a tiered card's art. One style so the six cards and the hero
+                 cannot drift: top-right, tucked over the card's own corner (the negative margins
+                 eat PlayCard's 22 Padding and 2px more, so it reads as pinned ON the card rather
+                 than laid inside it). Width is self-computed from the host card - see TierBadge -
+                 and the art is short enough that it never reaches the title row below the plate. -->
+            <Style x:Key="PlayTierBadge" TargetType="fx:TierBadge">
+                <Setter Property="HorizontalAlignment" Value="Right"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+                <Setter Property="Margin" Value="0,-24,-24,0"/>
+                <Setter Property="Panel.ZIndex" Value="9"/>
             </Style>
             <!-- The art plate every card header sits in. ONE height (138) for the whole wall now
                  that the wall is uniform - the old page ran 132 in three zones and 138 in one,
@@ -295,8 +322,13 @@
                      artwork lays on: if features/dtrh.png ever fails to decode, the hero degrades
                      to exactly the gradient it shipped with rather than to a black hole. -->
                 <!-- Diamond frame = Tier 2 livery (Brushes.xaml), same trim as the two Eyes
-                     cards, so the wall's most expensive door wears its price openly. -->
-                <Border CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource Tier2DiamondBorderBrush}"
+                     cards, so the wall's most expensive door wears its price openly. It wears the
+                     HERO weight of that trim - 4px and a counter-clockwise band, against the
+                     cards' 3 - because this is the one surface on the page that is allowed to be
+                     louder than the wall. RimThickness tracks BorderThickness; see the note on
+                     PlayCardT1/T2 above. -->
+                <Border CornerRadius="16" BorderThickness="4" BorderBrush="{DynamicResource Tier2DiamondBorderBrush}"
+                        fx:TierFxBorder.Tier="2" fx:TierFxBorder.RimThickness="4"
                         Margin="9,0,9,18" ClipToBounds="True" MinHeight="200">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -362,6 +394,21 @@
                              No second AmbientFxCanvas may be added to this view: one focal
                              ambient loop per surface (FX_OVERHAUL_PLAN). -->
                         <fx:AmbientFxCanvas x:Name="RabbitHoleFx" x:FieldModifier="internal"/>
+
+                        <!-- The hero's PRIME SUBJECT sign. TOP-LEFT here, and top-RIGHT on every
+                             card: the right side of this band is SlotDtrh's launch column, whose
+                             FALL IN button is vertically centred and reaches within ~45px of the
+                             top edge, so a right-hand badge would land on it at every hero height.
+                             The left corner is open art at any size (the title block is centred
+                             too), which is why the mirror is here and nowhere else. -->
+                        <!-- Named for the same reason as the Remote badge, with one difference:
+                             "dtrh" is NOT on the wheel. It is an override-only key (the owner's
+                             promo Saturdays), which is exactly why the lockband above already
+                             passes it to TierGate.RequiresLab - so the day the server names it,
+                             the band clears and this sign gets the stamp, together. -->
+                        <fx:TierBadge x:Name="PlayBadgeDtrh" x:FieldModifier="internal"
+                                      Tier="2" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="-2,-2,0,0" Panel.ZIndex="9"/>
 
                         <Grid x:Name="SlotDtrh" x:FieldModifier="internal" Margin="28,24,28,24">
                             <Grid>
@@ -621,6 +668,21 @@
                                         </Button.Resources>
                                     </Button>
                                 </Grid>
+                                <!-- The tier badge: a neon sign pinned on the art, above the
+                                     lockband on purpose (ZIndex in PlayTierBadge). The band is the
+                                     price TAG for an account that cannot open the card; the badge
+                                     is the price, and it is worn by every account, so it must not
+                                     be the thing that goes dim behind the scrim. Nothing about the
+                                     band's contract changes: still collapsed by default, still
+                                     hit-test invisible, still clockless. -->
+                                <!-- NAMED because "remote" is on the daily-free wheel
+                                     (DailyFreeService.Pool): MainWindow.PlayTab.cs stamps FREE
+                                     TODAY over this sign on the day it comes up. The four badges
+                                     that are not named - Blink, Lockdown, Gaze, Focus Gaze - are
+                                     not on the wheel and cannot be named by a server override
+                                     either, so a field for them would be dead weight. -->
+                                <fx:TierBadge x:Name="PlayBadgeRemote" x:FieldModifier="internal"
+                                              Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockRemote" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -754,6 +816,7 @@
                                         </Border>
                                     </StackPanel>
                                 </Grid>
+                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="2"/>
                                 <Border x:Name="PlayLockGaze" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBandT2}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -829,6 +892,7 @@
                                         </Border>
                                     </StackPanel>
                                 </Grid>
+                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="2"/>
                                 <Border x:Name="PlayLockFocusGaze" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBandT2}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -891,6 +955,7 @@
                                         </Button.Resources>
                                     </Button>
                                 </Grid>
+                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockBlink" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -1056,6 +1121,8 @@
                                         </Button.Resources>
                                     </Button>
                                 </Grid>
+                                <fx:TierBadge x:Name="PlayBadgeFyp" x:FieldModifier="internal"
+                                              Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockFyp" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">
@@ -1115,6 +1182,7 @@
                                         </Button.Resources>
                                     </Button>
                                 </Grid>
+                                <fx:TierBadge Style="{StaticResource PlayTierBadge}" Tier="1"/>
                                 <Border x:Name="PlayLockLockdown" x:FieldModifier="internal"
                                         Style="{StaticResource PlayLockBand}" Margin="-22">
                                     <StackPanel VerticalAlignment="Center">

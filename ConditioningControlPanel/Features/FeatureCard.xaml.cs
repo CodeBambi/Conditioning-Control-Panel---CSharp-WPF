@@ -308,6 +308,7 @@ namespace ConditioningControlPanel.Features
                     TeaseHost.Visibility = Visibility.Collapsed;
                     ImgIconHost.Effect = null;
                     GlyphHost.Effect = null;
+                    Controls.TierFxBorder.SetTier(RootBorder, 0);
                     RootBorder.SetResourceReference(Border.BorderBrushProperty, "GlassBorderBrush");
                     RootBorder.BorderThickness = new Thickness(1);
                     TierBadgeHost.SetResourceReference(Border.BorderBrushProperty, "PinkBrush");
@@ -336,6 +337,15 @@ namespace ConditioningControlPanel.Features
                 RootBorder.BorderThickness = new Thickness(TeaseBorderThickness);
                 TierBadgeHost.BorderBrush = livery;
                 TxtTierBadge.Foreground = livery;
+
+                // Living metal, same band the Play wall and the vault wear - the tease tile is the
+                // one mosaic tile carrying a livery, so it gets the livery's motion too. NO image
+                // badge here: a mosaic tile is ~150px wide and the neon sign art would swallow it,
+                // so the tease keeps its text pill (the "◆" above) and only the rim comes alive.
+                // RimThickness matches the stroke set above; the tile parks its own clock when the
+                // dashboard is hidden, via the adorner's visibility hook.
+                Controls.TierFxBorder.SetRimThickness(RootBorder, TeaseBorderThickness);
+                Controls.TierFxBorder.SetTier(RootBorder, TeaseTier);
             }
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyTeaseState: {E}", ex.Message); }
         }

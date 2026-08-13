@@ -96,6 +96,9 @@ namespace ConditioningControlPanel
                 SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")));
                 SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp"));
 
+                // --- FREE TODAY re-stamps ---------------------------------------------------
+                RefreshPlayFreeStamps(tab);
+
                 // --- Goon: name the rungs, gate nothing -------------------------------------
                 // Joining is free and stays free. The T1 send half and the T2 host half are the
                 // ONLY paid parts, they are enforced in GoonHostService and on the server, and this
@@ -118,6 +121,46 @@ namespace ConditioningControlPanel
                 // Do not reintroduce a second reader of EnableDeeper without a card to hide.
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshPlayCards: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Stamps FREE TODAY over the tier sign of any Play card whose feature is today's daily
+        /// free unlock.
+        ///
+        /// <para><b>Why this needs saying at all.</b> The lockbands above already pass their daily
+        /// key to TierGate ("fyp", "remote", "dtrh"), so on a free day the band simply CLEARS - the
+        /// card stops looking locked and says nothing about why. Without the stamp the one day a
+        /// feature is genuinely free is the one day the wall is silent about it, which is the exact
+        /// opposite of the intent. The stamp is the only surface on this door that says "today".</para>
+        ///
+        /// <para><b>Eligibility mirrors the vault</b> (<c>IsExclusiveFreeToday</c>): a re-stamp only
+        /// means anything on a door that is otherwise SHUT. An account that already owns the
+        /// feature is not being given a gift, so it keeps the plain tier sign - the same call the
+        /// dashboard's ? box makes for premium accounts. Note the two gates differ: Remote and For
+        /// You are premium features, the descent is a Lab one, so each asks its own question rather
+        /// than a blanket "is this a patron".</para>
+        ///
+        /// <para>Nothing here decides anything: <see cref="Services.TierGate"/> already ORs the same
+        /// <see cref="Services.DailyFreeService.IsFreeToday"/> into the verdict that opens the door.
+        /// This only says out loud what that verdict already allows.</para>
+        /// </summary>
+        private static void RefreshPlayFreeStamps(Views.Tabs.PlayTabView tab)
+        {
+            bool premium = App.Patreon?.HasPremiumAccess == true;
+            bool lab = App.Patreon?.HasLabAccess == true;
+
+            SetFreeStamp(tab.PlayBadgeRemote, "remote", owned: premium);
+            SetFreeStamp(tab.PlayBadgeFyp, "fyp", owned: premium);
+            // Override-only: the wheel never lands on the descent, but a promo Saturday can.
+            SetFreeStamp(tab.PlayBadgeDtrh, "dtrh", owned: lab);
+        }
+
+        /// <summary>One badge's stamp. Null-safe, and silent when there is no daily-free service
+        /// (early startup, test hosts) - a missing stamp is the correct failure for chrome.</summary>
+        private static void SetFreeStamp(Controls.TierBadge? badge, string dailyKey, bool owned)
+        {
+            if (badge == null) return;
+            badge.FreeToday = !owned && App.DailyFree?.IsFreeToday(dailyKey) == true;
         }
 
         /// <summary>

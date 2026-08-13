@@ -52,6 +52,23 @@ namespace ConditioningControlPanel.Models
         public string? BadgeLocKey { get; init; }
 
         /// <summary>
+        /// The LIVERY tier this card wears: 1 = gold "BASIC SUBJECT", 2 = diamond "PRIME SUBJECT",
+        /// 0 = no livery at all. It drives the animated rim and the stamped tier badge
+        /// (MainWindow.Exclusives.cs), and nothing else.
+        ///
+        /// <para><b>This is a price tag, not an entitlement check.</b> It says what the feature
+        /// costs, which is why every account sees it - a patron who owns the shelf still gets to
+        /// see which doors are the expensive ones. What an account may actually OPEN is
+        /// <see cref="GateState"/> and, at the destination, TierGate: those two are the only
+        /// things that ever refuse, and this number must never be read as either.</para>
+        ///
+        /// <para>Graded Intake is deliberately 0: it is the weekly-pass feature, legitimately open
+        /// to free accounts on their unspent pass, so hanging a tier badge on it would be the
+        /// shelf telling a small lie about the one door that is not sold by tier.</para>
+        /// </summary>
+        public int Tier { get; init; }
+
+        /// <summary>
         /// This exclusive's <see cref="Services.DailyFreeService"/> pool key, or null for the
         /// entries the daily rotation never names (Blink Trainer, Graded Intake, Lockdown).
         /// On the day the ? box rotates a key in, the matching vault card renders open and
@@ -100,7 +117,7 @@ namespace ConditioningControlPanel.Models
             new()
             {
                 // "fyp" is not a tab - ShowTab launches the feed window for this key.
-                Key = "fyp", Emoji = "📱",
+                Key = "fyp", Emoji = "📱", Tier = 1,
                 TitleLocKey = "tab_fyp", TaglineLocKey = "exclusives_tag_fyp",
                 ArtResource = "Resources/features/fyp.png",
                 // Wide cut for the hero band; the card keeps the 16:9 art above.
@@ -112,21 +129,21 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
-                Key = "blinktrainer", Emoji = "💫",
+                Key = "blinktrainer", Emoji = "💫", Tier = 1,
                 TitleLocKey = "tab_blink_trainer", TaglineLocKey = "exclusives_tag_blinktrainer",
                 ArtResource = "Resources/features/blink_trainer.png",
                 FocalX = 0.30, FocalY = 0.45,
             },
             new()
             {
-                Key = "remotecontrol", Emoji = "🎮",
+                Key = "remotecontrol", Emoji = "🎮", Tier = 1,
                 TitleLocKey = "tab_remote_control", TaglineLocKey = "exclusives_tag_remotecontrol",
                 ArtResource = "Resources/features/remote_control.png",
                 DailyFreeKey = "remote",
             },
             new()
             {
-                Key = "bambitakeover", Emoji = "🤖",
+                Key = "bambitakeover", Emoji = "🤖", Tier = 1,
                 TitleLocKey = "tab_takeover", TaglineLocKey = "exclusives_tag_bambitakeover",
                 ArtResource = "Resources/features/takeover.png",
                 FocalY = 0.35,
@@ -134,7 +151,7 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
-                Key = "shelistening", Emoji = "🎙️",
+                Key = "shelistening", Emoji = "🎙️", Tier = 1,
                 TitleLocKey = "tab_shelistening", TaglineLocKey = "exclusives_tag_shelistening",
                 ArtResource = "Resources/features/audio_whispers.png",
                 BadgeLocKey = "exclusives_badge_beta",
@@ -143,6 +160,7 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
+                // Tier deliberately left at 0 - the weekly pass opens this door without one.
                 Key = "gradedintake", Emoji = "❓",
                 TitleLocKey = "tab_gradedintake", TaglineLocKey = "exclusives_tag_gradedintake",
                 ArtResource = "Resources/features/lab_quiz_hero.png",
@@ -158,7 +176,7 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
-                Key = "haptics", Emoji = "💜",
+                Key = "haptics", Emoji = "💜", Tier = 1,
                 TitleLocKey = "tab_haptics", TaglineLocKey = "exclusives_tag_haptics",
                 ArtResource = "Resources/features/vibe.png",
                 // Benched from the wheel, but a server override can still hand it out.
@@ -166,14 +184,14 @@ namespace ConditioningControlPanel.Models
             },
             new()
             {
-                Key = "awareness", Emoji = "👁",
+                Key = "awareness", Emoji = "👁", Tier = 1,
                 TitleLocKey = "tab_awareness", TaglineLocKey = "exclusives_tag_awareness",
                 ArtResource = "Resources/features/awareness.png",
                 DailyFreeKey = "awareness",
             },
             new()
             {
-                Key = "lockdown", Emoji = "🔒",
+                Key = "lockdown", Emoji = "🔒", Tier = 1,
                 TitleLocKey = "tab_lockdown_mode", TaglineLocKey = "exclusives_tag_lockdown",
                 ArtResource = "Resources/lockdown_icon.png",
             },

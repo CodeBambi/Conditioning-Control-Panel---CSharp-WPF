@@ -329,12 +329,21 @@ public class ModAwareVaultTests
     [Fact]
     public void NoBrandLiteralsAreLeftInTheVaultChrome()
     {
-        var vault = AppFile("MainWindow", "MainWindow.Exclusives.cs");
-        var code = StripComments(vault);
+        // TWO files since the tier-livery pass: the shelf's edge vocabulary moved to
+        // Features\VaultLivery.cs so a render suite could reach it without a live MainWindow. The
+        // brand-literal guard follows the code - a violet hairline is just as wrong in its new home.
+        foreach (var file in new[]
+                 {
+                     AppFile("MainWindow", "MainWindow.Exclusives.cs"),
+                     AppFile("Features", "VaultLivery.cs"),
+                 })
+        {
+            var code = StripComments(file);
 
-        // Bambi pink and its violet partner, in the two spellings this file used.
-        foreach (var literal in new[] { "0xFF, 0x69, 0xB4", "0xB4, 0x78, 0xFF" })
-            Assert.DoesNotContain(literal, code, StringComparison.Ordinal);
+            // Bambi pink and its violet partner, in the two spellings these files used.
+            foreach (var literal in new[] { "0xFF, 0x69, 0xB4", "0xB4, 0x78, 0xFF" })
+                Assert.DoesNotContain(literal, code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -345,8 +354,11 @@ public class ModAwareVaultTests
         var vault = AppFile("MainWindow", "MainWindow.Exclusives.cs");
 
         Assert.Contains("FreeTodayGold = Color.FromRgb(0xFF, 0xD2, 0x7A)", vault, StringComparison.Ordinal);
-        Assert.Contains("ExclusiveEdgeFree = Freeze(Color.FromArgb(0xE6, 0xFF, 0xD2, 0x7A))", vault,
-            StringComparison.Ordinal);
+        // The gold EDGE moved to Features\VaultLivery.cs with the rest of the livery vocabulary
+        // (tier-livery pass) - same literal, new home. Asserted there, and still asserted, because
+        // the contract is about the colour surviving the mod chain, not about which file holds it.
+        Assert.Contains("EdgeFree = Frozen(Color.FromArgb(0xE6, 0xFF, 0xD2, 0x7A))",
+            AppFile("Features", "VaultLivery.cs"), StringComparison.Ordinal);
         Assert.Contains("Color = FreeTodayGold", vault, StringComparison.Ordinal);
 
         // The pill's own gradient and the PassReady chip are gold too, and equally untouched.

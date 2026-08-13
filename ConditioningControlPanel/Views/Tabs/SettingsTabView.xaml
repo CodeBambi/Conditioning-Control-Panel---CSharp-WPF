@@ -1136,6 +1136,17 @@
                                            FontSize="15" FontWeight="Black"/>
                             </StackPanel>
                         </Border>
+
+                        <!-- The gift's price, re-stamped. On the REVEAL face only: this is the
+                             side that names today's feature, so it is the side that can say what
+                             the feature normally costs and that today it does not. The ? box face
+                             keeps its own gold ring and its FREE TODAY text pill - putting a tier
+                             sign on the unopened box would price a gift nobody has looked at yet.
+                             Painted by RefreshMysteryTile; collapsed for premium accounts, who own
+                             the whole pool and are not being given anything. -->
+                        <fx:TierBadge x:Name="MysteryRevealBadge" x:FieldModifier="internal"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                                      Margin="0,-4,-4,0" Panel.ZIndex="9"/>
                     </Grid>
                 </Border>
 
