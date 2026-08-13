@@ -148,6 +148,21 @@ public sealed class AvatarAnimationEngineTests
     }
 
     [Fact]
+    public async Task Stop_BeforeFirstTick_CompletesCancelled_ZeroTick()
+    {
+        var (engine, _, _, _) = CreateEngine();
+        engine.Start();
+        // Zero-tick regression pin (SP-067): stop lands before (or during) the loop's first
+        // check — no clock advance, no settle. Deterministic because BOTH exits agree: the
+        // OCE path (ManualAvatarClock.Delay observes the token via WaitAsync) and the
+        // token-observed post-loop return both yield Cancelled. What breaks it: a post-loop
+        // `return OperationOutcome.Completed.Instance` shape returning here (the SP-067
+        // heartbeat defect class).
+        Assert.NotNull(engine.Completion); // the owned completion is registered at Start (contract §1)
+        await StopAndAssertCancelledAsync(engine);
+    }
+
+    [Fact]
     public async Task PauseResume_SuccessorFrame_AndUnchangedCadence()
     {
         var (engine, clock, _, _) = CreateEngine();
