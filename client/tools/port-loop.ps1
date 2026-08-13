@@ -118,31 +118,12 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         $auditLog = Join-Path $logDir ("{0:000}-audit.log" -f $i)
         Write-Loop "blind audit of $($headAfter.Substring(0,8)) -> $auditLog"
 
-        $auditPrompt = @'
-You are a BLIND AUDITOR. You did not do this work and cannot see the session that did. Judge
-only what the repository proves right now. Do not fix anything, do not commit, do not write files.
-
-In C:/Code/Conditioning-Control-Panel---CSharp-WPF on branch feat/crossplatform:
-
-1. Read the NEWEST entry of client/docs/port-digest.md and the newest wave section of
-   spine-tasks/CONTEXT.md. Note the exact unit/headless test counts they claim.
-2. Run, and read the real output:
-     dotnet build client/CcpClient.sln -c Debug --nologo
-     dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
-     dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
-3. Check: build 0 warnings 0 errors; the counts EXACTLY match the claim; SKIPPED is 0 (a skip is
-   a failure here even though the exit code is 0 - it is the vacuous-green class); `git status
-   --short` is empty; HEAD equals origin/feat/crossplatform (run `git fetch origin` first).
-
-FAIL if any check fails, if a claimed count and the observed count differ in either direction,
-or if you cannot verify a claim. Passing tests do not excuse a mismatched number.
-
-Your LAST line must be exactly one of:
-VERDICT: PASS
-VERDICT: FAIL - <one line naming the check, the claimed value and the observed value>
-'@
-
-        & $pi -p -ne -ns -nc -np --no-session -t read,bash,grep,find,ls --model $AuditModel $auditPrompt *>&1 |
+        # The prompt MUST be passed as an @file. `pi` is reached through pi.cmd, a batch shim,
+        # and cmd.exe does not preserve a multi-line argument: the first attempt handed the
+        # auditor an empty instruction, it answered "What should I audit?", produced no verdict,
+        # and the fail-closed default halted the run (2026-08-13). @file is the same mechanism
+        # the phase prompt uses, which is why that one always worked.
+        & $pi -p -ne -ns -nc -np --no-session -t read,bash,grep,find,ls --model $AuditModel '@client/tools/port-audit-prompt.md' *>&1 |
             Tee-Object -FilePath $auditLog | Out-Null
 
         $verdict = (Select-String -Path $auditLog -Pattern '^VERDICT:' -ErrorAction SilentlyContinue | Select-Object -Last 1).Line
