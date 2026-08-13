@@ -1,18 +1,23 @@
-# HANDOFF — 2026-08-13 — wave 26 AUTHORED + LAUNCHED (SP-069), BATCH `20260813T124621` RUNNING
+# HANDOFF — 2026-08-14 — wave 26 LANDED (SP-069), BATCH `20260813T124621` COMPLETE AND ARCHIVED
 
-**Status: NOT PARKED. A batch is running. Base branch clean, committed and pushed at `69c426a9`.**
-**Base floor, unchanged by this phase: 946 unit / 35 headless / 2 NAMED skips, build 0W/0E.**
+**Status: PARKED. No batch is running.** SP-069 succeeded, gate approved, integrated into `feat/crossplatform`
+at merge `6feb11e4` (orch `e384ef6e`, 10 commits), batch archived. Base branch clean and pushed.
+**Base floor after this wave: 996 unit / 35 headless / 2 NAMED skips, build 0W/0E** (946 → 996: +47 Step-3
+facts, +3 across two final-review REVISE rounds).
+**The batch finished at 01:13 and sat at the integrate gate for ~6.5 h before the land — the gate is not
+self-serving, and `spine status --diagnose` reporting `macroPhase: "gating"` is the signal to land, not to wait.**
 
 ## Which phase is yours
 
 Reconcile first, then classify. Do **not** trust this file's phase label — check `spine status --diagnose`.
 
-- **Batch running → port.txt case C: EXIT AT ONCE.** The shell owns the waiting. That is the expected
-  next phase while `20260813T124621` executes.
-- **Batch finished / `needs_integrate` → case A: LAND IT.** Obligations below.
-- **No batch + claimable work → case B: author + launch one wave.**
+- **No batch + claimable work → case B: author + launch one wave.** That is this file's expected next
+  phase — `20260813T124621` is landed and archived, and nothing is in flight.
+- **Batch running → port.txt case C: EXIT AT ONCE.** The shell owns the waiting.
+- **Batch finished / `needs_integrate` → case A: LAND IT.** The wave-26 obligations below are DISCHARGED;
+  a new wave writes its own.
 
-## What is in flight
+## What landed (wave 26, verified at the land — see the discharge notes below)
 
 **SP-069 — companion reply hygiene** (board row `:53`, the v6.7.x `§C` line "companion effect-reply
 truncation + raw-JSON leak"; upstream fix `932d829a`, 2026-08-07). Single lane. Three layers on
@@ -28,7 +33,33 @@ truncation + raw-JSON leak"; upstream fix `932d829a`, 2026-08-07). Single lane. 
   deliberately not ported.
 - **Union moderation rule:** `EvaluateOutput` on raw **and** hygienic text, block if **either** hits.
 
-## LAND OBLIGATIONS FOR THIS WAVE (inherit these — the land is a fresh session)
+## LAND OBLIGATIONS FOR THIS WAVE — **ALL DISCHARGED 2026-08-14** (kept verbatim; the discharge is recorded per item)
+
+**Discharge summary, done on the merged tree BEFORE `spine integrate` so an abort would have cost nothing
+(the advisor's correction to the plan — T-3 exists for exactly this):**
+1. **Union rule verified monotone, not argued.** `EvaluateOutput(raw, outputSurface)` runs unconditionally;
+   `EvaluateOutput(hygienic, outputSurface)` runs when the text changed; Block on either. Both directions
+   pinned (hygiene-only: `UnionRule_TokenJoinedAcrossTagBoundary_Blocks_NeverPersisted`,
+   `UnionRule_TokenJoinedByArtifactCharacter_Blocks`; raw-only: `UnionRule_TokenInsideStrippedThinkBlock_StillBlocks`,
+   `UnionRule_TokenInsideStrippedMetadataEcho_StillBlocks`; plus a soft-hit pair). `Evaluate` re-read and
+   still pure — token scan, no counter, no escalation, no state.
+2. **Board row `:53` updated AND BOUNDED** — one §C line discharged, row stays WIP, truncation half
+   restated as a NON-ITEM that must not be re-filed.
+3. **Three wave-26 lessons appended to `client/docs/port-lessons.md`** at land (port-produces-the-filter's-input;
+   union-gate as F2's mirror image; write the handoff before `batch start`).
+4. **Record honesty cell confirmed** — `record.md:301` no truncation parity, `:306` refuses where WPF
+   salvages, `:310` `AiEnvelopeValidator` unwired, `:322` Linux unproven.
+5. **Moderation-surface ruling held.** `AiModerationBoundary.cs` untouched, the 6/5 pins at
+   `AiModerationCoverageTests.cs:242-243` unchanged, no new surface literal anywhere; the existing
+   `outputSurface` is reused for both evaluations. **The distinct-hygienic-surface question is now its own
+   P2 board row**, as the ruling required.
+6. **T-18 seventh occurrence logged on the row** — new shape: a COMPLETE verdict that then truncated
+   mid-sentence in the remedy (`"Base already mo"`), so the 150-250 word cap does not cover it.
+7. **Tree identity (scoped, because this integrate was a merge):** `git diff e384ef6e HEAD -- client/
+   scripts/ ConditioningControlPanel/ docs/` → EMPTY; sole non-code delta `.spine/handoff.md`, the
+   authoring-phase commit that moved base mid-batch.
+
+### The obligations as written before the land (kept for audit)
 
 1. **Verify the union rule is actually monotone on the merged tree, not just argued.** Read the
    both-directions pins yourself (a forbidden token visible only in raw; one visible only after hygiene).
