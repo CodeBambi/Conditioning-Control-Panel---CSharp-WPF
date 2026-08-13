@@ -45,8 +45,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public ICommand TutorialCommand { get; }
         public ICommand OpenPatreonCommand { get; }
 
-        /// <summary>Re-reads entitlement. Called from the room's Sync, which MainWindow drives.</summary>
-        public void Sync() => HasAiAccess = App.Patreon?.HasAiAccess == true;
+        /// <summary>Re-reads entitlement. Called from the room's Sync, which MainWindow drives.
+        /// Identity counts: AI chat is not a tier perk (usage is), so a signed-in free account is
+        /// entitled and the plate lights - same bar the send path and Z2's veil use.</summary>
+        public void Sync() => HasAiAccess = App.Patreon?.HasAiAccess == true || App.HasCloudIdentity;
     }
 
     /// <summary>
