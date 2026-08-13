@@ -1,167 +1,127 @@
-# HANDOFF — 2026-08-14 — wave 26 LANDED (SP-069), BATCH `20260813T124621` COMPLETE AND ARCHIVED
+# HANDOFF — 2026-08-14 — wave 27 AUTHORED + LAUNCHED (SP-070), nothing landed
 
-**Status: PARKED. No batch is running.** SP-069 succeeded, gate approved, integrated into `feat/crossplatform`
-at merge `6feb11e4` (orch `e384ef6e`, 10 commits), batch archived. Base branch clean and pushed.
-**Base floor after this wave: 996 unit / 35 headless / 2 NAMED skips, build 0W/0E** (946 → 996: +47 Step-3
-facts, +3 across two final-review REVISE rounds).
-**The batch finished at 01:13 and sat at the integrate gate for ~6.5 h before the land — the gate is not
-self-serving, and `spine status --diagnose` reporting `macroPhase: "gating"` is the signal to land, not to wait.**
+**Status: BATCH LAUNCHED.** This file is written in the authoring commit, **before** `spine batch start`
+(the wave-26 lesson: writing it after launch moves the base branch mid-batch and turns the integrate into a
+merge instead of a fast-forward). Wave 26 (SP-069) is landed, integrated at `6feb11e4`, archived.
+**Base floor at launch: 996 unit / 35 headless / 2 NAMED skips, build 0W/0E.**
 
 ## Which phase is yours
 
 Reconcile first, then classify. Do **not** trust this file's phase label — check `spine status --diagnose`.
 
-- **No batch + claimable work → case B: author + launch one wave.** That is this file's expected next
-  phase — `20260813T124621` is landed and archived, and nothing is in flight.
 - **Batch running → port.txt case C: EXIT AT ONCE.** The shell owns the waiting.
-- **Batch finished / `needs_integrate` → case A: LAND IT.** The wave-26 obligations below are DISCHARGED;
-  a new wave writes its own.
+- **Batch finished / `needs_integrate` (`macroPhase: "gating"`) → case A: LAND IT.** The wave-27 obligations
+  below are yours. A finished batch is not a landed one — wave 26's sat at the gate ~6.5 h.
+- **No batch + claimable work → case B.** SP-070's own row work would then be either landed or abandoned;
+  reconcile from git and the board before authoring anything new.
 
-## What landed (wave 26, verified at the land — see the discharge notes below)
+## What is in flight (SP-070 — the audio session-disable is permanent and must not be)
 
-**SP-069 — companion reply hygiene** (board row `:53`, the v6.7.x `§C` line "companion effect-reply
-truncation + raw-JSON leak"; upstream fix `932d829a`, 2026-08-07). Single lane. Three layers on
-`AiReply.Generated.Text` at the pipeline reply seam, upstream of SP-068's link strip:
+Board row `:53`, the v6.7.x `§C` audio line (upstream fix `d33b5d8d`, 2026-08-03, `#778`/`#779`). Single lane.
 
-- **H1** `<think>`/`<thinking>`/`<reasoning>`/`<thought>` blocks (incl. unterminated) + orphan closer +
-  `Ġ`→space, `Ċ`→newline (WPF `AiTextHygiene.Clean`).
-- **H2** the five-pattern metadata-tag strip in WPF's fixed order + collapse/trim (`StripMetadataTags`).
-  **The port's own trigger is `AiAwarenessService.cs:229`** — it sends the model
-  `[Category: … | App: … | Title: … | Duration: …]` and strips nothing when a model mirrors it back.
-- **H3** envelope-leak **DETECTION ONLY** (`LooksLikeEnvelopeLeak`) typed to the **existing**
-  `AiReplyCodes.MalformedOutput`. **The port refuses where WPF salvages** — `TryLiftResponseField` is
-  deliberately not ported.
-- **Union moderation rule:** `EvaluateOutput` on raw **and** hygienic text, block if **either** hits.
+`SoundArbitration.Initialize` sets `_audioDisabledForSession = true` on zero endpoints (`:214`) or a failed
+`TryInit` (`:236`); `ReadyLocked` (`:601`) then refuses **every** play on **every** channel for the rest of
+the process; and the **only** product caller of `Initialize` runs once, during DTRH host-window construction
+(`DtrhHostWindow.axaml.cs:213-220`). WPF fixed exactly this: *"`_waveOutPermanentlyUnavailable` is no longer
+permanent."* **The defect is PERMANENCE, not disabling.**
 
-## LAND OBLIGATIONS FOR THIS WAVE — **ALL DISCHARGED 2026-08-14** (kept verbatim; the discharge is recorded per item)
+Delivered shape: a consecutive-failure counter that success resets, a cooldown from the already-injected
+`ISoundClock`, and a **single-flight** lazy re-probe reusing `Initialize` — triggered only by a play attempt
+whose cooldown has elapsed. No timer thread, no background service, no wall clock, no new seam. One product
+file (`client/src/CcpClient.Desktop/Audio/SoundArbitration.cs`).
 
-**Discharge summary, done on the merged tree BEFORE `spine integrate` so an abort would have cost nothing
-(the advisor's correction to the plan — T-3 exists for exactly this):**
-1. **Union rule verified monotone, not argued.** `EvaluateOutput(raw, outputSurface)` runs unconditionally;
-   `EvaluateOutput(hygienic, outputSurface)` runs when the text changed; Block on either. Both directions
-   pinned (hygiene-only: `UnionRule_TokenJoinedAcrossTagBoundary_Blocks_NeverPersisted`,
-   `UnionRule_TokenJoinedByArtifactCharacter_Blocks`; raw-only: `UnionRule_TokenInsideStrippedThinkBlock_StillBlocks`,
-   `UnionRule_TokenInsideStrippedMetadataEcho_StillBlocks`; plus a soft-hit pair). `Evaluate` re-read and
-   still pure — token scan, no counter, no escalation, no state.
-2. **Board row `:53` updated AND BOUNDED** — one §C line discharged, row stays WIP, truncation half
-   restated as a NON-ITEM that must not be re-filed.
-3. **Three wave-26 lessons appended to `client/docs/port-lessons.md`** at land (port-produces-the-filter's-input;
-   union-gate as F2's mirror image; write the handoff before `batch start`).
-4. **Record honesty cell confirmed** — `record.md:301` no truncation parity, `:306` refuses where WPF
-   salvages, `:310` `AiEnvelopeValidator` unwired, `:322` Linux unproven.
-5. **Moderation-surface ruling held.** `AiModerationBoundary.cs` untouched, the 6/5 pins at
-   `AiModerationCoverageTests.cs:242-243` unchanged, no new surface literal anywhere; the existing
-   `outputSurface` is reused for both evaluations. **The distinct-hygienic-surface question is now its own
-   P2 board row**, as the ruling required.
-6. **T-18 seventh occurrence logged on the row** — new shape: a COMPLETE verdict that then truncated
-   mid-sentence in the remedy (`"Base already mo"`), so the 150-250 word cap does not cover it.
-7. **Tree identity (scoped, because this integrate was a merge):** `git diff e384ef6e HEAD -- client/
-   scripts/ ConditioningControlPanel/ docs/` → EMPTY; sole non-code delta `.spine/handoff.md`, the
-   authoring-phase commit that moved base mid-batch.
+**Three halves of that same upstream commit are NON-ITEMS** and are recorded on board row `:53` already so
+they are never re-filed as owed: the MTA one-shot worker thread (that NAudio idiom does not exist in this
+port), the 10-concurrent cap (already landed as `MaxSfxVoices = 8` drop-on-overflow), and the
+`IMMNotificationClient` endpoint watcher (**its own row, owed at this land**).
 
-### The obligations as written before the land (kept for audit)
+## LAND OBLIGATIONS FOR THIS WAVE
 
-1. **Verify the union rule is actually monotone on the merged tree, not just argued.** Read the
-   both-directions pins yourself (a forbidden token visible only in raw; one visible only after hygiene).
-   **This is the one change in the wave that can WIDEN** if it was implemented as sanitized-only
-   moderation — and a green suite would not tell you. Confirm `EvaluateOutput` is still pure.
-2. **Update board row `:53` at land AND BOUND IT.** The row covers the whole `§C`/`§D` backlog and SP-069
-   discharges exactly one line of it. Do not let a one-item land read as the backlog closing. **The
-   truncation half of that same line is a NON-ITEM** (the port sends no token cap) and is already recorded
-   that way on the row — do not re-file it as owed.
-3. **Append the wave-26 lessons to `client/docs/port-lessons.md` AT LAND — not before.** That file is in
-   spine `referenceDocs` (`.spine/spine-config.json:97`), so editing it mid-batch mutates a live worker's
-   input. At least three are owed:
-   - **When the port lacks a filter, check whether the port also PRODUCES that filter's input.**
-     `AiAwarenessService.cs:229` turned a speculative parity item into a demonstrated defect.
-   - **A subtractive filter upstream of a gate is the SP-068 F2 class in mirror image; the answer is a
-     UNION gate, not an ordering choice.** Evaluating both texts and blocking on either is monotone by
-     construction, so parity costs nothing in safety.
-   - **Write `.spine/handoff.md` BEFORE `spine batch start`, in the authoring commit.** This phase wrote it
-     after launching, so the base branch moves during the batch and the integrate becomes a MERGE rather
-     than a fast-forward (the wave-25 tree-identity finding, paid again here avoidably).
-4. **Confirm the record's honesty cell says plainly:** no truncation parity claimed; the port refuses a
-   leaked envelope where WPF salvages it; `AiEnvelopeValidator` is still unwired; Linux unproven.
-5. **THE MODERATION-SURFACE GAP — the packet does not answer this and the land must (found by the
-   post-launch consult, verified against the tree).** The union rule needs a surface argument for its
-   SECOND `EvaluateOutput` call. A worker with good instincts will want a *distinct* surface id for the
-   hygienic evaluation — but `AiModerationSurfaces` lives in `AiModerationBoundary.cs`, which is **not in
-   File Scope**, and `AiModerationCoverageTests.cs:242-243` **pins the exact counts** (6 Wired / 5
-   Reserved). So adding one goes **RED loudly**, and the cheap way out is bumping a landed honesty pin.
-   **THE RULING, decided here so the land does not invent one under pressure: reuse the EXISTING
-   `outputSurface` (`AiOperationPipeline.cs:245`) for both evaluations. A distinct hygienic surface is OUT
-   OF SCOPE and is a separate filing.** At land, check three things: `AiModerationBoundary.cs` is
-   untouched; the 6/5 counts at `AiModerationCoverageTests.cs:242-243` are unchanged; and no new surface
-   literal was invented anywhere. If the worker stopped-and-reported on this instead, **that was correct
-   behaviour** — file the surface question, do not treat the stop as a failure.
+1. **Verify the healthy-session negative control yourself, on the merged tree.** The one way this wave goes
+   wrong invisibly is by turning a lazy re-probe into a background re-probe loop, and a green suite would not
+   tell you. Read three pins directly: one init call and no extra device calls when nothing fails;
+   single-flight (N concurrent play attempts → exactly one init call); no busy loop (exactly one attempt per
+   cooldown window). **This is the wave-26 union-rule check in its wave-27 form.**
+2. **Confirm the direction argument survived implementation.** SP-068 and SP-069 were subtractive; this one
+   is **restorative**, so "every change narrows" is the wrong test and a worker may have over-applied it. The
+   bound is: a recovery may only restore what a healthy endpoint would already have permitted, and may never
+   override teardown, panic, or an explicit stop. Check the panic and teardown facts exist and bite.
+3. **File the `IMMNotificationClient` endpoint-watcher row** (Windows-only native; re-arms recovery the
+   instant a device returns instead of waiting for the next play attempt). Named as a non-item *for this
+   packet* only — it becomes phantom debt unless it is filed at the land.
+4. **Update board row `:53` and BOUND it** — one more `§C` line discharged, not the backlog closing. The
+   three non-items are already on the row; keep them there.
+5. **Append the wave-27 lessons to `client/docs/port-lessons.md` AT LAND — not before.** That file is in
+   spine `referenceDocs` (`.spine/spine-config.json:97`), so editing it mid-batch mutates a live worker's input.
+6. **Check whether the worker recorded a needed contract wording** for an expiring-disable state
+   (`runtime-capability-contract.md` / `async-lifecycle-fault-contract.md` were read-only for it). Policy text
+   lands via the orchestrator (SP-059 precedent).
 
 ## Standing land discipline (unchanged, learned the hard way)
 
 - **Never trust the gate's own evidence (T-3, seven occurrences).** Verify the merged state yourself in a
   scratch worktree. `diff-stat.txt` is a TWO-dot diff — disprove it with three dots.
-- **The tree-identity proof needs the SCOPED form when the integrate is a MERGE, not a fast-forward**
-  (wave-25 rule, and **this wave will hit it**, because the handoff commit moves base during the batch):
-  `git diff <verified> HEAD -- client/ scripts/ ConditioningControlPanel/ docs/` → EMPTY, and **name the
-  non-code deltas with their commits**.
+- **Verify BEFORE `spine integrate`**, not after: verifying after means unwinding a merge on the base branch.
+- **Tree identity:** fast-forward → `git diff <verified> HEAD` EMPTY. Merge → use the SCOPED form
+  `git diff <verified> HEAD -- client/ scripts/ ConditioningControlPanel/ docs/` and name the non-code deltas
+  with their commits. **This wave should be a fast-forward** — the handoff was written before launch, so base
+  does not move during the batch. If it is a merge anyway, find out what moved base.
 - **Full contract, in this order:** `dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs`.
   The wrapper is `--no-build` by design; standalone it measures the LAST build and names the wrong cause.
 - **The land's LAST action verifies the tree actually being pushed.** Commit the reconciliation FIRST, then
   run the contract, then push (the wave-18 land shipped a red base by editing after its verification run).
-- **Bite matrix, one source at a time.** This packet requires **four** reverts (H1, H2, H3, union rule).
-  A shared revert falsely verifies pins that were never exercised (SP-067).
-- **Never set `CCP_DATA_ROOT` for a floor run** (`port-workflow.md:204`) — it skips the SP-057 pin and
-  blinds the exact-count floor (the vacuous-green class SP-062 closed).
-- **`allowedSkips` pins 5 names; 2 skip on Windows. THE ASYMMETRY IS CORRECT** — driving the skip count to
-  0 regresses SP-066's honesty.
+- **Bite matrix, one source at a time.** This packet requires **three** reverts (suppression clear,
+  single-flight guard, cooldown gate). A shared revert falsely verifies pins that were never exercised (SP-067).
+- **Never set `CCP_DATA_ROOT` for a floor run** (`port-workflow.md:204`) — it skips the SP-057 pin and blinds
+  the exact-count floor (the vacuous-green class SP-062 closed).
+- **`allowedSkips` pins 5 names; 2 skip on Windows. THE ASYMMETRY IS CORRECT.**
 - **`node .spine/patches/verify.mjs` FAILS in a scratch worktree and that is expected** (`.pi/npm` is
-  per-checkout and gitignored). Run it in the MAIN checkout.
+  per-checkout and gitignored). Run it in the MAIN checkout. **Re-run it before the NEXT `batch start`** —
+  it was run this phase (9 project + 5 engine patches applied, exit 0).
 - **`cmd | tail; echo $?` reports TAIL's exit code.** Use `${PIPESTATUS[0]}` or redirect to a file.
 - **A doc a test READS is code — but check READ vs merely NAMED.** `port-audit-prompt.md`, `floor.json`,
   `vacuous-shape-ledger.json` are genuinely read. `task-board.md` is only an asserted error-message string
   in `UpstreamPayloadInventoryTests.cs` and is safe to reconcile.
-- **`spine preflight`'s "Pre-landed contract risk" warning is noise here and its suggested fix is
-  dangerous** — it compares against **`main`**, the WPF branch with no `client/` tree. **It fired for
-  SP-069 exactly as the packet predicted. Never redirect `fileScopeMustChange` to docs.**
+- **`spine preflight`'s "Pre-landed contract risk" warning compares against `main`**, the WPF branch with no
+  `client/` tree. It did **not** fire for SP-070; if it appears later, never redirect `fileScopeMustChange`
+  to docs.
 - **Landed rows stay WIP/OPEN until the owner ratifies;** flip to DONE only with a RATIFIED citation.
 - **Budget the board-row update INTO the land.** ENABLER 2 keeps `task-board.md` out of worker scope;
-  SP-001's gap recurred at SP-067 and again at SP-068.
+  SP-001's gap recurred at SP-067 and SP-068.
 
 ## Decisions on record — do not re-open
 
 - **Owner default in force: BACK TO WPF PARITY.** The suite-hardening/parity ratio question was asked at
-  waves 23 and 24 and is unanswered; the default is recorded and **will not be re-asked**.
+  waves 23 and 24, is unanswered, and **will not be re-asked**.
 - **The sizing pass over Goon `:44` / FYP `:45` / Trainer Card `:51` / Haptics v2 `:52` is DEFERRED,
   MACHINE-GATED — not dropped.** Three of the four need headed/payload/Linux evidence this laptop cannot
-  produce. A standing offer to write it anyway for a desktop session is in the wave-25 and wave-26 digests.
-- **"An audit is not a decree" is intact.** SP-069's authorization is board row `:53` as queue authority.
-- **H3's non-lift is a DECIDED divergence, not an omission.** Re-opening it needs owner input (the digest
-  offers it as a small follow-up if they would rather see a rescued sentence than nothing).
+  produce.
+- **The endpoint watcher's absence is a DECIDED bound for SP-070**, not an oversight: it is Windows-only
+  native with no headless proof here, and the lazy re-probe delivers the user-visible outcome without it.
 
 ## Instrument notes
 
-- **Consult truncation is board row T-18.** The 150-250 word cap worked again — wave 26's decomposition
-  verdict surfaced complete on the FIRST call (6th consecutive wave). **Never stitch a verdict out of
-  reasoning**; an unstitched non-verdict is a MISSING consult. Use `mode: "solo"` explicitly (T-7).
-- **Verify the advisor's checkable claims before encoding them.** Done this wave: `Evaluate` is a pure
-  token scan (`:279-296`), and `BuildBody` sends no token cap (`:252-258`). Also done for the
-  post-launch consult: the moderation-surface gap is real, and checking it turned up something the
-  advisor did not have — the coverage test pins the surface COUNTS, so the failure mode is loud rather
-  than silent, and the hazard is the tempting fix, not the miss.
-- **T-18, 7th occurrence, logged this phase:** the post-launch completion consult returned a complete
-  verdict and then **truncated mid-sentence** while describing the remedy (`"Base already mo"`). The
-  verdict was usable and was NOT stitched out of the reasoning — the actionable half had already
-  surfaced. Add this occurrence to row T-18 at land.
+- **Consult truncation is board row T-18.** Wave 27's decomposition verdict surfaced **complete on the first
+  call** under a 200-word cap — 7th consecutive wave. **Never stitch a verdict out of reasoning**; an
+  unstitched non-verdict is a MISSING consult. Use `mode: "solo"` explicitly (T-7).
+- **Verify the advisor's checkable claims before encoding.** Done this phase: `Initialize` does not hold
+  `_gate` across the backend calls (so the deadlock half of the hazard is already mitigated and the packet's
+  job is to preserve it); `PanicReset` neither sets nor reads `_audioDisabledForSession` (so panic is *not*
+  the hazard — the blocking half is); `ISoundClock` already carries `UtcNow` + `Schedule` and the test
+  `ManualClock` fires due callbacks on `Advance`.
 
 ## Claimable work after this lands (the board is authority, this is a pointer)
 
-Row `:53` keeps every other `§C`/`§D` item. Also open: **T-18** (consult verdict truncation), the
-`ProcessEnvCollection` co-location residual, the `CapabilityRegistry` probe row, the `Assert.All`
-unenumerated shape, the `allowedSkips` bans-are-text row, T-17's auditor **run**, the named privacy flake,
-and the standing product queue.
+Row `:53` keeps every other `§C`/`§D` item. Also open: the endpoint-watcher row this land must file, **T-18**
+(consult verdict truncation), the SP-069 hygienic-surface-id row, the `ProcessEnvCollection` co-location
+residual, the `CapabilityRegistry` probe row, the `Assert.All` unenumerated shape, the `allowedSkips`
+bans-are-text row, T-17's auditor **run**, the named privacy flake, and the standing product queue.
 
 ## Machine facts (laptop)
 
 pi-spine 2.10.0 · hermes memory + durable fallback `client/memories/port-status.md` · **WSL zero distros →
-every Linux gate is a standing named limit, never faked** · **MCP not re-probed this phase** (named limit,
-never a blocker) · `Z:\CCP Vids`, DISPLAY3 and the WSL2 Linux gate are **DESKTOP-only** · batch launched
-with `SPINE_WORKER_PI_TIMEOUT_MS=14400000` · 9 local patches verified applied on both roots (`verify.mjs` OK).
+every Linux gate is a standing named limit, never faked** · **no audio-endpoint death can be induced here —
+the manual gate is named in the packet's honesty cell, never simulated as evidence** · **MCP not re-probed
+this phase** (named limit, never a blocker) · `Z:\CCP Vids`, DISPLAY3 and the WSL2 Linux gate are
+**DESKTOP-only** · batch launched with `SPINE_WORKER_PI_TIMEOUT_MS=14400000` · 9 project + 5 engine patches
+verified applied before authoring (`verify.mjs` exit 0).
