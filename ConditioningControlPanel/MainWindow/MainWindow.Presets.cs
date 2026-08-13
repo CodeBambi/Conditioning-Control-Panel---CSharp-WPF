@@ -980,33 +980,15 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// Just Drop: the session shop. Two behaviours, decided by the same flag the rail door
-        /// reads (<c>JustDropService.DoorAvailable</c>) so the tile and the rail can never
-        /// disagree about whether the feature exists.
+        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
+        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
+        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
         ///
-        /// <para><b>Door open:</b> navigate to it, exactly as CardDeeper_Click hands off to the
-        /// rail entry rather than re-implementing the destination.</para>
-        ///
-        /// <para><b>Door withheld:</b> the original placeholder toast, unchanged. A tile that
-        /// silently does nothing when clicked reads as a bug, and this app has shipped that bug
-        /// before. The tile stays on the wall in both states on purpose - it is there to announce
-        /// the feature - which is the one place the withheld door is allowed to be visible at all.
-        /// Drop this branch, and the SOON badge in <see cref="RefreshMosaicTierBadges"/>, when the
-        /// feature is no longer being withheld from anyone.</para>
+        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
+        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
+        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
         /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
-        {
-            if (Services.JustDrop.JustDropService.DoorAvailable)
-            {
-                ShowTab("justdrop");
-                return;
-            }
-
-            // Literal copy, like the tile's own title: naming a placeholder in nine language
-            // files buys nine rows to re-translate the day it gets its real name.
-            App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
-                                    + "future update.", NotificationType.Info, TimeSpan.FromSeconds(6));
-        }
+        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
@@ -1023,11 +1005,11 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Just Drop wears SOON for exactly as long as its door is withheld. Same flag the
-                // rail door and the tile's own click read, so the badge cannot promise "coming"
-                // while the door is already open (or vice versa). Literal, like the tile's title -
-                // see CardJustDrop_Click.
-                SetTierBadge(dash.CardJustDrop, Services.JustDrop.JustDropService.DoorAvailable, "SOON");
+                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
+                // price tag. It owns its own badge now (same SetTierBadge helper, called from
+                // there) because the badge, the title, the tooltip and the blur have to move as
+                // one costume - see MainWindow.TeaseCard.cs.
+                ApplyTeaseCard();
 
                 RefreshMysteryTile();
                 RefreshWallActiveStates();

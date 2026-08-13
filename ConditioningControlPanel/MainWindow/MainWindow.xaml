@@ -1080,11 +1080,12 @@
                              for things you could buy and this is a thing that does not exist for
                              you yet.
 
-                             The glyph is the one the dashboard mosaic's Just Drop tile already
-                             carries (SettingsTabView.xaml, CardJustDrop). No PNG exists for this
-                             feature anywhere in the app - real art is a separate pipeline, which
-                             is also why this door keeps the emoji strip rather than the medallion
-                             the art-backed doors moved to. -->
+                             The dashboard's tile for this feature is now the nameless TEASE tile
+                             (SettingsTabView.xaml, CardJustDrop - see MainWindow.TeaseCard.cs),
+                             so it carries no glyph of its own to share. This door keeps the emoji
+                             strip rather than the medallion the art-backed doors moved to,
+                             because no PNG exists for this feature anywhere in the app - real art
+                             is a separate pipeline. -->
                         <Button x:Name="DoorJustDrop" Tag="justdrop" Style="{StaticResource NavDoorButton}"
                                 Visibility="Collapsed"
                                 Click="NavDoor_Click" ToolTip="{loc:Str jd_door_tip}">

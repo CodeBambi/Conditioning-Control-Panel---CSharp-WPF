@@ -51,6 +51,25 @@
                            Foreground="{DynamicResource PinkBrush}"/>
             </Border>
 
+            <!-- TEASE VEIL. Shown only when TeaseTier > 0 (see FeatureCard.ApplyTeaseState):
+                 the art below is blurred out and this scrim + "?" is what the card actually
+                 says. It sits ABOVE the art and BELOW the bottom gradient so the title strip
+                 still reads at full contrast over it.
+
+                 Deliberately static - no clock. Every tile on the dashboard mosaic is
+                 registered in MainWindow.DashboardFx's motion contract, and a tease card is
+                 not worth a third Forever clock per tile; the shimmer that sells the mystery
+                 lives on the teaser popup instead, where it is gated on MotionFx. -->
+            <Grid x:Name="TeaseHost" Visibility="Collapsed" IsHitTestVisible="False">
+                <Border CornerRadius="11" Background="#59000000"/>
+                <TextBlock x:Name="TxtTeaseGlyph"
+                           Text="?"
+                           FontSize="46" FontWeight="Bold"
+                           Margin="0,0,0,16"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="White" Opacity="0.9"/>
+            </Grid>
+
             <!-- Bottom gradient + title overlay -->
             <Border CornerRadius="0,0,11,11"
                     VerticalAlignment="Bottom"

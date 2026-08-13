@@ -239,6 +239,34 @@ namespace ConditioningControlPanel.Controls
             Evaluate();
         }
 
+        // ------------------------------------------------------------ external spout
+        // The Trainer Card's interactive faucet (MainWindow.ProfileFaucet) is a XAML
+        // element perched on the jar's top-left lip; when it owns the plumbing the
+        // canvas must not draw its own slide-in faucet art, and the stream has to
+        // fall from the XAML spout instead of the art's tip. The slide value is kept
+        // as a ~150ms stream-on delay so the stream starts as the faucet finishes
+        // its tilt rather than a frame before it.
+
+        private double? _externalSpoutX;
+
+        /// <summary>
+        /// When set (0..1, a fraction of the control width), pours draw no internal
+        /// faucet art and the stream falls from this x instead — the host's own
+        /// faucet element is the visible plumbing. Null restores the built-in art.
+        /// </summary>
+        public double? ExternalSpoutXFraction
+        {
+            get => _externalSpoutX;
+            set
+            {
+                _externalSpoutX = value is double d && double.IsFinite(d) ? Math.Clamp(d, 0, 1) : null;
+                _sk.InvalidateVisual();
+            }
+        }
+
+        /// <summary>How far the slide must be before the stream/splash turn on.</summary>
+        private double StreamOnSlide => _externalSpoutX is double ? 0.55 : 0.88;
+
         /// <summary>Re-read the mod accent (mod switch).</summary>
         public void RefreshPalette()
         {
@@ -472,7 +500,7 @@ namespace ConditioningControlPanel.Controls
             }
 
             // ---- splash from the stream landing
-            if (_pourT > 0 && _slide > 0.88)
+            if (_pourT > 0 && _slide > StreamOnSlide)
             {
                 float fx = SpoutXAt((float)w, (float)h, yT);
                 if (_rng.NextDouble() < 0.7 * (dt * 60.0))
@@ -560,8 +588,10 @@ namespace ConditioningControlPanel.Controls
 
             using var paint = new SKPaint { IsAntialias = true };
 
-            // ---- faucet layout: slides in from the LEFT, spout parks over the jar
-            var faucet = LoadFaucet();
+            // ---- faucet layout: slides in from the LEFT, spout parks over the jar.
+            // With an external spout the host's XAML faucet IS the plumbing: no art
+            // here, and the stream-on delay rides the same slide ramp.
+            var faucet = _externalSpoutX is null ? LoadFaucet() : null;
             SKRect? faucetRect = null;
             float fx = SpoutXAt(w, h, yT);
             if (faucet != null)
@@ -572,7 +602,10 @@ namespace ConditioningControlPanel.Controls
                 float x = finalX - (float)(1 - _slide) * (finalX + iw + 12);
                 faucetRect = SKRect.Create(x, yT - 3 - ih * SpoutY, iw, ih);
             }
-            bool streamOn = pouring && (faucetRect is null || _slide > 0.88);
+            bool streamOn = pouring
+                && (_externalSpoutX is double
+                        ? _slide > StreamOnSlide
+                        : faucetRect is null || _slide > 0.88);
 
             using var jarPath = new SKPath();
             // SKRoundRect is IDisposable in SkiaSharp 2.88 — an un-disposed one per
@@ -762,9 +795,11 @@ namespace ConditioningControlPanel.Controls
                 ? (float)(2.0 * Math.Sin(x / 16 + _now / 480) + 1.3 * Math.Sin(x / 8.5 - _now / 300))
                 : 0f;
 
-        /// <summary>Where the stream falls: the spout tip, or 55% of the box with no art.</summary>
+        /// <summary>Where the stream falls: the external spout when the host owns the
+        /// plumbing, else the art's spout tip, else 55% of the box with no art.</summary>
         private float SpoutXAt(float w, float h, float yT)
         {
+            if (_externalSpoutX is double ext) return w * (float)ext;
             var faucet = LoadFaucet();
             if (faucet == null) return w * 0.55f;
             float ih = h * 0.21f;

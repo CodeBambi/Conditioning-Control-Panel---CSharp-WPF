@@ -33,6 +33,14 @@ namespace ConditioningControlPanel.Services.Descent
         public int DeltaXp { get; init; }
 
         /// <summary>
+        /// The server's daily cap for this reading — the divisor that turns an XP
+        /// amount back into a fill fraction. Carried so display-layer holds (the
+        /// Trainer Card's interactive faucet) can re-scale a held XP delta without
+        /// asking the coordinator for private state.
+        /// </summary>
+        public int Cap { get; init; }
+
+        /// <summary>
         /// True when the scale itself changed (cap or lip). The engine is scaled to
         /// the lip and captioned by the cap, so the host must re-scale rather than
         /// animate — a cap change is a different meter, not a different reading.
@@ -166,6 +174,7 @@ namespace ConditioningControlPanel.Services.Descent
                 Fill = fill,
                 Lip = lip,
                 DeltaXp = delta,
+                Cap = vat.Cap,
                 ScaleChanged = scaleChanged,
             };
         }

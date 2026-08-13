@@ -222,6 +222,86 @@
                                             <fx:VatGlassCanvas x:Name="ProfileVatGlass" x:FieldModifier="internal"
                                                                Visibility="Collapsed"
                                                                HorizontalAlignment="Left" VerticalAlignment="Top"/>
+
+                                            <!-- THE FAUCET (owner sketch 2026-08-13): a small tap
+                                                 perched on the vat's TOP-LEFT lip, spout aimed into
+                                                 the jar. It is the Trainer Card's XP hold — earned
+                                                 XP waits here (the faucet wobbles) until clicked,
+                                                 which pours the whole held delta into the glass.
+                                                 MainWindow.ProfileFaucet.cs owns every behavior:
+                                                 position (derived from the jar ratios in ArmVat),
+                                                 wobble/tilt/hover animations, tooltip text, sfx and
+                                                 haptics. Drawn in XAML (no bitmap): metallic grays
+                                                 with the app's pink accent on the handle. -->
+                                            <Grid x:Name="ProfileVatFaucet" x:FieldModifier="internal"
+                                                  Width="40" Height="42" HorizontalAlignment="Left"
+                                                  VerticalAlignment="Top" Visibility="Collapsed"
+                                                  Cursor="Hand" Background="Transparent"
+                                                  RenderTransformOrigin="0.30,0.88">
+                                                <Grid.RenderTransform>
+                                                    <TransformGroup>
+                                                        <ScaleTransform x:Name="ProfileVatFaucetScale" x:FieldModifier="internal"/>
+                                                        <RotateTransform x:Name="ProfileVatFaucetTilt" x:FieldModifier="internal"/>
+                                                    </TransformGroup>
+                                                </Grid.RenderTransform>
+                                                <Grid.Resources>
+                                                    <LinearGradientBrush x:Key="FaucetMetal" StartPoint="0,0" EndPoint="1,1">
+                                                        <GradientStop Color="#C6CAD6" Offset="0"/>
+                                                        <GradientStop Color="#8E93A6" Offset="0.45"/>
+                                                        <GradientStop Color="#62677C" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Grid.Resources>
+
+                                                <!-- base flange sitting on the glass lip -->
+                                                <Rectangle Width="17" Height="4" RadiusX="1.5" RadiusY="1.5"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                           Margin="3,36,0,0" Fill="{StaticResource FaucetMetal}"
+                                                           Stroke="#3A2A3E" StrokeThickness="0.6"/>
+                                                <!-- riser -->
+                                                <Rectangle Width="8" Height="24" RadiusX="2" RadiusY="2"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                           Margin="7,13,0,0" Fill="{StaticResource FaucetMetal}"
+                                                           Stroke="#3A2A3E" StrokeThickness="0.6"/>
+                                                <!-- arm bending right over the jar -->
+                                                <Rectangle Width="22" Height="8" RadiusX="3" RadiusY="3"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                           Margin="7,9,0,0" Fill="{StaticResource FaucetMetal}"
+                                                           Stroke="#3A2A3E" StrokeThickness="0.6"/>
+                                                <!-- spout, mouth pointing down into the jar -->
+                                                <Path HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                      Fill="{StaticResource FaucetMetal}"
+                                                      Stroke="#3A2A3E" StrokeThickness="0.6"
+                                                      Data="M 23,10 L 31,10 L 31,17 L 29,22 L 25,22 L 23,17 Z"/>
+                                                <!-- handle: pink tee on top -->
+                                                <Rectangle Width="4" Height="7" HorizontalAlignment="Left"
+                                                           VerticalAlignment="Top" Margin="13,4,0,0"
+                                                           Fill="{StaticResource FaucetMetal}"
+                                                           Stroke="#3A2A3E" StrokeThickness="0.5"/>
+                                                <Rectangle Width="13" Height="4.5" RadiusX="2" RadiusY="2"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                           Margin="8.5,1,0,0" Fill="#FF69B4"
+                                                           Stroke="#B44780" StrokeThickness="0.6"/>
+
+                                                <!-- droplet sparkle at the spout while XP is waiting
+                                                     (ambient — code gates it on AllowAmbientLoops +
+                                                     AllowGlow and animates opacity/translate) -->
+                                                <Ellipse x:Name="ProfileVatFaucetDrop" x:FieldModifier="internal"
+                                                         Width="4" Height="6" HorizontalAlignment="Left"
+                                                         VerticalAlignment="Top" Margin="25,23,0,0"
+                                                         Fill="#C8FF9CCF" Opacity="0">
+                                                    <Ellipse.RenderTransform>
+                                                        <TranslateTransform x:Name="ProfileVatFaucetDropFall" x:FieldModifier="internal"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+
+                                                <!-- reduced-motion badge: a still dot saying "XP is
+                                                     waiting" when the wobble is not allowed to -->
+                                                <Ellipse x:Name="ProfileVatFaucetBadge" x:FieldModifier="internal"
+                                                         Width="8" Height="8" HorizontalAlignment="Left"
+                                                         VerticalAlignment="Top" Margin="28,2,0,0"
+                                                         Fill="#FF69B4" Stroke="#FFF0F7" StrokeThickness="1"
+                                                         Visibility="Collapsed"/>
+                                            </Grid>
                                         </Grid>
 
                                         <!-- Percent only, deliberately wordless: loc keys for the

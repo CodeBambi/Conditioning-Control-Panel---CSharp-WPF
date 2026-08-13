@@ -117,6 +117,11 @@ namespace ConditioningControlPanel
                     }
                 }
 
+                // The dashboard's tease tile reads the same flag to know when to take its costume
+                // off. Called here rather than left to the next mosaic repaint so a mid-session
+                // reveal lands on the tile and the rail in the same frame.
+                ApplyTeaseCard();
+
                 App.Logger?.Debug("JustDrop door visibility -> {State}", available ? "visible" : "hidden");
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "ApplyJustDropDoorVisibility failed"); }

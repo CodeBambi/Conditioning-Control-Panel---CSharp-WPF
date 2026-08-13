@@ -71,7 +71,19 @@ namespace ConditioningControlPanel
                 if (!onScreen)
                 {
                     _vatPollTimer?.Stop();
+                    OnFaucetVatOffScreen();
                     return;
+                }
+
+                // THE TAB-ENTRY ESCAPE VALVE (owner ruling 2026-08-13): entering the
+                // Profile tab fresh always shows the TRUE level — no pending hold is
+                // carried across visits, so a hold left behind by the last visit is
+                // dropped and the glass snapped to the last accepted server fill
+                // before the reading below can decide anything.
+                if (_vatArmed && _faucetHold.HeldXp > 0)
+                {
+                    _faucetHold.ClearHeld();
+                    DiscordTab?.ProfileVatGlass?.SnapTo(_faucetHold.TruthFill);
                 }
 
                 ApplyDescentToVat();                       // draw what we already know
@@ -216,38 +228,43 @@ namespace ConditioningControlPanel
             // consume its only chance to introduce itself.
             if (_vatOnScreen) MaybeShowFeatureIntro("descent-vat", "discord");
 
-            switch (read.Kind)
+            // THE HOLD (owner ruling 2026-08-13, desktop surface only): while the
+            // Profile tab is on screen, earned XP does not move the liquid — it
+            // accumulates in the faucet perched on the lip until the user clicks it.
+            // VatFaucetHold folds the coordinator's reading into that hold and
+            // answers what the glass should actually do; the shared contract's
+            // cases all survive inside it (seed snaps, cap retunes re-scale
+            // silently, midnight drains silently, a mid-pour delta extends).
+            var step = _faucetHold.Fold(read, holdActive: _vatOnScreen, pouring: glass.IsPouring);
+            switch (step.Action)
             {
-                case VatReadKind.Seed:
-                    glass.SnapTo(read.Fill);
+                case FaucetActionKind.Snap:
+                    glass.SnapTo(step.Fill);
                     break;
 
-                case VatReadKind.Pour:
+                case FaucetActionKind.Ease:
+                    glass.EaseTo(step.Fill);
+                    break;
+
+                case FaucetActionKind.Pour:
                     if (!glass.IsPresenting)
                     {
-                        // A POUR NOBODY IS THERE FOR IS NOT REPLAYED. The sync hook
-                        // can land a qualifying earn while the window is minimised or
-                        // the card is behind another tab; swinging the faucet then
-                        // means swinging it on the user's return, announcing XP from
-                        // minutes ago. The reading still applies — silently.
-                        glass.EaseTo(read.Fill);
+                        // A POUR NOBODY IS THERE FOR IS NOT REPLAYED — same rule as
+                        // ever. The reading still applies, silently.
+                        glass.EaseTo(step.Fill);
                         break;
                     }
-                    // The faucet swings in. A pour landing while one is already
-                    // running EXTENDS it inside the canvas; nothing restarts here.
-                    glass.PourTo(read.Fill);
-                    App.Logger?.Debug("[Descent] vat pour +{Xp} XP -> {Pct:F0}%", read.DeltaXp, read.Fill * 100);
-                    break;
-
-                case VatReadKind.Silent:
-                    // A CAP OR LIP CHANGE IS A RE-SCALE, NOT A READING. Levelling up
-                    // buys a bigger cap, so the same XP is suddenly a smaller
-                    // fraction of it — easing that would draw a long drain the user
-                    // did not lose. Snap to the new scale and say nothing.
-                    if (read.ScaleChanged) glass.SnapTo(read.Fill);
-                    else glass.EaseTo(read.Fill);
+                    // Only reachable mid-pour (the extension case): the stream keeps
+                    // running and simply lasts longer. Nothing restarts.
+                    glass.PourTo(step.Fill);
+                    App.Logger?.Debug("[Descent] vat pour extended +{Xp} XP -> {Pct:F0}%", read.DeltaXp, step.Fill * 100);
                     break;
             }
+
+            if (read.DeltaXp > 0 && step.Action == FaucetActionKind.None)
+                App.Logger?.Debug("[Descent] faucet holding +{Xp} XP ({Held} total)", read.DeltaXp, _faucetHold.HeldXp);
+
+            UpdateFaucetPresentation();
         }
 
         /// <summary>
@@ -287,6 +304,8 @@ namespace ConditioningControlPanel
                 readout.Visibility = Visibility.Visible;
             }
 
+            ArmFaucet(glass, jarW, jarH);
+
             App.Logger?.Information("[Descent] vat armed on the Trainer Card");
         }
 
@@ -319,6 +338,8 @@ namespace ConditioningControlPanel
 
             var readout = DiscordTab?.ProfileVatReadout;
             if (readout != null) readout.Visibility = Visibility.Collapsed;
+
+            DisarmFaucet();
         }
     }
 }

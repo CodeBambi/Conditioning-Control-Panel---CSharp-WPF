@@ -779,9 +779,9 @@
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
                  with the mod-aware localized name (same keys as the Studio rack rows).
-                 "Just Drop" stays a literal (unbuilt placeholder), and the ? box's title
-                 is runtime-owned outright: RefreshMysteryTile() writes today's feature
-                 name over it on every repaint. -->
+                 Two tiles are runtime-owned outright instead: the ? box (RefreshMysteryTile()
+                 writes today's feature name over it on every repaint) and the tease tile
+                 (ApplyTeaseCard() owns its title, badge, tooltip and blur together). -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
@@ -809,14 +809,25 @@
                                   Click="CardBouncingText_Click"
                                   ToggleRequested="CardBouncingText_Toggle"/>
 
-            <!-- Row 2: Just Drop (far left, owner spec) + centre logo + spiral pair -->
-            <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder
-                 for now"). SOON badge + toast; wire the real launcher when feat/justdrop-door
-                 merges and delete the toast. Title stays an English literal on purpose. -->
+            <!-- Row 2: the TEASE tile (far left, owner spec) + centre logo + spiral pair -->
+            <!-- THE TEASE TILE. Nameless on purpose (owner, 2026-08-13): the art below is
+                 blurred past recognition by FeatureCard.TeaseTier, the title is "???", the rim
+                 is the teased feature's tier livery and the click opens a cryptic teaser rather
+                 than a door. Nothing here may name the feature.
+
+                 The art IS still loaded, and must be: it is the substrate the blur smears into,
+                 which is what makes the tile a shape rather than an empty box. It is never
+                 legible - see the blur radius note in FeatureCard.
+
+                 Title and TeaseTier here are FIRST-FRAME values, not the authority: the switch
+                 block at the top of MainWindow.TeaseCard.cs owns both and rewrites them on every
+                 mosaic repaint (and the instant the teased feature is revealed). They are
+                 authored rather than left blank so the tile can never flash a name or an
+                 unblurred face in the frames before the first repaint. -->
             <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardJustDrop" x:FieldModifier="internal"
-                                  Title="Just Drop"
+                                  Title="???"
+                                  TeaseTier="2"
                                   Icon="pack://application:,,,/Resources/features/justdrop.png"
-                                  Glyph="🎚"
                                   Click="CardJustDrop_Click"/>
 
             <!-- Centre logo, back at 2x2 (the 3x3 interlude had it 1x1).
