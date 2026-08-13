@@ -130,7 +130,15 @@ public static partial class BuiltInPrograms
                     Subtitle = "Six easy days and one that isn't",
                     AccentColor = "#FF69B4",
                     RewardId = "first_week_preset",
-                    RewardDescription = "The \"First Week\" preset - day seven, saved permanently, replayable whenever you want it back.",
+                    // Softened from "The \"First Week\" preset - day seven, saved permanently,
+                    // replayable whenever you want it back." Nothing implements that: CompleteChapter
+                    // records the RewardId in enrollment.BankedRewards and no code path turns a
+                    // banked id into a saved session, so a free user finishing the funnel went
+                    // looking for a preset that was never written. Banking IS real, so the copy now
+                    // promises exactly the part that happens. See the fix report - eleven sibling
+                    // reward lines across the paid programs make the same class of promise and are
+                    // left alone pending the owner call on building the grant.
+                    RewardDescription = "Day seven, banked - it's yours, and a restart can't take it back.",
                     Days = new List<ProgramDay>
                     {
                         // ---- Day 1 ---------------------------------------------------------------
@@ -359,7 +367,9 @@ public static partial class BuiltInPrograms
                             SessionTemplateId = "BW-Deep",
                             SessionMinutes = 60,
                             Intensity = 0.75,
-                            RewardDescription = "Good Girl badge, and day seven saved as a preset you keep.",
+                            // Kept in step with the chapter line above - the preset it promised does
+                            // not get written.
+                            RewardDescription = "Good Girl badge, and day seven banked - yours to keep.",
                             Tasks = new List<ProgramTask>
                             {
                                 new ProgramTask

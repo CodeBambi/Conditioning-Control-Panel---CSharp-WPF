@@ -294,4 +294,67 @@ public class ProgramLibraryTests
             Assert.False(string.IsNullOrWhiteSpace(program.SafetyNote), $"{program.Id} has no safety note.");
         }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // KNOWN DEBT: four of the five graduation badges do not exist.
+    //
+    // Every program names a GraduationBadgeId and ProgramService.Graduate unlocks it, but only
+    // "first_week_graduate" is in Achievement.All. Finishing any of the four PAID programs - 14 or 28
+    // days of work someone paid for - therefore produces a Warning in the log and nothing else: no
+    // badge, no art, and no Discord post, because the announce webhook 400s on ids the server's own
+    // achievements.json has never heard of.
+    //
+    // Closing it is owner territory in three places this lane does not own: Achievement.All, the
+    // achievement art (PNG + 256px webp on cclabs-site), and proxy/data/achievements.json on the
+    // server. So the assertion is written and skipped rather than deleted or quietly weakened,
+    // and the pair below is arranged so the debt cannot rot:
+    //   - the skipped test is the real assertion, ready to un-skip the moment the ids exist;
+    //   - the test after it FAILS as soon as any of the four is added, and its message says to
+    //     un-skip the first one and delete the second.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact(Skip = "KNOWN DEBT - firmware_install_graduate, kept_graduate, presentation_graduate and " +
+                 "takeover_graduate are not in Achievement.All. Graduating any paid program logs a " +
+                 "Warning and awards nothing. Needs Achievement.All + art + the server's " +
+                 "achievements.json (owner). Un-skip when they land.")]
+    public void EveryGraduationBadgeExistsInTheAchievementCatalogue()
+    {
+        var missing = Library
+            .Where(p => !Achievement.All.ContainsKey(p.GraduationBadgeId ?? ""))
+            .Select(p => $"{p.Id} -> '{p.GraduationBadgeId}'")
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            "Programs whose graduation badge does not exist in Achievement.All, so graduation awards " +
+            "nothing and the Discord announce silently never fires:\n  " + string.Join("\n  ", missing));
+    }
+
+    [Fact]
+    public void TheGraduationBadgeDebtIsStillExactlyTheFourKnownPaidPrograms()
+    {
+        // A tripwire, not a preference. It fails in BOTH directions: if somebody adds a fifth program
+        // without a badge the debt grows silently, and if somebody adds one of the four the skipped
+        // test above is now enforceable and should be enforcing.
+        var expectedMissing = new[]
+        {
+            "firmware_install_graduate",
+            "kept_graduate",
+            "presentation_graduate",
+            "takeover_graduate"
+        };
+
+        var actualMissing = Library
+            .Select(p => p.GraduationBadgeId ?? "")
+            .Where(id => !Achievement.All.ContainsKey(id))
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            expectedMissing.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(actualMissing),
+            "The graduation-badge debt has changed. Expected exactly these four missing:\n  " +
+            string.Join("\n  ", expectedMissing) + "\nFound:\n  " +
+            (actualMissing.Count == 0 ? "(none - the debt is paid)" : string.Join("\n  ", actualMissing)) +
+            "\n\nIf the list shrank: delete the Skip on EveryGraduationBadgeExistsInTheAchievementCatalogue " +
+            "and delete this test. If it grew: a new program was added without a badge in Achievement.All.");
+    }
 }

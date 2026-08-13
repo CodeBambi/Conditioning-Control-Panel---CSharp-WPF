@@ -147,7 +147,12 @@ public static partial class BuiltInPrograms
         Subtitle = "Two words, over and over, until they stop being words",
         AccentColor = "#FFB6C1",
         RewardId = "tk_ch1_banked",
-        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP - stay in your subliminal pool for good.",
+        // Softened from "...stay in your subliminal pool for good." Nothing writes them there - the
+        // reward is recorded as an id in enrollment.BankedRewards and no code path adds a phrase to
+        // the user's own pool - and unlike the program's other reward copy that one named a surface
+        // the user can go and open, so it reads as a bug rather than as flavour. "Installed" is the
+        // program's own fiction and stays.
+        RewardDescription = "Banked: the two phrases this week installed - GOOD GIRL and BAMBI SLEEP. Yours from here, and a restart can't take them back.",
         Days = new List<ProgramDay>
         {
             // ---- Day 1 -------------------------------------------------------------------------
