@@ -39,22 +39,85 @@ creator's MEGA link, then drag it onto the app.
 
 ## Creating a mod
 
-Open **Manage Mods → Create New** to launch the Mod Creator. Tabs cover:
+Open **Manage Mods → Create New** to launch the Mod Creator. The sidebar
+sections, in order:
 
-- **Basics** - id, name, author, version, description, tags, minimum app
-  version, theme color, preview image.
-- **Personality** - companion name, prompt/personality text, affirmation and
-  rank subject lines.
+- **Info** - id, name, author, version, description, tags, minimum app
+  version, preview image.
+- **Theme** - accent/background/panel colors and the ambient FX palette.
+- **Identity** - companion name, what the companion calls you, mode display
+  name, the Talk To / Takeover button labels.
+- **Achievements / Features / Skills** - badge, feature-icon and skill-node
+  art.
+- **Avatars** - the four-pose avatar sets (default plus the level-gated ones).
+- **UI Assets** - bubble, tube, spiral GIF, logo.
+- **UI Art** - the rest of the app's artwork: nav rail doors, Play wall
+  heroes, vault/dashboard tiles, session and intake cards. See
+  [Art overrides](#art-overrides) below.
+- **Audio** - companion sounds, bubble pops, lucky chimes, voice lines.
+- **Browser / Triggers / Messages / Phrases** - links, fullscreen trigger
+  text, minigame messages, and the companion's speech-bubble phrase pools.
+- **Text Replacements** - find-and-replace pairs applied across the UI's
+  wording. The most powerful re-skinning tool in the editor.
+- **Pools & Triggers / Personalities / Advanced** - image pools, alternate
+  personalities, avatar-tube offsets and skill-tree label overrides.
 - **Barks** - the companion's spoken one-liners per trigger, as text or
   `{text, audio}` pairs with pre-made mp3s.
-- **Mantras / Event audio / Portraits / Emotes** - the rest of the content
-  surfaces. Emotes ship as `resources/emotes/set{N}/` folders with an
+- **Mantras / Event audio / Portraits / Animated emotes** - the rest of the
+  content surfaces. Emotes ship as `resources/emotes/set{N}/` folders with an
   `emotes.json` manifest.
-- **Pools / Advanced** - image pools and expert knobs.
 
 **Export** writes everything into a single `.ccpmod` (a zip with `mod.json`
 at the root). Reinstalling a newer export of the same mod id upgrades it in
 place.
+
+## Art overrides
+
+Mod art is **path shadowing**, and that is the whole contract. Any file you
+put at `resources/<path>` inside your mod replaces the app's own
+`Resources/<same path>`. There is no registry to declare, no manifest entry
+to add, and nothing to name: `resources/features/vault.png` becomes the
+Velvet Vault tile, full stop. Leave a file out and the built-in art stays.
+
+Three consequences worth knowing:
+
+- **The path is the compatibility surface, so the app never renames one.**
+  Several files still carry historical names -
+  `features/lab_gaze_hero.png`, `features/lab_focusgaze_hero.png` and
+  `features/lab_aimemory_hero.png` say "lab" but now hang on the Play and
+  Companion doors. Ship them under those exact names.
+- **One file can feed several places.** `features/dtrh.png` paints both the
+  dashboard tile and the Play wall hero; `features/lab_quiz_hero.png` paints
+  the Play card, the Graded Intake header and the quick-launch rail chip.
+  One upload repaints all of them.
+- **Format matters, not just the picture.** The filename inside the package
+  is fixed, so a JPEG saved as `.png` ships bytes that lie about their
+  format. The editor now rejects a picked file whose extension does not match
+  the slot, and warns above 4 MB - most of the art below is 1376x768 or
+  smaller and comfortably under that.
+
+The **UI Art** section of the editor covers these slots (the dimmed art
+behind each slot in the editor is the file you are replacing; sizes are the
+shipped art's real pixels, not a hard requirement):
+
+| Group | Slots | Geometry |
+|-------|-------|----------|
+| Nav doors | `nav/door_home.png`, `nav/door_play.png`, `nav/door_companion.png`, `nav/door_library.png`, `nav/door_studio.png`, `nav/door_you.png`, `nav/door_settings.png` | Square transparent PNG, 64x64 shipped (128 for HiDPI) |
+| Play wall | `features/dtrh.png`, `features/loom.png`, `features/goon_game.png`, `features/lab_gaze_hero.png`, `features/lab_focusgaze_hero.png`, `features/lab_quiz_hero.png`, `features/lab_aimemory_hero.png` | Wide 16:9, 1376x768 (`goon_game.png` ships 1024 square) |
+| Vault & dashboard | `features/vault.png`, `features/mysterybox.png`, `features/justdrop.png`, `features/fyp.png`, `features/fyp_banner.png`, `features/awareness.png`, `features/remote_control.png`, `features/blink_trainer.png`, `features/deeper.png`, `lockdown_icon.png`, `exclusives/vault_backdrop.png` | Wide 16:9, 1376x768; the strips are wider - `fyp_banner.png` 1376x459, `lockdown_icon.png` 1527x343 |
+| Session & intake | `Cards/fireworks.png`, `Cards/hearth.png`, `Cards/spotlight.png`, `intake/pass_card.png`, `intake/pass_card_bambi.png`, `intake/pass_card_sissy.png`, `intake/pass_card_circe.png`, `intake/pass_card_drone.png` | Square - session cards ~512, pass cards 1024 |
+
+`lockdown_icon.png` lives at the **root** of `resources/`, not under
+`features/`. `intake/pass_card.png` is the catch-all: supply it and it wins
+for every niche, so the four per-niche cards are never reached.
+
+Everything the older sections cover shadows the same way -
+`resources/achievements/`, `resources/features/`, `resources/skills/`,
+`resources/spirals/`, `resources/Cards/`, `resources/nav/`,
+`resources/programs/`, `resources/quests/`, `resources/intake/`,
+`resources/exclusives/` and the avatar poses at the root. The mod template
+generator scaffolds all of those folders empty, and the Manage Mods details
+panel shows a per-folder count of what an installed mod actually overrides.
 
 ## Sharing your mod to the catalogue
 

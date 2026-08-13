@@ -199,6 +199,11 @@ namespace ConditioningControlPanel
                 CacheNavDoorRows();
                 CacheNavRailParts(NavSidebar);
 
+                // The medallion art is mod-aware from the first frame; MainWindow.xaml's literal
+                // pack Sources are the fallback, not the answer. Repaints on ModChanged too - see
+                // the subscription block in MainWindow.xaml.cs.
+                ApplyDoorArt();
+
                 _navRailCollapseTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromMilliseconds(NavRailCollapseDelayMs)
@@ -243,6 +248,56 @@ namespace ConditioningControlPanel
                 // 56px wide, 44px tiles, no door names and no hover flyout. Degraded, not
                 // broken - every door still navigates and still has its tooltip.
                 App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays as authored (shut, icon-only)");
+            }
+        }
+
+        /// <summary>
+        /// Decode cap for a door medallion. The art is authored at 64px native and the tile never
+        /// exceeds 56 DIP, so 128 is 2x headroom for a high-DPI display - and it is the reason
+        /// this goes through the DECODED resolver: a mod is free to ship a 2048px door_play.png,
+        /// and ResolveImage would hand back every pixel of it for a 44px tile.
+        /// </summary>
+        private const int NavDoorArtDecodeWidth = 128;
+
+        /// <summary>
+        /// Points the seven door medallions at the active mod's art. The paths are the mod
+        /// compatibility surface (nav/door_*.png) and are never renamed; a mod that ships none of
+        /// them resolves straight back to the embedded copies, which is byte-identical to what
+        /// MainWindow.xaml already authored.
+        ///
+        /// <para><b>A null resolve leaves the existing Source alone.</b> An empty nav rail is the
+        /// worst failure this file can produce (missing nav art has crashed this app before), and
+        /// the authored pack URI is always a valid fallback - so "could not resolve" means "keep
+        /// what is on screen", never "blank it".</para>
+        ///
+        /// <para>Safe to call before <see cref="InitializeNavRail"/> has cached anything: it only
+        /// touches x:Named Images, which exist from InitializeComponent onward.</para>
+        /// </summary>
+        private void ApplyDoorArt()
+        {
+            try
+            {
+                var doors = new (Image? Img, string Path)[]
+                {
+                    (ImgDoorHome,      "nav/door_home.png"),
+                    (ImgDoorStudio,    "nav/door_studio.png"),
+                    (ImgDoorCompanion, "nav/door_companion.png"),
+                    (ImgDoorPlay,      "nav/door_play.png"),
+                    (ImgDoorYou,       "nav/door_you.png"),
+                    (ImgDoorLibrary,   "nav/door_library.png"),
+                    (ImgDoorSettings,  "nav/door_settings.png"),
+                };
+
+                foreach (var (img, path) in doors)
+                {
+                    if (img == null) continue;
+                    var art = ModResourceResolver.ResolveImageDecoded(path, NavDoorArtDecodeWidth);
+                    if (art != null) img.Source = art;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ApplyDoorArt failed; nav rail keeps its embedded medallions");
             }
         }
 

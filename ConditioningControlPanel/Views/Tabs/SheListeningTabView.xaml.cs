@@ -1,5 +1,7 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -17,6 +19,74 @@ namespace ConditioningControlPanel.Views.Tabs
         public SheListeningTabView()
         {
             InitializeComponent();
+            Loaded += SheListeningTabView_Loaded;
+            Unloaded += SheListeningTabView_Unloaded;
+        }
+
+        // ==== mod-aware feature art =====================================================
+        // Both audio_whispers.png plates author a pack:// URI in XAML, which is the BASE art
+        // and stays as the fallback. A mod shipping resources/features/audio_whispers.png has
+        // to repaint them, and only ModChanged is authoritative about that: ApplyActiveModChange
+        // is never reached when the ACTIVE mod is uninstalled (ModService activates the fallback
+        // itself), which used to leave the dead mod's art on screen. Sources only - the side
+        // plate's fixed 520px height and top pin are load-bearing layout, see the XAML note.
+
+        /// <summary>Guards against a double subscription if Loaded fires again after a re-parent.</summary>
+        private bool _modArtHooked;
+
+        private void SheListeningTabView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged += OnModChangedArt;
+                _modArtHooked = true;
+            }
+            ApplyFeatureArt();
+        }
+
+        private void SheListeningTabView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged -= OnModChangedArt;
+                _modArtHooked = false;
+            }
+        }
+
+        // ModChanged can be raised off the UI thread; marshal before touching the brushes.
+        private void OnModChangedArt(object? sender, Models.ModPackage mod)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(ApplyFeatureArt));
+                return;
+            }
+            ApplyFeatureArt();
+        }
+
+        /// <summary>
+        /// Repaints the hero and side-art plates from the active mod's audio_whispers.png, if it
+        /// has one. A null resolve is left alone deliberately: the plate degrades to its authored
+        /// pack:// art rather than to an empty rectangle.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            try
+            {
+                const string Art = "features/audio_whispers.png";
+
+                var hero = ModResourceResolver.ResolveImageDecoded(Art, 480);
+                if (hero != null && SheListeningHeroArtBrush != null && !SheListeningHeroArtBrush.IsFrozen)
+                    SheListeningHeroArtBrush.ImageSource = hero;
+
+                var side = ModResourceResolver.ResolveImageDecoded(Art, 800);
+                if (side != null && SheListeningSideArtBrush != null && !SheListeningSideArtBrush.IsFrozen)
+                    SheListeningSideArtBrush.ImageSource = side;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("SheListeningTabView feature art: {E}", ex.Message);
+            }
         }
 
         private void ChkSL_Mantras_Changed(object sender, RoutedEventArgs e)
