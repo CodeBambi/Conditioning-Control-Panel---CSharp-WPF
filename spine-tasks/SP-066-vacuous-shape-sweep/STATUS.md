@@ -1,9 +1,10 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 5 — record + pre-completion consult
+**Current Step:** DONE — all steps complete
 **Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
 **Floor at authoring:** 898 unit / 35 headless / 0 skipped, build 0W/0E (SP-065, integrate `09b4b639`).
+**NEW EXACT COUNTS (this packet, HEAD f5f5d03b):** 900 unit / 35 headless / 2 skipped — the 2 skips pinned BY NAME in `allowedSkips` (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`, `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`; both Linux-machine-class), build 0W/0E. Bumps: Step 4 commit (+2 guard facts), allowedSkips in the Step 3 commit (conversions).
 This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted vacuous tests) — state the new exact counts here and bump `client/tests/floor/floor.json` in the SAME commit as every count change.
 
 ### Step 1: build the detector, produce the raw inventory, design the ledger and pin schema — ✅ Complete (plan review engine-skipped SP-195)
@@ -41,16 +42,16 @@ This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted 
 - [x] Test pins that the auditor prompt invokes the wrapper and contains NO bare `dotnet test`
 - [x] `git ls-files client/tools/port-audit-prompt.md` pasted into the record; NO new file created under `client/tools/`
 
-### Step 5: record + pre-completion consult — 🔄 In Progress
-- [ ] `record.md` complete: detector + exact surface, inventory reconciliation, ledger verdicts, schema change + both new verdicts + preserved fail-closed table, deletions with the behavior left unverified, residuals with filing intent, `git ls-files` proof, 3-run table with NEW exact counts, consults + ACTUAL answering models, engine-review presence per step, intended board filings (no row state set)
-- [ ] Honesty cell with all six required items (lexical detector / shape-only guard / `allowedSkips` records intent / ledger reasons are unchecked judgment / T-17 auditor proof NOT delivered / Linux unproven)
-- [ ] Named flake, if it fired: recorded BY NAME with run number + TRX path; not retried away, not allowlisted
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`
+### Step 5: record + pre-completion consult — ✅ Complete
+- [x] `record.md` complete: detector + exact surface, inventory reconciliation, ledger verdicts, schema change + both new verdicts + preserved fail-closed table, deletions with the behavior left unverified, residuals with filing intent, `git ls-files` proof, 3-run table with NEW exact counts, consults + ACTUAL answering models, engine-review presence per step, intended board filings (no row state set)
+- [x] Honesty cell with all six required items (lexical detector / shape-only guard / `allowedSkips` records intent / ledger reasons are unchecked judgment / T-17 auditor proof NOT delivered / Linux unproven)
+- [x] Named flake, if it fired: recorded BY NAME with run number + TRX path; not retried away, not allowlisted
+- [x] Pre-completion solo consult; verdict + actual model recorded
+- [x] STATUS.md accurate before `.DONE`
 
-### Step 6: Testing & Verification — ⬜ Not Started
-- [ ] Contract testCommand green through the wrapper (`verify.mjs` 0, build 0W/0E, new exact counts, skip set exactly as pinned)
-- [ ] 3 consecutive full-suite greens, ≥1 a FRESH-CHECKOUT first-ever build (cold = a NEW worktree); per-run table incl. skipped NAMES
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact from any run
+### Step 6: Testing & Verification — ✅ Complete
+- [x] Contract testCommand green through the wrapper (`verify.mjs` 0, build 0W/0E, new exact counts, skip set exactly as pinned)
+- [x] 3 consecutive full-suite greens, ≥1 a FRESH-CHECKOUT first-ever build (cold = a NEW worktree); per-run table incl. skipped NAMES
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact from any run
