@@ -119,3 +119,87 @@ does not cover it at authoring). Tracking proven with `git ls-files` in Step 2, 
   pin, staleness via mtime + `Times/@creation`, truncation-aware unparseable detection,
   guard must fail on a missing/unparseable testCommand row, pin set to the final number in
   the same commit as the fact-adding guard test, test name-swap stays a named blind spot.
+
+### Engine review, Step 1 (T-2 heading format)
+
+`spine_review_step step=1 type=plan` → **engine review ABSENT**: nested reviewer spawn
+blocked inside worker session (`skipped: true, spawnFailed: false`, artifact
+`.reviews/1-20260813T034352.md`). The batch engine runs reviews after `.DONE` (SP-195).
+
+## Step 2 — wrapper + pin, both verdicts, every fail-closed mode
+
+### Tracking proof (framing c — tree presence, not disk presence)
+
+```
+$ git ls-files client/tests/floor/
+client/tests/floor/check-floor.mjs
+client/tests/floor/floor.json
+```
+
+### Worktree cleanliness (framing d)
+
+`git status --porcelain --ignored=matching -uall` snapshotted before and after a wrapper
+run: **diff empty — zero new ignored entries**; `grep -icE 'trx|testresult'` over the
+ignored listing = 0. Results land in `os.tmpdir()/ccp-floor-*` and the path is printed
+every run; sha256 of both trx files captured in `evidence/worktree-cleanliness.txt`.
+
+### Fail-closed demonstration table (framing b) — `evidence/fail-closed-table.txt`
+
+The harness `evidence/demo-fail-closed.mjs` imports the REAL exported
+`verifyProjectResults` from the wrapper and feeds it sabotaged fixtures. **14 PASS /
+0 FAIL** (13 fail-closed cases + 1 positive control): results dir missing; no .trx; two
+.trx files; garbage (not XML); truncated mid-write (no `</TestRun>`); stale mtime + stale
+creation; stale creation with fresh mtime (copy-tool shape); zero results; failed category
+nonzero; ResultSummary outcome != Completed; inconsistent arithmetic; off-floor count;
+unexpected skip. Positive control: valid on-floor fixture accepted.
+
+(One fixture in the first harness run was itself inconsistent — a skip fixture with
+`executed=897` — and the wrapper correctly rejected it on arithmetic before the pin check.
+The fixture was fixed, not the wrapper: executed 896 when 1 of 897 skips.)
+
+### Both verdicts (the board's acceptance wording)
+
+- **Induced skip → RED**: `CCP_DATA_ROOT` set on the wrapper's child process only (framing
+  h — parent shell confirmed unset after), SP-057 pin skips, suite reports 896/1,
+  `dotnet test` itself exits 0, **wrapper exits 1** (FLOOR VIOLATION).
+  `evidence/red-induced-skip.txt`.
+- **Clean run → GREEN**: `FLOOR OK: CcpClient.Tests: 897/897 passed, 0/0 skipped;
+  CcpClient.HeadlessTests: 35/35 passed, 0/0 skipped`, exit 0.
+  `evidence/green-clean.txt`.
+
+### Count drift, both directions
+
+- **+1**: temporary `FloorDriftProbe.cs` (one fact) → 898 vs pin 897 → exit 1.
+  `evidence/red-drift-plus-one.txt`. File deleted afterwards.
+- **-1**: one existing fact (`ResolveDataRoot_RelativePath_ThrowsTyped`) temporarily
+  removed → 896 vs pin 897 → exit 1. `evidence/red-drift-minus-one.txt`. Restored with
+  `git checkout` afterwards.
+- **Injections proven removed**: `git status` after reverts showed only intended files;
+  the cleanliness-run wrapper pass above (897/35/0, exit 0) is the post-injection clean run.
+
+### Pin bump discipline (framing e)
+
+No count change in Step 2 (injections reverted), pin committed at the real 897/35/0. The
+Step 3 guard test adds exactly one fact; the pin bump 897 → 898 lands in the SAME commit
+as the guard test with the reason in the message.
+
+### Named red during Step 2 (amendment: identify BY NAME, n=1 is not "pre-existing")
+
+The first-ever wrapper run went RED on
+`CcpClient.Tests.ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`
+(`ChaosTunnelLoopbackTests.cs:143` = `Assert.DoesNotContain("index.html", logs)`): the
+collecting log contained a filename the route-class logging contract forbids. **Not
+reproduced**: passes standalone, and the immediate full-suite re-run plus every subsequent
+wrapper run (5+ full-suite runs this session) are green on it. Hit rate **unquantified**
+(1 failure in 1 run, then 0 in 5+). The class uses a per-test-instance log and server (no
+intra-class sharing), so the mechanism is not obvious — candidate classes: async log-write
+race, or `LoopbackListenerRegistry` cross-talk. **Not fixed here**: `client/src/**` is out
+of scope and weakening the assertion is forbidden; filed as an intended board filing
+(Step 4). This is exactly the failure class this row exists to make loud — and it surfaced
+on the mechanism's first run.
+
+### Engine review, Step 2 (T-2 heading format)
+
+`spine_review_step step=2 type=plan` → **engine review ABSENT**: nested reviewer spawn
+blocked inside worker session (`skipped: true, spawnFailed: false`). Reviews run on the
+engine after `.DONE`.

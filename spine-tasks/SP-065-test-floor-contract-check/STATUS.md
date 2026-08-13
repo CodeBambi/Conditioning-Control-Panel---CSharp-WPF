@@ -1,6 +1,6 @@
 ## STATUS: SP-065 — Mechanical skip/count detection that fails the CONTRACT
-**Current Step:** 2 (implement the wrapper and the pin, prove BOTH verdicts)
-**Last Updated:** 2026-08-13 (worker, Step 2 in progress)
+**Current Step:** 3 (the half-install guard)
+**Last Updated:** 2026-08-13 (worker, Step 3 in progress)
 **Blockers:** none
 
 ### Step 1: probe the runner surface, choose the mechanism, design the guard — COMPLETE
@@ -12,16 +12,16 @@
 - [x] Half-install guard design: walk, `>= SP-065` ID rule, `file:line` shape, why it cannot skip
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch
 
-### Step 2: implement the wrapper and the pin, prove BOTH verdicts — IN PROGRESS
-- [ ] Wrapper at exactly `client/tests/floor/check-floor.mjs`; pin beside it; `git ls-files` tracking proof
-- [ ] Results outside the worktree; `git status --porcelain --ignored=matching -uall` gains no new entry
-- [ ] Every fail-closed behavior implemented AND demonstrated (one table row per failure mode)
-- [ ] Induced skip -> RED (captured); clean run -> GREEN
-- [ ] Induced count drift BOTH directions -> RED (captured)
-- [ ] Every injection removed and proven removed
-- [ ] Pin bumped in the same commit as any count change, reason stated
+### Step 2: implement the wrapper and the pin, prove BOTH verdicts — COMPLETE
+- [x] Wrapper at exactly `client/tests/floor/check-floor.mjs`; pin beside it; `git ls-files` tracking proof
+- [x] Results outside the worktree; `git status --porcelain --ignored=matching -uall` gains no new entry
+- [x] Every fail-closed behavior implemented AND demonstrated (one table row per failure mode)
+- [x] Induced skip -> RED (captured); clean run -> GREEN
+- [x] Induced count drift BOTH directions -> RED (captured)
+- [x] Every injection removed and proven removed
+- [x] Pin bumped in the same commit as any count change, reason stated
 
-### Step 3: the half-install guard — NOT STARTED
+### Step 3: the half-install guard — IN PROGRESS
 - [ ] Guard walks `spine-tasks/*/PROMPT.md`, enforces IDs `>= SP-065`, `file:line` violations, never skips
 - [ ] Captured RED from a probe packet with a bare `dotnet test` testCommand; probe deleted and deletion proven
 - [ ] This packet's own PROMPT.md passes the guard (self-binding)
