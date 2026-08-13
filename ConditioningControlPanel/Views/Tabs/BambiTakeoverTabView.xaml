@@ -46,7 +46,8 @@
                     <Grid>
                         <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                             <Border.Background>
-                                <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                <ImageBrush x:Name="TakeoverHeroArtBrush"
+                                            Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                                     <ImageBrush.ImageSource>
                                         <BitmapImage UriSource="pack://application:,,,/Resources/features/takeover.png" DecodePixelWidth="480"/>
                                     </ImageBrush.ImageSource>
@@ -732,7 +733,7 @@
                         <Border CornerRadius="14" BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                                 MinHeight="200" MaxHeight="300" Margin="0,0,0,10">
                             <Border.Background>
-                                <ImageBrush Stretch="UniformToFill">
+                                <ImageBrush x:Name="TakeoverSideArtBrush" Stretch="UniformToFill">
                                     <ImageBrush.ImageSource>
                                         <BitmapImage UriSource="pack://application:,,,/Resources/features/takeover.png"
                                                      DecodePixelWidth="800"/>

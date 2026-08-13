@@ -513,11 +513,17 @@
                              ImgHapticsVibeDesc is kept ALIVE but collapsed: MainWindow.xaml.cs
                              (a SHARED partial this pass may not edit) writes its .Source on every
                              mod switch. The hero art is an ImageBrush because a Border clips its
-                             Background to CornerRadius but never its children. The consequence,
-                             recorded honestly: the hero/side plate shows the base vibe.png even
-                             under a mod that overrides it - ImgVideoHapticSync, in the Advanced
-                             drawer, is still repainted from that same map, so mod art is not
-                             lost from the page. -->
+                             Background to CornerRadius but never its children.
+
+                             MOD-AWARENESS LANE D: the plate no longer waits on that map. Its brush
+                             is named (HapticsHeroArtBrush) and HapticsTabView.xaml.cs repaints it
+                             through ModResourceResolver on Loaded + ModChanged, so a mod shipping
+                             resources/features/vibe.png reskins the hero too. The pack:// URI below
+                             stays as the authored fallback - a null resolve leaves it alone.
+
+                             The hero stays INSIDE HapticsContentGrid (see the round-4 note above):
+                             MainWindow.Patreon.cs gates entitlement by dimming + un-hit-testing
+                             that grid, and the master enable rides this hero. -->
                         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                                 BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
                                 Margin="0,0,0,10">
@@ -530,7 +536,8 @@
                                 <Border Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="0,16,16,0"
                                         Width="240" HorizontalAlignment="Right">
                                     <Border.Background>
-                                        <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                        <ImageBrush x:Name="HapticsHeroArtBrush"
+                                                    Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                                             <ImageBrush.ImageSource>
                                                 <BitmapImage UriSource="pack://application:,,,/Resources/features/vibe.png"
                                                              DecodePixelWidth="480"/>
@@ -897,7 +904,7 @@
                                     BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                                     VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560">
                                 <Border.Background>
-                                    <ImageBrush Stretch="UniformToFill">
+                                    <ImageBrush x:Name="HapticsSideArtBrush" Stretch="UniformToFill">
                                         <ImageBrush.ImageSource>
                                             <BitmapImage UriSource="pack://application:,,,/Resources/features/vibe.png"
                                                          DecodePixelWidth="800"/>

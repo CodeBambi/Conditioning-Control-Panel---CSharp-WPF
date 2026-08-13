@@ -247,7 +247,8 @@
                     <Border Grid.Column="0" Grid.ColumnSpan="2"
                             CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                         <Border.Background>
-                            <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                            <ImageBrush x:Name="DeeperHeroArtBrush"
+                                        Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
                                 <ImageBrush.ImageSource>
                                     <BitmapImage UriSource="pack://application:,,,/Resources/features/deeper.png" DecodePixelWidth="480"/>
                                 </ImageBrush.ImageSource>
@@ -796,7 +797,7 @@
                         BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                         VerticalAlignment="Top" Height="520">
                     <Border.Background>
-                        <ImageBrush Stretch="UniformToFill">
+                        <ImageBrush x:Name="DeeperSideArtBrush" Stretch="UniformToFill">
                             <ImageBrush.ImageSource>
                                 <BitmapImage UriSource="pack://application:,,,/Resources/features/deeper.png"
                                              DecodePixelWidth="800"/>

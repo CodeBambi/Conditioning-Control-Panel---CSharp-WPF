@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -16,6 +17,91 @@ namespace ConditioningControlPanel.Views.Tabs
             // or the toggle lies after something else disarms the chant behind our back — panic clears
             // MantraChantEnabled (#685) and the checkbox would still read ON.
             IsVisibleChanged += (_, _) => { if (IsVisible) LoadMantraChant(); };
+            Loaded += BambiTakeoverTabView_Loaded;
+            Unloaded += BambiTakeoverTabView_Unloaded;
+        }
+
+        // ==== mod-aware feature art =====================================================
+        // Both plates author a pack:// URI in XAML, which is the BASE art and stays as the
+        // fallback. A mod shipping its own takeover art has to repaint them, and only
+        // ModChanged is authoritative about that: ApplyActiveModChange is never reached when
+        // the ACTIVE mod is uninstalled (ModService activates the fallback itself), which used
+        // to leave the dead mod's art on screen.
+        //
+        // THE TAKEOVER FORK. This feature is the one with two base files: BambiSleep's art is
+        // "features/bambi takeover.png", every other mod's is "features/takeover.png". That
+        // fork is not local to this view - MainWindow.xaml.cs picks the same pair for
+        // ImgBambiTakeoverDesc, the collapsed Image in the description card - so the hero and
+        // the description icon must agree or the page shows two different takeovers at once.
+        // Replicated inline rather than shared because MainWindow.xaml.cs is a shared partial
+        // this pass may not edit. Keep the two in step if either ever changes.
+
+        /// <summary>Guards against a double subscription if Loaded fires again after a re-parent.</summary>
+        private bool _modArtHooked;
+
+        /// <summary>
+        /// The base art path for the active mod. BambiSleep ships a dedicated file; a mod that
+        /// overrides either name still wins through the resolver, because whichever name is
+        /// picked here is the one the resolver probes under the mod's resources/ folder.
+        /// </summary>
+        private static string TakeoverArtPath =>
+            App.Mods?.ActiveModId == Models.BuiltInMods.BambiSleepId
+                ? "features/bambi takeover.png"
+                : "features/takeover.png";
+
+        private void BambiTakeoverTabView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged += OnModChangedArt;
+                _modArtHooked = true;
+            }
+            ApplyFeatureArt();
+        }
+
+        private void BambiTakeoverTabView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged -= OnModChangedArt;
+                _modArtHooked = false;
+            }
+        }
+
+        // ModChanged can be raised off the UI thread; marshal before touching the brushes.
+        private void OnModChangedArt(object? sender, Models.ModPackage mod)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(ApplyFeatureArt));
+                return;
+            }
+            ApplyFeatureArt();
+        }
+
+        /// <summary>
+        /// Repaints the hero and side-art plates from the active mod's takeover art. A null
+        /// resolve is left alone deliberately: the plate degrades to its authored pack:// art
+        /// rather than to an empty rectangle.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            try
+            {
+                var art = TakeoverArtPath;
+
+                var hero = ModResourceResolver.ResolveImageDecoded(art, 480);
+                if (hero != null && TakeoverHeroArtBrush != null && !TakeoverHeroArtBrush.IsFrozen)
+                    TakeoverHeroArtBrush.ImageSource = hero;
+
+                var side = ModResourceResolver.ResolveImageDecoded(art, 800);
+                if (side != null && TakeoverSideArtBrush != null && !TakeoverSideArtBrush.IsFrozen)
+                    TakeoverSideArtBrush.ImageSource = side;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BambiTakeoverTabView feature art: {E}", ex.Message);
+            }
         }
 
         // ── Mantra Chant (suggestion #653) ────────────────────────────────────────
