@@ -1,19 +1,19 @@
 ## STATUS: SP-066 — Vacuous-shape sweep, name-anchored skip pin, and the shape guard
-**Current Step:** 0 — not started
-**Last Updated:** 2026-08-13 (orchestrator, authored)
+**Current Step:** 1 — build the detector, produce the raw inventory, design the ledger and pin schema
+**Last Updated:** 2026-08-13 (worker, step 1 started)
 **Blockers:** none
 
 **Floor at authoring:** 898 unit / 35 headless / 0 skipped, build 0W/0E (SP-065, integrate `09b4b639`).
 This packet ADDS facts (guard tests, auditor pin) and MAY REMOVE facts (deleted vacuous tests) — state the new exact counts here and bump `client/tests/floor/floor.json` in the SAME commit as every count change.
 
-### Step 1: build the detector, produce the raw inventory, design the ledger and pin schema — ⬜ Not Started
-- [ ] Update STATUS.md before starting work
-- [ ] Detector over BOTH test projects classifying: early `return`, all-assertions-nested, no-assertion-token, platform predicate, environment predicate, filesystem-existence predicate — `file:line` + method + shape per site
-- [ ] Complete RAW inventory into `evidence/`, reconciled against the framing (a) magnitudes (7 / 12 / 3 / 48 / 53 / 10 / 1)
-- [ ] Detector error directions stated with one concrete example of each from this codebase (helper-hoisted assertion = false positive; loop over possibly-empty collection = false negative)
-- [ ] Ledger schema designed, incl. how entries are keyed so a moved line does not silently un-cover a site
-- [ ] `floor.json` schema change designed (framing e) + the `allowedSkips` admission rule text (framing f, incl. the two named bans)
-- [ ] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch from reasoning
+### Step 1: build the detector, produce the raw inventory, design the ledger and pin schema — 🔄 In Progress
+- [x] Update STATUS.md before starting work
+- [x] Detector over BOTH test projects classifying: early `return`, all-assertions-nested, no-assertion-token, platform predicate, environment predicate, filesystem-existence predicate — `file:line` + method + shape per site
+- [x] Complete RAW inventory into `evidence/`, reconciled against the framing (a) magnitudes (7 / 12 / 3 / 48 / 53 / 10 / 1)
+- [x] Detector error directions stated with one concrete example of each from this codebase (helper-hoisted assertion = false positive; loop over possibly-empty collection = false negative)
+- [x] Ledger schema designed, incl. how entries are keyed so a moved line does not silently un-cover a site
+- [x] `floor.json` schema change designed (framing e) + the `allowedSkips` admission rule text (framing f, incl. the two named bans)
+- [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply) — verdict + ACTUAL answering model; record exactly what surfaced, never stitch from reasoning
 
 ### Step 2: name-anchored skip pin in the wrapper (BEFORE any conversion) — ⬜ Not Started
 > ⚠️ Hydrate: expand from the Step 1 schema decision
