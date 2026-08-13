@@ -31,7 +31,7 @@
              (OnCardMouseEnter / MotionFx.HoverLift) so it honours the reduced-motion setting -
              a XAML EventTrigger has no way to ask. -->
 
-        <Grid x:Name="ContentRoot">
+        <Grid x:Name="ContentRoot" SizeChanged="OnContentRootSizeChanged">
             <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
             <Border x:Name="ImgIconHost" CornerRadius="11"
                     RenderOptions.BitmapScalingMode="HighQuality"/>

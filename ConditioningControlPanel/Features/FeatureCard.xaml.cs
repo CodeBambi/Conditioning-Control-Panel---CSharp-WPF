@@ -43,6 +43,12 @@ namespace ConditioningControlPanel.Features
         /// thing the card is allowed to say, so it gets to be seen.</summary>
         private const double TeaseBorderThickness = 2;
 
+        /// <summary>Rounded clip for the card's content, matching RootBorder's inner arc
+        /// (CornerRadius 12 minus the 1px border). A Border never clips its CHILDREN to its
+        /// CornerRadius - ClipToBounds is rectangular - so without this the full-bleed art
+        /// (and its 1.06 hover zoom) paints square corners that poke past the rounded frame.</summary>
+        private const double ContentClipRadius = 11;
+
         private Window? _hostWindow;
         private bool _hovered;
 
@@ -493,6 +499,19 @@ namespace ConditioningControlPanel.Features
         {
             if (target is Freezable { IsFrozen: true }) return;
             target.BeginAnimation(property, null);
+        }
+
+        private void OnContentRootSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            try
+            {
+                double w = ContentRoot.ActualWidth, h = ContentRoot.ActualHeight;
+                if (w <= 0 || h <= 0) { ContentRoot.Clip = null; return; }
+                var clip = new RectangleGeometry(new Rect(0, 0, w, h), ContentClipRadius, ContentClipRadius);
+                clip.Freeze();
+                ContentRoot.Clip = clip;
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.OnContentRootSizeChanged: {E}", ex.Message); }
         }
 
         private void OnCardLoaded(object sender, RoutedEventArgs e)
