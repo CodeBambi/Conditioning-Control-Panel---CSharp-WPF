@@ -28,7 +28,7 @@
     </Window.CommandBindings>
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="0" 
+        <WindowChrome CaptionHeight="0"
                       ResizeBorderThickness="5"
                       GlassFrameThickness="0"
                       CornerRadius="0"
@@ -1184,7 +1184,11 @@
         </Border>
 
         <!-- Header Bar - Row 1 -->
-        <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="15,8">
+        <!-- 2026-08-13: was an opaque PanelBg slab; its square edges read as sharp corners
+             against the darker base coat. Every child is a self-contained rounded pill, so
+             the slab is simply transparent now and the pills float on the window background
+             like the cards below do. -->
+        <Border Grid.Row="1" Grid.Column="1" Background="Transparent" Padding="15,8">
             <Grid>
                 <!-- #857 note, kept for the record: navigation used to live here in an Auto
                      column and had to size to content BEFORE the identity cluster, or the
@@ -1859,6 +1863,34 @@
                                                 </Setter.Value>
                                             </Setter>
                                         </Style>
+                                        <!-- Same skin, stretched presenter. The row above hosts a
+                                             single left-aligned caption, which is all any of the
+                                             plain links needs; the spiral row carries a glyph, a
+                                             label AND a right-aligned summary, and a Left-aligned
+                                             ContentPresenter measures to the content instead of the
+                                             row, so the summary would sit against the label rather
+                                             than the panel edge. Everything else (height feel,
+                                             hover fill, foreground swap) is inherited. -->
+                                        <Style x:Key="ProfileMenuWideItemStyle" TargetType="Button"
+                                               BasedOn="{StaticResource ProfileMenuItemStyle}">
+                                            <Setter Property="Height" Value="34"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bg" Background="Transparent" CornerRadius="6" Padding="10,0">
+                                                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bg" Property="Background" Value="#2D2D50"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
                                     </StackPanel.Resources>
 
                                     <!-- Identity: display name + tier badge (🧪 Lab / 🔒 Premium),
@@ -1897,6 +1929,27 @@
 
                                     <Border Height="1" Background="#3D3D60" Margin="0,10,0,6"/>
 
+                                    <!-- THE SPIRAL. Collapsed by default and shown only when the
+                                         server has actually shipped this account a descent block
+                                         (MainWindow.ProfileBubble.cs / RefreshProfileMenuSpiral) -
+                                         block presence IS the rollout gate, so there is no flag to
+                                         check and nothing to see for anyone outside the dial.
+                                         The summary is numbers and a Roman numeral only: stage
+                                         NAMES are still an open owner call with no loc keys. -->
+                                    <Button x:Name="ProfileMenuSpiralRow" Visibility="Collapsed"
+                                            Style="{StaticResource ProfileMenuWideItemStyle}"
+                                            Click="ProfileMenuSpiral_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <controls:SpiralGlyph x:Name="ProfileMenuSpiralGlyph" DockPanel.Dock="Left"
+                                                                  Width="22" Height="22" Margin="0,0,8,0"
+                                                                  VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="ProfileMenuSpiralSummary" DockPanel.Dock="Right"
+                                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            <TextBlock Text="{loc:Str profile_menu_spiral}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                    </Button>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_profile}" Click="ProfileMenuProfile_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
@@ -3012,5 +3065,14 @@
             </Border.RenderTransform>
         </Border>
     </Grid>
+
+    <!-- 2026-08-13: accent window frame. A 3px edge so the app pops off the desktop instead
+         of melting into whatever sits behind it. Rides PinkBrush = the mod accent, so it
+         re-tints with the mod. CornerRadius matches the DWMWCP_ROUND corner DWM already
+         clips the window to. Below EventFxHost (9998) and the fullscreen browser overlay
+         (9999) on purpose. -->
+    <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" Panel.ZIndex="9997"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
+            IsHitTestVisible="False"/>
     </Grid>
 </Window>

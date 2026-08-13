@@ -173,7 +173,30 @@ namespace ConditioningControlPanel.Features
         /// </summary>
         private bool ResolveHalfA(Point p) => _halfHover ?? IsInHalfA(p);
 
-        private void OnContentSizeChanged(object sender, SizeChangedEventArgs e) => SafeRebuildGeometry();
+        private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateRoundedClip();
+            SafeRebuildGeometry();
+        }
+
+        /// <summary>Rounded clip for the whole content stack, matching RootBorder's inner arc
+        /// (CornerRadius 12 minus the 1px border). A Border never clips its CHILDREN to its
+        /// CornerRadius - ClipToBounds is rectangular - and the half-region polygon clips have
+        /// square outer corners, so without this the art pokes past the rounded frame at every
+        /// card corner. One clip here rounds the halves, washes, seam and rings together, so
+        /// RebuildGeometry's polygon math stays untouched.</summary>
+        private void UpdateRoundedClip()
+        {
+            try
+            {
+                double w = ContentRoot.ActualWidth, h = ContentRoot.ActualHeight;
+                if (w <= 0 || h <= 0) { ContentRoot.Clip = null; return; }
+                var clip = new RectangleGeometry(new Rect(0, 0, w, h), 11, 11);
+                clip.Freeze();
+                ContentRoot.Clip = clip;
+            }
+            catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.UpdateRoundedClip: {E}", ex.Message); }
+        }
 
         private void SafeRebuildGeometry()
         {

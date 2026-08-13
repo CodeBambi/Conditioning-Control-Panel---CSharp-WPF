@@ -109,31 +109,34 @@ namespace ConditioningControlPanel
         // shut. Nothing here changes the row PITCH: door rows are a fixed 64px tall in both
         // states (see the NavDoorButton style), only what sits inside them grows.
 
-        /// <summary>The rounded (r12) tile behind the door art. Open is 56, not the CONTRACT's
-        /// 64: the tile is centred on the 56px collapsed strip (which is frozen, and moving the
-        /// centre sideways on expand is a jitter nobody asked for), so 64 would hang 4px off the
-        /// window's left edge and have its rounded corners sliced flat by the rail's clip. 56 is
-        /// the widest medallion that strip can hold whole - and it still reads as the "64px
-        /// medallion zone", because the door name starts at 64 either way.</summary>
+        /// <summary>The rounded (r12) tile behind the door art. Open was 56 - the full collapsed
+        /// strip, flush with the window's left edge - until the 3px accent window frame landed
+        /// (2026-08-13, GlassWindowEdge in MainWindow.xaml): a 56px tile sat underneath the frame
+        /// and read as crowding it. 50 keeps the tile centred on the frozen 56px strip (moving
+        /// the centre sideways on expand is a jitter nobody asked for) with 3px clear each side,
+        /// so its left edge meets the frame's inner edge instead of disappearing under it. It
+        /// still reads as the "64px medallion zone", because the door name starts at 64 either
+        /// way.</summary>
         private const double NavDoorTileCollapsed = 44;
-        private const double NavDoorTileExpanded = 56;
+        private const double NavDoorTileExpanded = 50;
 
         /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
         /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.
         ///
         /// <para>2026-08-13 (owner: the door images are too small and ringed in grey). Was 28 shut
-        /// / 44 open inside the same 44/56 tile, i.e. 8px of grey plate plus a 1px grey hairline
-        /// all the way round a 28px thumbnail. The tile did not grow - the art did, to 2px inside
-        /// it in both states, and the plate's idle outline went Transparent in MainWindow.xaml so
-        /// the only ring left is the hue one RefreshNavDoorActive paints on the door you are in.
-        /// Row pitch, tile size, hit target and rail width are all untouched.</para>
+        /// / 44 open, i.e. 8px of grey plate plus a 1px grey hairline all the way round a 28px
+        /// thumbnail. The tile did not grow - the art did, to 2px inside it in both states, and
+        /// the plate's idle outline went Transparent in MainWindow.xaml so the only ring left is
+        /// the hue one RefreshNavDoorActive paints on the door you are in. Row pitch, tile size,
+        /// hit target and rail width are all untouched.</para>
         ///
-        /// <para>52 open is the ceiling worth taking: the art is 64px native, so anything past
-        /// ~56 DIP is upscale, and the 2px inset is what keeps the tile's r12 corners (and the
-        /// active hue ring, which is painted on the tile's own 1px edge) from being covered by
-        /// the art sitting on top of them.</para></summary>
+        /// <para>Sized as tile minus 2px inset per side: 44 shut -> 40, and 50 open (the tile
+        /// shrank 56 -> 50 the same day for the GlassWindowEdge accent frame, see the tile note
+        /// above) -> 46. The inset is what keeps the tile's r12 corners (and the active hue ring,
+        /// painted on the tile's own 1px edge) from being covered by the art sitting on top of
+        /// them; the art is 64px native, so 46 DIP stays comfortably under upscale.</para></summary>
         private const double NavDoorIconCollapsed = 40;
-        private const double NavDoorIconExpanded = 52;
+        private const double NavDoorIconExpanded = 46;
 
         /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
         /// 4px each side where the gradient has already reached zero alpha, so the rail's
