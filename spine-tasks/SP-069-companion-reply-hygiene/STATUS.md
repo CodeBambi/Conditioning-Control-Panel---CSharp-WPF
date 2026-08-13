@@ -1,5 +1,5 @@
 ## STATUS: SP-069 — Companion reply hygiene: the model's raw text is not the user's text
-**Current Step:** Step 2
+**Current Step:** Step 4
 **Last Updated:** 2026-08-13 (worker, Step 1 start)
 **Blockers:** none
 
@@ -45,27 +45,27 @@ only that layer's own pins go red. SP-067's land proved a shared revert falsely 
 - [x] Any `ai-operation-contract.md` §7 rule 1 wording the change needs is **named, not written** (framing c)
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, ask narrowly, cap the reply) — verdict + **ACTUAL answering model**; never stitch a verdict from reasoning (T-18)
 
-### Step 2: Implement the three layers — removal only — 🔶 In progress
-- [ ] `AiTextHygiene.cs` with exactly one definition per rule, WPF cite per rule, H2's order readable as ordered
-- [ ] H3 is detection only — no extraction, unescape, repair, execution, or call into `AiEnvelopeValidator`
-- [ ] Applied at the seam in the derived order, upstream of SP-068's link strip, which is unmodified
-- [ ] Union moderation rule implemented; **Block if either** raw or hygienic hits; first `SoftHit` taken and named in the record; output blocking stays non-escalating
-- [ ] Emptied-by-hygiene reply typed from the **existing** vocabulary and never appended to memory (SP-068's atomic turn-pair rule preserved)
-- [ ] Own-diff grep proves no new log / diagnostic / persist / network call; **no reply fragment, stripped tag, or leaked JSON is ever logged**
-- [ ] Per-file `git diff` summary in the record; no edit outside the two files
+### Step 2: Implement the three layers — removal only — ✅ Complete
+- [x] `AiTextHygiene.cs` with exactly one definition per rule, WPF cite per rule, H2's order readable as ordered
+- [x] H3 is detection only — no extraction, unescape, repair, execution, or call into `AiEnvelopeValidator`
+- [x] Applied at the seam in the derived order, upstream of SP-068's link strip, which is unmodified
+- [x] Union moderation rule implemented; **Block if either** raw or hygienic hits; first `SoftHit` taken and named in the record; output blocking stays non-escalating
+- [x] Emptied-by-hygiene reply typed from the **existing** vocabulary and never appended to memory (SP-068's atomic turn-pair rule preserved)
+- [x] Own-diff grep proves no new log / diagnostic / persist / network call; **no reply fragment, stripped tag, or leaked JSON is ever logged**
+- [x] Per-file `git diff` summary in the record; no edit outside the two files
 
-### Step 3: Bind all three, one source at a time — ⬜ Not started
-- [ ] Regression facts per layer (H1 blocks + unterminated + orphan closer + both artifact chars; H2 all five shapes + collapse + trim; H3 detection + typed code)
-- [ ] **H2's ORDER pinned**, not just its members
-- [ ] **The port's own trigger pinned** — the `AiAwarenessService.cs:229` shape, echoed back, is stripped; line cited in the test
-- [ ] **Union rule pinned both ways** — forbidden token visible only in raw blocks; forbidden token visible only after hygiene blocks
-- [ ] **H3 non-lift pinned** — recoverable `"response"` text is not displayed, not persisted, not executed
-- [ ] **Negative control per layer**, byte-identical passthrough; includes a legitimate reply containing `{` and one containing a non-metadata bracketed phrase
-- [ ] **Bite matrix:** H1 alone → only H1's pins red; then H2; then H3; then the union rule. Each RED captured under `evidence/` naming the reverted source; others green
-- [ ] Landed pipeline/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
-- [ ] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
+### Step 3: Bind all three, one source at a time — ✅ Complete
+- [x] Regression facts per layer (H1 blocks + unterminated + orphan closer + both artifact chars; H2 all five shapes + collapse + trim; H3 detection + typed code)
+- [x] **H2's ORDER pinned**, not just its members
+- [x] **The port's own trigger pinned** — the `AiAwarenessService.cs:229` shape, echoed back, is stripped; line cited in the test
+- [x] **Union rule pinned both ways** — forbidden token visible only in raw blocks; forbidden token visible only after hygiene blocks
+- [x] **H3 non-lift pinned** — recoverable `"response"` text is not displayed, not persisted, not executed
+- [x] **Negative control per layer**, byte-identical passthrough; includes a legitimate reply containing `{` and one containing a non-metadata bracketed phrase
+- [x] **Bite matrix:** H1 alone → only H1's pins red; then H2; then H3; then the union rule. Each RED captured under `evidence/` naming the reverted source; others green
+- [x] Landed pipeline/moderation tests unchanged in strictness — zero assertions weakened, zero tolerances widened; proven by per-file diff summary
+- [x] `floor.json` `total` bumped in the **same commit** as the new facts, reason in the message; `allowedSkips` / `admissionRule` / `skipSemantics` untouched
 
-### Step 4: Record + pre-completion consult — ⬜ Not started
+### Step 4: Record + pre-completion consult — 🔶 In progress
 - [ ] `record.md` complete per the packet's Step 4 list (anchors found-vs-given, transcribed patterns, H2 order case, layer order, **monotonicity argument + both adversarial cases**, the union recorded as a deliberate fail-closed divergence, H3 non-lift justification, boundary clearance table, bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board filings)
 - [ ] **Honesty cell** — including: no truncation parity claimed (the port sends no token cap); this is the **subtractive half** of WPF's fix and a leaked envelope yields **no reply** where WPF shows one; `AiEnvelopeValidator` still unwired; execution vs reading per layer; whether any **real** model output was exercised or only constructed fixtures; **Linux unproven**; hygiene is lossy by design
 - [ ] Named flake, if it fired, recorded by name + run number + TRX path — never retried away

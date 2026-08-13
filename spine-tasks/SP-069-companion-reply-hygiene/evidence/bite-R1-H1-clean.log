@@ -1,0 +1,11 @@
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-ADSsNH
+FLOOR CHECK FAILED (SP-065):
+  dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  --- CcpClient.Tests dotnet output tail ---
+[xUnit.net 00:00:03.65]     CcpClient.Tests.AiTextHygieneTests.H1_TokenizerArtifact_GSpace_MappedToSpace [FAIL]
+[xUnit.net 00:00:03.85]     CcpClient.Tests.AiReplyHygienePipelineTests.SoftHit_VisibleOnlyAfterHygiene_SoftHitCode [FAIL]
+[xUnit.net 00:00:03.87]     CcpClient.Tests.AiReplyHygienePipelineTests.HygieneEmptiedReply_TypedUnavailable_TurnPairNeverAppended [FAIL]
+[xUnit.net 00:00:03.96]     CcpClient.Tests.AiReplyHygienePipelineTests.UnionRule_TokenJoinedAcrossTagBoundary_Blocks_NeverPersisted [FAIL]
+[xUnit.net 00:00:03.97]     CcpClient.Tests.AiReplyHygienePipelineTests.SoftHit_VisibleOnlyInRaw_SoftHitCode_ReplyShowsHygienicText [FAIL]
+[xUnit.net 00:00:04.00]     CcpClient.Tests.AiReplyHygienePipelineTests.UnionRule_TokenJoinedByArtifactCharacter_Blocks [FAIL]
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-ADSsNH
