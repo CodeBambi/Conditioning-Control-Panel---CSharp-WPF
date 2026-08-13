@@ -68,7 +68,7 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 | `--label=ccp-client` | SecretStores.cs:157 | secret-tool argv label |
 
 - Step 3: `spine_review_step` — engine-skipped (SP-195, same). Artifact: `.reviews/3-20260813T014543.md`.
-- Step 4/5: single final `spine_review_step` call at completion (step 4) — pending.
+- Step 4/5: `spine_review_step` — engine-skipped (SP-195, same). Artifact: `.reviews/4-20260813T015005.md`.
 
 ## Step 5 — verification
 
