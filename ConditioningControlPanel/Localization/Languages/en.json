@@ -4849,5 +4849,15 @@
   "label_remote_custom_subs": "Your own subreddits",
   "tooltip_remote_custom_sub_add": "Type a subreddit name (the r/ is optional) or paste its link, then press Add.",
   "label_remote_blocklist": "Blocked",
-  "btn_remote_clear_blocklist": "Clear blocklist"
+  "btn_remote_clear_blocklist": "Clear blocklist",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "The session shop - pick a drop and go",
+  "jd_door_subtitle": "Pick a drop, place the order, play it. Your order book lives here too.",
+  "jd_reload": "Reload",
+  "jd_reload_tip": "Reload the shop",
+  "jd_loading": "Opening the shop...",
+  "jd_error_title": "Can't reach the shop",
+  "jd_error_body": "Just Drop lives online. Check your connection and try again.",
+  "jd_toast_session_complete": "Drop complete. +{0} XP"
 }

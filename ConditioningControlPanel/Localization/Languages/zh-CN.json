@@ -4747,5 +4747,15 @@
   "label_remote_custom_subs": "你自己的子版块",
   "tooltip_remote_custom_sub_add": "输入子版块名称（r/ 可省略）或粘贴其链接，然后点击添加。",
   "label_remote_blocklist": "已屏蔽",
-  "btn_remote_clear_blocklist": "清空屏蔽列表"
+  "btn_remote_clear_blocklist": "清空屏蔽列表",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "会话商店 - 挑一个 drop 就开始",
+  "jd_door_subtitle": "挑一个 drop，下单，播放。你的订单簿也在这里。",
+  "jd_reload": "重新加载",
+  "jd_reload_tip": "重新加载商店",
+  "jd_loading": "正在打开商店...",
+  "jd_error_title": "无法连接商店",
+  "jd_error_body": "Just Drop 需要联网。请检查网络后重试。",
+  "jd_toast_session_complete": "Drop 完成。+{0} XP"
 }
