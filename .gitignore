@@ -207,3 +207,5 @@ package-lock.json
 # describes explicit screenshots; topics.json describes unannounced features. Media is large
 # and some of it is suggestive. Nothing in here belongs on GitHub.
 marketing/
+.spine/runtime/loop/
+.spine/STOP

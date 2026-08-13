@@ -1,58 +1,74 @@
-Orchestrate the greenfield port per @client/docs/port-session-prompt.md in CONTINUOUS
-MODE (owner authorization 2026-07-18 — recorded in the board gate history and
-spine-tasks/CONTEXT.md; run until no claimable board work remains).
+Orchestrate the greenfield port per @client/docs/port-session-prompt.md.
 
-FRESH-MACHINE BOOTSTRAP (any PC, do first):
-1. git fetch origin && git checkout feat/crossplatform. If this machine has a stale
-   local feat/crossplatform (2026-08-04 incident: a from-scratch restart was
-   force-overwritten), do NOT pull/merge — git reset --hard origin/feat/crossplatform.
+YOU ARE ONE PHASE OF AN UNATTENDED LOOP (client/tools/port-loop.ps1). Do exactly ONE
+phase, then EXIT. Never wait on a running batch — the shell owns the waiting, you own the
+judgment. A fresh session with a clean context runs the next phase.
+
+Which phase is yours is decided by state, not by memory. Reconcile first (read-only), then:
+  A. A batch is finished / needs_integrate  -> LAND IT: read the evidence, verify the merged
+     state yourself, gate approve, integrate, batch complete, reconcile the board/CONTEXT/
+     memories/port-lessons, commit, push. Then EXIT.
+  B. No batch, claimable work on the board   -> AUTHOR + LAUNCH ONE WAVE: consult on the
+     decomposition, write the packet(s) (create-spine-tasks), validate/analyze/plan/preflight,
+     commit the authoring, `spine batch start pending` DETACHED. Then EXIT immediately —
+     do not monitor, do not sleep, do not spawn a watcher.
+  C. A batch is running                      -> EXIT AT ONCE (the loop is already waiting).
+  D. No claimable work, or a pause condition -> write .spine/STOP with the reason, write
+     .spine/handoff.md, then EXIT.
+
+Continuous mode is owner-authorized (2026-07-18, recorded in the board gate history and
+spine-tasks/CONTEXT.md). Owner lifted all gates 2026-07-21; consult discipline still applies
+where the docs require it.
+
+FRESH-MACHINE BOOTSTRAP (do first, every phase — cheap):
+1. git fetch origin && git checkout feat/crossplatform. If this machine has a stale local
+   feat/crossplatform (2026-08-04 incident: a from-scratch restart was force-overwritten),
+   do NOT pull/merge — git reset --hard origin/feat/crossplatform.
 2. spine needs its npm bin dir on PATH for every bash call:
    export PATH="$PATH:$HOME/.pi/agent/npm/node_modules/.bin"
-   (portable form — resolves on any Windows user profile, Linux, or macOS).
-3. Memory provider differs per machine: engram on the desktop, hermes on the laptop.
-   Durable shared fallback = client/memories/ in this repo — read it at session start;
-   update it whenever routes/state change materially, and commit.
-4. Verify MCP servers connect and record status (engram, avalonia). Missing servers
-   are a noted limit, never a blocker — the avalonia MCP registration is per-machine.
+3. Memory provider differs per machine: engram on the desktop, hermes on the laptop. Durable
+   shared fallback = client/memories/ in this repo — read port-status.md at session start;
+   update it whenever routes or state change materially, and commit.
+4. Verify MCP servers connect and record status. Missing servers are a named limit, never a
+   blocker — the avalonia MCP registration is per-machine.
 
-Reconcile per the session prompt. Expected findings to verify, not trust:
-waves 1-3 landed (SP-001..SP-034, integrates bff8f037 / 6e1b2f81 / 2f77c934; T-5 named
-gate DISCHARGED on SP-033; T-13 DONE; run tip = consult-rewire commit 0861f5c6).
-Next claimable work = WAVE 4, both packets authored 2026-07-22 and pending:
-SP-035-ai-companion-c2 (loopback Ollama provider, deps SP-033) and
-SP-036-avalonia-mcp-audit (deps SP-030) — a 2-lane batch per the wave playbook.
-Next unused task ID = SP-037. All landed rows stay WIP until owner ratifies;
-rows flip WIP->DONE only with a RATIFIED decree citation in the evidence cell.
+RECONCILE FROM DURABLE EVIDENCE, NEVER FROM THIS FILE. This file carries no live status on
+purpose. The authorities are, in order: client/docs/task-board.md (product queue),
+spine-tasks/CONTEXT.md (waves + next task ID), spine state (`spine status --diagnose`),
+git log, and client/memories/port-status.md. Where they disagree, the repository wins and
+you fix the smallest authoritative document before continuing.
 
-Then cycle per the session prompt: author packet (create-spine-tasks) → validate →
-plan → preflight → detached batch → MonitorCreate on spine wait (never poll) → ONE
-bounded hybrid steering loop per batch (which also runs the learning harvest into
-client/docs/port-lessons.md + the active memory provider, recurrence-triggered
-tooling tasks, and land-time retrospectives) → land only after reading evidence →
-reconcile the board → next row. Workers must update STATUS.md + their board row
-before .DONE (SP-001's recorded gap — don't repeat it).
+LAND DISCIPLINE (learned the hard way — client/docs/port-workflow.md §Tracker reconciliation):
+- Never trust the gate's own evidence; run the merged state yourself in a scratch worktree
+  (3 consecutive full-suite runs, output redirected to files, TRX attached) and prove
+  `git diff` is EMPTY between the tree you verified and the integrated tip.
+- The land's LAST action verifies the tree actually being pushed. A reconciliation edit made
+  after the verification run is unverified — the wave-18 land shipped a red base that way.
+- Landed rows stay WIP until the owner ratifies; flip to DONE only with a RATIFIED citation.
+- Workers update STATUS.md + their board row before .DONE (SP-001's recorded gap).
 
-CONSULT ROUTES (rewired 2026-08-04, .pi/bpx-consult.json — only these models exist).
-Hierarchy: anthropic Opus 5 > Fable 5 > Sonnet 5; kimi K3 > highspeed. Fable 5 is the
-COSTLIEST per 1M tokens — use it where its reasoning/knowledge edge pays, not by default.
-solo/advisor = anthropic/claude-opus-5 (MAIN — best code/agentic, cheaper than Fable).
-gut-check = kimi-coding/kimi-for-coding-highspeed (cheap reads). council = opus-5
-architect+tester+performance, fable-5 critic (the one reasoning/knowledge seat),
-k3 simplifier+security, k3 synthesizer — sanctioned since 2026-07-19 amendment,
-roster valid since 2026-08-04. Spine plan/code reviewer = opus-5 (.spine/spine-config.json).
-Owner lifted ALL gates 2026-07-21; consult discipline still applies where docs require.
+OWNER DIGEST (required, every phase that lands): append three lines to
+client/docs/port-digest.md — what landed, what it does NOT prove, and any owner question or
+decision it raised. Unattended running must not bury named limits in ten records nobody reads.
 
-PAUSE PROTOCOL (the only stop): if the Opus 5 consult route errors or times out,
-fall back to solo on anthropic/claude-fable-5 and continue, and start a loop that
-re-probes Opus 5 hourly; when healthy, switch back. (Sol/glm/uva routes are DEAD —
-never route there.) If Opus and Fable both fail: park in-flight work, write
-.spine/handoff.md (state, evidence paths, next action), checkpoint to the active
-memory provider + client/memories/, delete loops/monitors, stop. I resume by pasting
-this prompt. Same response for safety/privacy questions, unresolvable ambiguity, or
-repeated failure. Never proceed past a gate unconsulted; never flip owner-held rows;
-never invent scope beyond WPF parity; constitution and port-workflow stop conditions
-always apply.
+CONSULT ROUTES (.pi/bpx-consult.json — only these models exist). Hierarchy: anthropic Opus 5
+> Fable 5 > Sonnet 5; kimi K3 > highspeed. Fable 5 is the COSTLIEST per 1M tokens — use it
+where its reasoning edge pays, not by default. solo/advisor = anthropic/claude-opus-5 (MAIN).
+gut-check = kimi-coding/kimi-for-coding-highspeed. council = opus-5 architect+tester+
+performance, fable-5 critic, k3 simplifier+security, k3 synthesizer. Spine plan/code reviewer
+= opus-5 (.spine/spine-config.json). Use mode:"solo" explicitly — a bare consult hits the
+council-roster trap (T-7).
 
-MACHINE-SPECIFIC (desktop-only unless owner designates equivalents — otherwise record
-as named limit, never fake): Z:\CCP Vids real-media dir; DISPLAY3 headed-evidence
-monitor; the WSL2 install used for Linux gates.
+PAUSE PROTOCOL (the only stop): if the Opus 5 consult route errors or times out, fall back to
+solo on anthropic/claude-fable-5 and continue. If Opus and Fable both fail: park in-flight
+work, write .spine/handoff.md (state, evidence paths, next action), checkpoint to the active
+memory provider + client/memories/, write .spine/STOP with the reason, and EXIT. Same response
+for safety/privacy questions, unresolvable ambiguity, or repeated failure. Never proceed past
+a gate unconsulted; never flip owner-held rows; never invent scope beyond WPF parity;
+constitution and port-workflow stop conditions always apply.
+
+MACHINE-SPECIFIC (desktop-only unless the owner designates equivalents — otherwise record as
+a named limit, never fake): Z:\CCP Vids real-media dir; DISPLAY3 headed-evidence monitor; the
+WSL2 install used for Linux gates. Headed evidence runs set CCP_DATA_ROOT (SP-057) — but never
+set it process-wide for a plain test run: the SP-057 pin then skips and the suite reports
+891/1 instead of 892/0, which is exactly the vacuous-green class SP-062 closed.

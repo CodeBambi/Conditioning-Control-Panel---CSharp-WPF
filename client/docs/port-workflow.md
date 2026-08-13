@@ -194,6 +194,16 @@ Every spine packet (`PROMPT.md`) must include:
 
 For every WPF-shaped UI task, the spec must cite the current official migration index and cheat sheet plus the deeper topic page for the chosen property/style/binding/event/window/animation/control pattern. The older expert guide contributes planning methodology only and cannot override greenfield architecture or approve dependencies.
 
+## Unattended loop
+
+`client/tools/port-loop.ps1` runs the port without a human in the chair. It is a **phase** loop, not a wave loop: the shell owns the long waits, each `pi -p @client/port.txt` invocation reconciles, does exactly ONE phase (land a finished batch, or author + launch the next wave), and exits. Context is therefore fresh for every phase, and no session sits resident for the hours a batch takes.
+
+- **Coordinator = spine's own state**, not a bespoke protocol: `spine status --json` decides whether the shell waits or the model runs.
+- **Stops on:** `.spine/STOP` (written by the phase prompt on a pause condition or when no claimable work remains), an iteration cap, a wall-clock cap, or two consecutive non-zero `pi` exits.
+- **Owner digest:** every landing phase appends three lines to `client/docs/port-digest.md` (landed / does not prove / owner question). Unattended running must not bury named limits in records nobody opens.
+- **Never export `CCP_DATA_ROOT` loop-wide.** It makes the SP-057 pin skip, so every suite run reports 891/1 instead of 892/0 and the exact-count floor discipline goes blind. Isolation comes from spine's worktree lanes; `CCP_DATA_ROOT` is set per headed-evidence run by the packet that needs it.
+- **One orchestrator at a time.** While the loop runs, an interactive session must not author, launch, or land anything.
+
 ## Verification floor
 
 The `VERIFY` block is task-specific and tiered:

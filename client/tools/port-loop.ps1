@@ -1,0 +1,105 @@
+# port-loop.ps1 — unattended orchestration loop for the greenfield port.
+#
+# One pi session per PHASE, never per wave: the shell owns the long waits, the model owns
+# the judgment. Each `pi -p` invocation reconciles, does exactly ONE phase (land a finished
+# batch, or author + launch the next wave), then exits — so context is fresh every time and
+# no session sits blocked for hours while a batch runs.
+#
+#   pwsh -File client/tools/port-loop.ps1
+#   pwsh -File client/tools/port-loop.ps1 -MaxIterations 6 -MaxHours 4 -DryRun
+#
+# Stop conditions (any one halts the loop):
+#   - .spine/STOP exists            (the phase prompt writes it: pause protocol, or no claimable work)
+#   - -MaxIterations reached        (default 24)
+#   - -MaxHours elapsed             (default 12)
+#   - two consecutive non-zero pi exits
+#   - Ctrl-C
+#
+# Deliberately NOT done here: exporting CCP_DATA_ROOT loop-wide. That would make the SP-057
+# pin skip and every suite run report 891/1 instead of 892/0, destroying the exact-count floor
+# discipline SP-062 restored. Isolation comes from spine's worktree lanes; CCP_DATA_ROOT is set
+# per headed-evidence run, by the packet that needs it (SP-057's rule).
+
+[CmdletBinding()]
+param(
+    [int]$MaxIterations = 24,
+    [int]$MaxHours = 12,
+    [string]$Model = 'anthropic/claude-opus-5',
+    [string]$Prompt = 'client/port.txt',
+    [switch]$DryRun
+)
+
+$ErrorActionPreference = 'Stop'
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+Set-Location $repo
+
+$pi = Join-Path $env:APPDATA 'npm\pi.cmd'
+$spineBin = Join-Path $env:USERPROFILE '.pi\agent\npm\node_modules\.bin'
+$env:PATH = "$env:PATH;$spineBin"
+$spine = Join-Path $spineBin 'spine.cmd'
+
+foreach ($p in @($pi, $spine, (Join-Path $repo $Prompt))) {
+    if (-not (Test-Path $p)) { throw "missing: $p" }
+}
+
+$logDir = Join-Path $repo '.spine\runtime\loop'
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$stopFile = Join-Path $repo '.spine\STOP'
+$started = Get-Date
+$consecutiveFailures = 0
+
+function Write-Loop($msg) {
+    $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $msg
+    Write-Host $line
+    Add-Content -Path (Join-Path $logDir 'loop.log') -Value $line
+}
+
+Write-Loop "port-loop start — repo=$repo model=$Model maxIterations=$MaxIterations maxHours=$MaxHours dryRun=$DryRun"
+if (Test-Path $stopFile) {
+    Write-Loop "STOP file present at start: $(Get-Content $stopFile -Raw)"
+    Write-Loop "remove .spine/STOP to resume"
+    exit 0
+}
+
+for ($i = 1; $i -le $MaxIterations; $i++) {
+
+    if (Test-Path $stopFile) { Write-Loop "STOP file written — halting. Reason: $(Get-Content $stopFile -Raw)"; break }
+    if (((Get-Date) - $started).TotalHours -ge $MaxHours) { Write-Loop "wall-clock cap ${MaxHours}h reached — halting"; break }
+
+    # 1. If a batch is already running, the SHELL waits — never a pi session (hours of context for nothing).
+    $status = & $spine status --json 2>&1 | Out-String
+    $macro = try { ($status | ConvertFrom-Json).macroPhase } catch { 'unknown' }
+    Write-Loop "iteration $i — spine macroPhase=$macro"
+
+    if ($macro -eq 'executing' -or $macro -eq 'planning') {
+        Write-Loop "batch in flight — shell waits (no model resident)"
+        if (-not $DryRun) {
+            & $spine wait --until completed,needs_integrate,failed,aborted,needs_retry --timeout 4h 2>&1 |
+                Tee-Object -FilePath (Join-Path $logDir ("{0:000}-wait.log" -f $i)) | Out-Null
+        }
+        continue   # next iteration lands it with a fresh session
+    }
+
+    # 2. Otherwise run ONE phase in a fresh pi session.
+    $log = Join-Path $logDir ("{0:000}-phase.log" -f $i)
+    Write-Loop "running phase in a fresh session -> $log"
+    if ($DryRun) { Write-Loop "DRYRUN: $pi -p --model $Model @$Prompt"; continue }
+
+    & $pi -p --model $Model -xt ask_user "@$Prompt" *>&1 | Tee-Object -FilePath $log | Out-Null
+    $code = $LASTEXITCODE
+    Write-Loop "phase exit=$code"
+
+    if ($code -ne 0) {
+        $consecutiveFailures++
+        if ($consecutiveFailures -ge 2) {
+            Write-Loop "two consecutive non-zero exits — halting for an operator"
+            Set-Content -Path $stopFile -Value "port-loop halted: two consecutive non-zero pi exits (last log: $log)"
+            break
+        }
+        Write-Loop "retrying once with a fresh session"
+    }
+    else { $consecutiveFailures = 0 }
+}
+
+Write-Loop "port-loop end — iterations run, elapsed $([int]((Get-Date) - $started).TotalMinutes)m"
+Write-Loop "digest: client/docs/port-digest.md · logs: .spine/runtime/loop/"
