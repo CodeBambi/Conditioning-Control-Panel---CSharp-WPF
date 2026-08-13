@@ -1,5 +1,5 @@
 ## STATUS: SP-064 — Harness entry points must REFUSE to run unsealed
-**Current Step:** 3 (in progress)
+**Current Step:** 4 (in progress)
 **Last Updated:** 2026-08-13 (worker, lane-1)
 **Blockers:** none
 
@@ -18,14 +18,14 @@
 - [x] Guard test mirroring `DataRootChokePointGuardTests`; RED captured with an unclassified literal, then removed
 - [x] Any process-env-mutating test joins `ProcessEnvCollection` (SP-062) — N/A by design: no test in this packet mutates process env (consult guidance: no in-process Program.Main call; wiring pinned by the guard's source-shape assertion)
 
-### Step 3: real-process evidence — the pin is not the proof — IN PROGRESS
-- [ ] (a) class-1 flag, `CCP_DATA_ROOT` unset → non-zero exit, stderr names the variable, no window
-- [ ] (b) real profile path-hashed manifest before/after (a), both directions, with SP-057's positive controls
-- [ ] (c) same flag sealed → not refused, override line observed, bounded by auto-close
-- [ ] (d) plain launch unsealed → not refused, window rect-verified, exit 0, profile delta reported honestly
-- [ ] 3 consecutive full-suite greens, ≥1 fresh-checkout first-ever build, TRX attached, per-run table incl. skipped column
+### Step 3: real-process evidence — the pin is not the proof — COMPLETE
+- [x] (a) class-1 flag, `CCP_DATA_ROOT` unset → non-zero exit, stderr names the variable, no window
+- [x] (b) real profile path-hashed manifest before/after (a), both directions, with SP-057's positive controls
+- [x] (c) same flag sealed → not refused, override line observed, bounded by auto-close
+- [x] (d) plain launch unsealed → not refused, window rect-verified, exit 0, profile delta reported honestly
+- [x] 3 consecutive full-suite greens, ≥1 fresh-checkout first-ever build, TRX attached, per-run table incl. skipped column
 
-### Step 4: record + pre-completion consult — NOT STARTED
+### Step 4: record + pre-completion consult — IN PROGRESS
 - [ ] record.md complete (table, gate, registry, guard RED, four process runs, 3-run suite table with the new exact floor, intended filings)
 - [ ] Honesty cell: the demo+auto-close residual hole, non-data-root writes, guard surface bounds, non-`Main` harness paths, Linux unproven
 - [ ] Pre-completion solo consult (verdict + ACTUAL model)

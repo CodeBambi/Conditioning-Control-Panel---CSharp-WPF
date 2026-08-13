@@ -67,6 +67,48 @@ injection" in its own comment; the drives are labeled HARNESS-ONLY at their pars
 | `--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion` | ChaosTunnelWindow.cs:164 | WebView2 AdditionalBrowserArguments (one two-option string literal) |
 | `--label=ccp-client` | SecretStores.cs:157 | secret-tool argv label |
 
+## Step 3 — real-process evidence (four bounded runs; `evidence/run.ps1`, transcript in
+`evidence/run-transcript.log`, OVERALL VERDICT EXIT=0)
+
+Machine posture: DISPLAY3 absent (only DISPLAY1 2880x1800 attached) — loud fallback to
+(100,100) per the SP-057 amendment, named here. Zero WSL distros: Linux unproven (honesty cell).
+
+- **(a) refusal, real process, unsealed:** `CcpClient.Desktop.exe --dtrh-m2test`,
+  `CCP_DATA_ROOT` unset → **exit 3** within 15s; stderr (`run-a-refusal.stderr.log`):
+  `refusing to start: --dtrh-m2test is a HARNESS-ONLY entry point ... and CCP_DATA_ROOT is
+  not set — set CCP_DATA_ROOT=<fully-qualified absolute directory> ...`. No process/window
+  survives the refusal. (The `—` renders as a replacement char in the redirected file —
+  console OEM codepage artifact of redirection only; the source string is intact.)
+- **(b) real profile untouched by (a):** path-hashed manifests of `%APPDATA%\CcpClient`
+  before/after (2677 files each) → `diff-refusal-verdict.txt`: **BYTE-IDENTICAL,
+  set-equal both directions, all hashes match**. Positive controls (a crash-at-startup
+  also leaves the profile untouched, so byte-identity alone is vacuous): exit code == 3,
+  stderr names the variable + the flag + HARNESS-ONLY, no surviving process — all True.
+- **(c) sealed harness run still works:** same flag (`--dtrh-demo --dtrh-quick
+  --dtrh-m2test --dtrh-auto-close 60`) with `CCP_DATA_ROOT` set to a TEMP scratch root →
+  NOT refused; stderr carries `data-root override active: CCP_DATA_ROOT` and the m2test
+  signal `M2 TEST MODE`; exit 0 via auto-close. Scratch root manifest (plain paths,
+  `sealed-root-manifest.json`, 310 files): `dtrh_slots.json`, `dtrh/`, `wv2-profile*`
+  present (SP-057's control set). `settings.json` absent — EXPECTED (no DemoSettings
+  mutation in the run; SP-010 observed even a fresh plain launch creates none); named,
+  not suppressed.
+- **(d) plain launch non-regression, unsealed:** no args, no `CCP_DATA_ROOT` → NOT
+  refused; `CCP Client` window rect-verified at (100,100)-(1034,1354) [934x1254] on
+  DISPLAY1 (capture `run-d-plain-window.png`, dark=81% = the dark theme, 76 distinct
+  colors — not a black surface); CloseMainWindow → **exit 0**. Profile delta across (d):
+  **BYTE-IDENTICAL** (2677 files, both directions) — the SP-010 expectation held.
+
+### Suite runs (new exact floor: **897 unit / 35 headless, 0 skipped**)
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped |
+|---|---|---|---|---|---|
+| R1 | lane-1 | warm | 897 passed | 35 passed | 0 / 0 |
+| R2 | cold-sp064 (fresh `git worktree add --detach a5ca1d8e`, first-ever build; needed `-c core.longpaths=true` — a legacy WPF asset path overflows MAX_PATH at this depth; worktree removed after) | **cold** | 897 passed | 35 passed | 0 / 0 |
+| R3 | lane-1 (full contract: verify.mjs exit 0, build 0W/0E) | warm | 897 passed | 35 passed | 0 / 0 |
+
+TRX attached per run under `evidence/trx/` (sp064-r1/r2-cold/r3 + step2 interim).
+All output redirected to files, never tailed.
+
 ## Step 2 — implementation
 
 - `Lifecycle/HarnessEntryPoints.cs`: the ONE registry (39 entries: 8 Harness, 8 Demo,
