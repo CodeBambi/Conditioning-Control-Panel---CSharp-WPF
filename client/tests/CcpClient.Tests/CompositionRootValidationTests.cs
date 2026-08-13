@@ -4,6 +4,13 @@ using Xunit;
 
 namespace CcpClient.Tests;
 
+// SP-068 Step 5: co-located with the ONLY in-suite CCP_DATA_ROOT mutator (SP-062's
+// ProcessEnvCollection pattern — intra-collection sequentiality). This class builds REAL
+// composition roots, whose DefaultSettingsPath() reads the process-wide override variable;
+// in the default collection that read can land inside DataRootOverrideEnvTests' mutation
+// window (probe-proven red on this runner: 'relative/not-absolute' leaking into
+// Construction_StartsNoBackgroundWork).
+[Collection(nameof(ProcessEnvCollection))]
 public class CompositionRootValidationTests
 {
     [Fact]
