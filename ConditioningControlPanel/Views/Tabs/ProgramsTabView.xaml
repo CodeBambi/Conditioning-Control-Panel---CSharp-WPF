@@ -1459,8 +1459,12 @@
              frozen radial built from the program accent in code and the resting
              opacity is 0, so at every tier below Ignited this is a rectangle that
              paints nothing and holds no clock. -->
+        <!-- Margin and radius track the SectionPanel style exactly (Margin 0,0,0,8,
+             CornerRadius 12): these two overlays are siblings of that panel, not
+             children of it, so anything else leaves the glow hanging 8px below
+             the surface it is supposed to be lighting. -->
         <Rectangle x:Name="ProgramsEdgeGlow" x:FieldModifier="internal"
-                   IsHitTestVisible="False" Opacity="0"
+                   IsHitTestVisible="False" Opacity="0" Margin="0,0,0,8"
                    RadiusX="12" RadiusY="12"/>
 
         <!-- Chapter-cleared seal stamp. Collapsed until a chapter is actually
@@ -1471,7 +1475,8 @@
              Copy is the chapter's own authored name plus its day range: this
              surface adds no new localisation keys. -->
         <Grid x:Name="ProgramsSealHost" x:FieldModifier="internal"
-              IsHitTestVisible="False" Visibility="Collapsed" Opacity="0">
+              IsHitTestVisible="False" Visibility="Collapsed" Opacity="0"
+              Margin="0,0,0,8">
             <Rectangle x:Name="ProgramsSealScrim" x:FieldModifier="internal"
                        RadiusX="12" RadiusY="12" Fill="#B0000000"/>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
