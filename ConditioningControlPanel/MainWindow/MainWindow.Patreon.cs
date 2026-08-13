@@ -754,6 +754,12 @@ namespace ConditioningControlPanel
             {
                 UpdatePatreonUI();
                 UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                // Programs gate on the same entitlement: locked browse cards, the "needs a pledge"
+                // task badges and RequiredTasks itself all read HasPremiumAccess at BUILD time. A
+                // subscriber who opened the tab before async validation landed saw everything locked
+                // until they re-entered it, and a logout left it stale unlocked. Cheap: behind a
+                // hidden tab the refresh is a dirty flag and the Dashboard card.
+                if (ProgramsTab != null) RefreshProgramsUI();
                 MaybeShowPremiumCelebration();
             });
         }

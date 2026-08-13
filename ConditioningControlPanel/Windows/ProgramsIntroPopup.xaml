@@ -159,9 +159,14 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock x:Name="Bullet4" Text="●" FontSize="9" VerticalAlignment="Top"
                                    Margin="0,5,9,0"/>
+                        <!-- Deliberately does NOT name First Week. The rail beside this copy is
+                             dressed with whichever program matches the ACTIVE mod, so on a Sissy
+                             install the card introduced Presentation while the text talked about a
+                             program the user was not being shown. The fact is mod-independent either
+                             way: exactly one program is free, and it is the seven-day one. -->
                         <TextBlock Grid.Column="1" Foreground="White" FontSize="13.5"
                                    TextWrapping="Wrap" LineHeight="20"
-                                   Text="First Week is free and runs seven days. The longer programs need a subscription."/>
+                                   Text="One program is free and runs seven days. The longer ones need a subscription."/>
                     </Grid>
                 </StackPanel>
 

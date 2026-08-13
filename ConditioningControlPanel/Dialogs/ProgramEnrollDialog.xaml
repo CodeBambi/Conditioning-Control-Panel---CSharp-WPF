@@ -4,12 +4,26 @@
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="{loc:Str program_enroll_title}"
-        Width="660" Height="760"
+        Width="660"
+        SizeToContent="Height"
+        MinHeight="380"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="Transparent">
+        Background="Transparent"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <!--
+        Height is CONTENT-driven and clamped to the work area in the constructor, not the fixed 760
+        it was. Chromeless + NoResize + a taller-than-the-screen window is unrecoverable: on a
+        1366x768 panel, or at 150% DPI, the footer's Cancel and Enroll buttons sat below the bottom
+        edge with no title bar to drag by and no border to pull - Alt+F4 was the only way out of a
+        modal. The middle section is already a ScrollViewer in a star row, so the clamp costs the
+        arc some height and never the footer. Escape and click-drag are wired for the same reason
+        (ProgramsIntroPopup does both) - a chromeless modal needs a way out and a way to be moved.
+    -->
 
     <Window.Resources>
         <!-- The shared PinkButton has no disabled visual state, so a gated Enroll button
