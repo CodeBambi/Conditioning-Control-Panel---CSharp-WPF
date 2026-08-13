@@ -62,17 +62,29 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
 
         /// <summary>
         /// Same dialog the post-update "What's New" popup uses (Dialogs/WhatsNewDialog), so the
-        /// notes are never formatted two different ways.
+        /// notes are never formatted two different ways - and, for the same reason, the same
+        /// upgrade-tour offer. Reading the notes late is exactly when someone is looking for the
+        /// tour, and the startup showing is one-shot per version (LastSeenVersion).
         /// </summary>
         private void BtnViewPatchNotes_Click(object sender, RoutedEventArgs e)
         {
             try
             {
+                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
                 var dialog = new WhatsNewDialog(
                     Loc.GetF("set2_whats_new_title_0", UpdateService.AppVersion),
-                    UpdateService.CurrentPatchNotes)
+                    UpdateService.CurrentPatchNotes,
+                    tourAction: () =>
+                    {
+                        try { (owner as MainWindow)?.StartTutorial(TutorialType.UpgradeTour); }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Warning(ex, "Settings/Updates: could not start the v6.8 upgrade tour");
+                        }
+                    },
+                    tourButtonText: "Show me around (60s)")
                 {
-                    Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+                    Owner = owner
                 };
                 dialog.ShowDialog();
             }

@@ -28,6 +28,22 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string CurrentPatchNotes = @"v6.8 - One Account
 
+🚪 EVERYTHING MOVED: THE NEW LAYOUT
+- The tab strip is gone. Six doors now live on a rail down the left edge, with Settings pinned at the bottom. Hover the rail and it opens.
+- Home: your dashboard
+- Studio: Presets, Haptics and the effects rack (the settings your dashboard tiles used to pop open)
+- Companion: Her Room, Bambi Takeover, She's Listening, Awareness
+- Play: the Lab lives here now, alongside Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer, Remote Control and Available Subjects
+- You: Profile, Quests, Achievements, Skill Tree, Programs, Leaderboard
+- Library: Assets, Mods, Catalogue, Phrase Manager, Media Log
+- Enhancements is now the Skill Tree, and it lives behind the You door
+- YOUR CLICKS SWAPPED: left-click a dashboard tile or a rail chip to OPEN its page, right-click to toggle that feature on or off. That is the opposite of 6.7.4, so expect a surprise or two on your first evening.
+- Ctrl+K opens a command palette. Type a few letters of any setting and it takes you straight there.
+- Settings is rebuilt into 8 sections, and Devices is the one home for your webcam, microphone, blink kill switch, gaze restriction, panic key and global hotkeys.
+- The ? box on the dashboard is one premium feature, genuinely free, every single day. It changes at midnight.
+- The bug report button moved out of the header and into the title bar.
+- Lost? The ? button opens a 60-second What moved in 6.8 tour that walks you through all of it.
+
 🌐 REMOTE MEDIA, APP-WIDE
 - Scrolller joins as an online media source for the whole app, not just the For You feed
 - Flashes, mandatory videos, subliminals and more can now pull fresh online content

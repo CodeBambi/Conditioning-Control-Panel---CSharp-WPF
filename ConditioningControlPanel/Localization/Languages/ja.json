@@ -4023,6 +4023,7 @@
   "nav_door_settings": "設定",
   "account_chip_sign_in": "サインイン",
   "account_chip_signed_in": "サインイン済み",
+  "profile_bubble_achievements": "実績 {0}/{1}",
   "tooltip_account_chip": "アカウントとサブスクリプション",
   "tooltip_mod_chip": "使用中の Mod",
   "tiergate_denied_premium": "{0} は支援者向けの機能です。Patreon のどのティアでも解除できますよ。",

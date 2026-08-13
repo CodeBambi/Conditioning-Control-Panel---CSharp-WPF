@@ -204,6 +204,9 @@ namespace ConditioningControlPanel
                     App.Progression.XPChanged -= OnXPChanged;
                     App.Progression.LevelUp -= OnLevelUp;
                 }
+                // Profile bubble: unsubscribes its own progression/flash/subliminal/achievement/
+                // Discord hooks and closes the hover menu (MainWindow.ProfileBubble.cs).
+                CleanupProfileBubble();
                 if (App.Companion != null)
                 {
                     App.Companion.XPAwarded -= OnCompanionXPAwarded;

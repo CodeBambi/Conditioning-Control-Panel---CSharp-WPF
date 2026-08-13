@@ -14,6 +14,20 @@ namespace ConditioningControlPanel.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent();
+            // The Dashboard is the one tab the app LANDS on - it ships Visible in MainWindow.xaml
+            // and nothing calls ShowTab("settings") at startup - so its one-shot ? box explainer
+            // has no navigation to ride. Wired in code rather than XAML because the seam is
+            // MainWindow's, not this view's (same shape as DiscordTabView's hook for the Profile
+            // tab); MainWindow.TabNavigation.OnDashboardTabVisibilityChanged owns every decision.
+            IsVisibleChanged += (_, _) =>
+            {
+                try
+                {
+                    if (Window.GetWindow(this) is MainWindow mw)
+                        mw.OnDashboardTabVisibilityChanged(IsVisible);
+                }
+                catch (Exception ex) { App.Logger?.Debug("SettingsTabView visibility hook: {E}", ex.Message); }
+            };
         }
 
         /// <summary>
