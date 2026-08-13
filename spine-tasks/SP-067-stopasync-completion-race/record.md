@@ -159,8 +159,9 @@ return), 5 added (comment + ternary). Zero renames, zero refactors, zero unrelat
 Every changed line traces to framing (a) (the mechanism), (b) (the reused shape), and (f)
 (the single divergent site the sweep found).
 
-
+## Engine-review presence per step
 
 | Step | Plan review call | Verdict |
 |------|------------------|---------|
 | 1 | `spine_review_step(step=1, type=plan)` — **absent by design**: nested reviewer spawn blocked inside a pi worker session (SP-195); engine runs reviews after `.DONE`. `skipped=true, spawnFailed=false` | n/a |
+| 2 | `spine_review_step(step=2, type=plan)` — **absent by design** (SP-195, same as Step 1). `skipped=true, spawnFailed=false` | n/a |

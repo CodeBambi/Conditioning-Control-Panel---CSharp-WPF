@@ -1,5 +1,5 @@
 ## STATUS: SP-067 — The StopAsync completion race: a cancelled heartbeat that reports Completed
-**Current Step:** Step 2 (in progress)
+**Current Step:** Step 3 (in progress)
 **Last Updated:** 2026-08-13 (worker, lane-1)
 **Blockers:** none
 
@@ -17,7 +17,7 @@
 - [x] Zero-tick determinism (framing e) stated with the measurement behind it
 - [x] Pre-approach solo consult (T-7: `mode: "solo"`, cap the reply, ask narrowly) — verdict + **ACTUAL answering model**; record exactly what surfaced, never stitch a verdict from reasoning
 
-### Step 2: Fix at the source, and sweep the class — 🔄 In Progress
+### Step 2: Fix at the source, and sweep the class — ✅ Complete (plan review absent by design, SP-195)
 > Sweep executed: 10 methods + 2 inline op bodies + WriteOnce, all dispositioned in record.md Step 2
 - [x] `HeartbeatParticipant.TickLoopAsync` post-loop return fixed using the **existing in-repo shape**, comment citing the contract section
 - [x] Step-1 probe re-run against fixed code: `Completed` gone across >= the iteration count that produced the RED; GREEN saved beside the RED
@@ -25,7 +25,7 @@
 - [x] Framing (g) clearance: `LastOutcome` / `Completion` / `Completed` grepped against heartbeat and teardown paths; result stated; any real dependency reported as a finding
 - [x] Zero behavior changed beyond the cancellation-exit outcome value; per-file `git diff` summary in the record
 
-### Step 3: Bind the class so it cannot return — ⬜ Not Started
+### Step 3: Bind the class so it cannot return — 🔄 In Progress
 - [ ] Zero-tick fact at `HeartbeatParticipant` (start → stop immediately → owned completion is `Cancelled`)
 - [ ] Zero-tick fact at `StatusTickerParticipant`
 - [ ] Zero-tick fact at `AvatarAnimationEngine`
