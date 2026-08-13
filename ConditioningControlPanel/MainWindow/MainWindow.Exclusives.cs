@@ -10,6 +10,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Features;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -33,13 +34,20 @@ namespace ConditioningControlPanel
             public required TextBlock ChipText;
             public required Border Veil;
             public required TextBlock VeilLock;
-            /// <summary>The gold FREE TODAY pill; collapsed on every other day.</summary>
+            /// <summary>The gold FREE TODAY pill; collapsed on every other day. Only ever used on
+            /// an UNTIERED card - a tiered one wears the stamped re-stamp composition instead.</summary>
             public required Border FreePill;
             public required TextBlock FreePillText;
             /// <summary>The pill's live pulse, kept so the next repaint can stop it.</summary>
             public Storyboard? FreeFx;
             public CardSheenAdorner? Sheen;
+            /// <summary>The stamped tier badge, or null on an untiered card (Graded Intake).</summary>
+            public TierBadge? Badge;
         }
+
+        // The rim weights, the edge brushes and the "what does this surface wear" decision live in
+        // Features\VaultLivery.cs - out here so the render suite can exercise them without a live
+        // MainWindow. This file assembles cards; that one decides how they are dressed.
 
         private readonly List<ExclusiveCardUi> _exclusiveCards = new();
         private readonly List<TextBlock> _exclusiveTeaserMarks = new();
@@ -57,22 +65,6 @@ namespace ConditioningControlPanel
         // "pass ready" chip wear, so "open for one day only" reads the same everywhere.
         // Literal colours, never a theme StaticResource - see CLAUDE.md's BAML note.
         private static readonly Color FreeTodayGold = Color.FromRgb(0xFF, 0xD2, 0x7A);
-
-        /// <summary>A live card's resting edge (violet, 1px).</summary>
-        private static readonly SolidColorBrush ExclusiveEdgeDefault = Freeze(Color.FromArgb(0x4D, 0xB4, 0x78, 0xFF));
-
-        /// <summary>A free-today card's edge: gold, and thicker, so the shelf reads at a glance.</summary>
-        private static readonly SolidColorBrush ExclusiveEdgeFree = Freeze(Color.FromArgb(0xE6, 0xFF, 0xD2, 0x7A));
-
-        /// <summary>The spotlight band's resting edge (pink, 1px), as authored in the view.</summary>
-        private static readonly SolidColorBrush SpotlightEdgeDefault = Freeze(Color.FromArgb(0x66, 0xFF, 0x69, 0xB4));
-
-        private static SolidColorBrush Freeze(Color c)
-        {
-            var b = new SolidColorBrush(c);
-            b.Freeze();
-            return b;
-        }
 
         /// <summary>
         /// True when this exclusive is today's daily free unlock AND the account does not
@@ -236,7 +228,12 @@ namespace ConditioningControlPanel
             {
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 8, 8, 0),
+                // On a tiered card the badge owns this corner, so the chip drops below it rather
+                // than fighting it. Both are top-right on purpose: entitlement and price belong in
+                // the same column, read top to bottom.
+                Margin = feature.Tier > 0
+                    ? new Thickness(0, VaultLivery.ChipTopWhenTiered, 8, 0)
+                    : new Thickness(0, 8, 8, 0),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(8, 3, 8, 3),
                 BorderThickness = new Thickness(1),
@@ -341,6 +338,24 @@ namespace ConditioningControlPanel
             Views.Tabs.ExclusivesTabView.RoundClipOnResize(veil, 12);
             host.Children.Add(veil);
 
+            // --- the tier badge: the neon sign pinned over the art's top-right corner. Built ONLY
+            //     for tiered features, and added last inside the host so it sits above the veil -
+            //     a locked card must still advertise what it costs, which is the whole job of a
+            //     price tag. Its state (and the FREE TODAY re-stamp) is set in the refresh. ---
+            TierBadge? badge = null;
+            if (feature.Tier > 0)
+            {
+                badge = new TierBadge
+                {
+                    Tier = feature.Tier,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    // Tucked over the corner so it reads as pinned ON the card, not laid inside it.
+                    Margin = new Thickness(0, VaultLivery.CardBadgeTopMargin, -6, 0),
+                };
+                host.Children.Add(badge);
+            }
+
             var card = new Border
             {
                 Width = 336,
@@ -348,7 +363,7 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(0, 0, 16, 16),
                 CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E)),
-                BorderBrush = ExclusiveEdgeDefault,
+                BorderBrush = VaultLivery.EdgeDefault,
                 BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Child = host,
@@ -370,6 +385,7 @@ namespace ConditioningControlPanel
                 VeilLock = veilLock,
                 FreePill = freePill,
                 FreePillText = freePillText,
+                Badge = badge,
             });
             return card;
         }
@@ -568,11 +584,16 @@ namespace ConditioningControlPanel
                     spotState == ExclusiveGateState.Locked && !spotFree ? Visibility.Visible : Visibility.Collapsed;
                 ApplyVeilLockBreath(ExclusivesTab.SpotVeilLock, ExclusivesTab.SpotVeil.Visibility == Visibility.Visible);
 
+                // Hero weight of the same livery the shelf wears (4px, not the cards' 3), plus the
+                // stamped sign. A tiered spotlight says its free day with the re-stamp, so the
+                // gold pill is only asked for when the hero has no badge to stamp over.
+                bool spotPill = VaultLivery.Apply(
+                    ExclusivesTab.SpotlightCard, ExclusivesTab.SpotTierBadge,
+                    spot.Tier, spotFree, VaultLivery.SpotlightRim, VaultLivery.SpotlightEdgeDefault);
+
                 ExclusivesTab.TxtSpotFreeToday.Text = Loc.Get("mosaic_free_today");
-                ExclusivesTab.SpotFreeToday.Visibility = spotFree ? Visibility.Visible : Visibility.Collapsed;
-                ExclusivesTab.SpotlightCard.BorderBrush = spotFree ? ExclusiveEdgeFree : SpotlightEdgeDefault;
-                ExclusivesTab.SpotlightCard.BorderThickness = new Thickness(spotFree ? 2 : 1);
-                _spotFreeFx = ApplyFreeTodayPulse(ExclusivesTab.SpotFreeToday, _spotFreeFx, spotFree);
+                ExclusivesTab.SpotFreeToday.Visibility = spotPill ? Visibility.Visible : Visibility.Collapsed;
+                _spotFreeFx = ApplyFreeTodayPulse(ExclusivesTab.SpotFreeToday, _spotFreeFx, spotPill);
 
                 RefreshExclusiveTierPlates();
 
@@ -595,24 +616,26 @@ namespace ConditioningControlPanel
             // the destination's TierGate call already ORs in DailyFreeService, so the card is
             // simply telling the truth about a door that really is open.
             bool freeToday = IsExclusiveFreeToday(ui.Feature, state);
+
+            // Rim + badge in one place for both branches, so a tiered card cannot end a repaint
+            // wearing the untiered violet edge. Returns true only when there is no badge to
+            // re-stamp, which is the one case still needing the old gold pill.
+            bool wantPill = VaultLivery.Apply(ui.Card, ui.Badge, ui.Feature.Tier, freeToday);
+
             if (freeToday)
             {
                 ui.Veil.Visibility = Visibility.Collapsed;
                 ui.Art.Opacity = 1.0;
                 ui.Chip.Visibility = Visibility.Collapsed;
                 ui.FreePillText.Text = Loc.Get("mosaic_free_today");
-                ui.FreePill.Visibility = Visibility.Visible;
-                ui.Card.BorderBrush = ExclusiveEdgeFree;
-                ui.Card.BorderThickness = new Thickness(2);
+                ui.FreePill.Visibility = wantPill ? Visibility.Visible : Visibility.Collapsed;
                 ApplyVeilLockBreath(ui.VeilLock, false);
-                ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, true);
+                ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, wantPill);
                 return;
             }
 
             ui.FreePill.Visibility = Visibility.Collapsed;
             ui.FreeFx = ApplyFreeTodayPulse(ui.FreePill, ui.FreeFx, false);
-            ui.Card.BorderBrush = ExclusiveEdgeDefault;
-            ui.Card.BorderThickness = new Thickness(1);
 
             switch (state)
             {
@@ -848,6 +871,18 @@ namespace ConditioningControlPanel
 
                     AttachExclusiveSheens();
                 }
+
+                // The tier livery's own loops. OUTSIDE the AllowAmbientLoops branch above because
+                // each of these re-reads the gate for itself and settles into its static look when
+                // it is shut - calling them either way is what makes a motion-level change land on
+                // the next visit to the tab instead of needing a rebuild.
+                foreach (var ui in _exclusiveCards)
+                {
+                    TierFxBorder.Resume(ui.Card);
+                    ui.Badge?.StartMotion();
+                }
+                TierFxBorder.Resume(ExclusivesTab.SpotlightCard);
+                ExclusivesTab.SpotTierBadge?.StartMotion();
             }
             catch (Exception ex) { App.Logger?.Debug("StartExclusivesMotion: {E}", ex.Message); }
         }
@@ -860,7 +895,14 @@ namespace ConditioningControlPanel
             {
                 ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                foreach (var ui in _exclusiveCards) ui.Sheen?.Stop();
+                foreach (var ui in _exclusiveCards)
+                {
+                    ui.Sheen?.Stop();
+                    TierFxBorder.Park(ui.Card);
+                    ui.Badge?.StopMotion();
+                }
+                TierFxBorder.Park(ExclusivesTab.SpotlightCard);
+                ExclusivesTab.SpotTierBadge?.StopMotion();
                 // The AmbientFxCanvas parks itself via SwitchTabFx (it's registered).
             }
             catch (Exception ex) { App.Logger?.Debug("StopExclusivesMotion: {E}", ex.Message); }

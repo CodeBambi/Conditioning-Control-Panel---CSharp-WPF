@@ -163,6 +163,17 @@
                                 </Border.Background>
                             </Border>
 
+                            <!-- The hero's tier sign, painted by RefreshExclusivesTab from the
+                                 spotlight feature's Tier (collapsed when it has none). LEFT, over
+                                 the art column, not right: the right column is the copy, and its
+                                 own badge row (JUST SHIPPED / NEW / FREE TODAY) already owns that
+                                 side. The card badges are top-right; hero bands put the sign on
+                                 the art side, same call as the Play door's DTRH hero. -->
+                            <fx:TierBadge x:Name="SpotTierBadge" x:FieldModifier="internal"
+                                          Grid.Column="0"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                                          Margin="-4,-4,0,0" Panel.ZIndex="9"/>
+
                             <!-- copy -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center"
                                         Margin="26,0,30,0">
