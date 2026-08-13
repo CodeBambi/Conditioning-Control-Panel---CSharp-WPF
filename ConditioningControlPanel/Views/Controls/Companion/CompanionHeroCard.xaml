@@ -302,16 +302,30 @@
                                 </Ellipse>
                             </Grid>
 
-                            <!-- The real portrait, when there is one. The source is the avatar
-                                 set's pose-1 TUBE sprite (LoadPortrait) - a tall full-body
-                                 image - so UniformToFill's default centre crop framed the
-                                 torso and beheaded her (owner, 2026-08-13: "avatar preview is
-                                 off center"). AlignmentY=Top keeps the head: the fill scales
-                                 to the circle's width and the crop eats the legs instead. -->
+                            <!-- The real portrait, when there is one.
+
+                                 Stretch is Uniform, NOT UniformToFill. The busts are full-body
+                                 art on a tall canvas (the shipped set-1 pose is 540x960), and
+                                 "fill a 132x132 circle" meant scaling by WIDTH to 132x235 and
+                                 then centre-cropping 51px off each end — her head off the top and
+                                 her heels off the bottom. What survived read as shoved up and to
+                                 the left, because the PNG's ink is not centred on its own canvas
+                                 either: the opaque bounds are 158..417 across (centre 53.2%) and
+                                 97..801 down (centre 46.8%).
+
+                                 (A parallel same-day fix tried AlignmentY=Top on the fill crop —
+                                 head kept, heels still eaten; this measured-viewbox approach
+                                 replaced it in the merge.)
+
+                                 Uniform keeps the whole figure, and the code-behind then points
+                                 this brush's Viewbox at a square centred on the art's OWN opaque
+                                 bounds — so the padding a mod happens to ship is measured rather
+                                 than assumed, and its bust lands centred too. See
+                                 CompanionHeroCard.xaml.cs · ApplyAvatarArt / CentrePortrait. -->
                             <Ellipse Margin="3" Visibility="{Binding Portrait, Converter={StaticResource CmpHasContentToVis}}">
                                 <Ellipse.Fill>
-                                    <ImageBrush ImageSource="{Binding Portrait}" Stretch="UniformToFill"
-                                                AlignmentY="Top"/>
+                                    <ImageBrush x:Name="PortraitBrush" ImageSource="{Binding Portrait}"
+                                                Stretch="Uniform" AlignmentX="Center" AlignmentY="Center"/>
                                 </Ellipse.Fill>
                             </Ellipse>
 

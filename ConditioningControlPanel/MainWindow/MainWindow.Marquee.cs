@@ -44,7 +44,7 @@ namespace ConditioningControlPanel
             // Update welcome message based on login status
             UpdateBannerWelcomeMessage();
 
-            // Always start rotation now (we have 3 messages including the thanks message)
+            // Always start rotation now (support + welcome-back; the thanks beat was retired 0813)
             _bannerRotationTimer.Start();
         }
 
@@ -438,12 +438,14 @@ namespace ConditioningControlPanel
 
         private void BannerRotationTimer_Tick(object? sender, EventArgs e)
         {
-            // Get the 3 banner textblocks
-            var banners = new[] { TxtBannerPrimary, TxtBannerSecondary, TxtBannerTertiary };
+            // The two banner textblocks. 0813 retired a third beat (the PlatinumPuppets thanks
+            // hyperlink) along with the banner's own canvas row - support + welcome-back are the
+            // whole rotation now, so the modulus below is 2.
+            var banners = new[] { TxtBannerPrimary, TxtBannerSecondary };
 
             // Determine which one to fade out and which to fade in
             var fadeOutTarget = banners[_bannerCurrentIndex];
-            var nextIndex = (_bannerCurrentIndex + 1) % 3;
+            var nextIndex = (_bannerCurrentIndex + 1) % banners.Length;
             var fadeInTarget = banners[nextIndex];
 
             // Create fade animations

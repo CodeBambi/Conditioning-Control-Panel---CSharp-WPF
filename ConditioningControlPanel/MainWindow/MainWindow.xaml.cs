@@ -209,7 +209,7 @@ namespace ConditioningControlPanel
 
         // Banner rotation (cycles through 3 messages: support, welcome, thanks)
         private DispatcherTimer? _bannerRotationTimer;
-        private int _bannerCurrentIndex = 0; // 0=Primary (support), 1=Secondary (welcome), 2=Tertiary (thanks)
+        private int _bannerCurrentIndex = 0; // 0=Primary (support), 1=Secondary (welcome)
         private List<string> _bannerMessages = new();
 
         // Marquee animation
@@ -1671,8 +1671,6 @@ namespace ConditioningControlPanel
                     TxtBannerPrimary.Foreground = accentBrush;
                 if (TxtBannerSecondary != null)
                     TxtBannerSecondary.Foreground = accentBrush;
-                if (TxtBannerTertiary != null)
-                    TxtBannerTertiary.Foreground = accentBrush;
 
                 // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
 

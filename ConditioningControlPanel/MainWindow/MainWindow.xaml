@@ -100,10 +100,17 @@
              2026-08-11 emoji purge: door icons are painted art thumbnails
              (Resources/nav/door_*.png, 64x64 native). 2026-08-12 (CONTRACT.md "Nav rail
              interaction spec"): the row became a medallion tile that grows with the rail -
-             44px r12 tile with a 36px icon while the rail is shut, 50px tile with a 45px icon
+             44px r12 tile with a 40px icon while the rail is shut, 50px tile with a 46px icon
              and a big centred name once it opens. Every size in that sentence is animated
              from MainWindow.NavRail.cs (which also says why the open tile is 50 and not the
              contract's 64); nothing here animates itself.
+
+             2026-08-13 (owner: the door art is too small and sits in a grey ring): the icon
+             went 28/44 -> 40/46 inside the SAME tile, and the tile's permanent GlassBorder
+             hairline became Transparent. The 1px edge is still there and still 1px - it is
+             what RefreshNavDoorActive paints the door's hue on - it just carries no colour
+             until you are standing in that door. Nothing about the row's size moved: the tile
+             is 44/56, the row is 64 tall, the rail is 56 wide, the hit target is the whole row.
 
              The row is a FIXED 64px tall in BOTH states on purpose: only the tile inside it
              grows. Animating the row height as well would re-layout the whole rail (and shove
@@ -257,7 +264,11 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <!-- 2: was the full-width support banner. 0813 nested that banner into the
+                     header row (HeaderBannerHost) and pinned this row to 0 - the height it
+                     used to cost is now tab canvas in row 4. Kept as a row, not deleted, so
+                     rows 3/4/5 keep the indices every Grid.Row below is authored against. -->
+                <RowDefinition Height="0"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -524,8 +535,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
                                          re-point the art at the active mod's override. The literal
@@ -581,8 +592,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorStudio"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -662,8 +673,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorCompanion"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -740,8 +751,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorPlay"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -861,8 +872,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorYou"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -966,8 +977,8 @@
                                 <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                                <Viewbox Grid.Column="0" Width="36" Height="36"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Image x:Name="ImgDoorLibrary"
                                            Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1152,8 +1163,8 @@
                             <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"/>
-                            <Viewbox Grid.Column="0" Width="36" Height="36"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Column="0" Width="40" Height="40"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1199,15 +1210,25 @@
                      200px cap the TextBlock used to own on its own: with room to spare the
                      level pill still hugs the title exactly as before, and when the window
                      narrows the title ellipsizes instead of the cluster shouldering the tabs
-                     out of the header. HorizontalAlignment=Left keeps the cluster from
-                     spreading across the (now much wider) star column. -->
-                <Grid Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                     out of the header. HorizontalAlignment used to be Left here; 0813 dropped it
+                     so the cluster stretches and column 5 (the support banner, moved out of its
+                     own row) can claim the leftover width between the version text and the
+                     right-hand chrome. Nothing spreads: columns 0-4 are still Auto/capped, and
+                     the banner is the only thing that grows. -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MaxWidth="200"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <!-- 5: support banner. Star, so it is the FIRST thing to give width
+                             back; the right-hand chrome (language pill, update button) lives in
+                             an Auto column of the outer grid and can never be pushed out.
+                             2*, not *, because column 1 is capped at 200 anyway: the weight is
+                             what keeps the support line off an ellipsis once the update button
+                             is showing. -->
+                        <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
@@ -1309,10 +1330,15 @@
                              single most-asked "where is it?" control in the app. Gear + caption
                              live inside the template so one hit area covers both.
                              Height 28 is free vertical room - the Row 1 tab buttons in column 1
-                             are already Height 32, so this cannot grow the header row.
-                             LineHeight/BlockLineHeight pins each line so the 28px never clips. -->
+                             are already Height 32, so this cannot grow the header row. 0813 turned
+                             the stacked gear-over-caption into a one-line wordmark (the gear IS
+                             the O of "MOD"), so the 28px now holds a single line with room to
+                             spare and nothing needs a pinned LineHeight to avoid clipping.
+                             AutomationProperties.Name keeps the localized string on the control
+                             for screen readers - the visible letters are split across runs. -->
                         <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
                                 ToolTip="{loc:Str tooltip_manage_mods}"
+                                AutomationProperties.Name="{loc:Str label_mod_manager}"
                                 Margin="4,0,0,0" Height="28" VerticalAlignment="Center"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand">
                             <Button.Template>
@@ -1322,16 +1348,39 @@
                                     <Border x:Name="capsule" CornerRadius="4" Padding="5,1"
                                             Background="{DynamicResource TransparentPink20Brush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                       Foreground="{DynamicResource PinkBrush}"
-                                                       HorizontalAlignment="Center"
-                                                       LineHeight="15" LineStackingStrategy="BlockLineHeight"/>
-                                            <TextBlock Text="{loc:Str label_mod_manager}" FontSize="8" FontWeight="Bold"
-                                                       Foreground="{DynamicResource PinkBrush}"
-                                                       HorizontalAlignment="Center"
-                                                       LineHeight="9" LineStackingStrategy="BlockLineHeight"/>
-                                        </StackPanel>
+                                        <!-- The wordmark. Sizes are measured, not eyeballed. Segoe UI
+                                             Bold at 11 has a 7.97px cap band running from 0.13 BELOW
+                                             the baseline to 7.83 above it, so its optical centre is
+                                             3.85 above the baseline. The MDL2 gear's ink is 0.994em
+                                             tall and fills its whole advance, so FontSize 10 draws a
+                                             9.94px glyph whose inner body reads at about cap height
+                                             with the teeth as the overshoot a round letter wants next
+                                             to a flat-topped M and D.
+                                             It shares ONE TextBlock with the letters, so the text
+                                             engine baselines it instead of a guessed margin: an
+                                             InlineUIContainer bottom-aligns to the baseline, and at
+                                             this font the glyph's own baseline IS its box bottom. The
+                                             -1 bottom margin then drops it to a 4.00 centre, i.e.
+                                             onto the cap band's 3.85 to within a sixth of a pixel,
+                                             instead of leaving the whole overshoot above the baseline.
+                                             The 0.7 side margins are the side bearings a real "O"
+                                             would have and this glyph does not.
+                                             The three inlines are written with NO whitespace between
+                                             them on purpose: a line break there collapses to a real
+                                             space and the button reads "M (gear) D MANAGER".
+                                             The letters are literal because label_mod_manager is the
+                                             string "MOD MANAGER" in all nine language files; the key
+                                             is still bound, as this button's AutomationProperties.Name. -->
+                                        <TextBlock FontSize="11" FontWeight="Bold" TextWrapping="NoWrap"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"><Run Text="M"/><InlineUIContainer
+                                                       BaselineAlignment="Baseline"><TextBlock
+                                                           Text="&#xE713;" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="10" FontWeight="Normal"
+                                                           Foreground="{DynamicResource PinkBrush}"
+                                                           Margin="0.7,0,0.7,-1"/></InlineUIContainer><Run
+                                                       Text="D MANAGER"/></TextBlock>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -1419,6 +1468,70 @@
                                       Data="M8,1 L2,4 V9.5 C2,13 5,15.5 8,17 C11,15.5 14,13 14,9.5 V4 Z M8,15 C5.8,13.8 4,11.8 4,9.5 V5.2 L8,3 L12,5.2 V9.5 C12,11.8 10.2,13.8 8,15 Z"/>
                             </Viewbox>
                         </StackPanel>
+                    </Border>
+
+                    <!-- Support/welcome banner (0813). It used to own canvas row 2 outright, a
+                         full-width strip whose only job was two rotating one-liners; the row is
+                         gone and the banner now rides the header's leftover width, between the
+                         version text and the right-hand chrome. Sizing rules that keep that
+                         honest: Height 26 is BELOW the 28px mod capsule already in this row, so
+                         the banner can never grow the header; the host is centred in a star
+                         column that collapses before any Auto column, so the language pill and
+                         update button cannot be pushed out; and both beats trim with an
+                         ellipsis rather than wrap, so a narrow window loses banner text and
+                         nothing else. The third beat (the Platinum Puppets thanks hyperlink) was
+                         retired with the row - see MainWindow.Marquee.cs, where the rotation is
+                         now a two-beat crossfade. -->
+                    <Border Grid.Column="5" x:Name="HeaderBannerHost"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                            CornerRadius="13" Padding="12,0" Height="26" MaxWidth="620"
+                            Margin="12,0,12,0"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid>
+                            <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="1">
+                                <Run Text="{loc:Str label_if_you_love_the_project_please}"/>
+                                <Run Text="{loc:Str label_consider_supporting_it}" FontWeight="Bold"/>
+                                <Run Text=" "/>
+                                <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
+                                    <Run Text="https://linktr.ee/CodeBambi"/>
+                                </Hyperlink>
+                            </TextBlock>
+                            <TextBlock x:Name="TxtBannerSecondary" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="0" IsHitTestVisible="False"
+                                       Text="{loc:Str login_welcome_back}"/>
+                            <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
+                                 message changes. Its own ClipToBounds host so the band can't
+                                 escape the card - deliberately NOT ClipToBounds on the shared
+                                 Grid, which would start clipping the banner text itself.
+                                 Hit-test invisible so the hyperlinks underneath keep working.
+                                 Driven from MainWindow.ChromeFx.cs. -->
+                            <Grid x:Name="BannerSheenHost" ClipToBounds="True" IsHitTestVisible="False">
+                                <Border x:Name="BannerSheen" Width="110" HorizontalAlignment="Left" Opacity="0"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Offset="0" Color="#00FFFFFF"/>
+                                            <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                                            <GradientStop Offset="1" Color="#00FFFFFF"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform>
+                                        <TransformGroup>
+                                            <SkewTransform AngleX="-20"/>
+                                            <TranslateTransform x:Name="BannerSheenSlide"/>
+                                        </TransformGroup>
+                                    </Border.RenderTransform>
+                                </Border>
+                            </Grid>
+                        </Grid>
                     </Border>
                 </Grid>
 
@@ -1862,74 +1975,11 @@
             </Grid>
         </Border>
 
-        <!-- Row 2: the support/marquee banner. Phase 1 deleted the second tab-button grid
-             that used to share this row, so the banner now spans the header outright.
-             Its fixed-width host requirement still holds - see MainWindow.Marquee.cs. -->
-        <!-- 2026-08-13: opaque slab dropped here too (see Header Bar) - the banner inside
-             carries its own rounded border, the host just positions it. -->
-        <Border Grid.Row="2" Grid.Column="1" Background="Transparent" Padding="10,6">
-            <Grid>
-                <!-- Banner -->
-                <Border Background="{DynamicResource SurfaceBgBrush}"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="12,8">
-                    <Grid>
-                        <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="1">
-                            <Run Text="{loc:Str label_if_you_love_the_project_please}"/>
-                            <Run Text="{loc:Str label_consider_supporting_it}" FontWeight="Bold"/>
-                            <Run Text=" "/>
-                            <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
-                                <Run Text="https://linktr.ee/CodeBambi"/>
-                            </Hyperlink>
-                        </TextBlock>
-                        <TextBlock x:Name="TxtBannerSecondary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="0" IsHitTestVisible="False"
-                                   Text="{loc:Str login_welcome_back}"/>
-                        <TextBlock x:Name="TxtBannerTertiary" Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="14" FontStyle="Italic" FontWeight="Bold"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextAlignment="Center" Opacity="0" IsHitTestVisible="False">
-                            <Hyperlink NavigateUri="https://www.patreon.com/c/PlatinumPuppets" RequestNavigate="HandleHyperlinkClick">
-                                <Run Text="{loc:Str label_a_special_thanks_to_platinum_puppets_for_prov}"/>
-                            </Hyperlink>
-                        </TextBlock>
-                        <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the message
-                             changes. Its own ClipToBounds host so the band can't escape the card -
-                             deliberately NOT ClipToBounds on the shared Grid, which would start
-                             clipping the banner text itself. Hit-test invisible so the hyperlinks
-                             underneath keep working. Driven from MainWindow.ChromeFx.cs. -->
-                        <Grid x:Name="BannerSheenHost" ClipToBounds="True" IsHitTestVisible="False">
-                            <Border x:Name="BannerSheen" Width="110" HorizontalAlignment="Left" Opacity="0"
-                                    RenderTransformOrigin="0.5,0.5">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Offset="0" Color="#00FFFFFF"/>
-                                        <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
-                                        <GradientStop Offset="1" Color="#00FFFFFF"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                                <Border.RenderTransform>
-                                    <TransformGroup>
-                                        <SkewTransform AngleX="-20"/>
-                                        <TranslateTransform x:Name="BannerSheenSlide"/>
-                                    </TransformGroup>
-                                </Border.RenderTransform>
-                            </Border>
-                        </Grid>
-                    </Grid>
-                </Border>
-
-                <!-- Phase 1: the row-2 tab-button grid moved into the nav rail (canvas column 0);
-                     Help and Bug Report were re-homed to the row-1 right cluster. -->
-
-            </Grid>
-        </Border>
-
+        <!-- Canvas row 2 is EMPTY on purpose (0813). It carried the full-width support/marquee
+             banner; the banner is now nested in the header row beside the version text
+             (HeaderBannerHost, above), and the ~53px this row cost went back to the tab
+             canvas in row 4. The row DEFINITION survives, pinned to 0, so every Grid.Row
+             below it keeps its index. -->
         <!-- XP Progress Bar + Stat Pills - Row 3 -->
         <Grid Grid.Row="3" Grid.Column="1" Margin="15,10,15,5">
             <!-- Main content with XP bar and stat pills -->
