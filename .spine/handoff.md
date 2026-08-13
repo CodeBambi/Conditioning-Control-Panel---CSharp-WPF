@@ -1,38 +1,90 @@
-# HANDOFF — 2026-08-13 — wave 23 LAUNCHED (SP-066 in flight), run continues
+# HANDOFF — 2026-08-13 — wave 23 LANDED (SP-066), spine IDLE, run continues
 
-**Status: NOT PARKED. Wave 23 is IN FLIGHT.** SP-066 (board row 49 part (1) + T-17 riding) was authored, committed (`1276de71`), pushed, and launched detached. **The next phase is therefore port.txt case C (batch running → exit at once) and then case A (LAND IT)** — it is NOT another author+launch. Everything below the next two sections is the wave-22 land record, still accurate as history.
+**Status: NOT PARKED. No batch is running. Board row 49 is fully landed.** The next phase is
+therefore **port.txt case B: author + launch ONE wave**, not a land. Spine is `Idle`, the tree is
+clean, and `feat/crossplatform` is pushed and in sync at `851596cf`.
 
-## Land checks specific to SP-066 (the landing phase has no memory of authoring)
+## State the next phase inherits
 
-1. **Read `client/tests/floor/floor.json` `allowedSkips` FIRST.** The packet moves the pin from `{passed, skipped}` to `{total, allowedSkips[]}`, which creates a new quarantine temptation. Two names are banned from that list and both bans are in the packet's `## Do NOT`: the **SP-057 pin** (a skip there means `CCP_DATA_ROOT` went process-wide — the vacuous `896/1` green SP-062 closed) and the named flake **`ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`** (privacy boundary; reproduce and fix at source, never quarantine). Every listed entry must name the machine class where it *does* execute.
-2. **Check the commit ORDER, not just the end state.** The schema change had to land BEFORE any `Assert.Skip` conversion; doing it the other way reddens the packet's own contract and the cheap way out is widening the pin — the exact failure this row exists to prevent, reproduced by its own fix.
-3. **Expect these non-claims in `record.md` and do not let them be dropped at reconciliation:** the detector is lexical, so **runtime vacuity is NOT detected** (assertions hoisted into helpers read as absent; a loop over an empty collection reads as asserting); the guard binds only enumerated shapes; `allowedSkips` records intent nothing verifies; **T-17's induced-skip auditor RUN is not delivered** (only the `port-audit-prompt.md:12-13` edit + a prompt pin), so T-17 stays OPEN with that residual; Linux unproven.
-4. **Verify the merged tree THROUGH the wrapper**, as wave 22 did: in a scratch worktree run `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs` (the wrapper is `--no-build` by design — standalone it measures the last build and names the wrong cause), 3 consecutive greens, then prove `git diff` is EMPTY between the verified tree and the integrated tip.
-5. **Next unused task ID after this wave: SP-067.**
+- **Floor: 900 unit / 35 headless / 2 NAMED skips, build 0W/0E.** Verified by the orchestrator on
+  the exact pushed tree: cold fresh-worktree first-ever build 0W/0E + **4 greens through the
+  wrapper** (3 on `fdbb0f82`, 1 final on `851596cf` after the evidence commit, so the last
+  verification is of the tree actually pushed). Evidence committed at
+  `spine-tasks/SP-066-vacuous-shape-sweep/evidence/land-*.txt`.
+- **THE 2 SKIPS ARE CORRECT — DO NOT "FIX" THEM.** `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`
+  and `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps` are Linux-gated and
+  pinned by name in `client/tests/floor/floor.json`. Before SP-066 they early-`return`ed and were
+  counted as PASSES, so the old "898/0 skipped" floor was scoring vacuity as green. A packet that
+  drives the skip count back to 0 is regressing the honesty, not improving the floor.
+- **Next unused task ID: SP-067.**
 
-## Where the run was at the wave-22 land
+## Land checks that will apply to whatever lands next
 
-- **Landed the previous phase:** SP-065 (board row 49 **part (2) only**) — integrate `09b4b639`, reconcile + push `c799d2cf`. Batch `20260813T032810` completed and archived; it was a CLEAN land (no recovery, unlike wave 21).
-- **Floor is now 898 unit / 35 headless / 0 skipped, build 0W/0E**, and it is enforced by machinery rather than by a human comparing numbers: `node client/tests/floor/check-floor.mjs` owns both `dotnet test` invocations and fails the CONTRACT on an unexpected skip or an off-floor count.
-- **Next unused task ID at that land: SP-066** (now consumed by SP-066; next unused is SP-067).
+1. **`node .spine/patches/verify.mjs` FAILS in a scratch worktree and that is expected** — `.pi/npm`
+   is a per-checkout gitignored tree that does not exist there, so the project-root patches are
+   uncheckable. All 5 ENGINE patches still verify. Run `verify.mjs` in the MAIN checkout (exit 0
+   there), and run build+floor in the scratch worktree. Captured at
+   `evidence/land-verify-scratch-npm-absent.txt` so nobody re-discovers it as a scare.
+2. **Full contract, in this order:** `dotnet build client/CcpClient.sln -c Debug --nologo && node
+   client/tests/floor/check-floor.mjs`. The wrapper is `--no-build` by design — standalone it
+   measures the LAST BUILD and names the wrong cause.
+3. **Never set `CCP_DATA_ROOT` for a floor run** (port-workflow.md:204). It skips the SP-057 pin and
+   blinds the exact-count floor — the vacuous-green class SP-062 closed.
+4. **`cmd | tail; echo $?` reports TAIL's exit code.** Use `${PIPESTATUS[0]}` or redirect to a file
+   and echo `$?` on the next line.
+5. **A doc a test READS is code.** `client/tools/port-audit-prompt.md` is now asserted on by
+   `FloorWrapperGuardTests`; `client/tests/floor/floor.json` and `vacuous-shape-ledger.json` are
+   asserted on by the floor wrapper and `VacuousShapeGuardTests`. None of these may be edited during
+   post-verification reconciliation — that is the wave-18 red-base class in a docs disguise.
+6. **Gate evidence is still untrustworthy (T-3, six occurrences).** `evidence/diff-stat.txt` is a
+   TWO-DOT diff, so base-side commits appear as worker deletions. Disprove with three dots
+   (`git diff --stat base...orch`) before reacting.
 
-## Next claimable work (author ONE wave, then exit)
+## Claimable work (author ONE wave, then EXIT — do not monitor)
 
-- **Board row 49 part (1)** — the vacuous-SHAPE enumeration sweep. Untouched, still claimable, sized M+ by its own row; slice it if it does not fit one packet.
-- **Board row 50** — injected timeout BUDGETS (4th occurrence of the timing-discipline class). Its site `LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` is a known out-of-scope cold red; raising its 800 ms budget stays BANNED.
-- **New rows filed at this land:** T-17 (the blind auditor `client/tools/port-audit-prompt.md:12-13` still runs bare `dotnet test`, so it keeps the detection path SP-065 replaced) and the named flake `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` (1 red in 15 runs; guards a privacy boundary — never weaken, never quarantine).
+Five queue rows now exist purely to harden the test suite, and **the digest asks the owner whether
+to keep going or return to WPF parity features.** Absent an owner answer, prefer the P1 product-risk
+row (the first one) over more suite scaffolding, and consider pairing it with a product row.
+
+- **P1 `AsyncLifecycleTests.Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary`** — the
+  StopAsync completion race. **Second recorded occurrence** (SP-055, then SP-066 run 0); both times
+  under a diff touching no lifecycle code, so it is a real product race, not test noise. It did NOT
+  fire in the land's 4 runs — that bounds nothing. Reproduce with a bounded loop, name the mechanism,
+  fix at the source. Never weaken the assertion, never allowlist it. Size S.
+- **P2 `Assert.All` / expression-lambda silencing shape** — 21 uses, found during the SP-066 sweep and
+  deliberately left out of scope. Either extend the detector surface and re-sweep, or pin
+  `Assert.NotEmpty`. Size S+.
+- **P2 (S) the two `allowedSkips` permanent bans are prose** — ~10 lines of test asserting `floor.json`
+  `allowedSkips` contains neither the SP-057 pin nor the `ChaosTunnelLoopbackTests` privacy flake.
+  Do NOT widen it into a general admission-rule validator.
+- **T-17 (P2, OPEN on its residual)** — the prompt edit and its mechanical pin landed; the induced-skip
+  auditor RUN (blind auditor against a broken tree must FAIL, against a clean tree must PASS) is
+  undelivered. The row closes on that run.
+- **Named flake `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`** — 1 red in
+  15 runs, 0 in SP-066's 5 and 0 in the land's 4. Privacy boundary: never weaken, never quarantine.
+- **Board row 50** — injected timeout BUDGETS, 4th occurrence of the timing-discipline class. Its site
+  `LoopbackOllamaProviderTests.Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` is a known
+  out-of-scope cold red; raising its 800 ms budget stays BANNED.
 - The standing product queue is unchanged; nothing above outranks an owner-approved product row.
 
-## Traps that cost time this phase (read before landing anything)
+## Techniques that are now reliable, not lucky
 
-1. **The gate's `evidence/diff-stat.txt` is a TWO-DOT diff.** Base-side commits show up as worker DELETIONS. It showed `client/memories/port-status.md -1` and `spine-tasks/CONTEXT.md -8` — i.e. it looked exactly like the worker reverting the orchestrator's own land obligations. Disprove with `git diff --stat base...orch` (three dots) before reacting. 5th consecutive misleading-gate-evidence occurrence (T-3 class).
-2. **`check-floor.mjs` is `--no-build` by design.** Standalone it measures the LAST BUILD, not the working tree. At this land it reported `passed 897 (pin 898)` on the pushed tip purely because the dll predated the merged test file — fails closed, but names the wrong cause. Always run the full contract: `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs`.
-3. **`cmd | tail; echo $?` reports TAIL's exit code.** Use `${PIPESTATUS[0]}`. This produced a false "FLOOR_EXIT=0" at this land on a run that had actually failed.
-4. **Local-patch anchors must not survive inside their own replacement** (`apply.mjs` detects applied as anchor×0 + replacement×1, so it verifies as `drifted` forever). Anchor across the insertion point; run `apply.mjs && verify.mjs` in the same step as any `manifest.json` edit.
-5. **Consult surfacing:** ask narrowly and cap the reply (`under N words, numbered`). A capped solo Opus 5 call surfaced cleanly and caught two real errors this phase, where three uncapped calls last phase truncated.
+- **Cap the consult reply and ask narrowly** (`under N words, numbered`, verdict first). Third
+  consecutive wave with clean surfacing on solo Opus 5 where uncapped calls truncated. This land's
+  capped call caught the port-audit-prompt.md read-by-tests trap and contributed a board row.
+- **Verify the merged state yourself and make the LAST verification the tree you push.** This land ran
+  a 4th confirming green after the evidence commit rather than pushing on the strength of the earlier
+  three.
+- **Check commit ORDER, not just end state**, when a packet's own contract depends on sequencing.
 
 ## Machine facts (laptop)
 
-pi-spine 2.10.0 pinned, 9 local patches green on both roots (`verify.mjs` OK) · hermes memory + durable fallback `client/memories/port-status.md` · WSL zero distros → **every Linux gate is a standing named limit** · MCP 0/3 connected at this phase (cached only) — a named limit, never a blocker · `Z:\CCP Vids`, DISPLAY3, and the WSL2 Linux gate are DESKTOP-only.
+pi-spine 2.10.0 pinned, 9 local patches — `verify.mjs` OK in the main checkout · hermes memory +
+durable fallback `client/memories/port-status.md` (ninth export current) · WSL zero distros →
+**every Linux gate is a standing named limit** · MCP not re-probed this phase — treat as a named
+limit, never a blocker · `Z:\CCP Vids`, DISPLAY3, and the WSL2 Linux gate are DESKTOP-only.
 
-**Per-checkout gotcha (new):** the `skill-floor-wrapper-testcommand` patch is `engine:false`, so it lives in the per-checkout `.pi/npm` tree. On any other machine or a fresh clone, run `node .spine/patches/apply.mjs && node .spine/patches/verify.mjs` before authoring, or the packet template will silently lack the wrapper mandate and `FloorWrapperGuardTests` will redden the lane instead.
+**Per-checkout gotcha:** the `skill-floor-wrapper-testcommand` patch is `engine:false`, so it lives in
+the per-checkout `.pi/npm` tree. On any other machine or a fresh clone, run
+`node .spine/patches/apply.mjs && node .spine/patches/verify.mjs` before authoring, or the packet
+template will silently lack the wrapper mandate and `FloorWrapperGuardTests` will redden the lane.
