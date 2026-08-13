@@ -39,6 +39,23 @@ public class ProgramAmbient
 
     /// <summary>Which quest category accumulates the ambient minutes, when one applies.</summary>
     public QuestCategory? Verifier { get; set; }
+
+    /// <summary>
+    /// Same meaning as <see cref="ProgramTask.OutsideSession"/>, one layer up: these minutes are
+    /// meant to accrue across the user's whole day - a filter left on through the working day -
+    /// rather than inside the day's own session, so <see cref="ProgramDefinition.Validate"/> does
+    /// not hold the session's minute budget against them.
+    ///
+    /// It has to be set deliberately. Leaving it false on an ambient the session cannot possibly
+    /// fill is the same authoring bug OutsideSession exists to catch, and it is worse here: an
+    /// unreachable ambient does not block the day, it lets
+    /// <c>ProgramService.SettleAmbientShortfallDay</c> settle the day at rollover *without the day
+    /// XP*, so the user quietly earns less for a day they completed in full.
+    ///
+    /// Additive, defaulting to false, so definitions serialised before it existed round-trip
+    /// unchanged.
+    /// </summary>
+    public bool OutsideSession { get; set; }
 }
 
 /// <summary>
@@ -366,6 +383,12 @@ public class ProgramDefinition
                     return false;
                 }
             }
+
+            if (!IsAmbientFeasible(day, out var ambientWhy))
+            {
+                error = $"Day {day.DayIndex} ambient layer can never be completed: {ambientWhy}";
+                return false;
+            }
         }
 
         return true;
@@ -378,25 +401,200 @@ public class ProgramDefinition
     /// </summary>
     private const int StartJitterMinutes = 3;
 
+    // ---------------------------------------------------------------------------------------------
+    // Engine clamps, mirrored.
+    //
+    // Every one of these lives on an AppSettings *setter*, and SessionEngine.ApplySessionSettings
+    // writes the session's numbers straight through those setters - so a template authoring a value
+    // above the clamp does not get that value, it gets the clamp, silently. A feasibility model that
+    // did not clamp would promise supply the app is structurally incapable of producing. The flash
+    // one is the load-bearing case: AppSettings.FlashFrequency clamps to 1..180 and SessionEngine
+    // writes it twice (once at start, then every second of the ramp), so an authored 480/hour is
+    // 180/hour and an authored 180 -> 480 ramp is a flat line.
+    //
+    // Raising any of these clamps is an owner call. Mirroring them here is not.
+    // ---------------------------------------------------------------------------------------------
+    internal const int MaxFlashPerHour = 180;         // AppSettings.FlashFrequency
+    internal const int MaxSimultaneousImages = 20;    // AppSettings.SimultaneousImages
+    internal const int MaxBubblesPerMinute = 60;      // AppSettings.BubblesFrequency (per MINUTE)
+    internal const int MaxVideosPerHour = 20;         // AppSettings.VideosPerHour
+    internal const int MaxBubbleCountPerHour = 10;    // AppSettings.BubbleCountFrequency
+    internal const int MaxLockCardsPerHour = 10;      // AppSettings.LockCardFrequency
+
+    /// <summary>
+    /// Minutes of credited playback one mandatory video is modelled as worth.
+    ///
+    /// QuestCategory.Video credits *actual playback seconds* of the user's own files
+    /// (VideoService.FinalizeWatchCredit -> AchievementService -> QuestService.TrackVideoMinutes),
+    /// and the app puts no cap on clip length by default, so the true figure is content-dependent
+    /// and unknowable from a definition. Two minutes is the deliberately conservative stand-in: it
+    /// is short enough that a day passing this check will still pass for a user whose library is
+    /// mostly short loops, which is the only direction that matters. A day that wants twenty
+    /// minutes of playback out of a session running one video an hour is not a tuning question, it
+    /// is a task belonging to the user's own day - mark it OutsideSession.
+    /// </summary>
+    internal const double ConservativeClipMinutes = 2.0;
+
+    /// <summary>
+    /// How much of a verifier's signal one session can produce, in the units the task counts in.
+    /// Null means "not modellable" - the int? frequency fields fall through to the user's own
+    /// dashboard value when a template leaves them null, and guessing at that would be worse than
+    /// not checking.
+    /// </summary>
+    private delegate double? SupplyModel(SessionSettings settings, int startMinute, int sessionMinutes, int availableMinutes);
+
     /// <summary>Which session feature a verifier draws its credit from.</summary>
     /// <param name="Name">Human name for the error message.</param>
     /// <param name="MinuteDenominated">True when TargetValue counts minutes of runtime rather than events.</param>
+    /// <param name="Supply">How much of the signal the session can produce - see <see cref="SupplyModel"/>.</param>
     private readonly record struct VerifierFeature(
         string Name,
         bool MinuteDenominated,
         Func<SessionSettings, bool> Enabled,
-        Func<SessionSettings, int> StartMinute);
+        Func<SessionSettings, int> StartMinute,
+        SupplyModel Supply);
 
     private static readonly Dictionary<QuestCategory, VerifierFeature> SessionFeatureVerifiers = new()
     {
-        [QuestCategory.Flash] = new("flash images", false, s => s.FlashEnabled, s => s.FlashStartMinute),
-        [QuestCategory.Video] = new("mandatory videos", true, s => s.MandatoryVideosEnabled, s => s.MandatoryVideosStartMinute),
-        [QuestCategory.Spiral] = new("spiral", true, s => s.SpiralEnabled, s => s.SpiralStartMinute),
-        [QuestCategory.PinkFilter] = new("pink filter", true, s => s.PinkFilterEnabled, s => s.PinkFilterStartMinute),
-        [QuestCategory.Bubbles] = new("bubbles", false, s => s.BubblesEnabled, s => s.BubblesStartMinute),
-        [QuestCategory.LockCard] = new("lock cards", false, s => s.LockCardEnabled, s => s.LockCardStartMinute),
-        [QuestCategory.BubbleCount] = new("bubble count", false, s => s.BubbleCountEnabled, s => s.BubbleCountStartMinute),
+        [QuestCategory.Flash] = new("flash images", false, s => s.FlashEnabled, s => s.FlashStartMinute, FlashSupply),
+        [QuestCategory.Video] = new("mandatory videos", true, s => s.MandatoryVideosEnabled, s => s.MandatoryVideosStartMinute, VideoSupply),
+        [QuestCategory.Spiral] = new("spiral", true, s => s.SpiralEnabled, s => s.SpiralStartMinute, OverlayMinuteSupply),
+        [QuestCategory.PinkFilter] = new("pink filter", true, s => s.PinkFilterEnabled, s => s.PinkFilterStartMinute, OverlayMinuteSupply),
+        [QuestCategory.Bubbles] = new("bubbles", false, s => s.BubblesEnabled, s => s.BubblesStartMinute, BubbleSupply),
+        [QuestCategory.LockCard] = new("lock cards", false, s => s.LockCardEnabled, s => s.LockCardStartMinute, LockCardSupply),
+        [QuestCategory.BubbleCount] = new("bubble count", false, s => s.BubbleCountEnabled, s => s.BubbleCountStartMinute, BubbleCountSupply),
     };
+
+    // ---------------------------------------------------------------------------------------------
+    // Supply models. Each one answers "how much credit can this session hand out?" in the units the
+    // task counts in, and each is written against the service that actually fires the Track* call -
+    // not against what the setting is named. Two of those turned out to matter a great deal:
+    //   - flash credit is per IMAGE, not per burst (FlashService.SpawnFlashWindow tracks once per
+    //     spawned window, and a burst spawns FlashImages of them), so a burst of four counts four;
+    //   - bubbles are credited on POP, not on spawn, and only a clickable bubble can be popped.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// SessionEngine ramps the flash rate linearly across the WHOLE session clock - not from the
+    /// feature's own start minute - and writes it through the clamped AppSettings.FlashFrequency
+    /// every second, so the honest figure is the mean of the *clamped* ramp over the minutes the
+    /// feature is actually running, multiplied by the images each burst spawns.
+    /// </summary>
+    private static double? FlashSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+    {
+        var images = Math.Clamp(s.FlashImages, 1, MaxSimultaneousImages);
+        return AverageFlashPerHour(s, startMinute, sessionMinutes) * images * availableMinutes / 60.0;
+    }
+
+    private static double AverageFlashPerHour(SessionSettings s, int startMinute, int sessionMinutes)
+    {
+        if (sessionMinutes <= 0) return 0;
+
+        // Sampled rather than integrated: the clamp puts a kink in the line, and a loop that is
+        // obviously right beats a closed form that needs its own proof.
+        double sum = 0;
+        var samples = 0;
+
+        for (var minute = Math.Max(0, startMinute); minute < sessionMinutes; minute++)
+        {
+            var progress = (double)minute / sessionMinutes;
+            var rate = s.FlashPerHour + ((s.FlashPerHourEnd - s.FlashPerHour) * progress);
+            sum += Math.Clamp(rate, 1, MaxFlashPerHour);
+            samples++;
+        }
+
+        return samples == 0 ? 0 : sum / samples;
+    }
+
+    /// <summary>
+    /// Bubbles are credited on the pop, so the session's job is to put enough of them on screen.
+    /// BubblesFrequency is per MINUTE (BubbleService schedules 60000/frequency ms), which is the
+    /// one rate in this file that is not per hour.
+    /// </summary>
+    private static double? BubbleSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+    {
+        // BubbleService only awards a pop, and an unclickable bubble can never be popped - so a
+        // session with clicking off produces exactly zero credit no matter how many it spawns.
+        if (!s.BubblesClickable) return 0;
+
+        // The intermittent path ignores BubblesFrequency entirely and spawns
+        // BubblesBurstCount x BubblesPerBurst over the session (SessionEngine.ScheduleBubbleBursts).
+        if (s.BubblesIntermittent)
+            return (double)Math.Max(0, s.BubblesBurstCount) * Math.Max(1, s.BubblesPerBurst);
+
+        return Math.Clamp(s.BubblesFrequency, 1, MaxBubblesPerMinute) * (double)availableMinutes;
+    }
+
+    /// <summary>
+    /// Lock cards arrive at a known rate. The first card is guaranteed inside the window (#736 -
+    /// LockCardService.ComputeFirstCardDelayMinutes); every later one costs a full interval.
+    /// </summary>
+    private static double? LockCardSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+    {
+        if (s.LockCardFrequency is not { } perHour) return null;
+
+        var intervalMinutes = 60.0 / Math.Clamp(perHour, 1, MaxLockCardsPerHour);
+        return 1 + Math.Floor(availableMinutes / intervalMinutes);
+    }
+
+    /// <summary>
+    /// Bubble count games are scheduled a full interval apart with no guaranteed first game, and
+    /// BubbleCountService refuses to run two inside a minute of each other.
+    /// </summary>
+    private static double? BubbleCountSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+    {
+        if (s.BubbleCountFrequency is not { } perHour) return null;
+
+        var intervalMinutes = Math.Max(1.0, 60.0 / Math.Clamp(perHour, 1, MaxBubbleCountPerHour));
+        return Math.Floor(availableMinutes / intervalMinutes);
+    }
+
+    /// <summary>
+    /// Video is minute-denominated but event-produced: the session starts a clip VideosPerHour
+    /// times an hour and credit is the playback that actually happens, so the supply is
+    /// clips x <see cref="ConservativeClipMinutes"/> and NOT "every minute after the start minute".
+    /// Treating it as continuous playback is what let three days ship asking for twenty to thirty
+    /// minutes out of sessions that start one or two clips.
+    /// </summary>
+    private static double? VideoSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+    {
+        if (s.VideosPerHour is not { } perHour) return null;
+
+        var clips = Math.Clamp(perHour, 1, MaxVideosPerHour) * availableMinutes / 60.0;
+        return clips * ConservativeClipMinutes;
+    }
+
+    /// <summary>
+    /// Pink filter and spiral really are continuous: AchievementService's one-second timer credits
+    /// a minute per minute for as long as the feature is enabled and the overlay is running, so
+    /// every minute from the (jittered) start to session end counts.
+    /// </summary>
+    private static double? OverlayMinuteSupply(SessionSettings s, int startMinute, int sessionMinutes, int availableMinutes)
+        => availableMinutes;
+
+    /// <summary>
+    /// The settings the day will actually run, which is the only thing worth measuring against.
+    ///
+    /// Built through the real builder rather than by reading Floor/Ceiling by hand, because a day's
+    /// <see cref="ProgramDay.Overrides"/> can switch a feature ON that the template leaves off
+    /// (Presentation days 2, 8 and 9 all do), move a start minute, or switch one OFF - and a check
+    /// that read the raw template judged all four cases wrong. It also means the check cannot drift
+    /// from the builder's rounding, and that ApplyOverrides' JsonElement materialisation is reused
+    /// rather than reimplemented (#429).
+    /// </summary>
+    private SessionSettings? EffectiveSettings(ProgramDay day)
+    {
+        var template = GetTemplate(day.SessionTemplateId);
+        if (template == null) return null; // already reported by the caller
+
+        var settings = Services.Program.ProgramSessionBuilder.LerpSettings(
+            template.Floor, template.Ceiling, Math.Clamp(day.Intensity, 0.0, 1.0));
+
+        if (day.Overrides is { Count: > 0 })
+            Services.Program.ProgramSessionBuilder.ApplyOverrides(settings, day.Overrides);
+
+        return settings;
+    }
 
     /// <summary>
     /// #736/#747: can the day's own session actually deliver what the task asks for?
@@ -416,21 +614,57 @@ public class ProgramDefinition
         if (task.Kind != ProgramTaskKind.AutoVerified) return true;
         if (task.OutsideSession) return true;
         if (task.Verifier is not { } verifier) return true;
-        if (!SessionFeatureVerifiers.TryGetValue(verifier, out var feature)) return true;
 
-        var template = GetTemplate(day.SessionTemplateId);
-        if (template == null) return true; // already reported by the caller
+        return IsVerifierSatisfiable(day, verifier, task.TargetValue, "the task", out why);
+    }
 
-        // Booleans come from Floor - which features a template runs is the template's identity.
-        if (!feature.Enabled(template.Floor))
+    /// <summary>
+    /// The same budget check for the day's ambient layer. Ambient minutes were exempt from
+    /// validation entirely, which is how Firmware cycles 11-14 shipped asking for sixty minutes of
+    /// filter against 45-to-75-minute sessions: the day still completes, but
+    /// <c>ProgramService.SettleAmbientShortfallDay</c> settles it at rollover *without the day XP*,
+    /// so the user is quietly underpaid for a day they finished.
+    ///
+    /// Ambients flagged <see cref="ProgramAmbient.OutsideSession"/> are exempt, same as tasks.
+    /// </summary>
+    internal bool IsAmbientFeasible(ProgramDay day, out string why)
+    {
+        why = "";
+
+        if (day.Ambient is not { RequiredMinutes: > 0 } ambient) return true;
+        if (ambient.OutsideSession) return true;
+
+        if (ambient.Verifier is not { } verifier)
         {
-            why = $"the '{template.Id}' session has {feature.Name} switched off. " +
-                  "Enable it in the template, retarget the task, or mark the task OutsideSession.";
+            why = $"it requires {ambient.RequiredMinutes} minutes but names no verifier, so nothing can " +
+                  "ever credit it. Give it a verifier or mark the ambient OutsideSession.";
             return false;
         }
 
-        var startMinute = Services.Program.ProgramSessionBuilder.LerpInt(
-            feature.StartMinute(template.Floor), feature.StartMinute(template.Ceiling), day.Intensity);
+        return IsVerifierSatisfiable(day, verifier, ambient.RequiredMinutes, "the ambient layer", out why);
+    }
+
+    /// <summary>
+    /// Shared budget check. <paramref name="subject"/> only shapes the advice at the end of the
+    /// message, so a task and an ambient are told to fix themselves rather than each other.
+    /// </summary>
+    private bool IsVerifierSatisfiable(ProgramDay day, QuestCategory verifier, int target, string subject, out string why)
+    {
+        why = "";
+
+        if (!SessionFeatureVerifiers.TryGetValue(verifier, out var feature)) return true;
+
+        var settings = EffectiveSettings(day);
+        if (settings == null) return true; // unknown template - already reported by the caller
+
+        if (!feature.Enabled(settings))
+        {
+            why = $"the '{day.SessionTemplateId}' session has {feature.Name} switched off. " +
+                  $"Enable it in the template, override it on for the day, retarget {subject}, or mark {subject} OutsideSession.";
+            return false;
+        }
+
+        var startMinute = feature.StartMinute(settings);
 
         // A delayed start is only jittered when it is non-zero.
         var jitter = startMinute > 0 ? StartJitterMinutes : 0;
@@ -442,31 +676,14 @@ public class ProgramDefinition
             return false;
         }
 
-        if (feature.MinuteDenominated && task.TargetValue > availableMinutes)
-        {
-            why = $"it needs {task.TargetValue} minutes of {feature.Name} but the session offers at most " +
-                  $"{availableMinutes} (starts minute {startMinute}, ±{StartJitterMinutes} jitter, of {day.SessionMinutes}).";
-            return false;
-        }
+        if (feature.Supply(settings, startMinute, day.SessionMinutes, availableMinutes) is not { } supply)
+            return true; // not modellable - the rate falls through to the user's own dashboard value
 
-        // Lock cards arrive at a known rate, so an event count can be checked too. The first card is
-        // guaranteed inside the window (#736); every later one costs a full interval.
-        if (verifier == QuestCategory.LockCard && task.TargetValue > 1)
-        {
-            var perHour = template.Floor.LockCardFrequency;
-            if (perHour is > 0)
-            {
-                var intervalMinutes = 60.0 / perHour.Value;
-                var achievable = 1 + (int)Math.Floor(availableMinutes / intervalMinutes);
-                if (task.TargetValue > achievable)
-                {
-                    why = $"it needs {task.TargetValue} lock cards but {perHour}/hour over {availableMinutes} " +
-                          $"minutes can deliver at most {achievable}.";
-                    return false;
-                }
-            }
-        }
+        if (target <= supply) return true;
 
-        return true;
+        var units = feature.MinuteDenominated ? $"{target} minutes of {feature.Name}" : $"{target} {feature.Name}";
+        why = $"it needs {units} but the session can supply at most {Math.Floor(supply)} " +
+              $"(starts minute {startMinute}, ±{StartJitterMinutes} jitter, of {day.SessionMinutes}).";
+        return false;
     }
 }

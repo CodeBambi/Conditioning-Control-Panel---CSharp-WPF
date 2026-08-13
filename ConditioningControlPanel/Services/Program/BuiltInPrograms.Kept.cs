@@ -506,7 +506,17 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession, like day 4's video task, and for a structural reason
+                        // rather than a shortfall: QuestCategory.Video credits actual playback
+                        // minutes of the user's own files, and KP-Habit starts mandatory videos at
+                        // one an hour, so a 45-minute session can only ever contribute a minute or
+                        // two of playback. The blurb already says it out loud - "twenty minutes of
+                        // it, and the session brings its own on top" - and the flag makes the Today
+                        // card say the same thing instead of implying the session will do the work.
+                        //
+                        // The ladder is 15 (day 4) -> 20 -> 25 (day 18) -> 30 (day 25).
                         Id = "d11_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 20 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -749,7 +759,9 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 11. The session's own playback runs underneath it.
                         Id = "d18_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 25 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -1017,7 +1029,10 @@ public static partial class BuiltInPrograms
                         // the roadmap's haptics steps are spent and there is no haptics verifier -
                         // so this takes the longest single stretch of her video in the program
                         // instead, which is verified.
+                        // OutsideSession - see day 11, and the top of the ladder. 60 minutes of
+                        // session plus 30 of watching sits exactly on the 90-minute daily cap.
                         Id = "d25_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 30 minutes of video",
                         Verifier = QuestCategory.Video,

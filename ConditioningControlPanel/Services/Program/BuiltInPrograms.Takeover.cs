@@ -163,11 +163,21 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // Arithmetic, not taste. Flash credit is one per IMAGE (FlashService tracks
+                        // once per spawned window), and TK-Bubble at i .05 runs 12 -> 21 an hour with
+                        // FlashImages 1, so half an hour offers about eight. Twenty-five - what this
+                        // shipped as - was three times what day 1 could produce, on the first evening
+                        // of a 28-day purchase, with the counter visibly stalling at 8/25 and no
+                        // OutsideSession flag to send the user anywhere else.
+                        //
+                        // Six leaves room for the +/-30% the flash timer jitters each interval by.
+                        // Raising TK-Bubble's rate is not on the table: "half an hour where almost
+                        // nothing happens" is the day.
                         Id = "d1_flash",
                         Kind = ProgramTaskKind.AutoVerified,
-                        Description = "See 25 flash images",
+                        Description = "See 6 flash images",
                         Verifier = QuestCategory.Flash,
-                        TargetValue = 25
+                        TargetValue = 6
                     }
                 }
             },
@@ -475,7 +485,7 @@ public static partial class BuiltInPrograms
             {
                 DayIndex = 13,
                 Title = "Twenty Minutes of Watching",
-                Blurb = "An hour tonight, and twenty solid minutes of it are just eyes on the screen. Five more than Sunday. Don't multitask - she'll know~",
+                Blurb = "An hour tonight, and twenty solid minutes of watching to go with it. Five more than Sunday. Don't multitask - she'll know~",
                 SessionTemplateId = "TK-Uniform",
                 SessionMinutes = 60,
                 Intensity = 0.51,
@@ -483,7 +493,18 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession, like every other video task in the set (day 10 here, and
+                        // First Week day 5), and for a reason that is structural rather than a
+                        // shortfall: QuestCategory.Video credits *actual playback minutes of the
+                        // user's own files*, and mandatory videos start at VideosPerHour - two an
+                        // hour here - so the session itself can only ever contribute single-digit
+                        // minutes no matter how long it runs. Twenty minutes of watching is the
+                        // user's own evening; the session's own clips land on top of it.
+                        //
+                        // The ladder is 15 (day 10) -> 20 -> 25 (day 19) -> 30 (day 26), and the
+                        // blurbs name each step, so it is not a number to trim casually.
                         Id = "d13_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 20 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -677,7 +698,9 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 13. The session's own clips run underneath it.
                         Id = "d19_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 25 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -927,7 +950,17 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession - see day 13, and the top of the ladder.
+                        //
+                        // OWNER CALL flagged in the fix report: 75 minutes of session plus 30 of
+                        // watching is 105 minutes of seated time on one day, over this program's own
+                        // 90-minute MaxDailyMinutes. That load is not new - the day has always asked
+                        // for thirty minutes the session could not supply - but the flag makes it
+                        // visible. Fixing it properly means either dropping day 26 to a 60-minute
+                        // session or breaking the 15/20/25/30 ladder the blurbs name, and both are
+                        // content decisions rather than corrections.
                         Id = "d26_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 30 minutes of video",
                         Verifier = QuestCategory.Video,

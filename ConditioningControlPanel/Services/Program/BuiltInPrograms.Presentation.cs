@@ -377,8 +377,12 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // NOT OutsideSession, and it used to be, which made the Today card print
+                        // "today's session will not produce this on its own" directly underneath a
+                        // day whose own override switches the filter on at minute 2. The session
+                        // delivers all twenty minutes and then some: 30 minutes, filter from minute
+                        // 2, worst case 25 minutes of it after the +/-3 start jitter.
                         Id = "d8_pink",
-                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Keep the pink filter on for 20 minutes",
                         Verifier = QuestCategory.PinkFilter,
@@ -419,6 +423,15 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // OutsideSession stays, and the override above stays with it - they are not
+                        // in contradiction, which is worth writing down because they look like they
+                        // are. The override exists so the session does not *switch video off*
+                        // (ApplySessionSettings writes false into live AppSettings and stops the
+                        // service for anything the template omits). What it cannot do is supply the
+                        // fifteen minutes: video credit is actual playback of the user's own files
+                        // at VideosPerHour cadence, and one clip an hour across 36 usable minutes is
+                        // a minute or two. So the session unblocks the feature and the user's own
+                        // evening fills the counter, which is exactly what the how-to line says.
                         Id = "d9_video",
                         OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,

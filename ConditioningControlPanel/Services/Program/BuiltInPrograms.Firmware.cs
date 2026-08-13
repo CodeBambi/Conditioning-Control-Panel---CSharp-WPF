@@ -175,11 +175,22 @@ public static partial class BuiltInPrograms
                 {
                     new ProgramTask
                     {
+                        // The number is arithmetic, not taste. Flash credit is one per IMAGE
+                        // (FlashService tracks once per spawned window), and FW-Boot at i .05 runs
+                        // 10 -> 18 injections an hour with FlashImages 1, so thirty minutes offers
+                        // about seven. Thirty - what this shipped as - was four times what cycle 1
+                        // could ever produce, on the first day of a paid program, with no
+                        // OutsideSession flag to tell the Unit to go and find them elsewhere.
+                        //
+                        // Five, not seven: FlashService jitters each interval +/-30%, so a target
+                        // sitting at 100% of the expected count fails a coin flip's worth of runs.
+                        // Raising FW-Boot's rate instead is not available - "if a first-time Unit
+                        // notices this running, it is authored wrong" is the template's whole brief.
                         Id = "c1_injections",
                         Kind = ProgramTaskKind.AutoVerified,
-                        Description = "Process 30 data injections. [LOG] OPTICAL INPUT CALIBRATION",
+                        Description = "Process 5 data injections. [LOG] OPTICAL INPUT CALIBRATION",
                         Verifier = QuestCategory.Flash,
-                        TargetValue = 30
+                        TargetValue = 5
                     }
                 }
             },
@@ -456,7 +467,16 @@ public static partial class BuiltInPrograms
                     // text-replacement pass is relied on.
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // OutsideSession, and this is the fiction rather than a concession: the whole
+                    // point of cycle 11 is that "the green filter is no longer session-scoped, it
+                    // stays over the display for the working day". Cycles 11-13 could not hit sixty
+                    // minutes from the session alone anyway (45m and 60m sessions, filter from
+                    // minute 2-3), and an unreachable ambient is not merely cosmetic - it lets
+                    // ProgramService.SettleAmbientShortfallDay settle the cycle at rollover with the
+                    // day XP withheld, so the Unit is underpaid for a cycle it completed in full.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -485,7 +505,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -530,7 +553,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -566,7 +592,10 @@ public static partial class BuiltInPrograms
                 {
                     Description = "Command words armed + green filter for the working day",
                     RequiredMinutes = 60,
-                    Verifier = QuestCategory.PinkFilter
+                    Verifier = QuestCategory.PinkFilter,
+
+                    // All-day wear, same as cycle 11 - see the note there.
+                    OutsideSession = true
                 },
                 RewardDescription = "[INSTALL COMPLETE] Unit designation issued. System log exported to the diary as a text file.",
                 Tasks = new List<ProgramTask>
