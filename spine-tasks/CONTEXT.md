@@ -1,7 +1,7 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-08-13
-**Status:** ACTIVE — wave 21 AUTHORED + LAUNCHED (SP-064, single lane, board row 38: harness entry points must REFUSE to run unsealed); base floor 892 unit / 35 headless, 0 skipped (this wave ADDS facts — the worker states the new exact count); next after landing = board row 49 part (2), the mechanical skip/count contract check, which must pin the POST-SP-064 count
+**Status:** ACTIVE — wave 21 AUTHORED + LAUNCHED (SP-064, single lane, board row 38: harness entry points must REFUSE to run unsealed). **Expected counts for the tree at this commit: exactly 892 unit / 35 headless / 0 skipped** — this phase changed only packet and doc files, no product or test code, so the floor is unmoved. SP-064 adds facts when it LANDS; that new count is stated at land, not now. Next after landing = board row 49 part (2), the mechanical skip/count contract check, which must pin the POST-SP-064 count
 **Next Task ID:** SP-065
 
 ---
@@ -108,6 +108,10 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-064-harness-refuse-unsealed | Harness-only entry points refuse to start unsealed. Classification is by resolved launch INTENT, not flag spelling: class 1 HARNESS (`--dtrh-m2test`, `--dtrh-fx-drive`, `--intake-drive`, `--loom-drive`, `--tunnel-drive` + the harness-only failure injectors `--dtrh-kill-renderers`, `--dtrh-block-route`, `--intake-kill-renderers`) refuses; class 2 DEMO/INSPECTION and class 3 PRE-PHASE SELF-CHECK never refuse (the row's explicit ban); class 4 MODIFIER carries no independent verdict. The `--dtrh-demo --dtrh-auto-close 30` residual hole is named for the owner, not silently closed. | authored 2026-08-13, batch launched | SP-057, SP-063 |
 
 **Why alone:** the deliverable is a suite-wide pinned enumeration of startup entry points, and every product slice in this port's history has added its own `--x-demo`/`--x-drive` flag — a parallel lane adding a flag is green alone and RED at merge against this guard (SP-054/SP-058 class; the wave-19 standing rule "a row delivering a suite-wide pinned guard runs alone"). It also moves the exact-count floor, which is what board row 49 part (2) would pin, so that row is the successor and must land after this one.
+
+**Counts at this commit:** **892 unit / 35 headless / 0 skipped, build 0W/0E** — unchanged from wave 20. Wave 21's authoring touched only `spine-tasks/**` and `client/docs/**` + `client/memories/**`; zero product or test files.
+
+**Authoring-commit collision (recorded, 2026-08-13):** this packet's files are committed inside `9d5f92c6`, whose message is about `port-workflow.md`. The owner committed loop tooling on the same checkout in the same minute and swept the orchestrator's already-staged authoring into it; the orchestrator's own commit then found nothing to commit. Content was verified identical to what was authored (`git diff HEAD` empty for the packet) and no history was rewritten. **Consequence for the next phase: `git log --oneline` will not show a wave-21 authoring commit — the packet is in `9d5f92c6`.** This is the mirror image of T-9 (orchestrator commits to base mid-batch); the same fix applies in reverse, so nothing else was committed on this checkout while the batch launches.
 
 **Decomposition consult (solo, Opus 5, 2026-08-13):** returned **reasoning only — the final verdict text was not surfaced by the tool.** Recorded, never stitched. Its substantive guidance is carried into the packet's framings: classify by intent rather than spelling and name the residual hole; the gate must ride the real entry point and fire before any write, proven by a real process run rather than a pin alone; one registry plus an unclassified-literal guard mirroring `DataRootChokePointGuardTests`.
 
