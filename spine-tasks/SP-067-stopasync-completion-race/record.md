@@ -125,7 +125,7 @@ owned-op bodies** (lambdas passed to `RunAsync`) were found and dispositioned, s
 | 10 | `Features/Dtrh/DtrhSaveSlots.cs:414` `SelectSlot` | no | CORRECT — no loop; returns the index store's `Save()` completion. |
 | 11 | `Features/Dtrh/DtrhSaveSlots.cs:426` `DescendInto` | no | CORRECT — awaits `SelectSlot`; a non-`Completed` outcome (incl. `Cancelled`) is propagated unchanged (`:430-433`). |
 | 12 | `Ai/AiOperationPipeline.cs:299` inline op body (`ai.<class>`) | no | CORRECT — post-await explicit check `!_owner.IsLive(generation) \|\| token.IsCancellationRequested` → `Cancelled` (`:311`); `Completed` only for real produced work. |
-| 13 | `Capabilities/CapabilityRegistry.cs:100` inline op body (`probe:<name>`) | no | CORRECT — the token is passed into the probe; OCE maps via `RunAsync`; `Completed` is reached only when the probe genuinely returned; the caller's switch handles `Cancelled` as honest not-probed state. |
+| 13 | `Capabilities/CapabilityRegistry.cs:100` inline op body (`probe:<name>`) | no | CORRECT for THIS defect class — no loop; the token is passed into the probe; OCE maps via `RunAsync`; the caller's switch handles `Cancelled` as honest not-probed state. **Residual finding (pre-completion consult):** the body returns `Completed` after `await probe(token)` — a probe that *swallows* cancellation and returns normally would report `Completed` on a cancelled token. Not a loop-exit site and outside framing (n)'s licence; named here for the orchestrator, not fixed. |
 
 Disposition method: sites 1–3 verified by **execution** (the probe, plus the Step-3 zero-tick
 facts and the existing suite); sites 4–13 dispositioned by **reading** — they have no
@@ -159,9 +159,120 @@ return), 5 added (comment + ternary). Zero renames, zero refactors, zero unrelat
 Every changed line traces to framing (a) (the mechanism), (b) (the reused shape), and (f)
 (the single divergent site the sweep found).
 
+## Step 3 — Bind the class so it cannot return
+
+Three zero-tick facts, one per loop site (framing e). Each starts the participant/engine and
+stops it **immediately**; each is deterministic green on either scheduling outcome after the
+fix because both exits now agree on `Cancelled` (framing d). No sleeps, no retries, no waits
+outside the existing helpers.
+
+| Fact | File | What breaks it (also in the fact's comment) |
+|------|------|----------------------------------------------|
+| `Heartbeat_StoppedBeforeFirstTick_CompletesCancelled_ZeroTick` | `AsyncLifecycleTests.cs` | the defective post-loop `return OperationOutcome.Completed.Instance` shape returning at `Participants.cs` — the SP-067 defect itself |
+| `SetEnabled_ThenImmediatelyDisabled_CompletesCancelled_ZeroTick` | `StatusTickerSliceTests.cs` | the same shape returning at `StatusTickerParticipant.cs` |
+| `Stop_BeforeFirstTick_CompletesCancelled_ZeroTick` | `AvatarAnimationEngineTests.cs` | the same shape returning at `AvatarAnimationEngine.cs` |
+
+**Vacuous-shape guard interaction (honest note):** the avatar fact's first draft delegated its
+only assertion to the existing `StopAndAssertCancelledAsync` helper, which reads as
+`no-assertion` to the SP-066 lexical guard (documented helper-hoisting false-positive class).
+`vacuous-shape-ledger.json` is **not in this packet's File Scope**, so rather than touch it,
+the fact carries its own real depth-0 assertion — `Assert.NotNull(engine.Completion)` (the
+owned completion is registered at Start, contract §1) — ahead of the helper call. The helper
+is still reused (pre-approach consult); no ledger edit, no scope expansion.
+
+### Zero assertions weakened — per-file proof
+
+`git diff` over the three test files is **purely additive**: `AsyncLifecycleTests.cs` +19/-0,
+`StatusTickerSliceTests.cs` +21/-0, `AvatarAnimationEngineTests.cs` +15/-0 (one added line is
+the in-fact `Assert.NotNull`). No existing assertion, tolerance, or window was touched. The
+named red `Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary` is **byte-identical**
+(verified: no removed lines anywhere in its file's diff). `floor.json`: `total` 900→903 and
+`lastMovedBy` only; `allowedSkips`, `admissionRule`, `skipSemantics` untouched.
+
+### Floor bump
+
+`total` 900 → **903** unit (+3 facts), bumped in commit `a52eac4b` — the same commit as the
+three facts, reason stated in the message, per the `bumpRule`. Headless stays 35.
+
+## Step 5 — Verification runs
+
+Contract testCommand in the lane: `node .spine/patches/verify.mjs` exit 0 ("OK — all patches
+applied on all roots"), `dotnet build client/CcpClient.sln -c Debug` **0W/0E**, wrapper green.
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped (exact names) | Named red in TRX | TRX path |
+|-----|----------|-----------|------|----------|------------------------|------------------|----------|
+| 1 | lane-1 | warm | 903/903 | 35/35 | `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`, `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked` | Passed | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-ijnQkY\CcpClient.Tests\results.trx` |
+| 2 | lane-1 | warm | 903/903 | 35/35 | same 2 names | Passed | `...\ccp-floor-ZbmbfU\CcpClient.Tests\results.trx` |
+| 3 | lane-1 | warm | 903/903 | 35/35 | same 2 names | Passed | `...\ccp-floor-PNuRdd\CcpClient.Tests\results.trx` |
+| 4 | lane-1 | warm | 903/903 | 35/35 | same 2 names | Passed | `...\ccp-floor-A4JVCm\CcpClient.Tests\results.trx` |
+| 5 | `.worktrees/sp-067-cold-check` (NEW worktree at `a52eac4b`, first-ever build there, removed after) | **cold** | 903/903 | 35/35 | same 2 names | Passed | `...\ccp-floor-GUdIXM\CcpClient.Tests\results.trx` |
+
+A sixth green (`ccp-floor-JQGsm1`, cold worktree) was produced accidentally when a verification
+grep re-invoked the wrapper; recorded for honesty, not counted toward the five.
+
+Named flake watch (framing k): `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`
+did **not** fire in any of the 6 runs. `git diff --check` clean. `git status --short` clean at
+final commit (all File Scope changes committed). Ignored-artifact check: only `bin/`/`obj/`
+build output (produced by the contract-mandated `dotnet build`, same class every prior packet
+produced in-lane) and the T-14-staged `.pi/npm`; the wrapper wrote all TRX to `os.tmpdir()`
+outside the worktree — no new ignored artifact from any run.
+
+## Honesty cell
+
+1. **What the probe does NOT bound.** The RED needed exactly **1** iteration to fire (every
+   run fired within the first handful; 992/1000 across two 500-iteration runs on this machine,
+   this load, this 1 ms interval, stop-immediately posture). That measures the *zero-tick
+   window*, which this probe deliberately maximizes. It says **nothing** about the real-world
+   hit rate of the originally failing test, whose stop lands *after* ticks and whose defective
+   interleave (cancel between `Delay` completion and the `while` re-check) is orders of
+   magnitude narrower — consistent with the observed ~1-in-15-runs flake rate, but 5 greens
+   do not bound that rate either: at p≈1/15, five consecutive passes occur by chance ~71% of
+   the time even *unfixed*. What the greens DO show is the fixed code taking both exits to
+   `Cancelled` (probe: 500/500) and the suite holding at the new floor.
+2. **The zero-tick facts pin the outcome rule, not the scheduler.** They are deterministic
+   because the OCE path and the token-observed post-loop return now agree on `Cancelled` —
+   the interleaving is still uncontrolled (probe post-fix: 494 zero-tick / 6 one-tick, both
+   `Cancelled`).
+3. **Read-vs-executed dispositions.** Sweep sites 1–3 (the three loops) are pinned by
+   executed facts. Sites 4–13 (`RunAsync`, the persistence methods, the DTRH methods, the two
+   inline op bodies, `WriteOnce`) were dispositioned by **reading** — none has a
+   loop-exit-by-token-observation path, so the defect class cannot exist there; no new
+   execution was added for them.
+4. **No product capability closed.** This removes a lying terminal outcome from an existing
+   capability (the heartbeat demonstrator's stop path); nothing was removed, stubbed, or
+   gated off.
+5. **Linux unproven.** Zero WSL distros on this machine; no Linux run was performed or faked.
+   The fix is platform-neutral C# (a ternary on `CancellationToken.IsCancellationRequested`),
+   but that is an argument, not evidence — Linux remains a named gate.
+
+## Intended board filings (ENABLER 2 — named only, no row state set)
+
+- The SP-067 row: fixed at the source (`Participants.cs` post-loop return, RED/GREEN probe
+  evidence at ~99% zero-tick hit rate pre-fix), class swept (13 sites dispositioned), 3
+  zero-tick pins, floor 900→903, 5 consecutive greens incl. 1 cold-worktree first-ever build.
+- `port-lessons.md` candidate: a lexical vacuous-shape guard plus an out-of-scope ledger
+  pushes helper-delegating facts toward carrying one real in-body assertion — the cheapest
+  in-scope resolution; future packets adding helper-only facts should expect this.
+- `upstream-sync.md`: nothing — no WPF delta involved.
+
+## Step 4 — Pre-completion consult
+
+- Mode: `solo`, asked narrowly (any hole blocking `.DONE`; soundness of the both-exits-agree
+  determinism argument and of read-based dispositions), reply length capped.
+- Verdict (returned complete, not truncated): **no hole blocks `.DONE`; proceed.** The
+  determinism argument is sound — exactly two exits, both `Cancelled` post-fix, the
+  `Completed` branch provably dead; the body's only throw site (`_ui.Post`) is `IsBound`-guarded
+  so no `Failed` third outcome in the zero-tick facts. Reading is the correct instrument for
+  sites 4–13: a method with no token-observed loop exit cannot manifest a loop-exit defect.
+- One record-only addendum (not a blocker): the `CapabilityRegistry.cs:100` probe-body
+  residual — encoded above as sweep row 13's finding and filed for the orchestrator.
+- **ACTUAL answering model:** not identifiable — the consult tool response carried no model
+  identity (same as Step 1; recorded honestly, not claimed).
+
 ## Engine-review presence per step
 
 | Step | Plan review call | Verdict |
 |------|------------------|---------|
 | 1 | `spine_review_step(step=1, type=plan)` — **absent by design**: nested reviewer spawn blocked inside a pi worker session (SP-195); engine runs reviews after `.DONE`. `skipped=true, spawnFailed=false` | n/a |
 | 2 | `spine_review_step(step=2, type=plan)` — **absent by design** (SP-195, same as Step 1). `skipped=true, spawnFailed=false` | n/a |
+| 3 | `spine_review_step(step=3, type=plan)` — **absent by design** (SP-195, same). `skipped=true, spawnFailed=false` | n/a |
