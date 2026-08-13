@@ -6,6 +6,24 @@ import { createFeed } from './feed.js';
 import { createPage } from './surfaces.js';
 
 const PAGE_TRANSITION_MS = 340;
+// Neighbour pages this many steps from the active one stay mounted in PREVIEW
+// (media loaded + seeked, paused on the window's first frame). This is at once
+// the "never a black box" fix (a committed page resumes in place, no cold
+// mount), the peek a half-swipe reveals, and the preload of the next page
+// (preload='auto' buffers while the active clip plays). ±1 on purpose: a page
+// can hold up to 4 decoders, and local files load fast enough that ±2 buys
+// nothing but memory.
+const NEIGHBOR_PAGES = 1;
+// Live drag (ported back from the browser FYP, see FypFeed.tsx there):
+const PAGE_COMMIT_FRAC = 0.22;         // drag this fraction of the viewport commits
+const FLICK_V = 0.55;                  // px/ms release velocity that commits...
+const FLICK_MIN_PX = 20;               // ...but a twitch is not a flick
+const RUBBER = 0.35;                   // resistance where there is nothing to reveal
+// Remote entries carry a poster still; warming the image cache this many pages
+// ahead means even a swipe burst lands on a picture while the stream catches
+// up. One fetch per url per session; local files have no poster (their paused
+// preview frame plays that role) so this is online/mixed-mode work only.
+const POSTER_WARM_AHEAD = 6;
 const INTRO_EXIT_MS = 240;             // intro card is fully gone before the feed is built
 const CLIP_VIEWED_MIN_DWELL_MS = 5000; // below this a skim earns no XP
 const ATTENTION_MIN_GAP_MS = 120000;   // attention target every 2-4 min
@@ -161,6 +179,30 @@ const pageCtx = {
   onAdvance(compKey) {
     if (feed.comps[activeIdx]?.key === compKey) next();
   },
+  isPagerBusy: () => performance.now() < pageBusyUntil,
+  // Vertical drag, forwarded by whichever tile slot locked the 'y' axis. Only
+  // the active page steers the track; a stale gesture (page changed under it)
+  // is dropped rather than fought over.
+  onPageDragMove(compKey, dy) {
+    if (feed.comps[activeIdx]?.key !== compKey) return;
+    const atEdge = (activeIdx <= 0 && dy > 0) || (activeIdx >= feed.comps.length - 1 && dy < 0);
+    const eff = atEdge ? dy * RUBBER : dy;
+    track.style.transition = 'none';
+    track.style.transform = `translateY(${-activeIdx * pageH() + eff}px)`;
+  },
+  onPageDragEnd(compKey, dy, vy) {
+    if (feed.comps[activeIdx]?.key !== compKey) { applyTrack(true); return; }
+    let dir = 0;
+    if (Math.abs(vy) > FLICK_V && Math.sign(vy) === Math.sign(dy) && Math.abs(dy) > FLICK_MIN_PX) {
+      dir = dy < 0 ? 1 : -1;
+    } else if (Math.abs(dy) > pageH() * PAGE_COMMIT_FRAC) {
+      dir = dy < 0 ? 1 : -1;
+    }
+    // Commit continues the slide from wherever the pointer left the track
+    // (goTo's applyTrack animates from the current transform); a refusal
+    // (feed edge) or a short drag springs back the same way.
+    if (dir === 0 || !goTo(activeIdx + dir)) applyTrack(true);
+  },
   onSwap(compKey, tileIndex, dir) {
     const cut = feed.swapTile(compKey, tileIndex, dir);
     if (cut && tileIndex === 0 && feed.comps[activeIdx]?.key === compKey) updateCaption();
@@ -229,6 +271,43 @@ function applyTrack(animated) {
   track.style.transform = `translateY(${-activeIdx * pageH()}px)`;
 }
 
+/**
+ * Enforce the page window around activeIdx: the active page LIVE, its ±NEIGHBOR
+ * neighbours PREVIEW (mounted, paused on their first frame — the peek a
+ * half-swipe reveals, and the warm media a commit resumes with no black gap),
+ * everything else OFF. Hidden window: everything off — decoders freed, dwell
+ * reported — exactly what the old binary active flag did on minimize.
+ */
+function applyWindow() {
+  if (document.hidden) {
+    for (const p of pages.values()) p.setMode('off');
+    return;
+  }
+  feed.comps.forEach((c, i) => {
+    const page = pages.get(c.key);
+    if (!page) return;
+    const d = Math.abs(i - activeIdx);
+    page.setMode(d === 0 ? 'live' : d <= NEIGHBOR_PAGES ? 'preview' : 'off');
+  });
+  warmPosters();
+}
+
+// Poster pre-warm (online/mixed): one new Image() per url per session, well
+// past the mounted window, so a swipe burst lands on a cached still while the
+// stream spins up. Local entries have no posterUrl and skip out for free.
+const warmedPosters = new Set();
+function warmPosters() {
+  const until = Math.min(activeIdx + POSTER_WARM_AHEAD, feed.comps.length - 1);
+  for (let i = activeIdx + 1; i <= until; i++) {
+    for (const t of feed.comps[i].tiles) {
+      const u = t.cut.asset.posterUrl;
+      if (!u || warmedPosters.has(u)) continue;
+      warmedPosters.add(u);
+      new Image().src = u;
+    }
+  }
+}
+
 /** Reconcile page DOM with feed.comps (after configure/extend/trim). */
 function syncPages() {
   const comps = feed.comps;
@@ -249,28 +328,27 @@ function syncPages() {
     }
     page.el.style.top = (i * 100) + '%';
   });
+  applyWindow();
 }
 
+/** Returns true when the pager actually moved (the drag release needs the
+ *  refusal to spring back instead of committing into a wall). */
 function goTo(idx, animated = true) {
   const comps = feed.comps;
-  if (idx < 0 || idx >= comps.length || idx === activeIdx) return;
-  const prevPage = pageAt(activeIdx);
+  if (idx < 0 || idx >= comps.length || idx === activeIdx) return false;
   activeIdx = idx;
-  const page = pageAt(idx);
-  page?.setActive(true); // both pages live during the slide — no black gap
+  // The window shift does all the media work in place: incoming preview
+  // resumes (it was paused on the exact frame it shows — no black, no jump),
+  // outgoing live page freezes as a preview and keeps its frame through the
+  // slide, the far neighbour tears down (reporting its dwell).
+  applyWindow();
   applyTrack(animated);
   if (animated) pageBusyUntil = performance.now() + PAGE_TRANSITION_MS + 60;
-  if (prevPage && prevPage !== page) {
-    if (animated) {
-      setTimeout(() => { if (pageAt(activeIdx) !== prevPage) prevPage.setActive(false); }, PAGE_TRANSITION_MS + 40);
-    } else {
-      prevPage.setActive(false);
-    }
-  }
   updateCaption();
   // Append (and possibly head-trim) OUTSIDE the slide so the compensating
   // instant re-offset can never cancel the animation mid-flight.
   setTimeout(maybeExtend, animated ? PAGE_TRANSITION_MS + 60 : 0);
+  return true;
 }
 
 const next = () => goTo(activeIdx + 1);
@@ -296,9 +374,8 @@ function applyConfig() {
     pages.clear();
     audioFocus.clear();
     activeIdx = 0;
-    syncPages();
+    syncPages(); // applies the live/preview window around page 0
     applyTrack(false);
-    pageAt(0)?.setActive(true);
     updateCaption();
   }
   updateEmptyState();
@@ -732,7 +809,7 @@ function wireChrome() {
     updateOptionsUi();
     // live page picks the flag up on its next schedule pass
     const page = pageAt(activeIdx);
-    if (page) { page.setActive(false); page.setActive(true); }
+    if (page) { page.setMode('off'); page.setMode('live'); }
   });
   $('mosaic-sec').addEventListener('input', () => {
     $('mosaic-sec-label').textContent = `${$('mosaic-sec').value}s`;
@@ -814,13 +891,13 @@ function wireInput() {
 
   window.addEventListener('resize', () => applyTrack(false));
 
-  // Minimized/hidden: tear the live page down (reports dwell, frees decoders);
-  // restore on return.
+  // Minimized/hidden: tear every mounted page down (reports dwell, frees
+  // decoders — previews included); the window is restored on return. The
+  // re-snap covers a drag whose release was lost to the hide.
   document.addEventListener('visibilitychange', () => {
-    const page = pageAt(activeIdx);
-    if (!page) return;
-    if (document.hidden) page.setActive(false);
-    else page.setActive(true);
+    if (!feed) return;
+    applyWindow();
+    if (!document.hidden) applyTrack(false);
   });
   window.addEventListener('pagehide', () => stats.flush());
 }
@@ -931,9 +1008,8 @@ function onHostMessage(data) {
         feed.append(fresh);
         if (wasEmpty && feed.comps.length > 0) {
           activeIdx = 0;
-          syncPages();
+          syncPages(); // applies the live/preview window around page 0
           applyTrack(false);
-          pageAt(0)?.setActive(true);
           updateCaption();
         }
         updateEmptyState();

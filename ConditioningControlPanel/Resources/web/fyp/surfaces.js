@@ -1,11 +1,15 @@
 // Tile surfaces + pages — the DOM/media layer under feed.js's data model.
 //
 // Rules carried over from mobile (they are what keeps this smooth):
-//  - Only the ACTIVE page mounts live <video>/<img> elements; a deactivated page
-//    tears its media down immediately (reporting dwell exactly once) and shows a
-//    dark placeholder. Chromium then releases the decoders.
-//  - Dwell = wall-clock while the surface is active AND playing, accumulated
-//    across stalls; reported once on teardown.
+//  - Pages live in three states now (ported back from the browser FYP, which
+//    solved the black-flash-on-advance first): LIVE (playing, audible),
+//    PREVIEW (media mounted but paused on its first window frame — what a
+//    half-swipe peeks at, and what a committed page resumes from with no
+//    black gap), OFF (torn down, decoders freed). Only the active page is
+//    live; its ±1 neighbours hold preview; everything further is off.
+//  - Dwell = wall-clock while the surface is live AND playing, accumulated
+//    across stalls; reported exactly once on teardown. A preview never plays,
+//    so it banks nothing — promotion to live is when the clock starts.
 //  - The played window must match the scored segId (grid cuts seek to their
 //    grid start; cold cuts score the section actually played).
 //  - Unmount clears src + load() so the decoder frees now, not at GC time.
@@ -16,6 +20,12 @@ const SWAP_MS = 260;          // cross-slide duration on a committed swap
 const DRAG_RESISTANCE = 0.7;  // finger-follow while dragging
 const COMMIT_DIST = 64;       // px to commit a swap
 const COMMIT_VELOCITY = 0.8;  // px/ms
+// Movement below this never locks a drag axis — the release is a tap. The
+// first travel past it picks the axis: 'x' trades this tile (the drag that
+// was always here), 'y' hands the gesture to the pager so the whole track
+// follows the pointer (browser-FYP parity).
+const DRAG_LOCK_PX = 8;
+const VELOCITY_WINDOW_MS = 120; // release velocity reads the last ~120ms only
 const ERROR_ADVANCE_MS = 1200; // never machine-gun a broken pack
 const MAX_ERROR_SWAPS = 3;     // per mounted slot; then the visible fail state stays
 const MORPH_FADE_OUT_MS = 220;
@@ -32,9 +42,25 @@ function markFailed(el, cut) {
   el.appendChild(note);
 }
 
+/** Release velocity over the last ~VELOCITY_WINDOW_MS of samples, px/ms. */
+function dragVelocity(samples, k) {
+  const last = samples[samples.length - 1];
+  if (!last) return 0;
+  let first = samples[0];
+  for (const p of samples) {
+    if (last.t - p.t <= VELOCITY_WINDOW_MS) { first = p; break; }
+  }
+  const dt = last.t - first.t;
+  if (dt <= 0) return 0;
+  return (last[k] - first[k]) / dt;
+}
+
 /**
- * One live media surface for a cut. Returns { el, stop(), setMuted(), setAutoAdvance() }.
- * ctx: { onEnded, onError, onAssetMeta, report(segId, dwellMs, clipLenMs), advances }
+ * One media surface for a cut. Returns { el, stop(), setMuted(), setAutoAdvance(),
+ * setPreview(), failed }. ctx: { onEnded, onError, onAssetMeta,
+ * report(segId, dwellMs, clipLenMs), advances, preview }. Born with ctx.preview
+ * it loads + seeks but never plays: a paused element showing its window's first
+ * frame, ready to resume the instant the page goes live.
  */
 function createVideoSurface(cut, ctx) {
   const el = document.createElement('div');
@@ -49,11 +75,15 @@ function createVideoSurface(cut, ctx) {
   // steered by timeupdate before they ever get there).
   video.loop = !(ctx.autoAdvance && ctx.advances);
   video.style.objectFit = cut.fit;
+  // Remote entries carry a still; local files don't need one (the paused
+  // first frame IS the poster once metadata lands). Never black either way.
+  if (cut.asset.posterUrl) video.poster = cut.asset.posterUrl;
   el.appendChild(video);
 
   let cutStart = null;   // seconds; null until metadata
   let windowLen = null;  // null = whole-video cut
   let finished = false;
+  let previewing = !!ctx.preview;
   let autoAdvance = ctx.autoAdvance;
   // Retention attribution (set at metadata; cold cuts score what actually played).
   let scoreSegId = null;
@@ -76,8 +106,9 @@ function createVideoSurface(cut, ctx) {
     closeDwell();
     // There is no user-facing pause on the reel, so an unrequested pause while
     // the surface is live is an interruption — resume it (mobile parity). The
-    // `reported` guard keeps teardown's own pause from re-kicking playback.
-    if (!reported && !finished && !document.hidden && video.error == null) {
+    // `reported` guard keeps teardown's own pause from re-kicking playback,
+    // and `previewing` keeps a demoted page frozen on its frame.
+    if (!reported && !finished && !previewing && !document.hidden && video.error == null) {
       video.play().catch(() => { /* teardown race */ });
     }
   });
@@ -143,15 +174,31 @@ function createVideoSurface(cut, ctx) {
     ctx.onEnded();
   }
 
-  video.play().catch(() => { /* autoplay policy is disabled via browser args */ });
+  // A preview only buffers + seeks; playback (and dwell) starts on promotion.
+  if (!previewing) video.play().catch(() => { /* autoplay policy is disabled via browser args */ });
 
   return {
     el,
     cut,
+    /** A slot promoting a preview checks this to self-heal a dead file (#562). */
+    get failed() { return video.error != null; },
     setMuted(m) { video.muted = m; },
     setAutoAdvance(on) {
       autoAdvance = on;
       video.loop = !(on && ctx.advances);
+    },
+    /** live ⇄ preview without remounting: pause holds the frame (and the warm
+     *  buffer), play resumes exactly where the window left off. */
+    setPreview(on) {
+      if (on === previewing) return;
+      previewing = on;
+      if (on) {
+        closeDwell();
+        video.muted = true; // a peeked page must never talk over the live one
+        try { video.pause(); } catch { /* ignore */ }
+      } else {
+        video.play().catch(() => { /* teardown race */ });
+      }
     },
     /** Teardown: report dwell exactly once, then free the decoder NOW. */
     stop() {
@@ -169,7 +216,9 @@ function createVideoSurface(cut, ctx) {
   };
 }
 
-/** GIF sibling: always "playing", dwell is wall-clock, auto-advance is a timer. */
+/** GIF sibling: a GIF cannot pause, so preview only changes the accounting —
+ *  dwell is wall-clock while LIVE (not since mount), auto-advance is a timer
+ *  armed only while live. */
 function createGifSurface(cut, ctx) {
   const el = document.createElement('div');
   el.className = 'surface';
@@ -179,11 +228,19 @@ function createGifSurface(cut, ctx) {
   img.style.objectFit = cut.fit;
   el.appendChild(img);
 
-  const start = performance.now();
+  let previewing = !!ctx.preview;
+  let dwellAccum = 0;
+  let watchStart = previewing ? null : performance.now();
   let reported = false;
   let finished = false;
+  let failed = false;
   let advTimer = null;
   let metaSent = false;
+  let autoAdvance = ctx.autoAdvance;
+
+  const closeDwell = () => {
+    if (watchStart != null) { dwellAccum += performance.now() - watchStart; watchStart = null; }
+  };
 
   img.addEventListener('load', () => {
     if (!metaSent && cut.asset.width == null && img.naturalWidth > 0 && img.naturalHeight > 0) {
@@ -195,13 +252,14 @@ function createGifSurface(cut, ctx) {
   // GIFs had NO error listener at all — a broken image sat as the bare browser
   // glyph with nothing reported anywhere (#562).
   img.addEventListener('error', () => {
+    failed = true;
     markFailed(el, cut);
     ctx.onError?.(cut, { code: 0, message: 'image failed to load' });
   });
 
   function arm(on) {
     if (advTimer != null) { clearTimeout(advTimer); advTimer = null; }
-    if (on && ctx.advances) {
+    if (on && !previewing && ctx.advances) {
       advTimer = setTimeout(() => {
         if (finished) return;
         finished = true;
@@ -209,19 +267,26 @@ function createGifSurface(cut, ctx) {
       }, cut.lenSec * 1000);
     }
   }
-  arm(ctx.autoAdvance);
+  arm(autoAdvance);
 
   return {
     el,
     cut,
+    get failed() { return failed; },
     setMuted() { /* GIFs are silent */ },
-    setAutoAdvance(on) { arm(on); },
+    setAutoAdvance(on) { autoAdvance = on; arm(on); },
+    setPreview(on) {
+      if (on === previewing) return;
+      previewing = on;
+      if (on) { closeDwell(); arm(false); }
+      else { watchStart = performance.now(); arm(autoAdvance); }
+    },
     stop() {
       arm(false);
       if (!reported) {
         reported = true;
-        const dwell = performance.now() - start;
-        if (dwell > 0) ctx.report(segId(cut.asset.id, 0), dwell, cut.lenSec * 1000);
+        closeDwell();
+        if (dwellAccum > 0) ctx.report(segId(cut.asset.id, 0), dwellAccum, cut.lenSec * 1000);
       }
       img.removeAttribute('src');
       el.remove();
@@ -273,8 +338,11 @@ function createTileSlot(page, tileIndex, ctx) {
    *  Under auto-advance the advancing tile already pages away on its own error
    *  timer; every other case (manual browsing — the DEFAULT, autoAdvance is off —
    *  and non-advancing tiles) self-heals here. Capped so a mostly-broken library
-   *  settles into visible fail states rather than swap-looping. */
+   *  settles into visible fail states rather than swap-looping. Live pages only:
+   *  a preview that failed waits for promotion (setPreview re-checks then) —
+   *  swapping an off-screen page's tiles would churn the pool for nobody. */
   function scheduleErrorSwap() {
+    if (!ctx.isLive()) return;
     if (ctx.isAutoAdvance() && tile?.advances) return;
     if (errorSwaps >= MAX_ERROR_SWAPS || errSwapTimer != null) return;
     errSwapTimer = setTimeout(() => {
@@ -297,10 +365,11 @@ function createTileSlot(page, tileIndex, ctx) {
     slot.classList.toggle('blurred', !!t.blurred);
   }
 
-  function surfaceCtx(t) {
+  function surfaceCtx(t, preview) {
     return {
       advances: t.advances,
       autoAdvance: ctx.isAutoAdvance(),
+      preview: !!preview,
       onEnded: () => ctx.onAdvance(),
       onError: (cut, detail) => {
         ctx.onMediaError?.(cut.asset, detail);
@@ -311,14 +380,14 @@ function createTileSlot(page, tileIndex, ctx) {
     };
   }
 
-  function mount(t) {
+  function mount(t, preview) {
     mountGen++;
     tile = t;
     errorSwaps = 0;
     clearErrorSwap();
     applyRect(t);
     if (surface) { surface.stop(); surface = null; }
-    const s = createSurface({ ...t.cut, fit: t.fit }, surfaceCtx(t));
+    const s = createSurface({ ...t.cut, fit: t.fit }, surfaceCtx(t, preview));
     s.el.style.transform = 'translateX(0)';
     clip.appendChild(s.el);
     surface = s;
@@ -377,13 +446,19 @@ function createTileSlot(page, tileIndex, ctx) {
     slideTo(cut, dir);
   }
 
-  // Pointer drag: horizontal swap; a near-still release is a tap (audio focus).
+  // Pointer drag. The first DRAG_LOCK_PX of travel lock an axis: 'x' is the
+  // horizontal tile trade that was always here; 'y' hands the gesture to the
+  // pager (via ctx.onPageDragMove/End) so the whole track follows the pointer
+  // — half-swipe peeks the neighbour's preview, release commits or springs
+  // back (browser-FYP parity). A gesture that never locks is a tap.
   let dragId = null;
+  let dragAxis = null;   // null until locked: 'x' | 'y'
   let dragStartX = 0;
   let dragStartY = 0;
   let lastX = 0;
   let lastT = 0;
-  let velocity = 0;
+  let velocity = 0;      // instantaneous, for the 'x' trade (unchanged feel)
+  let samples = [];      // windowed, for the 'y' release (flick detection)
   slot.addEventListener('pointerdown', (e) => {
     // A press on a chevron must never start a drag: setPointerCapture below
     // retargets the whole gesture (including the compatibility `click`) to the
@@ -391,33 +466,56 @@ function createTileSlot(page, tileIndex, ctx) {
     if (e.target.closest?.('.chev')) return;
     if (e.button !== 0 || sliding || !surface) return;
     dragId = e.pointerId;
+    dragAxis = null;
     dragStartX = lastX = e.clientX;
     dragStartY = e.clientY;
     lastT = performance.now();
     velocity = 0;
+    samples = [{ t: lastT, x: e.clientX, y: e.clientY }];
     slot.setPointerCapture(e.pointerId);
   });
   slot.addEventListener('pointermove', (e) => {
     if (dragId !== e.pointerId || !surface) return;
+    // A mouse release can slip past pointer capture (a native drag or a focus
+    // steal swallows it) and plain hover moves would then steer the drag
+    // forever. No button held means the drag is over: settle with what we have.
+    if (dragAxis != null && e.pointerType !== 'touch' && e.buttons === 0) { endDrag(e); return; }
     const now = performance.now();
     const dt = now - lastT;
     if (dt > 0) velocity = (e.clientX - lastX) / dt;
     lastX = e.clientX;
     lastT = now;
+    samples.push({ t: now, x: e.clientX, y: e.clientY });
+    if (samples.length > 8) samples.shift();
     const dx = e.clientX - dragStartX;
-    if (Math.abs(dx) > 6) {
+    const dy = e.clientY - dragStartY;
+    if (dragAxis == null) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_LOCK_PX) return;
+      // a page slide is still animating: let it land, keep sampling
+      if (ctx.isPagerBusy?.()) return;
+      dragAxis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (dragAxis === 'x') {
       surface.el.style.transition = 'none';
       surface.el.style.transform = `translateX(${dx * DRAG_RESISTANCE}px)`;
+    } else {
+      ctx.onPageDragMove(dy);
     }
   });
   const endDrag = (e) => {
     if (dragId !== e.pointerId) return;
     dragId = null;
+    const axis = dragAxis;
+    dragAxis = null;
+    if (axis === 'y') {
+      ctx.onPageDragEnd(e.clientY - dragStartY, dragVelocity(samples, 'y'));
+      return;
+    }
     if (!surface) return;
     surface.el.style.transition = '';
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    if (Math.abs(dx) > COMMIT_DIST || Math.abs(velocity) > COMMIT_VELOCITY) {
+    if (axis === 'x' && (Math.abs(dx) > COMMIT_DIST || Math.abs(velocity) > COMMIT_VELOCITY)) {
       commit(dx < 0 || (Math.abs(dx) <= COMMIT_DIST && velocity < 0) ? 'next' : 'back');
     } else if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
       springBack();
@@ -427,7 +525,14 @@ function createTileSlot(page, tileIndex, ctx) {
     }
   };
   slot.addEventListener('pointerup', endDrag);
-  slot.addEventListener('pointercancel', (e) => { if (dragId === e.pointerId) { dragId = null; springBack(); } });
+  slot.addEventListener('pointercancel', (e) => {
+    if (dragId !== e.pointerId) return;
+    dragId = null;
+    const axis = dragAxis;
+    dragAxis = null;
+    if (axis === 'y') ctx.onPageDragEnd(0, 0); // 0 travel: pager springs back
+    else springBack();
+  });
 
   // Chevrons drive the same commit path as the drag: ‹ = history-back (what a
   // rightward drag does), › = fresh pick (what a leftward drag does).
@@ -450,9 +555,18 @@ function createTileSlot(page, tileIndex, ctx) {
     get tile() { return tile; },
     get surface() { return surface; },
     get sliding() { return sliding; },
+    /** A pointer is mid-gesture on this slot. The morph checks it: removing a
+     *  slot that holds pointer capture silently kills the rest of the drag. */
+    get dragging() { return dragId != null; },
     mount,
     unmount,
     applyRect,
+    /** live ⇄ preview in place. Promotion re-checks a preview that failed
+     *  while off-screen so the self-heal swap (#562) still happens. */
+    setPreview(on) {
+      surface?.setPreview(on);
+      if (!on && surface?.failed) scheduleErrorSwap();
+    },
     /** Eye control: the exact chevron path (same guard, same cross-slide).
      *  Returns false when the slot could not act (mid-slide / not mounted). */
     commitSwap(dir) {
@@ -466,11 +580,13 @@ function createTileSlot(page, tileIndex, ctx) {
 }
 
 /**
- * One feed page. Created for every composition in the window; only mounts live
- * media while active. ctx:
+ * One feed page. Created for every composition in the window; media mounts in
+ * 'preview' (paused first frame — the pager's neighbours) or 'live' (playing).
+ * ctx:
  *   { onAdvance(compKey), onSwap(compKey, i, dir), onTapAudio(compKey, i),
  *     onAssetMeta, report, isAutoAdvance(), isMuted(), audioGlow() -> bool,
- *     audioFocus() -> index|null }
+ *     audioFocus() -> index|null, isPagerBusy() -> bool,
+ *     onPageDragMove(compKey, dy), onPageDragEnd(compKey, dy, vy) }
  */
 export function createPage(comp, ctx) {
   const el = document.createElement('div');
@@ -479,7 +595,7 @@ export function createPage(comp, ctx) {
   inner.className = 'page-inner';
   el.appendChild(inner);
 
-  let active = false;
+  let mode = 'off';      // 'off' | 'preview' | 'live'
   let slots = [];
   let morphTimer = null;
   let morphing = false;  // a morph's fade-out is in flight
@@ -491,7 +607,9 @@ export function createPage(comp, ctx) {
   }
 
   function applyAudio() {
-    const ai = audioIndex();
+    // Only the LIVE page ever speaks: previews are all-muted, no glow, so a
+    // half-swipe peek can never talk over the clip actually playing.
+    const ai = mode === 'live' ? audioIndex() : -1;
     const muted = ctx.isMuted();
     // Nothing is audible while muted (or when no tile carries audio at all) —
     // in that case no tile glows either.
@@ -505,9 +623,13 @@ export function createPage(comp, ctx) {
   function slotCtx(i) {
     return {
       isAutoAdvance: ctx.isAutoAdvance,
+      isLive: () => mode === 'live',
+      isPagerBusy: ctx.isPagerBusy,
       onAdvance: () => ctx.onAdvance(comp.key),
       onSwap: (idx, dir) => ctx.onSwap(comp.key, idx, dir),
       onTapAudio: (idx) => { ctx.onTapAudio(comp.key, idx); applyAudio(); },
+      onPageDragMove: (dy) => ctx.onPageDragMove(comp.key, dy),
+      onPageDragEnd: (dy, vy) => ctx.onPageDragEnd(comp.key, dy, vy),
       onAssetMeta: ctx.onAssetMeta,
       onMediaError: ctx.onMediaError,
       report: ctx.report,
@@ -515,11 +637,11 @@ export function createPage(comp, ctx) {
     };
   }
 
-  function mountTiles() {
+  function mountTiles(preview) {
     slots = comp.tiles.map((t, i) => {
       const slot = createTileSlot(el, i, slotCtx(i));
       inner.appendChild(slot.el);
-      slot.mount(t);
+      slot.mount(t, preview);
       return slot;
     });
     applyAudio();
@@ -533,16 +655,19 @@ export function createPage(comp, ctx) {
   /** The morph itself (fade out -> re-compose -> fade in), shared by the timer and
    *  by the eyes-closed gesture. Returns false when it could not run. */
   function runMorph() {
-    if (!active || morphing || comp.layout !== 'random') return false;
+    if (mode !== 'live' || morphing || comp.layout !== 'random') return false;
+    // A finger (or held mouse) on a slot: remounting would strip its pointer
+    // capture and strand the drag mid-air. Try again on the next tick instead.
+    if (slots.some((s) => s.dragging)) { scheduleMorph(); return false; }
     morphing = true;
     if (morphTimer != null) { clearTimeout(morphTimer); morphTimer = null; }
     inner.style.transition = `opacity ${MORPH_FADE_OUT_MS}ms ease-in`;
     inner.style.opacity = '0';
     setTimeout(() => {
       morphing = false;
-      if (!active) { inner.style.opacity = '1'; return; }
+      if (mode !== 'live') { inner.style.opacity = '1'; return; }
       const tiles = ctx.onMorph(comp.key); // feed re-composes in place
-      if (tiles) { unmountTiles(); mountTiles(); }
+      if (tiles) { unmountTiles(); mountTiles(false); }
       inner.style.transition = `opacity ${MORPH_FADE_IN_MS}ms ease-out`;
       inner.style.opacity = '1';
       scheduleMorph();
@@ -554,7 +679,7 @@ export function createPage(comp, ctx) {
   // tail of a morph would stomp the fade-in transition it was just given.
   function scheduleMorph() {
     if (morphTimer != null) { clearTimeout(morphTimer); morphTimer = null; }
-    if (!active || comp.layout !== 'random' || !ctx.mosaicAutoChange()) return;
+    if (mode !== 'live' || comp.layout !== 'random' || !ctx.mosaicAutoChange()) return;
     morphTimer = setTimeout(runMorph, Math.max(3000, ctx.mosaicChangeMs()));
   }
 
@@ -568,7 +693,8 @@ export function createPage(comp, ctx) {
     el,
     key: comp.key,
     comp,
-    get active() { return active; },
+    get mode() { return mode; },
+    get active() { return mode === 'live'; },
 
     // ---- eye control ----
     /** Tiles currently mounted (falls back to the model when inactive). */
@@ -594,11 +720,27 @@ export function createPage(comp, ctx) {
     /** Re-compose the whole mosaic now, with the timer's fade choreography. */
     morphNow() { return runMorph(); },
 
-    setActive(on) {
-      if (on === active) return;
-      active = on;
-      if (on) { mountTiles(); scheduleMorph(); }
-      else { cancelMorph(); unmountTiles(); }
+    /**
+     * The pager window drives this. Off→(preview|live) mounts media (paused or
+     * playing); live⇄preview flips the SAME surfaces in place — pause holds the
+     * frame and the buffer, play resumes it, and that in-place resume is what
+     * killed the black flash. Only →off tears down (reporting dwell once).
+     */
+    setMode(next) {
+      if (next === mode) return;
+      const prev = mode;
+      mode = next;
+      if (next === 'off') { cancelMorph(); unmountTiles(); return; }
+      if (prev === 'off') mountTiles(next === 'preview');
+      else for (const s of slots) s.setPreview(next === 'preview');
+      if (next === 'live') {
+        // the toggle may have flipped while this page waited in preview
+        for (const s of slots) s.surface?.setAutoAdvance(ctx.isAutoAdvance() && !!s.tile?.advances);
+        scheduleMorph();
+      } else {
+        cancelMorph();
+      }
+      applyAudio();
     },
     applyAudio,
     /** Auto-advance flipped while live: re-arm the surfaces. */
