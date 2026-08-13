@@ -831,6 +831,24 @@ namespace ConditioningControlPanel.Services
             try { BambiSprite.InvalidateStablePrompt(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: prompt cache invalidation failed: {E}", ex.Message); }
 
+            // The companion identity changed with the mod, so the chat history's voice did too.
+            // Same two moves PersonalityService.SetActivePreset makes for a preset switch, because
+            // history out-few-shots any prompt change: fence pre-switch assistant turns out of the
+            // wire window, and drop the bark echoes recorded under the OLD companion name — the
+            // fence deliberately keeps BarkEcho turns, so «OldName said aloud: …» would otherwise
+            // sit next to the new mod's echoes and the model roleplays a two-speaker transcript
+            // (observed 2026-08-13, Bambi → Drone).
+            try
+            {
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+                    App.Settings.Save();
+                }
+                App.Brain?.OnModSwitched();
+            }
+            catch (Exception ex) { _log?.Debug("ActivateMod: companion voice fence failed: {E}", ex.Message); }
+
             // If the active companion isn't supported by the new mod, fall back to first supported companion
             if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
             {

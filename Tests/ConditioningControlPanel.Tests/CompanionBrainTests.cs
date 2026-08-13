@@ -649,4 +649,30 @@ public class CompanionBrainTests
         Assert.Empty(brain.Session.Turns);
         Assert.Empty(store.Writes);
     }
+
+    // ---------- mod switch ----------
+
+    [Fact]
+    public async Task OnModSwitched_PurgesBarkEchoes_AndKeepsTheDialogue()
+    {
+        // 0813: bark echoes carry the companion name they were recorded under, and the persona
+        // fence deliberately keeps BarkEcho turns — so after Bambi → Drone the window held
+        // «BambiSprite said aloud: …» next to «DroneOS said aloud: …» and the model answered
+        // with a two-speaker roleplay transcript. The mod switch must drop the stale echoes
+        // (they replay from the new mod's bark_rules.json anyway) without touching dialogue.
+        var transport = new FakeTransport();
+        var store = new FakeStore();
+        using var brain = Build(transport, store);
+
+        await brain.ChatAsync("hi");
+        brain.Session.Append(TurnKind.BarkEcho,
+            CompanionTurn.FormatBarkEcho("BambiSprite", "such a good girl~"), voiced: true);
+        brain.Session.Append(TurnKind.BarkEcho,
+            CompanionTurn.FormatBarkEcho("BambiSprite", "spiral time~"), voiced: true);
+
+        brain.OnModSwitched();
+
+        Assert.DoesNotContain(brain.Session.Turns, t => t.Kind == TurnKind.BarkEcho);
+        Assert.Equal(2, brain.Session.Turns.Count(t => t.IsDialogue)); // user + reply survive
+    }
 }
