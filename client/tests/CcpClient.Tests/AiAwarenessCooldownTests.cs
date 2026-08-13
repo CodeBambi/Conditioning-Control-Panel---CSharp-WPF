@@ -29,6 +29,9 @@ public class AiAwarenessCooldownTests
         var clock = new Clock();
         var registry = new AiCooldownRegistry(clock.Read);
 
+        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // non-empty so an emptied enum can never silence them invisibly.
+        Assert.NotEmpty(Enum.GetValues<AiCooldownKind>());
         foreach (var kind in Enum.GetValues<AiCooldownKind>())
         {
             Assert.IsType<AiCooldownVerdict.Admitted>(registry.Check(kind, "k"));

@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 // SP-065 (board row 49 part 2): mechanical skip/count floor for the client test suite.
+// SP-066 (board row 49 part 1, framing e): the pin is now NAME-ANCHORED — per project
+// { total, allowedSkips[] }; expected skips are pinned by fully-qualified test NAME,
+// never by count (closes SP-065's counts-not-identity limit; machine-portable).
 // Runs BOTH test projects with TRX loggers into a per-run temp dir OUTSIDE the worktree,
-// then post-processes the results against an exact per-project pin (floor.json).
+// then post-processes the results against the exact per-project pin (floor.json).
 //
-// Green requires ALL THREE: dotnet test exit 0, every fail-closed TRX check, and the pin.
+// Green requires ALL THREE: dotnet test exit 0, every fail-closed TRX check, and the pin:
+// zero bad outcomes, passed + skipped == total, and every NotExecuted result's testName
+// present in allowedSkips (offender NAMED in the failure). May-skip semantics: a listed
+// test that runs and passes is green.
 // Exit 0 = floor met. Exit 1 = any violation (each prints a loud named reason).
 //
 // Never sets CCP_DATA_ROOT (port-workflow.md:204 — a process-wide override makes the
@@ -49,11 +55,22 @@ function readPin() {
     fail(`pin file ${PIN_PATH} has no "projects" object`);
   }
   for (const [name, entry] of Object.entries(pin.projects)) {
-    if (!entry || !Number.isInteger(entry.passed) || !Number.isInteger(entry.skipped)) {
-      fail(`pin file ${PIN_PATH} has no integer {passed, skipped} entry for ${name}`);
+    if (!entry || !Number.isInteger(entry.total) || !Array.isArray(entry.allowedSkips) ||
+        !entry.allowedSkips.every((s) => typeof s === "string" && s.length > 0)) {
+      fail(`pin file ${PIN_PATH} has no {total: int, allowedSkips: string[]} entry for ${name}`);
     }
   }
   return pin;
+}
+
+// SP-066: testName matching is exact on the pre-'(' portion (xunit theory rows serialize
+// with arguments, e.g. Class.Method(x: 1)); a name with no parens matches whole.
+function skipNameAllowed(testName, allowedSkips) {
+  if (allowedSkips.includes(testName)) {
+    return true;
+  }
+  const base = testName.split("(")[0];
+  return base !== testName && allowedSkips.includes(base);
 }
 
 // Test-project DISCOVERY from the solution (pre-completion consult hole: a hardcoded list
@@ -164,11 +181,21 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   // (Assert.SkipWhen) yields a UnitTestResult with outcome="NotExecuted" while
   // Counters/@notExecuted stays 0 and @executed excludes it — the Counters arithmetic does
   // NOT close over skips (executed + notExecuted = 897 != total 898 with one skip). So the
-  // skip count and all consistency checks anchor on the result list, never on Counters
-  // arithmetic.
+  // skip count, the skip NAMES (SP-066 name-anchored pin), and all consistency checks
+  // anchor on the result list, never on Counters arithmetic.
   const outcomes = {};
-  for (const m of xml.matchAll(/<UnitTestResult\s[^>]*\boutcome="([^"]+)"/g)) {
-    outcomes[m[1]] = (outcomes[m[1]] ?? 0) + 1;
+  const skippedNames = [];
+  for (const m of xml.matchAll(/<UnitTestResult\s[^>]*?\/?>/g)) {
+    const tag = m[0];
+    const outcome = tag.match(/\boutcome="([^"]*)"/)?.[1];
+    const testName = tag.match(/\btestName="([^"]*)"/)?.[1];
+    if (!outcome || !testName) {
+      fail(`${projectName}: a <UnitTestResult> lacks outcome or testName — unparseable results`);
+    }
+    outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+    if (outcome === "NotExecuted") {
+      skippedNames.push(testName);
+    }
   }
   const resultCount = Object.values(outcomes).reduce((a, b) => a + b, 0);
   if (resultCount === 0) {
@@ -192,15 +219,27 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
     const exotic = Object.entries(outcomes).filter(([k]) => k !== "Passed" && k !== "NotExecuted").map(([k, v]) => `${k}=${v}`).join(", ");
     fail(`${projectName}: Passed(${passed}) + NotExecuted(${skipped}) != ${resultCount} results — unexpected outcome(s): ${exotic || "none named"}`);
   }
-  if (counters.passed !== pinEntry.passed || skipped !== pinEntry.skipped) {
+  if (resultCount !== pinEntry.total) {
     fail(
-      `${projectName}: FLOOR VIOLATION — passed ${counters.passed} (pin ${pinEntry.passed}), ` +
-      `skipped ${skipped} (pin ${pinEntry.skipped}). A count drift in EITHER direction or an ` +
-      `unexpected skip fails the contract (SP-065). If this change is intentional, bump ` +
-      `client/tests/floor/floor.json in the SAME commit and state the reason in the message.`
+      `${projectName}: FLOOR VIOLATION — total drift: ${resultCount} result(s) (pin total ${pinEntry.total}). ` +
+      `A count drift in EITHER direction fails the contract (SP-065/SP-066). If this change ` +
+      `is intentional, bump client/tests/floor/floor.json in the SAME commit and state the ` +
+      `reason in the message.`
     );
   }
-  return { passed: counters.passed, skipped, total: counters.total, trxPath };
+  for (const name of skippedNames) {
+    if (!skipNameAllowed(name, pinEntry.allowedSkips)) {
+      fail(
+        `${projectName}: FLOOR VIOLATION — unexpected skip: ${name} is NotExecuted but NOT in ` +
+        `allowedSkips. An unexpected skip fails the contract (SP-066 framing e/f). Either fix ` +
+        `the precondition so the test runs, or — only under the admission rule in floor.json ` +
+        `(machine/OS property, never a quarantine; the SP-057 pin and the named privacy flake ` +
+        `are permanently banned) — pin the name in allowedSkips in the SAME commit, naming the ` +
+        `machine class where it executes.`
+      );
+    }
+  }
+  return { passed: counters.passed, skipped, skippedNames, total: counters.total, trxPath };
 }
 
 function runProject(project, runDir) {
@@ -250,7 +289,9 @@ export function main() {
         fail(`dotnet test exited ${exitCode} for ${project.name} — runner-level failure (see tail below)`);
       }
       const summary = verifyProjectResults(project.name, resultsDir, pin.projects[project.name], runStartMs);
-      summaries.push(`${project.name}: ${summary.passed}/${pin.projects[project.name].passed} passed, ${summary.skipped}/${pin.projects[project.name].skipped} skipped`);
+      const pinEntry = pin.projects[project.name];
+      const skipNote = summary.skippedNames.length > 0 ? ` [${summary.skippedNames.join(", ")}]` : "";
+      summaries.push(`${project.name}: ${summary.passed + summary.skipped}/${pinEntry.total} total, ${summary.skipped} skipped${skipNote}`);
     } catch (err) {
       if (err instanceof FloorError) {
         failures.push(err.message);

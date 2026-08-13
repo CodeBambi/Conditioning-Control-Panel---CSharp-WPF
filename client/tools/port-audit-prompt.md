@@ -9,15 +9,23 @@ Repository: `C:/Code/Conditioning-Control-Panel---CSharp-WPF`, branch `feat/cros
 
    ```
    dotnet build client/CcpClient.sln -c Debug --nologo
-   dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
-   dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
+   node client/tests/floor/check-floor.mjs
    ```
+
+   The second command is the test-floor wrapper (SP-065/SP-066): it runs BOTH test
+   projects with TRX loggers and fails closed on any red, any count drift in either
+   direction, and any skip not pinned by name in `client/tests/floor/floor.json`. A
+   non-zero exit is an audit FAIL — name the wrapper's reason verbatim. Never set
+   `CCP_DATA_ROOT` for it (port-workflow.md:204): the wrapper needs no override, and an
+   override makes the SP-057 pin skip, blinding the exact-count floor it exists to enforce.
 
 3. Check every one of these:
    - build reports 0 warnings and 0 errors;
-   - the observed unit and headless counts match the claim EXACTLY;
-   - skipped is 0 — a skip is a failure here even though the exit code is 0 (that is the
-     vacuous-green class this project has already been bitten by);
+   - the wrapper exits 0 and its `FLOOR OK` line reports totals matching the claim EXACTLY
+     (unit and headless);
+   - any skipped tests are exactly the names pinned in `allowedSkips` — the wrapper itself
+     fails on anything else, so a green wrapper already proves this; report the pinned
+     skip names you observed;
    - `git status --short` is empty;
    - HEAD equals `origin/feat/crossplatform` (run `git fetch origin` first).
 

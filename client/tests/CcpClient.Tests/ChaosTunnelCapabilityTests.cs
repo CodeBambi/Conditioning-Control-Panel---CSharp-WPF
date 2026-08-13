@@ -26,10 +26,11 @@ public sealed class ChaosTunnelCapabilityTests
     [Fact]
     public void Windows_DelegatesToTheSameEngineLoadAsDtrh()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // the delegation branch is Windows-only; the Linux branch has its own test below
-        }
+        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the
+        // skip is pinned by NAME in client/tests/floor/floor.json (allowedSkips; may-skip
+        // semantics — green on Windows, allowed-skipped on Linux).
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delegation branch is Windows-only; the Linux branch has its own test below");
 
         var tunnel = ChaosTunnelCapabilityProbes.ProbeEmbedded();
         var dtrh = DtrhCapabilityProbes.ProbeEmbedded();
@@ -39,10 +40,11 @@ public sealed class ChaosTunnelCapabilityTests
     [Fact]
     public void Linux_UnavailableNamesTheTunnelsOwnTwoGaps()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // exercised on Linux runs (the WSL gate); skipped honestly here
-        }
+        // SP-066: the OS gate REPORTS (Assert.SkipWhen), never a silent return — the skip is
+        // pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on the Linux
+        // machine class — the WSL gate — allowed-skipped on Windows).
+        Assert.SkipWhen(OperatingSystem.IsWindows(),
+            "exercised on Linux runs (the WSL gate); skipped honestly here");
 
         var state = Assert.IsType<CapabilityState.Unavailable>(ChaosTunnelCapabilityProbes.ProbeEmbedded());
         Assert.Equal("unsupported-platform", state.Reason.Code);

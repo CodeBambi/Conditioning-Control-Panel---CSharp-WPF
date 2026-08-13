@@ -17,10 +17,11 @@ public class SecretStoreTests
     [Fact]
     public void WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // OS-gated: the Linux evidence is the probe test below.
-        }
+        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on Windows,
+        // allowed-skipped on Linux).
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "DPAPI is the Windows leg; the Linux evidence is the probe test below");
 
         var root = Path.Combine(Path.GetTempPath(), "ccp-sp033-secrets-" + Guid.NewGuid().ToString("N"));
         try
@@ -34,6 +35,9 @@ public class SecretStoreTests
             Assert.Equal(secretValue, store.Get("ai-cloud-token"));
 
             // The on-disk bytes never carry the plaintext value.
+            // SP-066 framing (c): the loop carries these assertions — pin the source
+            // non-empty first so an empty enumeration can never silence them invisibly.
+            Assert.NotEmpty(Directory.EnumerateFiles(root));
             foreach (var file in Directory.EnumerateFiles(root))
             {
                 Assert.DoesNotContain(secretValue, System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(file)));
@@ -59,10 +63,12 @@ public class SecretStoreTests
     [Fact]
     public async Task LinuxProbe_TypedOutcome_NeverFaked()
     {
-        if (!OperatingSystem.IsLinux())
-        {
-            return; // OS-gated: runs on the WSL2 evidence box (and any Linux CI).
-        }
+        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on the
+        // Linux machine class — the WSL2 evidence box and any Linux CI — allowed-skipped
+        // on Windows).
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "OS-gated: runs on the WSL2 evidence box (and any Linux CI)");
 
         var store = new SecretToolSecretStore();
         var state = await store.ProbeAsync(CancellationToken.None);
@@ -111,10 +117,11 @@ public class SecretStoreTests
     [Fact]
     public void SettingsDocument_CarriesSecretNames_NeverValues()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // DPAPI-backed value storage is the Windows leg; the name-only rule is proven there.
-        }
+        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on Windows,
+        // allowed-skipped on Linux).
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "DPAPI-backed value storage is the Windows leg; the name-only rule is proven there");
 
         var root = Path.Combine(Path.GetTempPath(), "ccp-sp033-names-" + Guid.NewGuid().ToString("N"));
         try

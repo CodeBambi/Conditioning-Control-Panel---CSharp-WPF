@@ -276,6 +276,9 @@ public sealed class AvatarPackTests
     [Fact]
     public void Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource()
     {
+        // SP-066 framing (c): the pack loop carries assertions — pin the registry
+        // non-empty so an emptied pack set turns RED, not vacuous.
+        Assert.NotEmpty(SyntheticAvatarPacks.All);
         foreach (var def in SyntheticAvatarPacks.All)
         {
             foreach (var clip in def.Clips)

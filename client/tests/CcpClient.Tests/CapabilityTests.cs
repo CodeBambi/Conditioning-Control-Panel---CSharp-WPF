@@ -100,6 +100,9 @@ public class CapabilityTests
 
         await runner.RunAllAsync(new CancellationToken(canceled: true));
 
+        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // non-empty so a probe-registry regression turns RED, not vacuous.
+        Assert.NotEmpty(registry.Names);
         foreach (var name in registry.Names)
         {
             var unavailable = Assert.IsType<CapabilityState.Unavailable>(registry.GetState(name));

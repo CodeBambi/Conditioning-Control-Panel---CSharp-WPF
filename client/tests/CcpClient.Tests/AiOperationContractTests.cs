@@ -411,6 +411,9 @@ public class AiOperationContractTests
         RoundTrip<AiAdmission>(new AiAdmission.Suppressed(AiSuppressionKind.Cooldown));
         RoundTrip(new AiMemoryTurn(AiMemoryRole.User, "hi"));
 
+        // SP-066 framing (c): the loop's helper calls carry the assertions — pin the
+        // source non-empty so an emptied sample set can never silence them invisibly.
+        Assert.NotEmpty(VerdictSamples());
         foreach (var verdict in VerdictSamples())
             RoundTrip<AiCommandVerdict>(verdict);
     }
@@ -467,6 +470,9 @@ public class AiOperationContractTests
             new AiCommandData.Media("videos/a.mp4", false),
             new AiCommandData.GetBackToMe("tok", 60, true, "later"),
         ];
+        // SP-066 framing (c): the loop's helper calls carry the assertions — pin the
+        // source non-empty so an emptied sample set can never silence them invisibly.
+        Assert.NotEmpty(samples);
         foreach (var data in samples)
             RoundTrip<AiCommandData>(data);
     }

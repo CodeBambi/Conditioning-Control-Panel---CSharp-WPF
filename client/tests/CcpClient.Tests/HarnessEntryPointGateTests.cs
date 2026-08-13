@@ -19,6 +19,9 @@ public class HarnessEntryPointGateTests
     [Fact]
     public void HarnessEntries_AreSingledOut_TableDrivenOverRegistry()
     {
+        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // non-empty (the count pin below covers the Harness subset; this covers All).
+        Assert.NotEmpty(HarnessEntryPoints.All);
         foreach (var (flag, disposition) in HarnessEntryPoints.All)
         {
             var found = HarnessEntryPoints.HarnessFlagsIn([flag]);
