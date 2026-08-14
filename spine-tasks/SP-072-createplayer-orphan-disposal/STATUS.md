@@ -1,7 +1,7 @@
 ## STATUS: SP-072 — An abandoned player construction must never reach the mixer
 
-**Current Step:** 1
-**Last Updated:** 2026-08-14 (authoring)
+**Current Step:** 5
+**Last Updated:** 2026-08-14 (worker, Step 4 complete — record.md full, pre-completion solo consult verdict adopted (load-bearing-order comments), 4 consecutive contract greens incl. 1 cold; Step 5 final checks clean)
 **Blockers:** none
 
 **Floor at authoring:** 1010 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -42,79 +42,66 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 ---
 
 ### Step 1: Census the callers, decide the bound, design the orphan invariant
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 > ⚠️ Hydrate: expand the census rows once the call-site count is confirmed by your own grep
 
-- [ ] Update STATUS.md before starting work
-- [ ] Pre-fix observation captured under `evidence/` (a late construction reaches the mixer and nothing
+- [x] Update STATUS.md before starting work
+- [x] Pre-fix observation captured under `evidence/` (a late construction reaches the mixer and nothing
       disposes it); if unobservable against the real backends, say so and capture the seam-level equivalent
       with the difference named
-- [ ] **Census of every caller of both `CreatePlayer` seams** — file:line, reaching thread(s), what is held
+- [x] **Census of every caller of both `CreatePlayer` seams** — file:line, reaching thread(s), what is held
       while waiting, existing typed no-player path?, cost of a wedged construction beyond the calling thread
-- [ ] Decision-rule branch chosen and recorded (bound lands here / bound partial + remainder named as a row)
-- [ ] Orphan invariant written before code (never reaches `MasterMixer`, never plays, disposed exactly once,
+- [x] Decision-rule branch chosen and recorded (bound lands here / bound partial + remainder named as a row)
+- [x] Orphan invariant written before code (never reaches `MasterMixer`, never plays, disposed exactly once,
       disposal ordered against device teardown, ordinary path unchanged)
-- [ ] Placement decided on **testability** grounds and justified; residual read-only line named
-- [ ] SP-025 off-sync-context rule preserved and re-argued if `OffSyncContext` or its inline duplicate moves
-- [ ] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
+- [x] Placement decided on **testability** grounds and justified; residual read-only line named
+- [x] SP-025 off-sync-context rule preserved and re-argued if `OffSyncContext` or its inline duplicate moves
+- [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement orphan safety, then the bound your census authorized
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Abandonment decided **before** the player can reach the mixer; abandoned player disposed on the
-      constructing thread and never added
-- [ ] Exactly one path disposes an abandoned player, exactly once, including during concurrent device
-      teardown; ordering primitive named and the deadlock order argued against SP-071's backgrounded
-      `_backend.Dispose()`
-- [ ] Non-abandoned path observably unchanged (same object, volume, attachment, wrapper)
-- [ ] Bound implemented **only if Step 1 authorized it**, using the existing typed no-player vocabulary —
-      never a null or placeholder player
-- [ ] Transition-only logging (one line per abandonment); nothing new observed, persisted, or transmitted
-- [ ] No awaitable UI dispatch, no `SynchronizationContext.Current` capture, no new dispatch primitive
-- [ ] Every SP-070 / SP-071 property preserved (teardown handoff, give-up never touches the backend,
-      exactly-once backend disposal, `Dispose` idempotence, cooldown + single-flight probe, play seam never
-      takes `_initLock`)
-- [ ] Per-file `git diff` summarized; no edit outside File Scope
+- [x] Abandonment decided **before** the player can reach the mixer; abandoned player disposed on the
+      constructing thread and never added — only pool disposers (P3/P4) dispose, under the lifecycle lock; only the waiter ever attaches
+- [x] Exactly one path disposes an abandoned player, exactly once, including during concurrent device
+      teardown; ordering primitive = the factory `_lifecycle` leaf lock + CAS latch; deadlock-order argued in record.md (caller paths bounded TryEnter — the consult's SP-071-class fix)
+- [x] Non-abandoned path observably unchanged (same object, volume, attachment, wrapper; unwrapped exception surface)
+- [x] Bound implemented (Step 1 authorized it), typed `PlayerConstructionTimeoutException` → existing refusal vocabulary — never a null or placeholder player
+- [x] Transition-only logging (one line per abandonment); nothing new observed, persisted, or transmitted (grep shown in record.md)
+- [x] No awaitable UI dispatch, no `SynchronizationContext.Current` capture, no new dispatch primitive
+- [x] Every SP-070 / SP-071 property preserved (SoundArbitration.cs untouched; suite proves in Steps 3/5)
+- [x] Per-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Orphan fact: abandoned construction never added to the mixer, never plays (asserted from the fake's
-      own record, not from the absence of an exception)
-- [ ] Exactly-once fact: the abandoned player is disposed once — never zero, never twice
-- [ ] Ordering fact: abandoned-player disposal does not overlap device teardown; **a missing event fails**,
-      it does not pass vacuously (no new `IndexOf`-sentinel shape)
-- [ ] Negative control: ordinary construction unchanged, no abandonment line
-- [ ] Bound's caller behavior proven, if the bound landed
-- [ ] Every landed SoundArbitration + DTRH-effects fact green and unchanged in meaning (per-file diff proof)
-- [ ] Bite matrix: abandonment check / single-dispose latch / ordering guard reverted **separately**, each
-      RED captured under `evidence/`, others confirmed green, each fixture shown to reach its mechanism
-- [ ] No timing-dependent determinism; no waits outside `TestWait`
-- [ ] `floor.json` `total` bumped in the same commit as the facts
+- [x] Orphan fact: `Construction_Abandoned_NeverAttached_NeverPlayed_DisposedOnce` — asserted from the fake's own event record
+- [x] Exactly-once fact: `Construction_CompletionRacesAbandonment_DisposedExactlyOnce` — both disposers provably armed (log-hook rendezvous), CAS latch admits one
+- [x] Ordering fact: `Construction_OrphanDisposal_OrderedAgainstDeviceTeardown` — non-overlap observed from INSIDE the parked teardown + UntilSync-fails-on-absence (no IndexOf-sentinel shape)
+- [x] Negative control: `Construction_Ordinary_AttachedOnce_NeverDisposed_NoAbandonmentLine`
+- [x] Bound's caller behavior proven: `PlaySfx_ConstructionTimeout_TypedFailed_NeverInPool`, `PlayVoice_ConstructionTimeout_TypedFailed_ChannelStaysIdle` (+ torn-down refusal fact)
+- [x] Every landed SoundArbitration + DTRH-effects fact green and unchanged in meaning (test file diff = pure addition + one fake hook)
+- [x] Bite matrix: 3 reverts captured separately under evidence/ (bite-1 abandonment mark → orphan pin RED at UntilSync + documented cascade; bite-2 CAS latch → ONLY exactly-once pin RED, 3/3; bite-3 ordering lock → ONLY ordering pin RED at its ordering assertion, 3/3); restore verified 42/42 green
+- [x] No timing-dependent determinism; every rendezvous is a gate/signal; no waits outside TestWait
+- [x] `floor.json` `total` bumped 1010 → 1017 in the same commit as the facts (reason in message)
 
 ### Step 4: Record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `record.md` complete (pre-fix observation, census table, decision-rule branch + reason, invariant +
-      design, testability/placement argument with the residual read-only line, deadlock-order argument,
-      bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board
-      filings)
-- [ ] Honesty cell (fake vs a real wedged `AssetDataProvider`; the real `AddComponent` line never exercised;
-      any caller left unbounded; execution vs reading; **Linux unproven**; whether SP-071's give-up residue
-      row got cheaper or is untouched)
-- [ ] Named flake recorded by name + TRX if it fired, never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
+- [x] `record.md` complete (pre-fix observation, census table, branch + reason, invariant + design, testability/placement with residual read-only line, deadlock-order argument, bite matrix, floor bump, run table, consults + model-surfacing honesty, engine-review presence, intended board filings)
+- [x] Honesty cell (fake vs real wedge; real `AddComponent` never exercised; no caller left unbounded; execution vs reading; Linux unproven; SP-071 residue row untouched)
+- [x] Named flake did not fire in any run (recorded by name)
+- [x] Pre-completion solo consult; verdict adopted (load-bearing-order comments both ends) and recorded
+- [x] STATUS.md accurate before `.DONE`; intended board filings named (no row state set)
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green through the wrapper (verify.mjs exit 0, build 0W/0E, new exact unit count /
-      35 headless, skip set exactly the 2 pinned Windows names)
-- [ ] 3 consecutive full-suite greens, >= 1 a fresh-checkout first-ever build; per-run table with TRX paths
-- [ ] Cross-thread facts run >= 20x filtered, zero flakes, count stated
-- [ ] Bite matrix complete (each revert named with the pins it reddened and the pins that stayed green)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+- [x] Contract testCommand green through the wrapper (verify.mjs exit 0, build 0W/0E, 1017 unit / 35 headless, skip set exactly the 2 pinned Windows names)
+- [x] 4 consecutive full-suite greens (3 required), run 2 a fresh-checkout first-ever build (`C:\Code\sp072-cold`, removed after); per-run table with results dirs in record.md
+- [x] Cross-thread facts run 20× filtered, zero flakes (20/20)
+- [x] Bite matrix complete (each revert named with pins reddened / stayed green — record.md table + evidence/)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact (probe built in %TEMP%; cold worktree removed)
 - [ ] `.DONE` created as the last action and **NOT committed** (the engine's lane-commit stages it)

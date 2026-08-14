@@ -109,7 +109,19 @@ public sealed class DtrhNativeEffects : IDisposable
                 return;
             }
 
-            player = _audio.CreatePlayer(path, Volume(effectiveScale));
+            try
+            {
+                player = _audio.CreatePlayer(path, Volume(effectiveScale));
+            }
+            catch (Exception ex)
+            {
+                // SP-072: construction is now BOUNDED and can refuse typed (timeout / torn
+                // down). The layer's refusal idiom is the logged silent no-op — same as an
+                // unresolved cue. Contains an exception that used to ESCAPE to the router.
+                _log($"dtrh-fx: sfx '{name}' construction failed ({ex.GetType().Name}) — silent no-op");
+                return;
+            }
+
             _sfxPool.Add(player);
         }
 
@@ -436,7 +448,21 @@ public sealed class DtrhNativeEffects : IDisposable
             try { old.Dispose(); } catch { /* best-effort */ }
         }
 
-        var player = _audio.CreatePlayer(path, Volume(1.0));
+        IDtrhAudioPlayer player;
+        try
+        {
+            player = _audio.CreatePlayer(path, Volume(1.0));
+        }
+        catch (Exception ex)
+        {
+            // SP-072: construction is now BOUNDED and can refuse typed (timeout / torn
+            // down) — logged, channel stays silent (the old voice was already stopped
+            // above, exactly as on any replacement). Contains an exception that used to
+            // ESCAPE to the host's harness/dispatch path.
+            _log($"dtrh-fx: whisper construction failed ({ex.GetType().Name}) — channel silent");
+            return;
+        }
+
         player.PlaybackEnded += (_, _) =>
         {
             // Identity filter (F2): only the LIVE player may clear the channel.
@@ -700,7 +726,13 @@ public interface IDtrhAudioBackend : IDisposable
     /// the NAME, never the Id. null/missing name → default device.</summary>
     bool TryInit(string? deviceName, out string? error);
 
-    /// <summary>Create (not yet playing) a player for a local audio file at a gain 0..1.</summary>
+    /// <summary>Create (not yet playing) a player for a local audio file at a gain 0..1.
+    /// SP-025: implementations MUST construct off-sync-context; SP-072: they MUST bound the
+    /// caller's wait and keep the orphan invariant (an abandoned construction never reaches
+    /// the mixer, never plays, is disposed exactly once, ordered against device teardown) —
+    /// both live in <see cref="OrphanSafePlayerFactory{TPlayer}"/>; budget expiry throws
+    /// <see cref="PlayerConstructionTimeoutException"/> (typed — callers map it to the logged
+    /// silent no-op idiom).</summary>
     IDtrhAudioPlayer CreatePlayer(string path, float volume);
 }
 
