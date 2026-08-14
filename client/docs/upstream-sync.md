@@ -44,10 +44,17 @@ that moved the base is byte-identical to the tree that was built and tested.
 
 ### B. Behavior changes to code the port has ALREADY ported (parity drift — defect-class)
 
-Measured mechanically, not by reading notes: the 344 WPF files upstream changed were intersected with the
-**84 distinct WPF filenames the port's own code cites as its behavioral evidence** (`File.cs:line` comments
-under `client/src/**`). **12 files hit.** The dangerous ones are fixes to code the port already copied —
-the port now carries a bug upstream retired, and no test on either side says so.
+> **CORRECTED 2026-08-14 (completeness audit — see §F). The first pass of this section said "12 files hit"
+> and that number was WRONG**: it came from scanning `client/src/**` code comments only. The port's
+> **authority documents** under `client/docs/**` cite WPF by `File.cs:line` too, and a landed contract's
+> citation matters more than a code comment's. True figures: **297 WPF files are cited by the port, 106 of
+> them changed at this sync, 19 of those are tier-1** (cited by port code or a landed contract). The full
+> set now lives in `client/docs/upstream-citation-inventory.json` — data, keyed by real path, regenerated
+> and diffed at every sync — precisely so a wrong count in prose cannot hide the remainder again.
+
+Measured mechanically, not by reading notes. The dangerous ones are fixes to code the port already copied —
+the port now carries a bug upstream retired, and no test on either side says so. The table below records the
+first pass; §F carries what the audit added.
 
 | Change | Evidence | Impact on landed port code |
 |---|---|---|
@@ -86,8 +93,57 @@ the port now carries a bug upstream retired, and no test on either side says so.
   (`programs`, `achievements`, `features`, `sounds`) with zero test signal. That is correct for *payload*
   purposes and a blind spot for *asset* purposes; folded into the backlog row rather than widened blindly.
 - **Nothing in this repository detects that upstream changed a file the port cites as its evidence.** The
-  12-file intersection in §B was computed by hand this sync. Every future sync will need it, and a stale
-  `File.cs:line` citation is how a landed parity claim rots silently. **Filed as a tooling row.**
+  intersection in §B was computed by hand this sync. Every future sync will need it, and a stale
+  `File.cs:line` citation is how a landed parity claim rots silently. **Filed as tooling row T-19**, and
+  now half-implemented: `client/docs/upstream-citation-inventory.json` is the data the check needs.
+
+### F. Completeness audit — what the first pass of this sync MISSED
+
+The owner asked for assurance that nothing was lost. Re-running the intersection properly found that the
+first pass had lost a great deal, and the miss is recorded here rather than quietly corrected.
+
+**The defect in my own method:** I scanned `client/src/**` only. The port's parity claims live at least as
+much in `client/docs/**` — `startup-shutdown-contract.md`, `persistence-migration-contract.md`,
+`quick-toggle-dispatch.md`, `capability-inventory.md` and the rest cite WPF by `File.cs:line`, and those
+citations back **landed, in some cases RATIFIED** claims. A second, smaller defect: my "is it already
+covered?" check tested `task-board.md.includes(filename)`, which matches rows from **earlier** syncs — so
+it reported coverage that did not exist. Both are now impossible to repeat the same way: the inventory is
+keyed by **real path** (basenames collide — `MainWindow.xaml` is the live example) and carries an explicit
+`tier` and `verdict` per entry.
+
+| | first pass | after the audit |
+|---|---|---|
+| Cited WPF files considered | 84 (src comments only) | **297** (src + docs) |
+| Cited **and changed** at this sync | 12 | **106** |
+| Tier-1 (port code or a landed contract) changed | not distinguished | **19** |
+| With a recorded verdict | 12 | **10 verdicts + 9 owed to a named row** (tier 1); tiers 2 and 3 carry standing dispositions |
+
+**What the audit surfaced that the first pass did not:**
+
+1. **A persistence-contract defect candidate.** `Services/Settings/SettingsService.cs` (+124/−48) adds
+   `MergeBuiltInPresetInto` — upstream now **merges bundled built-in presets into the user's stored
+   document on load**, a concept the port's landed persistence contract does not have at all. `App.xaml.cs`
+   adds `EnsureInstallDateRecorded`/`ResolveInstallDateUtc`, a new persisted field written at startup.
+   **P1 row filed.**
+2. **A RATIFIED row's ground truth moved.** `MainWindow.Presets.cs` **removed and re-added**
+   `CardJustDrop_Click` with a different body; `FeatureCard.xaml.cs` (+142) gained a tease-tier
+   `DependencyProperty` and `ApplyTeaseState`; `MainWindow.UiUpdates.cs` (+166) gained a mod-aware surface
+   sweep. The quick-toggle row is **DONE + RATIFIED** and cites exactly these files. **P1 escalation row
+   filed** — an unattended run does not silently re-open a ratified row, it files the notice.
+3. **A cross-cutting theme split across buckets and lost: "remote media".** `VideoService.cs` gained
+   `IsRemoteMediaPath`/`RemoteMediaEnabled`/`RemoteChannels`/`TakeRemoteVideo`; `App.xaml.cs` gained
+   `OfferRemoteMediaSource`/`FlushPendingRemoteMediaOffer`. The first pass filed THE DESCENT and JUST DROP
+   as two unrelated rows and dismissed `VideoService` as "a moved baseline". They are **one owner-level
+   network/credential boundary across four surfaces**, and the Decisions-needed entry was widened to say so
+   — because a partial approval (say, JUST DROP alone) would leave a remote video path unsanctioned.
+4. **Two repeat offenders.** `DtrhAssetManifest.cs` moved at **two consecutive syncs**;
+   `IntakeHostService.cs` at **three**. A file that moves every sync is a continuously drifting copy, not a
+   one-off delta — called out as the priority inside the tier-1 review row.
+5. **`window-behavior-manifest.md` is stale** — 74 of its cited files moved. Filed as its own
+   re-verification row rather than dismissed as "inventory churn", which is what the first pass assumed.
+
+**No dangling citations:** zero cited files were deleted or renamed upstream, so every `File.cs:line` in the
+port still resolves to a real file. That was checked, not assumed.
 
 ### E. In-flight batch — what this sync does and does not cost wave 29
 

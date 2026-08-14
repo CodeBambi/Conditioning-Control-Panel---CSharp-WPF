@@ -1,0 +1,3458 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Every WPF file the port cites as behavioral evidence (from client/src/** code comments and client/docs/** authority documents), keyed by REAL PATH because basenames collide. Regenerated at each upstream sync and DIFFED: an entry whose changedAtSync moved needs a verdict, and a citation that disappears means the port stopped relying on that file. This file exists because the 2026-08-14 v6.8.0 sync first reported '12 files hit' from a client/src-only scan when the true cited-and-changed count was 105 - the miss, not the theory, is why it is data and not prose.",
+  "tiers": {
+    "1": "Cited by port CODE (client/src/**) or by a LANDED port contract - a change here can invalidate a shipped parity claim. Needs a verdict every sync.",
+    "2": "Cited only by window-behavior-manifest.md, the SP-012 INVENTORY of WPF windows (most of them unported). Needs a manifest re-verification pass, not a per-file row.",
+    "3": "Cited only by historical research inputs (first-attempt lessons, row-1 research, spikes, prior sync ledgers, audits). Recorded, no standing obligation."
+  },
+  "baseline": {
+    "upstreamVersion": "v6.8.0",
+    "merge": "db3e842f",
+    "previous": {
+      "upstreamVersion": "v6.7.4",
+      "merge": "42286638"
+    },
+    "recorded": "2026-08-14"
+  },
+  "ambiguousBasenames": [
+    "MainWindow.xaml"
+  ],
+  "entries": [
+    {
+      "path": "ConditioningControlPanel/App.xaml.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:main-sync-2026-08-04.md",
+        "docs:persistence-migration-contract.md",
+        "docs:row-1-research-inputs.md",
+        "docs:startup-shutdown-contract.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 471,
+        "del": 88
+      },
+      "verdict": "SPLIT: EnsureInstallDateRecorded/ResolveInstallDateUtc = new persisted startup field (persistence-contract row); OfferRemoteMediaSource/FlushPendingRemoteMediaOffer = remote-media row + owner network decision"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/AppSettings.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:first-attempt-lessons.md",
+        "docs:her-room-divergence-audit.md",
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs",
+        "src:src/CcpClient.Desktop/Companion/CompanionState.cs",
+        "src:src/CcpClient.Desktop/Features/Companion/CompanionViewModel.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeSettingsDocument.cs",
+        "src:src/CcpClient.Desktop/Persistence/AssetSelectionDocument.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 441,
+        "del": 5
+      },
+      "verdict": "NO LANDED-CODE DEFECT IDENTIFIED: +441 is new-feature surface (SetSessionFlashRamp/ClearSessionFlashRamp, Descent/JustDrop/Programs keys). Any CHANGED existing key is still unreviewed - owed to the tier-1 review row"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Video/VideoService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md",
+        "docs:main-sync-2026-08-04.md",
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "docs:video-handoff-spike.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 364,
+        "del": 11
+      },
+      "verdict": "REMOTE-MEDIA: IsRemoteMediaPath/RemoteMediaEnabled/RemoteChannels/TakeRemoteVideo/RemoteConsumerId - board row, gated by the owner network/credential decision"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Presets.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md",
+        "docs:quick-toggle-dispatch.md",
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/FeaturePopupManager.cs",
+        "src:src/CcpClient.Desktop/Features/FeaturePopupWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/QuickToggleDispatch.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 213,
+        "del": 63
+      },
+      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: CardJustDrop_Click removed and re-added as => TeaseCardClicked(); + RefreshPresetsModVisuals/MysteryFeatureTier - escalated to the owner"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhAssetManifest.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 270,
+        "del": 2
+      },
+      "verdict": "SECOND CONSECUTIVE SYNC on this file - re-read owed against the landed active-pool code (SP-055) - tier-1 review row"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Settings/SettingsService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:first-attempt-systemic-lessons.md",
+        "docs:persistence-migration-contract.md",
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 124,
+        "del": 48
+      },
+      "verdict": "DEFECT-CANDIDATE: adds MergeBuiltInPresetInto (built-in preset merge on load) inside the LANDED persistence-migration contract - board P1 row"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.UiUpdates.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:quick-toggle-dispatch.md",
+        "docs:upstream-sync.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 166,
+        "del": 4
+      },
+      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: QueueModAwareSurfaceSweep/RefreshModAwareSurfaces/EnsureModSweepWatchers (mod-aware surface sweep)"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/FeatureCard.xaml.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:migration-checklist-validation.md",
+        "docs:quick-toggle-dispatch.md",
+        "docs:task-board.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 142,
+        "del": 1
+      },
+      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: tease-tier DependencyProperty + ApplyTeaseState + visibility/size refresh on the card control the quick-toggle row ports"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/IntakeHostService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeDraft.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeDraftSink.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeHarness.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeLaunchCoordinator.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeMediaManifest.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeNiche.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeParticipant.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakePassService.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeSaveImageSink.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeSubjectId.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 106,
+        "del": 1
+      },
+      "verdict": "THIRD CONSECUTIVE SYNC on this file - re-read owed against the landed Intake host contract - tier-1 review row"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/AiTextHygiene.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs",
+        "src:src/CcpClient.Desktop/Ai/AiTextHygiene.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 61,
+        "del": 1
+      },
+      "verdict": "DEFECT-FILED: transcript-shape hygiene missing in landed SP-069 port code (board P1 row, 2026-08-14)"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosWebViewHost.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 43,
+        "del": 6
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/CompanionBrain.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiOperationPipeline.cs",
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 27,
+        "del": 2
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.ChatInput.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 26,
+        "del": 0
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Settings.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:main-sync-2026-08-04.md",
+        "docs:task-board.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeSettingsDocument.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 16,
+        "del": 0
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 10,
+        "del": 5
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/Services/KeywordTriggerService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "docs:her-room-divergence-audit.md",
+        "docs:row-1-research-inputs.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 11,
+        "del": 1
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Avatar.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 10,
+        "del": 0
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AiService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "docs:ai-provider-spike.md",
+        "docs:capability-inventory.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs",
+        "src:src/CcpClient.Desktop/Ai/AiOperationPipeline.cs",
+        "src:src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs",
+        "src:src/CcpClient.Desktop/Ai/AiProviderSeam.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 2
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Lab.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:task-board.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLaunchCoordinator.cs"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 0,
+        "del": 2
+      },
+      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.CirceEmotes.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Speech.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:audio-backend-spike.md",
+        "docs:capability-inventory.md",
+        "docs:her-room-divergence-audit.md",
+        "src:src/CcpClient.Desktop/Audio/SoundArbitration.cs",
+        "src:src/CcpClient.Desktop/Features/Companion/CompanionBubbleModel.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Windowing.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosOverlayWindow.xaml.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSlotPickerWindow.axaml",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSlotPickerWindow.axaml.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosTunnelService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Chaos/ChaosTunnelCore.cs",
+        "src:src/CcpClient.Desktop/Features/Chaos/ChaosTunnelLoopback.cs",
+        "src:src/CcpClient.Desktop/Features/Chaos/ChaosTunnelService.cs",
+        "src:src/CcpClient.Desktop/Features/Chaos/ChaosTunnelWin32.cs",
+        "src:src/CcpClient.Desktop/Features/Chaos/ChaosTunnelWindow.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/FeaturePopupWindow.xaml",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/FeaturePopupWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/PopupPlacement.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/AiCommandData.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-operation-contract.md",
+        "src:src/CcpClient.Desktop/Ai/AiCommandEnvelope.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/CompanionPromptSettings.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:her-room-divergence-audit.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiCommandExecutor.cs",
+        "src:src/CcpClient.Desktop/Ai/AiMemoryStore.cs",
+        "src:src/CcpClient.Desktop/Features/Companion/CompanionParticipant.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/IntakePunchCardState.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakePunchCard.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/KeywordTrigger.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/QuizRunResult.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/AiResponseParser.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-operation-contract.md",
+        "docs:first-attempt-lessons.md",
+        "src:src/CcpClient.Desktop/Ai/AiCommandEnvelope.cs",
+        "src:src/CcpClient.Desktop/Ai/AiTextHygiene.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/AiServiceStrategy.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/IAiService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-operation-contract.md",
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/LocalAiService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "docs:ai-provider-spike.md",
+        "docs:first-attempt-lessons.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiMemoryStore.cs",
+        "src:src/CcpClient.Desktop/Ai/AiOperationPipeline.cs",
+        "src:src/CcpClient.Desktop/Ai/AiProviderSeam.cs",
+        "src:src/CcpClient.Desktop/Ai/IAiMemoryStore.cs",
+        "src:src/CcpClient.Desktop/Ai/LoopbackOllamaProvider.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AIService/OpenAiCompatibleService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-provider-spike.md",
+        "src:src/CcpClient.Desktop/Ai/AiOperationPipeline.cs",
+        "src:src/CcpClient.Desktop/Ai/LoopbackOllamaProvider.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Audio/AudioService.Playback.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Audio/SoundArbitration.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AudioService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:audio-backend-spike.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Audio/AudioSeams.cs",
+        "src:src/CcpClient.Desktop/Audio/SoundArbitration.cs",
+        "src:src/CcpClient.Desktop/Audio/SoundFlowAudioBackend.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/SoundFlowDtrhAudio.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Auth/DiscordTokenStorage.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "src:src/CcpClient.Desktop/Persistence/SecretStores.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Auth/SecureAuthTokenStore.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "src:src/CcpClient.Desktop/Persistence/SecretStores.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessObserverPolicy.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md",
+        "docs:port-lessons.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs",
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessPrivacyRules.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs",
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessProjection.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md",
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessText.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Bark/BarkRule.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Bark/BarkRuleLoader.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Bark/BarkRuleSet.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Bark/BarkVariant.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosCraftingIds.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosHappyPath.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhRunConfig.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosLessons.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosMetaState.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosMetaStore.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosModels.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhRunConfig.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosRanks.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSlotPickerWindow.axaml.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosRevealService.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosSfx.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:audio-backend-spike.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Audio/SoundArbitration.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhRunConfig.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhAssetStatsStore.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhAssetStats.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhSaveSlots.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhHostService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:task-board.md",
+        "docs:webview-dtrh-spike.md",
+        "docs:window-behavior-manifest.md",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhAssetStats.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhBarkRouting.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoomDispatch.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProcessFailed.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProfileLock.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProtocol.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhRunConfig.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhWatchdog.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/LoopbackServer.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhLoomStore.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoom.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhParticipant.cs",
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeParticipant.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhMetaBridge.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMeta.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/EffectPayload.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhVideoWindow.axaml"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/LoomHostService.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoomDispatch.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoomReveal.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoomWindow.axaml",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLoomWindow.axaml.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProfileLock.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProtocol.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Commands/AiCommandService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "docs:first-attempt-lessons.md",
+        "src:src/CcpClient.Desktop/Ai/AiCommandExecutor.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/BarkService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:audio-backend-spike.md",
+        "docs:capability-inventory.md",
+        "docs:her-room-divergence-audit.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Audio/SoundArbitration.cs",
+        "src:src/CcpClient.Desktop/Companion/BarkPipeline.cs",
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs",
+        "src:src/CcpClient.Desktop/Companion/CompanionState.cs",
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhBarkRouting.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/CompanionPhraseService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "src:src/CcpClient.Desktop/Companion/BarkRules.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Compositor/CompositorLayers.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Moderation/IModerationGuard.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-operation-contract.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Moderation/ModerationCounter.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "src:src/CcpClient.Desktop/Ai/AiModerationBoundary.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Moderation/ModerationRefusal.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "src:src/CcpClient.Desktop/Ai/AiModerationBoundary.cs",
+        "src:src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/MotionFx.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Dtrh/DtrhMotionPreference.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Progression/IntakePassService.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakePassService.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Progression/IntakePunchCardService.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakePunchCard.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/IntakeNiche.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeNiche.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/IntakeProfiler.cs",
+      "tier": 1,
+      "citedBy": [
+        "src:src/CcpClient.Desktop/Features/Intake/IntakeProfiler.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/QuizService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "docs:ai-operation-contract.md",
+        "docs:port-lessons.md",
+        "docs:task-board.md",
+        "src:src/CcpClient.Desktop/Ai/AiModerationBoundary.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/UI/WindowAwarenessService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:ai-companion-admission.md",
+        "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs",
+      "tier": 1,
+      "citedBy": [
+        "docs:capability-inventory.md",
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1107,
+        "del": 296
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Flash/FlashService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 653,
+        "del": 53
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Assets.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 480,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 293,
+        "del": 38
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.SessionIO.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 139,
+        "del": 127
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Marquee.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 154,
+        "del": 11
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Resources/Theme/MainWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 102,
+        "del": 62
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Session/SessionEngine.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 142,
+        "del": 14
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Tracking/GazeDebugCursorService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 97,
+        "del": 18
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Notifications/OverlayService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:first-attempt-lessons.md",
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 63,
+        "del": 34
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WhatsNewDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 63,
+        "del": 29
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/AwarenessPresetDetailDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 76
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/BouncingTextFeatureControl.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 66,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/LockCardFeatureControl.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 66,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/VideoFeatureControl.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 66,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Browser.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 43,
+        "del": 15
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Progression/SkillTreeService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 50,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/EnhancementPlayerWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 38,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/LoginDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 17,
+        "del": 17
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.AchievementsTab.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 26,
+        "del": 5
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/ModManagerDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 20,
+        "del": 8
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/EasterEggWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 14,
+        "del": 14
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 12,
+        "del": 12
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/HapticsSetupWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 11,
+        "del": 11
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/SessionEditorWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 10,
+        "del": 10
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 19,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 17,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/RoadmapDiaryDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 8
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 8
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/DeeperEditorWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 6
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Tabs/SettingsTabView.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 14,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Login.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 12,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/AttentionTargetEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 6,
+        "del": 6
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/DeeperEditorWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 7,
+        "del": 5
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/LockCardWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 7
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosHubWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CompanionPhraseEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 4
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/LinkPhoneDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 4
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Enhancements.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 7,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/LockCard/LockCardService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 5,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/ColorEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/RoadmapStartDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/UsernamePickerDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WelcomeDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/AchievementPopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/MiniPlayerWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/ModCreatorWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/WebcamLoadingSplash.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 3
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/MicConsentDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WebcamConsentDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Autonomy.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 5,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Awareness.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 4,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/LocalAiSetupWizard.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/OfflineUsernameDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/OpenAiCompatibleSamplerSettingsDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/RoadmapStepPopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/BubbleCountResultWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/FeatureSettingsPopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/PinkRushPopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/QuizWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 2,
+        "del": 2
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.WindowChrome.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 0
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/ChatShortcutCaptureDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/DisplayNameDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/RoadmapConfirmDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/TextEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/UpdateNotificationDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/PopQuizService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/UrlPromptDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/AnnouncementPopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/BubbleCountWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/QuestCompletePopup.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/WebcamGazeTrackerWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/WebcamQuickRecalWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarRandomBubble.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:first-attempt-lessons.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosBackdropService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosHubWindow.Reveals.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosHubWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosHudWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosIntroWindow.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosOverlayWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Controls/SeasonRecapWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/AssetSubmitDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CataloguePickerDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CatalogueSubmitDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CompanionPhraseEditorDialog.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/ContentPolicyWarningDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/ExplicitContentAcknowledgementDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/InputDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/KnowledgeLinkEditorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/LockCardColorDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/UpdateProgressDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WarningDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WarningDialog.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/WelcomeDialog.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Features/SystemFeatureControl.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.BlinkTrainer.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.CompanionTab.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.DeeperTab.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Haptics.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:main-sync-2026-08-04.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.LabTab.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.ModCatalogue.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Quests.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/MainWindow/MainWindow.Roadmap.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Overlays/SpeakCueOverlay.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Overlays/TakeoverAnnouncerOverlay.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Account/AccountService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AttentionCheckService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/BlinkTrainerService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/BubbleCountService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/BubbleService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:audio-backend-spike.md",
+        "docs:first-attempt-lessons.md",
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Chaos/DtrhSpike.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Compositor/CompositorHostWindow.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Haptics/MockHapticProvider.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/KeywordHighlightService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/MantraService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Progression/AchievementService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Subliminal/BouncingTextService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Subliminal/SubliminalService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:audio-backend-spike.md",
+        "docs:main-sync-2026-08-04.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Video/DualMonitorVideoService.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:first-attempt-lessons.md",
+        "docs:video-handoff-spike.md",
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/EnhancementPlayerWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/GazePickerWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/GazePickerWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/NewEnhancementDialog.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Deeper/NewEnhancementDialog.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/BubbleCountResultWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/BubbleCountWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/BugReportWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/FeatureSettingsPopup.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/HelpVideoWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/HelpVideoWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/LockCardWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/MantraWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/PopQuizWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/QuizReportWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/QuizWindow.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/SessionCompleteWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/SessionLogHistoryWindow.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/SplashScreen.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/SplashScreen.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/TutorialOverlay.xaml",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Windows/TutorialOverlay.xaml.cs",
+      "tier": 2,
+      "citedBy": [
+        "docs:window-behavior-manifest.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/TutorialService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md",
+        "docs:upstream-sync.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 247,
+        "del": 18
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/ModResourceResolver.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 202,
+        "del": 22
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/ModService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 126,
+        "del": 11
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Deeper/IActionDispatcher.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 51,
+        "del": 11
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosGifCascadeOverlay.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:upstream-sync.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 44,
+        "del": 12
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/GamificationBridge.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:port-lessons.md",
+        "docs:row-1-research-inputs.md",
+        "docs:task-board.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 38,
+        "del": 16
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Chaos/ChaosFlashOverlay.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:upstream-sync.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 41,
+        "del": 11
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/ScreenOcrService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 33,
+        "del": 4
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/CompanionHeroCard.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 22,
+        "del": 2
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/ChatSession.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 15,
+        "del": 0
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Localization/LocalizationManager.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:first-attempt-systemic-lessons.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 8,
+        "del": 2
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/AutonomyService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 1
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessReactionService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": {
+        "sync": "2026-08-14",
+        "status": "M",
+        "add": 3,
+        "del": 1
+      },
+      "verdict": "tier-3 - historical research input only, no standing obligation"
+    },
+    {
+      "path": "ConditioningControlPanel/Dialogs/AwarenessConsentDialog.xaml.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Models/HapticSettings.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:task-board.md",
+        "docs:upstream-sync.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/ActivityLedger.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessAppCandidates.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessIntensity.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessIntensityMigration.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessObserver.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessPause.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessProbes.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessPromptBuilder.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/AwarenessSignals.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/ICompanionMemory.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/ReactionCooldownLedger.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/SmtcMediaWatcher.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Awareness/WorthinessScorer.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/BugReportService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/CatalogueLookupService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/CatalogueService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/AwarenessRouting.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/CompanionSessionStore.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/MemorySignalWriter.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/MemoryStore.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/PromptAssembler.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/ReactionArbiter.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/Brain/RecentRecommendations.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/CommunityPromptService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/CompanionLinkIndex.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/CompanionService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md",
+        "docs:main-sync-2026-08-04.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Companion/PersonalityService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Compositor/CompositorEngine.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:first-attempt-lessons.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/FocusGameService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/HelpContentService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:main-sync-2026-08-04.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/KeywordTriggerPresetService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/LogScrubber.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/MantraVoiceService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Quiz/QuizSessionGenerator.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:main-sync-2026-08-04.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/RemoteControlService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/SubscribeStarService.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/TutorialEventBus.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:row-1-research-inputs.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Services/Video/VideoService.Browser.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:main-sync-2026-08-04.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/AiPermissionsGrid.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/AttentionGaugeView.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/AwarenessDialCopy.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/AwarenessPrivacyView.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/ChatThresholdView.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/CompanionRoomAnchors.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/CompanionRoomView.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/CompanionVmPrimitives.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/EngineRoomDrawer.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/KeywordTriggersPanel.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/MemoryDiaryView.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/MemoryFactCard.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/MemoryForgetConfirm.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/RelationshipConstellation.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/Runtime/AwarenessPrivacyRuntimeVm.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/Runtime/CompanionTranscriptWindow.cs",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    },
+    {
+      "path": "ConditioningControlPanel/Views/Controls/Companion/WorkshopAccordion.xaml",
+      "tier": 3,
+      "citedBy": [
+        "docs:her-room-divergence-audit.md"
+      ],
+      "changedAtSync": null,
+      "verdict": "not-changed-at-2026-08-14-sync"
+    }
+  ]
+}
