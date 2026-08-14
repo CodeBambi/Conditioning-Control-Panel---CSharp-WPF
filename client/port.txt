@@ -18,6 +18,15 @@ Which phase is yours is decided by state, not by memory. Reconcile first (read-o
   C. .port/WAVE-LOCK is live -> EXIT AT ONCE (another phase owns the wave).
   D. No claimable work, or a pause condition -> pause protocol below, then EXIT.
 
+STANDING OWNER AUTHORIZATION (2026-08-14, verbatim: "always commit and push ... no need to ask
+for permission everytime"): COMMIT AND PUSH WITHOUT ASKING. Do not stop a phase to request
+permission to commit, and do not end a phase leaving verified work sitting unpushed - unpushed
+work is one disk failure from gone, and a fresh session cannot reconcile from a commit it cannot
+see. This authorizes the ROUTINE act of committing and pushing; it does not authorize skipping a
+gate, landing unverified work, force-pushing, rewriting published history, or pushing anything
+other than feat/crossplatform. The land discipline below is unchanged: what you push is the tree
+you verified LAST, and a red gate is still a halt.
+
 Continuous mode and the lifted gates are recorded in the board gate history and
 spine-tasks/CONTEXT.md (2026-07-18, 2026-07-21). VERIFY THAT AT RECONCILE; this file is not the
 grant and does not carry authority. If the board does not confirm it, treat gates as ACTIVE.

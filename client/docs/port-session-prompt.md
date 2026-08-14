@@ -66,6 +66,12 @@ Repeat until the active phase in `spine-tasks/CONTEXT.md` has no claimable work:
 7. **Land** (the next session): verify the merged state yourself in a scratch worktree, merge, reconcile the board with concise evidence or the exact blocker, write the digest, then push. See Land discipline below.
 8. **Advisory gates.** `port-advisor` gates phase decomposition, each packet's pre-approach and pre-completion, and every land of P0 or high-risk work; add `port-advisor-critic` for architecture, dependencies, platform seams, privacy, and security. Record verdicts in the packet evidence. When a phase completes, re-derive the next scope from unblocked board rows, take advice on the decomposition, update `spine-tasks/CONTEXT.md`, and continue. Rows needing genuinely unavailable headed or manual evidence stay `WIP` or `BLOCKED` with the exact gate named. They are not failures and do not stop other work.
 
+### Standing owner authorization: commit and push
+
+Owner decision 2026-08-14, verbatim: *"always commit and push ... no need to ask for permission everytime."* Commit and push without asking, in interactive and unattended sessions alike. Never end a phase leaving verified work unpushed: it is one disk failure from gone, and the next session cannot reconcile against a commit it cannot see.
+
+This authorizes the routine act only. It does not authorize skipping a gate, landing unverified work, force-pushing, rewriting published history, or pushing any branch other than `feat/crossplatform`. Everything in Land discipline still binds — what you push is the tree you verified **last**, and a red gate is still a halt.
+
 ### Land discipline
 
 - Never trust a lane's or a reviewer's own evidence. Run the merged state yourself in a scratch worktree: three consecutive `node client/tests/floor/check-floor.mjs` runs with output redirected to files, and prove `git diff` is EMPTY between the tree you verified and the integrated tip.
