@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** 3
-**Last Updated:** 2026-08-14 (worker, Step 3 in progress)
+**Current Step:** 5 (verification runs; then Step 4 record)
+**Last Updated:** 2026-08-14 (worker, Step 3 complete — 5 facts + floor 1005->1010 green, bite A/B/C captured)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -68,18 +68,18 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 - [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195; bite matrix A/B/C captured under evidence/)
 
-- [ ] Bounded-return fact (the pin that captures today's behavior as RED)
-- [ ] **Ordering fact:** backend not disposed while the native call is in flight (assert the order, not
+- [x] Bounded-return fact (the pin that captures today's behavior as RED)
+- [x] **Ordering fact:** backend not disposed while the native call is in flight (assert the order, not
       merely that nothing threw)
-- [ ] Completion fact: after a give-up, teardown still disposes exactly once
-- [ ] Idempotence fact
-- [ ] Negative control: ordinary teardown observably unchanged, no give-up line
-- [ ] SP-070's teardown fact and all landed facts green and unchanged in meaning
-- [ ] Bite matrix: separate reverts, separate REDs, each pin's fixture shown to reach its mechanism
-- [ ] No timing-dependent determinism; no waits outside `TestWait`
-- [ ] `floor.json` `total` bumped in the same commit as the facts
+- [x] Completion fact: after a give-up, teardown still disposes exactly once
+- [x] Idempotence fact
+- [x] Negative control: ordinary teardown observably unchanged, no give-up line
+- [x] SP-070's teardown fact and all landed facts green and unchanged in meaning
+- [x] Bite matrix: separate reverts, separate REDs, each pin's fixture shown to reach its mechanism
+- [x] No timing-dependent determinism; no waits outside `TestWait`
+- [x] `floor.json` `total` bumped in the same commit as the facts
 
 ### Step 4: Record + pre-completion consult
 **Status:** ⬜ Not Started
