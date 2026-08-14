@@ -3,10 +3,10 @@
 ## OWNER DECISION 2026-08-14 — EXTERNAL CONNECTIONS APPROVED (answers the v6.8.0 four-surface question)
 
 - **Verbatim:** *"we want the same behaviour but how it is done under the hood we dont care about in the port. So yes we want all the external connections to work for sure."*
-- **Authorized:** external network + the credentials those surfaces need, for all four — THE DESCENT (row unblocked), JUST DROP (ungated), remote media in the video path, the remote-media offer prompt. **The "how" is free:** reproduce the user-observable outcome, never WPF's /header/ mechanics — those are evidence, not a design.
+- **Authorized:** external network + the credentials those surfaces need, for all four — THE DESCENT (row unblocked), JUST DROP (ungated), remote media in the video path, the remote-media offer prompt. **The "how" is free:** reproduce the user-observable outcome, never WPF's `HttpClient` / header / `X-Auth-Token` mechanics — those are evidence, not a design.
 - **NOT authorized, so nobody over-reads it:** webcam, biometric, capture, consent, moderation, logging boundaries all untouched; secret VALUES still never enter documents, diagnostics or logs (names only); the redaction registry still binds every new log site.
 - **The zero-external-network claim was never a principle** — only the honest state of a port nobody had asked to connect. It is superseded FOR THESE SURFACES; the send-attempt-counter proof is **re-scoped, not deleted** (it still proves the AI pipeline makes no unsanctioned call).
-- **DERIVED P1, filed rather than footnoted: Linux has no secret store.**  is DPAPI-proven on Windows and returns a typed  on Linux — harmless while nothing connected, load-bearing now. Acceptance: a Linux secret mechanism with the same typed discipline (libsecret/Secret Service, researched current) **or** an explicit typed refusal for credentialed surfaces on Linux — never a silent plaintext fallback. Unverifiable on this laptop (zero WSL distros) → desktop-session row.
+- **DERIVED P1, filed rather than footnoted: Linux has no secret store.** `ISecretStore` is DPAPI-proven on Windows and returns a typed `Unavailable` on Linux — harmless while nothing connected, load-bearing now. Acceptance: a Linux secret mechanism with the same typed discipline (libsecret/Secret Service, researched current) **or** an explicit typed refusal for credentialed surfaces on Linux — never a silent plaintext fallback. Unverifiable on this laptop (zero WSL distros) → desktop-session row.
 
 ## UPSTREAM BASELINE — v6.8.0 (sync 2026-08-14, merge `db3e842f`)
 
