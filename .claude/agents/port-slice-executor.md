@@ -45,6 +45,14 @@ node client/tests/floor/check-floor.mjs
 
 Commit your work on your branch at meaningful boundaries with a conventional message. Leave the tree buildable at every commit.
 
+## Checkpoints: never go idle having written nothing
+
+If the packet or the orchestrator stops you at a checkpoint (a plan review before your first product edit, for example), **write your checkpoint output to a file in your own packet folder before you stop** — `spine-tasks/SP-NNN-slug/plan.md`, or `record.md` for a later checkpoint — and say in your report that you did.
+
+This is not bookkeeping. A worktree with no changes in it is removed when you go idle, and if you are then resumed you no longer have one: your edits land in the shared repository on the port branch, where they collide with every other lane and with the orchestrator. That failure is silent — you will still build, still pass, still commit — and it is only visible afterwards, in `git worktree list` and in which branch the commits landed on. **Wave 30 lost its isolation exactly this way**, because the checkpoint instruction said to change nothing at all.
+
+So: a checkpoint always produces a file. If you genuinely have nothing to write, write the census, the plan, or the reason there is nothing — but never stop with an untouched tree.
+
 ## Report contract
 
 Files changed and why; WPF citations used; tests added and the resulting floor numbers; any spec-versus-code discrepancies found with your resolution; anything you could not wire, with the exact reason. State plainly what your work does NOT prove: a compile-only result never verifies interaction, rendering, audio, focus, window behavior, or animation, and a headless frame never discharges a headed gate. If you stopped early, say exactly where.

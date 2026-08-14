@@ -84,7 +84,16 @@ It passes the child's exit code through unchanged — a wrapper that swallowed a
 
 **Named limit:** the semaphore is verified on Windows only. There is no WSL distro on this machine, so its Linux behaviour is an API audit, not a test. Two Linux caveats are recorded in the file: a shared `/tmp` with the sticky bit can refuse another user's lock unlink (it logs and keeps waiting rather than crashing), and `O_EXCL` is unreliable on old NFS.
 
-**Lane worktrees.** Claude Code creates them at `.claude/worktrees/agent-<id>` — inside the repo, ignored by the `.claude/*` rule, auto-removed when unchanged. `core.longpaths` is now enabled and must stay enabled: the deepest tracked file is a 168-character WPF audio asset, which put the worst-case lane path within ~3 characters of the 260-character limit before the fix.
+**Lane worktrees.** Claude Code creates them at `.claude/worktrees/agent-<id>` — inside the repo, ignored by the `.claude/*` rule, **auto-removed when unchanged**. `core.longpaths` is now enabled and must stay enabled: the deepest tracked file is a 168-character WPF audio asset, which put the worst-case lane path within ~3 characters of the 260-character limit before the fix.
+
+**A lane that goes idle having written nothing loses its worktree, and the loss is silent (wave 30, 2026-08-14).** The stop-at-plan checkpoint told the lane to change nothing so the plan review could run first. It complied, went idle, and its unchanged worktree was garbage-collected. Resumed by message, it had no worktree, so its implementation committed straight onto `feat/crossplatform` in the shared tree. Nothing warned: it built, its facts passed, its scope was clean, and only `git worktree list` and the branch the commits landed on revealed it.
+
+Two consequences, both now encoded rather than remembered:
+
+1. **Every checkpoint produces a file in the packet folder.** `port-slice-executor` carries this rule. A lane paused for review writes `plan.md` before stopping, which both keeps the worktree alive and produces the artifact the reviewer should be reading anyway.
+2. **Verify isolation at the point of harm, not at the end.** Before accepting any lane's report, check `git worktree list` and `git branch --contains <lane head>`. A lane that reports commits "on `feat/crossplatform`" has already lost isolation. The recovery is non-destructive and takes one minute: `git branch lane/<packet> <lane tip>`, then `git reset --hard <base>` on the port branch — every commit stays reachable from the new branch, and the wave gets the merge-back it was supposed to test.
+
+The deeper lesson is about the checkpoint pattern itself, not about worktrees: **an instruction that forbids all writes is an instruction to discard the workspace.** If a checkpoint needs the tree untouched, it needs an artifact somewhere else.
 
 ## Advisory gates
 
