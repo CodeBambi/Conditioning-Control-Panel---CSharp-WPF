@@ -2154,8 +2154,6 @@ namespace ConditioningControlPanel
                         tab.SliderRemoteRatio.ValueChanged += SliderRemoteRatio_Changed;
                     if (tab.BtnRemoteAddSub != null)
                         tab.BtnRemoteAddSub.Click += BtnRemoteAddSub_Click;
-                    if (tab.BtnRemoteClearBlocklist != null)
-                        tab.BtnRemoteClearBlocklist.Click += BtnRemoteClearBlocklist_Click;
                     if (tab.TxtRemoteCustomSub != null)
                         tab.TxtRemoteCustomSub.KeyDown += TxtRemoteCustomSub_KeyDown;
                 }
@@ -2243,15 +2241,10 @@ namespace ConditioningControlPanel
                     tab.RemoteRatioRow.Visibility = string.Equals(source, MediaSrcMixed, StringComparison.Ordinal)
                         ? Visibility.Visible : Visibility.Collapsed;
 
-                var blockedSubs = settings.RemoteMediaBlockedSubs;
-                var blockedIds = settings.RemoteMediaBlockedIds;
-
-                // Folded away while the app runs on local files only - except when there is a
-                // blocklist, which must stay reviewable whatever the source is set to.
+                // Folded away while the app runs on local files only.
                 if (tab.RemoteMediaDetails != null)
                     tab.RemoteMediaDetails.Visibility =
                         !string.Equals(source, MediaSrcLocal, StringComparison.Ordinal)
-                        || blockedSubs.Count > 0 || blockedIds.Count > 0
                             ? Visibility.Visible : Visibility.Collapsed;
 
                 var selected = new HashSet<string>(settings.FypOnlineNiches ?? new List<string>(),
@@ -2260,7 +2253,6 @@ namespace ConditioningControlPanel
                     chip.IsChecked = chip.Tag is string id && selected.Contains(id);
 
                 RebuildRemoteCustomSubChips(settings);
-                RebuildRemoteBlocklist(settings, blockedSubs, blockedIds);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker refresh failed"); }
             finally { _remotePickerSyncing = false; }
@@ -2321,7 +2313,7 @@ namespace ConditioningControlPanel
                     "Pull media from Reddit?\n\n" +
                     "The app will stream images and clips from the subreddits you pick, straight from your own machine. " +
                     "Nothing is saved to your disk, nothing is uploaded, and none of it goes through our servers.\n\n" +
-                    "It is adult content and it is not curated by us - you choose the niches, and you can block anything you don't want to see again.\n\n" +
+                    "It is adult content and it is not curated by us - you choose the niches and subreddits, and only those are ever fetched.\n\n" +
                     "Turn it on?"),
                 LocOr("title_remote_media_consent", "Use Reddit media?"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -2407,18 +2399,6 @@ namespace ConditioningControlPanel
 
                 PersistRemoteChannelChange();
                 RefreshRemoteMediaPicker();
-
-                // Adding a sub that is on the blocklist looks like the Add button doing nothing:
-                // the block wins, everywhere, by design. Say so rather than silently overriding
-                // an earlier "never show me this again".
-                if (settings.RemoteMediaBlockedSubs.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
-                {
-                    MessageBox.Show(this,
-                        string.Format(LocOr("msg_remote_sub_is_blocked_0",
-                            "r/{0} is on your blocklist, so it stays hidden until you unblock it below."), clean),
-                        LocOr("title_remote_sub_is_blocked", "Still blocked"),
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Adding a custom subreddit failed"); }
         }
@@ -2436,46 +2416,7 @@ namespace ConditioningControlPanel
             RefreshRemoteMediaPicker();
         }
 
-        private void UnblockRemoteSub(string sub)
-        {
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-
-            var list = new List<string>(settings.RemoteMediaBlockedSubs);
-            list.RemoveAll(x => string.Equals(x, sub, StringComparison.OrdinalIgnoreCase));
-            settings.RemoteMediaBlockedSubs = list;
-
-            PersistRemoteChannelChange();
-            RefreshRemoteMediaPicker();
-            App.Logger?.Information("[remote media] unblocked r/{Sub}", sub);
-        }
-
-        private void BtnRemoteClearBlocklist_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var settings = App.Settings?.Current;
-                if (settings == null) return;
-                if (settings.RemoteMediaBlockedSubs.Count == 0 && settings.RemoteMediaBlockedIds.Count == 0) return;
-
-                var confirm = MessageBox.Show(this,
-                    LocOr("msg_remote_clear_blocklist_confirm",
-                        "Unblock everything?\n\nEvery subreddit and every individual post you have blocked can show up again. This can't be undone."),
-                    LocOr("title_remote_clear_blocklist", "Clear blocklist"),
-                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (confirm != MessageBoxResult.Yes) return;
-
-                settings.RemoteMediaBlockedSubs = new List<string>();
-                settings.RemoteMediaBlockedIds = new List<string>();
-
-                PersistRemoteChannelChange();
-                RefreshRemoteMediaPicker();
-                App.Logger?.Information("[remote media] blocklist cleared");
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Clearing the remote blocklist failed"); }
-        }
-
-        /// <summary>Niche / custom-sub / blocklist edits all land the same way: settings do not
+        /// <summary>Niche / custom-sub edits all land the same way: settings do not
         /// autosave (the lists are replaced, not observed) and every consumer's rotation state
         /// was built from the old set.</summary>
         private void PersistRemoteChannelChange()
@@ -2501,34 +2442,6 @@ namespace ConditioningControlPanel
             if (host.Children.Count == 0)
                 host.Children.Add(MutedRemoteNote(LocOr("label_remote_custom_subs_none",
                     "None yet - the niches above are plenty to start with.")));
-        }
-
-        private void RebuildRemoteBlocklist(Models.AppSettings settings, List<string> subs, List<string> ids)
-        {
-            if (AssetsTab?.TxtRemoteBlocklistSummary is TextBlock summary)
-            {
-                summary.Text = subs.Count == 0 && ids.Count == 0
-                    ? LocOr("label_remote_blocklist_empty",
-                        "Nothing blocked yet. Whatever you block here is gone from every part of the app.")
-                    : string.Format(LocOr("label_remote_blocklist_summary_0_1",
-                        "{0} subreddits and {1} individual posts blocked."), subs.Count, ids.Count);
-            }
-            if (AssetsTab?.BtnRemoteClearBlocklist != null)
-                AssetsTab.BtnRemoteClearBlocklist.IsEnabled = subs.Count > 0 || ids.Count > 0;
-
-            var host = AssetsTab?.RemoteBlockedChips;
-            if (host == null) return;
-
-            host.Children.Clear();
-            foreach (var sub in subs.ToList())
-            {
-                var name = sub;
-                host.Children.Add(BuildRemoteChip($"r/{name}",
-                    LocOr("tooltip_remote_unblock_sub", "Unblock this subreddit"),
-                    () => UnblockRemoteSub(name)));
-            }
-            // Blocked post ids have no name worth showing - they are summarised in the line
-            // above and cleared with everything else.
         }
 
         /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's
