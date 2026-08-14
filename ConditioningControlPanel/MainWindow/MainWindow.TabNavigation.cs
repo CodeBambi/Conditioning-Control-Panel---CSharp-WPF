@@ -601,6 +601,12 @@ namespace ConditioningControlPanel
         /// there, and the safe-room rule applies on arrival.</summary>
         internal const string WebAppUrl = "https://app.cclabs.app";
 
+        /// <summary>Where a public profile is created, edited, rotated and switched off. Web-only
+        /// on purpose: that page is the one surface that shows a profile's slug, and keeping it
+        /// behind the dashboard's login means no slug ever renders in the desktop app - not in a
+        /// settings row, not in a tooltip, not in anything a screenshot could catch.</summary>
+        internal const string ProfileSharingUrl = WebAppUrl + "/dashboard/profile-sharing";
+
         /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
         /// The accordion computes its open height from this instead of forcing a measure pass,
         /// so the two MUST stay in step.</summary>

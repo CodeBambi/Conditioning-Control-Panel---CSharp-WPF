@@ -17,10 +17,15 @@ namespace ConditioningControlPanel
     ///
     /// <para><b>Where the data comes from, and why that is not a desktop order book.</b>
     /// <see cref="JustDropOrdersService"/> reads the SERVER's drawer live over the device-token
-    /// door and keeps nothing. The desktop still cannot create, price, share or delete an order -
-    /// every one of those lives in the shop, and every action on a card here is "open the web player
-    /// at this code". That is the same doctrine <see cref="JustDropService"/> has always stated; the
-    /// shelf renders the drawer, it does not own it.</para>
+    /// door and keeps nothing. The desktop still cannot create, price or delete an order - every one
+    /// of those lives in the shop, and every action on a card here is "open the web player at this
+    /// code". That is the same doctrine <see cref="JustDropService"/> has always stated; the shelf
+    /// renders the drawer, it does not own it.</para>
+    ///
+    /// <para><b>Copying a link is not owning sharing.</b> The one exception the shelf carries is a
+    /// per-card copy chip, and all it does is put <see cref="JustDropService.TasteUrl"/> on the
+    /// clipboard: no dialog, no expiry, no upload, no order mutated, and nothing rendered on screen.
+    /// The page that link points at, and everything that decides what it shows, is the web's.</para>
     ///
     /// <para><b>Replays are free.</b> The bare player mints nothing, and the desktop's XP grant is
     /// deduplicated per order code by <see cref="CreditedOrders"/> - so a shelf that exists to
@@ -158,8 +163,19 @@ namespace ConditioningControlPanel
 
             var stack = new StackPanel();
 
-            var head = new StackPanel { Orientation = Orientation.Horizontal };
-            head.Children.Add(new Helpers.EmojiTextBlock
+            // DockPanel rather than the plain StackPanel it used to be: the copy chip has to sit
+            // hard right regardless of how wide the kind stamp gets in a given language.
+            var head = new DockPanel { LastChildFill = true };
+
+            var copy = BuildTakeawayCopyChip(order);
+            if (copy != null)
+            {
+                DockPanel.SetDock(copy, Dock.Right);
+                head.Children.Add(copy);
+            }
+
+            var headLeft = new StackPanel { Orientation = Orientation.Horizontal };
+            headLeft.Children.Add(new Helpers.EmojiTextBlock
             {
                 Text = "🎚",
                 FontSize = 13,
@@ -185,7 +201,8 @@ namespace ConditioningControlPanel
                 kind.FontWeight = FontWeights.Bold;
                 kind.VerticalAlignment = VerticalAlignment.Center;
             }
-            head.Children.Add(kind);
+            headLeft.Children.Add(kind);
+            head.Children.Add(headLeft);
             stack.Children.Add(head);
 
             var title = new Helpers.EmojiTextBlock { Text = SafeOrderName(order) };
@@ -217,6 +234,40 @@ namespace ConditioningControlPanel
 
             card.Child = stack;
             return card;
+        }
+
+        /// <summary>
+        /// The copy-link chip on one receipt. Copies the drop's PUBLIC taste link - the one page
+        /// that plays an order for someone with no account - and nothing else: no dialog, no
+        /// window, no upload. The link is never printed on screen, only put on the clipboard,
+        /// because a shelf that renders share URLs is a shelf that leaks them into screenshots.
+        /// </summary>
+        private Border? BuildTakeawayCopyChip(JustDropOrdersService.Order order)
+        {
+            var chip = new Border { Tag = order };
+            var style = TryFindTabStyle("SdTakeawayCopy");
+            if (style != null) chip.Style = style;
+            else
+            {
+                chip.Width = 20; chip.Height = 18;
+                chip.CornerRadius = new CornerRadius(6);
+                chip.Background = Brushes.Transparent;
+                chip.BorderThickness = new Thickness(1);
+                chip.BorderBrush = Brushes.Transparent;
+                chip.Cursor = System.Windows.Input.Cursors.Hand;
+                chip.Opacity = 0.55;
+            }
+
+            chip.Child = new Helpers.EmojiTextBlock
+            {
+                Text = "🔗",
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            chip.ToolTip = Loc.Get("tooltip_takeaway_copy_link");
+            chip.MouseLeftButtonUp += TakeawayCopyLink_Click;
+            return chip;
         }
 
         /// <summary>The trailing dashed card: a door to the shop, nothing more.</summary>
@@ -305,6 +356,33 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to replay a Takeaway order");
+            }
+        }
+
+        /// <summary>
+        /// Put this drop's taste link on the clipboard. Marks the click handled so the card
+        /// underneath does not also replay the order - copying a link and starting a session are
+        /// not the same intention, and one click may only be one of them.
+        /// </summary>
+        private void TakeawayCopyLink_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            try
+            {
+                if (sender is not FrameworkElement fe || fe.Tag is not JustDropOrdersService.Order order) return;
+                if (string.IsNullOrWhiteSpace(order.Code)) return;
+
+                System.Windows.Clipboard.SetText(JustDropService.TasteUrl(order.Code));
+                App.Notifications?.Show(Loc.Get("toast_taste_link_copied"),
+                    Services.NotificationType.Success, TimeSpan.FromSeconds(4));
+            }
+            catch (Exception ex)
+            {
+                // The clipboard is a shared OS resource another app can be holding open; a failed
+                // copy is a "try again", never a crash.
+                App.Logger?.Warning(ex, "Failed to copy a Takeaway taste link");
+                App.Notifications?.Show(Loc.Get("toast_taste_link_copy_failed"),
+                    Services.NotificationType.Warning, TimeSpan.FromSeconds(4));
             }
         }
 

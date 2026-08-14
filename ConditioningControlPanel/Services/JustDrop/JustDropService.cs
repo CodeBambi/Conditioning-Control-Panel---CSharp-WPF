@@ -32,6 +32,21 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// marketing site and does not serve this route.</para></summary>
         public const string ExpressUrl = "https://app.cclabs.app/dashboard/express";
 
+        /// <summary>
+        /// The PUBLIC taste page - a capped, signed-out preview of one order code. This is the
+        /// only form a shared drop travels as, and note the host: the NAKED <c>cclabs.app</c>,
+        /// which permanently redirects to the dashboard app. Short enough to read aloud, and
+        /// unfurlers follow the redirect, so the pretty link is also the working one.
+        /// <para>Building the URL is all the desktop does with it. Sharing is still not a desktop
+        /// feature in the sense the doctrine above forbids - there is no share dialog, no expiry
+        /// picker and no order created here; the clipboard gets a link to a page the web owns.</para>
+        /// </summary>
+        private const string TasteBaseUrl = "https://cclabs.app/taste";
+
+        /// <summary>Taste-page URL for one order code. Codes are base64url, but escape anyway.</summary>
+        public static string TasteUrl(string orderCode) =>
+            $"{TasteBaseUrl}/{Uri.EscapeDataString(orderCode ?? string.Empty)}";
+
         /// <summary>The bridge envelope's <c>source</c> discriminator. Fixed by the web player.</summary>
         private const string BridgeSource = "justdrop";
 

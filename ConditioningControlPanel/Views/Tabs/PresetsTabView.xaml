@@ -287,6 +287,28 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- The copy-link chip in the card's top-right corner. Deliberately quiet until hovered:
+             the card's whole job is "click to replay", and a second affordance shouting for
+             attention would compete with it. It sits INSIDE the card, so its handler marks the
+             click handled - otherwise copying a link would also start playing the drop. -->
+        <Style x:Key="SdTakeawayCopy" TargetType="Border">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="SdTakeawayTitle" TargetType="helpers:EmojiTextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
