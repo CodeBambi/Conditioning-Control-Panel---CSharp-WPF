@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** 5 (verification runs; then Step 4 record)
-**Last Updated:** 2026-08-14 (worker, Step 3 complete — 5 facts + floor 1005->1010 green, bite A/B/C captured)
+**Current Step:** done
+**Last Updated:** 2026-08-14 (worker, all steps complete — .DONE)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -82,24 +82,25 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 - [x] `floor.json` `total` bumped in the same commit as the facts
 
 ### Step 4: Record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (record.md; 2 consults, solo, verdicts + models recorded; pre-completion consult's 2 record edits applied)
 
-- [ ] `record.md` complete (pre-fix RED, caller chain, **census table**, invariant + design, why-not-timeout,
+- [x] `record.md` complete (pre-fix RED, caller chain, **census table**, invariant + design, why-not-timeout,
       budget justification, reopened-host answer, bite matrix, floor bump, run table, consults + actual
       models, engine-review presence, intended board filings incl. the `CreatePlayer` row)
-- [ ] Honesty cell (fake vs real wedged native call + manual gate; give-up residue; execution vs reading;
-      Linux unproven; **this closes one member of the class, not the class**)
-- [ ] Named flake recorded by name + TRX if it fired, never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`
+- [x] Honesty cell (fake vs real wedged native call + manual gate; give-up residue; execution vs reading;
+      Linux unproven; **this closes one member of the class, not the class**; + residual PanicReset native
+      wait, pre-completion consult finding)
+- [x] Named flake recorded by name + TRX if it fired, never retried away (did NOT fire in any run)
+- [x] Pre-completion solo consult; verdict + actual model recorded
+- [x] STATUS.md accurate before `.DONE`
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, exact counts, 2 pinned skips)
-- [ ] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build; per-run table with TRX paths
-- [ ] Cross-thread facts run >= 20 times filtered, zero flakes, count stated
-- [ ] Bite matrix complete
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+- [x] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, 1010 unit / 35 headless, 2 pinned skips)
+- [x] 3 consecutive full-suite greens, run 2 a fresh-checkout first-ever build (`C:\Code\sp071-cold`); per-run table with TRX paths in record.md
+- [x] Cross-thread facts run 20x filtered (23 matched facts), zero flakes
+- [x] Bite matrix complete (A/B/C, evidence/bite-revert-*.txt)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
