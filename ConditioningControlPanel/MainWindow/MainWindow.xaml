@@ -1988,6 +1988,14 @@
                                     </Button>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_profile}" Click="ProfileMenuProfile_Click"/>
+                                    <!-- The outward-facing half of the row above, and a door out of
+                                         the app rather than a tab: everything about a public profile
+                                         (the slug, the featured drops, the kill switch) lives on the
+                                         web, and deliberately never renders here. -->
+                                    <Button Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str profile_menu_public}"
+                                            ToolTip="{loc:Str tooltip_profile_menu_public}"
+                                            Click="ProfileMenuPublicProfile_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_achievements}" Click="ProfileMenuAchievements_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
