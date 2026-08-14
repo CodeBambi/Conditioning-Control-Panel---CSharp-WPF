@@ -6,7 +6,11 @@
 
 ---
 
-### Wave 30 (RAN 2026-08-14/15 — single lane, ALL SEATS PASSED, **NOT LANDED**; first wave under the Claude Code engine)
+### Wave 30 (**LANDED 2026-08-15** — squash `88a058ef`; floor 1018 → **1022**; first wave under the Claude Code engine, and the first use of the floor-delta mechanism)
+
+**ALL EIGHT LAND OBLIGATIONS DISCHARGED.** Verified in scratch worktree `.worktrees/land-w30`, **built first** because the wrapper is `--no-build`: three consecutive `check-floor.mjs` runs, 1022/1022 unit + 35/35 headless, exit 0, exactly the two named OS-gated skips, output redirected to files. Floor applied by `sum-deltas.mjs --apply --packets SP-073-teardown-residue-bound` (**its first real use**: declared +4/+0 summed onto pin 1018/35 → 1022/35) and the consumed `floor-delta.json` deleted, as the tool instructs. Lane's 3 commits squashed to one slice. Both owed wordings applied by the orchestrator — `async-lifecycle-fault-contract.md` §5 rule 6 (the backgrounded portion must not hold an OS thread waiting on the lock; the owed flag is read after the release) and `AudioSeams.cs:178-181` (second spawn path, neither nesting, **with the closing paren the final review caught**) — and the suite re-run afterwards because `AudioSeams.cs` is a source file. Both stale citations in `record.md` corrected **before** the rows were filed from them (`:721` not `:713`; `:257-271` not `:219-225`). Four board rows filed. Row `:112` is **WIP**, not DONE, pending owner ratification.
+
+**Previously (for the record): RAN 2026-08-14/15 — single lane, ALL SEATS PASSED, not landed at that point.**
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
