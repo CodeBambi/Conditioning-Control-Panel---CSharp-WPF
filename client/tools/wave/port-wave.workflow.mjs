@@ -64,7 +64,11 @@ if (packets.length === 0) {
 const RULES = `
 Operational rules for this repository, learned the hard way — follow them exactly:
 - Run plain, SEPARATE shell commands. The worktree isolation guard refuses compound commands ("cd X && ..."). Chain nothing.
-- BUILD IMMEDIATELY BEFORE THE GATE, in your own tree: "dotnet build client/CcpClient.sln -c Debug --nologo", then "node client/tests/floor/check-floor.mjs". The wrapper runs "dotnet test --no-build", so a stale bin/ makes it report a count that does not match the source. At the wave-30 close this reported 1022 against a tree containing 1018.
+- BUILD IMMEDIATELY BEFORE THE GATE, in your own tree, and run BOTH through the slot semaphore, as two separate commands:
+    node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+    node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+  The semaphore is not optional at wave scale: you are one of up to eight concurrent lanes on an 8-core / 31GB machine, and ungated parallel builds thrash CPU, RAM and the msbuild/NuGet file locks. It passes the child's exit code through unchanged, so a red gate stays red.
+  Build first because the wrapper runs "dotnet test --no-build": a stale bin/ makes it report a count that has nothing to do with your source. At the wave-30 close this reported 1022 against a tree containing 1018.
 - NEVER edit client/tests/floor/floor.json. Declare spine-tasks/<packet>/floor-delta.json = {packet, unit, headless, reason}. Your gate WILL report a pin mismatch; that is the designed state. Confirm observed == pin + your declared delta and report both numbers.
 - Never edit client/docs/task-board.md, docs/constitution.md, ConditioningControlPanel/**, .spine/**, .pi/**, or .claude/**.
 - No new wall-clock waits. Only client/tests/CcpClient.Tests/TestWait.cs is approved; TestTimingGuardTests enforces it mechanically.
@@ -203,7 +207,14 @@ Repo: C:\\Code\\Conditioning-Control-Panel---CSharp-WPF. Lane branch: ${lane.bra
 
 Create your own scratch worktree under .worktrees/ on that branch so you can run the gate, and remove it when done.
 
-EXPECTED, NOT A DEFECT: the lane is forbidden to edit client/tests/floor/floor.json, so check-floor.mjs WILL exit non-zero on a pin mismatch. The lane declares ${lane.declaredUnit} unit / ${lane.declaredHeadless} headless. Verify observed == pin + declared yourself, and treat any other number, any failure, or an unexpected skip as blocking. BUILD FIRST — the wrapper is --no-build and a stale bin/ will lie about the source.
+EXPECTED, NOT A DEFECT: the lane is forbidden to edit client/tests/floor/floor.json, so check-floor.mjs WILL exit non-zero on a pin mismatch. The lane declares ${lane.declaredUnit} unit / ${lane.declaredHeadless} headless.
+
+CRITICAL for a multi-lane wave: the pin you compare against is the pin ON DISK, which does NOT yet include any other lane's delta — the orchestrator sums every lane's declaration in ONE commit at land. So verify observed == pin + THIS lane's declared delta, and nothing else. Do not add another lane's numbers, and do not "reconcile" the pin. Treat any other number, any failure, or an unexpected skip as blocking.
+
+Build and gate through the semaphore, as separate commands, because up to eight lanes are running:
+    node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+    node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+BUILD FIRST — the wrapper is --no-build and a stale bin/ will lie about the source.
 
 Judge whether the new tests pin the claimed semantics or merely execute the code; treat them as vacuous until shown otherwise. Return APPROVE or REVISE in your documented contract form.`,
         { label: `code-review:${packet}`, phase: 'Review code', schema: VERDICT }

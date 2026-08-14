@@ -83,8 +83,15 @@ the merged tree observes" is the vacuous-green class the pin exists to catch. So
     node client/tools/gate/with-slot.mjs --slots 3 -- <command>
   It passes the child's exit code through unchanged. 8 lanes is a model target; this machine is
   8 physical cores / 31GB, and a lane worktree is ~10GB.
-CONCURRENCY IS UNPROVEN ABOVE ONE LANE as of 2026-08-14. Go 1 -> 2 -> 3-4 and read what breaks;
-do not open at 8 because this file says 8 is normal.
+OWNER DECISION 2026-08-15: RUN AT 8 LANES OR MORE. The correctness blockers are closed — wave 30
+landed end to end (lane write, commit, merge-back with git diff EMPTY against the verified tree,
+sum-deltas --apply on a real delta, blind audit PASS). What is still genuinely untested is
+CONCURRENCY: no two lanes have ever run at once. That is not a reason to go smaller, it is the
+reason to WATCH THE FIRST ONE. Expect the first concurrent wave to surface something, and expect
+it at the seams rather than in the product code: the floor pin (every lane declares, the land
+sums), worktree disk and RAM (~10GB per lane worktree, 8 physical cores, 31GB), and merge order.
+Gate every build and test through node client/tools/gate/with-slot.mjs --slots 3 so model
+concurrency and build concurrency stay different numbers.
 
 SUBAGENTS (.claude/agents/). A model override is the only routing knob you have.
 Lanes: port-slice-executor (isolation: worktree), one packet each, 8 concurrent is normal.
