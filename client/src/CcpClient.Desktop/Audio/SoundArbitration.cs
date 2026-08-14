@@ -105,6 +105,14 @@ public sealed class SoundArbitrationOptions
 public sealed class SoundArbitration : IDisposable
 {
     private readonly object _gate = new();
+    // Serializes EVERY backend device call (EnumerateDevices/TryInit inside Initialize).
+    // The recovery probe introduced the first second-thread access to IAudioBackend, which
+    // carries no internal synchronization (pre-completion consult): without this, a probe
+    // could run TryInit concurrently with Dispose's backend teardown or a SetPreferredDevice
+    // re-init — concurrent native miniaudio calls, last-writer-wins on the device. Never
+    // held while holding _gate (lock order: _initLock → _gate, and _gate code never takes
+    // _initLock), so the play seam is never blocked by it — it only schedules.
+    private readonly object _initLock = new();
     private readonly IAudioBackend _backend;
     private readonly IAudioDuckSink _duckSink;
     private readonly ISoundClock _clock;
@@ -197,8 +205,14 @@ public sealed class SoundArbitration : IDisposable
 
     // ---------- device layer (F1 re-probe discipline) ----------
 
-    /// <summary>Fresh render-endpoint NAMEs (re-enumerated per call — names, never Ids; session facts only).</summary>
-    public IReadOnlyList<string> EnumerateDevices() => _backend.EnumerateDevices();
+    /// <summary>Fresh render-endpoint NAMEs (re-enumerated per call — names, never Ids; session facts only). Serialized with device init/teardown via `_initLock`.</summary>
+    public IReadOnlyList<string> EnumerateDevices()
+    {
+        lock (_initLock)
+        {
+            return _backend.EnumerateDevices();
+        }
+    }
 
     /// <summary>
     /// Bring the playback device up with the re-probe discipline (spike F1 + named limit 9's
@@ -210,6 +224,14 @@ public sealed class SoundArbitration : IDisposable
     /// `_gate` is never held across `EnumerateDevices` / `TryInit`.
     /// </summary>
     public SoundOutcome Initialize(string? preferredDeviceName)
+    {
+        lock (_initLock)
+        {
+            return InitializeCore(preferredDeviceName);
+        }
+    }
+
+    private SoundOutcome InitializeCore(string? preferredDeviceName)
     {
         lock (_gate)
         {
@@ -1062,6 +1084,11 @@ public sealed class SoundArbitration : IDisposable
         }
 
         recoveryTimer?.Dispose();
+        lock (_initLock)
+        {
+            // An in-flight probe holds _initLock across its backend calls; taking it here
+            // means backend teardown never races a native init (pre-completion consult).
+        }
         PanicReset();
         _backend.Dispose();
     }
