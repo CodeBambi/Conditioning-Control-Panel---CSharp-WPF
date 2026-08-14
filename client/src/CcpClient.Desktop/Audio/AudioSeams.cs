@@ -177,8 +177,9 @@ public sealed class PlayerConstructionTimeoutException : Exception
 /// carries a SynchronizationContext — the AssetDataProvider sync-over-async ctor would
 /// deadlock one. <see cref="_lifecycle"/> is a LEAF lock: nothing under it takes any other
 /// managed lock, so no lock cycle is possible (SoundArbitration._gate → TryEnter is bounded;
-/// SP-071's teardown thread takes _initLock, releases it, then reaches _lifecycle — never
-/// nested).
+/// SP-071's teardown thread takes _initLock, releases it, then reaches _lifecycle; SP-073 adds
+/// a second teardown thread spawned by the post-release drain, which reaches _lifecycle
+/// without ever taking _initLock — never nested on either path).
 /// </summary>
 public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
 {

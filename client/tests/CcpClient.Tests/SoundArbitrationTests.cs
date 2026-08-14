@@ -16,8 +16,13 @@ public sealed class SoundArbitrationTests
 {
     private readonly List<string> _log = [];
 
+    /// <param name="log">SP-073: an optional per-test sink. The default keeps every existing
+    /// fact on the shared <see cref="_log"/> list; the SP-073 facts pass a concurrent sink
+    /// because their release phase genuinely has two product threads logging at once (the
+    /// unwedged probe and the teardown thread), and <see cref="_log"/> is an unsynchronised
+    /// <see cref="List{T}"/>.</param>
     private (SoundArbitration arb, FakeBackend backend, FakeDuckSink duck, ManualClock clock) Make(
-        int maxSfx = 8, string[]? devices = null, TimeSpan? teardownBudget = null)
+        int maxSfx = 8, string[]? devices = null, TimeSpan? teardownBudget = null, Action<string>? log = null)
     {
         var backend = new FakeBackend { Devices = devices ?? ["RDP Sink"] };
         var duck = new FakeDuckSink();
@@ -30,7 +35,7 @@ public sealed class SoundArbitrationTests
             // Budgets whose elapsing is NOT the subject get the shared 60s injection (SP-063);
             // the SP-071 give-up facts pass their own short literal (elapsing IS the subject).
             TeardownBudget = teardownBudget ?? TestWait.InjectedBudget,
-        }, _log.Add);
+        }, log ?? _log.Add);
         return (arb, backend, duck, clock);
     }
 
@@ -609,9 +614,10 @@ public sealed class SoundArbitrationTests
     /// the probe PROVEN parked inside the native call, holding `_initLock` — exactly the
     /// dead-endpoint window the DTRH host close can hit.
     /// </summary>
-    private (SoundArbitration arb, FakeBackend backend, Thread probe, ManualResetEventSlim probeDone) ParkedProbe()
+    private (SoundArbitration arb, FakeBackend backend, Thread probe, ManualResetEventSlim probeDone) ParkedProbe(
+        Action<string>? log = null)
     {
-        var (arb, backend, _, clock) = Make(devices: [], teardownBudget: GiveUpBudget);
+        var (arb, backend, _, clock) = Make(devices: [], teardownBudget: GiveUpBudget, log: log);
         Assert.IsType<SoundOutcome.Unavailable>(arb.Initialize(null)); // endpoint down — suppressed
         backend.Devices = ["RDP Sink"];
         backend.TryInitRelease = new ManualResetEventSlim();
@@ -633,7 +639,9 @@ public sealed class SoundArbitrationTests
         => new(() => { arb.Dispose(); returned.Set(); }) { IsBackground = true, Name = "test-dispose" };
 
     private static string TeardownState(FakeBackend backend)
-        => $"inFlight={backend.TryInitInFlight} disposeCalls={backend.DisposeCallCount} events=[{string.Join(",", backend.NativeEvents)}]";
+        => $"initInFlight={backend.TryInitInFlight} enumerateInFlight={backend.EnumerateInFlight} "
+           + $"disposeCalls={backend.DisposeCallCount} disposedBy={backend.DisposingThreadName ?? "(none)"} "
+           + $"events=[{string.Join(",", backend.NativeEvents)}]";
 
     [Fact]
     public void Teardown_ProbeParked_DisposeReturnsBounded_GiveUpLogged_BackendUntouched()
@@ -758,6 +766,209 @@ public sealed class SoundArbitrationTests
         Assert.True(player.Stopped && player.Disposed); // PanicReset still ran on the caller
         Assert.DoesNotContain(_log, l => l.Contains("teardown exceeds") || l.Contains("backgrounded backend teardown"));
         Assert.Contains(_log, l => l.Contains("panic-reset")); // the pre-SP-071 observable line
+    }
+
+    // ---------- SP-073: the give-up residue is bounded across REPEATED host closes ----------
+
+    // SP-071 left ONE thread per close parked on _initLock until the wedged native call
+    // returned, and framed that residue as "bounded by user close actions". The census
+    // (record.md §1) found the count is governed by host OPENS, not closes: every
+    // DtrhHostWindow builds its own arbitration (DtrhHostWindow.axaml.cs:214) and disposes it
+    // at Closing (:258), five of the close paths are automatic, and the WPF product's own
+    // doors re-launch the host on every press (MainWindow.Lab.cs:237-253, :318-322) with only
+    // RELAUNCHES latched (DtrhHostService.cs:39 `_relaunchedOnce`). So the residue is driven
+    // in a LOOP below: a single cycle cannot distinguish "bounded" from "bounded by one".
+    private const string TeardownThreadName = "SoundArbitrationTeardown";
+
+    [Fact]
+    public void Teardown_RepeatedWedgedCycles_TeardownThreadsDoNotAccumulate()
+    {
+        const int cycles = 5;
+        var sink = new ConcurrentQueue<string>();
+        var open = new List<(SoundArbitration arb, FakeBackend backend, Thread probe, ManualResetEventSlim probeDone)>();
+        try
+        {
+            for (var i = 0; i < cycles; i++)
+            {
+                // One host open/close cycle against a permanently wedged endpoint. Each cycle
+                // is sequenced to completion before the next starts, so the log sink and the
+                // rendezvous stay ordered by signals rather than by assumption.
+                var cycle = ParkedProbe(sink.Enqueue);
+                open.Add(cycle);
+                var disposeReturned = new ManualResetEventSlim();
+                RunDispose(cycle.arb, disposeReturned).Start();
+                TestWait.UntilSync(
+                    () => disposeReturned.IsSet,
+                    $"close {i + 1} of {cycles} gives up bounded while its own probe is parked",
+                    () => TeardownState(cycle.backend));
+            }
+
+            // THE BOUND: N wedged closes leave ZERO teardown threads holding an OS thread.
+            // Pre-SP-073 this count is N — one parked on _initLock per close, for the life of
+            // the process if the endpoint never unwedges.
+            TestWait.UntilSync(
+                () => open.All(c => !c.arb.TeardownThreadOutstanding),
+                $"all {cycles} wedged closes released their teardown thread (residue does not accumulate)",
+                () => $"outstanding={open.Count(c => c.arb.TeardownThreadOutstanding)}/{cycles}");
+            Assert.Equal(cycles, sink.Count(l => l.Contains("teardown exceeds"))); // one give-up line per close
+            Assert.All(open, c => Assert.Equal(0, c.backend.DisposeCallCount));    // SP-071: give-up never touches the backend
+
+            // ...and the handoff did not SKIP the disposal (the forbidden overflow): released
+            // one wedge at a time, every backend is disposed EXACTLY once, by a teardown thread.
+            for (var i = 0; i < cycles; i++)
+            {
+                var cycle = open[i];
+                cycle.backend.TryInitRelease!.Set();
+                TestWait.UntilSync(
+                    () => cycle.probeDone.IsSet && cycle.backend.DisposeCallCount == 1,
+                    $"cycle {i + 1} disposed its backend once after its wedge cleared",
+                    () => TeardownState(cycle.backend));
+                cycle.probe.Join();
+                Assert.Equal(TeardownThreadName, cycle.backend.DisposingThreadName);
+            }
+
+            TestWait.UntilSync(
+                () => sink.Count(l => l.Contains("backgrounded backend teardown completed")) == cycles,
+                $"each of the {cycles} handed-off teardowns logged its completion pair",
+                () => $"completions={sink.Count(l => l.Contains("backgrounded backend teardown completed"))}");
+            Assert.All(open, c => Assert.Equal(1, c.backend.DisposeCallCount)); // never zero (leak), never two
+        }
+        finally
+        {
+            foreach (var cycle in open)
+            {
+                cycle.backend.TryInitRelease!.Set(); // unwedge the fixture whatever the verdict
+            }
+        }
+    }
+
+    [Fact]
+    public void Teardown_GiveUp_NoThreadOutstandingInsideTheWedgedInit_DisposedOnceAfterRelease()
+    {
+        // The inside-the-wedged-operation read (SP-072's disposeCountAtTeardownEnd shape, not
+        // an end-state observation): the residue is read ON the wedged thread, INSIDE the
+        // still-in-flight native init. That is the only window where "no teardown thread is
+        // outstanding" means anything — after the release the drain spawns one to perform the
+        // disposal, so a read taken afterwards would be reading a different question.
+        var sink = new ConcurrentQueue<string>();
+        var (arb, backend, probe, probeDone) = ParkedProbe(sink.Enqueue);
+        var outstandingInsideWedge = true;
+        var disposeCountInsideWedge = -1;
+        backend.InsideWedgedInit = () =>
+        {
+            outstandingInsideWedge = arb.TeardownThreadOutstanding;
+            disposeCountInsideWedge = backend.DisposeCallCount;
+        };
+        try
+        {
+            var disposeReturned = new ManualResetEventSlim();
+            RunDispose(arb, disposeReturned).Start();
+            TestWait.UntilSync(() => disposeReturned.IsSet, "the caller gives up bounded", () => TeardownState(backend));
+            // Establishes the state the inside read then confirms, so a starved scheduler can
+            // never be the verdict. The load-bearing assertion is still the inside one.
+            TestWait.UntilSync(
+                () => !arb.TeardownThreadOutstanding,
+                "the teardown thread handed the disposal off and exited instead of parking on the wedge",
+                () => TeardownState(backend));
+        }
+        finally
+        {
+            backend.TryInitRelease!.Set();
+        }
+
+        TestWait.UntilSync(
+            () => probeDone.IsSet && backend.DisposeCallCount == 1,
+            "the post-release drain performed the handed-off disposal",
+            () => TeardownState(backend));
+        probe.Join(); // publishes the values written on the probe thread
+
+        Assert.False(outstandingInsideWedge);      // THE FACT: no thread held while the wedge was
+        Assert.Equal(0, disposeCountInsideWedge);  // SP-071: and the backend was untouched there
+        Assert.Equal(1, backend.DisposeCallCount); // handed off, never skipped
+        Assert.Equal(TeardownThreadName, backend.DisposingThreadName); // never the wedged probe thread
+        Assert.True(backend.DisposingThreadIsBackground);
+        Assert.Equal(1, sink.Count(l => l.Contains("teardown exceeds")));
+        TestWait.UntilSync(
+            () => sink.Count(l => l.Contains("backgrounded backend teardown completed")) == 1,
+            "the SP-071 give-up/completion pair still lands exactly once",
+            () => TeardownState(backend));
+    }
+
+    [Fact]
+    public void Teardown_GiveUp_DuringParkedEnumerate_DrainsAfterTheEnumerateReleases()
+    {
+        // The SECOND _initLock scope. EnumerateDevices holds the same lock as the recovery
+        // probe, so a close during a wedged enumeration hands off identically — and without a
+        // post-release drain on THIS scope the handoff would have nobody to run it and the
+        // native device would leak.
+        var sink = new ConcurrentQueue<string>();
+        var (arb, backend, _, _) = Make(teardownBudget: GiveUpBudget, log: sink.Enqueue);
+        Initialized(arb);
+        backend.EnumerateRelease = new ManualResetEventSlim();
+        var outstandingInsideWedge = true;
+        var disposeCountInsideWedge = -1;
+        backend.InsideWedgedEnumerate = () =>
+        {
+            outstandingInsideWedge = arb.TeardownThreadOutstanding;
+            disposeCountInsideWedge = backend.DisposeCallCount;
+        };
+        var enumerateDone = new ManualResetEventSlim();
+        var enumerate = new Thread(() => { arb.EnumerateDevices(); enumerateDone.Set(); })
+            { IsBackground = true, Name = "test-enumerate" };
+        enumerate.Start();
+        TestWait.UntilSync(
+            () => backend.EnumerateInFlight,
+            "the enumeration parked inside the native call (fixture never reached the mechanism)",
+            () => TeardownState(backend));
+        try
+        {
+            var disposeReturned = new ManualResetEventSlim();
+            RunDispose(arb, disposeReturned).Start();
+            TestWait.UntilSync(
+                () => disposeReturned.IsSet,
+                "the caller gives up bounded against a wedged enumeration",
+                () => TeardownState(backend));
+            TestWait.UntilSync(
+                () => !arb.TeardownThreadOutstanding,
+                "the teardown thread handed off and exited",
+                () => TeardownState(backend));
+            Assert.Equal(0, backend.DisposeCallCount);
+            Assert.Equal(1, sink.Count(l => l.Contains("teardown exceeds")));
+        }
+        finally
+        {
+            backend.EnumerateRelease!.Set();
+        }
+
+        TestWait.UntilSync(
+            () => enumerateDone.IsSet && backend.DisposeCallCount == 1,
+            "the enumerate scope's post-release drain performed the handed-off disposal",
+            () => TeardownState(backend));
+        enumerate.Join();
+
+        Assert.False(outstandingInsideWedge);
+        Assert.Equal(0, disposeCountInsideWedge);
+        Assert.Equal(1, backend.DisposeCallCount);
+        Assert.Equal(TeardownThreadName, backend.DisposingThreadName);
+    }
+
+    [Fact]
+    public void Teardown_NoContention_DisposalNeverRunsOnTheCallerThread()
+    {
+        // SP-071 REGRESSION GUARD, not an SP-073 fact: pre-SP-073 code passes it too, so it is
+        // deliberately NOT counted in the packet's revert matrix. It exists because SP-073's
+        // uncontended branch sits one edit away from "we hold the lock, just dispose here",
+        // which is SP-071 reverted — the native device teardown back on the UI close handler.
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        var callerThreadId = Environment.CurrentManagedThreadId;
+
+        arb.Dispose();
+
+        Assert.Equal(1, backend.DisposeCallCount);
+        Assert.NotEqual(callerThreadId, backend.DisposingThreadId);
+        Assert.Equal(TeardownThreadName, backend.DisposingThreadName);
+        Assert.True(backend.DisposingThreadIsBackground); // a wedged teardown never blocks process exit
     }
 
     /// <summary>Run <paramref name="count"/> failed re-probes (each: expire window → play kicks → advance fires the failed probe).</summary>
@@ -1197,9 +1408,32 @@ public sealed class SoundArbitrationTests
         private int _disposeCallCount;
         public int DisposeCallCount => Volatile.Read(ref _disposeCallCount);
 
+        // SP-073 instrumentation. InsideWedgedInit/InsideWedgedEnumerate run ON the wedged
+        // thread, INSIDE the native call, after the test releases it and BEFORE it returns —
+        // the only window in which "no teardown thread is outstanding while the wedge is
+        // still held" can be observed at all (afterwards the drain spawns one). The disposing
+        // identity is recorded because "who performs the native teardown" is the invariant:
+        // never the caller, never the wedged thread, always a teardown thread.
+        public ManualResetEventSlim? EnumerateRelease { get; set; }
+        public volatile bool EnumerateInFlight;
+        public Action? InsideWedgedInit { get; set; }
+        public Action? InsideWedgedEnumerate { get; set; }
+        public string? DisposingThreadName { get; private set; }
+        public int DisposingThreadId { get; private set; }
+        public bool DisposingThreadIsBackground { get; private set; }
+
         public IReadOnlyList<string> EnumerateDevices()
         {
             EnumerateCallCount++;
+            if (EnumerateRelease is { } release)
+            {
+                EnumerateInFlight = true;
+                release.Wait(); // the wedged native enumeration — released by the test
+                InsideWedgedEnumerate?.Invoke();
+                EnumerateInFlight = false;
+                NativeEvents.Enqueue("enumerate-returned");
+            }
+
             return Devices;
         }
 
@@ -1211,6 +1445,7 @@ public sealed class SoundArbitrationTests
             {
                 TryInitInFlight = true;
                 release.Wait(); // the wedged native call — released by the test, never by timing
+                InsideWedgedInit?.Invoke(); // still INSIDE the native call, still holding _initLock
                 TryInitInFlight = false;
                 NativeEvents.Enqueue("init-returned");
             }
@@ -1248,6 +1483,9 @@ public sealed class SoundArbitrationTests
             {
                 DisposedWhileInitInFlight = true; // the concurrent-native-call class, observed
             }
+            DisposingThreadName = Thread.CurrentThread.Name;
+            DisposingThreadId = Environment.CurrentManagedThreadId;
+            DisposingThreadIsBackground = Thread.CurrentThread.IsBackground;
             NativeEvents.Enqueue("backend-disposed");
             Interlocked.Increment(ref _disposeCallCount);
         }

@@ -75,7 +75,7 @@ public sealed class SoundArbitrationOptions
     /// <summary>Consecutive failed device-init attempts at which a still-dead endpoint logs ONE escalation line (WPF OutputFailuresToTrip = 5, AudioService.Playback.cs:101). Port role = the escalation transition only: the port disables on the FIRST init failure (WPF arms at the streak because its failure unit is a per-play waveOutOpen; a port play is never a device attempt — SP-070 record §design).</summary>
     public int RecoveryFailureThreshold { get; init; } = 5;
 
-    /// <summary>Bound on the CALLER's wait for the backgrounded backend teardown (SP-071: the close handler must never wait unbounded on a wedged native init). On expiry the caller logs ONE typed give-up line and returns WITHOUT touching the backend — the backgrounded teardown still disposes it exactly once when the native call returns. Default 2s = the local precedent (TeardownBarkPipeline's store waits, DtrhHostWindow.axaml.cs:257-260).</summary>
+    /// <summary>Bound on the CALLER's wait for the backgrounded backend teardown (SP-071: the close handler must never wait unbounded on a wedged native init). On expiry the caller logs ONE typed give-up line and returns WITHOUT touching the backend — the teardown still disposes it exactly once when the native call returns. SP-073: the wait is on the DISPOSAL rather than on a thread, because no teardown thread parks on the wedge any more (the give-up residue must not accumulate over repeated host closes). Default 2s = the local precedent (TeardownBarkPipeline's store waits, DtrhHostWindow.axaml.cs:257-260).</summary>
     public TimeSpan TeardownBudget { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>Duck watchdog: force-unduck after this hold (WPF DuckWatchdogMs 300_000, AudioService.cs:39).</summary>
@@ -159,8 +159,25 @@ public sealed class SoundArbitration : IDisposable
     // 2 = caller gave up. Interlocked transitions only; meaningful once Dispose starts the
     // backgrounded teardown. Closes the give-up/completion log race: the completion line is
     // logged only when the give-up line was (a transition pair), and a teardown finishing in
-    // the Join race logs neither.
+    // the budget race logs neither.
     private int _teardownState;
+
+    // SP-073 handoff state. `_backendDisposeOwed` is published (full fence) by the teardown
+    // thread BEFORE it attempts `_initLock` and is NEVER cleared: every later release of that
+    // lock re-offers to perform the disposal, and `_backendDisposeClaimed` makes the perform
+    // exactly-once across both spawn paths, so a redundant offer is a no-op rather than a
+    // second native teardown. `_teardownSignal` carries the CALLER's bounded observation: the
+    // caller waits for the DISPOSAL to complete, never for a thread to exit (a thread that
+    // parks on the wedge is exactly the residue this packet removes). Monitor.Wait rather than
+    // an event object so the permanently wedged path never materialises a kernel handle that
+    // is never disposed.
+    private int _backendDisposeOwed;
+    private int _backendDisposeClaimed;
+    private readonly object _teardownSignal = new();
+    private bool _backendDisposeCompleted; // guarded by _teardownSignal
+    private Thread? _teardownThread;
+
+    private const string TeardownThreadName = "SoundArbitrationTeardown";
 
     public SoundArbitration(
         IAudioBackend backend,
@@ -213,14 +230,43 @@ public sealed class SoundArbitration : IDisposable
     /// <summary>The endpoint the device is up on (fresh-snapshot NAME; null before init).</summary>
     public string? ActiveDeviceName { get { lock (_gate) { return _activeDeviceName; } } }
 
+    /// <summary>
+    /// SP-073: this instance's backgrounded teardown still OWNS an OS thread. The residue an
+    /// app session accumulates is the SUM of this over every arbitration the session builds —
+    /// one per DTRH host window (DtrhHostWindow.axaml.cs:214 construct, :258 dispose), and
+    /// host windows recur per session (WPF parity: the Lab doors re-launch the host on every
+    /// press, MainWindow.Lab.cs:237-253 and :318-322, with only relaunches latched —
+    /// DtrhHostService.cs:39 `_relaunchedOnce`). So the count is exposed per instance and
+    /// summed by the observer, never as process-global state.
+    ///
+    /// <para>SCOPE, precisely: this reports the residue SP-073 removes — a teardown thread
+    /// parked on `_initLock` waiting out a wedged native call. It is NOT a general residue
+    /// counter and must not be read as one. `_teardownThread` is a SINGLE slot written by both
+    /// spawn paths and `_backendDisposeOwed` is never cleared, so every post-teardown
+    /// `_initLock` release spawns a no-op thread that OVERWRITES the slot: with a Dispose-side
+    /// thread still parked inside a wedged `_backend.Dispose()` (the irreducible class — a
+    /// blocking native call owns its thread by construction), one `EnumerateDevices` call is
+    /// enough to make this read false while that thread is alive. The suite reads it only
+    /// against the parked-on-`_initLock` case it is sound for.</para>
+    /// </summary>
+    public bool TeardownThreadOutstanding => Volatile.Read(ref _teardownThread) is { IsAlive: true };
+
     // ---------- device layer (F1 re-probe discipline) ----------
 
     /// <summary>Fresh render-endpoint NAMEs (re-enumerated per call — names, never Ids; session facts only). Serialized with device init/teardown via `_initLock`.</summary>
     public IReadOnlyList<string> EnumerateDevices()
     {
-        lock (_initLock)
+        try
         {
-            return _backend.EnumerateDevices();
+            lock (_initLock)
+            {
+                return _backend.EnumerateDevices();
+            }
+        }
+        finally
+        {
+            // SP-073: OUTSIDE the lock body — this runs after Monitor.Exit has returned.
+            DrainOwedBackendDisposalAfterRelease();
         }
     }
 
@@ -235,9 +281,17 @@ public sealed class SoundArbitration : IDisposable
     /// </summary>
     public SoundOutcome Initialize(string? preferredDeviceName)
     {
-        lock (_initLock)
+        try
         {
-            return InitializeCore(preferredDeviceName);
+            lock (_initLock)
+            {
+                return InitializeCore(preferredDeviceName);
+            }
+        }
+        finally
+        {
+            // SP-073: OUTSIDE the lock body — this runs after Monitor.Exit has returned.
+            DrainOwedBackendDisposalAfterRelease();
         }
     }
 
@@ -1107,51 +1161,174 @@ public sealed class SoundArbitration : IDisposable
         // host close handler, DtrhHostWindow.axaml.cs:153 → :258) must never wait unbounded
         // on a wedged native init — the ONLY case with a probe in flight is a dead endpoint.
         // A timeout on _initLock that CONTINUES would run _backend.Dispose() concurrently
-        // with that init (the process-fatal class _initLock exists to prevent), so the
-        // unbounded lock wait lives on the background thread and only the caller's
-        // OBSERVATION is bounded. _tornDown is already set, so InitializeCore's early return
-        // guarantees no NEW native call can start; the background _initLock acquisition only
-        // drains an ALREADY in-flight call. Named + IsBackground (WPF 5a168554 remedy shape);
+        // with that init (the process-fatal class _initLock exists to prevent), so only the
+        // caller's OBSERVATION is bounded. Named + IsBackground (WPF 5a168554 remedy shape);
         // a wedged thread never blocks process exit.
-        var teardown = new Thread(() =>
-        {
-            try
-            {
-                lock (_initLock)
-                {
-                    // An in-flight probe holds _initLock across its backend calls; taking it
-                    // here means backend teardown never races a native init.
-                }
-                _backend.Dispose();
-            }
-            catch (Exception ex)
-            {
-                // An escaping exception on a background thread is process-fatal — degrade to
-                // one logged line; the completion signal still lands below.
-                _log($"sound: backend teardown threw ({ex.GetType().Name}: {ex.Message})");
-            }
-            finally
-            {
-                if (Interlocked.CompareExchange(ref _teardownState, 1, 0) == 2)
-                {
-                    // The transition pair to the give-up line — logged only when the caller
-                    // already gave up (ordinary teardown's logging is byte-identical).
-                    _log("sound: backgrounded backend teardown completed after the caller gave up — wedged native init released");
-                }
-            }
-        })
-        { IsBackground = true, Name = "SoundArbitrationTeardown" };
-        teardown.Start();
+        //
+        // SP-073: that thread must not PARK on the wedge either. SP-071 bounded the caller and
+        // left one thread per close parked on _initLock until the native call returned, and
+        // the residue was framed as "bounded by user close actions" — false: host closes are
+        // automatic (watchdog relaunch/exhaustion, forced exit, page exit-done, page
+        // boot-error, dialog close) and, decisively, host OPENS recur per app session, one new
+        // arbitration each (DtrhHostWindow.axaml.cs:214). Nothing bounded the count. So the
+        // thread now takes the lock with a ZERO timeout: on success it releases immediately
+        // and disposes outside the lock (SP-071's barrier-then-dispose shape, unchanged); on
+        // failure it publishes the owed disposal and EXITS, and the thread holding the lock
+        // performs the teardown after ITS release. Same disposal, same instant, one fewer
+        // thread — see RunHandoffTeardown / DrainOwedBackendDisposalAfterRelease.
+        StartBackendTeardownThread(RunHandoffTeardown);
 
-        if (!teardown.Join(_options.TeardownBudget)
-            && Interlocked.CompareExchange(ref _teardownState, 2, 0) == 0)
+        // The caller's bounded observation is of the DISPOSAL, not of a thread: with the
+        // handoff the teardown thread exits long before the budget, and a Join would then
+        // report "done" while the backend is still owed.
+        bool settled;
+        lock (_teardownSignal)
         {
-            // Bounded give-up: NEVER touches _backend in any way — the background thread
-            // still disposes it exactly once when the native call finally returns.
+            if (!_backendDisposeCompleted)
+            {
+                Monitor.Wait(_teardownSignal, _options.TeardownBudget);
+            }
+
+            settled = _backendDisposeCompleted; // re-checked under the lock: spurious wakeups
+        }
+
+        if (!settled && Interlocked.CompareExchange(ref _teardownState, 2, 0) == 0)
+        {
+            // Bounded give-up: NEVER touches _backend in any way — the disposal still lands
+            // exactly once when the native call finally returns and its thread releases.
             _log($"sound: backend teardown exceeds {(int)_options.TeardownBudget.TotalMilliseconds}ms on an in-flight native call — close not blocked, teardown continues in background (SP-071; WPF 5a168554 remedy shape)");
         }
-        // State 1 on the Join-timeout race: the teardown completed as the budget expired —
-        // no give-up, no line.
+        // State 1 on the budget race: the teardown completed as the budget expired — no
+        // give-up, no line.
+    }
+
+    /// <summary>
+    /// The Dispose-side teardown body (SP-073). Publishes the owed disposal with a full fence
+    /// BEFORE attempting the lock — every interleaving argument rests on that order — then
+    /// takes `_initLock` with a ZERO timeout as a barrier only.
+    ///
+    /// <para>Why a failed attempt is safe to walk away from: a failed TryEnter proves some
+    /// thread held `_initLock` at an instant AFTER the owed write; every `_initLock`
+    /// acquisition site checks the owed flag strictly after its own Monitor.Exit returns
+    /// (<see cref="DrainOwedBackendDisposalAfterRelease"/>), so that holder's check observes
+    /// the flag and performs the teardown. Termination is immediate, not inductive. The flag
+    /// is never cleared and the perform is claimed, so a redundant offer is a no-op. Reading
+    /// the flag INSIDE the lock body instead would lose it: a holder could read false and be
+    /// preempted before releasing, the TryEnter would still fail, and the native device would
+    /// never be disposed — a leak, not a delay.</para>
+    /// </summary>
+    private void RunHandoffTeardown()
+    {
+        Interlocked.Exchange(ref _backendDisposeOwed, 1);
+        if (!Monitor.TryEnter(_initLock, TimeSpan.Zero))
+        {
+            // Handed off. NEVER park here: one parked thread per host close is the residue.
+            return;
+        }
+
+        // Barrier only: an in-flight probe holds _initLock across its backend calls, so
+        // acquiring it here means this teardown never starts against a live native init. The
+        // dispose itself runs OUTSIDE the lock exactly as it did before SP-073 —
+        // SoundFlowAudioBackend.Dispose:126-138 routes into OrphanSafePlayerFactory.Teardown,
+        // which takes the `_lifecycle` lock (AudioSeams.cs:324); holding _initLock across
+        // that would nest two locks that AudioSeams.cs:178-181 states are never nested.
+        Monitor.Exit(_initLock);
+        PerformBackendDisposeOnce();
+    }
+
+    /// <summary>
+    /// The owed-disposal check every `_initLock` scope runs after releasing the lock (SP-073).
+    /// Called from the `finally` of <see cref="Initialize"/> and <see cref="EnumerateDevices"/>
+    /// — OUTSIDE their lock bodies, which is what closes the release race described in
+    /// <see cref="RunHandoffTeardown"/>.
+    /// </summary>
+    private void DrainOwedBackendDisposalAfterRelease()
+    {
+        if (Volatile.Read(ref _backendDisposeOwed) == 0)
+        {
+            return;
+        }
+
+        // The disposal is handed to a fresh named teardown thread rather than run here: this
+        // runs on whatever thread owned the lock — the recovery probe's THREAD-POOL thread
+        // (AudioSeams.cs:133-137), or a future UI-thread caller (Initialize is called on the
+        // UI thread at DtrhHostWindow.axaml.cs:220). Running a native device teardown there
+        // would be the SP-071 class by a new door. One line instead: _backend.Dispose() runs
+        // only ever on a teardown thread.
+        StartBackendTeardownThread(PerformBackendDisposeOnce);
+    }
+
+    /// <summary>
+    /// The ONLY place a teardown thread is created (SP-073): named + IsBackground so a wedged
+    /// native call never blocks process exit (WPF 5a168554 remedy shape). The field is
+    /// published before Start, which closes the started-but-not-yet-published mode of
+    /// <see cref="TeardownThreadOutstanding"/>. That does NOT make the property a general
+    /// residue counter — see its own remarks for the overwrite mode it cannot report.
+    /// </summary>
+    private void StartBackendTeardownThread(ThreadStart body)
+    {
+        var teardown = new Thread(body) { IsBackground = true, Name = TeardownThreadName };
+        Volatile.Write(ref _teardownThread, teardown);
+        try
+        {
+            teardown.Start();
+        }
+        catch (Exception ex)
+        {
+            // Thread creation failed (resource exhaustion). An escaping exception here would
+            // surface out of a probe's finally; degrade to one line.
+            //
+            // The line below is TRUE on the DRAIN path only: there the owed flag is already
+            // set, so the next release of _initLock offers the disposal again. On the
+            // Dispose-side path the flag is published INSIDE RunHandoffTeardown, which never
+            // ran — nothing is owed, no later release can drain, the backend is never disposed,
+            // and both this line and the caller's "teardown continues in background" overstate
+            // the outcome. FILED, NOT FIXED HERE (record.md §9): it is not a regression —
+            // pre-SP-073 an unguarded Start() throw was swallowed by TeardownBarkPipeline's
+            // catch (DtrhHostWindow.axaml.cs:258) and the backend was likewise never disposed —
+            // and a post-verification code edit would invalidate this packet's revert matrix.
+            _log($"sound: backend teardown thread could not start ({ex.GetType().Name}: {ex.Message}) — disposal stays owed for the next lock release");
+        }
+    }
+
+    /// <summary>
+    /// The single site that disposes the backend (SP-073). Entered ONLY on a teardown thread
+    /// and NEVER while holding a lock, so `_initLock` is never nested over the backend's own
+    /// `_lifecycle` lock. Claimed, so the two spawn paths (the Dispose-side attempt and the
+    /// post-release drain) can both offer and exactly one performs.
+    /// </summary>
+    private void PerformBackendDisposeOnce()
+    {
+        if (Interlocked.CompareExchange(ref _backendDisposeClaimed, 1, 0) != 0)
+        {
+            return; // a redundant offer — the claim arbitrates (the owed flag is never cleared)
+        }
+
+        try
+        {
+            _backend.Dispose();
+        }
+        catch (Exception ex)
+        {
+            // An escaping exception on a background thread is process-fatal — degrade to
+            // one logged line; the completion signal still lands below.
+            _log($"sound: backend teardown threw ({ex.GetType().Name}: {ex.Message})");
+        }
+        finally
+        {
+            if (Interlocked.CompareExchange(ref _teardownState, 1, 0) == 2)
+            {
+                // The transition pair to the give-up line — logged only when the caller
+                // already gave up (ordinary teardown's logging is byte-identical).
+                _log("sound: backgrounded backend teardown completed after the caller gave up — wedged native init released");
+            }
+
+            lock (_teardownSignal)
+            {
+                _backendDisposeCompleted = true;
+                Monitor.PulseAll(_teardownSignal);
+            }
+        }
     }
 
     private sealed class DuckHandle(SoundArbitration owner, long generation) : IDuckHandle
