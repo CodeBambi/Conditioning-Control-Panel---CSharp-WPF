@@ -14,8 +14,12 @@ planning/
 # Root-anchored so legit deeper-tree files matching the pattern aren't excluded.
 /ConditioningControlPanel/System.Drawing.*
 
-# Claude Code local config
-.claude/
+# Claude Code config. Shared skills/agents are tracked (same policy as .pi/ below);
+# session state and local settings are not.
+.claude/*
+!.claude/README.md
+!.claude/agents/
+!.claude/skills/
 ConditioningControlPanel/.claude/
 .github/agents/wpf-ui-specialist.agent.md
 AGENTS.md
@@ -43,6 +47,10 @@ release/
 settings.json
 logs/
 **/.claude/settings.local.json
+# Shared Claude Code project settings ARE tracked: worktree.baseRef must travel
+# between machines or lanes silently branch from main instead of the port branch.
+# This negation must stay below the bare `settings.json` rule above to win.
+!.claude/settings.json
 
 # Pi port orchestration
 # Share the exact project package declaration, but not installed npm contents or

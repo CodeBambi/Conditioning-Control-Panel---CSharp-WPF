@@ -1,4 +1,22 @@
-# port-loop.ps1 — unattended orchestration loop for the greenfield port.
+# port-loop.ps1 - unattended orchestration loop for the greenfield port.
+#
+# !!! DISABLED 2026-08-14 - THIS SCRIPT IS THE PI VERSION AND THE PROMPT IS NOT !!!
+#
+# client/port.txt was rewritten for Claude Code (subagent lanes in git worktrees, reviewers
+# and advisors from .claude/agents/, .port/ state files). This script still launches `pi` and
+# still coordinates on `spine status --json`. Running it now hands a Claude-Code-shaped prompt
+# to a Pi session, which has none of those things.
+#
+# It does NOT fail safe on its own: `pi` IS installed on this machine, so the preflight below
+# passes and the loop starts. It also watches .spine/STOP while the new prompt writes
+# .port/STOP, so a pause raised by the prompt would not halt the loop.
+#
+# Until this script is rewritten as the Claude Code lane scheduler (`claude -p`, stdin-piped
+# prompts, --worktree lanes, .port/ state), run the port SUPERVISED instead: open an
+# interactive Claude Code session in the repo and give it the contents of client/port.txt.
+#
+# Pass -IUnderstandThisIsThePiVersion to override, only if you have deliberately restored the
+# Pi-shaped prompt as well.
 #
 # One pi session per PHASE, never per wave: the shell owns the long waits, the model owns
 # the judgment. Each `pi -p` invocation reconciles, does exactly ONE phase (land a finished
@@ -28,12 +46,38 @@ param(
     [string]$Prompt = 'client/port.txt',
     [string]$AuditModel = 'kimi-coding/kimi-for-coding-highspeed',
     [switch]$NoAudit,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$IUnderstandThisIsThePiVersion
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repo
+
+# --- Engine/prompt mismatch guard (2026-08-14) -------------------------------------------
+# Refuse to launch Pi with a prompt written for Claude Code. Detect by content, not by date,
+# so this stays correct if either side is edited.
+$promptPath = Join-Path $repo $Prompt
+if ((Test-Path $promptPath) -and -not $IUnderstandThisIsThePiVersion) {
+    $promptText = Get-Content $promptPath -Raw
+    if ($promptText -match '\.claude/agents/|port-slice-executor|port-advisor|WAVE-LOCK') {
+        Write-Host ''
+        Write-Host 'REFUSING TO START: engine/prompt mismatch.' -ForegroundColor Red
+        Write-Host ''
+        Write-Host "  $Prompt is written for Claude Code (it names .claude/agents/ subagents)."
+        Write-Host '  This script launches `pi` and coordinates on `spine status --json`.'
+        Write-Host '  Pi cannot use Claude Code subagents, worktree lanes, or the reviewer agents.'
+        Write-Host ''
+        Write-Host '  Run the port SUPERVISED instead: open an interactive Claude Code session'
+        Write-Host '  in the repo and give it the contents of client/port.txt.'
+        Write-Host ''
+        Write-Host '  This script needs rewriting as the Claude Code lane scheduler before any'
+        Write-Host '  unattended run. Override only if you also restored the Pi-shaped prompt:'
+        Write-Host '      -IUnderstandThisIsThePiVersion'
+        Write-Host ''
+        exit 2
+    }
+}
 
 $pi = Join-Path $env:APPDATA 'npm\pi.cmd'
 $spineBin = Join-Path $env:USERPROFILE '.pi\agent\npm\node_modules\.bin'

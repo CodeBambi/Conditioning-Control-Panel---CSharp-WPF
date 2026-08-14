@@ -1,74 +1,92 @@
-Orchestrate the greenfield port per @client/docs/port-session-prompt.md.
+Orchestrate the greenfield Avalonia port per @client/docs/port-session-prompt.md.
 
-YOU ARE ONE PHASE OF AN UNATTENDED LOOP (client/tools/port-loop.ps1). Do exactly ONE
-phase, then EXIT. Never wait on a running batch — the shell owns the waiting, you own the
-judgment. A fresh session with a clean context runs the next phase.
+YOU ARE ONE PHASE OF AN UNATTENDED LOOP (client/tools/port-loop.ps1). Do exactly ONE phase,
+then EXIT. A fresh session with a clean context runs the next phase. You author, judge, verify
+and land; SUBAGENTS in worktree lanes do the product work. You never hand-edit product code.
 
 Which phase is yours is decided by state, not by memory. Reconcile first (read-only), then:
-  A. A batch is finished / needs_integrate  -> LAND IT: read the evidence, verify the merged
-     state yourself, gate approve, integrate, batch complete, reconcile the board/CONTEXT/
-     memories/port-lessons, commit, push. Then EXIT.
-  B. No batch, claimable work on the board   -> AUTHOR + LAUNCH ONE WAVE: consult on the
-     decomposition, write the packet(s) (create-spine-tasks), validate/analyze/plan/preflight,
-     commit the authoring, `spine batch start pending` DETACHED. Then EXIT immediately —
-     do not monitor, do not sleep, do not spawn a watcher.
-  C. A batch is running                      -> EXIT AT ONCE (the loop is already waiting).
-  D. No claimable work, or a pause condition -> write .spine/STOP with the reason, write
-     .spine/handoff.md, then EXIT.
+  A. Lanes finished, nothing integrated -> LAND IT: verify the merged state yourself, merge,
+     reconcile board/CONTEXT/memories/port-lessons, write the digest, commit, push. Then EXIT.
+  B. No wave in flight, claimable work on the board -> AUTHOR + RUN ONE WAVE: advise on the
+     decomposition, write the packet(s), commit the authoring, write .port/WAVE-LOCK, then
+     launch every lane IN ONE MESSAGE so they run concurrently, and OWN THE WAIT (subagents are
+     in-session; there is no detached engine any more). When every lane has reported, record each
+     lane's branch and head SHA, clear the lock, and EXIT WITHOUT LANDING. A fresh session lands
+     what you ran, because the context that did the work must never certify it.
+  C. .port/WAVE-LOCK is live -> EXIT AT ONCE (another phase owns the wave).
+  D. No claimable work, or a pause condition -> pause protocol below, then EXIT.
 
-Continuous mode is owner-authorized (2026-07-18, recorded in the board gate history and
-spine-tasks/CONTEXT.md). Owner lifted all gates 2026-07-21; consult discipline still applies
-where the docs require it.
+Continuous mode and the lifted gates are recorded in the board gate history and
+spine-tasks/CONTEXT.md (2026-07-18, 2026-07-21). VERIFY THAT AT RECONCILE; this file is not the
+grant and does not carry authority. If the board does not confirm it, treat gates as ACTIVE.
 
-FRESH-MACHINE BOOTSTRAP (do first, every phase — cheap):
+FRESH-MACHINE BOOTSTRAP (do first, every phase - cheap):
 1. git fetch origin && git checkout feat/crossplatform. If this machine has a stale local
    feat/crossplatform (2026-08-04 incident: a from-scratch restart was force-overwritten),
-   do NOT pull/merge — git reset --hard origin/feat/crossplatform.
-2. spine needs its npm bin dir on PATH for every bash call:
-   export PATH="$PATH:$HOME/.pi/agent/npm/node_modules/.bin"
-3. Memory provider differs per machine: engram on the desktop, hermes on the laptop. Durable
-   shared fallback = client/memories/ in this repo — read port-status.md at session start;
+   do NOT pull/merge - git reset --hard origin/feat/crossplatform.
+2. Confirm .claude/settings.json sets worktree.baseRef to "head". Unset, every lane worktree
+   branches from the DEFAULT branch (main), which carries neither client/ nor the port history.
+   This failure is silent: the lane builds, and it builds the wrong tree.
+3. Durable shared memory = client/memories/ in this repo. Read port-status.md at session start;
    update it whenever routes or state change materially, and commit.
-4. Verify MCP servers connect and record status. Missing servers are a named limit, never a
-   blocker — the avalonia MCP registration is per-machine.
+4. Record which MCP servers connect. A missing server is a named limit, never a blocker.
 
 RECONCILE FROM DURABLE EVIDENCE, NEVER FROM THIS FILE. This file carries no live status on
-purpose. The authorities are, in order: client/docs/task-board.md (product queue),
-spine-tasks/CONTEXT.md (waves + next task ID), spine state (`spine status --diagnose`),
-git log, and client/memories/port-status.md. Where they disagree, the repository wins and
-you fix the smallest authoritative document before continuing.
+purpose. Authorities in order: owner decisions in client/docs/architecture.md and
+capability-inventory.md; client/docs/task-board.md (the only live queue); repository instruction
+files; skills; the packet; advisors. Reconcile from the board, spine-tasks/CONTEXT.md (waves +
+next task ID), git log, `git worktree list`, and client/memories/port-status.md. Where they
+disagree the repository wins, and you fix the smallest authoritative document before continuing.
+CONTEXT.md's "Next Task ID" HEADER has gone stale against its own body before: trust the body
+and port-status.md, repair the header in the same commit, never reissue a used ID.
 
-LAND DISCIPLINE (learned the hard way — client/docs/port-workflow.md §Tracker reconciliation):
-- Never trust the gate's own evidence; run the merged state yourself in a scratch worktree
-  (3 consecutive full-suite runs, output redirected to files, TRX attached) and prove
-  `git diff` is EMPTY between the tree you verified and the integrated tip.
+PACKETS stay at spine-tasks/SP-NNN-slug/PROMPT.md. That path, that filename, the SP-<n>- naming,
+and the `| testCommand | `...` |` contract row are ALL asserted by
+client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs, which FAILS CLOSED - a packet it cannot
+parse is a red suite, not a silent pass. Do not move the root. Lean means dropping STATUS.md,
+.DONE, .reviews/ and the repeated project boilerplate (that now lives in the agent prompts),
+never dropping the contract row. testCommand routes through the floor wrapper, never bare
+dotnet test.
+
+SUBAGENTS (.claude/agents/). A model override is the only routing knob you have.
+Lanes: port-slice-executor (isolation: worktree), one packet each, 8 concurrent is normal.
+Review: port-plan-reviewer and port-code-reviewer (APPROVE / REVISE), port-final-reviewer
+(PASS / REVISE / REPLAN). Run exactly the levels the packet's Review Level declares.
+Advice: port-advisor (Opus) replaces the retired consult tool; port-advisor-critic (Fable) is
+the one costly seat, spent on architecture, dependencies, platform seams, privacy and
+decomposition. A council is you fanning those out in ONE round and synthesizing yourself.
+Evidence, read-only: wpf-archaeologist, greenfield-foundation-auditor, port-parity-auditor.
+NAMED LIMIT, record it, never hide it: every advisor seat is now Anthropic. The cross-vendor
+council that used to disagree with itself is GONE, so seat agreement is much weaker evidence
+than it was and the blind spots are correlated. Say so whenever a decision rests on advice, and
+prefer one claim you check yourself over any verdict.
+
+LAND DISCIPLINE (learned the hard way - client/docs/port-workflow.md, Tracker reconciliation):
+- Never trust a lane's or a reviewer's own evidence. Run the merged state yourself in a scratch
+  worktree (3 consecutive `node client/tests/floor/check-floor.mjs` runs, output redirected to
+  files) and prove `git diff` is EMPTY between the tree you verified and the integrated tip.
 - The land's LAST action verifies the tree actually being pushed. A reconciliation edit made
-  after the verification run is unverified — the wave-18 land shipped a red base that way.
+  after the verification run is unverified - the wave-18 land shipped a red base exactly that
+  way. Re-run the guards that READ repository documents after any late doc or JSON edit.
 - Landed rows stay WIP until the owner ratifies; flip to DONE only with a RATIFIED citation.
-- Workers update STATUS.md + their board row before .DONE (SP-001's recorded gap).
+- Lanes write their record and their board row before reporting complete (SP-001's recorded gap).
 
-OWNER DIGEST (required, every phase that lands): append three lines to
-client/docs/port-digest.md — what landed, what it does NOT prove, and any owner question or
-decision it raised. Unattended running must not bury named limits in ten records nobody reads.
+OWNER DIGEST (required, every phase that lands): append three lines to client/docs/port-digest.md
+- what landed, what it does NOT prove, and any owner question or decision it raised. Unattended
+running must not bury named limits in ten records nobody opens.
 
-CONSULT ROUTES (.pi/bpx-consult.json — only these models exist). Hierarchy: anthropic Opus 5
-> Fable 5 > Sonnet 5; kimi K3 > highspeed. Fable 5 is the COSTLIEST per 1M tokens — use it
-where its reasoning edge pays, not by default. solo/advisor = anthropic/claude-opus-5 (MAIN).
-gut-check = kimi-coding/kimi-for-coding-highspeed. council = opus-5 architect+tester+
-performance, fable-5 critic, k3 simplifier+security, k3 synthesizer. Spine plan/code reviewer
-= opus-5 (.spine/spine-config.json). Use mode:"solo" explicitly — a bare consult hits the
-council-roster trap (T-7).
+PAUSE PROTOCOL (the only stop). A saturated model is no longer a stop condition: the loop passes
+--fallback-model, so the phase degrades and records which model it actually ran on. Pause when
+JUDGMENT is exhausted, not capacity: a safety or privacy question; ambiguity no repository source
+resolves; the same verification failing twice on the same cause; a lane that cannot leave its
+tree buildable; a WAVE-LOCK whose owner is gone; a failed blind audit. Then, in order: park
+in-flight work, write .port/handoff.md (state, evidence paths, exact next action), checkpoint
+client/memories/, write .port/STOP with the reason, EXIT. Never proceed past a gate the docs
+require unadvised; never flip owner-held rows; never invent scope beyond the agreed parity
+posture; constitution and port-workflow stop conditions always apply.
 
-PAUSE PROTOCOL (the only stop): if the Opus 5 consult route errors or times out, fall back to
-solo on anthropic/claude-fable-5 and continue. If Opus and Fable both fail: park in-flight
-work, write .spine/handoff.md (state, evidence paths, next action), checkpoint to the active
-memory provider + client/memories/, write .spine/STOP with the reason, and EXIT. Same response
-for safety/privacy questions, unresolvable ambiguity, or repeated failure. Never proceed past
-a gate unconsulted; never flip owner-held rows; never invent scope beyond WPF parity;
-constitution and port-workflow stop conditions always apply.
-
-MACHINE-SPECIFIC (desktop-only unless the owner designates equivalents — otherwise record as
-a named limit, never fake): Z:\CCP Vids real-media dir; DISPLAY3 headed-evidence monitor; the
-WSL2 install used for Linux gates. Headed evidence runs set CCP_DATA_ROOT (SP-057) — but never
-set it process-wide for a plain test run: the SP-057 pin then skips and the suite reports
-891/1 instead of 892/0, which is exactly the vacuous-green class SP-062 closed.
+MACHINE-SPECIFIC (desktop-only unless the owner designates equivalents - otherwise record as a
+named limit, never fake): Z:\CCP Vids real-media dir; DISPLAY3 headed-evidence monitor; the WSL2
+install used for Linux gates. The mechanical gate is `node client/tests/floor/check-floor.mjs`;
+a bare dotnet test is not it. Headed evidence runs set CCP_DATA_ROOT (SP-057) per run and NEVER
+process-wide: the SP-057 pin then skips and the suite reports a vacuous green instead of a red.

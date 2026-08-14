@@ -4,7 +4,9 @@ This is the only live queue for the greenfield Windows/Linux client.
 
 Do not import completion claims, test floors, parity percentages, or row states from the first Avalonia attempt.
 
-Execution engine: **pi-spine** (owner decision 2026-07-18 — see gate history and `port-workflow.md` §Extension admission). Phase scope and owner-held gates live in [`spine-tasks/CONTEXT.md`](../../spine-tasks/CONTEXT.md); its Phase 0 gates apply before any batch.
+Execution engine: **Claude Code** (2026-08-14 — pi-spine and the `consult` extension are retired; see `port-workflow.md` §Engine change for the mechanical reason and the named limit it creates). Lanes are `port-slice-executor` subagents in git worktrees; review is `port-plan-reviewer` / `port-code-reviewer` / `port-final-reviewer`; advice is `port-advisor` and `port-advisor-critic`. Phase scope and owner-held gates live in [`spine-tasks/CONTEXT.md`](../../spine-tasks/CONTEXT.md); its Phase 0 gates apply before any wave.
+
+The `T-` tooling rows below that name pi-spine defects (T-3, T-4, T-6, T-8, T-10, T-12) are open against a **retired** engine. They are left in place rather than deleted, because several record a *class* of failure the new engine can repeat; they need an explicit disposition pass and until then they are not claimable.
 
 ## Status values
 
