@@ -1,64 +1,73 @@
-# HANDOFF — 2026-08-14 — wave 28 AUTHORED + LAUNCHED (SP-071), nothing landed
+# HANDOFF — 2026-08-14 — wave 28 LANDED (SP-071), nothing in flight
 
-**Status: BATCH LAUNCHED.** Written in the authoring commit, **before** `spine batch start` — that is what
-bought wave 27 its fast-forward, and it is the rule now: any orchestrator commit to base between
-`batch start` and integrate converts a free tree-identity proof into a manual one.
-Wave 27 (SP-070) is landed at `9e6498b6`, reconciled at `c4c979df`, archived.
-**Base floor at launch: 1005 unit / 35 headless / 2 NAMED skips, build 0W/0E.**
+**Status: NO ACTIVE BATCH.** Wave 28 landed at `d1c69617` (fast-forward), reconciled in the commit that
+carries this file, archived. **Base floor: 1010 unit / 35 headless / 2 NAMED skips, build 0W/0E.**
+**Next unused task ID: SP-072.**
 
 ## Which phase is yours
 
 Reconcile first, then classify. Do **not** trust this file's phase label — check `spine status --diagnose`.
 
 - **Batch running → port.txt case C: EXIT AT ONCE.** The shell owns the waiting.
-- **Batch finished / `needs_integrate` (`macroPhase: "gating"`) → case A: LAND IT.** The obligations below
-  are yours. A finished batch is not a landed one.
-- **No batch + claimable work → case B.** Reconcile from git and the board before authoring anything new.
+- **Batch finished / `needs_integrate` (`macroPhase: "gating"`) → case A: LAND IT.** A finished batch is not
+  a landed one.
+- **No batch + claimable work → case B: AUTHOR + LAUNCH ONE WAVE.** This is the expected next phase.
+  Reconcile from git and the board before authoring anything new.
 
-## What is in flight (SP-071 — host close must not wait on a wedged native audio probe)
+## THE ONE-LINE CHANGE WAVE 29's PACKET MUST CARRY
 
-Board row: the `_initLock` teardown residual filed at the wave-27 land. Single lane.
+**Tell the worker: create `.DONE`, do NOT commit it — spine's lane-commit stages it.**
 
-`SoundArbitration.Dispose` takes `_initLock` (`:1087-1091`) before `_backend.Dispose()` (`:1093`), and
-`TeardownBarkPipeline` (`DtrhHostWindow.axaml.cs:255-262`) is called from the host-window close handler
-(`:153`) **on the UI thread** — in exactly the dead-endpoint scenario SP-070's recovery exists for. The
-host is a **non-modal child window** (`DtrhLaunchCoordinator.cs:167`), so close is not process exit.
+Wave 28's worker did everything right and the batch was still recorded `failed`. Spine's post-worker
+`laneCommit` (`src/batch/lane-commit.mjs:326-368`) reaches a fail-closed `GitignoredDirtyWorktree` branch
+**only when `stageable.length === 0`** — and this worker had committed its own `.DONE`, so the only thing
+left in the lane was `.pi/npm/**`, the T-14 hook's per-lane patched install. The auto-sanitize escape needs
+**every** ignored path to match `GITIGNORED_ARTIFACT_MARKERS`, and `.pi/npm/.gitignore`, `package.json`,
+`package-lock.json` and `worktree-setup-hook.log` match none of them (only paths containing `node_modules/`
+do). Wave 27 escaped by accident — its worker left `.DONE` uncommitted, so `stageable` was 1.
 
-**WPF parity framing:** `5a168554` ("stop the UI thread joining a wedged render thread, and name the next
-one"), upstream's pass over this class for the v6.6.3 hang cluster. Port the remedy **shape** — bound the
-wait, degrade instead of block, name what cannot be bounded — never its WPF-specific mechanics. The port's
-own `async-lifecycle-fault-contract.md` §5 already makes the UI boundary post-only.
+**Do NOT add `.pi/npm/` to the markers.** That makes `sanitizeGitignoredArtifactsBeforeLaneCommit` DELETE the
+lane's patched install and re-creates the SP-035/039 pristine-reinstall failure T-14 exists to prevent.
 
-**THE TRAP, and it is in the packet's `## Do NOT`:** a timeout on the `_initLock` acquisition that then
-continues runs `_backend.Dispose()` while a native init is in flight — the **process-fatal**
-concurrent-native-call class `_initLock` exists to prevent. The design is to move the teardown **off the UI
-thread**: unbounded lock wait on a background thread, bounded UI-side wait, typed give-up that never
-touches the backend, exactly-once disposal even after a give-up, `Dispose` still idempotent.
+**If it happens anyway, the recovery is (all supported paths, never a `batch-state.json` hand-edit):**
+1. `git clean -fdX` in the finished lane worktree (it is done with; `verify.mjs` runs in the MAIN checkout
+   and land verification uses a fresh scratch worktree).
+2. `spine batch force-merge --wave 0` — bypasses the §17.4 mixed-outcome gate. Allowed only in phase
+   `failed`/`paused`. **It does not schedule a merge by itself**; alone it dead-ends on
+   "No pending tasks to resume" (`resume` needs a pending task or `phase === "merge_blocked"`).
+3. `spine batch retry <taskId>` (status → pending, phase → paused), **with the worker's `.DONE` copied into
+   the MAIN task folder** so `engine.mjs:310`'s `doneOnDisk` check routes to `skipTaskDoneOnDisk` — the task
+   is recorded **succeeded** (journal `task.skipped_done_on_disk`) with no worker re-run.
+4. **Delete that `.DONE` again** the moment the task is recorded succeeded — untracked, it blocks the merge
+   as dirt (`merge failed without unmerged paths (dirty: …/.DONE)`). The lane branch carries the real one.
+5. `spine batch resume --force` → merge → gate opens.
 
-## LAND OBLIGATIONS FOR THIS WAVE
+## Claimable work (the board is authority, this is a pointer)
 
-1. **Read the ORDERING fact yourself, not just the bounded-return fact.** The wave is only safe if the
-   backend is provably not disposed while a native call is in flight. A green suite showing `Dispose`
-   returning fast is *also* consistent with the process-fatal shape. Check that the fake records the moment
-   `TryInit` returns and the moment it is disposed, and that the assertion is about their **order**.
-2. **Check each pin's fixture reaches its mechanism.** SP-070's single-flight pin passed with its own guard
-   reverted until the fixture was corrected — same class, one wave earlier, on the same file. Re-run the
-   bite matrix yourself, one source at a time.
-3. **File the `CreatePlayer` row.** `SoundFlowAudioBackend.CreatePlayer` (`:108` → `OffSyncContext.Run`,
-   `AudioSeams.cs:150`) and `SoundFlowDtrhAudio.CreatePlayer` (`:100`) block the UI thread inside a native
-   `AssetDataProvider` construction, unbounded. The packet censuses them deliberately and does not fix them
-   (they change a synchronous seam contract; a late-completing construction adds itself to `MasterMixer` —
-   ghost play plus leak, disposal racing device teardown). **Orphan disposal is that row's central
-   acceptance.** Unfiled, it is phantom debt.
-4. **Use the census.** The packet produces a verdict per blocking wait in `client/src/**` (~30 sites) —
-   file what it surfaces as rows rather than letting the table die in `record.md`.
-5. **Append the wave-28 lessons to `client/docs/port-lessons.md` AT LAND — not before** (spine
-   `referenceDocs`, `.spine/spine-config.json:97`: editing it mid-batch mutates a live worker's input).
-6. **Check whether the worker recorded owed wording** for `async-lifecycle-fault-contract.md` §5 (read-only
-   for it). Policy text lands via the orchestrator (SP-059 precedent).
+Filed at the wave-28 land, all P2:
+- **The two `CreatePlayer` sites** (`SoundFlowAudioBackend.cs:108` → `OffSyncContext.Run`,
+  `SoundFlowDtrhAudio.cs:100`) — unbounded UI-thread block inside a native `AssetDataProvider`
+  construction. **Orphan disposal is the central acceptance**, not a detail: a late-completing construction
+  adds itself to `MasterMixer` (ghost play + leak) and disposing it races device teardown. The residual
+  `PanicReset` player wait inside `SoundArbitration.Dispose` (SP-071 honesty cell 3b) and the unguarded
+  `CreatePlayer`-vs-in-flight-teardown race ride with this row. Size M.
+- **Five disk-store follow-up waits** from SP-071's 18-site census (`DtrhHostWindow:228`,
+  `DtrhSaveSlots:467,469`, `IntakeHostContext:84,95`, `AssetSelectionDocument:61`, `AiMemoryStore:272`).
+  A verdict per site, never a blanket refactor. Size S–M.
+- **Two SP-071 test-shape residuals** the engine code review named non-blocking (an `IndexOf` ordering
+  assertion that would pass vacuously if `init-returned` ever stopped being recorded — not vacuous today;
+  a plain `List<string>` log read while the teardown thread may append). Test-only. Size S.
+
+Older, still open: the **endpoint-watcher** row (`IMMNotificationClient`, Windows-only, headed gate);
+row `:53`'s remaining `§C`/`§D` items; **T-18**; the SP-069 hygienic-surface-id row; the
+`ProcessEnvCollection` co-location residual; the `CapabilityRegistry` probe row; the `Assert.All`
+unenumerated shape; the `allowedSkips` bans-are-text row; T-17's auditor **run**; the named privacy flake.
 
 ## Standing land discipline (unchanged, learned the hard way)
 
+- **Write this file in the AUTHORING commit, before `spine batch start`.** Any orchestrator commit to base
+  between `batch start` and integrate converts a free tree-identity proof into a manual one. Waves 27 and 28
+  both fast-forwarded because of this.
 - **Never trust the gate's own evidence (T-3).** Verify the merged state yourself in a scratch worktree.
   `diff-stat.txt` is a TWO-dot diff — disprove it with three dots.
 - **Verify BEFORE `spine integrate`**, not after: verifying after means unwinding a merge on the base branch.
@@ -68,18 +77,20 @@ touches the backend, exactly-once disposal even after a give-up, `Dispose` still
   The wrapper is `--no-build` by design; standalone it measures the LAST build and names the wrong cause.
 - **The land's LAST action verifies the tree actually being pushed.** Commit the reconciliation FIRST, then
   run the contract, then push (wave 18 shipped a red base by editing after its verification run).
+- **A reviewer's "non-blocking" note is a board row, never a post-verification edit** (wave-28 lesson).
 - **Bite matrix, one source at a time.** A shared revert falsely verifies pins never exercised (SP-067) —
-  and a pin whose FIXTURE cannot reach the mechanism passes with its own guard reverted (SP-070).
-- **This packet's facts are cross-thread:** ask for the repeated-run count (>= 20 filtered iterations) and
-  treat any timing-dependent test as a defect, not a flake.
+  and a pin whose FIXTURE cannot reach the mechanism passes with its own guard reverted (SP-070). SP-071
+  closed that door by asserting the revert reds the pin **at its own ordering assertion**.
+- **Cross-thread packets:** ask for the repeated-run count (>= 20 filtered iterations) and treat any
+  timing-dependent test as a defect, not a flake.
 - **Never set `CCP_DATA_ROOT` for a floor run** (`port-workflow.md:204`).
 - **`allowedSkips` pins 5 names; 2 skip on Windows. THE ASYMMETRY IS CORRECT.**
 - **`node .spine/patches/verify.mjs` FAILS in a scratch worktree and that is expected** (`.pi/npm` is
   per-checkout and gitignored). Run it in the MAIN checkout — done this phase, exit 0 (9 project + 5 engine).
 - **`cmd | tail; echo $?` reports TAIL's exit code.** Use `${PIPESTATUS[0]}` or redirect to a file.
 - **A doc a test READS is code — check READ vs merely NAMED.** `port-audit-prompt.md`, `floor.json`,
-  `vacuous-shape-ledger.json` are read. `task-board.md`, `port-lessons.md`, `port-digest.md` and
-  `client/memories/**` are not.
+  `vacuous-shape-ledger.json` are read. `task-board.md`, `port-lessons.md`, `port-digest.md`,
+  `async-lifecycle-fault-contract.md` and `client/memories/**` are not (grep-verified at the wave-28 land).
 - **`spine preflight`'s "Pre-landed contract risk" warning compares against `main`**, the WPF branch with no
   `client/` tree. Never redirect `fileScopeMustChange` to docs.
 - **Landed rows stay WIP/OPEN until the owner ratifies;** flip to DONE only with a RATIFIED citation.
@@ -88,37 +99,29 @@ touches the backend, exactly-once disposal even after a give-up, `Dispose` still
 ## Decisions on record — do not re-open
 
 - **Owner default in force: BACK TO WPF PARITY.** Asked at waves 23 and 24, unanswered, **not re-asked**.
-- **`_initLock` stays.** The race it closes is the process-fatal class; this wave moves the blocking, it
-  does not remove the lock.
+- **`_initLock` stays.** SP-071 moved the blocking; it did not remove the lock.
 - **The sizing pass over Goon `:44` / FYP `:45` / Trainer Card `:51` / Haptics v2 `:52` is DEFERRED,
   MACHINE-GATED — not dropped.** The standing offer to write it for a desktop session is in the digests.
-- **The two `CreatePlayer` sites are OUT of SP-071 by decision**, not by oversight — orphan disposal makes
-  them their own packet.
+- **The two `CreatePlayer` sites were OUT of SP-071 by decision**, not oversight — orphan disposal makes
+  them their own packet, now a filed row.
 
 ## Instrument notes
 
-- **Consult truncation is board row T-18.** Wave 28's decomposition verdict surfaced complete on the first
-  call under a 200-word cap (8th consecutive wave). **Never stitch a verdict out of reasoning**; an
+- **Consult truncation is board row T-18.** Wave 28's recovery consult surfaced a complete verdict on the
+  first call under a 250-word cap (9th consecutive wave). **Never stitch a verdict out of reasoning**; an
   unstitched non-verdict is a MISSING consult. Use `mode: "solo"` explicitly (T-7).
-- **Verify the advisor's checkable claims before encoding.** Done this phase: the `Dispose` lock-then-dispose
-  sequence, the close-handler call site, and the non-modal `window.Show(_owner)` were all read in the tree
-  before being written into the packet.
-- **hermes memory is FULL** (9358/10000 chars; auto-consolidation timed out). The durable record is
-  `client/memories/port-status.md`, which is current through wave 27. Do not rely on `memory_add` this
-  session; fix or prune the store if a future phase needs it.
-
-## Claimable work after this lands (the board is authority, this is a pointer)
-
-The `CreatePlayer` row this land must file; the **endpoint-watcher** row (Windows-only, headed gate);
-row `:53`'s remaining `§C`/`§D` items; **T-18**; the SP-069 hygienic-surface-id row; the
-`ProcessEnvCollection` co-location residual; the `CapabilityRegistry` probe row; the `Assert.All`
-unenumerated shape; the `allowedSkips` bans-are-text row; T-17's auditor **run**; the named privacy flake.
+- **Verify the advisor's checkable claims before encoding.** Paid off this phase: the advisor predicted
+  contract-verify and review had never run for the failed task. The journal proved the opposite —
+  `contract.verified ok=true` (10/10 checks), code review APPROVE, final review PASS, all **before** the
+  lane-commit that failed. The rest of its verdict (force-merge over retry; reject the marker patch; fix the
+  packet template instead) was adopted.
+- **hermes memory is FULL** (auto-consolidation timed out). The durable record is
+  `client/memories/port-status.md`, current through wave 28. Do not rely on `memory_add` this session.
 
 ## Machine facts (laptop)
 
 pi-spine 2.10.0 · durable memory fallback `client/memories/port-status.md` (hermes store full) · **WSL zero
 distros → every Linux gate is a standing named limit, never faked** · **no wedged native audio call can be
-induced here — the manual gate is named in the packet's honesty cell, never simulated as evidence** ·
-**MCP not re-probed this phase** (named limit, never a blocker) · `Z:\CCP Vids`, DISPLAY3 and the WSL2 Linux
-gate are **DESKTOP-only** · batch launched with `SPINE_WORKER_PI_TIMEOUT_MS=14400000` · 9 project + 5 engine
-patches verified applied before authoring (`verify.mjs` exit 0).
+induced here — SP-071's manual gate is named, never simulated as evidence** · **MCP not re-probed this
+phase** (named limit, never a blocker) · `Z:\CCP Vids`, DISPLAY3 and the WSL2 Linux gate are **DESKTOP-only**
+· 9 project + 5 engine patches verified applied at this land (`verify.mjs` exit 0).

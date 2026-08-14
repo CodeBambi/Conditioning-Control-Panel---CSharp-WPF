@@ -59,6 +59,7 @@ The classification vocabulary is shared with `InitFailureKind`; the outcome type
 
    Every future event/stream that crosses the boundary must add a row here naming its producer context, delivery context, and stale handling before it ships (first-attempt lesson: document delivery context per event/stream; reject implicit callback-thread assumptions).
 5. Posted delegates must be harmless if they run late or never: during teardown the UI thread is blocked inside `ShutdownAsync` (SP-003 invokes it synchronously from the lifetime `Exit` handler), so queued posts may execute stale or not at all. The generation check inside the delegate is what makes this safe.
+6. **Teardown paths reachable from the UI thread must bound their wait on any native or backgrounded work.** The unbounded portion runs off the UI thread, and the give-up path must not touch the resource the backgrounded teardown owns. Added at the SP-071 land: rule 1 removes the *awaitable* deadlock class by construction, but a `lock`/`Join`/native call taken directly on a UI-thread teardown path is the same hazard reached without the dispatcher — `SoundArbitration.Dispose` held `_initLock` across a wedged native init on the DTRH host close handler. A timeout that then **continues** is not a fix: it reintroduces the concurrent-native-call class the lock exists to prevent. Bound the *observation*, never the lock.
 
 ## 6. Shutdown ordering for async work
 
