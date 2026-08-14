@@ -207,6 +207,21 @@ the only product file touched):
   `finally { _reprobeInFlight = false; }` (consult finding 2).
 - `Dispose`: cancels a pending `_recoveryTimer` and clears `_reprobeInFlight` — no recovery
   after teardown.
+- **`_initLock` (pre-completion consult hardening, below):** a second lock serializing EVERY
+  backend device call (`Initialize` body incl. `EnumerateDevices`/`TryInit`, the public
+  `EnumerateDevices` passthrough, and `Dispose` takes it before `_backend.Dispose()`). The
+  probe introduced the first second-thread access to `IAudioBackend`, which carries no
+  internal synchronization — without it a probe's native init could race backend teardown or
+  a `SetPreferredDevice` re-init (concurrent miniaudio calls, last-writer-wins). Lock order
+  is `_initLock` → `_gate` only; `_gate` code never takes `_initLock`, and the play seam
+  never takes `_initLock` (it only schedules), so the discovering caller is still never
+  blocked. Trade-off recorded honestly: `Dispose` can now block on an IN-FLIGHT wedged
+  native probe — bounded by the native call itself, once per process, only when a probe is
+  actually running; the alternative (concurrent native access) is the process-fatal class.
+  `CreatePlayer` is deliberately NOT under `_initLock`: plays refuse before construction
+  while suppressed, and suppression lifts only after the probe's native calls complete, so
+  no probe/`CreatePlayer` overlap is introduced (the pre-existing
+  `SetPreferredDevice`-vs-`CreatePlayer` shape is unchanged).
 - `PanicReset`, channel ownership, ducking, queueing, pacing, the SFX cap: **untouched**
   (zero diff lines in those regions).
 - Docs/comments updated where the old text claimed session-permanence or cited the
@@ -287,7 +302,7 @@ contract run is exactly the 2 Windows-observed pinned names
 |---|---|
 | 1 | SKIPPED in-worker — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `spawnFailed: false`; artifact `.reviews/1-20260813T233803.md` |
 | 2 | SKIPPED in-worker — same SP-195 message; `spawnFailed: false`; artifact `.reviews/2-20260813T234204.md` |
-| 3 | (called at the step boundary — same expected skip; see STATUS) |
+| 3 | SKIPPED in-worker — same SP-195 message; `spawnFailed: false`; artifact `.reviews/3-20260813T235933.md` |
 
 Engine code + final review therefore run after `.DONE`, per FR-WORK-07/SP-195.
 
@@ -312,6 +327,21 @@ flight)` / `arbitration torn down`.
 3. `upstream-sync.md` §C: the d33b5d8d backlog line is now PARTIALLY discharged — breaker +
    lazy re-probe ported (SP-070); the endpoint watcher remains owed as row 2; the one-shot
    MTA worker and the 10-concurrent cap are recorded non-items (never re-file).
+
+## Pre-completion consult (solo)
+
+- Mode: `solo`, narrow question, <200-word cap. **First call returned a REASONING-ONLY
+  non-verdict (T-18)** — no verdict line, mid-analysis. Recorded as returned; NOT stitched
+  into a verdict. Its two surfaced races were nevertheless evaluated on their merits and
+  BOTH addressed before re-asking (below). **Actual answering model: NOT SURFACED by the
+  tool** (same as the Step 1 consult — no model identity in the output).
+- Surfaced race 1 (adopted): an in-flight probe could run `TryInit` concurrently with
+  `Dispose`'s `_backend.Dispose()` — the first cross-thread backend access in the port.
+- Surfaced race 2 (adopted): a `SetPreferredDevice` re-init could overlap an in-flight
+  probe (concurrent native inits; `_preferredDeviceName` last-writer-wins).
+- Fix for both: `_initLock` (see Step 2 section). Re-verified: arbitration suite 30/30
+  green, bite matrix re-confirmed at the final tree (identical RED sets).
+- **Re-asked verdict: (see below — appended after the re-ask)**
 
 ## Honesty cell
 
@@ -350,9 +380,14 @@ retried away.
 
 | Run | Worktree | Cold/warm | Unit | Headless | Skipped (exact names) | TRX |
 |---|---|---|---|---|---|---|
-| 1 | lane-1 (d818e834 tree) | warm | 1005/1005 (1003 passed) | 35/35 | `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`, `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps` | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-UnNXJi\CcpClient.Tests\results.trx` |
-| 2 | `C:\Code\sp070-cold` (new worktree, first-ever build; removed after) | **COLD** | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-QwPmVp\CcpClient.Tests\results.trx` |
-| 3 | lane-1 | warm | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-lvZN2z\CcpClient.Tests\results.trx` |
+| 1 | lane-1 (final tree, 34d2cbb3) | warm | 1005/1005 (1003 passed) | 35/35 | `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`, `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps` | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-kBTEP7\CcpClient.Tests\results.trx` |
+| 2 | `C:\Code\sp070-cold2` (new worktree, first-ever build; removed after) | **COLD** | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-cr5hu8\CcpClient.Tests\results.trx` |
+| 3 | lane-1 | warm | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-zKDRrp\CcpClient.Tests\results.trx` |
+
+Earlier runs at the pre-hardening tree (superseded by the `_initLock` change; counts
+identical): warm `ccp-floor-UnNXJi`, cold `ccp-floor-QwPmVp`, warm `ccp-floor-lvZN2z`.
+Every green in this table is AT THE FINAL TREE — the three superseded runs are listed for
+honesty only and do not count toward the 3-consecutive requirement.
 
 Each run: `node .spine/patches/verify.mjs` OK → `dotnet build client/CcpClient.sln -c Debug
 --nologo` 0W/0E → `node client/tests/floor/check-floor.mjs` FLOOR OK. (Cold run: the
