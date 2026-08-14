@@ -46,7 +46,7 @@ public abstract record SoundOutcome
     /// <summary>Request dropped for a typed reason (logged at the drop site).</summary>
     public sealed record Dropped(SoundChannel Channel, SoundDropReason Reason) : SoundOutcome;
 
-    /// <summary>Audio unavailable (no endpoints / not initialised / torn down) — WPF "audio disabled for the session" parity (AudioService.cs:129-131).</summary>
+    /// <summary>Audio unavailable (no endpoints / not initialised / torn down / suppressed). Suppression EXPIRES via the cooldown re-probe — WPF #779 parity (AudioService.cs:163-166; the port's inherited ":129-131" cite aged by offset — the early-return now sits at :121).</summary>
     public sealed record Unavailable(string Reason) : SoundOutcome;
 
     /// <summary>Backend failure (typed error, logged).</summary>
@@ -68,6 +68,12 @@ public sealed class SoundArbitrationOptions
 {
     /// <summary>SFX pool bound = 8 (SP-025 packet decree; WPF ChaosSfx cap-6 cited, ChaosSfx.cs:91-107).</summary>
     public int MaxSfxVoices { get; init; } = 8;
+
+    /// <summary>Suppression window after a failed device init: the next play attempt after expiry schedules a single-flight re-probe (WPF OutputCooldown = 30s, AudioService.Playback.cs:104; SP-070 — the disable EXPIRES, #779 parity).</summary>
+    public TimeSpan RecoveryCooldown { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Consecutive failed device-init attempts at which a still-dead endpoint logs ONE escalation line (WPF OutputFailuresToTrip = 5, AudioService.Playback.cs:101). Port role = the escalation transition only: the port disables on the FIRST init failure (WPF arms at the streak because its failure unit is a per-play waveOutOpen; a port play is never a device attempt — SP-070 record §design).</summary>
+    public int RecoveryFailureThreshold { get; init; } = 5;
 
     /// <summary>Duck watchdog: force-unduck after this hold (WPF DuckWatchdogMs 300_000, AudioService.cs:39).</summary>
     public TimeSpan DuckWatchdog { get; init; } = TimeSpan.FromMinutes(5);
@@ -99,6 +105,14 @@ public sealed class SoundArbitrationOptions
 public sealed class SoundArbitration : IDisposable
 {
     private readonly object _gate = new();
+    // Serializes EVERY backend device call (EnumerateDevices/TryInit inside Initialize).
+    // The recovery probe introduced the first second-thread access to IAudioBackend, which
+    // carries no internal synchronization (pre-completion consult): without this, a probe
+    // could run TryInit concurrently with Dispose's backend teardown or a SetPreferredDevice
+    // re-init — concurrent native miniaudio calls, last-writer-wins on the device. Never
+    // held while holding _gate (lock order: _initLock → _gate, and _gate code never takes
+    // _initLock), so the play seam is never blocked by it — it only schedules.
+    private readonly object _initLock = new();
     private readonly IAudioBackend _backend;
     private readonly IAudioDuckSink _duckSink;
     private readonly ISoundClock _clock;
@@ -107,6 +121,10 @@ public sealed class SoundArbitration : IDisposable
 
     private bool _initialized;
     private bool _audioDisabledForSession;
+    private int _consecutiveInitFailures;
+    private DateTimeOffset? _suppressedUntilUtc;
+    private bool _reprobeInFlight;
+    private IDisposable? _recoveryTimer;
     private string? _preferredDeviceName;
     private string? _activeDeviceName;
 
@@ -179,7 +197,7 @@ public sealed class SoundArbitration : IDisposable
     /// <summary>Outstanding duck holds.</summary>
     public int DuckCount { get { lock (_gate) { return _duckCount; } } }
 
-    /// <summary>Audio disabled for the session (no endpoints / init failure — WPF :129-131 parity).</summary>
+    /// <summary>Audio suppressed (no endpoints / init failure) — EXPIRES: a play attempt after the cooldown schedules a single-flight re-probe (WPF #779 — no longer session-permanent, AudioService.cs:163-166).</summary>
     public bool AudioDisabledForSession { get { lock (_gate) { return _audioDisabledForSession; } } }
 
     /// <summary>The endpoint the device is up on (fresh-snapshot NAME; null before init).</summary>
@@ -187,17 +205,33 @@ public sealed class SoundArbitration : IDisposable
 
     // ---------- device layer (F1 re-probe discipline) ----------
 
-    /// <summary>Fresh render-endpoint NAMEs (re-enumerated per call — names, never Ids; session facts only).</summary>
-    public IReadOnlyList<string> EnumerateDevices() => _backend.EnumerateDevices();
+    /// <summary>Fresh render-endpoint NAMEs (re-enumerated per call — names, never Ids; session facts only). Serialized with device init/teardown via `_initLock`.</summary>
+    public IReadOnlyList<string> EnumerateDevices()
+    {
+        lock (_initLock)
+        {
+            return _backend.EnumerateDevices();
+        }
+    }
 
     /// <summary>
     /// Bring the playback device up with the re-probe discipline (spike F1 + named limit 9's
     /// mechanism): the requested NAME is matched against a FRESH enumeration; absent → typed
-    /// fallback to default (WPF AudioService.cs:292-293); zero endpoints → audio disabled for
-    /// the session (WPF :129-131); the backend itself re-enumerates again immediately before
-    /// native init and passes only the fresh snapshot's DeviceInfo.
+    /// fallback to default (WPF AudioService.cs:292-293); zero endpoints / failed init →
+    /// audio SUPPRESSED with a cooldown window, never session-permanent (WPF #779,
+    /// AudioService.cs:163-166 — SP-070); the backend itself re-enumerates again immediately
+    /// before native init and passes only the fresh snapshot's DeviceInfo. Short locks only:
+    /// `_gate` is never held across `EnumerateDevices` / `TryInit`.
     /// </summary>
     public SoundOutcome Initialize(string? preferredDeviceName)
+    {
+        lock (_initLock)
+        {
+            return InitializeCore(preferredDeviceName);
+        }
+    }
+
+    private SoundOutcome InitializeCore(string? preferredDeviceName)
     {
         lock (_gate)
         {
@@ -211,9 +245,8 @@ public sealed class SoundArbitration : IDisposable
         _log($"sound: {devices.Count} render endpoint(s): {string.Join(" | ", devices)}");
         if (devices.Count == 0)
         {
-            lock (_gate) { _audioDisabledForSession = true; }
-            _log("sound: no render endpoints — audio disabled for the session (AudioService.cs:129-131 parity)");
-            return new SoundOutcome.Unavailable("no render endpoints — audio disabled for session");
+            lock (_gate) { RecordInitFailureLocked("no render endpoints"); }
+            return new SoundOutcome.Unavailable("no render endpoints — audio suppressed (a play attempt after the cooldown re-probes)");
         }
 
         string? effective = null;
@@ -233,20 +266,95 @@ public sealed class SoundArbitration : IDisposable
 
         if (!_backend.TryInit(effective, out var error))
         {
-            lock (_gate) { _audioDisabledForSession = true; }
-            _log($"sound: device init failed ({error}) — audio disabled for the session");
+            lock (_gate) { RecordInitFailureLocked($"device init failed ({error})"); }
             return new SoundOutcome.Failed(error ?? "device init failed");
         }
 
+        bool recovered;
         lock (_gate)
         {
+            recovered = _audioDisabledForSession;
             _initialized = true;
             _audioDisabledForSession = false;
+            _consecutiveInitFailures = 0;
+            _suppressedUntilUtc = null;
             _preferredDeviceName = preferredDeviceName;
             _activeDeviceName = effective ?? "(default)";
         }
         _log($"sound: playback device up (requested {preferredDeviceName ?? "default"})");
+        if (recovered)
+        {
+            // Transition-only: suppressed → ready logs the recovery ONCE (WPF
+            // NoteOutputSuccess, AudioService.Playback.cs:379-385 parity).
+            _log("sound: output recovered — playback resumed (WPF #779, AudioService.Playback.cs:379-385 parity)");
+        }
         return new SoundOutcome.Ready(_activeDeviceName!);
+    }
+
+    /// <summary>
+    /// One failed device init: suppress + count + arm the cooldown window from the injected
+    /// clock (SP-070; WPF NoteOutputFailure, AudioService.Playback.cs:393-417 parity). Logs
+    /// on TRANSITIONS only: the healthy→suppressed trip line, and ONE escalation line when
+    /// the streak reaches <see cref="SoundArbitrationOptions.RecoveryFailureThreshold"/> —
+    /// never a line per refused play.
+    /// </summary>
+    private void RecordInitFailureLocked(string detail)
+    {
+        var wasSuppressed = _audioDisabledForSession;
+        _audioDisabledForSession = true;
+        _consecutiveInitFailures++;
+        _suppressedUntilUtc = _clock.UtcNow + _options.RecoveryCooldown;
+        if (!wasSuppressed)
+        {
+            _log($"sound: {detail} — audio suppressed; a play attempt after {(int)_options.RecoveryCooldown.TotalSeconds}s re-probes the endpoint (WPF #779 — no longer session-permanent, AudioService.cs:163-166)");
+        }
+        else if (_consecutiveInitFailures == _options.RecoveryFailureThreshold)
+        {
+            _log($"sound: endpoint still down after {_consecutiveInitFailures} consecutive init failures — suppression continues, one re-probe per {(int)_options.RecoveryCooldown.TotalSeconds}s window (WPF OutputFailuresToTrip, AudioService.Playback.cs:101,:393-417 parity)");
+        }
+    }
+
+    /// <summary>
+    /// The single-flight re-probe: runs OFF the discovering thread (scheduled one-shot —
+    /// FACT 1: the play seam can be the UI thread, and a native init can block on a dead
+    /// audio-service RPC, WPF d33b5d8d's own root cause). Reuses the ONE init path with the
+    /// remembered preferred NAME (never an Id — F1). Exception-proof: an escaping exception
+    /// on a timer thread is process-fatal and a stuck flag is permanence by a new door, so a
+    /// throw degrades to a typed failed probe and the flag ALWAYS clears.
+    /// </summary>
+    private void RunRecoveryProbe()
+    {
+        string? preferred;
+        lock (_gate)
+        {
+            _recoveryTimer = null;
+            if (_tornDown || !_audioDisabledForSession)
+            {
+                _reprobeInFlight = false;
+                return;
+            }
+
+            preferred = _preferredDeviceName;
+        }
+
+        try
+        {
+            Initialize(preferred);
+        }
+        catch (Exception ex)
+        {
+            lock (_gate)
+            {
+                RecordInitFailureLocked($"endpoint re-probe threw ({ex.GetType().Name}: {ex.Message})");
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _reprobeInFlight = false;
+            }
+        }
     }
 
     /// <summary>
@@ -592,15 +700,33 @@ public sealed class SoundArbitration : IDisposable
             return false;
         }
 
-        if (!_initialized)
+        if (_audioDisabledForSession)
         {
-            reason = "not initialised";
+            // SP-070 (#779 parity): suppression EXPIRES. Checked BEFORE `!_initialized` — a
+            // failed STARTUP init leaves _initialized false, and refusing as "not
+            // initialised" would strand the recovery forever (pre-approach consult finding).
+            // Cooldown enforced BEFORE any attempt: the kick schedules a single-flight
+            // one-shot probe and the caller is refused typed IMMEDIATELY — never blocked by
+            // the native probe, never a second schedule while one is in flight.
+            if (_suppressedUntilUtc is not { } until || _clock.UtcNow >= until)
+            {
+                if (!_reprobeInFlight)
+                {
+                    _reprobeInFlight = true;
+                    _recoveryTimer = _clock.Schedule(TimeSpan.Zero, RunRecoveryProbe);
+                    _log("sound: suppression cooldown expired — endpoint re-probe scheduled (WPF IsOutputSuppressed, AudioService.Playback.cs:141-157 parity)");
+                }
+            }
+
+            reason = _reprobeInFlight
+                ? "audio unavailable — endpoint down (re-probe in flight)"
+                : "audio unavailable — endpoint down (re-probe after cooldown)";
             return false;
         }
 
-        if (_audioDisabledForSession)
+        if (!_initialized)
         {
-            reason = "audio disabled for the session";
+            reason = "not initialised";
             return false;
         }
 
@@ -942,6 +1068,7 @@ public sealed class SoundArbitration : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        IDisposable? recoveryTimer;
         lock (_gate)
         {
             if (_tornDown)
@@ -950,8 +1077,18 @@ public sealed class SoundArbitration : IDisposable
             }
 
             _tornDown = true;
+            // No recovery after teardown: cancel a pending probe and clear the flag.
+            recoveryTimer = _recoveryTimer;
+            _recoveryTimer = null;
+            _reprobeInFlight = false;
         }
 
+        recoveryTimer?.Dispose();
+        lock (_initLock)
+        {
+            // An in-flight probe holds _initLock across its backend calls; taking it here
+            // means backend teardown never races a native init (pre-completion consult).
+        }
         PanicReset();
         _backend.Dispose();
     }

@@ -338,6 +338,270 @@ public sealed class SoundArbitrationTests
         Assert.Equal("Speakers (Realtek)", backend.RequestedDeviceName);
     }
 
+    // ---------- SP-070: the session-disable EXPIRES (WPF d33b5d8d, #778/#779) ----------
+
+    [Fact]
+    public void Recovery_EndpointReturns_AfterCooldownNextPlay_PlaysAgain()
+    {
+        // The user story as a fact — no real device, no real time: zero endpoints at init →
+        // play refused → endpoint appears → after the cooldown the play-attempt path recovers.
+        var (arb, backend, _, clock) = Make(devices: []);
+        Assert.IsType<SoundOutcome.Unavailable>(arb.Initialize(null));
+        Assert.True(arb.AudioDisabledForSession);
+        Assert.Equal(1, backend.EnumerateCallCount); // one enumeration per Initialize call
+        Assert.Equal(0, backend.InitCallCount); // zero endpoints — TryInit never reached
+
+        var refused = Assert.IsType<SoundOutcome.Unavailable>(arb.PlayVoice("a.mp3", 1f));
+        Assert.Contains("re-probe after cooldown", refused.Reason); // cooldown unexpired — honest state
+        Assert.Empty(backend.Players);
+
+        backend.Devices = ["RDP Sink"]; // the endpoint comes back
+        clock.Advance(TimeSpan.FromSeconds(31)); // cooldown expires; nothing fires without a play attempt
+        Assert.True(arb.AudioDisabledForSession);
+        Assert.Equal(1, backend.EnumerateCallCount);
+
+        var discovering = Assert.IsType<SoundOutcome.Unavailable>(arb.PlayVoice("a.mp3", 1f));
+        Assert.Contains("re-probe in flight", discovering.Reason); // discovering caller refused typed, never blocked
+        Assert.Equal(1, backend.EnumerateCallCount); // probe scheduled, not yet run (single-flight one-shot)
+
+        clock.Advance(TimeSpan.Zero); // ManualClock fires the scheduled probe
+        Assert.False(arb.AudioDisabledForSession);
+        Assert.Equal(2, backend.EnumerateCallCount);
+        Assert.Equal(1, backend.InitCallCount);
+        Assert.Null(backend.RequestedDeviceName); // remembered preferred NAME (null = default), never an Id
+        Assert.Contains(_log, l => l.Contains("output recovered — playback resumed"));
+
+        Assert.IsType<SoundOutcome.Started>(arb.PlayVoice("a.mp3", 1f)); // audio plays again
+        Assert.True(backend.Players[^1].Playing);
+    }
+
+    [Fact]
+    public void Recovery_FailureCounting_EscalatesAtThreshold_SuccessResets()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null); // streak 1 (healthy→suppressed trip line)
+        Assert.Equal(1, _log.Count(l => l.Contains("audio suppressed")));
+
+        FailProbes(arb, clock, 3); // streak 2..4 — no escalation yet
+        Assert.Equal(0, _log.Count(l => l.Contains("still down after")));
+        Assert.Equal(4, backend.EnumerateCallCount);
+
+        FailProbes(arb, clock, 1); // streak 5 == threshold — ONE escalation line
+        Assert.Equal(1, _log.Count(l => l.Contains("still down after 5 consecutive")));
+        Assert.Equal(5, backend.EnumerateCallCount);
+
+        FailProbes(arb, clock, 1); // streak 6 — escalation does NOT repeat (transition-only)
+        Assert.Equal(1, _log.Count(l => l.Contains("still down after")));
+
+        backend.Devices = ["RDP Sink"];
+        clock.Advance(TimeSpan.FromSeconds(31));
+        arb.PlayVoice("a.mp3", 1f); // kick
+        clock.Advance(TimeSpan.Zero); // probe succeeds — success RESETS the streak
+        Assert.False(arb.AudioDisabledForSession);
+
+        backend.Devices = [];
+        arb.Initialize(null); // one failure after the reset: streak restarts at 1...
+        Assert.True(arb.AudioDisabledForSession);
+        Assert.Equal(2, _log.Count(l => l.Contains("audio suppressed"))); // ...a fresh trip transition...
+        Assert.Equal(1, _log.Count(l => l.Contains("still down after"))); // ...and NO new escalation (would need 5 more)
+    }
+
+    [Fact]
+    public void Recovery_CooldownEnforcedBeforeAttempt_InitCountDoesNotMove()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+        Assert.Equal(1, backend.EnumerateCallCount);
+
+        for (var i = 0; i < 20; i++) // hammer the play seam across channels, cooldown unexpired
+        {
+            Assert.IsType<SoundOutcome.Unavailable>(arb.PlayVoice($"v{i}.mp3", 1f));
+            Assert.IsType<SoundOutcome.Unavailable>(arb.PlayWhisper($"w{i}.mp3", 1f));
+            Assert.IsType<SoundOutcome.Unavailable>(arb.PlaySfx($"s{i}.mp3", 1f));
+            Assert.IsType<SoundOutcome.Unavailable>(arb.QueueVoice($"q{i}.mp3", 1f));
+        }
+        Assert.Equal(1, backend.EnumerateCallCount); // never a retry per play call
+        Assert.Empty(backend.Players);
+
+        clock.Advance(TimeSpan.FromSeconds(15)); // still inside the 30s window
+        Assert.IsType<SoundOutcome.Unavailable>(arb.PlayVoice("v.mp3", 1f));
+        Assert.Equal(1, backend.EnumerateCallCount);
+    }
+
+    [Fact]
+    public void Recovery_SingleFlight_ConcurrentAttempts_OneInitCall()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+        clock.Advance(TimeSpan.FromSeconds(31)); // cooldown expired
+
+        // Concurrent play attempts across every channel — all refused, exactly ONE schedule wins.
+        // (Refused plays never reach CreatePlayer, so the recording lists stay single-threaded;
+        // the kick itself is serialized under the arbitration gate.)
+        Parallel.For(0, 32, i =>
+        {
+            switch (i % 4)
+            {
+                case 0: arb.PlayVoice($"v{i}.mp3", 1f); break;
+                case 1: arb.PlayWhisper($"w{i}.mp3", 1f); break;
+                case 2: arb.PlaySfx($"s{i}.mp3", 1f); break;
+                default: arb.QueueVoice($"q{i}.mp3", 1f); break;
+            }
+        });
+        Assert.Equal(1, backend.EnumerateCallCount); // 32 concurrent attempts, at most one schedule
+
+        clock.Advance(TimeSpan.Zero); // the scheduled probe(s) fire with the endpoint STILL DOWN —
+        Assert.Equal(2, backend.EnumerateCallCount); // N concurrent attempts → exactly one backend init
+        Assert.True(arb.AudioDisabledForSession);
+
+        // ...and the single-flight probe still recovers when the endpoint returns.
+        backend.Devices = ["RDP Sink"];
+        clock.Advance(TimeSpan.FromSeconds(31));
+        arb.PlayVoice("kick.mp3", 1f);
+        clock.Advance(TimeSpan.Zero);
+        Assert.False(arb.AudioDisabledForSession);
+        Assert.Equal(3, backend.EnumerateCallCount);
+    }
+
+    [Fact]
+    public void Recovery_RepeatedFailure_ExactlyOneAttemptPerCooldownWindow()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+
+        for (var window = 0; window < 3; window++)
+        {
+            for (var i = 0; i < 10; i++) // window armed but UNEXPIRED: in-window hammering adds NOTHING
+            {
+                arb.PlayVoice($"v{i}.mp3", 1f);
+                arb.PlaySfx($"s{i}.mp3", 1f);
+            }
+            Assert.Equal(1 + window, backend.EnumerateCallCount);
+
+            clock.Advance(TimeSpan.FromSeconds(31)); // the window expires
+            arb.PlayVoice("kick.mp3", 1f); // the one trigger this window
+            Assert.Equal(1 + window, backend.EnumerateCallCount); // probe scheduled, not fired
+            clock.Advance(TimeSpan.FromSeconds(1)); // probe fires, fails, re-arms the window
+            Assert.Equal(2 + window, backend.EnumerateCallCount); // exactly one attempt per window
+        }
+        Assert.True(arb.AudioDisabledForSession);
+        Assert.Equal(4, backend.EnumerateCallCount); // startup + 3 windows — no busy loop
+    }
+
+    [Fact]
+    public void Recovery_Panic_NothingResurrected_ExplicitStopUntouched()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        backend.Devices = ["RDP Sink"];
+        arb.PlayVoice("before.mp3", 1f); // kick
+        clock.Advance(TimeSpan.Zero); // probe succeeds
+        Assert.False(arb.AudioDisabledForSession);
+
+        arb.PlayVoice("line.mp3", 1f);
+        var playing = backend.Players[^1];
+        Assert.True(playing.Playing);
+
+        arb.PanicReset(); // panic owns the players; recovery must never touch what it cleared
+        Assert.True(playing.Stopped && playing.Disposed);
+
+        // Force suppression again and recover: nothing panic cleared comes back.
+        backend.Devices = [];
+        arb.Initialize(null);
+        Assert.True(arb.AudioDisabledForSession);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        backend.Devices = ["RDP Sink"];
+        arb.PlayVoice("kick2.mp3", 1f);
+        clock.Advance(TimeSpan.Zero);
+        Assert.False(arb.AudioDisabledForSession);
+
+        Assert.True(playing.Stopped && playing.Disposed); // the panicked player was NOT resurrected
+        Assert.Equal(0, arb.QueuedVoiceCount);
+        var restarted = Assert.IsType<SoundOutcome.Started>(arb.PlayVoice("new.mp3", 1f));
+        var newPlayer = backend.Players[^1];
+        Assert.NotSame(playing, newPlayer); // a post-recovery play constructs a NEW player through the normal seam
+        Assert.True(newPlayer.Playing);
+        _ = restarted;
+    }
+
+    [Fact]
+    public void Recovery_Teardown_NoProbeAfterDispose_Ever()
+    {
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        arb.PlayVoice("kick.mp3", 1f); // schedule a probe
+
+        arb.Dispose(); // teardown cancels the pending probe
+        backend.Devices = ["RDP Sink"];
+        clock.Advance(TimeSpan.FromSeconds(60)); // the cancelled probe never fires
+        Assert.Equal(1, backend.EnumerateCallCount);
+
+        var after = Assert.IsType<SoundOutcome.Unavailable>(arb.PlayVoice("x.mp3", 1f));
+        Assert.Contains("torn down", after.Reason); // honest state, and...
+        Assert.Equal(1, backend.EnumerateCallCount); // ...no re-probe after teardown, ever
+    }
+
+    [Fact]
+    public void Recovery_HealthySession_NoExtraDeviceCalls_NoNewLogLines()
+    {
+        // Negative control: nothing fails → byte-for-byte unaffected. One init, one
+        // enumeration, zero recovery state transitions or log lines.
+        var (arb, backend, _, clock) = Make();
+        Initialized(arb);
+        Assert.Equal(1, backend.InitCallCount);
+        Assert.Equal(1, backend.EnumerateCallCount);
+
+        arb.PlayVoice("a.mp3", 1f);
+        arb.PlayWhisper("w.mp3", 1f);
+        arb.PlaySfx("s.mp3", 1f);
+        arb.QueueVoice("q.mp3", 1f);
+        clock.Advance(TimeSpan.FromMinutes(10)); // pacing fires; clock far past any window
+        arb.PanicReset();
+
+        Assert.Equal(1, backend.InitCallCount); // no probe, ever
+        Assert.Equal(1, backend.EnumerateCallCount); // no extra device call
+        Assert.False(arb.AudioDisabledForSession);
+        Assert.DoesNotContain(_log, l => l.Contains("re-probe") || l.Contains("recovered") || l.Contains("suppressed") || l.Contains("still down"));
+    }
+
+    [Fact]
+    public void Recovery_ProbeThrows_DegradesTyped_FlagClears_NoEscape()
+    {
+        // Exception-proofing pin (pre-approach consult finding): a backend that THROWS from
+        // TryInit on the timer thread must degrade to a typed failed probe — the single-flight
+        // flag always clears and the window re-arms, never a stuck-true permanence.
+        var (arb, backend, _, clock) = Make(devices: []);
+        arb.Initialize(null);
+
+        backend.Devices = ["RDP Sink"];
+        backend.ThrowOnTryInit = true;
+        clock.Advance(TimeSpan.FromSeconds(31));
+        arb.PlayVoice("kick.mp3", 1f);
+        clock.Advance(TimeSpan.Zero); // probe throws internally — nothing escapes the scheduled callback
+        Assert.True(arb.AudioDisabledForSession); // still suppressed, window re-armed (streak 2)
+        Assert.Equal(2, backend.EnumerateCallCount);
+
+        clock.Advance(TimeSpan.FromSeconds(31));
+        arb.PlayVoice("kick2.mp3", 1f); // flag cleared → a later window can probe again
+        backend.ThrowOnTryInit = false;
+        clock.Advance(TimeSpan.Zero);
+        Assert.False(arb.AudioDisabledForSession); // and recovery still lands
+        Assert.Equal(3, backend.EnumerateCallCount);
+    }
+
+    /// <summary>Run <paramref name="count"/> failed re-probes (each: expire window → play kicks → advance fires the failed probe).</summary>
+    private static void FailProbes(SoundArbitration arb, ManualClock clock, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(31));
+            arb.PlayVoice("kick.mp3", 1f); // kick the single-flight probe
+            clock.Advance(TimeSpan.FromSeconds(1)); // probe fires and fails (devices still [])
+        }
+    }
+
     // ---------- off-sync-context construction (SP-025 regression) ----------
 
     [Fact]
@@ -467,13 +731,33 @@ public sealed class SoundArbitrationTests
         public List<FakePlayer> Players { get; } = [];
         public string[] Devices { get; set; } = ["RDP Sink"];
         public string? RequestedDeviceName { get; private set; }
+        public int InitCallCount { get; private set; }
+        public int EnumerateCallCount { get; private set; }
+        public string? TryInitError { get; set; }
+        public bool ThrowOnTryInit { get; set; }
         public Action<FakePlayer>? PlayerHook { get; set; }
 
-        public IReadOnlyList<string> EnumerateDevices() => Devices;
+        public IReadOnlyList<string> EnumerateDevices()
+        {
+            EnumerateCallCount++;
+            return Devices;
+        }
 
         public bool TryInit(string? deviceName, out string? error)
         {
+            InitCallCount++;
             RequestedDeviceName = deviceName;
+            if (ThrowOnTryInit)
+            {
+                throw new InvalidOperationException("backend wedged in the audio stack");
+            }
+
+            if (TryInitError is { } failure)
+            {
+                error = failure;
+                return false;
+            }
+
             error = null;
             return true;
         }
