@@ -518,15 +518,19 @@ public class SkillTreeService : IDisposable
 
     /// <summary>
     /// Get daily welcome bonus XP based on current streak length.
-    /// Base XP by streak tier: 50 (1-3d), 100 (4-6d), 150 (7-13d), 200 (14-29d), 300 (30+d)
-    /// Scales with player level: +3% per level (e.g. level 50 = +150% = 2.5x)
+    /// Flat XP by streak tier: 50 (1-3d), 100 (4-6d), 150 (7-13d), 200 (14-29d), 300 (30+d).
+    ///
+    /// XP-economy rework (feat/xp-economy, shared with mobile): the bonus is for EVERYONE —
+    /// the old milestone_rewards skill gate is gone (showing up every day is the behaviour
+    /// being paid for, not a perk to buy), and so is the +3%/level scaling — a daily login
+    /// must not be worth thousands of XP at high level while sessions do the real earning.
+    /// The milestone_rewards node itself still exists in the tree as a prerequisite step.
     /// </summary>
     public int GetDailyStreakBonus(int streakDays)
     {
-        if (!HasSkill("milestone_rewards")) return 0;
         if (streakDays <= 0) return 0;
 
-        var baseXp = streakDays switch
+        var xp = streakDays switch
         {
             <= 3 => 50,
             <= 6 => 100,
@@ -534,11 +538,6 @@ public class SkillTreeService : IDisposable
             <= 29 => 200,
             _ => 300
         };
-
-        // Scale with player level: +3% per level
-        var level = App.Settings?.Current?.PlayerLevel ?? 1;
-        var levelMultiplier = 1.0 + (level - 1) * 0.03;
-        var xp = (int)Math.Round(baseXp * levelMultiplier);
 
         ShowDailyStreakNotification(xp, streakDays);
         return xp;

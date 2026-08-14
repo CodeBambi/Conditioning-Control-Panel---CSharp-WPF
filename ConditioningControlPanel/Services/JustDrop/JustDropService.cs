@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
@@ -133,14 +134,54 @@ namespace ConditioningControlPanel.Services.JustDrop
 
         // ============================== the bridge ==============================
 
-        /// <summary>
-        /// XP for one finished drop. Calibration against the app's existing grants: an FYP clip is
-        /// 5 and an attention hit 15, a Pop Quiz is 25, a mantra 30, and a whole Training Program
-        /// day is 200+. A drop is a short complete run, so it sits with the Pop Quiz rather than
-        /// with a program day - and it is a FIXED number, not derived from the payload's
-        /// <c>durationSec</c>, because the page is not a trusted clock.
-        /// </summary>
-        public const int SessionCompleteXp = 25;
+        // ─── the settlement table (mirror of ccpmobile src/lib/justdrop/dropXp.ts fallback
+        //     settlement — computeDropXPFallback) ─────────────────────────────────────────
+        // The flat 25 is retired: a 60-minute XXL and a 2-minute taste paid the same, which
+        // made the drop the worst-paying session in the app. Desktop only ever hears
+        // {orderCode, sizeId, durationSec} from the page, so it prices a drop exactly the way
+        // the mobile host's size-only fallback does: size base, no item bonus, a quick-taste
+        // floor under any clock we don't trust, the 4th-drop-of-the-day quarter, then the
+        // level multiplier. Keep every number in step with dropXp.ts — the two hosts must pay
+        // the same drop the same.
+        //
+        // The page's durationSec is browser-authored and NEVER trusted. The host runs its own
+        // clock from the bridge's session-start message; a completion with no host-measured
+        // start (page reloaded mid-run, an older page build) settles as a taste, exactly as
+        // mobile treats a missing/unbelievable clock.
+
+        /// <summary>Completion base by size. Sub-linear in duration on purpose (dropXp.ts rationale 1).</summary>
+        private static readonly IReadOnlyDictionary<string, int> SizeBaseXp =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            { ["S"] = 300, ["M"] = 650, ["L"] = 1000, ["XXL"] = 1400 };
+
+        /// <summary>Expected wall-clock per size, in seconds (S 5min / M 15 / L 30 / XXL 60).</summary>
+        private static readonly IReadOnlyDictionary<string, int> SizeExpectedSeconds =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            { ["S"] = 300, ["M"] = 900, ["L"] = 1800, ["XXL"] = 3600 };
+
+        /// <summary>An unrecognised or missing size reads as M, the same default decodeOrder applies.</summary>
+        private const string DefaultSizeId = "M";
+
+        /// <summary>A taste, not a meal (dropXp.ts rationale 6).</summary>
+        private const int QuickTasteXp = 40;
+
+        /// <summary>Quick-taste duration, and the floor under any measured clock.</summary>
+        private const int QuickSeconds = 120;
+
+        /// <summary>An elapsed time under this share of the size's expected run settles as a taste.</summary>
+        private const double ClockTrust = 0.8;
+
+        /// <summary>From the 4th credited drop of the local day the award quarters (rationale 7).</summary>
+        private const int DiminishAfter = 3;
+        private const double DiminishFactor = 0.25;
+
+        /// <summary>Host-side clock: UTC instant the bridge reported session-start, per order code.
+        /// This — never the page's durationSec — is what the settlement measures elapsed time with.</summary>
+        private static readonly Dictionary<string, DateTime> SessionStartUtc = new(StringComparer.Ordinal);
+
+        /// <summary>Once per order code, for the life of the process: a page that re-posts the same
+        /// completion (replay, reload, double-fire) credits nothing the second time.</summary>
+        private static readonly HashSet<string> CreditedOrders = new(StringComparer.Ordinal);
 
         /// <summary>
         /// Consumes one raw <c>WebMessageReceived</c> payload. MUST be called on the UI thread
@@ -188,6 +229,10 @@ namespace ConditioningControlPanel.Services.JustDrop
                     case "session-start":
                         App.Logger?.Information("JustDrop bridge: session-start order={Order} size={Size} duration={Duration}s",
                             orderCode ?? "?", sizeId ?? "?", durationSec ?? 0);
+                        // Start the HOST's clock for this order. A restart for the same code
+                        // overwrites — the newest run is the one a completion will describe.
+                        if (!string.IsNullOrEmpty(orderCode))
+                            SessionStartUtc[orderCode] = DateTime.UtcNow;
                         break;
 
                     case "session-exit":
@@ -198,7 +243,7 @@ namespace ConditioningControlPanel.Services.JustDrop
                     case "session-complete":
                         App.Logger?.Information("JustDrop bridge: session-complete order={Order} size={Size} duration={Duration}s",
                             orderCode ?? "?", sizeId ?? "?", durationSec ?? 0);
-                        AwardSessionComplete();
+                        AwardSessionComplete(orderCode, sizeId);
                         break;
 
                     default:
@@ -221,23 +266,103 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// not take the door down, so each half is caught separately: a failed grant should not
         /// cost the user the toast, and a failed toast should not cost them the XP.</para>
         /// </summary>
-        private static void AwardSessionComplete()
+        private static void AwardSessionComplete(string? orderCode, string? sizeId)
         {
+            int xp;
             try
             {
+                // Once per order code. A code we have already paid is a replayed message, not a
+                // second session; it also does not consume a daily-diminish slot.
+                if (!string.IsNullOrEmpty(orderCode) && !CreditedOrders.Add(orderCode))
+                {
+                    App.Logger?.Information("JustDrop: order {Order} already credited — replay pays nothing", orderCode);
+                    return;
+                }
+
+                // The host's clock, or no clock at all. durationSec from the payload is
+                // deliberately not consulted (see the settlement table's header note).
+                double? hostElapsedSec = null;
+                if (!string.IsNullOrEmpty(orderCode) && SessionStartUtc.Remove(orderCode, out var startedUtc))
+                {
+                    var elapsed = (DateTime.UtcNow - startedUtc).TotalSeconds;
+                    if (elapsed >= 0) hostElapsedSec = elapsed;
+                }
+
+                xp = SettleDropXp(sizeId, hostElapsedSec, out var quickTaste, out var diminished);
+
                 // XPSource.Other, matching Programs / Quests / Pop Quiz / the Intake. NOT
                 // XPSource.Session: that source is the session engine's, and borrowing it would
                 // make companion bonuses and quest counters read a web drop as a local session.
-                App.Progression?.AddXP(SessionCompleteXp, XPSource.Other);
+                App.Progression?.AddXP(xp, XPSource.Other);
+                App.Settings?.Save();   // the daily counter must survive a crash between drops
+
+                App.Logger?.Information("JustDrop: drop settled — order={Order} size={Size} elapsed={Elapsed}s taste={Taste} diminished={Dim} xp={Xp}",
+                    orderCode ?? "?", sizeId ?? "?", hostElapsedSec.HasValue ? (int)hostElapsedSec.Value : -1,
+                    quickTaste, diminished, xp);
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete XP failed"); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "JustDrop: session-complete XP failed");
+                return;
+            }
 
             try
             {
-                App.Notifications?.Show(Loc.GetF("jd_toast_session_complete", SessionCompleteXp),
+                App.Notifications?.Show(Loc.GetF("jd_toast_session_complete", xp),
                     NotificationType.Success, TimeSpan.FromSeconds(6));
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete toast failed"); }
+        }
+
+        /// <summary>
+        /// Price one credited drop. Same order of operations as dropXp.ts settle(): taste-or-base,
+        /// daily diminish, then the level multiplier last so drops scale with progression exactly
+        /// like every other session award. (No item bonus on desktop — size-only fallback — so the
+        /// mobile table's 2000 pre-multiplier cap can never be reached and is not re-stated here.)
+        /// </summary>
+        private static int SettleDropXp(string? sizeId, double? hostElapsedSec, out bool quickTaste, out bool diminished)
+        {
+            var size = sizeId != null && SizeBaseXp.ContainsKey(sizeId) ? sizeId : DefaultSizeId;
+            var expectedSec = SizeExpectedSeconds[size];
+
+            // No host clock is an untrusted clock (mobile treats a missing reading the same):
+            // a completion we cannot time is paid as a taste, never as a full meal.
+            quickTaste = hostElapsedSec is null
+                         || hostElapsedSec < QuickSeconds
+                         || hostElapsedSec < expectedSec * ClockTrust;
+
+            double subtotal = quickTaste ? QuickTasteXp : SizeBaseXp[size];
+
+            diminished = BumpDailyDropCount() >= DiminishAfter;
+            if (diminished) subtotal *= DiminishFactor;
+
+            var level = App.Settings?.Current?.PlayerLevel ?? 1;
+            var multiplier = App.Progression?.GetSessionXPMultiplier(level) ?? 1.0;
+
+            return (int)Math.Round(subtotal * multiplier);
+        }
+
+        /// <summary>
+        /// The daily-diminish counter: {dayKey, count} in AppSettings, lazy rollover on read (first
+        /// credited drop of a new LOCAL day resets it). Returns how many drops were already
+        /// credited today BEFORE this one, which is the figure the diminish compares — mobile's
+        /// dropsCompletedToday. The caller saves settings.
+        /// </summary>
+        private static int BumpDailyDropCount()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return 0;
+
+            var today = DateTime.Now.ToString("yyyy-MM-dd");
+            if (!string.Equals(settings.JustDropXpDayKey, today, StringComparison.Ordinal))
+            {
+                settings.JustDropXpDayKey = today;
+                settings.JustDropCreditedToday = 0;
+            }
+
+            var before = Math.Max(0, settings.JustDropCreditedToday);   // hand-edited negatives read as 0
+            settings.JustDropCreditedToday = before + 1;
+            return before;
         }
     }
 }
