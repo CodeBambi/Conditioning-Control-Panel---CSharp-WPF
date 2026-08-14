@@ -58,7 +58,7 @@
 
             <!-- Character count -->
             <TextBlock x:Name="TxtCharCount" Grid.Row="4" Text="{loc:Str label_0_20_characters}"
-                       Foreground="#888" FontSize="11" Margin="0,5,0,0"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,5,0,0"
                        HorizontalAlignment="Right" VerticalAlignment="Top"/>
 
             <!-- Buttons -->

@@ -382,7 +382,9 @@ public class OverlayService : IDisposable
 
             if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
             {
-                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+                // Base feature: strength comes from the dedicated blur slider, NOT from
+                // BrainDrainIntensity (that is the AUDIO half's per-minute trigger probability).
+                StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
             }
 
             _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -588,7 +590,7 @@ public class OverlayService : IDisposable
             if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
             {
                 StopBrainDrainBlur();
-                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+                StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
             }
         });
 
@@ -822,7 +824,10 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampPink = null;
                         }
-                        if (!settings.PinkFilterEnabled) hide();
+                        // Feature ownership requires the engine to be running (see
+                        // HideOverlaySustained) — a ticked checkbox with the engine stopped
+                        // has no reconciler to ever tear this down.
+                        if (!(_isRunning && settings.PinkFilterEnabled)) hide();
                     }
                 }
                 else if (kind == "spiral")
@@ -841,7 +846,7 @@ public class OverlayService : IDisposable
                             }
                             _bumpPrevRampSpiral = null;
                         }
-                        if (!settings.SpiralEnabled) hide();
+                        if (!(_isRunning && settings.SpiralEnabled)) hide();
                     }
                 }
                 else // braindrain / braindrain_melt
@@ -852,7 +857,7 @@ public class OverlayService : IDisposable
                     // only checked the setting, so the first timed effect to end killed a co-active
                     // band (the setting is false for everyone while the feature is reworked).
                     if (_timedBrainDrainHolds > 0) _timedBrainDrainHolds--;
-                    if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                    if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                         hide();
                 }
             }
@@ -940,8 +945,13 @@ public class OverlayService : IDisposable
             // the overlay stayed frozen at the ramp's final opacity forever (#563). Clearing it
             // returns ownership to the reconciler, which re-applies the user's saved opacity next
             // tick (base-on) or the overlay is torn down (base-off).
-            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
-            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
+            // The persistent feature only actually owns the overlay while the service is running:
+            // with the engine stopped there is no 500ms reconciler, so leaving the overlay up for a
+            // merely-ticked checkbox strands it on screen forever after a Deeper band ends (the
+            // "overlay outlives the enhancement" report). Engine running + feature on still hands
+            // ownership back to the reconciler as before.
+            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !(_isRunning && settings.PinkFilterEnabled)) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !(_isRunning && settings.SpiralEnabled)) StopSpiral(); },
             // Guard braindrain the same way as pink/spiral: a Deeper band exit must not tear down
             // the user's base Brain Drain feature, NOR a timed braindrain effect that is still in
             // flight. Clear ramp ownership + the sustained hold, then stop only when nothing else
@@ -950,7 +960,7 @@ public class OverlayService : IDisposable
             {
                 _sustainedBrainDrainHeld = false;
                 _rampBrainDrainOpacity = null;
-                if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                     StopBrainDrainBlur();
             },
             _ => null
@@ -1905,28 +1915,28 @@ public class OverlayService : IDisposable
     private IntPtr _captureHBitmap;
 
     /// <summary>
-    /// Brain Drain / Brain Melt are WITHHELD from playback while the effect is reworked.
-    /// This is the single authoritative gate: <see cref="StartBrainDrainBlur"/> is the only
-    /// place the visual comes up, so flipping this covers every caller (Deeper region bands,
-    /// Deeper timed effects, chaos effect bubbles, session/preset settings) at once.
+    /// RE-ENABLED (rework shipped): the blur now renders through the shared compositor
+    /// (<see cref="Compositor.BrainDrainLayer"/> + its off-UI-thread capture pump), the melt warp
+    /// is live, and the base feature has its own blur-strength setting
+    /// (<c>AppSettings.BrainDrainBlurStrength</c>) plus a melt toggle
+    /// (<c>AppSettings.BrainDrainMeltEnabled</c>).
     ///
-    /// Deliberately a SKIP, not an error: creator content that already carries a braindrain
-    /// overlay keeps its saved kind, still validates, still loads, and still plays every OTHER
-    /// effect on its timeline — only the blur is silently omitted. All the stop/hold/ramp
-    /// bookkeeping around it stays live and harmlessly no-ops because nothing is showing
-    /// (StopBrainDrainBlur on nothing is a no-op; the hold counters still pair up).
-    ///
-    /// To re-enable: set this to false and restore the two picker entries in
-    /// DeeperEditorWindow (CmbOverlayKind + AddOverlayKindCombo).
+    /// The flag stays as the single authoritative kill-switch: <see cref="StartBrainDrainBlur"/>
+    /// is the only place the visual comes up, so flipping this back to true withholds it for
+    /// every caller (Deeper region bands, Deeper timed effects, chaos effect bubbles,
+    /// session/preset settings) at once. If it ever goes back to true, also re-hide the two
+    /// picker entries in DeeperEditorWindow (CmbOverlayKind + AddOverlayKindCombo) and flip
+    /// <c>OverlayKinds.IsWithheld</c> with it - the three are one decision.
     /// </summary>
-    /// <remarks>static readonly, not const: a const would make the rest of
+    /// <remarks>static readonly, not const: a const would make the skip branch in
     /// <see cref="StartBrainDrainBlur"/> compile-time unreachable (CS0162).</remarks>
-    public static readonly bool BrainDrainWithheld = true;
+    public static readonly bool BrainDrainWithheld = false;
 
-    /// <summary><paramref name="melt"/> selects the "braindrain_melt" variant. Melt and plain blur
-    /// are ONE overlay - they never co-exist by design - so the flag only picks the render mode on
-    /// the compositor layer (Phase 2; today it renders identically). The legacy per-screen-window
-    /// path ignores it.</summary>
+    /// <summary><paramref name="melt"/> selects the "braindrain_melt" variant: the same blur plus
+    /// a slowly-drifting Perlin displacement warp ("melting glass"), composed on the capture pump's
+    /// small surface (see <see cref="Compositor.BrainDrainCapturePump"/>). Melt and plain blur are
+    /// ONE overlay - they never co-exist by design - and the flag is fixed for the lifetime of one
+    /// run. The legacy per-screen-window fallback path ignores it (blur only).</summary>
     public void StartBrainDrainBlur(int intensity, bool melt = false)
     {
         if (BrainDrainWithheld)
@@ -2607,7 +2617,7 @@ public class OverlayService : IDisposable
         // Brain drain was previously only logged here, so a braindrain overlay that was the one losing
         // topmost got torn down and never came back. Restart it too (same intensity source the other
         // reconcile paths use) so recreation doesn't silently kill the effect.
-        if (hadBrainDrain && settings.BrainDrainEnabled) StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+        if (hadBrainDrain && settings.BrainDrainEnabled) StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
     }
 
     /// <summary>
@@ -2882,9 +2892,24 @@ public class OverlayService : IDisposable
         DispatcherHelper.RunOnUISync(() =>
         {
             if (e.PropertyName == nameof(App.Settings.Current.BrainDrainIntensity) ||
+                e.PropertyName == nameof(App.Settings.Current.BrainDrainBlurStrength) ||
                 e.PropertyName == nameof(App.Settings.Current.BrainDrainEnabled))
             {
                 App.Logger?.Debug("Brain Drain setting changed: {PropertyName}. Refreshing state.", e.PropertyName);
+                RefreshBrainDrainState();
+            }
+            else if (e.PropertyName == nameof(App.Settings.Current.BrainDrainMeltEnabled))
+            {
+                // The melt flag is fixed for the lifetime of one capture-pump run (see
+                // BrainDrainCapturePump), so a live flip needs a bounce, not just an intensity
+                // push. Only bounce when the BASE feature owns the overlay - a Deeper band or
+                // timed effect chose its own variant and must not be torn down by this setting.
+                App.Logger?.Debug("Brain Drain melt toggled: {Melt}", App.Settings.Current.BrainDrainMeltEnabled);
+                if (BrainDrainShowing && _timedBrainDrainHolds == 0 && !_sustainedBrainDrainHeld
+                    && App.Settings.Current.BrainDrainEnabled)
+                {
+                    StopBrainDrainBlur();
+                }
                 RefreshBrainDrainState();
             }
             // Add other property names for PinkFilter, Spiral, etc. here if needed
@@ -2907,12 +2932,14 @@ public class OverlayService : IDisposable
         var settings = App.Settings.Current;
 
         // Only start/update brain drain if the overlay service is running (engine is active).
-        // Unconditional stop: this is a full teardown (service not running), same as Stop()/panic —
-        // StopBrainDrainBlur clears the sustained hold so nothing stale survives it.
+        // Engine-stopped is NOT a license to kill an ad-hoc blur: this method is reachable from
+        // CurrentSettings_PropertyChanged (not gated on _isRunning), and Deeper bands run without
+        // the engine — so toggling BrainDrainEnabled/Intensity mid-video used to tear a live band
+        // down with no path to ever re-show it. Same hold discipline as everywhere else.
         if (!_isRunning)
         {
-            // Don't start brain drain if engine isn't running
-            StopBrainDrainBlur();
+            if (ShouldStopHeldOverlay(featureWantsIt: false, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                StopBrainDrainBlur();
             return;
         }
 
@@ -2921,12 +2948,14 @@ public class OverlayService : IDisposable
         {
             if (!BrainDrainShowing)
             {
-                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+                StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
             }
             else if (!_rampBrainDrainOpacity.HasValue)
             {
-                // Already running, just update intensity (a Deeper ramp owns it when active).
-                UpdateBrainDrainBlurOpacity((int)settings.BrainDrainIntensity);
+                // Already running, just update strength (a Deeper ramp owns it when active).
+                // NOTE: this cannot flip the melt variant - the pump's melt flag is fixed for
+                // one run; CurrentSettings_PropertyChanged bounces the overlay on a melt toggle.
+                UpdateBrainDrainBlurOpacity(settings.BrainDrainBlurStrength);
             }
         }
         // The base feature being off is NOT permission to kill an ad-hoc blur: a timed effect or a

@@ -88,7 +88,7 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorSettings,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorWebApp, DoorSettings,
                     BtnSettings,
                     BtnNavStudio, BtnPresets, BtnNavHaptics,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
@@ -138,6 +138,9 @@ namespace ConditioningControlPanel
                 EnsureEventBurstLayer();
 
                 ApplyNavActiveGlow(NavButtonForTab(_activeTabKey));
+                // Velvet Kit 2 lane B's hero moments (START charge + XP meniscus) ride this same
+                // lifecycle rather than hooking Activated / Deactivated / StateChanged again.
+                InitializeHeroFx();
                 ApplyChromeFxLoops();
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "InitializeChromeFx failed"); }
@@ -182,6 +185,8 @@ namespace ConditioningControlPanel
             // PR-2's dashboard loops ride the same funnel rather than hooking Activated /
             // Deactivated / StateChanged a second time. No-op until InitializeDashboardFx runs.
             ApplyDashboardFxLoops();
+            // Velvet Kit 2 (FX lane B): START charge / ring exhale / heartbeat + XP meniscus pulse.
+            ApplyHeroFxLoops();
 
             try
             {
@@ -221,6 +226,13 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Timer-independent restore of the fade-out's hit-test suppression. Coming BACK to
+                // a tab inside the 100ms fade replaces its opacity clock, so FadeOutgoingTab's
+                // Completed never runs (and its "they came back" guard returns before restoring
+                // anyway) - the tab would then swallow every click for the rest of the session.
+                // Every tab show funnels through here, so this is the one point that always runs.
+                if (tab is FrameworkElement incomingFe) incomingFe.IsHitTestVisible = true;
+
                 CancelStaggerCleanup();
 
                 var level = MotionFx.Level;
@@ -318,7 +330,13 @@ namespace ConditioningControlPanel
                     try
                     {
                         // The user came back to it inside 100ms: its own entrance owns it now.
-                        if (ReferenceEquals(fe, _activeTabElement)) return;
+                        // Hit-testing is still ours to hand back - the entrance does it too, but
+                        // this callback must never be the reason a live tab stays click-through.
+                        if (ReferenceEquals(fe, _activeTabElement))
+                        {
+                            fe.IsHitTestVisible = true;
+                            return;
+                        }
                         fe.BeginAnimation(OpacityProperty, null);
                         fe.Opacity = 1;
                         fe.IsHitTestVisible = true;
@@ -802,7 +820,11 @@ namespace ConditioningControlPanel
                     {
                         var progress = Math.Min(1.0, xpNeeded > 0 ? xp / xpNeeded : 0);
                         double fromWidth = double.IsNaN(XPBar.Width) ? 0 : XPBar.Width;
-                        MotionFx.BarFill(XPBar, fromWidth, progress * available);
+                        double toWidth = progress * available;
+                        MotionFx.BarFill(XPBar, fromWidth, toWidth);
+                        // Velvet Kit 2 (FX lane B): the meniscus rides the same target width on the
+                        // same clock and curve as the fill, so it sits on the surface throughout.
+                        AnimateXpMeniscus(toWidth);
                     }
                 }
             }

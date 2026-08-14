@@ -209,7 +209,7 @@ namespace ConditioningControlPanel
 
         // Banner rotation (cycles through 3 messages: support, welcome, thanks)
         private DispatcherTimer? _bannerRotationTimer;
-        private int _bannerCurrentIndex = 0; // 0=Primary (support), 1=Secondary (welcome), 2=Tertiary (thanks)
+        private int _bannerCurrentIndex = 0; // 0=Primary (support), 1=Secondary (welcome)
         private List<string> _bannerMessages = new();
 
         // Marquee animation
@@ -411,6 +411,10 @@ namespace ConditioningControlPanel
                 App.Achievements.AchievementUnlocked += OnAchievementUnlockedInMainWindow;
             }
 
+            // Header profile bubble: avatar face, hover account menu, live reactions
+            // (XP pulse / level-up burst / flash wobble). MainWindow.ProfileBubble.cs.
+            InitializeProfileBubble();
+
             // Subscribe to quest events
             if (App.Quests != null)
             {
@@ -435,11 +439,24 @@ namespace ConditioningControlPanel
             }
 
             // A landed server override for the ? box repaints the wall + rail + lockbands: the
-            // rail refresh is the one funnel that already fans out to all three.
+            // rail refresh is the one funnel that already fans out to all three. The Velvet
+            // Vault rides the SAME event (never its own timer) so the FREE TODAY card and the
+            // dashboard's ? box can never name two different features; the call no-ops until
+            // the tab has been built at least once.
             if (App.DailyFree != null)
             {
                 App.DailyFree.TodayChanged += () =>
-                    Dispatcher.BeginInvoke(new Action(RefreshPremiumRail));
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        RefreshPremiumRail();
+                        RefreshExclusivesTab();
+                        // The Play wall rides it too, for its lockbands AND its FREE TODAY
+                        // re-stamps (MainWindow.PlayTab.cs). It is not reached by the rail
+                        // refresh - that funnel covers the rail and the mosaic - and the two Play
+                        // cards on the wheel (For You, Remote Control) would otherwise go on
+                        // wearing yesterday's answer until the user re-entered the door.
+                        RefreshPlayCards();
+                    }));
             }
 
             // Subscribe to skill tree events
@@ -550,7 +567,15 @@ namespace ConditioningControlPanel
                         // the patch notes silently lost the picker until the next launch (play-test
                         // scenario C caught exactly that). Past 5 min we still defer to next launch,
                         // which ModPickerShown=false keeps armed.
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        //
+                        // App.Tutorial.IsActive is in the predicate since v6.8.0: What's New clears
+                        // IsStartupDialogShowing in its finally BEFORE the "Show me around (60s)"
+                        // action it queued gets to run, so without this check the picker opened
+                        // modally ON TOP of the running upgrade tour's spotlight (flagged in the
+                        // 0812 build review). The tour is minutes at most, well inside the 5-min
+                        // budget this loop already spends on the patch notes.
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
+                                                    || App.Tutorial?.IsActive == true); i++)
                         {
                             await Task.Delay(500);
                         }
@@ -560,7 +585,8 @@ namespace ConditioningControlPanel
                             await Task.Delay(500);
                         }
 
-                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing && IsLoaded)
+                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing
+                            && App.Tutorial?.IsActive != true && IsLoaded)
                         {
                             // Pre-ticks the card for the mod they were already running, so one press
                             // restores what the installer removed.
@@ -833,10 +859,163 @@ namespace ConditioningControlPanel
                     // installing thread's message loop), so the stall column on this very line is
                     // itself evidence.
                     VideoDiag.Log("PANIC", $"panic key '{key}' RECEIVED by the global hook - queueing handler");
-                    Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
+                    var panicOp = Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
                     VideoDiag.Log("PANIC", "handler queued on the dispatcher");
+                    ArmPanicWatchdog(panicOp);
                 }
             }
+        }
+
+        // #919b: the panic press is queued on the dispatcher, so a wedged UI thread swallows it
+        // exactly when it matters most (reporter's trace: the hook logged the press three times,
+        // the handler never ran once). If the queued handler hasn't finished inside this window,
+        // an emergency teardown runs off-thread instead.
+        // Coverage is bounded by where the arming happens: the WH_KEYBOARD_LL hook is installed with
+        // dwThreadId=0 but delivered on the UI thread's own message pump, so the watchdog can only
+        // arm while that thread is still PUMPING. That covers the two reported shapes - a handler
+        // that ran and then hung, and a dispatcher queue starved by higher-priority work - but not a
+        // thread that has stopped pumping altogether (there the callback never runs, Windows drops
+        // the hook for exceeding LowLevelHooksTimeout, and nothing here fires at all).
+        private static readonly TimeSpan PanicWatchdogTimeout = TimeSpan.FromSeconds(2);
+        private static int _panicFallbackRunning;
+
+        /// <summary>
+        /// Watches a queued panic handler from a background thread. Called from the WH_KEYBOARD_LL
+        /// callback, which runs on the UI thread and must return well inside LowLevelHooksTimeout —
+        /// so this only ever spawns the watcher, it never waits here.
+        /// </summary>
+        private void ArmPanicWatchdog(DispatcherOperation? op)
+        {
+            if (op == null) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var finished = await Task.WhenAny(op.Task, Task.Delay(PanicWatchdogTimeout))
+                                             .ConfigureAwait(false);
+                    if (finished == op.Task)
+                    {
+                        try { _ = op.Task.Exception; } catch { }   // observe a faulted handler
+                        return;
+                    }
+                    RunEmergencyPanicTeardown();
+                }
+                catch (Exception ex)
+                {
+                    try { App.Logger?.Error(ex, "Panic watchdog failed"); } catch { }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Last-resort panic path (#919b), on a background thread, when the dispatcher never ran the
+        /// queued handler. ONLY thread-safe teardown belongs here: anything that touches a WPF object
+        /// throws on this thread, and the premise is that the UI thread is unavailable. Every step is
+        /// guarded on its own so one failure can't starve the rest.
+        /// </summary>
+        private void RunEmergencyPanicTeardown()
+        {
+            // The panic double-press ladder ends in an app shutdown, which reliably outlives the 2s
+            // deadline — without this the watchdog fires INTO the shutdown and races App disposal
+            // over services it is already tearing down.
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    VideoDiag.Log("PANIC", "FALLBACK skipped — the app is already shutting down");
+                    return;
+                }
+            }
+            catch { return; }
+
+            if (Interlocked.Exchange(ref _panicFallbackRunning, 1) == 1) return;
+            try
+            {
+                try
+                {
+                    App.Logger?.Warning(
+                        "PANIC FALLBACK: dispatcher did not handle the panic key within {Ms}ms — tearing down off-thread",
+                        (int)PanicWatchdogTimeout.TotalMilliseconds);
+                }
+                catch { }
+                VideoDiag.Log("PANIC", "FALLBACK firing — the UI thread never drained the queued handler");
+
+                try { App.Haptics?.PanicStop(); }        catch (Exception ex) { LogPanicFallbackStep("haptics", ex); }
+                // Conditional, matching the designed panic path in StopEverything (#668): with the
+                // standalone Audio Layers master on, the bed is the user's, not the session's.
+                try
+                {
+                    if (App.Settings?.Current?.AudioLayersEnabled != true) App.LayeredAudio?.Stop();
+                }
+                catch (Exception ex) { LogPanicFallbackStep("audio layers", ex); }
+                // StopEmergency, not StopAndDisarm: the same runtime teardown from any thread, but
+                // without persisting MantraChantEnabled=false. The real panic leaves the setting
+                // alone, and a watchdog that fired only because the UI thread was slow must not
+                // silently turn the user's chant off for good.
+                try { App.MantraChant?.StopEmergency(); } catch (Exception ex) { LogPanicFallbackStep("mantra chant", ex); }
+                // #890 rewrote both of these to be reachable from this thread. Called individually
+                // rather than via App.KillAllAudio, which also touches services never audited for
+                // off-thread calls.
+                try { App.MindWipe?.Stop(); }            catch (Exception ex) { LogPanicFallbackStep("mind wipe", ex); }
+                try { App.BrainDrain?.Stop(); }          catch (Exception ex) { LogPanicFallbackStep("brain drain", ex); }
+                try { App.Audio?.ForceUnduck(); }        catch (Exception ex) { LogPanicFallbackStep("unduck", ex); }
+                try { App.ScreenOcr?.Stop(); }           catch (Exception ex) { LogPanicFallbackStep("screen OCR", ex); }
+
+                // No overlay hiding here by design. ShowWindowAsync only POSTS to the owner thread,
+                // so it cannot hide anything while that thread is the wedged one — and re-showing
+                // the raw-Win32 LayeredCompositorHost behind its back desyncs host.IsVisible, which
+                // CompositorEngine gates every Show/Hide on: one false fire and every layer renders
+                // into an invisible window for the rest of the session. Overlays are the UI thread's
+                // to drop, when it comes back and runs the real handler.
+                QueuePanicFallbackRecovery();
+
+                VideoDiag.Log("PANIC", "FALLBACK complete");
+            }
+            catch (Exception ex)
+            {
+                try { App.Logger?.Error(ex, "Panic fallback teardown failed"); } catch { }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _panicFallbackRunning, 0);
+            }
+        }
+
+        private static void LogPanicFallbackStep(string step, Exception ex)
+        {
+            try { App.Logger?.Warning("PANIC FALLBACK: {Step} step failed: {Error}", step, ex.Message); } catch { }
+            VideoDiag.Log("PANIC", $"FALLBACK step '{step}' failed: {ex.Message}");
+        }
+
+        /// <summary>
+        /// Repairs the one thing the off-thread teardown does behind the settings' back: the
+        /// Awareness scanner was stopped (rightly, while the UI was wedged) with nothing to restart
+        /// it, leaving the checkbox reading ON over a dead scanner. Queued so it lands as soon as
+        /// the UI thread drains — after the panic op the watchdog gave up on, which was posted
+        /// earlier and therefore runs first. Idempotent: Start no-ops if it is already running.
+        /// </summary>
+        private void QueuePanicFallbackRecovery()
+        {
+            try
+            {
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    try
+                    {
+                        // Same three conditions as the real start path (MainWindow.Patreon.cs):
+                        // the access check matters because entitlement can have lapsed since.
+                        var settings = App.Settings?.Current;
+                        if (settings?.ScreenOcrEnabled == true && settings.KeywordTriggersEnabled &&
+                            KeywordTriggerService.HasAccess())
+                            App.ScreenOcr?.Start();   // no-ops if it is already running
+                    }
+                    catch (Exception ex) { LogPanicFallbackStep("screen OCR restart", ex); }
+
+                    VideoDiag.Log("PANIC", "FALLBACK recovery ran on the UI thread");
+                });
+            }
+            catch (Exception ex) { LogPanicFallbackStep("recovery queue", ex); }
         }
 
         private void HandlePanicKeyPress()
@@ -1501,8 +1680,6 @@ namespace ConditioningControlPanel
                     TxtBannerPrimary.Foreground = accentBrush;
                 if (TxtBannerSecondary != null)
                     TxtBannerSecondary.Foreground = accentBrush;
-                if (TxtBannerTertiary != null)
-                    TxtBannerTertiary.Foreground = accentBrush;
 
                 // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
 
@@ -1630,8 +1807,14 @@ namespace ConditioningControlPanel
         /// when even the base fails to resolve, in which case the XAML pack-URI face stands.
         /// </summary>
         private static System.Windows.Media.ImageSource? ModTileVariant(string baseName)
+            => ModTileVariant(baseName, TileDecodeWidth);
+
+        private static System.Windows.Media.ImageSource? ModTileVariant(string baseName, int decodeWidth)
         {
-            var modOverride = ModResourceResolver.ResolveImage($"features/{baseName}.png");
+            // Decoded at a cap rather than through ResolveImage: the tile art is 1376px wide and
+            // these cards render a fraction of that, so a full decode cost ~12MB of pixels each.
+            // A failed decode (no such themed file) is how "the mod has no variant" is detected —
+            // LoadModImageDecoded returns null for a resource that doesn't exist.
             // ResolveImage falls back to the app's own resource when the mod has no override,
             // so "did the mod override it" needs the mod folder check to be meaningful only if
             // the resolver distinguishes. It does not - so order the lookups by specificity
@@ -1645,9 +1828,19 @@ namespace ConditioningControlPanel
                 Models.BuiltInMods.LockedId => "_locked",
                 _ => null,
             };
-            if (suffix == null) return modOverride;
-            return ModResourceResolver.ResolveImage($"features/{baseName}{suffix}.png") ?? modOverride;
+            if (suffix != null)
+            {
+                var themed = LoadModImageDecoded($"features/{baseName}{suffix}.png", decodeWidth);
+                if (themed != null) return themed;
+            }
+            return LoadModImageDecoded($"features/{baseName}.png", decodeWidth);
         }
+
+        // Dashboard tile decode caps. The mosaic lives in a 1489x901 design Viewbox, so a
+        // single-column card paints ~340 DIP and the double-wide Vault ~700; these are roughly
+        // 2x that, which covers a maximized window on a high-DPI display with headroom.
+        private const int TileDecodeWidth = 768;
+        private const int WideTileDecodeWidth = 1024;
 
         /// <summary>
         /// Loads feature images from mod resources (if overrides exist) or embedded resources.
@@ -1668,7 +1861,6 @@ namespace ConditioningControlPanel
                     ("features/bouncing_text.png", SettingsTab.CardBouncingText),
                     ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
                     ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
-                    ("features/justdrop.png", SettingsTab.CardJustDrop),
                     // The ? box and the Vault resolve through ModTileVariant below: built-in
                     // mods get app-shipped themed faces (features/mysterybox_bambi.png, ...)
                     // by filename convention - same mechanism as the takeover art fork - while
@@ -1682,14 +1874,19 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
+                if (SettingsTab.CardJustDrop != null)
+                {
+                    var img = LoadModImageDecoded("features/justdrop.png", TileDecodeWidth);
+                    if (img != null) SettingsTab.CardJustDrop.Icon = img;
+                }
                 if (SettingsTab.CardMystery != null)
                 {
-                    var img = ModTileVariant("mysterybox");
+                    var img = ModTileVariant("mysterybox", TileDecodeWidth);
                     if (img != null) SettingsTab.CardMystery.Icon = img;
                 }
                 if (SettingsTab.CardVault != null)
                 {
-                    var img = ModTileVariant("vault");
+                    var img = ModTileVariant("vault", WideTileDecodeWidth);
                     if (img != null) SettingsTab.CardVault.Icon = img;
                 }
 
@@ -1825,6 +2022,13 @@ namespace ConditioningControlPanel
                     ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024),
+                    // The page hero and the Loom strip. Both brushes were named and left mutable
+                    // by the 0812 remake but never fed, so a .ccpmod overriding features/dtrh.png
+                    // or features/loom.png repainted every OTHER surface that uses those files and
+                    // left the two biggest ones on the embedded art. 1024 for the hero because it
+                    // is the full-width banner at the top of the wall; 512 for the strip.
+                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024),
+                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512),
                 };
                 foreach (var (path, brush, decodeWidth) in playHeroMap)
                 {
@@ -1850,29 +2054,14 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Loads a resource image (mod override first, embedded fallback) at a capped decode
-        /// size. ModResourceResolver.ResolveImage decodes at full resolution and caches, which
-        /// is wrong for the rail's marquee PNGs — this goes through ResolveUri instead so the
-        /// mod override still wins but DecodePixelWidth is honoured. Returns null on failure.
+        /// size. Thin delegate to <see cref="ModResourceResolver.ResolveImageDecoded"/> since the
+        /// mod-awareness sweep promoted the body into the resolver - the name stays because ~7
+        /// call sites in this window and its partials read better with it, and because the
+        /// resolver is now the only place that knows the cache key (which carries the width).
+        /// Returns null on failure, which is also how "the mod ships no such variant" is read.
         /// </summary>
-        private static BitmapImage? LoadModImageDecoded(string resourcePath, int decodeWidth)
-        {
-            try
-            {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(ModResourceResolver.ResolveUri(resourcePath), UriKind.Absolute);
-                bitmap.DecodePixelWidth = decodeWidth;
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                return bitmap;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("LoadModImageDecoded failed for {Path}: {Error}", resourcePath, ex.Message);
-                return null;
-            }
-        }
+        private static ImageSource? LoadModImageDecoded(string resourcePath, int decodeWidth)
+            => ModResourceResolver.ResolveImageDecoded(resourcePath, decodeWidth);
 
         private void BtnManageMods_Click(object sender, RoutedEventArgs e)
         {
@@ -2467,6 +2656,21 @@ namespace ConditioningControlPanel
                 });
                 // Re-load mod-aware feature images (description card images, VHS card)
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(LoadFeatureImages);
+                // The nav rail's seven door medallions are mod art too (nav/door_*.png).
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyDoorArt);
+                // THE ACCENT PALETTE. ApplyActiveModChange also calls this, but it is not on every
+                // path that changes the active mod: uninstalling the mod you are wearing makes
+                // ModService activate CCP Default by itself (ModService.UninstallMod), and that
+                // route never reaches ApplyActiveModChange - so the whole app kept the uninstalled
+                // mod's accent until the next restart. ModChanged is the authoritative signal, so
+                // the palette hangs off it as well.
+                //
+                // Running twice on a manual switch is deliberate and cheap: the body is a pure
+                // rewrite of ~40 Application.Resources entries (idempotent by construction), and
+                // the one thing it calls out to, RefreshChromeFx, is self-guarded and re-entrant.
+                // No last-applied-mod guard, because that would also suppress the legitimate
+                // re-apply after a mod is reinstalled under the same id with new theme colors.
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(RefreshThemeAwareElements);
             }
 
             // Re-apply code-behind strings when language changes (section headers, feature names, etc.)
@@ -2533,8 +2737,20 @@ namespace ConditioningControlPanel
             // Check if this is first run and prompt for assets folder
             await CheckFirstRunAssetsPromptAsync();
 
-            // Initialize Avatar Tube Window
-            InitializeAvatarTube();
+            // Startup ran before there was any window to ask on, so a dead end it hit (a custom
+            // assets folder that has vanished — App.EffectiveAssetsPath) could only record that an
+            // offer was warranted. This is the first safe moment to surface it: a window exists,
+            // and the first-run prompt's own modals have closed. No-ops when nothing is parked.
+            App.FlushPendingRemoteMediaOffer(this);
+
+            // Initialize Avatar Tube Window. #888: this used to run unconditionally, so a companion
+            // the user had dismissed came back on the next launch — visible but mute, because the
+            // speech path gates on AvatarEnabled separately. Creation is the gate now; Wake (tray)
+            // and the Companion room's toggle build it on demand.
+            if (App.Settings.Current.AvatarEnabled)
+            {
+                InitializeAvatarTube();
+            }
 
             // Initialize the Discord Rich Presence checkbox. Guard with _isLoading so the Changed
             // handler doesn't fire the "Discord Not Linked" MessageBox during startup for users
@@ -2577,6 +2793,11 @@ namespace ConditioningControlPanel
 
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
+
+            // Ask the server whether this account has a Just Drop door. Staggered behind the
+            // marquee's three checks for the same reason they are staggered behind each other -
+            // see MainWindow.JustDrop.cs.
+            InitializeJustDropDoor();
 
             // Deeper tab first-launch pulse — draw the eye to the new tab once,
             // unless the user has already opened it (HasSeenDeeperTab) or disabled it.
@@ -2753,11 +2974,45 @@ namespace ConditioningControlPanel
                     // Open the assets folder selection dialog
                     BtnPickAssetsFolder_Click(this, new RoutedEventArgs());
                 }
+
+                // Best moment in the whole app to offer remote media: the user has just told us
+                // they have no library. After the modal chain above, never during it - the
+                // coaching card dispatches at Normal priority and a MessageBox / folder browser
+                // pumps its own loop, which would stack the card on top of them.
+                // Someone who pointed us at a folder that already has content is not this user,
+                // so re-check the effective path rather than trusting the pre-prompt count.
+                if (!HasAnyLocalMedia(App.EffectiveAssetsPath))
+                    App.OfferRemoteMediaSource("first-run-assets-prompt", this);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Error in first-run assets prompt");
             }
+        }
+
+        /// <summary>
+        /// Cheap "is there anything at all to play?" probe over the images/videos folders under
+        /// <paramref name="assetsRoot"/>. Deliberately looser than the first-run prompt's typed
+        /// count - this only decides whether to offer remote media, so any file at all counts and
+        /// an unreadable folder counts as empty.
+        /// </summary>
+        private static bool HasAnyLocalMedia(string assetsRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(assetsRoot)) return false;
+                foreach (var sub in new[] { "images", "videos" })
+                {
+                    var dir = System.IO.Path.Combine(assetsRoot, sub);
+                    if (System.IO.Directory.Exists(dir) && System.IO.Directory.EnumerateFiles(dir).Any())
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("HasAnyLocalMedia: probe of {Root} failed ({Error}) — treating as empty", assetsRoot, ex.Message);
+            }
+            return false;
         }
 
         private const int WM_GETMINMAXINFO = 0x0024;

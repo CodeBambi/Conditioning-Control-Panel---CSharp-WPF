@@ -387,6 +387,9 @@ namespace ConditioningControlPanel
             TxtModVersion.Text = Loc.GetF("label_version_prefix", mod.Manifest.Version);
             TxtModDescription.Text = mod.Manifest.Description ?? "";
 
+            // Preview image + what the mod actually overrides on disk.
+            ShowArtSummary(mod);
+
             // Theme color
             var colorHex = mod.Manifest.Theme?.AccentColor ?? "#FF69B4";
             TxtThemeColor.Text = colorHex;
@@ -420,6 +423,115 @@ namespace ConditioningControlPanel
 
             // Built-in mods whose media still has to come down off the release.
             UpdatePackPanel(mod);
+        }
+
+        // ------------------------------------------------------------------ art summary
+        //
+        // Two read-only rows under the description: the manifest's own previewImage (declared
+        // by every mod exported from the creator, and never rendered anywhere in the app until
+        // now) and a count of what the mod shadows. Mod art is pure path shadowing -- a file at
+        // resources/<path> replaces the app's Resources/<same path> -- so a plain file count
+        // per top-level folder is an honest picture of how much of the app the mod repaints.
+        // Both rows stay hidden for built-in mods, which have no InstalledPath to read.
+
+        private void ShowArtSummary(ModPackage mod)
+        {
+            ImgModPreview.Source = null;
+            PreviewImagePanel.Visibility = Visibility.Collapsed;
+            TxtArtOverrides.Visibility = Visibility.Collapsed;
+
+            var installed = mod.InstalledPath;
+            if (string.IsNullOrEmpty(installed) || !Directory.Exists(installed)) return;
+
+            var preview = LoadPreviewImage(installed, mod.Manifest.PreviewImage);
+            if (preview != null)
+            {
+                ImgModPreview.Source = preview;
+                PreviewImagePanel.Visibility = Visibility.Visible;
+            }
+
+            var summary = SummarizeOverrides(Path.Combine(installed, "resources"));
+            if (summary != null)
+            {
+                TxtArtOverrides.Text = summary;
+                TxtArtOverrides.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>
+        /// The manifest's previewImage decoded from inside the mod folder, or null when it is
+        /// unset/missing/unreadable. The path comes out of author-supplied JSON, so it is held
+        /// to the same rules as any other mod resource path: relative, and no climbing out.
+        /// </summary>
+        private static ImageSource? LoadPreviewImage(string installedPath, string? relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath)) return null;
+            if (relativePath!.Contains("..") || Path.IsPathRooted(relativePath)) return null;
+
+            try
+            {
+                var full = Path.Combine(installedPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(full)) return null;
+
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new System.Uri(full, System.UriKind.Absolute);
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 320;   // the row is 260px wide; a full-size decode here costs MBs
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// "Overrides: 19 files (features 12, nav 7)" for a mod's resources tree, or null when
+        /// the folder is missing or empty. Grouped by top-level folder, biggest first; files
+        /// sitting loose at the root of resources/ group as "root".
+        /// </summary>
+        internal static string? SummarizeOverrides(string resourcesDir)
+        {
+            if (string.IsNullOrEmpty(resourcesDir) || !Directory.Exists(resourcesDir)) return null;
+
+            System.Collections.Generic.Dictionary<string, int> groups;
+            int total;
+            try
+            {
+                groups = new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+                total = 0;
+                foreach (var file in Directory.EnumerateFiles(resourcesDir, "*.*", SearchOption.AllDirectories))
+                {
+                    total++;
+                    var group = TopLevelFolder(resourcesDir, file);
+                    groups[group] = groups.TryGetValue(group, out var n) ? n + 1 : 1;
+                }
+            }
+            catch
+            {
+                return null;   // unreadable tree is not worth a broken details panel
+            }
+
+            if (total == 0) return null;
+
+            var breakdown = string.Join(", ", groups
+                .OrderByDescending(kv => kv.Value)
+                .ThenBy(kv => kv.Key, System.StringComparer.OrdinalIgnoreCase)
+                .Select(kv => $"{kv.Key} {kv.Value}"));
+
+            var noun = total == 1 ? "file" : "files";
+            return $"Overrides: {total} {noun} ({breakdown})";
+        }
+
+        /// <summary>First path segment below <paramref name="root"/>, or "root" for a loose file.</summary>
+        private static string TopLevelFolder(string root, string filePath)
+        {
+            var relative = Path.GetRelativePath(root, filePath);
+            var cut = relative.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+            return cut > 0 ? relative[..cut] : "root";
         }
 
         private async void BtnShare_Click(object sender, RoutedEventArgs e)

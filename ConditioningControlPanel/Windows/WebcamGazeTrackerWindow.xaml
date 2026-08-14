@@ -32,7 +32,7 @@
             <TextBlock Text="Gaze Tracker Test" Foreground="White"
                        FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
             <TextBlock Text="Look around the screen. The cyan dot should follow your gaze."
-                       Foreground="#AAAAAA" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
             <!-- Always-visible, mouse-clickable close. Lockdown's global keyboard hook swallows

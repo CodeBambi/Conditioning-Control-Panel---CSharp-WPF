@@ -368,6 +368,10 @@ namespace ConditioningControlPanel
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
+            // Velvet Kit 2 (FX lane B): the "absorbed" tick + ripple. Decoration only, wrapped end
+            // to end, and it runs its own 1.6s clock - the save path below is untouched.
+            FlashSaveAbsorb();
+
             // First, apply current settings to the settings object
             SaveSettings();
 
@@ -559,6 +563,18 @@ namespace ConditioningControlPanel
         }
 
         #region Feature Tutorial Button Handlers
+
+        /// <summary>
+        /// The permanent re-run path for the v6.8 relocation tour. The What's New dialog offers it
+        /// once (its LastSeenVersion gate is one-shot per version); this row in the ? panel is how
+        /// anyone finds it again afterwards, so no AppSettings flag guards either surface.
+        /// </summary>
+        private void BtnTutorialWhatMoved_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (SettingsTab.BrowserContainer != null) SettingsTab.BrowserContainer.Visibility = Visibility.Visible;
+            StartTutorial(TutorialType.UpgradeTour);
+        }
 
         private void BtnTutorialGettingStarted_Click(object sender, RoutedEventArgs e)
         {

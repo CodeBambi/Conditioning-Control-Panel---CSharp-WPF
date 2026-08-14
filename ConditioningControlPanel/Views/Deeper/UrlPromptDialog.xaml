@@ -14,7 +14,7 @@
                    Foreground="{DynamicResource TextLightBrush}"
                    FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap"/>
         <TextBox x:Name="TxtUrl"
-                 Background="White" Foreground="Black" FontSize="12"
+                 FontSize="12"
                  BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
                  BorderThickness="1" Padding="8,6"
                  KeyDown="TxtUrl_KeyDown"/>

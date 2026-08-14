@@ -10,7 +10,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);CCP.Core\**;CCP.Avalonia\**;CCP.Avalonia.Desktop\**;CCP.Avalonia.Desktop.Windows\**;CCP.Avalonia.Desktop.Linux\**;CCP.Avalonia.Desktop.macOS\**;CCP.Avalonia.Android\**;CCP.WindowsOnly\**;tests\**</DefaultItemExcludes>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.7.4</Version>
+    <Version>6.8.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -219,13 +219,10 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- Exclusives tab art (vault backdrop), loaded off disk by Views/Tabs/ExclusivesTabView -->
-    <None Remove="assets\exclusives\*.png" />
-    <Content Include="assets\exclusives\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
+    <!-- The Exclusives vault backdrop used to live at assets\exclusives\ as loose Content and
+         was loaded off AppContext.BaseDirectory - outside Resources\, so no .ccpmod could ever
+         shadow it. It moved to Resources\exclusives\ (declared as <Resource> further down) and
+         now resolves through ModResourceResolver like every other mod-skinnable image. -->
   </ItemGroup>
 
   <!-- WebView2Loader.dll must be on disk - the WebView2 SDK loads it outside .NET's single-file extraction -->
@@ -259,6 +256,10 @@
     <Resource Include="Resources\intake\pass_card_sissy.png" />
     <Resource Include="Resources\intake\pass_card_drone.png" />
     <Resource Include="Resources\intake\pass_card_circe.png" />
+    <!-- THE VAT's faucet (planning/one-descent/mockups/faucet.png, chroma-cut to
+         alpha, spout tip at 90.6% / 98.9%). Same rule as the intake cards above:
+         no glob, so a missing entry fails the pack:// URI at RUNTIME only. -->
+    <Resource Include="Resources\descent\faucet.png" />
     <Resource Include="Resources\bubble.png" />
     <Resource Include="Resources\speechbubble1.png" />
     <Resource Include="Resources\speechbubble2.png" />
@@ -371,6 +372,11 @@
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
     <Resource Include="Resources\programs\*.png" />
+
+    <!-- Velvet Vault room art. Resource, NOT Content: ModResourceResolver's last link is a
+         pack:// URI, so a Content-only file resolves to nothing once the mod and event probes
+         miss (that is exactly how this backdrop was unreachable to mods before). -->
+    <Resource Include="Resources\exclusives\*.png" />
 
     <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
          loader is pack:// only, and these must never fall under the Resources\cosmetics\**

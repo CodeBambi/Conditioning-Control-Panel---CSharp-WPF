@@ -21,7 +21,7 @@
         </Style>
 
         <Style x:Key="SectionDescription" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#808080"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
@@ -94,7 +94,7 @@
                     </Border>
                 </Grid>
                 <TextBlock Text="{loc:Str label_edit_the_prompts_that_control_how_your_compan}"
-                           Foreground="#808080" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
 
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                     <CheckBox x:Name="ChkUseCustom" Content="{loc:Str btn_enable_custom_prompts}"
@@ -387,7 +387,7 @@
                                         <StackPanel Margin="0,2">
                                             <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10"/>
-                                            <TextBlock Text="{Binding Description}" Foreground="#A0A0A0" FontSize="10"
+                                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                        TextWrapping="Wrap" Visibility="{Binding Description, Converter={StaticResource NullToCollapsedConverter}}"/>
                                         </StackPanel>
                                     </DataTemplate>

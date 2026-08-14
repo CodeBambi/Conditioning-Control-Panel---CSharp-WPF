@@ -37,7 +37,7 @@
                            FontWeight="Bold" FontSize="18" Margin="0,0,0,4"/>
                 <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
                            FontSize="13" Margin="0,0,0,6"/>
-                <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="#AAAAAA"
+                <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="{DynamicResource TextMutedBrush}"
                            FontSize="12"/>
             </StackPanel>
 
@@ -45,7 +45,7 @@
             <Button Grid.Column="1" Content="✕"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="24" Height="24" Margin="0,-5,-5,0"
-                    Background="Transparent" Foreground="#888888"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Click="BtnClose_Click">
                 <Button.Style>

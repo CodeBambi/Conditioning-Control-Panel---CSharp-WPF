@@ -23,8 +23,13 @@ namespace ConditioningControlPanel.Controls
     ///     >= 10s period" the plan asks for and one clock rather than a timer plus a one-shot.
     ///   * the caller gates on <see cref="MotionFx.AllowAmbientLoops"/> before attaching; this type
     ///     never starts a clock it was not asked for, and <see cref="Stop"/> parks it invisible.
-    ///   * colour comes from <see cref="FxTheme"/>, read at <see cref="Start"/>, so a mod switch
-    ///     re-tints the sheen as soon as the caller restarts it.
+    ///   * colour comes from <see cref="FxTheme"/>, re-read on EVERY <see cref="Start"/>, so a mod
+    ///     switch re-tints the sheen as soon as the caller restarts it. It used to be read once in
+    ///     the constructor and baked into the stops, which this comment already claimed it was not:
+    ///     launching under Dronification's green and switching to BambiSleep left every vault card
+    ///     glimmering green until the app was restarted, because the adorners are built once and
+    ///     then only ever re-Started. The stops and the brush are deliberately left unfrozen for
+    ///     this - freezing either would make the re-tint throw.
     ///   * every animation is started with BeginAnimation on the GradientStop itself - the stops
     ///     live in a brush that is not in any name scope, so Storyboard.SetTargetName could not
     ///     reach them even if we wanted it to.
@@ -52,19 +57,35 @@ namespace ConditioningControlPanel.Controls
             IsHitTestVisible = false;
             _cornerRadius = Math.Max(0, cornerRadius);
 
-            var tint = FxTheme.GlowColor;
-            var clear = Color.FromArgb(0, tint.R, tint.G, tint.B);
-            var core = Color.FromArgb(PeakAlpha, tint.R, tint.G, tint.B);
             _stops = new[]
             {
-                new GradientStop(clear, RestOffsets[0]),
-                new GradientStop(core, RestOffsets[1]),
-                new GradientStop(clear, RestOffsets[2]),
+                new GradientStop(Colors.Transparent, RestOffsets[0]),
+                new GradientStop(Colors.Transparent, RestOffsets[1]),
+                new GradientStop(Colors.Transparent, RestOffsets[2]),
             };
             // Angled rather than vertical: a band that leans reads as light across glass, a
             // straight one reads as a loading bar.
             _brush = new LinearGradientBrush(new GradientStopCollection(_stops),
                                              new Point(0, 0), new Point(1, 0.65));
+            // The band rests off the visible range until Start(), so this only matters for the
+            // one frame between construction and the caller's Start - but a transparent brush on
+            // screen is the wrong kind of wrong, so paint it now as well.
+            ApplyTint();
+        }
+
+        /// <summary>
+        /// Rewrites the three stops from the active mod's <see cref="FxTheme.GlowColor"/>. Called
+        /// from the constructor and again from every <see cref="Start"/>, which is what makes a
+        /// mod switch land: the offsets are animated, the colours never are, so writing them while
+        /// a clock is running is safe.
+        /// </summary>
+        private void ApplyTint()
+        {
+            var tint = FxTheme.GlowColor;
+            var clear = Color.FromArgb(0, tint.R, tint.G, tint.B);
+            _stops[0].Color = clear;
+            _stops[1].Color = Color.FromArgb(PeakAlpha, tint.R, tint.G, tint.B);
+            _stops[2].Color = clear;
         }
 
         /// <summary>Starts (or restarts) the travelling band. The caller owns the ambient gate.</summary>
@@ -72,6 +93,8 @@ namespace ConditioningControlPanel.Controls
         {
             try
             {
+                ApplyTint();
+
                 for (int i = 0; i < _stops.Length; i++)
                 {
                     double from = RestOffsets[i];

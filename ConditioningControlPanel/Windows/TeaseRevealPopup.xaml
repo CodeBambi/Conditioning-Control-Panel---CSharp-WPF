@@ -1,0 +1,114 @@
+<Window x:Class="ConditioningControlPanel.TeaseRevealPopup"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="???"
+        Width="430" SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <!-- The house dark/pink dialog card (same surface, radius and margin as
+         FeatureIntroPopup), re-trimmed in TIER LIVERY: the rim, the glow and the
+         glyph are all painted from Features\TierLivery in code, so a gold tease and
+         a diamond tease are the same window with one number changed. -->
+    <Border x:Name="CardBorder" Background="#F0151530" CornerRadius="14"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            ClipToBounds="True"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect x:Name="CardShadow" Color="{DynamicResource PinkColor}"
+                              BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid>
+            <!-- SHIMMER. A single sheen bar swept across the card, and the only clock in
+                 this window. Armed from code ONLY when PerformanceProfile.AllowGlow and
+                 MotionFx.AllowAmbientLoops both say yes; otherwise the host is collapsed
+                 outright and the livery rim + glow are the whole accent. Under the content
+                 in z-order so it never washes out the copy. -->
+            <Border x:Name="ShimmerHost" CornerRadius="12"
+                    IsHitTestVisible="False" ClipToBounds="True"
+                    Visibility="Collapsed">
+                <Rectangle x:Name="ShimmerBar" Width="150" HorizontalAlignment="Left">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#00FFFFFF" Offset="0"/>
+                            <GradientStop Color="#30FFFFFF" Offset="0.5"/>
+                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                    <Rectangle.RenderTransform>
+                        <TransformGroup>
+                            <SkewTransform AngleX="-18"/>
+                            <TranslateTransform x:Name="ShimmerSlide" X="-200"/>
+                        </TransformGroup>
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+            </Border>
+
+            <StackPanel Margin="26,24,26,20">
+                <!-- The mark. Text glyph, not emoji: WPF cannot draw COLR/CPAL colour-emoji
+                     fonts and the app-wide workaround would put a bitmap here. -->
+                <TextBlock x:Name="TxtGlyph"
+                           Text="?"
+                           FontSize="54" FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Margin="0,2,0,10"/>
+
+                <TextBlock x:Name="TxtTitle"
+                           Text="{loc:Str tease_popup_title}"
+                           FontSize="19" FontWeight="Bold"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,10"/>
+
+                <TextBlock x:Name="TxtBody"
+                           Text="{loc:Str tease_popup_body}"
+                           Foreground="#CCD5D5E5" FontSize="13"
+                           LineHeight="20"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,20"/>
+
+                <Button x:Name="BtnDismiss"
+                        Content="{loc:Str tease_popup_dismiss}"
+                        Click="BtnDismiss_Click"
+                        HorizontalAlignment="Center"
+                        MinWidth="140" Height="36"
+                        Cursor="Hand"
+                        FontSize="14" FontWeight="SemiBold"
+                        IsDefault="True">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            <Setter Property="Foreground" Value="#12121F"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                CornerRadius="18" Padding="18,6">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="border" Property="Opacity" Value="0.7"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

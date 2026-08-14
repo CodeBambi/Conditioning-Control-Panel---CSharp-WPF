@@ -660,8 +660,13 @@ export function createBackground({ canvas, media }) {
   // under reduced motion and when the manifest carries no visual media.
   function initDecals() {
     if (reduced || decals) return;
-    const hasMedia = !!media && ((Array.isArray(media.gifs) && media.gifs.length)
-      || (Array.isArray(media.images) && media.images.length));
+    // LOCAL urls only, matching the deck wallDecals.js will actually build: the manifest
+    // can carry remote (CDN) stills, and those can never become a texture — no CORS
+    // headers means fetch rejects and a texture upload throws. Counting them here would
+    // spin the whole layer up around a pool it is going to filter down to nothing.
+    const local = (u) => typeof u === 'string' && /^(?:https?:\/\/ccp\.[a-z0-9-]+\/|data:|blob:|\.{0,2}\/)/i.test(u);
+    const hasMedia = !!media && ((Array.isArray(media.gifs) && media.gifs.some(local))
+      || (Array.isArray(media.images) && media.images.some(local)));
     if (!hasMedia) return;
     import('./wallDecals.js').then((m) => {
       if (disposed || decals || mode === 'dead' || !scene || !three) return;

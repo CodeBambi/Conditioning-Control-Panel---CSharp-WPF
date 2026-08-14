@@ -5,210 +5,368 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="36,28,36,28" MaxWidth="1280" HorizontalAlignment="Center">
-    
-                <!-- Hero banner -->
-                <Border CornerRadius="14" Margin="0,0,0,20" ClipToBounds="True" MaxHeight="320"
-                        HorizontalAlignment="Center" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                    <Image x:Name="ImgRemoteControlFeature" x:FieldModifier="internal" Source="pack://application:,,,/Resources/features/remote_control.png"
-                           Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Border>
-    
-                <!-- Header -->
-                <Grid Margin="0,0,0,22">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Image Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,16,0"
-                           Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" FontSize="26" FontWeight="Bold"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="HelpBtnRemoteControl" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
-                                VerticalAlignment="Center" Margin="0,0,8,0" Tag="RemoteControl"/>
-                        <CheckBox x:Name="ChkRemoteControlEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                  VerticalAlignment="Center"
-                                  Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
-                    </StackPanel>
-                </Grid>
-    
-                <!-- Description card (always visible) -->
-                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="24,20" Margin="0,0,0,22">
+
+    <!-- Velvet Kit 2 · round 4. Per-tab hue identity, LOCAL resources with literal colours: nothing
+         may be added to Resources/Theme/* - a fresh cross-dictionary StaticResource there trips
+         WPF's deferred-BAML EndOfStreamException and takes every styled control down with it.
+         Remote Control's hue is signal cyan, the same alpha family the Theme section hues use
+         (full / 0x40 border / 0x14 wash). -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TabHueBrush" Color="#5ED4E8"/>
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#405ED4E8"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+            <GradientStop Color="#145ED4E8" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <!-- Root grid: the gate is its LAST sibling so the scrim covers the hero AND both columns
+             (a free user must not be able to drive the pairing console around the edge of it). -->
+        <Grid Margin="36,28,36,28" MaxWidth="1280" HorizontalAlignment="Center">
+            <StackPanel>
+
+                <!-- ============================ HERO ============================
+                     Replaces the old MaxHeight=320 banner + the 26px header row. The full
+                     "what is this" paragraph (desc_remote_control) is the one-line subtitle here
+                     and the block's tooltip; the tier bullets it used to carry live on the three
+                     tier cards below, verbatim - so the description card is gone, not lost. -->
+                <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="20"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="56" Height="56" CornerRadius="28"
-                                Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                                BorderThickness="2" VerticalAlignment="Top">
-                            <Image Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
+                        <!-- Mod art carrier. MainWindow.xaml.cs's descImageMap writes
+                             ImgRemoteControlFeature.Source on every mod switch and that file is
+                             shared with nine other tabs, so it must keep finding this Image by
+                             name. It stays here at zero size; the code-behind mirrors its Source
+                             into the hero plate and the side-art plate whenever it changes, which
+                             is how a mod's own remote_control.png still repaints both. -->
+                        <Image x:Name="ImgRemoteControlFeature" x:FieldModifier="internal"
+                               Visibility="Collapsed" Width="0" Height="0">
+                            <Image.Source>
+                                <BitmapImage UriSource="pack://application:,,,/Resources/features/remote_control.png"
+                                             DecodePixelWidth="800"/>
+                            </Image.Source>
+                        </Image>
+
+                        <Border x:Name="HeroArtPlate" x:FieldModifier="internal"
+                                CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
+                            <Border.Background>
+                                <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                    <ImageBrush.ImageSource>
+                                        <BitmapImage UriSource="pack://application:,,,/Resources/features/remote_control.png"
+                                                     DecodePixelWidth="480"/>
+                                    </ImageBrush.ImageSource>
+                                </ImageBrush>
+                            </Border.Background>
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#00000000" Offset="0"/>
+                                    <GradientStop Color="#E6000000" Offset="0.55"/>
+                                </LinearGradientBrush>
+                            </Border.OpacityMask>
                         </Border>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str desc_remote_control}" Foreground="White" FontSize="15"
-                                       TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="22"/>
-                            <TextBlock Text="{loc:Str desc_remote_control_bullets}"
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                       TextWrapping="Wrap" LineHeight="20"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-    
-                <!-- Interactive controls + translucent gating overlay -->
-                <Grid>
-                    <StackPanel x:Name="RemoteControlControls">
-    
-                        <!-- Tier comparison cards (3 across) -->
-                        <Grid Margin="0,0,0,22">
+
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,12,0"
+                                        ToolTip="{loc:Str desc_remote_control}">
+                                <TextBlock Text="{loc:Str tab_remote_control}" FontSize="17" FontWeight="Bold"
+                                           Foreground="{StaticResource TextLightBrush}"/>
+                                <TextBlock Text="{loc:Str desc_remote_control}" FontSize="11.5"
+                                           Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        VerticalAlignment="Center" Margin="0,0,16,0">
+                                <Button x:Name="HelpBtnRemoteControl" x:FieldModifier="internal"
+                                        Style="{StaticResource HelpButtonStyle}"
+                                        VerticalAlignment="Center" Margin="0,0,10,0" Tag="RemoteControl"/>
+                                <Border CornerRadius="99" Background="#8C131320"
+                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                        Padding="12,5,8,5" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <CheckBox x:Name="ChkRemoteControlEnabled" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkRemoteControlEnabled_Changed"
+                                                  Unchecked="ChkRemoteControlEnabled_Changed"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- ROUND 3 LAYOUT: settings capped at 780 so the pairing console stops being a
+                     1200px runway, and the width that buys back becomes one art plate instead of
+                     dead margin. Below 1000px the art column goes to zero (AdaptiveSideArt). -->
+                <Grid feat:AdaptiveSideArt.CollapseBelow="1000">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MaxWidth="780"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" x:Name="RemoteControlControls">
+
+                        <!-- Tier comparison cards (3 across). BorderBrush/BorderThickness on these
+                             three are WRITTEN from MainWindow.RemoteControl.cs
+                             (RefreshTierCardHighlight); the values below are the same cyan pair it
+                             now sets - full hue for the selected card, 0x40 for the idle ones. -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-    
-                            <Border x:Name="TierCardLight" x:FieldModifier="internal" Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="#FF69B4" BorderThickness="2" CornerRadius="10" Padding="20,16"
-                                    MinHeight="140" Cursor="Hand" Tag="0" MouseLeftButtonUp="TierCard_Click">
-                                <StackPanel>
-                                    <Image Width="28" Height="28" HorizontalAlignment="Left"
-                                           Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_light}" Foreground="White"
-                                               FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
-                                    <TextBlock Text="Visual triggers only"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                               TextWrapping="Wrap"/>
-                                    <TextBlock Text="• Flashes • Subliminals • Overlays" Foreground="#A0A0A0"
-                                               FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
+
+                            <Border x:Name="TierCardLight" x:FieldModifier="internal" Grid.Column="0"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#5ED4E8" BorderThickness="2" CornerRadius="12" Padding="0"
+                                    MinHeight="128" Cursor="Hand" Tag="0" MouseLeftButtonUp="TierCard_Click">
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <StackPanel Margin="16,14">
+                                        <Image Width="26" Height="26" HorizontalAlignment="Left"
+                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_light}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Text="Visual triggers only"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Flashes • Subliminals • Overlays"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
-    
-                            <Border x:Name="TierCardStandard" x:FieldModifier="internal" Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="20,16"
-                                    MinHeight="140" Cursor="Hand" Tag="1" MouseLeftButtonUp="TierCard_Click">
-                                <StackPanel>
-                                    <Image Width="28" Height="28" HorizontalAlignment="Left"
-                                           Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_standard}" Foreground="White"
-                                               FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
-                                    <TextBlock Text="Light + audio + overlays"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                               TextWrapping="Wrap"/>
-                                    <TextBlock Text="• Videos • Haptics • Audio ducking" Foreground="#A0A0A0"
-                                               FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
+
+                            <Border x:Name="TierCardStandard" x:FieldModifier="internal" Grid.Column="2"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#405ED4E8" BorderThickness="2" CornerRadius="12" Padding="0"
+                                    MinHeight="128" Cursor="Hand" Tag="1" MouseLeftButtonUp="TierCard_Click">
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <StackPanel Margin="16,14">
+                                        <Image Width="26" Height="26" HorizontalAlignment="Left"
+                                               Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_standard}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Text="Light + audio + overlays"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Videos • Haptics • Audio ducking"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
-    
-                            <Border x:Name="TierCardFull" x:FieldModifier="internal" Grid.Column="4" Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="20,16"
-                                    MinHeight="140" Cursor="Hand" Tag="2" MouseLeftButtonUp="TierCard_Click">
-                                <StackPanel>
-                                    <Image Width="28" Height="28" HorizontalAlignment="Left"
-                                           Source="{Binding Source='🔥', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_full}" Foreground="White"
-                                               FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
-                                    <TextBlock Text="Everything including session control"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                               TextWrapping="Wrap"/>
-                                    <TextBlock Text="• Bambi Takeover • Sessions • Lockdown" Foreground="#A0A0A0"
-                                               FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
+
+                            <Border x:Name="TierCardFull" x:FieldModifier="internal" Grid.Column="4"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#405ED4E8" BorderThickness="2" CornerRadius="12" Padding="0"
+                                    MinHeight="128" Cursor="Hand" Tag="2" MouseLeftButtonUp="TierCard_Click">
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <StackPanel Margin="16,14">
+                                        <Image Width="26" Height="26" HorizontalAlignment="Left"
+                                               Source="{Binding Source='🔥', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_full}"
+                                                   Foreground="{StaticResource TextLightBrush}"
+                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Text="Everything including session control"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Bambi Takeover • Sessions • Lockdown"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
-    
+
+                        <!-- ===================== PAIRING CONSOLE =====================
+                             The marquee card of the tab: hue wash + edge bar, code stays 52px
+                             Consolas pink. 2 columns (code 3* / QR 2*). -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <Grid Margin="18,14,16,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="3*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="2*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left: code + PIN + buttons -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="SESSION CODE" Foreground="{StaticResource TabHueBrush}"
+                                                   FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <TextBlock x:Name="TxtRemoteCode" x:FieldModifier="internal" Text="- - - - - - - -"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="52"
+                                                   FontWeight="Bold" FontFamily="Consolas"/>
+                                        <TextBlock x:Name="TxtRemotePin" x:FieldModifier="internal" Text="" Foreground="{DynamicResource SecondaryBrush}"
+                                                   FontSize="24" FontWeight="Bold" FontFamily="Consolas" Margin="0,6,0,0"
+                                                   Visibility="Collapsed"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                            <Button x:Name="BtnCopyRemoteCode" x:FieldModifier="internal" Content="{loc:Str btn_copy}"
+                                                    Style="{DynamicResource OutlineButton}"
+                                                    Foreground="{StaticResource TabHueBrush}"
+                                                    BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                    FontSize="12.5" Padding="14,7"
+                                                    Click="BtnCopyRemoteCode_Click"/>
+                                            <Button x:Name="BtnCopyRemoteLink" x:FieldModifier="internal" Content="{loc:Str btn_copy_link}"
+                                                    Style="{DynamicResource OutlineButton}"
+                                                    Foreground="{StaticResource TabHueBrush}"
+                                                    BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                    FontSize="12.5" Padding="14,7" Margin="8,0,0,0"
+                                                    Click="BtnCopyRemoteLink_Click"/>
+                                        </StackPanel>
+                                        <!-- #746: say the URL out loud. It previously existed only
+                                             behind Copy Link and inside the QR image, so a user who
+                                             couldn't scan had no way to learn where to go - the bug
+                                             report asked which app to install on the phone. -->
+                                        <TextBlock Text="{loc:Str desc_remote_pairing_url}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
+                                                   TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Left"
+                                                   Margin="0,12,0,0"/>
+
+                                        <Border x:Name="RemoteLinkPanel" x:FieldModifier="internal" Visibility="Collapsed"/>
+                                        <Border x:Name="RemoteCodePanel" x:FieldModifier="internal" Visibility="Collapsed"/>
+
+                                        <!-- Listing confirmation — shown once the directory opt-in
+                                             succeeds so the user gets feedback right here instead of
+                                             having to tab over to the Subjects directory to check. -->
+                                        <Border x:Name="ListedConfirmationPanel" x:FieldModifier="internal" Visibility="Collapsed"
+                                                Background="#1E2E1E" BorderBrush="{DynamicResource SuccessGreenBrush}"
+                                                BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,14,0,0">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="✓" Foreground="{DynamicResource SuccessGreenBrush}"
+                                                           FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <TextBlock Text="You're listed in the Subjects Directory"
+                                                           Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Right: QR code with themed frame -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <Border CornerRadius="10" Background="White" Padding="10"
+                                                BorderBrush="{StaticResource TabHueBrush}" BorderThickness="2">
+                                            <Image x:Name="ImgRemoteQrCode" x:FieldModifier="internal" Width="200" Height="200" Stretch="Uniform"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str label_remote_pairing}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
+                                                   HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
                         <!-- SP5 layer 3: Available Subjects directory opt-in.
                              Visible while configuring; collapses on session start.
                              The opt-in checkbox itself never persists across
                              sessions — re-opt every time. Tags + status_text
                              persist only when "Remember" is ticked. -->
-                        <Border x:Name="OptInSectionPanel" x:FieldModifier="internal" Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="#FFB47BFF" BorderThickness="1"
-                                CornerRadius="10" Padding="20,16" Margin="0,0,0,18">
-                            <StackPanel>
-                                <CheckBox x:Name="ChkOptIntoDirectory" x:FieldModifier="internal" Foreground="White" FontSize="14"
-                                          Content="{loc:Str chk_optin_directory}" FontWeight="Bold"
-                                          Checked="ChkOptIntoDirectory_Changed"
-                                          Unchecked="ChkOptIntoDirectory_Changed"/>
-                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                           Text="{loc:Str desc_optin_directory_consent}" TextWrapping="Wrap"
-                                           Margin="0,8,0,0" LineHeight="18"/>
-    
-                                <StackPanel x:Name="OptInFormPanel" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,12,0,0">
-                                    <TextBlock Text="{loc:Str label_optin_tags}" Foreground="#FFB47BFF"
-                                               FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
-                                    <WrapPanel x:Name="OptInTagsPanel">
-                                        <CheckBox x:Name="ChkTagBimbo" x:FieldModifier="internal" Tag="bimbo"
-                                                  Content="bimbo" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagDrone" x:FieldModifier="internal" Tag="drone"
-                                                  Content="drone" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagTrance" x:FieldModifier="internal" Tag="trance"
-                                                  Content="trance" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagFeminization" x:FieldModifier="internal" Tag="feminization"
-                                                  Content="feminization" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagSubmission" x:FieldModifier="internal" Tag="submission"
-                                                  Content="submission" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagDegradation" x:FieldModifier="internal" Tag="degradation"
-                                                  Content="degradation" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagAudioOk" x:FieldModifier="internal" Tag="audio_ok"
-                                                  Content="audio_ok" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagSoftOnly" x:FieldModifier="internal" Tag="soft_only"
-                                                  Content="soft_only" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagLockdownOk" x:FieldModifier="internal" Tag="lockdown_ok"
-                                                  Content="lockdown_ok" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                        <CheckBox x:Name="ChkTagChastity" x:FieldModifier="internal" Tag="chastity"
-                                                  Content="chastity" Foreground="White" Margin="0,0,12,6"
-                                                  Click="ChkOptInTag_Click"/>
-                                    </WrapPanel>
-    
-                                    <TextBlock Text="{loc:Str label_optin_status}" Foreground="#FFB47BFF"
-                                               FontSize="11" FontWeight="Bold" Margin="0,12,0,6"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="TxtOptInStatus" x:FieldModifier="internal" Grid.Column="0" MaxLength="80"
-                                                 Background="{DynamicResource PanelBgBrush}" Foreground="White"
-                                                 BorderBrush="#FFB47BFF" BorderThickness="1"
-                                                 Padding="10,8" FontSize="13"
-                                                 TextChanged="TxtOptInStatus_TextChanged"/>
-                                        <TextBlock x:Name="TxtOptInStatusCount" x:FieldModifier="internal" Grid.Column="1"
-                                                   Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontSize="11" VerticalAlignment="Center"
-                                                   Margin="10,0,0,0" Text="0/80"/>
-                                    </Grid>
-    
-                                    <CheckBox x:Name="ChkRememberOptInDetails" x:FieldModifier="internal" Foreground="White" FontSize="12"
-                                              Margin="0,12,0,0"
-                                              Content="{loc:Str chk_remember_optin_details}"/>
-    
-                                    <TextBlock x:Name="TxtOptInFeedback" x:FieldModifier="internal" Foreground="#FFB47BFF" FontSize="11"
-                                               Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
+                        <Border x:Name="OptInSectionPanel" x:FieldModifier="internal"
+                                Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,12,16,12">
+                                    <CheckBox x:Name="ChkOptIntoDirectory" x:FieldModifier="internal"
+                                              Foreground="{StaticResource TextLightBrush}" FontSize="13.5"
+                                              Content="{loc:Str chk_optin_directory}" FontWeight="Bold"
+                                              Checked="ChkOptIntoDirectory_Changed"
+                                              Unchecked="ChkOptIntoDirectory_Changed"/>
+                                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                               Text="{loc:Str desc_optin_directory_consent}" TextWrapping="Wrap"
+                                               Margin="0,6,0,0" LineHeight="17"/>
+
+                                    <StackPanel x:Name="OptInFormPanel" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,10,0,0">
+                                        <TextBlock Text="{loc:Str label_optin_tags}" Foreground="{StaticResource TabHueBrush}"
+                                                   FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <WrapPanel x:Name="OptInTagsPanel">
+                                            <CheckBox x:Name="ChkTagBimbo" x:FieldModifier="internal" Tag="bimbo"
+                                                      Content="bimbo" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDrone" x:FieldModifier="internal" Tag="drone"
+                                                      Content="drone" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagTrance" x:FieldModifier="internal" Tag="trance"
+                                                      Content="trance" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagFeminization" x:FieldModifier="internal" Tag="feminization"
+                                                      Content="feminization" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSubmission" x:FieldModifier="internal" Tag="submission"
+                                                      Content="submission" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDegradation" x:FieldModifier="internal" Tag="degradation"
+                                                      Content="degradation" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagAudioOk" x:FieldModifier="internal" Tag="audio_ok"
+                                                      Content="audio_ok" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSoftOnly" x:FieldModifier="internal" Tag="soft_only"
+                                                      Content="soft_only" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagLockdownOk" x:FieldModifier="internal" Tag="lockdown_ok"
+                                                      Content="lockdown_ok" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagChastity" x:FieldModifier="internal" Tag="chastity"
+                                                      Content="chastity" Foreground="{StaticResource TextLightBrush}" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                        </WrapPanel>
+
+                                        <TextBlock Text="{loc:Str label_optin_status}" Foreground="{StaticResource TabHueBrush}"
+                                                   FontSize="10" FontWeight="Bold" Margin="0,10,0,6"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TxtOptInStatus" x:FieldModifier="internal" Grid.Column="0" MaxLength="80"
+                                                     Background="{DynamicResource PanelBgBrush}" Foreground="{StaticResource TextLightBrush}"
+                                                     BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="1"
+                                                     Padding="10,7" FontSize="13"
+                                                     TextChanged="TxtOptInStatus_TextChanged"/>
+                                            <TextBlock x:Name="TxtOptInStatusCount" x:FieldModifier="internal" Grid.Column="1"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" VerticalAlignment="Center"
+                                                       Margin="10,0,0,0" Text="0/80"/>
+                                        </Grid>
+
+                                        <CheckBox x:Name="ChkRememberOptInDetails" x:FieldModifier="internal"
+                                                  Foreground="{StaticResource TextLightBrush}" FontSize="12"
+                                                  Margin="0,10,0,0"
+                                                  Content="{loc:Str chk_remember_optin_details}"/>
+
+                                        <TextBlock x:Name="TxtOptInFeedback" x:FieldModifier="internal"
+                                                   Foreground="{StaticResource TabHueBrush}" FontSize="11"
+                                                   Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
                         </Border>
-    
+
                         <!-- Hidden ComboBox keeps existing handler wiring intact -->
                         <ComboBox x:Name="CmbRemoteTier" x:FieldModifier="internal" Visibility="Collapsed"
                                   SelectionChanged="CmbRemoteTier_SelectionChanged">
@@ -216,327 +374,317 @@
                             <ComboBoxItem Content="Standard"/>
                             <ComboBoxItem Content="Full"/>
                         </ComboBox>
-    
-                        <!-- Pairing hero panel: 2 columns (code 60% / QR 40%) -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                                BorderThickness="1" CornerRadius="12" Padding="28,24" Margin="0,0,0,22">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="3*"/>
-                                    <ColumnDefinition Width="20"/>
-                                    <ColumnDefinition Width="2*"/>
-                                </Grid.ColumnDefinitions>
-    
-                                <!-- Left: code + PIN + buttons -->
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="SESSION CODE" Foreground="#8A8AA0" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
-                                    <TextBlock x:Name="TxtRemoteCode" x:FieldModifier="internal" Text="- - - - - - - -"
-                                               Foreground="{DynamicResource PinkBrush}" FontSize="52"
-                                               FontWeight="Bold" FontFamily="Consolas"/>
-                                    <TextBlock x:Name="TxtRemotePin" x:FieldModifier="internal" Text="" Foreground="{DynamicResource SecondaryBrush}"
-                                               FontSize="24" FontWeight="Bold" FontFamily="Consolas" Margin="0,6,0,0"
-                                               Visibility="Collapsed"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                                        <Button x:Name="BtnCopyRemoteCode" x:FieldModifier="internal" Content="{loc:Str btn_copy}"
-                                                Background="#353550" Foreground="White" FontSize="13"
-                                                Padding="14,8" BorderThickness="0" Cursor="Hand"
-                                                Click="BtnCopyRemoteCode_Click"/>
-                                        <Button x:Name="BtnCopyRemoteLink" x:FieldModifier="internal" Content="{loc:Str btn_copy_link}"
-                                                Background="#353550" Foreground="White" FontSize="13"
-                                                Padding="14,8" Margin="10,0,0,0" BorderThickness="0" Cursor="Hand"
-                                                Click="BtnCopyRemoteLink_Click"/>
-                                    </StackPanel>
-                                    <!-- #746: say the URL out loud. It previously existed only
-                                         behind Copy Link and inside the QR image, so a user who
-                                         couldn't scan had no way to learn where to go - the bug
-                                         report asked which app to install on the phone. -->
-                                    <TextBlock Text="{loc:Str desc_remote_pairing_url}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                               TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Left"
-                                               Margin="0,14,0,0"/>
 
-                                    <Border x:Name="RemoteLinkPanel" x:FieldModifier="internal" Visibility="Collapsed"/>
-                                    <Border x:Name="RemoteCodePanel" x:FieldModifier="internal" Visibility="Collapsed"/>
-    
-                                    <!-- Listing confirmation — shown once the directory opt-in
-                                         succeeds so the user gets feedback right here instead of
-                                         having to tab over to the Subjects directory to check. -->
-                                    <Border x:Name="ListedConfirmationPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                            Background="#1E2E1E" BorderBrush="{DynamicResource SuccessGreenBrush}"
-                                            BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,16,0,0">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="✓" Foreground="{DynamicResource SuccessGreenBrush}"
-                                                       FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <TextBlock Text="You're listed in the Subjects Directory"
-                                                       Foreground="White" FontSize="13" FontWeight="SemiBold"
-                                                       VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-    
-                                <!-- Right: QR code with themed frame -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <Border CornerRadius="8" Background="White" Padding="12"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
-                                        <Image x:Name="ImgRemoteQrCode" x:FieldModifier="internal" Width="220" Height="220" Stretch="Uniform"/>
-                                    </Border>
-                                    <TextBlock Text="{loc:Str label_remote_pairing}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                               HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-    
-                        <!-- Status row: Controller info (left) + Command log (right) -->
-                        <Grid Margin="0,0,0,22">
+                        <!-- Status row: controller info (left) + command log (right), two dense cards -->
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-    
+
                             <!-- Connected controller card -->
-                            <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="20,16">
-                                <StackPanel x:Name="ControllerInfoPanel">
-                                    <Grid Margin="0,0,0,8">
+                            <Border Grid.Column="0" Style="{StaticResource SettingCardStyle}">
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                            Background="{StaticResource TabHueBrush}"/>
+                                    <StackPanel x:Name="ControllerInfoPanel" Margin="16,12,16,12">
                                         <TextBlock Text="{loc:Str label_remote_controller_info}"
-                                                   Foreground="#8A8AA0" FontSize="12" FontWeight="Bold"/>
-                                        <StackPanel x:Name="RemoteStatusPanel" x:FieldModifier="internal" Orientation="Horizontal"
-                                                    HorizontalAlignment="Right">
-                                            <Ellipse x:Name="RemoteStatusDot" x:FieldModifier="internal" Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="TxtRemoteStatus" x:FieldModifier="internal" Text="{loc:Str label_remote_idle}" Foreground="#A0A0A0" FontSize="13"/>
+                                                   Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                                   Margin="0,0,0,8"/>
+                                        <StackPanel x:Name="RemoteStatusPanel" x:FieldModifier="internal" Orientation="Horizontal">
+                                            <Ellipse x:Name="RemoteStatusDot" x:FieldModifier="internal" Width="10" Height="10"
+                                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtRemoteStatus" x:FieldModifier="internal"
+                                                       Text="{loc:Str label_remote_idle}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                                                       TextWrapping="Wrap"/>
                                         </StackPanel>
-                                    </Grid>
-                                </StackPanel>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
-    
+
                             <!-- Command log -->
-                            <Border Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="20,16">
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str label_remote_command_log}"
-                                               Foreground="#8A8AA0" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
-                                    <ListBox x:Name="LstRemoteCommandLog" x:FieldModifier="internal" Background="Transparent" BorderThickness="0"
-                                             Foreground="White" FontSize="13" MaxHeight="260"/>
-                                </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource SettingCardStyle}">
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                            Background="{StaticResource TabHueBrush}"/>
+                                    <StackPanel Margin="16,12,16,12">
+                                        <TextBlock Text="{loc:Str label_remote_command_log}"
+                                                   Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                                   Margin="0,0,0,8"/>
+                                        <ListBox x:Name="LstRemoteCommandLog" x:FieldModifier="internal" Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Foreground="{StaticResource TextLightBrush}" FontSize="13" MaxHeight="240"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
-    
-                        <!-- Emote picker: 5 user-editable presets + 1 custom slot. -->
-                        <Border x:Name="EmotePickerPanel"
-                                Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="#2E2E48" BorderThickness="1"
-                                CornerRadius="10" Padding="20,16" Margin="0,0,0,16">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str label_remote_emotes}"
-                                           Foreground="#8A8AA0" FontSize="12" FontWeight="Bold"
-                                           Margin="0,0,0,12"/>
-    
-                                <!-- 5 preset slots, bound in code-behind to App.Settings.Current.RemoteEmotePresets. -->
-                                <ItemsControl x:Name="LstEmotePresets" x:FieldModifier="internal" Margin="0,0,0,12">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,0,12,0" Width="80">
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <Button Style="{StaticResource EmoteCircleButtonStyle}"
+
+                        <!-- Emote picker: 5 user-editable presets + 1 custom slot.
+                             Card chrome only - the ItemsControl, its template and the edit popup
+                             are untouched (they are bound from code-behind). -->
+                        <Border x:Name="EmotePickerPanel" Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,12,16,12">
+                                    <TextBlock Text="{loc:Str label_remote_emotes}"
+                                               Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                               Margin="0,0,0,10"/>
+
+                                    <!-- 5 preset slots, bound in code-behind to App.Settings.Current.RemoteEmotePresets. -->
+                                    <ItemsControl x:Name="LstEmotePresets" x:FieldModifier="internal" Margin="0,0,0,12">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,12,0" Width="80">
+                                                    <StackPanel HorizontalAlignment="Center">
+                                                        <Button Style="{StaticResource EmoteCircleButtonStyle}"
+                                                                Tag="{Binding}"
+                                                                Click="BtnEmotePreset_Click"
+                                                                ToolTip="{Binding Text}">
+                                                            <Grid>
+                                                                <Image Width="26" Height="26"
+                                                                       Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                                                                <!-- Fallback when user typed plain text (or unmapped glyph)
+                                                                     instead of an emoji; Image source is null in that case. -->
+                                                                <TextBlock Text="{Binding Icon}" FontSize="20"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Visibility="{Binding Icon, Converter={StaticResource EmojiFallbackVisibility}}"/>
+                                                            </Grid>
+                                                        </Button>
+                                                        <TextBlock Text="{Binding Text}"
+                                                                   Foreground="{StaticResource TextLightBrush}" FontSize="11"
+                                                                   HorizontalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="76" Margin="0,4,0,0"/>
+                                                    </StackPanel>
+                                                    <Button Style="{StaticResource EmoteEditOverlayStyle}"
                                                             Tag="{Binding}"
-                                                            Click="BtnEmotePreset_Click"
-                                                            ToolTip="{Binding Text}">
-                                                        <Grid>
-                                                            <Image Width="26" Height="26"
-                                                                   Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
-                                                            <!-- Fallback when user typed plain text (or unmapped glyph)
-                                                                 instead of an emoji; Image source is null in that case. -->
-                                                            <TextBlock Text="{Binding Icon}" FontSize="20"
-                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                       Visibility="{Binding Icon, Converter={StaticResource EmojiFallbackVisibility}}"/>
-                                                        </Grid>
-                                                    </Button>
-                                                    <TextBlock Text="{Binding Text}"
-                                                               Foreground="White" FontSize="11"
-                                                               HorizontalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="76" Margin="0,4,0,0"/>
+                                                            Click="BtnEmoteEdit_Click"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Margin="0,-4,8,0"
+                                                            Content="✎"
+                                                            ToolTip="{loc:Str btn_emote_edit_tooltip}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Custom slot row: circular badge + watermarked textbox + send button. -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource EmoteCustomBadgeStyle}">
+                                            <Image Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Source="{Binding Source='✏️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        </Border>
+                                        <TextBox Grid.Column="1" x:Name="TxtEmoteCustom" x:FieldModifier="internal"
+                                                 Style="{StaticResource EmoteCustomTextBoxStyle}"
+                                                 helpers:EmoteHelper.PlaceholderText="{loc:Str watermark_emote_custom}"
+                                                 helpers:EmoteHelper.LastSentEmoteHint=""
+                                                 Margin="12,0,8,0"
+                                                 KeyDown="TxtEmoteCustom_KeyDown"/>
+                                        <Button Grid.Column="2" x:Name="BtnEmoteCustomSend"
+                                                Content="{loc:Str btn_emote_send}"
+                                                Click="BtnEmoteCustomSend_Click"
+                                                Background="{DynamicResource PinkBrush}" Foreground="White"
+                                                FontWeight="Bold" Padding="16,8"
+                                                BorderThickness="0" Cursor="Hand"/>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TxtEmoteStatus" x:FieldModifier="internal" Text=""
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                               Margin="0,8,0,0"/>
+
+                                    <!-- Edit popup. Lives in the visual tree (zero-size when
+                                         IsOpen=false). Placement target + tag-bound EmotePreset
+                                         set in BtnEmoteEdit_Click. Save/Cancel close it. -->
+                                    <Popup x:Name="EmoteEditPopup" x:FieldModifier="internal"
+                                           Placement="Bottom" StaysOpen="False"
+                                           AllowsTransparency="True" PopupAnimation="Fade">
+                                        <Border Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                                                BorderThickness="2" CornerRadius="12"
+                                                Padding="16" Margin="0,6,0,0">
+                                            <StackPanel Width="260">
+                                                <TextBlock Text="{loc:Str label_emote_edit_title}"
+                                                           Foreground="{StaticResource TextLightBrush}" FontWeight="Bold"
+                                                           FontSize="14" Margin="0,0,0,12"/>
+                                                <TextBlock Text="{loc:Str label_emote_edit_icon}"
+                                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                           Margin="0,0,0,4"/>
+                                                <TextBox x:Name="TxtEditEmoteIcon" x:FieldModifier="internal" MaxLength="8"
+                                                         Background="#252542" Foreground="White"
+                                                         CaretBrush="White" BorderBrush="#3A3A55"
+                                                         Padding="8,6" FontSize="14"
+                                                         Margin="0,0,0,10"/>
+                                                <TextBlock Text="{loc:Str label_emote_edit_text}"
+                                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                           Margin="0,0,0,4"/>
+                                                <TextBox x:Name="TxtEditEmoteText" x:FieldModifier="internal" MaxLength="60"
+                                                         Background="#252542" Foreground="White"
+                                                         CaretBrush="White" BorderBrush="#3A3A55"
+                                                         Padding="8,6" FontSize="14"
+                                                         Margin="0,0,0,14"
+                                                         TextChanged="TxtEditEmoteText_TextChanged"/>
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right">
+                                                    <Button x:Name="BtnEditEmoteCancel"
+                                                            Content="{loc:Str btn_emote_edit_cancel}"
+                                                            Click="BtnEditEmoteCancel_Click"
+                                                            Background="#353550" Foreground="White"
+                                                            Padding="12,6" BorderThickness="0"
+                                                            Cursor="Hand" Margin="0,0,8,0"/>
+                                                    <Button x:Name="BtnEditEmoteSave" x:FieldModifier="internal"
+                                                            Content="{loc:Str btn_emote_edit_save}"
+                                                            Click="BtnEditEmoteSave_Click"
+                                                            Background="{DynamicResource PinkBrush}"
+                                                            Foreground="White" FontWeight="Bold"
+                                                            Padding="12,6" BorderThickness="0"
+                                                            Cursor="Hand"/>
                                                 </StackPanel>
-                                                <Button Style="{StaticResource EmoteEditOverlayStyle}"
-                                                        Tag="{Binding}"
-                                                        Click="BtnEmoteEdit_Click"
-                                                        HorizontalAlignment="Right"
-                                                        VerticalAlignment="Top"
-                                                        Margin="0,-4,8,0"
-                                                        Content="✎"
-                                                        ToolTip="{loc:Str btn_emote_edit_tooltip}"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-    
-                                <!-- Custom slot row: circular badge + watermarked textbox + send button. -->
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Style="{StaticResource EmoteCustomBadgeStyle}">
-                                        <Image Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Source="{Binding Source='✏️', Converter={StaticResource EmojiToImageSource}}"/>
-                                    </Border>
-                                    <TextBox Grid.Column="1" x:Name="TxtEmoteCustom" x:FieldModifier="internal"
-                                             Style="{StaticResource EmoteCustomTextBoxStyle}"
-                                             helpers:EmoteHelper.PlaceholderText="{loc:Str watermark_emote_custom}"
-                                             helpers:EmoteHelper.LastSentEmoteHint=""
-                                             Margin="12,0,8,0"
-                                             KeyDown="TxtEmoteCustom_KeyDown"/>
-                                    <Button Grid.Column="2" x:Name="BtnEmoteCustomSend"
-                                            Content="{loc:Str btn_emote_send}"
-                                            Click="BtnEmoteCustomSend_Click"
-                                            Background="{DynamicResource PinkBrush}" Foreground="White"
-                                            FontWeight="Bold" Padding="16,8"
-                                            BorderThickness="0" Cursor="Hand"/>
-                                </Grid>
-    
-                                <TextBlock x:Name="TxtEmoteStatus" x:FieldModifier="internal" Text=""
-                                           Foreground="#A0A0A0" FontSize="11"
-                                           Margin="0,8,0,0"/>
-    
-                                <!-- Edit popup. Lives in the visual tree (zero-size when
-                                     IsOpen=false). Placement target + tag-bound EmotePreset
-                                     set in BtnEmoteEdit_Click. Save/Cancel close it. -->
-                                <Popup x:Name="EmoteEditPopup" x:FieldModifier="internal"
-                                       Placement="Bottom" StaysOpen="False"
-                                       AllowsTransparency="True" PopupAnimation="Fade">
-                                    <Border Background="{DynamicResource SurfaceBgBrush}"
-                                            BorderBrush="{DynamicResource PinkBrush}"
-                                            BorderThickness="2" CornerRadius="10"
-                                            Padding="16" Margin="0,6,0,0">
-                                        <StackPanel Width="260">
-                                            <TextBlock Text="{loc:Str label_emote_edit_title}"
-                                                       Foreground="White" FontWeight="Bold"
-                                                       FontSize="14" Margin="0,0,0,12"/>
-                                            <TextBlock Text="{loc:Str label_emote_edit_icon}"
-                                                       Foreground="#8A8AA0" FontSize="11"
-                                                       Margin="0,0,0,4"/>
-                                            <TextBox x:Name="TxtEditEmoteIcon" x:FieldModifier="internal" MaxLength="8"
-                                                     Background="#252542" Foreground="White"
-                                                     CaretBrush="White" BorderBrush="#3A3A55"
-                                                     Padding="8,6" FontSize="14"
-                                                     Margin="0,0,0,10"/>
-                                            <TextBlock Text="{loc:Str label_emote_edit_text}"
-                                                       Foreground="#8A8AA0" FontSize="11"
-                                                       Margin="0,0,0,4"/>
-                                            <TextBox x:Name="TxtEditEmoteText" x:FieldModifier="internal" MaxLength="60"
-                                                     Background="#252542" Foreground="White"
-                                                     CaretBrush="White" BorderBrush="#3A3A55"
-                                                     Padding="8,6" FontSize="14"
-                                                     Margin="0,0,0,14"
-                                                     TextChanged="TxtEditEmoteText_TextChanged"/>
-                                            <StackPanel Orientation="Horizontal"
-                                                        HorizontalAlignment="Right">
-                                                <Button x:Name="BtnEditEmoteCancel"
-                                                        Content="{loc:Str btn_emote_edit_cancel}"
-                                                        Click="BtnEditEmoteCancel_Click"
-                                                        Background="#353550" Foreground="White"
-                                                        Padding="12,6" BorderThickness="0"
-                                                        Cursor="Hand" Margin="0,0,8,0"/>
-                                                <Button x:Name="BtnEditEmoteSave" x:FieldModifier="internal"
-                                                        Content="{loc:Str btn_emote_edit_save}"
-                                                        Click="BtnEditEmoteSave_Click"
-                                                        Background="{DynamicResource PinkBrush}"
-                                                        Foreground="White" FontWeight="Bold"
-                                                        Padding="12,6" BorderThickness="0"
-                                                        Cursor="Hand"/>
                                             </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </Popup>
-                            </StackPanel>
-                        </Border>
-    
-                        <!-- Behavior: stop effects when controller disconnects -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_remote_stop_on_disconnect}" Foreground="White"
-                                               FontSize="14" FontWeight="Bold"/>
-                                    <TextBlock Text="{loc:Str desc_remote_stop_on_disconnect}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                        </Border>
+                                    </Popup>
                                 </StackPanel>
-                                <CheckBox Grid.Column="1" x:Name="ChkStopEffectsOnRemoteDisconnect" x:FieldModifier="internal"
-                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                          Margin="16,0,0,0"
-                                          Checked="ChkStopEffectsOnRemoteDisconnect_Changed"
-                                          Unchecked="ChkStopEffectsOnRemoteDisconnect_Changed"/>
                             </Grid>
                         </Border>
-    
-                        <!-- Privacy: opt-in to share linked Discord avatar with controllers. -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
+
+                        <!-- Behaviour: one dense card, 34px rows. Stop-on-disconnect and the
+                             share-avatar opt-in used to be two separate 20,14 cards; their long
+                             descriptions are now the rows' tooltips. -->
+                        <Border Style="{StaticResource SettingCardStyle}">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_remote_share_avatar}" Foreground="White"
-                                               FontSize="14" FontWeight="Bold"/>
-                                    <TextBlock Text="{loc:Str desc_remote_share_avatar}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,8,16,8">
+
+                                    <Grid Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str desc_remote_stop_on_disconnect}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_stop_on_disconnect}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkStopEffectsOnRemoteDisconnect" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Margin="16,0,0,0"
+                                                  Checked="ChkStopEffectsOnRemoteDisconnect_Changed"
+                                                  Unchecked="ChkStopEffectsOnRemoteDisconnect_Changed"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str desc_remote_share_avatar}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_share_avatar}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkRemoteShareAvatar" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Margin="16,0,0,0"
+                                                  Checked="ChkRemoteShareAvatar_Changed"
+                                                  Unchecked="ChkRemoteShareAvatar_Changed"/>
+                                    </Grid>
                                 </StackPanel>
-                                <CheckBox Grid.Column="1" x:Name="ChkRemoteShareAvatar" x:FieldModifier="internal"
-                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                          Margin="16,0,0,0"
-                                          Checked="ChkRemoteShareAvatar_Changed"
-                                          Unchecked="ChkRemoteShareAvatar_Changed"/>
                             </Grid>
                         </Border>
-    
+
                         <!-- Stop session button -->
                         <Button x:Name="BtnStopRemote" x:FieldModifier="internal" Content="{loc:Str btn_stop_session}" Background="#FF4444"
                                 Foreground="White" FontWeight="Bold" FontSize="14" Padding="18,10"
                                 BorderThickness="0" Cursor="Hand" HorizontalAlignment="Stretch"
                                 Visibility="Collapsed"
                                 Click="BtnStopRemote_Click"/>
-    
+
                         <!-- Hidden legacy container — kept so existing handlers don't NRE -->
                         <StackPanel x:Name="RemoteControlPanel" x:FieldModifier="internal" Visibility="Collapsed"/>
-    
+
                     </StackPanel>
-    
-                    <!-- Translucent gating overlay (only for free users) -->
-                    <Border x:Name="RemoteControlGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
-                            CornerRadius="10" IsHitTestVisible="True">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
-                                       FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                                       Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
-                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
-                                <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
-                            </Button>
-                        </StackPanel>
+
+                    <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
+                         clips its Background to CornerRadius but does NOT clip child content
+                         (round-2 lesson), and the code-behind mirror writes mod art straight into
+                         this Background brush.
+                         ASPECT SIZING: remote_control.png is 1376x768 LANDSCAPE. A fixed portrait
+                         box (the old MinHeight/MaxHeight pair) made UniformToFill scale the art to
+                         the box height and crop ~60% of its width away, so the poster's
+                         "REMOTE CONTROL" lettering read "MOTE TROL". Instead the Border takes its
+                         height from an invisible Uniform child Image of the SAME source: that child
+                         measures to the art's aspect at whatever width the column gives us, the
+                         Border adopts it, and UniformToFill then paints an exact fit with zero crop.
+                         The child binds to ImgRemoteControlFeature.Source so mod art resizes the
+                         plate too. Still top-pinned, so the tall page never stretches it. -->
+                    <Border x:Name="SideArtPlate" x:FieldModifier="internal"
+                            Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                            BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                            VerticalAlignment="Top">
+                        <Border.Background>
+                            <ImageBrush Stretch="UniformToFill">
+                                <ImageBrush.ImageSource>
+                                    <BitmapImage UriSource="pack://application:,,,/Resources/features/remote_control.png"
+                                                 DecodePixelWidth="800"/>
+                                </ImageBrush.ImageSource>
+                            </ImageBrush>
+                        </Border.Background>
+                        <Grid>
+                            <!-- Sizing-only child: never drawn, never hit-tested. -->
+                            <Image Stretch="Uniform" Opacity="0" IsHitTestVisible="False"
+                                   Source="{Binding Path=Source, ElementName=ImgRemoteControlFeature, FallbackValue='pack://application:,,,/Resources/features/remote_control.png'}"/>
+                            <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                            <Border CornerRadius="12">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                        <GradientStop Color="#66000000" Offset="0"/>
+                                        <GradientStop Color="#00000000" Offset="0.45"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
                     </Border>
                 </Grid>
-    
+
             </StackPanel>
-        </ScrollViewer>
+
+            <!-- Translucent gating overlay (only for free users). Last sibling of the ROOT grid so
+                 it scrims the hero and both columns. Its child shape is load-bearing:
+                 Controls/PremiumGateFx.Attach walks the logical tree for the first Image (the
+                 padlock it breathes) and the first ButtonBase (the CTA it sheens). -->
+            <Border x:Name="RemoteControlGate" x:FieldModifier="internal" Visibility="Collapsed"
+                    Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
+                    CornerRadius="16" IsHitTestVisible="True">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
+                               FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
+                               Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                    <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
+                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                        <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
 </UserControl>

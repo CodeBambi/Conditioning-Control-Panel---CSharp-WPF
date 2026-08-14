@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Events;
 
 namespace ConditioningControlPanel.Services;
 
@@ -254,6 +255,14 @@ public class SkillTreeService : IDisposable
             multiplier += 0.50;
         }
 
+        // World event boost (additive, capped, and 0.0 unless an event is running).
+        // ADDITIVE ON PURPOSE: the one multiplicative term below already triples
+        // whatever it lands on, and an event that multiplied instead of added would
+        // stack with it into a number nobody costed. Capped inside LiveEventService
+        // (MaxXpBoost) so a bad server value can nudge the rate, never mint a level.
+        // Dormant in this build — nothing arms LiveEventService, so this adds +0.0.
+        multiplier += LiveEventService.ClampXpBoost(App.LiveEvent?.XpBoost ?? 0.0);
+
         // Pink Rush (active window)
         if (settings.PinkRushActive && HasSkill("pink_rush"))
         {
@@ -292,6 +301,13 @@ public class SkillTreeService : IDisposable
             breakdown.Add((Loc.Get("skill_mult_night_shift"), 0.50));
         if (HasSkill("early_bird_bimbo") && hour >= 5 && hour < 8)
             breakdown.Add((Loc.Get("skill_mult_early_bird"), 0.50));
+
+        // Kept in step with GetTotalXpMultiplier above. Omitted entirely when no event
+        // is running, which is every build until the event engine ships — an "Event +0%"
+        // row would advertise a feature that does not exist yet.
+        var eventBoost = LiveEventService.ClampXpBoost(App.LiveEvent?.XpBoost ?? 0.0);
+        if (eventBoost > 0.0)
+            breakdown.Add((Loc.Get("skill_mult_event_boost"), eventBoost));
 
         if (settings.PinkRushActive && HasSkill("pink_rush"))
             breakdown.Add((Loc.Get("skill_mult_pink_rush_active"), 2.0)); // Shows as +200% (3x total)
@@ -567,6 +583,10 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Check and award Perfect Bimbo Week bonus (7, 14, 30 day daily quest streaks)
     /// Base XP: 3000, 6000, 10000 for 7/14/30 day milestones, scaled by level (+2% per level)
+    ///
+    /// GRANTS the XP itself and returns the amount awarded (0 when no milestone is due) — callers
+    /// must not add it again. The grant lives in here so it happens before the paid-once latch is
+    /// persisted; see the note at the grant.
     /// </summary>
     public int CheckPerfectWeekBonus()
     {
@@ -577,6 +597,14 @@ public class SkillTreeService : IDisposable
 
         var streak = settings.DailyQuestStreak;
         var playerLevel = settings.PlayerLevel;
+
+        // The streak broke and is being rebuilt, so the same milestone can be earned again.
+        // Persisted immediately: nothing else on this path saves settings when no bonus is due.
+        if (streak < settings.LastPerfectWeekStreakAwarded)
+        {
+            settings.LastPerfectWeekStreakAwarded = 0;
+            App.Settings?.Save();
+        }
 
         // Determine base XP reward based on milestone
         int baseXP = 0;
@@ -600,8 +628,27 @@ public class SkillTreeService : IDisposable
 
         if (baseXP == 0) return 0;
 
+        // Pay each milestone once. This runs on EVERY daily quest completion, so without the
+        // latch the bonus was awarded again for every further quest that day - and again on the
+        // next launch, since the streak value itself hadn't changed (#895).
+        if (settings.LastPerfectWeekStreakAwarded == streak)
+        {
+            App.Logger?.Debug("Perfect Bimbo Week {Milestone} bonus already awarded for streak {Streak}; skipping",
+                milestone, streak);
+            return 0;
+        }
+
         // Scale with player level (+2% per level)
         var scaledXP = (int)Math.Round(baseXP * (1 + playerLevel * 0.02));
+
+        // GRANT FIRST, LATCH SECOND. The latch used to be written (and saved) here before the
+        // caller added the XP, so a crash in between burned the milestone permanently. Ordered
+        // this way a crash between the grant and the latch can at worst pay the milestone twice
+        // — the lesser evil against a bonus the player can never earn again.
+        App.Progression?.AddXP(scaledXP, XPSource.Other);
+
+        settings.LastPerfectWeekStreakAwarded = streak;
+        App.Settings?.Save();
 
         App.Logger?.Information("Perfect Bimbo Week {Milestone} bonus awarded! {XP} XP (base: {BaseXP}, level: {Level})",
             milestone, scaledXP, baseXP, playerLevel);
@@ -837,6 +884,9 @@ public class SkillTreeService : IDisposable
         settings.LastStreakDate = null;
         settings.DailyQuestStreak = 0;
         settings.LastDailyQuestDate = null;
+        // The Perfect Week latch tracks "already paid for streak N" — zeroing the streak without
+        // it would make the rebuilt streak's first milestone look already-paid.
+        settings.LastPerfectWeekStreakAwarded = 0;
 
         // Prune the tree to permanent nodes (fallback when the server didn't send the
         // post-rollover list — with a new server the level_reset handler has already

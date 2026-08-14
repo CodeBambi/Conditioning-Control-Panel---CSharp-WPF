@@ -96,7 +96,61 @@ public partial class ProgramEnrollDialog : Window
         TxtSafetyNote.Text = _program.SafetyNote;
         TxtContractPhrase.Text = _program.ContractPhrase;
 
+        ClampToWorkArea();
         UpdateConfirmState();
+    }
+
+    /// <summary>
+    /// Caps the content-driven height at the screen the dialog will open on.
+    ///
+    /// <para>Not expressible in XAML: <see cref="SystemParameters.WorkArea"/> is a runtime value, and
+    /// it is the one that matters - it excludes the taskbar, and it is already in device-independent
+    /// units, so a 150% DPI display reports the ~512 DIP of usable height it actually has rather than
+    /// 768 physical pixels. The 40 DIP of slack keeps the shadowless chromeless border off the very
+    /// edge of the work area.</para>
+    ///
+    /// <para>Once the clamp binds, the Grid's star row shrinks, the ScrollViewer inside it takes
+    /// over, and the Auto footer keeps its buttons - which is the whole point of the change.</para>
+    /// </summary>
+    private void ClampToWorkArea()
+    {
+        try
+        {
+            var available = SystemParameters.WorkArea.Height - 40;
+            if (available > 0) MaxHeight = Math.Max(MinHeight, available);
+        }
+        catch
+        {
+            // No work area (a locked session, an odd RDP host): the content-driven height stands.
+        }
+    }
+
+    /// <summary>
+    /// Escape cancels. A chromeless, non-resizable modal with no close button otherwise leaves
+    /// Alt+F4 as the only exit, and this is a screen the user is explicitly allowed to walk away
+    /// from. Setting DialogResult is what closes it AND what tells the caller not to enroll.
+    /// </summary>
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Escape) return;
+        e.Handled = true;
+        try
+        {
+            DialogResult = false;
+            Close();
+        }
+        catch { /* already closing */ }
+    }
+
+    /// <summary>
+    /// Chromeless window, so dragging the card is the only way to move it - which matters when the
+    /// clamp above has it filling the work area. Same handler as ProgramsIntroPopup. The controls
+    /// inside (TextBox, ComboBox, Buttons, the card radios) all mark the event handled for their own
+    /// focus handling, so this only ever fires on the dialog's own dead space.
+    /// </summary>
+    private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        try { DragMove(); } catch { /* not a drag-able moment */ }
     }
 
     private static Brush ParseBrush(string hex)

@@ -31,7 +31,8 @@ namespace ConditioningControlPanel.Services
         private int _dailyRequestCount;
         private DateTime _lastResetDate;
         private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
-        private const int PatreonDailyLimit = 1000;  // Patreon supporters
+        private const int Tier1DailyLimit = 1000;   // Tier 1 supporters
+        private const int Tier2DailyLimit = 2000;   // Tier 2 / Lab (whitelist folds to tier 2)
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
 
         /// <summary>
@@ -55,8 +56,13 @@ namespace ConditioningControlPanel.Services
         /// disagree about what a full tank is. Doc 01 §5.4 replaces the request counter with a
         /// server-authoritative token budget; this is one of the two places that then changes.</para>
         /// </summary>
+        // AI is not the perk - usage is (owner decision, 2026-08-13). Everyone with an identity
+        // can chat; the tiers buy a bigger daily tank. HasLabAccess is the canonical tier-2 bar
+        // (whitelist and SubscribeStar fold into it), HasAiAccess the tier-1 one.
         internal static int EffectiveDailyLimit =>
-            App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
+            App.Patreon?.HasLabAccess == true ? Tier2DailyLimit
+            : App.Patreon?.HasAiAccess == true ? Tier1DailyLimit
+            : FreeDailyLimit;
 
         // Fallback response when API unavailable or limit reached — pick from idle phrases for variety
         private static readonly Random _fallbackRandom = new();

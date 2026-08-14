@@ -1727,7 +1727,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Error(ex, "VideoService: GetNextVideo failed");
                 }
-                VideoDiag.Log("SELECT", $"end after {selectSw.ElapsedMilliseconds}ms clip={(selected == null ? "(none)" : Path.GetFileName(selected))}");
+                VideoDiag.Log("SELECT", $"end after {selectSw.ElapsedMilliseconds}ms clip={DescribeClip(selected)}");
 
                 DispatcherHelper.RunOnUI(() =>
                 {
@@ -1760,6 +1760,14 @@ namespace ConditioningControlPanel.Services
                 // No video to play - release the queue lock
                 App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
 
+                // Remote is on but had nothing to hand us. Selection already kicked a background
+                // top-up on its way through here, so the next trigger will usually find a buffer -
+                // say so in the log, because otherwise the guidance dialog below reads as "you have
+                // no videos" to someone who deliberately switched the app off their own library.
+                if (RemoteMediaEnabled())
+                    App.Logger?.Warning("VideoService: no local videos AND the remote buffer was empty (source={Source}) - a top-up is already in flight",
+                        App.Settings?.Current?.MediaSource);
+
                 // Startup auto-play: a user who hasn't added videos shouldn't get a blocking
                 // dialog on every launch (#333). Log and bail quietly — manual triggers still
                 // fall through to the guidance prompt below.
@@ -1787,6 +1795,12 @@ namespace ConditioningControlPanel.Services
                 message += Loc.Get("video_add_files_hint");
 
                 System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
+
+                // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
+                // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
+                // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
+                // budget, shared with the flash/wallpaper/first-run dead ends.
+                App.OfferRemoteMediaSource("videos");
                 return;
             }
 
@@ -2300,6 +2314,10 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = true;
             _playbackStarted = false; // nothing is on screen yet — we are entering pre-roll
             _strictActive = strict;
+            // Latched for the whole run, before any watchdog is armed: every guard below has to
+            // know whether a missing frame means "this machine's video output is broken" or
+            // "the network hasn't delivered yet", and those two want opposite responses.
+            _currentClipIsRemote = IsRemoteMediaPath(path);
             // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
             // after the two flags above are already set, so a reader on another thread never sees a
             // moment where neither the gap flag nor (_videoPlaying && _strictActive) is true.
@@ -2378,6 +2396,14 @@ namespace ConditioningControlPanel.Services
             // The ONLY change to this path. When the browser engine takes the clip it satisfies the
             // whole parity checklist itself (see VideoService.Browser.cs) and returns; otherwise
             // everything below runs exactly as it always has.
+            //
+            // Remote clips take this branch too, and SHOULD: this engine is the default
+            // (BrowserVideoEngineEnabled ships true), so excluding them would have routed every
+            // remote clip to LibVLC — the fallback engine most installs never use. It is also the
+            // better home for them on the merits, being out-of-process: a stalled network read
+            // cannot reach the WPF dispatcher there. BuildPageUrl passes absolute http(s) through;
+            // if the page fails on a clip, the existing forceLibVlc fallback still catches it, so
+            // LibVLC's FromLocation path remains the safety net rather than the front line.
             if (!forceLibVlc && Video.Browser.BrowserVideoGate.ShouldUseBrowser(path))
             {
                 if (StartBrowserVideoPlayback(path, strict)) return;
@@ -2956,11 +2982,26 @@ namespace ConditioningControlPanel.Services
                 videoView!.MediaPlayer = mediaPlayer;
             VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
 
-            // Create media - use file path directly for better compatibility
+            // Create media. A library/pack clip is a real file; a remote clip is an absolute
+            // https URL and needs NO local copy — see the Phase 4 spike note on
+            // IsRemoteMediaPath. FromLocation is the same constructor CreateLibVLCUrlWindow has
+            // shipped on since browser-fullscreen mirroring, so this is a proven path, not a new one.
             // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
             // (DualMonitorVideoService already uses this pattern with 'using var media')
-            using var media = new Media(_libVLC!, path, FromType.FromPath);
-            VideoDiag.Log("VIDEO", $"win[{tag}]: Media ctor +{winSw.ElapsedMilliseconds}ms");
+            bool isRemote = IsRemoteMediaPath(path);
+            using var media = isRemote
+                ? new Media(_libVLC!, path, FromType.FromLocation)
+                : new Media(_libVLC!, path, FromType.FromPath);
+            if (isRemote)
+            {
+                // A CDN read is not a disk read. VLC's default network-caching (~1s) is tuned for
+                // a LAN; on a home connection behind a CDN edge that turns the first rebuffer into
+                // a visible stutter, and the second into a failed clip.
+                media.AddOption($":network-caching={RemoteNetworkCachingMs}");
+                // A TCP connection dropped mid-clip is a rebuffer, not the end of the video.
+                media.AddOption(":http-reconnect");
+            }
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Media ctor +{winSw.ElapsedMilliseconds}ms (remote={isRemote})");
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
@@ -5504,6 +5545,13 @@ namespace ConditioningControlPanel.Services
             // another heal path may already have retired and rebuilt the shared instance, and the
             // fire handler must never condemn the fresh one.
             var owner = _libVLC;
+            // A remote clip's first frame has to cross the network first. Eight seconds is an
+            // OUTPUT deadline for a file the OS already has; for a stream it is a BUFFERING
+            // deadline, and a slow CDN edge would trip it on a perfectly healthy machine — which
+            // would then retire the shared LibVLC instance over someone's wifi. Longer window,
+            // and the fire handler refuses to retire for remote clips (see VoutWatchdogFire).
+            _voutGraceMsActive = _currentClipIsRemote ? RemoteVoutGraceMs : VoutGraceMs;
+            var graceMs = _voutGraceMsActive;
             _voutSeen = false;
             // Vout attach/detach is the single most informative signal for the black/white-screen
             // reports (#616-#623): e.Count > 0 means LibVLC actually created a video output, 0 means
@@ -5513,10 +5561,10 @@ namespace ConditioningControlPanel.Services
                 VideoDiag.Log("VOUT", e.Count > 0 ? $"attach (count={e.Count})" : "DETACH (count=0)");
                 if (e.Count > 0) { _voutSeen = true; _voutEverSeen = true; }
             };
-            VideoDiag.Log("VOUT", $"watchdog armed - grace {VoutGraceMs}ms, mid-play poll every {VoutMidPollMs}ms");
+            VideoDiag.Log("VOUT", $"watchdog armed - grace {graceMs}ms, mid-play poll every {VoutMidPollMs}ms");
             _voutWatchTimer?.Dispose();
             _voutWatchTimer = new System.Threading.Timer(
-                _ => VoutWatchdogFire(player, owner, path, strict), null, VoutGraceMs, System.Threading.Timeout.Infinite);
+                _ => VoutWatchdogFire(player, owner, path, strict), null, graceMs, System.Threading.Timeout.Infinite);
 
             // Part 4: mid-play vout-loss poll. Reset per-playback state and start ticking after the
             // start grace has elapsed (before that, a missing vout is the start watchdog's job).
@@ -5525,7 +5573,7 @@ namespace ConditioningControlPanel.Services
             _voutMidHealUsed = false;
             _voutMidWatchTimer?.Dispose();
             _voutMidWatchTimer = new System.Threading.Timer(
-                _ => VoutMidPlayTick(player, owner, path, strict), null, VoutGraceMs + VoutMidPollMs, VoutMidPollMs);
+                _ => VoutMidPlayTick(player, owner, path, strict), null, graceMs + VoutMidPollMs, VoutMidPollMs);
         }
 
         private void StopVoutWatchdog()
@@ -5563,7 +5611,23 @@ namespace ConditioningControlPanel.Services
 
                 // Reaching here IS the white-screen state the reports describe (#557-#560/#574, and
                 // now #616/#617/#621/#622/#623): the clip is decoding but nothing is on screen.
-                VideoDiag.Log("VOUT", $"NO VIDEO OUTPUT {VoutGraceMs}ms after Play ({Path.GetFileName(path)}) - white-screen state confirmed");
+                VideoDiag.Log("VOUT", $"NO VIDEO OUTPUT {_voutGraceMsActive}ms after Play ({DescribeClip(path)}) - white-screen state confirmed");
+
+                // A REMOTE clip that produced no output in the (already longer) grace window is a
+                // stream that never arrived: a dead CDN edge, a 404, a handshake that stalled. That
+                // says nothing about this machine's video output, so retiring the shared LibVLC
+                // would spend one of four per-session retires on someone's wifi AND then replay the
+                // same dead URL on the fresh instance. Give up on this clip through the natural-end
+                // path instead — Cleanup re-arms the scheduler, so the next one gets a clean go.
+                if (_currentClipIsRemote)
+                {
+                    App.Logger?.Warning(
+                        "VideoService: remote clip never produced video output within {Grace}ms ({Clip}) - skipping it (LibVLC is not at fault)",
+                        _voutGraceMsActive, DescribeClip(path));
+                    VideoDiag.Log("VOUT", "remote clip never started - skipping WITHOUT retiring LibVLC");
+                    DispatchVoutHeal(player, path, strict, retry: false);
+                    return;
+                }
 
                 // A file with no video track legitimately never creates a vout — an audio-only .mp4 in
                 // the videos folder is not an output failure. Let it play out (black window + audio,
@@ -5688,6 +5752,20 @@ namespace ConditioningControlPanel.Services
 
                 var lostMs = (now - _voutLostSinceTicks) / TimeSpan.TicksPerMillisecond;
                 _voutMidHealUsed = true;
+
+                // Same asymmetry as the start watchdog: a remote clip whose output vanished
+                // mid-stream is a connection that died, and replaying it on a fresh LibVLC would
+                // just re-fetch the same broken read. End the clip, keep the instance.
+                if (_currentClipIsRemote)
+                {
+                    App.Logger?.Warning(
+                        "VideoService: remote clip's video output vanished mid-playback ({Clip}, gone {LostMs}ms) - ending it (LibVLC is not at fault)",
+                        DescribeClip(path), lostMs);
+                    VideoDiag.Log("HEAL", $"mid-play vout loss on a REMOTE clip ({lostMs}ms gone) - ending without retiring");
+                    DispatchVoutHeal(player, path, strict, retry: false);
+                    return;
+                }
+
                 var retired = RetireSharedLibVLC(owner, "video output lost mid-playback");
                 App.Logger?.Error(
                     "VideoService: video output vanished mid-playback ({File}, gone {LostMs}ms) - white-screen mid-clip (retired={Retired}){Next}",
@@ -6536,8 +6614,38 @@ namespace ConditioningControlPanel.Services
                 RefillVideoQueues();
             }
 
+            bool localEmpty = _videoQueue.Count == 0 && _packVideoQueue.Count == 0;
+
+            // ---- remote blend (Phase 4) ----
+            // Sits ABOVE the local pick so an empty library is not a dead end any more: in every
+            // mode, if there is nothing on disk and the remote buffer has something, the remote
+            // clip plays. Otherwise "online" always draws remote and "mixed" rolls the ratio.
+            //
+            // Reads only the already-fetched buffer. This method runs on the trigger's background
+            // thread MOST of the time but NOT always - the attention-check retry calls it from a
+            // Task.Delay continuation and PlayVideo straight after is UI-affine - so it must never
+            // wait on a network round trip. TakeRemoteVideo tops the buffer up in the background.
+            if (RemoteMediaEnabled())
+            {
+                var source = App.Settings?.Current?.MediaSource ?? "local";
+                var ratio = App.Settings?.Current?.RemoteMediaRatio ?? 30;
+                bool wantRemote = localEmpty
+                    || string.Equals(source, "online", StringComparison.OrdinalIgnoreCase)
+                    || (string.Equals(source, "mixed", StringComparison.OrdinalIgnoreCase) && _random.Next(100) < ratio);
+
+                if (wantRemote)
+                {
+                    var remote = TakeRemoteVideo();
+                    if (remote != null) return remote;
+                    // Buffer dry (cold start, every channel cooling down, no connection). Fall
+                    // through to the local pools rather than skipping the video: a dead CDN
+                    // degrades to local behaviour, which is the whole fail-soft rule.
+                    App.Logger?.Debug("VideoService: remote video buffer empty - using the local pools for this pick");
+                }
+            }
+
             // If both queues are empty after refill, no videos available
-            if (_videoQueue.Count == 0 && _packVideoQueue.Count == 0)
+            if (localEmpty)
             {
                 return null;
             }
@@ -6578,12 +6686,250 @@ namespace ConditioningControlPanel.Services
             return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;
         }
 
+        #region Remote media (Phase 4, Contract 1)
+
+        // THE SPIKE RESULT, up front, because everything below depends on it:
+        //
+        //   Remote video needs NO local file. LibVLC takes an absolute https URL through
+        //   `new Media(_libVLC, url, FromType.FromLocation)` and its own http(s) access module
+        //   does the fetching - the exact constructor CreateLibVLCUrlWindow (:2166) has shipped
+        //   on for browser-fullscreen mirroring. So the heaviest Contract-1 consumer in the app
+        //   never touches disk, and RemoteMediaCache.MaterializeAsync is left for the surfaces
+        //   that genuinely need bytes (the wallpaper, which SPI_SETDESKWALLPAPER pins to a path).
+        //
+        // What a remote clip gives up, stated plainly rather than faked:
+        //   * NO CACHED DURATION. VideoMetadataCache parses local files; a remote clip is not in
+        //     it and must not be put in it (that would be a network parse per candidate, per
+        //     refill). The Min/Max duration SELECTION filter therefore does not apply - the
+        //     wall-clock StartMaxLengthCapTimer still enforces the user's maximum on screen, but
+        //     a remote clip shorter than VideoMinDurationSeconds can be picked.
+        //   * NO DEEPER ENHANCEMENTS. Those match on a local MediaSource path and read embedded
+        //     metadata from file bytes. Nothing matches a CDN URL, so remote clips play plain.
+        //   * NO FUNSCRIPT. The sidecar lookup is "<file>.funscript" next to the clip.
+        //   * NO BROWSER ENGINE. See the routing note in StartVideoPlayback.
+        //   * NO DISABLED-ASSET / PACK MACHINERY. Those key off relative library paths. The
+        //     blocklist is the remote equivalent and lives in FypOnlineCoordinator.
+        //
+        // BRIGHT LINE: this machine fetches straight from the provider. No CC Labs server is in
+        // the path, and on this surface nothing is written to disk at all.
+
+        /// <summary>Consumer id for our coordinator tenant. Rotation and dwell are per-consumer,
+        /// so mandatory videos learn their own channel taste without fighting the For You feed
+        /// for its iterators. The niche SELECTION is app-wide and deliberately shared.</summary>
+        private const string RemoteConsumerId = "videos";
+
+        /// <summary>Top the buffer up once it drops to this. One coordinator batch is up to ~30
+        /// entries, and a mandatory video fires a handful of times an hour, so one fetch covers a
+        /// long stretch - this is a low-water mark, not a per-play fetch.</summary>
+        private const int RemoteBufferLowWater = 4;
+
+        /// <summary>Hard cap on buffered URLs. They are strings, but a stale URL is a URL that
+        /// will 404 by the time it plays, so there is no point hoarding.</summary>
+        private const int RemoteBufferCap = 60;
+
+        /// <summary>Whole-batch budget. ScrolllerSource already has its own 20s per-request
+        /// timeout and never throws; this bounds the retry-across-channels loop as well.</summary>
+        private const int RemoteFetchTimeoutMs = 45000;
+
+        /// <summary>VLC buffer for a network read, ms. The default (~1s) is a LAN setting.</summary>
+        private const int RemoteNetworkCachingMs = 3000;
+
+        /// <summary>Vout grace for a remote clip. The local 8s is an OUTPUT deadline; for a
+        /// stream the same window is a BUFFERING deadline and a slow edge would trip it on a
+        /// healthy machine. See StartVoutWatchdog / VoutWatchdogFire.</summary>
+        private const int RemoteVoutGraceMs = 20000;
+
+        /// <summary>Already-fetched remote clip URLs. Written by the background prefetch, read by
+        /// selection on two different threads - hence the lock, which the local queues predate.</summary>
+        private readonly Queue<string> _remoteVideoQueue = new();
+        private readonly object _remoteLock = new();
+
+        /// <summary>0/1 via Interlocked: one prefetch in the air at a time.</summary>
+        private int _remoteFetchInFlight;
+
+        /// <summary>True while the clip on screen came from the remote pool. Latched in PlayVideo
+        /// before any watchdog is armed; read from threadpool watchdog callbacks, hence volatile.</summary>
+        private volatile bool _currentClipIsRemote;
+
+        /// <summary>The grace window the current playback's vout watchdog was actually armed
+        /// with (see <see cref="RemoteVoutGraceMs"/>), so the log lines can't claim 8000ms after
+        /// waiting 20000.</summary>
+        private volatile int _voutGraceMsActive = VoutGraceMs;
+
+        /// <summary>True when a path is a remote clip rather than something on disk. The whole
+        /// distinction the phase turns on, in one place: everything the pipeline does differently
+        /// for remote media keys off this and nothing else.</summary>
+        internal static bool IsRemoteMediaPath(string? path)
+            => !string.IsNullOrEmpty(path)
+               && (path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                   || path.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Log-safe short name for a clip: the filename for a library file, host + last
+        /// segment for a remote one. A full CDN URL in every diag line is noise, and the host is
+        /// the part that actually says "this edge is dead".</summary>
+        private static string DescribeClip(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return "(none)";
+            try
+            {
+                if (IsRemoteMediaPath(path) && Uri.TryCreate(path, UriKind.Absolute, out var uri))
+                    return uri.Host + "/..." + Path.GetFileName(uri.AbsolutePath);
+                return Path.GetFileName(path);
+            }
+            catch { return "(unprintable)"; }
+        }
+
+        /// <summary>True when remote media may appear anywhere in the app. Reads
+        /// <c>HasRemoteMediaConsent</c>, never the raw consent flag - a user who accepted the For
+        /// You feed's card has already agreed to exactly this (matches IntakeHostService).</summary>
+        private static bool RemoteMediaEnabled()
+        {
+            var s = App.Settings?.Current;
+            return s != null && s.MediaSource != "local" && s.HasRemoteMediaConsent;
+        }
+
+        /// <summary>Our channel set. The niche selection is app-wide by design (see the
+        /// AppSettings remarks beside MediaSource) - only rotation and dwell are per-consumer,
+        /// which is what asking for our own tenant buys.</summary>
+        private static IReadOnlyList<string> RemoteChannels()
+        {
+            var s = App.Settings?.Current;
+            return Fyp.Online.FypOnlineCoordinator.ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
+        }
+
+        /// <summary>Next buffered remote clip, or null when the buffer is dry. Tops the buffer up
+        /// in the background on the way out; never waits for it.</summary>
+        private string? TakeRemoteVideo()
+        {
+            string? url = null;
+            int left;
+            lock (_remoteLock)
+            {
+                if (_remoteVideoQueue.Count > 0) url = _remoteVideoQueue.Dequeue();
+                left = _remoteVideoQueue.Count;
+            }
+
+            if (url != null)
+                App.Logger?.Information("VideoService: playing remote clip {Clip} ({Left} buffered)", DescribeClip(url), left);
+
+            KickRemotePrefetch();
+            return url;
+        }
+
+        /// <summary>Fire-and-forget top-up of the remote buffer. Single-flight, bounded, and it
+        /// touches no UI at all - no dispatcher marshalling here on purpose, because the whole
+        /// point is that selection never waits on it. Never throws.</summary>
+        private void KickRemotePrefetch()
+        {
+            bool claimed = false;
+            try
+            {
+                if (!RemoteMediaEnabled()) return;
+
+                lock (_remoteLock)
+                {
+                    if (_remoteVideoQueue.Count >= RemoteBufferLowWater) return;
+                }
+
+                if (Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
+                claimed = true;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await FetchRemoteVideosAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The coordinator and the source are both documented never-throw, so this
+                        // is the belt to that braces: an unobserved exception here would reach
+                        // TaskScheduler.UnobservedTaskException and read as a crash.
+                        App.Logger?.Warning("VideoService: remote video prefetch failed: {Error}", ex.Message);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _remoteFetchInFlight, 0);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: could not start the remote video prefetch: {Error}", ex.Message);
+                // Only release the latch if this call is the one that took it — clearing another
+                // thread's claim would let two fetches run at once, which is the one thing the
+                // single-flight guard exists to prevent.
+                if (claimed) Interlocked.Exchange(ref _remoteFetchInFlight, 0);
+            }
+        }
+
+        /// <summary>One coordinator batch, validated and appended to the buffer. Runs entirely off
+        /// the UI thread.</summary>
+        private async Task FetchRemoteVideosAsync()
+        {
+            using var cts = new CancellationTokenSource(RemoteFetchTimeoutMs);
+            var coordinator = Fyp.Online.FypOnlineCoordinator.For(
+                RemoteConsumerId, RemoteChannels, Fyp.Online.FeedMediaKind.Video);
+
+            var (entries, error) = await coordinator.FetchBatchAsync(cts.Token).ConfigureAwait(false);
+            if (error != null)
+            {
+                // Not an error state for us: the local pools are still there and selection falls
+                // through to them. Logged at Warning because "my videos went quiet" reports need
+                // the difference between "no connection" and "no niches selected" to be visible.
+                App.Logger?.Warning("VideoService: remote video fetch reported {Error} - staying on the local pools", error);
+                return;
+            }
+
+            var accepted = new List<string>();
+            foreach (var entry in entries)
+            {
+                // Re-validated here even though the source already validated: this is the gate
+                // that keeps a still (or anything without a container LibVLC can demux) out of a
+                // pool whose only consumer is a fullscreen mandatory video.
+                if (!Fyp.Online.RemoteMediaFormats.Validate(entry, Fyp.Online.FeedMediaKind.Video, out var reason))
+                {
+                    App.Logger?.Debug("VideoService: rejected remote entry {Id}: {Reason}", entry.Id, reason);
+                    continue;
+                }
+                accepted.Add(entry.Url);
+            }
+
+            if (accepted.Count == 0)
+            {
+                App.Logger?.Debug("VideoService: remote video batch had nothing usable ({N} entries offered)", entries.Count);
+                return;
+            }
+
+            int buffered;
+            lock (_remoteLock)
+            {
+                foreach (var url in accepted)
+                {
+                    if (_remoteVideoQueue.Count >= RemoteBufferCap) break;
+                    _remoteVideoQueue.Enqueue(url);
+                }
+                buffered = _remoteVideoQueue.Count;
+            }
+
+            App.Logger?.Information("VideoService: buffered {Added} remote clips ({Total} ready)", accepted.Count, buffered);
+        }
+
+        #endregion
+
         /// <summary>
         /// Refills both video queues (regular and pack videos).
         /// </summary>
         private void RefillVideoQueues()
         {
             var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
+
+            // Remote injection point. A refill is the moment the pipeline admits it needs more
+            // material, so it is where the remote buffer gets topped up too - but ONLY as a
+            // fire-and-forget kick. Everything below this line walks the local disk; nothing here
+            // may ever wait on a network round trip, because this method also runs on the UI
+            // thread via the attention-check retry path.
+            KickRemotePrefetch();
 
             // Clean up old temp pack files
             CleanupTempPackFiles();
@@ -6665,6 +7011,11 @@ namespace ConditioningControlPanel.Services
             // duration are included and parsed lazily — they'll get filtered
             // correctly on the next refill once the cache is warm. We never
             // block playback on a cache miss, so cold runs aren't penalized.
+            //
+            // Remote clips are deliberately NOT here: `files` is the local walk, and putting a
+            // CDN URL through MetadataCache would mean a network parse per candidate per refill.
+            // The user's MAXIMUM still holds on screen (StartMaxLengthCapTimer is wall-clock, not
+            // metadata), but their minimum does not apply to remote clips. See the Phase 4 region.
             var minSec = App.Settings?.Current?.VideoMinDurationSeconds ?? 0;
             var maxSec = App.Settings?.Current?.VideoMaxDurationSeconds ?? 0;
             if ((minSec > 0 || maxSec > 0) && MetadataCache != null)
@@ -6707,8 +7058,10 @@ namespace ConditioningControlPanel.Services
             ShuffleList(packVideosList);
             _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideosList);
 
-            App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos (path: {Path})",
-                _videoQueue.Count, _packVideoQueue.Count, _videosPath);
+            int remoteBuffered;
+            lock (_remoteLock) remoteBuffered = _remoteVideoQueue.Count;
+            App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos, {RemoteCount} remote clips buffered (path: {Path})",
+                _videoQueue.Count, _packVideoQueue.Count, remoteBuffered, _videosPath);
         }
 
         /// <summary>

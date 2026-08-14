@@ -490,10 +490,26 @@ namespace ConditioningControlPanel.Services
         /// <c>Resources/AwarenessPresets/*.json</c> and merges them into
         /// <see cref="AppSettings.KeywordTriggerPresets"/>.
         ///
+        /// <para><b>Contract</b></para>
         /// - Presets the user has explicitly removed (<see cref="AppSettings.RemovedBuiltInPresetIds"/>) are skipped.
         /// - New presets are appended with <c>MasterEnabled = false</c>.
-        /// - If a built-in's <see cref="KeywordTriggerPreset.Version"/> is newer than the stored copy's, the
-        ///   stored copy's <c>Triggers</c> / <c>CannedPhrases</c> are refreshed in place (keeping MasterEnabled state).
+        /// - For a preset that is already stored, every DEFINITION field is copied from the bundled
+        ///   JSON on EVERY load, whatever the versions say. The JSON is the single source of truth for
+        ///   a built-in's definition (the detail dialog says as much: <c>MirrorLiveClonesToCustomSource</c>
+        ///   is a no-op for built-ins, and an installed built-in's user edits live on the CLONED triggers
+        ///   in <see cref="AppSettings.KeywordTriggers"/>, not on <c>preset.Triggers</c>). The only real
+        ///   user state carried on a stored built-in is <c>MasterEnabled</c>, which is preserved.
+        /// - The re-install queue stays VERSION-GATED: only when the bundled
+        ///   <see cref="KeywordTriggerPreset.Version"/> is strictly newer than the stored copy's AND the
+        ///   preset was installed do we flip <c>MasterEnabled = false</c> and queue
+        ///   <see cref="PendingPresetReinstalls"/>. That machinery must not fire on every launch.
+        ///
+        /// <para><b>Why the definition copy is unconditional.</b> It used to ride the version gate, so a
+        /// stored copy whose text had been mangled (a settings.json that went through UTF-8-read-as-cp1252
+        /// re-encoding rounds, leaving preset cards reading <c>"smart", "focus" ÃƒÆ'Ã†â€™…</c>) could never
+        /// be healed: the stored Version already equalled the bundled one, so the clean text never landed
+        /// and the mojibake was frozen forever. Re-copying costs nothing and makes the bundled JSON
+        /// authoritative in fact, not just in principle.</para>
         /// </summary>
         private void MergeBuiltInAwarenessPresets(AppSettings settings)
         {
@@ -535,7 +551,8 @@ namespace ConditioningControlPanel.Services
                 };
 
                 int added = 0;
-                int refreshed = 0;
+                int upgraded = 0;
+                int healed = 0;
                 foreach (var file in files)
                 {
                     try
@@ -559,49 +576,11 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
-                        if (settings.RemovedBuiltInPresetIds.Contains(preset.Id))
-                            continue;
-
-                        var existing = settings.KeywordTriggerPresets.FirstOrDefault(p => p.Id == preset.Id);
-                        if (existing == null)
+                        switch (MergeBuiltInPresetInto(settings, preset, PendingPresetReinstalls))
                         {
-                            preset.MasterEnabled = false;
-                            settings.KeywordTriggerPresets.Add(preset);
-                            added++;
-                        }
-                        else if (preset.Version > existing.Version)
-                        {
-                            // Refresh the preset definition in place. Prior versions only
-                            // updated the metadata here — the cloned triggers in
-                            // KeywordTriggers were left stale, so users who installed v2
-                            // never picked up v3's new keywords/actions.
-                            var wasInstalled = existing.MasterEnabled;
-
-                            existing.Name = preset.Name;
-                            existing.Icon = preset.Icon;
-                            existing.Description = preset.Description;
-                            existing.LongDescription = preset.LongDescription;
-                            existing.Author = preset.Author;
-                            existing.Version = preset.Version;
-                            existing.RequiresAi = preset.RequiresAi;
-                            existing.AvatarPromptTemplate = preset.AvatarPromptTemplate;
-                            existing.PhrasePools = preset.PhrasePools;
-                            existing.CannedPhrases = preset.CannedPhrases;
-                            existing.Triggers = preset.Triggers;
-                            refreshed++;
-
-                            // If the user already had this preset installed, queue a
-                            // re-install so the new triggers reach the live KeywordTriggers
-                            // list. We flip MasterEnabled = false now so InstallPreset's
-                            // "already installed" guard (line 64 of KeywordTriggerPresetService)
-                            // won't bail out, and we can't call InstallPreset directly here
-                            // because App.KeywordPresets is constructed later in OnStartup.
-                            if (wasInstalled)
-                            {
-                                existing.MasterEnabled = false;
-                                if (!PendingPresetReinstalls.Contains(existing.Id))
-                                    PendingPresetReinstalls.Add(existing.Id);
-                            }
+                            case BuiltInPresetMergeResult.Added: added++; break;
+                            case BuiltInPresetMergeResult.Upgraded: upgraded++; break;
+                            case BuiltInPresetMergeResult.Healed: healed++; break;
                         }
                     }
                     catch (Exception ex)
@@ -610,15 +589,112 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                if (added > 0 || refreshed > 0)
-                    App.Logger?.Information("Awareness presets merged: {Added} added, {Refreshed} refreshed",
-                        added, refreshed);
+                if (added > 0 || upgraded > 0 || healed > 0)
+                    App.Logger?.Information(
+                        "Awareness presets merged: {Added} added, {Upgraded} version-upgraded, {Healed} definition-healed",
+                        added, upgraded, healed);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("MergeBuiltInAwarenessPresets failed: {Error}", ex.Message);
             }
         }
+
+        /// <summary>What <see cref="MergeBuiltInPresetInto"/> did with one bundled preset.</summary>
+        internal enum BuiltInPresetMergeResult
+        {
+            /// <summary>The user removed this built-in — nothing was written.</summary>
+            Skipped,
+            /// <summary>No stored copy existed; the bundled preset was appended, uninstalled.</summary>
+            Added,
+            /// <summary>The bundled Version was strictly newer; definition refreshed and (if it was
+            /// installed) a re-install was queued.</summary>
+            Upgraded,
+            /// <summary>Same version, but the stored definition text differed from the bundled JSON
+            /// (the mojibake case) — it was overwritten from the JSON.</summary>
+            Healed,
+            /// <summary>Same version, identical definition — the copy was a no-op.</summary>
+            Unchanged,
+        }
+
+        /// <summary>
+        /// Merges ONE bundled built-in preset into <paramref name="settings"/>. Pure with respect to
+        /// the app spine (no file IO, no <c>App.*</c>), which is what makes the contract testable.
+        /// See <see cref="MergeBuiltInAwarenessPresets"/> for the full contract; in short: definition
+        /// fields are copied unconditionally, <c>MasterEnabled</c> is user state and is preserved, and
+        /// only a strict version bump touches <paramref name="pendingReinstalls"/>.
+        /// </summary>
+        internal static BuiltInPresetMergeResult MergeBuiltInPresetInto(
+            AppSettings settings,
+            KeywordTriggerPreset preset,
+            ICollection<string> pendingReinstalls)
+        {
+            if (settings == null || preset == null || string.IsNullOrEmpty(preset.Id))
+                return BuiltInPresetMergeResult.Skipped;
+
+            preset.IsBuiltIn = true;
+
+            if (settings.RemovedBuiltInPresetIds.Contains(preset.Id))
+                return BuiltInPresetMergeResult.Skipped;
+
+            var existing = settings.KeywordTriggerPresets.FirstOrDefault(p => p.Id == preset.Id);
+            if (existing == null)
+            {
+                preset.MasterEnabled = false;
+                settings.KeywordTriggerPresets.Add(preset);
+                return BuiltInPresetMergeResult.Added;
+            }
+
+            var wasInstalled = existing.MasterEnabled;
+            var isUpgrade = preset.Version > existing.Version;
+            var textChanged = !DefinitionTextMatches(existing, preset);
+
+            // The bundled JSON owns every definition field, so copy them on EVERY load rather than
+            // only on a version bump — that gate is what froze mojibake into settings.json forever.
+            // MasterEnabled is deliberately NOT touched here: it is the one piece of genuine user
+            // state a stored built-in carries.
+            existing.Name = preset.Name;
+            existing.Icon = preset.Icon;
+            existing.Description = preset.Description;
+            existing.LongDescription = preset.LongDescription;
+            existing.Author = preset.Author;
+            existing.IsBuiltIn = true;
+            existing.RequiresAi = preset.RequiresAi;
+            existing.AvatarPromptTemplate = preset.AvatarPromptTemplate;
+            existing.PhrasePools = preset.PhrasePools;
+            existing.CannedPhrases = preset.CannedPhrases;
+            existing.Triggers = preset.Triggers;
+            existing.Version = preset.Version;
+
+            if (!isUpgrade)
+                return textChanged ? BuiltInPresetMergeResult.Healed : BuiltInPresetMergeResult.Unchanged;
+
+            // Version bump only. If the user already had this preset installed, queue a re-install
+            // so the new triggers reach the live KeywordTriggers list. We flip MasterEnabled = false
+            // now so InstallPreset's "already installed" guard won't bail out, and we can't call
+            // InstallPreset directly here because App.KeywordPresets is constructed later in
+            // OnStartup.
+            if (wasInstalled)
+            {
+                existing.MasterEnabled = false;
+                if (!pendingReinstalls.Contains(existing.Id))
+                    pendingReinstalls.Add(existing.Id);
+            }
+
+            return BuiltInPresetMergeResult.Upgraded;
+        }
+
+        /// <summary>
+        /// True when the stored copy's user-visible definition text already matches the bundled JSON.
+        /// Only used to decide whether the unconditional copy actually changed anything (so the load
+        /// log can say "healed" instead of shouting on every launch).
+        /// </summary>
+        private static bool DefinitionTextMatches(KeywordTriggerPreset existing, KeywordTriggerPreset bundled)
+            => string.Equals(existing.Name, bundled.Name, StringComparison.Ordinal)
+               && string.Equals(existing.Icon, bundled.Icon, StringComparison.Ordinal)
+               && string.Equals(existing.Description, bundled.Description, StringComparison.Ordinal)
+               && string.Equals(existing.LongDescription, bundled.LongDescription, StringComparison.Ordinal)
+               && string.Equals(existing.Author, bundled.Author, StringComparison.Ordinal);
 
         /// <summary>
         /// Synthesize a composable <see cref="KeywordTrigger.Actions"/> list from the

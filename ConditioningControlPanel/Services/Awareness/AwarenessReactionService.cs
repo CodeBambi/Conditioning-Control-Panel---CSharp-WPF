@@ -190,8 +190,10 @@ namespace ConditioningControlPanel.Services.Awareness
         /// </summary>
         internal static AwarenessReaction Parse(string? raw)
         {
+            string? speaker;
+            try { speaker = App.Mods?.GetCompanionName(); } catch { speaker = null; }
             var cleaned = AiTextHygiene.StripMetadataTags(
-                AiTextHygiene.UnwrapSpokenSigil(AiTextHygiene.Clean(raw)));
+                AiTextHygiene.UnwrapSpokenSigil(AiTextHygiene.Clean(raw), speaker));
             if (cleaned.Length == 0) return AwarenessReaction.None("empty");
 
             string? line = null;

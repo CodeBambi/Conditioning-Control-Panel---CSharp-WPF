@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
+using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -32,6 +33,21 @@ namespace ConditioningControlPanel.Features
         private const double RimLightOpacity = 0.85;
         private const int RimLightMs = 150;
         private const int AmbientFrameRate = 24;
+
+        /// <summary>Blur radius for a teased card's art. Tuned to "coloured smear": at the
+        /// mosaic's tile size this leaves a mood and a palette and no recognisable shape, which
+        /// is the whole point - the art must not name the feature.</summary>
+        private const double TeaseBlurRadius = 26;
+
+        /// <summary>A teased card's rim is 2px, not the usual 1px: the livery is the loudest
+        /// thing the card is allowed to say, so it gets to be seen.</summary>
+        private const double TeaseBorderThickness = 2;
+
+        /// <summary>Rounded clip for the card's content, matching RootBorder's inner arc
+        /// (CornerRadius 12 minus the 1px border). A Border never clips its CHILDREN to its
+        /// CornerRadius - ClipToBounds is rectangular - so without this the full-bleed art
+        /// (and its 1.06 hover zoom) paints square corners that poke past the rounded frame.</summary>
+        private const double ContentClipRadius = 11;
 
         private Window? _hostWindow;
         private bool _hovered;
@@ -67,6 +83,10 @@ namespace ConditioningControlPanel.Features
         public static readonly DependencyProperty TierBadgeProperty =
             DependencyProperty.Register(nameof(TierBadge), typeof(string), typeof(FeatureCard),
                 new PropertyMetadata(null, OnTierBadgeChanged));
+
+        public static readonly DependencyProperty TeaseTierProperty =
+            DependencyProperty.Register(nameof(TeaseTier), typeof(int), typeof(FeatureCard),
+                new PropertyMetadata(0, OnTeaseTierChanged));
 
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
@@ -145,6 +165,27 @@ namespace ConditioningControlPanel.Features
             set => SetValue(TierBadgeProperty, value);
         }
 
+        /// <summary>
+        /// Turns this card into a nameless TEASE: 0 = a normal card, 1 = gold livery (a Tier 1
+        /// feature is being teased), 2 = diamond livery (Tier 2). Any other positive value is
+        /// treated as diamond.
+        ///
+        /// <para>A teased card blurs its own art past recognition, veils it, wears a "?" and a
+        /// persistent tier-livery rim, and paints its badge in the same metal. It says the
+        /// feature is coming and what it will cost, and nothing else - no name, no readable
+        /// icon. The card is otherwise untouched: it still clicks, still hovers, still lives on
+        /// the same wall, so the tease is a costume rather than a second control.</para>
+        ///
+        /// <para>Generic on purpose. Teasing a different feature later is a matter of moving
+        /// this one property (see the switch block at the top of
+        /// <c>MainWindow.TeaseCard.cs</c>), not of writing another card.</para>
+        /// </summary>
+        public int TeaseTier
+        {
+            get => (int)GetValue(TeaseTierProperty);
+            set => SetValue(TeaseTierProperty, value);
+        }
+
         public event RoutedEventHandler Click
         {
             add => AddHandler(ClickEvent, value);
@@ -171,6 +212,7 @@ namespace ConditioningControlPanel.Features
             // HelpButtonStyle / HelpTooltipStyle / PinkBrush live.
             Loaded += OnCardLoaded;
             Unloaded += OnCardUnloaded;
+            IsVisibleChanged += OnCardVisibilityChanged;
             MouseEnter += OnCardMouseEnter;
             MouseLeave += OnCardMouseLeave;
         }
@@ -242,6 +284,76 @@ namespace ConditioningControlPanel.Features
             }
             c.TxtTierBadge.Text = text;
             c.TierBadgeHost.Visibility = Visibility.Visible;
+            // A teased card's badge is worn in the livery metal, not in pink. Re-applied here
+            // (not only on the TeaseTier change) because the two properties are written in
+            // whichever order the caller happens to use, and the badge is rewritten far more
+            // often than the tease is.
+            if (c.TeaseTier > 0) c.ApplyTeaseState();
+        }
+
+        private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is FeatureCard c) c.ApplyTeaseState();
+        }
+
+        /// <summary>
+        /// Puts on (or takes off) the tease costume. Fully reversible: the day the teased feature
+        /// ships, <c>TeaseTier = 0</c> restores the card byte-for-byte to what it shipped as -
+        /// which is why the border and badge colours are restored with
+        /// <see cref="FrameworkElement.SetResourceReference"/> rather than cleared, so they go
+        /// back to tracking the theme instead of being frozen at whatever the theme was.
+        /// </summary>
+        private void ApplyTeaseState()
+        {
+            try
+            {
+                if (TeaseHost == null || RootBorder == null) return;
+
+                if (TeaseTier <= 0)
+                {
+                    TeaseHost.Visibility = Visibility.Collapsed;
+                    ImgIconHost.Effect = null;
+                    GlyphHost.Effect = null;
+                    Controls.TierFxBorder.SetTier(RootBorder, 0);
+                    RootBorder.SetResourceReference(Border.BorderBrushProperty, "GlassBorderBrush");
+                    RootBorder.BorderThickness = new Thickness(1);
+                    TierBadgeHost.SetResourceReference(Border.BorderBrushProperty, "PinkBrush");
+                    TxtTierBadge.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
+                    return;
+                }
+
+                var livery = TierLivery.BorderBrush(TeaseTier);
+
+                // ONE BlurEffect instance shared by both art hosts: only one of them is ever
+                // visible (icon XOR glyph), and a frozen-shape effect is cheaper than two.
+                // Performance rendering bias on purpose - this is a smear, not a lens.
+                var blur = new BlurEffect
+                {
+                    Radius = TeaseBlurRadius,
+                    KernelType = KernelType.Gaussian,
+                    RenderingBias = RenderingBias.Performance,
+                };
+                ImgIconHost.Effect = blur;
+                GlyphHost.Effect = blur;
+
+                TxtTeaseGlyph.Foreground = livery;
+                TeaseHost.Visibility = Visibility.Visible;
+
+                RootBorder.BorderBrush = livery;
+                RootBorder.BorderThickness = new Thickness(TeaseBorderThickness);
+                TierBadgeHost.BorderBrush = livery;
+                TxtTierBadge.Foreground = livery;
+
+                // Living metal, same band the Play wall and the vault wear - the tease tile is the
+                // one mosaic tile carrying a livery, so it gets the livery's motion too. NO image
+                // badge here: a mosaic tile is ~150px wide and the neon sign art would swallow it,
+                // so the tease keeps its text pill (the "◆" above) and only the rim comes alive.
+                // RimThickness matches the stroke set above; the tile parks its own clock when the
+                // dashboard is hidden, via the adorner's visibility hook.
+                Controls.TierFxBorder.SetRimThickness(RootBorder, TeaseBorderThickness);
+                Controls.TierFxBorder.SetTier(RootBorder, TeaseTier);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyTeaseState: {E}", ex.Message); }
         }
 
         private static void OnHelpSectionIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -310,11 +422,17 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.RefreshFx: {E}", ex.Message); }
         }
 
-        /// <summary>The single gate for this card's ambient clock: window focus + motion + tier.</summary>
+        /// <summary>The single gate for this card's ambient clock: visibility + window focus +
+        /// motion + tier.</summary>
         private bool AmbientAllowed
         {
             get
             {
+                // A Forever clock on a collapsed tab burns a composition slot for the rest of the
+                // session with nothing on screen to show for it. The card stays Loaded when its
+                // tab is hidden - only IsVisible goes false - so Unloaded is not the hook that
+                // catches this; IsVisibleChanged (wired in the ctor) is.
+                if (!IsVisible) return false;
                 var w = _hostWindow;
                 if (w != null && (!w.IsActive || w.WindowState == WindowState.Minimized)) return false;
                 return MotionFx.AllowAmbientLoops;
@@ -383,6 +501,19 @@ namespace ConditioningControlPanel.Features
             target.BeginAnimation(property, null);
         }
 
+        private void OnContentRootSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            try
+            {
+                double w = ContentRoot.ActualWidth, h = ContentRoot.ActualHeight;
+                if (w <= 0 || h <= 0) { ContentRoot.Clip = null; return; }
+                var clip = new RectangleGeometry(new Rect(0, 0, w, h), ContentClipRadius, ContentClipRadius);
+                clip.Freeze();
+                ContentRoot.Clip = clip;
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.OnContentRootSizeChanged: {E}", ex.Message); }
+        }
+
         private void OnCardLoaded(object sender, RoutedEventArgs e)
         {
             RefreshHelpTooltip();
@@ -426,6 +557,10 @@ namespace ConditioningControlPanel.Features
 
         private void OnHostWindowStateish(object? sender, EventArgs e) => RefreshFx();
 
+        /// <summary>Tab hidden = clock stopped, tab shown again = clock re-armed. RefreshFx is
+        /// idempotent, so this needs no latch of its own.</summary>
+        private void OnCardVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => RefreshFx();
+
         private void OnCardMouseEnter(object sender, MouseEventArgs e) => ApplyHover(true);
 
         private void OnCardMouseLeave(object sender, MouseEventArgs e) => ApplyHover(false);
@@ -433,6 +568,11 @@ namespace ConditioningControlPanel.Features
         /// <summary>
         /// Hover: a 1.02 lift plus the rim-light. RenderTransform only, so the tile never takes
         /// layout with it - the 6px margin on RootBorder is the headroom the lift paints into.
+        ///
+        /// The art inside gets the separate 1.06 "hover pop" (scale + wobble). It is driven from
+        /// here rather than from ImgIconHost's own MouseEnter because the art sits under the
+        /// gradient/rim/locked overlays - the card's hover is the honest trigger. RootBorder's
+        /// ClipToBounds keeps the zoom inside the rounded frame, which is the intended look.
         /// </summary>
         private void ApplyHover(bool on)
         {
@@ -445,6 +585,7 @@ namespace ConditioningControlPanel.Features
                 if (IsLocked) on = false;
 
                 MotionFx.HoverLift(RootBorder, on);
+                if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);
 
                 if (RimLight == null) return;
                 double to = on ? RimLightOpacity : 0;

@@ -75,7 +75,8 @@ public class PlayDoorRenderTests
     [Fact]
     public void TheWholePlayDoorRealizes()
     {
-        // Sixteen cards in one tree. This is the test that would catch a card whose
+        // The whole wall in one tree (the 0812 remake trimmed it to nine cards across eleven
+        // slots). This is the test that would catch a card whose
         // StaticResource lived in LabTabView's Grid.Resources: a UserControl's XAML is parsed
         // before it is attached to MainWindow, so a key that did not travel never resolves.
         OnStaThread(() => Realize(new PlayTabView()));
@@ -107,7 +108,9 @@ public class PlayDoorRenderTests
         // width (1429px of content after the StackPanel's 20px margin: /3 = 476, /2 = 714). A zone
         // that quietly gained a column, or a card that escaped into the wrong zone, halves a
         // card's width — and the wall's own comment says the fixed Columns exist precisely so a
-        // hidden neighbour (the Deeper card follows EnableDeeper) cannot restretch the row.
+        // hidden neighbour cannot restretch the row. Since the 0812 remake: TOGETHER is the
+        // 2-column zone, EYES and SESSIONS are the 3-column ones, and DTRH / the webcam chip /
+        // the Loom strip span the whole wall.
         //
         // The real clip sweep still belongs to the UIA play-test; this only proves the geometry
         // cannot regress below the contracted floor.
@@ -121,12 +124,10 @@ public class PlayDoorRenderTests
                 var slot = (FrameworkElement)page.FindName(name)!;
                 if (slot.Visibility != Visibility.Visible) continue;
 
-                // 2-column EYES zone vs the 3-column zones; SlotDtrh and SlotWebcamChip span the
-                // whole wall.
                 var floor = name switch
                 {
-                    "SlotDtrh" or "SlotWebcamChip" => 900.0,
-                    "SlotGaze" or "SlotFocusGaze" => 640.0,
+                    "SlotDtrh" or "SlotWebcamChip" or "SlotLoom" => 900.0,
+                    "SlotGoon" or "SlotRemoteControl" => 640.0,
                     _ => 400.0,
                 };
 
@@ -157,7 +158,9 @@ public class PlayDoorRenderTests
                 .Where(f => typeof(DependencyObject).IsAssignableFrom(f.FieldType))
                 .ToList();
 
-            Assert.True(fields.Count >= 60,
+            // ~57 named elements since the 0812 remake dropped five cards; the floor exists to
+            // catch the sweep silently seeing zero BAML fields, not to pin the exact count.
+            Assert.True(fields.Count >= 50,
                 $"only {fields.Count} named elements found on PlayTabView — the sweep is not seeing the BAML fields");
 
             var broken = fields.Where(f => f.GetValue(page) == null).Select(f => f.Name).ToList();
@@ -177,9 +180,9 @@ public class PlayDoorRenderTests
     /// </summary>
     private static readonly string[] SlotNames =
     {
-        "SlotDtrh", "SlotGoon", "SlotRemoteControl", "SlotAvailableSubjects", "SlotWebcamChip",
-        "SlotGaze", "SlotFocusGaze", "SlotGradedIntake", "SlotBlinkTrainer", "SlotFyp",
-        "SlotMantra", "SlotLockdown", "SlotDeeper", "SlotBureau", "SlotLoom", "SlotShowcase",
+        "SlotDtrh", "SlotGoon", "SlotRemoteControl", "SlotWebcamChip",
+        "SlotGaze", "SlotFocusGaze", "SlotBlinkTrainer",
+        "SlotGradedIntake", "SlotFyp", "SlotLockdown", "SlotLoom",
     };
 
     [Fact]
@@ -209,9 +212,8 @@ public class PlayDoorRenderTests
         var buttons = new[]
         {
             "BtnPlayFallIn", "BtnPlayQuickDrop", "BtnPlayGoon", "BtnPlayRemoteControl",
-            "BtnPlayAvailableSubjects", "BtnPlayGazeMinigame", "BtnPlayGradedIntake",
-            "BtnPlayBlinkTrainer", "BtnPlayFyp", "BtnPlayMantra", "BtnPlayLockdown",
-            "BtnPlayDeeper", "BtnPlayBureau", "BtnPlayLoom", "BtnPlayShowcase",
+            "BtnPlayGazeMinigame", "BtnPlayGradedIntake", "BtnPlayBlinkTrainer",
+            "BtnPlayFyp", "BtnPlayLockdown", "BtnPlayLoom",
         };
 
         OnStaThread(() =>
@@ -324,7 +326,42 @@ public class PlayDoorRenderTests
         ("PlayRemoteHeroBrush",   "features/remote_control.png"),
         ("PlayFypHeroBrush",      "features/fyp.png"),
         ("PlayLockdownHeroBrush", "lockdown_icon.png"),
+        // 0812 remake: the hero and the Loom strip carry art too. The named-and-mutable contract
+        // was already in place then; the mod-awareness sweep (0813) spent it, so playHeroMap now
+        // mutates these two on every mod switch like the eight above it. Before that, a .ccpmod
+        // overriding features/dtrh.png repainted every OTHER surface using that file and left the
+        // biggest one on the embedded art.
+        ("PlayDtrhHeroBrush",     "features/dtrh.png"),
+        ("PlayLoomHeroBrush",     "features/loom.png"),
     };
+
+    /// <summary>
+    /// Every brush above must actually appear in <c>playHeroMap</c>, paired with the path listed.
+    /// The list is otherwise a statement of intent that a XAML-only change keeps satisfying while
+    /// the wall goes stale - which is exactly the state the two rows below were in until 0813.
+    /// Read out of the source, because the map is a local in <c>LoadFeatureImages</c> and there is
+    /// nothing to reflect over.
+    /// </summary>
+    [Fact]
+    public void PlayHeroMapFeedsEveryHeroBrush()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+
+        var start = source.IndexOf("var playHeroMap", StringComparison.Ordinal);
+        Assert.True(start >= 0, "playHeroMap is gone from MainWindow.xaml.cs - the Play wall no longer repaints on a mod switch");
+        var end = source.IndexOf("};", start, StringComparison.Ordinal);
+        Assert.True(end > start, "playHeroMap's initializer did not terminate - the scrape is wrong, not the map");
+        var map = source.Substring(start, end - start);
+
+        foreach (var (brush, path) in HeroBrushes)
+        {
+            Assert.True(map.Contains(brush, StringComparison.Ordinal),
+                $"{brush} is not in playHeroMap - its card never repaints on a mod switch");
+            Assert.True(map.Contains($"\"{path}\"", StringComparison.Ordinal),
+                $"playHeroMap does not feed {path} - the mod contract path for {brush}");
+        }
+    }
 
     [Fact]
     public void EveryHeroBrushIsNamedAndStillMutable()
@@ -360,33 +397,22 @@ public class PlayDoorRenderTests
     }
 
     // =====================================================================================
-    //  the mantra rescue
+    //  the mantra rescue — retired with the card
     // =====================================================================================
 
     [Fact]
-    public void TheMantraRepPickerOnlyOffersCountsTheServiceAccepts()
+    public void TheMantraEntryPointSurvivesTheCardsRemoval()
     {
-        // MantraService.StartSession clamps to 1..100. A Tag that does not parse silently falls
-        // back to the card's own 25, and a count outside the clamp silently becomes a different
-        // session than the one the user picked.
-        OnStaThread(() =>
-        {
-            var page = new PlayTabView();
-            Realize(page);
-
-            var combo = page.FindName("CmbPlayMantraReps") as ComboBox;
-            Assert.True(combo != null, "CmbPlayMantraReps is missing — the Mantra card cannot supply a rep count");
-            Assert.NotEmpty(combo!.Items);
-
-            foreach (ComboBoxItem item in combo.Items)
-            {
-                Assert.True(item.Tag is string tag && int.TryParse(tag, out var n) && n >= 1 && n <= 100,
-                    $"mantra rep option '{item.Content}' has an unusable Tag '{item.Tag}'");
-            }
-
-            // Something has to be selected up front, or the first click silently uses the fallback.
-            Assert.True(combo.SelectedIndex >= 0, "the mantra rep picker starts with no selection");
-        });
+        // The 0812 remake removed the Mantra card (and its rep picker) from the wall, which made
+        // this page's card the app's ONLY entry point no more — MantraWindow is orphaned until an
+        // owner call re-homes it. StartMantraSession is the one method that knows the window
+        // needs StartSession(n) before load, so it must survive the interregnum: deleting it
+        // "because nothing calls it" would turn the re-home from a one-line change into an
+        // archaeology dig.
+        var m = typeof(global::ConditioningControlPanel.MainWindow)
+            .GetMethod("StartMantraSession", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        Assert.True(m != null,
+            "MainWindow.StartMantraSession is gone — MantraWindow now has no viable entry point left to re-home");
     }
 
     // =====================================================================================
@@ -559,6 +585,113 @@ public class PlayDoorRenderTests
             dir = dir.Parent;
         Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
         return dir!.FullName;
+    }
+
+    // =====================================================================================
+    //  tier livery: the stamped signs, and the FREE TODAY re-stamp
+    // =====================================================================================
+
+    /// <summary>
+    /// Wheel keys that legitimately have no card on this door, so their free day is announced on
+    /// the dashboard and in the vault instead. Listed rather than inferred: the whole point of the
+    /// test below is to make ADDING a wheel key a decision somebody has to write down.
+    /// </summary>
+    private static readonly string[] PoolKeysWithNoPlayCard = { "takeover", "awareness" };
+
+    [Fact]
+    public void TheTieredPlayCardsWearTheirOwnTiersSign()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+
+            // Gold on the two premium cards, diamond on the door's one Lab hero. A sign wearing
+            // the wrong tier is a price tag quoting the wrong price.
+            Assert.Equal(1, page.PlayBadgeFyp.Tier);
+            Assert.Equal(1, page.PlayBadgeRemote.Tier);
+            Assert.Equal(2, page.PlayBadgeDtrh.Tier);
+        });
+    }
+
+    [Fact]
+    public void EveryFeatureOnTheDailyWheelEitherHasAStampedPlayCardOrIsKnownNotTo()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+
+            var stamped = new Dictionary<string, ConditioningControlPanel.Controls.TierBadge>
+            {
+                ["fyp"] = page.PlayBadgeFyp,
+                ["remote"] = page.PlayBadgeRemote,
+            };
+
+            // The failure this catches: someone appends a key to DailyFreeService.Pool whose
+            // feature DOES have a Play card. The card's lockband would clear on its free day (the
+            // band already passes its key to TierGate) and nothing would replace it - the wall
+            // would go quiet on the one day the feature is free.
+            foreach (var key in DailyFreeService.Pool)
+            {
+                if (PoolKeysWithNoPlayCard.Contains(key)) continue;
+                Assert.True(stamped.ContainsKey(key),
+                    $"'{key}' is on the daily-free wheel with no Play badge wired to it, and is not "
+                    + "on the list of wheel keys known to have no card on this door");
+                Assert.True(stamped[key].Tier > 0, $"the '{key}' badge carries no tier to stamp over");
+            }
+
+            // ...and the exemption list cannot rot either: a key dropped from the wheel must not
+            // go on being excused here.
+            foreach (var key in PoolKeysWithNoPlayCard)
+                Assert.Contains(key, DailyFreeService.Pool);
+        });
+    }
+
+    [Fact]
+    public void APlayCardsSignGetsRestampedOnItsFreeDayAndPlainAgainAfterwards()
+    {
+        OnStaThread(() =>
+        {
+            var page = new PlayTabView();
+            Realize(page);
+            var badge = page.PlayBadgeFyp;
+
+            // What MainWindow.PlayTab.cs writes on the day the wheel lands on For You.
+            badge.FreeToday = true;
+
+            Assert.Equal(Visibility.Visible, badge.StampImage.Visibility);
+            // The tier sign stays, dimmed - "this normally costs Tier 1, except today". A sign
+            // that vanished would leave the card claiming the feature was always free.
+            Assert.Equal(Visibility.Visible, badge.TierImage.Visibility);
+            Assert.True(badge.TierImage.Opacity < 0.5,
+                $"the re-stamped sign is still at {badge.TierImage.Opacity} - the stamp has nothing to overrule");
+
+            // Midnight, or a patron logging in.
+            badge.FreeToday = false;
+
+            Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);
+            Assert.Equal(1.0, badge.TierImage.Opacity, 3);
+        });
+    }
+
+    [Fact]
+    public void APlayCardWearsNoStampUntilItIsToldItIsFree()
+    {
+        OnStaThread(() =>
+        {
+            // The resting state of the whole wall: signs, no stamps. In a test host App.DailyFree
+            // is null, which is also the early-startup case - and a badge that stamped itself by
+            // default would put FREE TODAY on all four gold cards at once.
+            var page = new PlayTabView();
+            Realize(page);
+
+            foreach (var badge in new[] { page.PlayBadgeFyp, page.PlayBadgeRemote, page.PlayBadgeDtrh })
+            {
+                Assert.False(badge.FreeToday);
+                Assert.Equal(Visibility.Collapsed, badge.StampImage.Visibility);
+            }
+        });
     }
 
     /// <summary>

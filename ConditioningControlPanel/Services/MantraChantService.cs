@@ -90,10 +90,14 @@ namespace ConditioningControlPanel.Services
                 _mutedIdle = false;
             }
             if (!wasActive) return;
-            try { _gapTimer?.Stop(); _gapTimer = null; } catch { }
-            StopMuteWatch();
+
+            // Audio teardown FIRST and inline. Panic reaches us off-thread, and both timer stops
+            // below have to hop the dispatcher — a wedged UI thread must never be the reason she
+            // keeps talking. DisposeOutput unsubscribes before it stops, so nothing re-queues.
             DisposeOutput();
             _pending.Clear(); // never resume into the back half of a mantra from a previous run
+            StopGapTimer();
+            StopMuteWatch();
             App.Logger?.Debug("MantraChantService: chant stopped.");
         }
 
@@ -116,6 +120,20 @@ namespace ConditioningControlPanel.Services
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("MantraChantService.StopAndDisarm error: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Panic FALLBACK entry point, callable from any thread. Same runtime teardown as
+        /// <see cref="Stop"/> — audio down inline first, timers routed through the dispatcher — but
+        /// it deliberately writes NO persisted setting. <see cref="StopAndDisarm"/> is the user's
+        /// panic and clearing <c>MantraChantEnabled</c> is the point of it; an automatic path
+        /// (watchdog, KillAllAudio) firing that same method silently wiped the user's opt-in on a
+        /// false alarm, so the automatic fallbacks call this instead.
+        /// </summary>
+        public void StopEmergency()
+        {
+            Stop();
+            App.Logger?.Debug("MantraChantService: emergency stop — persisted MantraChantEnabled left untouched.");
         }
 
         /// <summary>Push the current MantraChantVolume onto a clip that's already playing (live slider drag).</summary>
@@ -187,11 +205,27 @@ namespace ConditioningControlPanel.Services
             _muteWatch.Start();
         }
 
+        // Both timer stops below clear the FIELD first and only then hop the dispatcher for the
+        // .Stop() itself. DispatcherTimer.Stop() throws VerifyAccess off the UI thread, and doing it
+        // the other way round meant the throw ate the null assignment with it — the field kept
+        // pointing at a timer that was still enabled (same hazard OnPlaybackStopped calls out).
+        // DispatcherHelper.RunOnUI is a BeginInvoke, so it is safe from any thread and runs inline
+        // when we are already on the UI thread.
+        private void StopGapTimer()
+        {
+            var timer = _gapTimer;
+            _gapTimer = null;
+            if (timer == null) return;
+            Helpers.DispatcherHelper.RunOnUI(() => { try { timer.Stop(); } catch { } });
+        }
+
         private void StopMuteWatch()
         {
-            try { _muteWatch?.Stop(); } catch { }
-            if (_muteWatch != null) _muteWatch.Tick -= OnMuteWatchTick;
+            var timer = _muteWatch;
             _muteWatch = null;
+            if (timer == null) return;
+            timer.Tick -= OnMuteWatchTick;   // a plain event; no thread affinity, unlike Stop()
+            Helpers.DispatcherHelper.RunOnUI(() => { try { timer.Stop(); } catch { } });
         }
 
         private void OnMuteWatchTick(object? sender, EventArgs e)
@@ -204,7 +238,7 @@ namespace ConditioningControlPanel.Services
                 // Nothing queued and nothing playing ⇒ already parked, so don't log every tick.
                 if (_output == null && _gapTimer == null) return;
                 App.Logger?.Debug("MantraChantService: companion muted — dropping the chant clip.");
-                try { _gapTimer?.Stop(); _gapTimer = null; } catch { }
+                StopGapTimer();
                 DisposeOutput(); // unsubscribes first, so this doesn't re-queue through OnPlaybackStopped
                 _pending.Clear(); // both halves go — she doesn't come back mid-mantra
                 lock (_lock) _mutedIdle = true;
@@ -326,18 +360,21 @@ namespace ConditioningControlPanel.Services
             if (_disposed) return;
             lock (_lock) { if (!_running) return; }
 
-            try { _gapTimer?.Stop(); } catch { }
+            StopGapTimer();
             var wait = _pending.Count > 0
                 ? PairBeat
                 : TimeSpan.FromSeconds(Math.Clamp(App.Settings?.Current?.MantraChantGapSeconds ?? 5, 0, 60));
-            _gapTimer = new DispatcherTimer { Interval = wait };
-            _gapTimer.Tick += (_, _) =>
+            // The tick captures its OWN timer: a stop that already replaced the field must not have
+            // the newly installed timer nulled out from under it by an older tick draining late.
+            var timer = new DispatcherTimer { Interval = wait };
+            timer.Tick += (_, _) =>
             {
-                try { _gapTimer?.Stop(); } catch { }
-                _gapTimer = null;
+                try { timer.Stop(); } catch { }   // on the UI thread here, so Stop() is safe inline
+                if (ReferenceEquals(_gapTimer, timer)) _gapTimer = null;
                 PlayNext();
             };
-            _gapTimer.Start();
+            _gapTimer = timer;
+            timer.Start();
         }
 
         // Tear down the current output + reader. Unsubscribe FIRST so our own Stop() doesn't re-enter

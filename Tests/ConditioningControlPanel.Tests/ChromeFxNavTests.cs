@@ -29,6 +29,8 @@ public class ChromeFxNavTests
     [InlineData("presets", 2)]      // Studio
     [InlineData("lab", 8)]          // Play, first entry
     [InlineData("assets", 22)]      // Library, last row on the rail
+    // No "justdrop" row: the shop became a window (JustDropHostService), so it left the rail and
+    // "appsettings" moved back from 24 to 23. A key that is not on the strip indexes -1.
     [InlineData("appsettings", 23)] // Settings, pinned below everything
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));

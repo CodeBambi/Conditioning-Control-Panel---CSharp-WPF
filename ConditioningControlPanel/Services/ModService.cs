@@ -216,6 +216,12 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Before the backup is taken: a running session restores its start-of-session pool
+            // snapshot when it ends, which would revert this edit (and, via the snapshot-preferring
+            // backup below, revert it on the next launch too). Teach the snapshot about it first (#906).
+            try { SessionEngine.Active?.NoteUserPhrasePoolEdit(e.PropertyName); }
+            catch (Exception ex) { _log?.Debug("ModService: session snapshot update failed: {Error}", ex.Message); }
+
             SaveCurrentPoolsToSettings(_activeMod.Id);
             _log?.Debug("ModService: synced active pools to per-mod backup for {ModId}", _activeMod.Id);
         }
@@ -609,6 +615,10 @@ namespace ConditioningControlPanel.Services
                 if (manifest.Identity.TakeoverLabel?.Length > 200) manifest.Identity.TakeoverLabel = manifest.Identity.TakeoverLabel[..200];
                 if (manifest.Identity.Affirmation?.Length > 200) manifest.Identity.Affirmation = manifest.Identity.Affirmation[..200];
                 if (manifest.Identity.RankSubject?.Length > 200) manifest.Identity.RankSubject = manifest.Identity.RankSubject[..200];
+                // Descent vocabulary. Capped shorter than the rest on purpose: these are substituted
+                // INTO sentences, so a 200-char "pet name" would blow out every layout it lands in.
+                if (manifest.Identity.PetName?.Length > 40) manifest.Identity.PetName = manifest.Identity.PetName[..40];
+                if (manifest.Identity.Collective?.Length > 40) manifest.Identity.Collective = manifest.Identity.Collective[..40];
             }
             if (manifest.Messages != null)
             {
@@ -821,6 +831,24 @@ namespace ConditioningControlPanel.Services
             try { BambiSprite.InvalidateStablePrompt(); }
             catch (Exception ex) { _log?.Debug("ActivateMod: prompt cache invalidation failed: {E}", ex.Message); }
 
+            // The companion identity changed with the mod, so the chat history's voice did too.
+            // Same two moves PersonalityService.SetActivePreset makes for a preset switch, because
+            // history out-few-shots any prompt change: fence pre-switch assistant turns out of the
+            // wire window, and drop the bark echoes recorded under the OLD companion name — the
+            // fence deliberately keeps BarkEcho turns, so «OldName said aloud: …» would otherwise
+            // sit next to the new mod's echoes and the model roleplays a two-speaker transcript
+            // (observed 2026-08-13, Bambi → Drone).
+            try
+            {
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+                    App.Settings.Save();
+                }
+                App.Brain?.OnModSwitched();
+            }
+            catch (Exception ex) { _log?.Debug("ActivateMod: companion voice fence failed: {E}", ex.Message); }
+
             // If the active companion isn't supported by the new mod, fall back to first supported companion
             if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
             {
@@ -859,9 +887,35 @@ namespace ConditioningControlPanel.Services
             return baseFallback(_baseMod.Manifest);
         }
 
+        // ---- The event override, consulted FIRST -------------------------------
+        //
+        // A world event dresses EVERY mod, which is why it sits above the mod chain
+        // rather than inside it: Snowglobe has to turn the drone's cyan cold too, and
+        // a per-mod implementation would mean shipping an event palette per mod
+        // forever. One link at the top of the chain does it once.
+        //
+        // DORMANT IN THIS BUILD. Nothing arms LiveEventService, so EventAccentHex is
+        // always null here and every getter below resolves exactly as it did before
+        // this seam existed — same string, same call count, same brushes.
+        //
+        // Deliberately NOT overridden: background/panel/surface. Those are the app's
+        // structural darks; an event tints the accents that read as "the app's
+        // colour", it does not repaint the chrome out from under the user's mod.
+
+        /// <summary>The active event's accent, or null. Already validated as #RRGGBB(AA).</summary>
+        private static string? EventAccentHex => App.LiveEvent?.AccentHex;
+
+        /// <summary>
+        /// Event first, then whatever the mod chain would have said. Split out and
+        /// pure so the precedence is testable without a live ModService or an event.
+        /// </summary>
+        internal static string ResolveEventThemeHex(string? eventHex, string modHex)
+            => string.IsNullOrWhiteSpace(eventHex) ? modHex : eventHex!;
+
         // Theme colors
         public string GetAccentColorHex() =>
-            GetStringValue(m => m.Theme?.AccentColor, m => m.Theme!.AccentColor!);
+            ResolveEventThemeHex(EventAccentHex,
+                GetStringValue(m => m.Theme?.AccentColor, m => m.Theme!.AccentColor!));
 
         public (byte R, byte G, byte B) GetAccentColorRgb()
         {
@@ -869,11 +923,20 @@ namespace ConditioningControlPanel.Services
             return ParseHexColor(hex);
         }
 
+        // The light/dark rims are DERIVED from the event accent rather than taken from
+        // the mod, because a half-applied palette is worse than none: the mod's hot-pink
+        // hover rim around an event's cold-blue button is the exact incoherence this
+        // override exists to avoid. Shade factors match the ±18% the app's own
+        // LightenColor/DarkenColor use for the same pair.
         public string GetAccentLightColorHex() =>
-            GetStringValue(m => m.Theme?.AccentLightColor, m => m.Theme!.AccentLightColor!);
+            EventAccentHex is { } ev
+                ? ShadeHex(ev, 1.18)
+                : GetStringValue(m => m.Theme?.AccentLightColor, m => m.Theme!.AccentLightColor!);
 
         public string GetAccentDarkColorHex() =>
-            GetStringValue(m => m.Theme?.AccentDarkColor, m => m.Theme!.AccentDarkColor!);
+            EventAccentHex is { } ev
+                ? ShadeHex(ev, 0.82)
+                : GetStringValue(m => m.Theme?.AccentDarkColor, m => m.Theme!.AccentDarkColor!);
 
         // Background colors
         public string GetBackgroundColorHex() =>
@@ -886,7 +949,8 @@ namespace ConditioningControlPanel.Services
             GetStringValue(m => m.Theme?.SurfaceColor, m => m.Theme?.SurfaceColor ?? "#1E1E3A");
 
         public string GetFilterColorHex() =>
-            GetStringValue(m => m.Theme?.FilterColor, m => m.Theme?.FilterColor ?? m.Theme!.AccentColor!);
+            ResolveEventThemeHex(EventAccentHex,
+                GetStringValue(m => m.Theme?.FilterColor, m => m.Theme?.FilterColor ?? m.Theme!.AccentColor!));
 
         public (byte R, byte G, byte B) GetFilterColorRgb()
         {
@@ -911,10 +975,28 @@ namespace ConditioningControlPanel.Services
             return FxDefaultHex;
         }
 
+        /// <summary>
+        /// Chain: EVENT accent → fxPalette slot → theme.filterColor → theme.accentColor
+        /// → app default. The event link is the only addition; the four behind it are
+        /// untouched, and with no event running this is the old three-link resolve.
+        /// </summary>
         private string GetFxSlotHex(Func<ModManifest, string?> slot)
         {
             var m = _activeMod.Manifest;
-            return ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor);
+            return ResolveEventThemeHex(EventAccentHex,
+                ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor));
+        }
+
+        /// <summary>
+        /// Scale a #RRGGBB toward white (factor &gt; 1) or black (factor &lt; 1), clamped per
+        /// channel. Same shape as MainWindow's LightenColor/DarkenColor, kept here so the
+        /// event rims can be derived without ModService reaching into the window.
+        /// </summary>
+        internal static string ShadeHex(string hex, double factor)
+        {
+            var (r, g, b) = ParseHexColor(hex);
+            static byte Scale(byte c, double f) => (byte)Math.Clamp(Math.Round(c * f), 0, 255);
+            return $"#{Scale(r, factor):X2}{Scale(g, factor):X2}{Scale(b, factor):X2}";
         }
 
         public string GetMistColorHex() => GetFxSlotHex(m => m.FxPalette?.MistColor);
@@ -987,6 +1069,23 @@ namespace ConditioningControlPanel.Services
             if (!string.IsNullOrEmpty(rank)) return rank;
             return GetUserTerm();
         }
+
+        // ---- Descent vocabulary ({petname} / {collective}) ----
+        // These deliberately return NULL rather than a default, and deliberately do NOT walk the
+        // ActiveMod → BaseMod chain the other accessors use. The base mod (CCP Default) carries
+        // UserTerm "Subject", which is a UI label, not the vanilla narrative pet name — routing
+        // through it would silently make "Subject" the vanilla answer and bury the real default.
+        // The one owner of the default is Localization.VocabTokens; null here means "this mod has
+        // no opinion, use the vanilla word".
+
+        /// <summary>Active mod's <c>{petname}</c> override, or null when it sets none.</summary>
+        public string? GetPetNameOverride() => NullIfBlank(_activeMod.Manifest.Identity?.PetName);
+
+        /// <summary>Active mod's <c>{collective}</c> override, or null when it sets none.</summary>
+        public string? GetCollectiveOverride() => NullIfBlank(_activeMod.Manifest.Identity?.Collective);
+
+        private static string? NullIfBlank(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         // Pool defaults
         public Dictionary<string, bool> GetDefaultSubliminalPool() =>
@@ -1388,14 +1487,30 @@ namespace ConditioningControlPanel.Services
             var json = JsonConvert.SerializeObject(template, Formatting.Indented);
             File.WriteAllText(Path.Combine(outputFolder, "mod.json"), json);
 
-            // Create resource subdirectories
+            // Create resource subdirectories.
+            //
+            // These mirror the app's own Resources/ tree, because mod art is pure PATH
+            // SHADOWING: a file at resources/<path> replaces the embedded Resources/<same
+            // path>. An empty folder here is the hint for where each kind of art goes -- the
+            // folders a hand-built mod never discovers are the ones it never overrides.
             var resourcesDir = Path.Combine(outputFolder, "resources");
             Directory.CreateDirectory(resourcesDir);
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "achievements"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "features"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "skills"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "spirals"));
-            Directory.CreateDirectory(Path.Combine(resourcesDir, "Cards"));
+            foreach (var sub in new[]
+                     {
+                         "achievements",   // trophy-case badges
+                         "features",       // feature icons, dashboard tiles, Play wall heroes
+                         "skills",         // skill tree nodes
+                         "spirals",        // spiral overlay frames
+                         "Cards",          // session-complete cards
+                         "nav",            // left rail doors (door_*.png)
+                         "programs",       // program heroes / plates / banners / sigils
+                         "quests",         // daily + weekly quest art
+                         "intake",         // weekly pass cards (pass_card*.png)
+                         "exclusives",     // vault backdrop and friends
+                     })
+            {
+                Directory.CreateDirectory(Path.Combine(resourcesDir, sub));
+            }
 
             _log?.Information("Mod template generated at {Path}", outputFolder);
         }

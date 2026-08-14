@@ -375,9 +375,10 @@ namespace ConditioningControlPanel
             ApplyAchievementCardTooltip(parts, unlocked);
 
             // The card carries the transforms the entrance stagger and the unlock reveal need;
-            // the badge host carries the hover tilt. Two separate transform groups on purpose.
+            // the badge host carries the hover tilt; the badge Image carries the hover pop.
+            // Three separate transform groups on purpose - each animator owns exactly one.
             EnsureCardTransforms(card);
-            PrepareAchievementTileFx(card, unlocked, badgeHost);
+            PrepareAchievementTileFx(card, unlocked, badgeHost, image);
 
             return card;
         }
@@ -665,9 +666,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Brings one card back in line with the live unlock state: badge blur, name, tooltip,
-        /// hover-tilt eligibility, the reward strip, the body (only if it was ever built) and the
-        /// reward counter.
+        /// Brings one card back in line with the live unlock state: badge ART, badge blur, name,
+        /// tooltip, hover-tilt eligibility, the reward strip, the body (only if it was ever built)
+        /// and the reward counter.
+        ///
+        /// <para>The art is re-resolved rather than left alone because both shipped .ccpmod archives
+        /// override all 58 achievement PNGs, and this method is the ONLY thing that ever repaints a
+        /// card that already exists. The grid is built once (MainWindow.xaml.cs) and the tab's show
+        /// case only calls <see cref="RefreshAllAchievementTiles"/>, so without the re-resolve a mod
+        /// switch left every badge on the previous mod's art until the app was restarted. It costs a
+        /// dictionary hit per card on the unlock path: ModResourceResolver caches on
+        /// {skin}:{mod}:{path} and the cache is cleared immediately before ModChanged is raised, so
+        /// the first pass after a switch is the only one that touches disk.</para>
         /// </summary>
         private void RefreshAchievementTile(string achievementId)
         {
@@ -678,6 +688,11 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Null (art missing entirely) leaves the existing source alone rather than blanking
+                // the badge - the same contract LoadFeatureImages and the Record badges follow.
+                var art = LoadAchievementImage(parts.Achievement.ImageName);
+                if (art != null) parts.Badge.Source = art;
+
                 parts.Badge.Effect = isUnlocked ? null : new BlurEffect { Radius = 15 };
                 parts.NameText.Text = isUnlocked
                     ? AchName(parts.Achievement)
@@ -699,6 +714,12 @@ namespace ConditioningControlPanel
                 ApplyAchievementFilter();
         }
 
+        /// <summary>
+        /// Every card, in one pass: unlock state, mod-aware names/tooltips and mod art. Called on
+        /// every show of the tab and, while the tab is on screen, by the mod-switch sweep in
+        /// MainWindow.UiUpdates.cs - between the two, the grid can never show a mod the user is no
+        /// longer wearing.
+        /// </summary>
         private void RefreshAllAchievementTiles()
         {
             // Refresh all achievement cards to reflect current unlock state

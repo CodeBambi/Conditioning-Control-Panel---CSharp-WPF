@@ -1,0 +1,287 @@
+<Window x:Class="ConditioningControlPanel.DescentCeremonyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="The Descent"
+        WindowStyle="None"
+        WindowState="Maximized"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#FF0A0514"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+    <!--
+      THE MIGRATION CEREMONY (CONTRACTS-0812 §4, design doc §6).
+
+      Deliberately NOT AllowsTransparency. A layered fullscreen window created while other
+      layered surfaces are animating can wedge the shared WPF render thread (see the notes on
+      ChaosUnlockCardOverlay and LockCardWindow's pool) — and this window has no need of
+      transparency at all: it is opaque by design, because "dimmed chrome" for a ceremony this
+      size means covering the chrome, not tinting it.
+
+      No offers. No prices. No tiers. No upsell. CONTRACTS §0.6, and it is not negotiable.
+    -->
+
+    <Grid>
+        <!-- Backdrop: radial base -> wash -> vignette, the MantraWindow recipe -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.42" Center="0.5,0.42" RadiusX="0.85" RadiusY="0.9">
+                    <GradientStop Color="#FF241041" Offset="0"/>
+                    <GradientStop Color="#FF1A1A2E" Offset="0.55"/>
+                    <GradientStop Color="#FF0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border x:Name="GlowLayer" Opacity="0.30">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.30" Center="0.5,0.30" RadiusX="0.6" RadiusY="0.45">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="#00FF69B4" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#99000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Content -->
+        <Grid x:Name="Stage" Margin="40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="THE DESCENT"
+                       HorizontalAlignment="Center"
+                       Margin="0,18,0,0"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource PinkBrush}"
+                       Opacity="0.85">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+
+            <!-- One act visible at a time; the code-behind swaps Visibility. -->
+            <Grid Grid.Row="1" x:Name="ActHost">
+
+                <!-- ACT I - the intro -->
+                <StackPanel x:Name="ActIntro"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="760">
+                    <TextBlock x:Name="IntroHeadline"
+                               FontSize="38" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="IntroStanding"
+                               Margin="0,18,0,0"
+                               FontSize="14"
+                               Foreground="{DynamicResource PinkBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               Opacity="0.9"/>
+                    <TextBlock x:Name="IntroBody"
+                               Margin="0,28,0,0"
+                               FontSize="16" LineHeight="27"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button x:Name="BtnIntroContinue"
+                            Margin="0,40,0,0"
+                            HorizontalAlignment="Center"
+                            Padding="30,13"
+                            FontSize="15"
+                            Style="{DynamicResource PinkButton}"
+                            Click="OnIntroContinue"/>
+                </StackPanel>
+
+                <!-- ACT II - the two doors -->
+                <Grid x:Name="ActChoice" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               x:Name="ChoiceHeadline"
+                               Margin="0,10,0,0"
+                               FontSize="28" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+
+                    <Grid Grid.Row="1" MaxWidth="1080" VerticalAlignment="Center" Margin="0,24,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="28"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Door A -->
+                        <Border Grid.Column="0"
+                                Background="#FF252542"
+                                CornerRadius="14"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                BorderThickness="1.5"
+                                Padding="30,28">
+                            <StackPanel>
+                                <TextBlock x:Name="RestoreTitle"
+                                           FontSize="24" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="RestoreKicker"
+                                           Margin="0,6,0,0"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Border Margin="0,18,0,0" Padding="14,10"
+                                        CornerRadius="8" Background="#FF1A1A2E">
+                                    <TextBlock x:Name="RestoreDelta"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               TextAlignment="Center" TextWrapping="Wrap"/>
+                                </Border>
+                                <TextBlock x:Name="RestoreBody"
+                                           Margin="0,18,0,0"
+                                           FontSize="14" LineHeight="23"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Button x:Name="BtnChooseRestore"
+                                        Margin="0,24,0,0"
+                                        Padding="0,12"
+                                        FontSize="14"
+                                        Style="{DynamicResource PinkButton}"
+                                        Click="OnChooseRestore"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Door B -->
+                        <Border Grid.Column="2"
+                                Background="#FF252542"
+                                CornerRadius="14"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                BorderThickness="1.5"
+                                Padding="30,28">
+                            <StackPanel>
+                                <TextBlock x:Name="CycleTitle"
+                                           FontSize="24" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="CycleKicker"
+                                           Margin="0,6,0,0"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Border Margin="0,18,0,0" Padding="14,10"
+                                        CornerRadius="8" Background="#FF1A1A2E">
+                                    <TextBlock x:Name="CycleBonus"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               TextAlignment="Center" TextWrapping="Wrap"/>
+                                </Border>
+                                <TextBlock x:Name="CycleBody"
+                                           Margin="0,18,0,0"
+                                           FontSize="14" LineHeight="23"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Button x:Name="BtnChooseCycle"
+                                        Margin="0,24,0,0"
+                                        Padding="0,12"
+                                        FontSize="14"
+                                        Style="{DynamicResource OutlineButton}"
+                                        Click="OnChooseCycle"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2"
+                               x:Name="BothDoorsFooter"
+                               MaxWidth="900"
+                               Margin="0,26,0,0"
+                               FontSize="13" LineHeight="21"
+                               Foreground="{DynamicResource TextDimBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+                </Grid>
+
+                <!-- ACT III - the one-way confirm -->
+                <StackPanel x:Name="ActConfirm"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="640">
+                    <TextBlock x:Name="ConfirmHeadline"
+                               FontSize="30" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="ConfirmBody"
+                               Margin="0,24,0,0"
+                               FontSize="15" LineHeight="26"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,38,0,0">
+                        <Button x:Name="BtnConfirmBack"
+                                Padding="26,12" FontSize="14"
+                                Style="{DynamicResource SecondaryButton}"
+                                Click="OnConfirmBack"/>
+                        <Button x:Name="BtnConfirmYes"
+                                Margin="16,0,0,0"
+                                Padding="26,12" FontSize="14"
+                                Style="{DynamicResource PinkButton}"
+                                Click="OnConfirmYes"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ConfirmError"
+                               Visibility="Collapsed"
+                               Margin="0,20,0,0"
+                               FontSize="13"
+                               Foreground="#FFFF8080"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+
+                <!-- ACT IV - the close -->
+                <StackPanel x:Name="ActDone"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="640">
+                    <TextBlock x:Name="DoneHeadline"
+                               FontSize="34" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="DoneBody"
+                               Margin="0,24,0,0"
+                               FontSize="16" LineHeight="27"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button x:Name="BtnDoneClose"
+                            Margin="0,40,0,0"
+                            HorizontalAlignment="Center"
+                            Padding="34,13" FontSize="15"
+                            Style="{DynamicResource PinkButton}"
+                            Click="OnDoneClose"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- The escape hatch. Closing before a choice is made costs nothing. -->
+            <StackPanel Grid.Row="2" x:Name="LaterHost" HorizontalAlignment="Center" Margin="0,0,0,14">
+                <Button x:Name="BtnLater"
+                        HorizontalAlignment="Center"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource TextDimBrush}"
+                        FontSize="13" Padding="10,6" Cursor="Hand"
+                        Click="OnLater"/>
+                <TextBlock x:Name="LaterHint"
+                           HorizontalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           Opacity="0.7"
+                           TextAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

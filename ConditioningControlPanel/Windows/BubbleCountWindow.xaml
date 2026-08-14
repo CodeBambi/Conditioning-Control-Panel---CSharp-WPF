@@ -54,7 +54,7 @@
         <TextBlock x:Name="TxtEscHint"
                    Text="{loc:Str label_press_esc_to_skip_won_t_earn_xp}"
                    FontSize="16"
-                   Foreground="#888888"
+                   Foreground="{DynamicResource TextMutedBrush}"
                    VerticalAlignment="Bottom"
                    HorizontalAlignment="Center"
                    Margin="0,0,0,20"/>

@@ -192,6 +192,11 @@ namespace ConditioningControlPanel
                 //    write it. One hook, and it cannot get out of step with them.
                 HookBrowserStatusWatcher(tab.TxtBrowserStatus);
 
+                // 6. The vault CTA's breath follows the tab in and out. The ? box's breath has
+                //    its own copy of this hook (EnsureMysteryTileFx) because it is armed from the
+                //    rail repaint rather than from here; this one has no other entry point.
+                tab.IsVisibleChanged += (_, _) => ApplyVaultCtaBreath();
+
                 ApplyDashboardFxLoops();
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "InitializeDashboardFx failed"); }
@@ -245,10 +250,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var scale = SettingsTab?.VaultCtaScale;
+                var tab = SettingsTab;
+                var scale = tab?.VaultCtaScale;
                 if (scale == null || scale.IsFrozen) return;
 
-                if (!ChromeAmbientAllowed)
+                // Same gate as the ? box's breath, and for the same reason: a Forever clock on a
+                // collapsed tab burns a composition slot for the rest of the session with nothing
+                // on screen to show for it. The tab-visibility hook that re-asks this lives in
+                // InitializeDashboardFx.
+                if (!ChromeAmbientAllowed || !tab!.IsLoaded || !tab.IsVisible)
                 {
                     scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                     scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
@@ -370,6 +380,8 @@ namespace ConditioningControlPanel
             var tab = SettingsTab;
             if (tab == null) return;
 
+            ApplyMysteryBadgeVisibility();
+
             // A forever loop on a hidden tile burns a composition slot for the rest of the
             // session with nothing on screen to show for it (intake CTA lesson), so visibility
             // gates the breath as hard as the motion setting and the date latch do.
@@ -377,6 +389,26 @@ namespace ConditioningControlPanel
                 StopMysteryPop();
             else
                 StartMysteryPop();
+        }
+
+        /// <summary>
+        /// The "NEW TODAY!" badge answers to the SAME date latch the breath does, because it is
+        /// the same doorbell said in words: it is on while today's gift is unopened and gone for
+        /// the rest of the day the moment the box is hovered, re-arming by itself tomorrow when
+        /// the settings date stops matching. A badge that never clears is not a notice, it is
+        /// decoration - and this one sat outside the flip host where nothing else could hide it.
+        /// Deliberately NOT gated on ambient motion or tab visibility: those decide whether the
+        /// badge BREATHES, not whether there is news to announce.
+        /// </summary>
+        private void ApplyMysteryBadgeVisibility()
+        {
+            try
+            {
+                var badge = SettingsTab?.MysteryBadge;
+                if (badge == null) return;
+                badge.Visibility = MysteryGiftUnopened ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyMysteryBadgeVisibility: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -476,7 +508,8 @@ namespace ConditioningControlPanel
                         s.DailyGiftLastRevealDate = today;
                         App.Settings?.Save();
                     }
-                    StopMysteryPop();   // doorbell answered
+                    StopMysteryPop();              // doorbell answered
+                    ApplyMysteryBadgeVisibility(); // ...and the notice it was ringing about
                 }
 
                 // Reduced motion still reveals - it just does not turn. The swap is the content;

@@ -63,4 +63,69 @@ public class AiSpokenSigilUnwrapTests
     [Fact]
     public void AHashtagInsideTheSentenceSurvives()
         => Assert.Equal("you're my #1 fan", AiTextHygiene.UnwrapSpokenSigil("you're my #1 fan"));
+
+    // ── transcript salvage: the third live shape (0813, after a mod switch) ────
+    //
+    // With stale bark echoes from the PREVIOUS mod still in the window («BambiSprite said
+    // aloud: …» next to «DroneOS said aloud: …»), the model answered with a whole multi-speaker
+    // transcript. The start-anchored unwrap stripped only the first opener and the rest reached
+    // the bubble verbatim — sigils, foreign speaker and all.
+
+    [Fact]
+    public void AMultiBlockTranscriptKeepsOnlyTheActiveSpeakersLines()
+    {
+        var raw =
+            "«DroneOS said aloud: \"hihi~ that's my kind of morning~\"»\n" +
+            "«BambiSprite said aloud: \"unit reports... seems like a productive day~\"»\n" +
+            "«DroneOS said aloud: \"good morning *yawns*... got it. unit reporting in~";
+
+        Assert.Equal(
+            "hihi~ that's my kind of morning~ good morning *yawns*... got it. unit reporting in~",
+            AiTextHygiene.UnwrapSpokenSigil(raw, "DroneOS"));
+    }
+
+    [Fact]
+    public void TheMangledShapeTheAnchoredUnwrapLeavesBehindIsAlsoSalvaged()
+    {
+        // What actually reached the bubble live: the first block's opener already eaten, its
+        // orphan close ("») left mid-text, then two intact blocks with a truncated final close.
+        var raw =
+            "hihi~ that's my kind of morning~\"»\n" +
+            "«BambiSprite said aloud: \"unit reports... seems like a productive day~\"»\n" +
+            "«DroneOS said aloud: \"good morning *yawns*... got it. unit reporting in~";
+
+        Assert.Equal(
+            "hihi~ that's my kind of morning~ good morning *yawns*... got it. unit reporting in~",
+            AiTextHygiene.UnwrapSpokenSigil(raw, "DroneOS"));
+    }
+
+    [Fact]
+    public void WithoutASpeakerEveryBlocksInnerSpeechIsKept()
+    {
+        var raw =
+            "«BambiSprite said aloud: \"unit reports~\"» «DroneOS said aloud: \"reporting in~\"»";
+
+        Assert.Equal("unit reports~ reporting in~", AiTextHygiene.UnwrapSpokenSigil(raw));
+    }
+
+    [Fact]
+    public void ATranscriptThatIsAllOtherPeoplesLinesSalvagesToEmpty()
+    {
+        var raw =
+            "«BambiSprite said aloud: \"hihi~\"» «BambiSprite said aloud: \"good girl~\"»";
+
+        Assert.Equal("", AiTextHygiene.UnwrapSpokenSigil(raw, "DroneOS"));
+    }
+
+    [Fact]
+    public void ASingleBlockBuriedMidTextIsUnwrappedInPlace()
+        => Assert.Equal("sure! recalibrating~ anyway, ready?",
+            AiTextHygiene.UnwrapSpokenSigil(
+                "sure! «DroneOS said aloud: \"recalibrating~\"» anyway, ready?", "DroneOS"));
+
+    [Fact]
+    public void TheSpeakerFilterToleratesTheModelDecoratingTheName()
+        => Assert.Equal("unit online~",
+            AiTextHygiene.UnwrapSpokenSigil(
+                "«DroneOS v1.0 said aloud: \"unit online~\"» «Bambi said aloud: \"hi~\"»", "DroneOS"));
 }

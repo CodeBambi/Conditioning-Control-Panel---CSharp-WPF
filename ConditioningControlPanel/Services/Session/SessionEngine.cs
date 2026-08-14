@@ -272,9 +272,16 @@ namespace ConditioningControlPanel.Services
         }
         
         /// <summary>
-        /// Stops the current session
+        /// Stops the current session.
         /// </summary>
-        public void StopSession(bool completed = false)
+        /// <param name="completed">The session reached its end. Awards XP and never counts as abandoned.</param>
+        /// <param name="suppressAbandonTracking">
+        /// End the session without charging it to the abandoned-session counters. For the one case
+        /// where the app, not the user, ended it: withdrawing from a training program tears the
+        /// program's own session down as part of leaving, and leaving is a supported, free exit.
+        /// Every other caller leaves this alone - a session the user walked out of is still abandoned.
+        /// </param>
+        public void StopSession(bool completed = false, bool suppressAbandonTracking = false)
         {
             if (!_isRunning) return;
 
@@ -326,6 +333,11 @@ namespace ConditioningControlPanel.Services
             // Force-unduck audio before restoring settings (subliminals/flashes may have left it ducked)
             App.Audio?.ForceUnduck();
 
+            // Hand the flash trio back before the restore. Unconditional and ahead of
+            // RestoreSettings, which returns early when there is no snapshot - a session overlay
+            // left parked would keep overriding the user's own values for the rest of the run.
+            App.Settings?.Current?.ClearSessionFlashRamp();
+
             // Restore original settings
             RestoreSettings();
             
@@ -336,7 +348,7 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetIdleActivity();
 
             // Track abandoned session if not completed
-            if (!completed)
+            if (!completed && !suppressAbandonTracking)
             {
                 App.Achievements?.TrackSessionAbandoned();
             }
@@ -553,26 +565,38 @@ namespace ConditioningControlPanel.Services
             var curve = settings.RampCurve ?? App.Settings.Current.RampCurve;
             var progress = RampCurves.ApplyCurve(elapsedMinutes / totalMinutes, curve);
 
-            // Flash opacity ramp
+            // Flash trio: opacity ramp, frequency ramp, and the session's fixed scale.
+            //
+            // Parked on the settings object as a session overlay rather than written into it, for
+            // the reason spelled out under the pink filter below: these are the USER's persisted
+            // values, and an app kill mid-session used to freeze a ramp maximum into settings.json
+            // for good. FlashService still reads the ramped numbers - the getters prefer the
+            // overlay - while the file, the sliders and RestoreSettings keep the user's own.
+            int? rampedOpacity = null;
+            int? rampedFrequency = null;
+            int? rampedScale = null;
+
             if (settings.FlashEnabled && settings.FlashOpacity != settings.FlashOpacityEnd)
             {
                 _currentFlashOpacity = Lerp(settings.FlashOpacity, settings.FlashOpacityEnd, progress);
-                App.Settings.Current.FlashOpacity = (int)_currentFlashOpacity;
+                rampedOpacity = (int)_currentFlashOpacity;
             }
-            
+
             // Flash frequency ramp (for sessions like Good Girls Don't Cum)
             if (settings.FlashEnabled && settings.FlashPerHour != settings.FlashPerHourEnd)
             {
-                var currentFreq = Lerp(settings.FlashPerHour, settings.FlashPerHourEnd, progress);
-                App.Settings.Current.FlashFrequency = (int)currentFreq;
+                rampedFrequency = (int)Lerp(settings.FlashPerHour, settings.FlashPerHourEnd, progress);
             }
-            
-            // Flash scale (apply once at start if set)
+
+            // Flash scale (fixed for the whole session when the preset sets one)
             if (settings.FlashEnabled && settings.FlashScale != 100)
             {
-                App.Settings.Current.ImageScale = settings.FlashScale;
+                rampedScale = settings.FlashScale;
             }
-            
+
+            App.Settings?.Current?.SetSessionFlashRamp(rampedOpacity, rampedFrequency, rampedScale);
+
+
             // Pink filter ramp (only after randomized start minute).
             // Drive the overlay DIRECTLY (same path as Deeper enhancement ramps) instead of
             // writing the ramped value into App.Settings.Current.PinkFilterOpacity: that value
@@ -589,8 +613,13 @@ namespace ConditioningControlPanel.Services
                 App.Overlay?.SetSustainedOverlayOpacity("pink_filter", _currentPinkOpacity / 100.0);
             }
 
-            // Spiral ramp (only after randomized start minute) — same direct-drive as pink above.
-            if (settings.SpiralEnabled && elapsedMinutes >= _randomizedSpiralStartMinute)
+            // Spiral ramp (only after randomized start minute) — ramp-only guard matches the
+            // flash ramp's, not pink's (pink direct-drives constants too).
+            // Only when the session actually ramps: driving the overlay with a constant parks a
+            // ramp hold in OverlayService, which makes the settings-sync skip the spiral for the
+            // whole session and freezes the user's own opacity slider at the session value (#897).
+            if (settings.SpiralEnabled && settings.SpiralOpacity != settings.SpiralOpacityEnd
+                && elapsedMinutes >= _randomizedSpiralStartMinute)
             {
                 var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
                 var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
@@ -683,6 +712,10 @@ namespace ConditioningControlPanel.Services
                 
                 if (elapsedMinutes >= _randomizedSpiralStartMinute)
                 {
+                    // A non-ramping session never drives the overlay directly, so its prescribed
+                    // opacity has to land in settings here the way an immediate start does.
+                    if (settings.SpiralOpacity == settings.SpiralOpacityEnd)
+                        App.Settings.Current.SpiralOpacity = settings.SpiralOpacity;
                     App.Settings.Current.SpiralEnabled = true;
                     if (IsMainWindowValid) _mainWindow.EnableSpiral(true);
                     App.Logger?.Information("Spiral activated at {Minutes:F1} minutes (target was {Target:F1})",
@@ -943,6 +976,101 @@ namespace ConditioningControlPanel.Services
 
         internal Dictionary<string, bool>? UserLockCardPool =>
             _savedLockCardPool == null ? null : new Dictionary<string, bool>(_savedLockCardPool);
+
+        /// <summary>
+        /// Folds an edit the user just made in a phrase editor into this session's restore snapshot,
+        /// so RestoreSettings still undoes the session's own temporary pool changes but no longer
+        /// reverts the user's edit with them (#906: phrases added/removed/renamed mid-session came
+        /// back exactly as they were before the session, silently losing the work).
+        ///
+        /// Every call is a genuine user edit: only ASSIGNING a whole pool raises INPC (the session
+        /// mutates the live pools in place), and the mod-driven assignments are made with
+        /// ModService's pool mirror suppressed, so they never reach here.
+        /// </summary>
+        internal void NoteUserPhrasePoolEdit(string? propertyName)
+        {
+            if (!IsRunning) return;
+            var current = App.Settings?.Current;
+            if (current == null) return;
+
+            try
+            {
+                switch (propertyName)
+                {
+                    case nameof(AppSettings.SubliminalPool):
+                        FoldUserPoolEdit(current.SubliminalPool, ref _prescribedSubliminalPool, ref _savedSubliminalPool);
+                        break;
+                    case nameof(AppSettings.BouncingTextPool):
+                        FoldUserPoolEdit(current.BouncingTextPool, ref _prescribedBouncingTextPool, ref _savedBouncingTextPool);
+                        break;
+                    case nameof(AppSettings.LockCardPhrases):
+                        FoldUserPoolEdit(current.LockCardPhrases, ref _prescribedLockCardPool, ref _savedLockCardPool);
+                        break;
+                }
+                // Every fold assumes a GENUINE user edit (session writes are in-place/no-INPC,
+                // mod writes run suppressed). A non-user caller reaching here corrupts the
+                // restore snapshot — this line is the tell.
+                App.Logger?.Debug("[Session] Folded mid-session {Pool} edit into restore snapshot", propertyName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Session] Failed to fold a mid-session phrase edit into the restore snapshot");
+            }
+        }
+
+        /// <summary>
+        /// Applies the user's delta (live pool vs what the session prescribed) to the pre-session
+        /// snapshot, then re-bases the prescribed copy onto the live pool so a later edit diffs
+        /// against what is actually on screen — and so a mod switch re-asserts the edited pool.
+        /// Phrases the session owns are never folded into the user's pool: only keys the user
+        /// added, deleted, or re-toggled on their OWN phrases move across.
+        /// </summary>
+        private static void FoldUserPoolEdit(
+            Dictionary<string, bool>? live,
+            ref Dictionary<string, bool>? prescribed,
+            ref Dictionary<string, bool>? saved)
+        {
+            if (live == null || saved == null) return;
+
+            if (prescribed == null)
+            {
+                // The session left this pool alone, so the live pool IS the user's own.
+                saved = new Dictionary<string, bool>(live);
+                return;
+            }
+
+            foreach (var kvp in live)
+            {
+                if (!prescribed.TryGetValue(kvp.Key, out var wasEnabled))
+                {
+                    saved[kvp.Key] = kvp.Value;                     // added while the session ran
+                }
+                else if (saved.ContainsKey(kvp.Key))
+                {
+                    // Differs from what the session prescribed: an unambiguous re-toggle of one of
+                    // their own phrases.
+                    //
+                    // EQUAL to what the session prescribed is ambiguous, and stays ambiguous: the
+                    // phrase editor is seeded from the LIVE pool, so the user may have ticked the
+                    // box onto the session's value on purpose, or may simply have saved an
+                    // unrelated edit with the session's own value standing. Adopt only the ENABLED
+                    // side of that ambiguity - ApplySessionSettings disables every pre-existing
+                    // phrase and enables only its own, so adopting a `false` here would silence
+                    // the user's whole pool the moment they save any mid-session edit, while
+                    // adopting a `true` at worst leaves one phrase they already own switched on,
+                    // and it is the half the fold actually loses today (ticking a phrase the
+                    // session happens to run too, which then reverted at session end).
+                    if (wasEnabled != kvp.Value || kvp.Value) saved[kvp.Key] = kvp.Value;
+                }
+            }
+
+            foreach (var key in prescribed.Keys)
+            {
+                if (!live.ContainsKey(key)) saved.Remove(key);       // deleted while the session ran
+            }
+
+            prescribed = new Dictionary<string, bool>(live);
+        }
 
         /// <summary>
         /// Re-asserts this session's prescribed phrase pools over the live settings.

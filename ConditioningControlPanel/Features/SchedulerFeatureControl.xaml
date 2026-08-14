@@ -3,75 +3,89 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
+    <!-- ONE dense controls card for all nine scheduler settings. The hero for this feature
+         lives on Views/Controls/Studio/SchedulerRackPanel.xaml, but the ENABLE SWITCH stays
+         here: this control is also hosted bare in the feature popup (the "Scheduler + Ramp"
+         button on the Presets surface), and a hero-mounted pill would exist on the rack only,
+         leaving that path with no way to arm the feature. So the standalone Enable card
+         becomes the card's first row instead. -->
     <StackPanel>
-        <!-- Enable -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+        <Border Style="{StaticResource SettingCardStyle}">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{loc:Str btn_enable}"
-                           Foreground="White" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <CheckBox Grid.Column="1" x:Name="ChkEnabled"
-                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                          Checked="ChkEnabled_Changed" Unchecked="ChkEnabled_Changed"/>
+                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueStudioBrush}"/>
+                <StackPanel Margin="16,8,16,8">
+
+                    <!-- Enable -->
+                    <Grid Height="34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str btn_enable}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkEnabled"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkEnabled_Changed" Unchecked="ChkEnabled_Changed"/>
+                    </Grid>
+
+                    <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                    <!-- Time range -->
+                    <Grid Height="36">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str st4_scheduler_time_range}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <TextBox x:Name="TxtStart" Text="16:00" Width="74"
+                                     Background="{DynamicResource SurfaceBgBrush}"
+                                     Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                                     Padding="6,3" FontSize="13" TextAlignment="Center"
+                                     LostFocus="TxtTime_LostFocus"/>
+                            <TextBlock Text="→" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="15" Margin="10,0" VerticalAlignment="Center"/>
+                            <TextBox x:Name="TxtEnd" Text="22:00" Width="74"
+                                     Background="{DynamicResource SurfaceBgBrush}"
+                                     Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                                     Padding="6,3" FontSize="13" TextAlignment="Center"
+                                     LostFocus="TxtTime_LostFocus"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Active days -->
+                    <Grid Height="36">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str st4_scheduler_active_days}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <CheckBox x:Name="DayMon" Content="M" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DayTue" Content="T" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DayWed" Content="W" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DayThu" Content="T" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DayFri" Content="F" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DaySat" Content="S" Foreground="White" Margin="0,0,10,0" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                            <CheckBox x:Name="DaySun" Content="S" Foreground="White" IsChecked="True"
+                                      FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
+                        </StackPanel>
+                    </Grid>
+
+                </StackPanel>
             </Grid>
-        </Border>
-
-        <!-- Time range -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="{loc:Str st4_scheduler_time_range}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtStart" Grid.Column="0" Text="16:00"
-                             Background="{DynamicResource SurfaceBgBrush}"
-                             Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
-                             Padding="8,6" FontSize="14" TextAlignment="Center"
-                             LostFocus="TxtTime_LostFocus"/>
-                    <TextBlock Grid.Column="1" Text="→" Foreground="{DynamicResource PinkBrush}"
-                               FontSize="16" Margin="10,0" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtEnd" Grid.Column="2" Text="22:00"
-                             Background="{DynamicResource SurfaceBgBrush}"
-                             Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
-                             Padding="8,6" FontSize="14" TextAlignment="Center"
-                             LostFocus="TxtTime_LostFocus"/>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <!-- Days -->
-        <Border Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="16,14">
-            <StackPanel>
-                <TextBlock Text="{loc:Str st4_scheduler_active_days}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                <WrapPanel HorizontalAlignment="Center">
-                    <CheckBox x:Name="DayMon" Content="M" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DayTue" Content="T" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DayWed" Content="W" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DayThu" Content="T" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DayFri" Content="F" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DaySat" Content="S" Foreground="White" Margin="0,0,10,0" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                    <CheckBox x:Name="DaySun" Content="S" Foreground="White" IsChecked="True"
-                              FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>
-                </WrapPanel>
-            </StackPanel>
         </Border>
     </StackPanel>
 </UserControl>

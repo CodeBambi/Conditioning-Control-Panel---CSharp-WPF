@@ -183,7 +183,15 @@ calls `setQuality(tier)` first (resolves the shared `Q` block). On top, `scene.j
 C# `DtrhAssetManifest` enumerates the user's active preset → `manifest` of `https://ccp.assets/…`
 URLs (+ `favorites`). `hostMedia.js` ingests (URL-only, no blobs; Chromium cache does the lazy work).
 Consumers pull via `draw()/drawKind()/favorite()`: `spawner.js` (wall cards), `wallPosters.js`,
-Mirror biomes. No user media → tube is nearly blank (degrades gracefully). Native mandatory videos
+Mirror biomes. **Those four doors are LOCAL-ONLY and must stay that way.** The manifest can also
+carry REMOTE entries (absolute scrolller CDN urls, name-prefixed `online<pct>:`) when the user has
+moved `AppSettings.MediaSource` off `"local"`; that CDN sends no CORS headers, so `fetch` rejects
+and any WebGL/canvas upload throws — which is every consumer above. `hostMedia.js` keeps them in a
+second pool reachable only via `drawDom()`, whose sole consumer is `game/payloadFx.js` (the DOM
+payload layer: braindrain wash, flash burst, gif cascade, the 15s video card). The C# side caches
+the remote pool to `dtrh_remote_media.json` because `DtrhAssetManifest.Build()` is synchronous and
+the manifest is posted once — so a cold cache means remote media appears one launch later.
+No user media → tube is nearly blank (degrades gracefully). Native mandatory videos
 are *not* page media — host lays them over the page + `payload-state` holds the run. `assetTracker`
 drains per-asset attention home → C# biases next session's `favorites`.
 

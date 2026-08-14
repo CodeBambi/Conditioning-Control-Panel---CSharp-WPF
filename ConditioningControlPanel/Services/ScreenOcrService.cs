@@ -173,7 +173,9 @@ namespace ConditioningControlPanel.Services
 
                     // Diagnostic: log how many hits got dropped + the CCP rects
                     // being used to filter, so over-aggressive filtering is visible.
-                    if (App.Logger != null && dropped > 0)
+                    // Debug, not Information: this fires on EVERY scan and buried the
+                    // triage-relevant lines in the activity log.
+                    if (dropped > 0 && App.Logger?.IsEnabled(Serilog.Events.LogEventLevel.Debug) == true)
                     {
                         var rectSb = new System.Text.StringBuilder();
                         for (int i = 0; i < ccpRects.Length; i++)
@@ -183,7 +185,7 @@ namespace ConditioningControlPanel.Services
                             rectSb.Append('(').Append(r.X).Append(',').Append(r.Y)
                                   .Append(' ').Append(r.Width).Append('x').Append(r.Height).Append(')');
                         }
-                        App.Logger.Information(
+                        App.Logger.Debug(
                             "OCR self-exclusion: dropped {Dropped}/{Total} words inside {N} CCP rect(s): {Rects}",
                             dropped, words.Count, ccpRects.Length, rectSb.ToString());
                     }
@@ -241,8 +243,11 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap via MemoryStream
-                using var ms = new MemoryStream();
+                // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap via MemoryStream.
+                // Sized up-front: a default MemoryStream doubles its way to ~8MB per 1080p scan,
+                // so every scan burned a chain of large-object allocations instead of one.
+                var prealloc = EstimateBmpByteCount(bitmap);
+                using var ms = prealloc > 0 ? new MemoryStream(prealloc) : new MemoryStream();
                 bitmap.Save(ms, ImageFormat.Bmp);
                 ms.Position = 0;
 
@@ -294,6 +299,30 @@ namespace ConditioningControlPanel.Services
             finally
             {
                 bitmap?.Dispose();
+            }
+        }
+
+        /// <summary>Ceiling on the pre-allocation below. Comfortably above an 8K screen grab.</summary>
+        private const int MaxBmpPrealloc = 64 * 1024 * 1024;
+
+        /// <summary>
+        /// 32bpp BMP payload plus generous room for the file/info headers. Returns 0 for anything
+        /// above <see cref="MaxBmpPrealloc"/> so the caller falls back to the default growth path:
+        /// pre-allocating an absurd capacity (int.MaxValue, from a bogus bitmap size) throws
+        /// OutOfMemory outright, which is far worse than the doubling this avoids.
+        /// </summary>
+        private static int EstimateBmpByteCount(Bitmap bitmap)
+        {
+            try
+            {
+                long bytes = (long)bitmap.Width * bitmap.Height * 4L + 1024L;
+                if (bytes < 1024) return 1024;
+                if (bytes > MaxBmpPrealloc) return 0;
+                return (int)bytes;
+            }
+            catch
+            {
+                return 1024;
             }
         }
 

@@ -788,6 +788,16 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Repaints the Monthly/All-Time buttons and, through <see cref="ApplyLeaderboardTheme"/>,
+        /// the row style and the sticky "you" bar.
+        ///
+        /// <para>Also the board's mod-switch repaint (called by the sweep in
+        /// MainWindow.UiUpdates.cs, unconditionally - it is a few brushes and one Style, and a board
+        /// that is off screen has nothing else that would ever fix it). It is the lightweight half on
+        /// purpose: <see cref="RefreshLeaderboardAsync"/> re-fetches the DATA and never touches the
+        /// accent, so re-theming must not drag a network round-trip along with it.</para>
+        /// </summary>
         private void UpdateLeaderboardModeButtons()
         {
             try

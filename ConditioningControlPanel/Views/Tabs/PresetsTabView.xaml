@@ -7,633 +7,1127 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
-        <!-- Main Content -->
-        <Grid>
+    <!--
+        ======================= THE SESSION DOOR (tab key "presets") =======================
+        Restyled 2026-08-13 (Session Door Overhaul, phases 1-2). Same bones it always had -
+        rack on the left, detail panel on the right, draggable splitter between - relaid out
+        into the Play door's zone vocabulary so the two pages finally read as one app.
+
+        WHAT CHANGED, and what deliberately did not:
+          * Every literal hex is gone. The page was the last surface still painting itself
+            #2A2A4A on #3A3A5A, which meant it was the only tab that did NOT re-tint when the
+            active mod changed. Everything is a DynamicResource theme brush now.
+          * Zone headers (tag + trailing hairline) replace the old SectionHeader rows, matching
+            PlayTabView's PlayZoneTag / PlayZoneRule.
+          * The two placeholder boxes at the bottom (a "Community Catalogue" card and a
+            "Session Editor" card, together eating a ~120px band for two links) collapse into
+            ONE compact strip. The band they gave back went to the session list.
+          * The detail panel's loose Duration/Reward text rows become a three-medallion row.
+          * NOTHING was renamed. Every x:Name and every x:FieldModifier="internal" survives:
+            MainWindow reaches into this view by name from four partials (Presets, SessionIO,
+            PresetIO, TabFxPresetsQuestsAchievements) and a rename is a compile break at best
+            and a silent null at worst. Same for the tab key "presets" - see MainWindow.NavRail,
+            ChromeFxNav and the dashboard mosaic.
+
+        THE CARD VOCABULARY BELOW IS SHARED WITH CODE-BUILT CARDS. Preset chips are built by
+        MainWindow.Presets.CreatePresetCard and custom session rows by
+        MainWindow.SessionIO.AddCustomSessionCard - both reach these styles through
+        PresetsTab.TryFindResource(...), which finds a UserControl-local resource because
+        FrameworkElement.FindResource walks the element's OWN dictionary first. That is why
+        these styles live here and not in Resources/Theme: a fresh cross-dictionary
+        StaticResource in the theme is what broke BAML (and 181 tests) once already.
+
+        SPOILERS STAY OPT-IN. The "mystery experience" veil and its explicit Reveal button are
+        a product decision, not an oversight. Do not auto-expand SessionSpoilerPanel.
+    -->
+    <UserControl.Resources>
+
+        <!-- ============================ zone furniture ============================ -->
+        <!-- The tag + hairline pair PlayTabView established. Consolas because the whole app's
+             structural labelling is Consolas; the rule fades to transparent so the header does
+             not draw a box around content that is already in a panel. -->
+        <Style x:Key="SdZoneTag" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+        <Style x:Key="SdZoneRule" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+        <Style x:Key="SdZoneHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </Style>
+
+        <!-- ============================ session rows ============================ -->
+        <!-- r12 and a 1px stroke, against the old r8/2px. The 7px bottom margin IS the hover
+             headroom: LiftSessionRow raises a row 2px and a full-width row inside a ScrollViewer
+             would be clipped without a word if the margin were zero. -->
+        <Style x:Key="SdSessionRow" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="13,11"/>
+            <Setter Property="Margin" Value="0,0,0,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The art plate at the head of a row. A Border does NOT clip its child to its own
+             CornerRadius (0813 finding), so anything image-shaped that lands in here later needs
+             its own clipped ContentRoot - the gradient below is a fill, so it is safe as is. -->
+        <Style x:Key="SdRowThumb" TargetType="Border">
+            <Setter Property="Width" Value="52"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdRowThumbGlyph" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdRowTitle" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdRowBlurb" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <!-- ============================ pills ============================ -->
+        <!-- One pill shape for duration / grade / reward. The grade and reward pills still carry
+             literal semantic colours (green / gold / orange) because those encode difficulty, not
+             brand: they must NOT follow the mod accent or a drone-green build would paint "HARD"
+             the same green as "EASY". -->
+        <Style x:Key="SdPill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="8,2.5"/>
+            <Setter Property="Margin" Value="9,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdPillText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <!-- ============================ row actions ============================ -->
+        <!-- Replaces the shared SessionActionButton / SessionDeleteButton. r7 instead of r4, and a
+             stroke instead of a filled chip, so a resting row reads as one object rather than as a
+             row with two grey squares stapled on.
+
+             Those two theme keys (Resources/Theme/MainWindow.xaml) are now UNREFERENCED - this page
+             was their only consumer. They are deliberately left in place: pulling keys out of the
+             shared theme dictionary is a cleanup with its own blast radius, not part of a restyle,
+             and a keyed style is only safe to delete after grepping every FindResource /
+             TryFindResource call site as well as the XAML. Delete them in a pass of their own. -->
+        <Style x:Key="SdRowAction" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="3,0,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="chrome" CornerRadius="7"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="1" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chrome" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                <Setter TargetName="chrome" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Same shape, red hover. Destructive actions do not get the brand colour. -->
+        <Style x:Key="SdRowActionDanger" TargetType="Button" BasedOn="{StaticResource SdRowAction}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="chrome" CornerRadius="7"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="1" BorderBrush="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="chrome" Property="BorderBrush" Value="{DynamicResource DangerBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================ preset chips ============================ -->
+        <!-- 96x62 (was 100x70) with r11 corners. The 1px vertical margin is the hover-lift
+             headroom, exactly as the old code-built card documented: the strip's ScrollViewer
+             viewport is the card height and a 1.02 scale clips silently without it. -->
+        <Style x:Key="SdPresetChip" TargetType="Border">
+            <Setter Property="Width" Value="96"/>
+            <!-- 70, not the 62 this started at. A chip carries three stacked rows - name, feature
+                 glyphs, DEFAULT/CUSTOM - and 62 minus 16 of padding left 46px for ~49px of content,
+                 so the badge was cut in half on every chip. Nothing warns about this: a Border
+                 with a fixed Height just clips. Width stays 96 (the old card was 100) because
+                 narrower is what puts one more chip on screen. -->
+            <Setter Property="Height" Value="70"/>
+            <Setter Property="CornerRadius" Value="11"/>
+            <Setter Property="Padding" Value="9,8"/>
+            <Setter Property="Margin" Value="0,1,7,1"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SdPresetChipSelected" TargetType="Border" BasedOn="{StaticResource SdPresetChip}">
+            <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <!-- The fixed "new preset" chip at the end of the strip. Its own style rather than an
+             implicit one in Border.Resources: an implicit style declared on an element applies to
+             that element's CHILDREN, never to the element itself, so the hover trigger would
+             simply never have fired. -->
+        <Style x:Key="SdPresetChipNew" TargetType="Border" BasedOn="{StaticResource SdPresetChip}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ============================ takeaway shelf ============================ -->
+        <!-- A receipt, not a launcher. Each card is one finished run, and clicking it re-opens the
+             recap the session already produced (SessionCompleteWindow) - it does NOT start anything,
+             which is the whole reason the shelf can sit under a list of things that DO start.
+
+             158x74 with r12, matching SdSessionRow's radius rather than the chips' r11: these read
+             as small session rows turned on their side, not as presets. The 1px vertical margin is
+             hover-lift headroom, same as the chips - the shelf's ScrollViewer viewport is the card
+             height and a 1.02 scale clips silently without it. -->
+        <Style x:Key="SdTakeawayCard" TargetType="Border">
+            <Setter Property="Width" Value="158"/>
+            <Setter Property="Height" Value="74"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="11,9"/>
+            <Setter Property="Margin" Value="0,1,8,1"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The trailing "order a drop" card. Dashed, same footprint, so the shelf ends on an
+             invitation instead of on a hard edge - and so the zone is never visually empty even
+             before the user has finished a single session. -->
+        <Style x:Key="SdTakeawayDoor" TargetType="Border" BasedOn="{StaticResource SdTakeawayCard}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The kind stamp: RUN for a local session recap, and later DROP for a Just Drop order.
+             Consolas because it is structural labelling, and deliberately NOT pink - it carries a
+             semantic colour (completed / partial) that must survive a mod switch, exactly like the
+             difficulty pills above. -->
+        <Style x:Key="SdTakeawayKind" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdTakeawayTitle" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="SdTakeawayMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <!-- ============================ medallions ============================ -->
+        <!-- The detail panel's stat triple. One shape, three instances: a stacked caption over a
+             value, so duration / reward / grade scan as a row instead of as three sentences. -->
+        <Style x:Key="SdMedallion" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="6,9"/>
+        </Style>
+        <Style x:Key="SdMedLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SdMedValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+
+        <!-- ============================ detail chrome ============================ -->
+        <Style x:Key="SdDetailLabel" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="SdDetailValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="0,0,0,13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- =====================================================================
+             HEADER BAND. New in the overhaul, and the home for the two actions
+             that used to live inside the placeholder boxes at the bottom of the
+             page. The wash is a one-way accent gradient rather than a filled bar:
+             an opaque header on top of an already-panelled page reads as a second
+             title bar. Same treatment the Profile tab's banner got on 08-13.
+
+             The streak / last-run chips sketched in the proposal are NOT here.
+             They need progression plumbing this phase does not have, and they
+             belong next to the Takeaway shelf (phase 3) rather than up here.
+             ===================================================================== -->
+        <Border Grid.Row="0" Margin="5,5,5,0" CornerRadius="11" Padding="16,11"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- The accent wash is its OWN low-opacity layer rather than a gradient on the
+                     Background above. Theme colours (PinkColor, NeonPurpleColor) are opaque and a
+                     GradientStop cannot borrow an alpha from one, so painting the background
+                     directly would give this band a solid pink left edge. Opacity on a separate
+                     layer keeps it a tint AND keeps it mod-aware. The negative margin cancels this
+                     Border's own Padding so the wash is full-bleed - the same trick
+                     PlayCardArtPlate uses to reach its card's rounded edge. -->
+                <Border Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="-1"
+                        CornerRadius="11" Opacity="0.16" Margin="-16,-11">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                            <GradientStop Color="Transparent" Offset="0.7"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str sd_page_title}" Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="16.5" FontWeight="Bold"/>
+                    <TextBlock Text="{loc:Str sd_page_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Recent sessions. Moved up out of the Sessions zone header, where it was a
+                         second competing action next to the zone tag. -->
+                    <Button x:Name="BtnSessionHistory" Click="BtnSessionHistory_Click"
+                            ToolTip="{loc:Str tooltip_recent_sessions}"
+                            Style="{StaticResource OutlineButton}"
+                            Padding="12,7" Margin="0,0,7,0" FontSize="11.5" Cursor="Hand">
+                        <helpers:EmojiTextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
+                    </Button>
+                    <!-- Was the right-hand "Session Editor" placeholder box. -->
+                    <Button x:Name="BtnCreateSession" Content="{loc:Str btn_create_new}"
+                            Click="BtnCreateSession_Click"
+                            Style="{StaticResource PinkButton}"
+                            Padding="14,7" FontSize="11.5" FontWeight="SemiBold" Cursor="Hand"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== MAIN CONTENT: rack | splitter | detail ===================== -->
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="430" MinWidth="300" MaxWidth="700"/>
             </Grid.ColumnDefinitions>
-    
-            <!-- Left Side: Presets and Sessions -->
+
+            <!-- ============================ LEFT: the rack ============================ -->
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <!-- Takeaway. Auto, so an empty shelf costs the session list nothing but the
+                         zone header, and a full one costs it exactly one card height. -->
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-    
-                <!-- Top Section: Preset Cards Row -->
-                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
+
+                <!-- ============================ ZONE: PRESETS ============================ -->
+                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
                     <StackPanel>
-                        <Grid Margin="0,0,0,8">
-                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_presets}" Margin="0"/>
-                            <Button x:Name="HelpBtnPresets" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Presets"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_presets}"/>
+                            <Border Grid.Column="1" Style="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <Button Grid.Column="2" x:Name="HelpBtnPresets" x:FieldModifier="internal"
+                                    Style="{StaticResource HelpButtonStyle}" Tag="Presets"/>
                         </Grid>
-                        
-                        <!-- Horizontal Scrolling Preset Cards -->
+
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                                       PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel">
                             <StackPanel Orientation="Horizontal">
-                                <!-- Preset Cards Container -->
-                                <StackPanel x:Name="PresetCardsPanel" x:FieldModifier="internal" Orientation="Horizontal">
-                                    <!-- Preset cards will be generated here dynamically -->
+                                <!-- Chips are built by MainWindow.Presets.CreatePresetCard against
+                                     the SdPresetChip styles above. -->
+                                <StackPanel x:Name="PresetCardsPanel" x:FieldModifier="internal" Orientation="Horizontal"/>
+
+                                <!-- Fixed "new preset" chip. Same geometry as a real one so the
+                                     strip does not step at its end. -->
+                                <Border Style="{StaticResource SdPresetChipNew}"
+                                        MouseLeftButtonUp="BtnNewPreset_Click"
+                                        ToolTip="{loc:Str tooltip_create_a_new_preset_from_current_settings}">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="+" FontSize="21" FontWeight="Bold" HorizontalAlignment="Center"
+                                                   Foreground="{DynamicResource PinkBrush}"/>
+                                        <TextBlock Text="{loc:Str label_new}" FontSize="9.5" FontWeight="Bold"
+                                                   FontFamily="Consolas"
+                                                   Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
-                            
-                            <!-- Fixed "New Preset" Card -->
-                            <Border Background="#2A2A4A" CornerRadius="6" Padding="8" Margin="4,0,0,0" 
-                                    Width="100" Height="70" Cursor="Hand"
-                                    MouseLeftButtonUp="BtnNewPreset_Click"
-                                    ToolTip="{loc:Str tooltip_create_a_new_preset_from_current_settings}">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                                <Setter Property="Background" Value="#353550"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="➕" FontSize="20" HorizontalAlignment="Center" Foreground="{DynamicResource PinkBrush}"/>
-                                    <TextBlock Text="{loc:Str label_new}" FontSize="10" FontWeight="Bold" 
-                                               Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================ ZONE: SESSIONS ============================ -->
+                <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_sessions}"/>
+                            <Border Grid.Column="1" Style="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
                             </Border>
+                            <TextBlock Grid.Column="2" Style="{StaticResource SdZoneHint}" Text="{loc:Str sd_zone_sessions_hint}"/>
+                            <Button Grid.Column="3" x:Name="HelpBtnSessions" x:FieldModifier="internal"
+                                    Style="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="SessionsPanel" x:FieldModifier="internal">
+
+                                <!-- Morning Drift -->
+                                <Border Style="{StaticResource SdSessionRow}"
+                                        x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
+                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🌅"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_morning_drift}"/>
+                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_30_min}" Foreground="White"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#2A3A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_easy}" Foreground="#90EE90"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#2A4A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_400_xp}" Foreground="#90EE90"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource SdRowBlurb}"
+                                                       Text="{loc:Str label_gentle_subliminals_bouncing_text_with_gradual}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
+                                                    Tag="morning_drift" Click="SessionBtn_Edit"/>
+                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
+                                                    Tag="morning_drift" Click="SessionBtn_Export"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Gamer Girl -->
+                                <Border Style="{StaticResource SdSessionRow}"
+                                        x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
+                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🎮"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_gamer_girl}"/>
+                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_45_min}" Foreground="White"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#3A3A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_medium}" Foreground="#FFD700"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#3A4A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_800_xp}" Foreground="#FFD700"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource SdRowBlurb}"
+                                                       Text="{loc:Str label_non_intrusive_conditioning_with_pink_filter_s}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
+                                                    Tag="gamer_girl" Click="SessionBtn_Edit"/>
+                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
+                                                    Tag="gamer_girl" Click="SessionBtn_Export"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- The Distant Doll -->
+                                <Border Style="{StaticResource SdSessionRow}"
+                                        x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
+                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🪞"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_the_distant_doll}"/>
+                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_45_min}" Foreground="White"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#2A3A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_easy}" Foreground="#90EE90"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#2A4A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_400_xp}" Foreground="#90EE90"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource SdRowBlurb}"
+                                                       Text="{loc:Str label_large_visuals_for_couch_viewing_no_audio_duck}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
+                                                    Tag="distant_doll" Click="SessionBtn_Edit"/>
+                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
+                                                    Tag="distant_doll" Click="SessionBtn_Export"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Good Girls Don't Cum -->
+                                <Border Style="{StaticResource SdSessionRow}"
+                                        x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
+                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🔒"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_good_girls_don_t_cum}"/>
+                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_60_min}" Foreground="White"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#4A3A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_hard}" Foreground="#FFA500"/>
+                                                </Border>
+                                                <Border Style="{StaticResource SdPill}" Background="#4A4A2A">
+                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_1200_xp}" Foreground="#FFA500"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource SdRowBlurb}"
+                                                       Text="{loc:Str label_denial_session_with_heavy_conditioning_and_es}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
+                                                    Tag="good_girls_dont_cum" Click="SessionBtn_Edit"/>
+                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
+                                                    Tag="good_girls_dont_cum" Click="SessionBtn_Export"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Custom / imported sessions. Rows are built by
+                                     MainWindow.SessionIO.AddCustomSessionCard against the same
+                                     SdSessionRow vocabulary. -->
+                                <TextBlock x:Name="TxtCustomSessionsHeader" x:FieldModifier="internal"
+                                           Text="{loc:Str label_your_sessions}" Foreground="{DynamicResource PinkBrush}"
+                                           FontFamily="Consolas" FontSize="11.5" FontWeight="Bold"
+                                           Margin="0,14,0,9" Visibility="Collapsed"/>
+                                <StackPanel x:Name="CustomSessionsPanel" x:FieldModifier="internal"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- ====================== ZONE: TAKEAWAY ======================
+                     What you have already finished, newest first, built by
+                     MainWindow.Takeaway.RefreshTakeawayShelf from SessionLogService's
+                     persisted recaps. Read-only by design: a card OPENS its recap, it
+                     never re-runs anything.
+
+                     Phase 3 of the Session Door Overhaul ships the local RUN cards and the
+                     trailing "order a drop" door only. The DROP cards (replaying a Just Drop
+                     order in a WebView window) are phase 4 and are blocked on two web-side
+                     items - a replay deep link, and a payload that distinguishes a replay from
+                     a first play, without which JustDropService's flat 25 XP per
+                     session-complete becomes an unlimited XP loop.
+                     ============================================================= -->
+                <Border Grid.Row="2" x:Name="TakeawayZone" x:FieldModifier="internal"
+                        Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_takeaway}"/>
+                            <Border Grid.Column="1" Style="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="TxtTakeawayCount" x:FieldModifier="internal"
+                                       Style="{StaticResource SdZoneHint}" Text=""/>
+                        </Grid>
+
+                        <ScrollViewer x:Name="TakeawayScroller" x:FieldModifier="internal"
+                                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                      PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel">
+                            <StackPanel x:Name="TakeawayShelf" x:FieldModifier="internal" Orientation="Horizontal"/>
+                        </ScrollViewer>
+
+                        <!-- Only ever seen when there are no recaps AND the Just Drop door is
+                             withheld, i.e. a fresh install. With the door up, the dashed card is
+                             the empty state and this stays collapsed. -->
+                        <TextBlock x:Name="TxtTakeawayEmpty" x:FieldModifier="internal"
+                                   Text="{loc:Str sd_takeaway_empty}" Visibility="Collapsed"
+                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11.5"
+                                   Margin="2,4,0,6"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ====================== CATALOGUE STRIP ======================
+                     What is left of the two placeholder boxes. SessionDropZone,
+                     DropZoneIcon and DropZoneStatus all survive by name because
+                     MainWindow.SessionIO drives them (ShowDropZoneStatus is the
+                     import ticker for the window-wide drag-drop system), but they
+                     are now one 56px strip instead of a 120px box.
+
+                     Note: SessionDropZone_DragEnter/DragOver/DragLeave in
+                     MainWindow.SessionIO.cs are DEAD CODE - nothing wires them, and
+                     nothing has since drag-drop moved to Window_Drop. They are left
+                     alone here rather than deleted; that is a cleanup, not a restyle.
+                     ============================================================= -->
+                <Border Grid.Row="3"
+                        x:Name="SessionDropZone" x:FieldModifier="internal"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource PanelAccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Margin="5,8,5,5"
+                        Padding="14,10"
+                        Cursor="Hand"
+                        ToolTip="{loc:Str tooltip_open_catalogue}"
+                        MouseLeftButtonUp="CatalogueCard_Click">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <helpers:EmojiTextBlock Grid.Column="0" x:Name="DropZoneIcon" x:FieldModifier="internal"
+                                                Text="🌐" FontSize="20" VerticalAlignment="Center"
+                                                Margin="0,0,12,0" Foreground="{DynamicResource PinkBrush}"/>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str label_catalogue_card_title}" FontSize="12.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PinkBrush}"/>
+                            <TextBlock Text="{loc:Str label_catalogue_card_sub}" FontSize="11" TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                         </StackPanel>
-                    </ScrollViewer>
-                </StackPanel>
-            </Border>
-    
-            <!-- Bottom Section: Sessions -->
-            <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="10">
+
+                        <!-- Import ticker. Collapsed until ShowDropZoneStatus has something. -->
+                        <TextBlock Grid.Column="2" x:Name="DropZoneStatus" x:FieldModifier="internal" Text=""
+                                   FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"
+                                   Margin="14,0,10,0" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource PinkBrush}" Visibility="Collapsed"/>
+
+                        <!-- Export of the SELECTED session. Enabled by MainWindow when a session
+                             is picked; it stays on this strip rather than in the header band
+                             because it acts on the rack's selection, not on the page. -->
+                        <Button Grid.Column="3" x:Name="BtnExportSession" x:FieldModifier="internal"
+                                Content="{loc:Str btn_export}" Click="BtnExportSession_Click"
+                                IsEnabled="False" Style="{StaticResource OutlineButton}"
+                                Padding="12,6" FontSize="11" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ============================ SPLITTER ============================ -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource PanelAccentBrush}" Cursor="SizeWE"/>
+
+            <!-- ============================ RIGHT: detail ============================ -->
+            <Border Grid.Column="2" Style="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="0,0,0,14">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="2*"/>
-                        <RowDefinition Height="*" MinHeight="120"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-    
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_sessions}"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button x:Name="BtnSessionHistory" Click="BtnSessionHistory_Click"
-                                    ToolTip="{loc:Str tooltip_recent_sessions}"
-                                    Background="Transparent" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                    Foreground="{DynamicResource PinkBrush}"
-                                    Padding="8,3" Margin="0,0,6,0" FontSize="12" Cursor="Hand">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <helpers:EmojiTextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
-                            </Button>
-                            <Button x:Name="HelpBtnSessions" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
+
+                    <!-- ========================= HERO PLATE =========================
+                         The three loose header TextBlocks, moved onto a gradient plate
+                         so the panel opens on something rather than on an em dash.
+                         The session glyph rides inside TxtDetailTitle's own string
+                         ("{icon} {name}", set in SessionIO.SelectSession), so the plate
+                         needs no new element and no code change to carry art.
+                         Corner radius matches SectionPanel's 12 on the top two corners
+                         only - it is flush to the panel's head. -->
+                    <Border Grid.Row="0" CornerRadius="12,12,0,0" Padding="16,15,16,14"
+                            Background="{DynamicResource PanelBgBrush}"
+                            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource PanelAccentBrush}">
+                        <Grid>
+                            <!-- Accent wash on its own layer, same reason as the header band's:
+                                 an opaque theme colour cannot be a soft gradient stop. -->
+                            <Border Panel.ZIndex="-1" CornerRadius="12,12,0,0" Opacity="0.20"
+                                    Margin="-16,-15,-16,-14">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.9,1">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        <StackPanel>
+                            <Grid>
+                                <helpers:EmojiTextBlock x:Name="TxtDetailTitle" x:FieldModifier="internal"
+                                                        Text="{loc:Str label_select_a_preset}"
+                                                        Foreground="{DynamicResource TextLightBrush}"
+                                                        FontSize="18" FontWeight="Bold" TextWrapping="Wrap"
+                                                        Margin="0,0,26,0"/>
+                                <Button x:Name="HelpBtnSessionDetails" x:FieldModifier="internal"
+                                        Style="{StaticResource HelpButtonStyle}"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top" Tag="SessionDetails"/>
+                            </Grid>
+                            <TextBlock x:Name="TxtDetailSubtitle" x:FieldModifier="internal"
+                                       Text="{loc:Str label_click_on_a_preset_or_session_to_see_details}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
+                                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <!-- Catalogue share status badge (preset view) -->
+                            <StackPanel x:Name="PresetShareStatusHost" x:FieldModifier="internal"
+                                        Orientation="Horizontal" Margin="0,8,0,0"/>
                         </StackPanel>
-                    </Grid>
-    
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="SessionsPanel" x:FieldModifier="internal">
-                            <!-- Morning Drift - Available -->
-                            <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
-                                    Cursor="Hand" x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="{loc:Str label_morning_drift}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                                            <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
-                                                <TextBlock Text="{loc:Str label_30_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#2A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_easy}" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#2A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_400_xp}" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_gentle_subliminals_bouncing_text_with_gradual}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
-                                                Tag="morning_drift" Click="SessionBtn_Edit"/>
-                                        <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="{loc:Str tooltip_export_session}"
-                                                Tag="morning_drift" Click="SessionBtn_Export"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Gamer Girl - Available -->
-                            <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
-                                    Cursor="Hand" x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="{loc:Str label_gamer_girl}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                                            <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
-                                                <TextBlock Text="{loc:Str label_45_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#3A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_medium}" Foreground="#FFD700" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#3A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_800_xp}" Foreground="#FFD700" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_non_intrusive_conditioning_with_pink_filter_s}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
-                                                Tag="gamer_girl" Click="SessionBtn_Edit"/>
-                                        <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="{loc:Str tooltip_export_session}"
-                                                Tag="gamer_girl" Click="SessionBtn_Export"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- The Distant Doll - Available -->
-                            <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
-                                    Cursor="Hand" x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="{loc:Str label_the_distant_doll}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                                            <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
-                                                <TextBlock Text="{loc:Str label_45_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#2A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_easy}" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#2A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_400_xp}" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_large_visuals_for_couch_viewing_no_audio_duck}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
-                                                Tag="distant_doll" Click="SessionBtn_Edit"/>
-                                        <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="{loc:Str tooltip_export_session}"
-                                                Tag="distant_doll" Click="SessionBtn_Export"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Good Girls Don't Cum - Available -->
-                            <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
-                                    Cursor="Hand" x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <helpers:EmojiTextBlock Text="{loc:Str label_good_girls_don_t_cum}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                                            <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
-                                                <TextBlock Text="{loc:Str label_60_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#4A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_hard}" Foreground="#FFA500" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                            <Border Background="#4A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
-                                                <TextBlock Text="{loc:Str label_1200_xp}" Foreground="#FFA500" FontSize="10" FontWeight="Bold"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_denial_session_with_heavy_conditioning_and_es}"
-                                                   Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource SessionActionButton}" Content="✏" ToolTip="{loc:Str tooltip_edit_session}"
-                                                Tag="good_girls_dont_cum" Click="SessionBtn_Edit"/>
-                                        <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="{loc:Str tooltip_export_session}"
-                                                Tag="good_girls_dont_cum" Click="SessionBtn_Export"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Custom/Imported Sessions Section -->
-                            <TextBlock x:Name="TxtCustomSessionsHeader" x:FieldModifier="internal" Text="{loc:Str label_your_sessions}" Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="13" FontWeight="SemiBold" Margin="0,16,0,10" Visibility="Collapsed"/>
-                            <StackPanel x:Name="CustomSessionsPanel" x:FieldModifier="internal"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- ================== DETAIL: preset view ================== -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="16,14,16,0"
+                                  x:Name="PresetDetailScroller" x:FieldModifier="internal">
+                        <StackPanel x:Name="DetailContentPanel">
+                            <helpers:EmojiTextBlock x:Name="TxtDetailFlashLabel" x:FieldModifier="internal"
+                                                    Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
+                            <TextBlock x:Name="TxtDetailFlash" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <helpers:EmojiTextBlock x:Name="TxtDetailVideoLabel" x:FieldModifier="internal"
+                                                    Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_mandatory_videos}"/>
+                            <TextBlock x:Name="TxtDetailVideo" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <helpers:EmojiTextBlock x:Name="TxtDetailSubLabel" x:FieldModifier="internal"
+                                                    Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
+                            <TextBlock x:Name="TxtDetailSubliminal" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
+                            <TextBlock x:Name="TxtDetailAudio" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
+                            <TextBlock x:Name="TxtDetailOverlays" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_advanced}"/>
+                            <TextBlock x:Name="TxtDetailAdvanced" x:FieldModifier="internal"
+                                       Style="{StaticResource SdDetailValue}" Text="—"/>
                         </StackPanel>
                     </ScrollViewer>
-    
-                    <!-- Drop Zone and Editor Panel -->
-                    <Grid Grid.Row="2" Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <!-- Left: Community Catalogue link (repurposed from the old drag-drop import box) -->
-                        <Border Grid.Column="0"
-                                x:Name="SessionDropZone" x:FieldModifier="internal"
-                                Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="{DynamicResource PanelAccentBrush}"
-                                BorderThickness="2"
-                                CornerRadius="8"
-                                Margin="0,0,4,0"
-                                Cursor="Hand"
-                                ToolTip="{loc:Str tooltip_open_catalogue}"
-                                MouseLeftButtonUp="CatalogueCard_Click">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
-                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock x:Name="DropZoneIcon" x:FieldModifier="internal" Text="🌐" FontSize="28" HorizontalAlignment="Center" Foreground="{DynamicResource PinkBrush}"/>
-                                <TextBlock Text="{loc:Str label_catalogue_card_title}" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                                <TextBlock Text="{loc:Str label_catalogue_card_sub}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
-                                           Foreground="#909090" HorizontalAlignment="Center" Margin="10,2,10,0"/>
-                                <TextBlock x:Name="DropZoneStatus" x:FieldModifier="internal" Text="" FontSize="10"
-                                           Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,6,0,0"
-                                           Visibility="Collapsed"/>
-                            </StackPanel>
-                        </Border>
-    
-                        <!-- Right: Session Editor Panel -->
-                        <Border Grid.Column="1"
-                                Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="{DynamicResource PanelAccentBrush}"
-                                BorderThickness="2"
-                                CornerRadius="8"
-                                Margin="4,0,0,0">
-                            <Grid>
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_session_editor}" FontSize="13" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center"/>
-                                    <TextBlock Text="{loc:Str label_create_custom_sessions}" FontSize="11"
-                                               Foreground="#707090" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
-                                        <Button x:Name="BtnCreateSession" Content="{loc:Str btn_create_new}"
-                                                Click="BtnCreateSession_Click"
-                                                Background="{DynamicResource PinkBrush}" Foreground="White"
-                                                BorderThickness="0"
-                                                Padding="12,6" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
-                                                Margin="0,0,8,0">
-                                            <Button.Template>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Button.Template>
-                                        </Button>
-                                        <Button x:Name="BtnExportSession" x:FieldModifier="internal" Content="{loc:Str btn_export}"
-                                                Click="BtnExportSession_Click"
-                                                IsEnabled="False"
-                                                Background="#2A2A4A" Foreground="#909090"
-                                                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
-                                                Padding="12,6" FontSize="11" Cursor="Hand">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
-                                                    <Setter Property="Template">
-                                                        <Setter.Value>
-                                                            <ControlTemplate TargetType="Button">
-                                                                <Border Background="{TemplateBinding Background}"
-                                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                </Border>
-                                                            </ControlTemplate>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsEnabled" Value="True">
-                                                            <Setter Property="Foreground" Value="White"/>
-                                                            <Setter Property="Background" Value="#3A3A5A"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Button.Style>
-                                        </Button>
+
+                    <!-- ================== DETAIL: session view (spoiler-free) ================== -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="16,14,16,0"
+                                  x:Name="SessionDetailScroller" x:FieldModifier="internal" Visibility="Collapsed">
+                        <StackPanel x:Name="SessionDetailPanel">
+
+                            <!-- The medallion row. Was two centred text pairs in a box plus a
+                                 separate difficulty badge floating below; three medallions read
+                                 as one stat line instead of three separate statements. All three
+                                 value elements keep their old names - SessionIO writes to them
+                                 without knowing they moved. -->
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Style="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SdMedLabel}" Text="{loc:Str label_duration}"/>
+                                        <TextBlock x:Name="TxtSessionDuration" x:FieldModifier="internal"
+                                                   Style="{StaticResource SdMedValue}" Text="{loc:Str label_30_minutes}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="2" Style="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <helpers:EmojiTextBlock Style="{StaticResource SdMedLabel}" Text="{loc:Str label_reward}"/>
+                                        <TextBlock x:Name="TxtSessionXP" x:FieldModifier="internal"
+                                                   Style="{StaticResource SdMedValue}" Text="{loc:Str label_50_xp}"
+                                                   Foreground="#90EE90"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- DifficultyBadge keeps its name: it is the element whose
+                                     Background SessionIO retints per difficulty. -->
+                                <Border Grid.Column="4" x:Name="DifficultyBadge" Style="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SdMedLabel}" Text="{loc:Str sd_med_grade}"/>
+                                        <TextBlock x:Name="TxtSessionDifficulty" x:FieldModifier="internal"
+                                                   Style="{StaticResource SdMedValue}" Text="{loc:Str label_easy_2}"
+                                                   FontSize="12.5" Foreground="#FFD700"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <TextBlock x:Name="TxtSessionDescription" x:FieldModifier="internal" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                       LineHeight="20" Margin="0,0,0,16"
+                                       Text="{loc:Str label_let_the_morning_carry_you_away}"/>
+
+                            <!-- Corner GIF option (Gamer Girl) -->
+                            <Border x:Name="CornerGifOptionPanel" x:FieldModifier="internal"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                    CornerRadius="10" Padding="12" Margin="0,0,0,13" Visibility="Collapsed">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock x:Name="TxtFeatureCornerGif" x:FieldModifier="internal"
+                                                   Text="{loc:Str label_corner_gif}" Foreground="{DynamicResource PinkBrush}"
+                                                   FontWeight="Bold" FontSize="11.5"/>
+                                        <CheckBox x:Name="ChkCornerGifEnabled" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" Checked="ChkCornerGifEnabled_Changed"
+                                                  Unchecked="ChkCornerGifEnabled_Changed"/>
+                                    </Grid>
+                                    <TextBlock x:Name="TxtCornerGifDesc" x:FieldModifier="internal"
+                                               Text="{loc:Str label_place_a_subtle_gif_in_a_screen_corner}"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                               Margin="0,5,0,0" TextWrapping="Wrap"/>
+
+                                    <StackPanel x:Name="CornerGifSettings" x:FieldModifier="internal"
+                                                Visibility="Collapsed" Margin="0,10,0,0">
+                                        <Button x:Name="BtnSelectCornerGif" x:FieldModifier="internal"
+                                                Content="{loc:Str btn_select_gif}"
+                                                Style="{StaticResource OutlineButton}" Padding="10,6" FontSize="10.5"
+                                                Margin="0,0,0,10" Click="BtnSelectCornerGif_Click"/>
+                                        <TextBlock Text="{loc:Str label_position}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,0,0,5"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <RadioButton x:Name="RbCornerTL" x:FieldModifier="internal" Content="{loc:Str btn_top_left}"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5" Checked="RbCornerPos_Checked"/>
+                                            <RadioButton x:Name="RbCornerTR" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_top_right}"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5" Checked="RbCornerPos_Checked"/>
+                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="{loc:Str btn_bottom_left}"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5" IsChecked="True" Checked="RbCornerPos_Checked"/>
+                                            <RadioButton x:Name="RbCornerBR" x:FieldModifier="internal" Grid.Row="1" Grid.Column="1" Content="{loc:Str btn_bottom_right}"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5" Checked="RbCornerPos_Checked"/>
+                                        </Grid>
+
+                                        <TextBlock Text="{loc:Str label_size}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,10,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="50"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="SliderCornerGifSize" x:FieldModifier="internal" Minimum="100" Maximum="600" Value="300"
+                                                    VerticalAlignment="Center" ValueChanged="SliderCornerGifSize_ValueChanged"/>
+                                            <TextBlock x:Name="TxtCornerGifSize" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_300px}"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+
+                                        <TextBlock Text="{loc:Str label_opacity}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,10,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="50"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="SliderCornerGifOpacity" x:FieldModifier="internal" Minimum="5" Maximum="100" Value="20"
+                                                    VerticalAlignment="Center" ValueChanged="SliderCornerGifOpacity_ValueChanged"/>
+                                            <TextBlock x:Name="TxtCornerGifOpacity" x:FieldModifier="internal" Grid.Column="1" Text="20%"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
                                     </StackPanel>
                                 </StackPanel>
-                            </Grid>
-                        </Border>
-                    </Grid>
+                            </Border>
+
+                            <!-- The veil. Diagonal weave rather than a flat plate: it should read
+                                 as something drawn OVER the details, which is what it is. -->
+                            <Border CornerRadius="10" Padding="13" Margin="0,0,0,13"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource NeonPurpleTransparent20Brush}">
+                                <Grid>
+                                    <!-- Purple-to-pink wash on its own layer. Both stops are mod
+                                         theme colours, so the veil re-tints with the active mod
+                                         instead of staying Bambi purple on a drone build. -->
+                                    <Border Panel.ZIndex="-1" CornerRadius="10" Opacity="0.22" Margin="-13">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="0"/>
+                                                <GradientStop Color="Transparent" Offset="0.55"/>
+                                                <GradientStop Color="{DynamicResource PinkColor}" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str label_mystery_experience}" Foreground="{DynamicResource TextLightBrush}"
+                                               FontWeight="Bold" FontSize="12.5" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str label_the_magic_works_best_when_you_don_t_know_what}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextAlignment="Center"
+                                               TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic"/>
+                                </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Button x:Name="BtnRevealSpoilers" x:FieldModifier="internal" Content="{loc:Str btn_reveal_details}"
+                                    Style="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
+                                    Click="BtnRevealSpoilers_Click" Margin="0,0,0,13"
+                                    ToolTip="{loc:Str tooltip_this_will_show_all_session_settings_spoils_th}"/>
+
+                            <!-- Spoiler content, hidden by default. -->
+                            <StackPanel x:Name="SessionSpoilerPanel" x:FieldModifier="internal" Visibility="Collapsed">
+                                <Border CornerRadius="8" Padding="10" Margin="0,0,0,13"
+                                        Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource DangerBrush}">
+                                    <TextBlock Text="{loc:Str label_spoilers_below}" Foreground="{DynamicResource DangerBrush}"
+                                               FontFamily="Consolas" FontSize="11.5"
+                                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                                </Border>
+
+                                <helpers:EmojiTextBlock x:Name="TxtSessionFlashLabel" x:FieldModifier="internal"
+                                                        Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
+                                <TextBlock x:Name="TxtSessionFlash" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <helpers:EmojiTextBlock x:Name="TxtSessionSubLabel" x:FieldModifier="internal"
+                                                        Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
+                                <TextBlock x:Name="TxtSessionSubliminal" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
+                                <TextBlock x:Name="TxtSessionAudio" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
+                                <TextBlock x:Name="TxtSessionOverlays" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_extras}"/>
+                                <TextBlock x:Name="TxtSessionExtras" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <helpers:EmojiTextBlock Style="{StaticResource SdDetailLabel}" Text="{loc:Str label_timeline}"/>
+                                <TextBlock x:Name="TxtSessionTimeline" x:FieldModifier="internal"
+                                           Style="{StaticResource SdDetailValue}" Text="—"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ================== ACTION FLOOR ==================
+                         Both action stacks live in the same row so the primary button
+                         sits at the same height whichever mode the panel is in. -->
+                    <StackPanel Grid.Row="2" x:Name="PresetButtonsPanel" x:FieldModifier="internal" Margin="16,12,16,0">
+                        <Button x:Name="BtnLoadPreset" x:FieldModifier="internal" Content="{loc:Str btn_load_preset}"
+                                Style="{StaticResource PinkButton}"
+                                Margin="0,0,0,7" Padding="12,11" FontSize="13" Click="BtnLoadPreset_Click" IsEnabled="False"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BtnSaveOverPreset" x:FieldModifier="internal" Grid.Column="0" Content="{loc:Str btn_save_2}"
+                                    Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
+                                    Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="12"/>
+                            <Button x:Name="BtnDeletePreset" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_delete_2}"
+                                    Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
+                                    Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="12"/>
+                        </Grid>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BtnExportPreset" x:FieldModifier="internal" Grid.Column="0" Content="{loc:Str btn_export_preset}"
+                                    Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
+                                    Click="BtnExportPreset_Click" IsEnabled="False" FontSize="12"/>
+                            <Button x:Name="BtnSharePreset" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_share_to_catalogue}"
+                                    Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
+                                    Click="BtnSharePreset_Click" IsEnabled="False" FontSize="12"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" x:Name="SessionButtonsPanel" x:FieldModifier="internal"
+                                Margin="16,12,16,0" Visibility="Collapsed">
+                        <Button x:Name="BtnStartSession" x:FieldModifier="internal" Content="{loc:Str btn_start_session}"
+                                Style="{StaticResource PinkButton}"
+                                Padding="12,13" FontSize="14" Click="BtnStartSession_Click"/>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>
-    
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource PanelAccentBrush}" Cursor="SizeWE"/>
-    
-        <!-- Right Side: Details Panel -->
-        <Border Grid.Column="2" Style="{StaticResource SectionPanel}" Margin="5">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Header -->
-                <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                    <Grid>
-                        <TextBlock x:Name="TxtDetailTitle" x:FieldModifier="internal" Text="{loc:Str label_select_a_preset}"
-                                   Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
-                        <Button x:Name="HelpBtnSessionDetails" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="SessionDetails"/>
-                    </Grid>
-                    <TextBlock x:Name="TxtDetailSubtitle" x:FieldModifier="internal" Text="{loc:Str label_click_on_a_preset_or_session_to_see_details}"
-                               Foreground="#909090" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
-                    <!-- Catalogue share status badge (preset view) -->
-                    <StackPanel x:Name="PresetShareStatusHost" x:FieldModifier="internal" Orientation="Horizontal" Margin="0,6,0,0"/>
-                </StackPanel>
-                
-                <!-- Details Content - Preset View -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="PresetDetailScroller" x:FieldModifier="internal">
-                    <StackPanel x:Name="DetailContentPanel">
-                        <!-- Preset details will show here -->
-                        <helpers:EmojiTextBlock x:Name="TxtDetailFlashLabel" x:FieldModifier="internal" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailFlash" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-    
-                        <helpers:EmojiTextBlock x:Name="TxtDetailVideoLabel" x:FieldModifier="internal" Text="{loc:Str label_mandatory_videos}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailVideo" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-    
-                        <helpers:EmojiTextBlock x:Name="TxtDetailSubLabel" x:FieldModifier="internal" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailSubliminal" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-    
-                        <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailAudio" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-    
-                        <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailOverlays" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-    
-                        <helpers:EmojiTextBlock Text="{loc:Str label_advanced}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtDetailAdvanced" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                    </StackPanel>
-                </ScrollViewer>
-                
-                <!-- Details Content - Session View (Spoiler-Free) -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="SessionDetailScroller" x:FieldModifier="internal" Visibility="Collapsed">
-                    <StackPanel x:Name="SessionDetailPanel">
-                        <!-- Session Duration & Difficulty -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_duration}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtSessionDuration" x:FieldModifier="internal" Text="{loc:Str label_30_minutes}" Foreground="White" 
-                                               FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                    <helpers:EmojiTextBlock Text="{loc:Str label_reward}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtSessionXP" x:FieldModifier="internal" Text="{loc:Str label_50_xp}" Foreground="#90EE90" 
-                                               FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                        
-                        <!-- Difficulty Badge -->
-                        <Border x:Name="DifficultyBadge" Background="#2A2A4A" CornerRadius="6" Padding="8,4" 
-                                Margin="0,0,0,12" HorizontalAlignment="Center">
-                            <TextBlock x:Name="TxtSessionDifficulty" x:FieldModifier="internal" Text="{loc:Str label_easy_2}" Foreground="#FFD700" 
-                                       FontSize="12" FontWeight="Bold"/>
-                        </Border>
-                        
-                        <!-- Spoiler-Free Description -->
-                        <TextBlock x:Name="TxtSessionDescription" x:FieldModifier="internal" TextWrapping="Wrap" Foreground="#C0C0C0" FontSize="12" 
-                                   LineHeight="20" Margin="0,0,0,16"
-                                   Text="{loc:Str label_let_the_morning_carry_you_away}"/>
-                        
-                        <!-- Corner GIF Option (shown for Gamer Girl session) -->
-                        <Border x:Name="CornerGifOptionPanel" x:FieldModifier="internal" Background="#252540" CornerRadius="6" Padding="10" 
-                                Margin="0,0,0,12" Visibility="Collapsed">
-                            <StackPanel>
-                                <Grid>
-                                    <TextBlock x:Name="TxtFeatureCornerGif" x:FieldModifier="internal" Text="{loc:Str label_corner_gif}" Foreground="{DynamicResource PinkBrush}"
-                                               FontWeight="Bold" FontSize="11"/>
-                                    <CheckBox x:Name="ChkCornerGifEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
-                                              HorizontalAlignment="Right" Checked="ChkCornerGifEnabled_Changed" 
-                                              Unchecked="ChkCornerGifEnabled_Changed"/>
-                                </Grid>
-                                <TextBlock x:Name="TxtCornerGifDesc" x:FieldModifier="internal" Text="{loc:Str label_place_a_subtle_gif_in_a_screen_corner}" 
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                
-                                <StackPanel x:Name="CornerGifSettings" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,8,0,0">
-                                    <Button x:Name="BtnSelectCornerGif" x:FieldModifier="internal" Content="{loc:Str btn_select_gif}" 
-                                            Style="{StaticResource OutlineButton}" Padding="8,6" FontSize="10"
-                                            Margin="0,0,0,8" Click="BtnSelectCornerGif_Click"/>
-                                    <TextBlock Text="{loc:Str label_position}" Foreground="#909090" FontSize="10" Margin="0,0,0,4"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <RadioButton x:Name="RbCornerTL" x:FieldModifier="internal" Content="{loc:Str btn_top_left}" Foreground="White"
-                                                     GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
-                                        <RadioButton x:Name="RbCornerTR" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_top_right}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
-                                        <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="{loc:Str btn_bottom_left}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True" Checked="RbCornerPos_Checked"/>
-                                        <RadioButton x:Name="RbCornerBR" x:FieldModifier="internal" Grid.Row="1" Grid.Column="1" Content="{loc:Str btn_bottom_right}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
-                                    </Grid>
-    
-                                    <!-- Size Slider -->
-                                    <TextBlock Text="{loc:Str label_size}" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="50"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Slider x:Name="SliderCornerGifSize" x:FieldModifier="internal" Minimum="100" Maximum="600" Value="300"
-                                                VerticalAlignment="Center" ValueChanged="SliderCornerGifSize_ValueChanged"/>
-                                        <TextBlock x:Name="TxtCornerGifSize" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_300px}"
-                                                   Foreground="#C0C0C0" FontSize="10" VerticalAlignment="Center"
-                                                   HorizontalAlignment="Right"/>
-                                    </Grid>
-    
-                                    <!-- Opacity Slider -->
-                                    <TextBlock Text="{loc:Str label_opacity}" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="50"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Slider x:Name="SliderCornerGifOpacity" x:FieldModifier="internal" Minimum="5" Maximum="100" Value="20"
-                                                VerticalAlignment="Center" ValueChanged="SliderCornerGifOpacity_ValueChanged"/>
-                                        <TextBlock x:Name="TxtCornerGifOpacity" x:FieldModifier="internal" Grid.Column="1" Text="20%"
-                                                   Foreground="#C0C0C0" FontSize="10" VerticalAlignment="Center"
-                                                   HorizontalAlignment="Right"/>
-                                    </Grid>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                        
-                        <!-- Spoiler Warning -->
-                        <Border Background="#2A2040" CornerRadius="8" Padding="12" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str label_mystery_experience}" Foreground="{DynamicResource PinkBrush}" 
-                                           FontWeight="Bold" FontSize="13" HorizontalAlignment="Center"/>
-                                <TextBlock Text="{loc:Str label_the_magic_works_best_when_you_don_t_know_what}" 
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextAlignment="Center" 
-                                           Margin="0,6,0,0" FontStyle="Italic"/>
-                            </StackPanel>
-                        </Border>
-                        
-                        <!-- Reveal Spoilers Button -->
-                        <Button x:Name="BtnRevealSpoilers" x:FieldModifier="internal" Content="{loc:Str btn_reveal_details}" 
-                                Style="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
-                                Click="BtnRevealSpoilers_Click" Margin="0,0,0,12"
-                                ToolTip="{loc:Str tooltip_this_will_show_all_session_settings_spoils_th}"/>
-                        
-                        <!-- Spoiler Content (Hidden by default) -->
-                        <StackPanel x:Name="SessionSpoilerPanel" x:FieldModifier="internal" Visibility="Collapsed">
-                            <Border Background="#301520" CornerRadius="6" Padding="10" Margin="0,0,0,12">
-                                <TextBlock Text="{loc:Str label_spoilers_below}" Foreground="#FF6B6B" FontSize="12" 
-                                           FontWeight="Bold" HorizontalAlignment="Center"/>
-                            </Border>
-                            
-                            <helpers:EmojiTextBlock x:Name="TxtSessionFlashLabel" x:FieldModifier="internal" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionFlash" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
-    
-                            <helpers:EmojiTextBlock x:Name="TxtSessionSubLabel" x:FieldModifier="internal" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionSubliminal" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
-                            
-                            <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionAudio" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
-                            
-                            <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionOverlays" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                            
-                            <helpers:EmojiTextBlock Text="{loc:Str label_extras}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionExtras" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                            
-                            <TextBlock Text="{loc:Str label_timeline}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtSessionTimeline" x:FieldModifier="internal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-                
-                <!-- Preset Action Buttons -->
-                <StackPanel Grid.Row="2" x:Name="PresetButtonsPanel" x:FieldModifier="internal" Margin="0,10,0,0">
-                    <Button x:Name="BtnLoadPreset" x:FieldModifier="internal" Content="{loc:Str btn_load_preset}" Style="{StaticResource PinkButton}"
-                            Margin="0,0,0,6" Padding="12,10" FontSize="13" Click="BtnLoadPreset_Click" IsEnabled="False"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="BtnSaveOverPreset" x:FieldModifier="internal" Grid.Column="0" Content="{loc:Str btn_save_2}" 
-                                Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
-                                Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="12"/>
-                        <Button x:Name="BtnDeletePreset" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_delete_2}"
-                                Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
-                                Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="12"/>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="BtnExportPreset" x:FieldModifier="internal" Grid.Column="0" Content="{loc:Str btn_export_preset}"
-                                Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
-                                Click="BtnExportPreset_Click" IsEnabled="False" FontSize="12"/>
-                        <Button x:Name="BtnSharePreset" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_share_to_catalogue}"
-                                Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
-                                Click="BtnSharePreset_Click" IsEnabled="False" FontSize="12"/>
-                    </Grid>
-                </StackPanel>
-
-                <!-- Session Action Buttons -->
-                <StackPanel Grid.Row="2" x:Name="SessionButtonsPanel" x:FieldModifier="internal" Margin="0,10,0,0" Visibility="Collapsed">
-                    <Button x:Name="BtnStartSession" x:FieldModifier="internal" Content="{loc:Str btn_start_session}" Style="{StaticResource PinkButton}"
-                            Padding="12,12" FontSize="14" Click="BtnStartSession_Click"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-        </Grid>
+    </Grid>
 </UserControl>

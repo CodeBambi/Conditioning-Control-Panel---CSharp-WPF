@@ -30,6 +30,21 @@
          the same two properties the Phase-1 header chip and TierGate read
          (App.Patreon.HasLabAccess / HasPremiumAccess), so the badge cannot
          disagree with the gates.
+
+         VELVET KIT / UI POLISH 2 (Lane B):
+           · Every card uses ONE markup pattern: outer Border (name + radius
+             12) > Grid > wash Border > 3px edge bar > content.
+           · The five app-owned cards wear the Account hue (edge bar, wash,
+             border, panel title). The THREE provider login cards keep their
+             brand colour instead - Patreon red, SubscribeStar teal, Discord
+             blurple are identity, not decoration - so they take the same
+             edge bar in their own colour and skip the wash. That is the only
+             deliberate deviation from the per-section hue map in this file.
+           · Radius normalised 8 -> 12 on the three utility cards (contract's
+             corner-radius scale: section cards are 12).
+           · Hardcoded greys (#B0B0B0, #888) became Text* tokens: those lines
+             are information, and the contract bans FontSize 10 / TextDim for
+             information. No user-visible string changed anywhere.
          ================================================================ -->
 
     <StackPanel>
@@ -39,211 +54,260 @@
         <!-- Net-new: who you are, and which bar you clear. Painted by
              RefreshTierBadge() in the code-behind - no settings property,
              no service call, just the entitlement the gates already use. -->
-        <Border x:Name="AccountTierCard" x:FieldModifier="internal" CornerRadius="12" Padding="15" Margin="0,0,0,15"
+        <Border x:Name="AccountTierCard" x:FieldModifier="internal" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtAccountSectionName" x:FieldModifier="internal"
-                               Text="{loc:Str account_chip_sign_in}"
-                               Foreground="White" FontSize="15" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtAccountSectionTier" x:FieldModifier="internal"
-                               Text="{loc:Str label_login_to_unlock_exclusive_features}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtAccountSectionName" x:FieldModifier="internal"
+                                   Text="{loc:Str account_chip_sign_in}"
+                                   Foreground="{StaticResource SectionHueAccountBrush}"
+                                   FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtAccountSectionTier" x:FieldModifier="internal"
+                                   Text="{loc:Str label_login_to_unlock_exclusive_features}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,2,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
 
-                <Border x:Name="AccountTierBadge" x:FieldModifier="internal" Grid.Column="1"
-                        CornerRadius="10" Padding="10,4" Visibility="Collapsed"
-                        Background="{DynamicResource DarkerBgBrush}"
-                        BorderBrush="#3D3D60" BorderThickness="1"
-                        VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtAccountTierBadge" x:FieldModifier="internal" Text="🔒"
-                               Foreground="White" FontSize="14" FontWeight="Bold"/>
-                </Border>
+                    <Border x:Name="AccountTierBadge" x:FieldModifier="internal" Grid.Column="1"
+                            CornerRadius="10" Padding="10,4" Visibility="Collapsed"
+                            Background="{DynamicResource DarkerBgBrush}"
+                            BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtAccountTierBadge" x:FieldModifier="internal" Text="🔒"
+                                   Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
 
-        <!-- ==== MOVED from PatreonTabView.xaml:25-47 ==== -->
-        <Border x:Name="PatreonLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="15" Margin="0,0,0,15"
+        <!-- ==== MOVED from PatreonTabView.xaml:25-47 ====
+             Brand card: keeps Patreon red, takes the shared edge-bar pattern in that colour. -->
+        <Border x:Name="PatreonLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
                 BorderBrush="#FF424D" BorderThickness="1">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#FF424D"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <TextBlock x:Name="TxtPatreonStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtPatreonTier" x:FieldModifier="internal" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
-                </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtPatreonStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtPatreonTier" x:FieldModifier="internal" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
 
-                <Button x:Name="BtnPatreonLogin" x:FieldModifier="internal" Grid.Column="1"
-                        Content="{loc:Str btn_login}"
-                        Background="#FF424D" Foreground="White"
-                        BorderThickness="0" Padding="15,8"
-                        FontWeight="Bold" FontSize="12"
-                        Cursor="Hand"
-                        Click="BtnPatreonLogin_Click"/>
+                    <Button x:Name="BtnPatreonLogin" x:FieldModifier="internal" Grid.Column="1"
+                            Content="{loc:Str btn_login}"
+                            Background="#FF424D" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnPatreonLogin_Click"/>
+                </Grid>
             </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:50-72 ==== -->
-        <Border x:Name="SubscribeStarLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="15" Margin="0,0,0,15"
+        <Border x:Name="SubscribeStarLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
                 BorderBrush="#009E8F" BorderThickness="1">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#009E8F"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <TextBlock x:Name="TxtSubscribeStarStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtSubscribeStarTier" x:FieldModifier="internal" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
-                </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtSubscribeStarStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtSubscribeStarTier" x:FieldModifier="internal" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
 
-                <Button x:Name="BtnSubscribeStarLogin" x:FieldModifier="internal" Grid.Column="1"
-                        Content="{loc:Str btn_login}"
-                        Background="#009E8F" Foreground="White"
-                        BorderThickness="0" Padding="15,8"
-                        FontWeight="Bold" FontSize="12"
-                        Cursor="Hand"
-                        Click="BtnSubscribeStarLogin_Click"/>
+                    <Button x:Name="BtnSubscribeStarLogin" x:FieldModifier="internal" Grid.Column="1"
+                            Content="{loc:Str btn_login}"
+                            Background="#009E8F" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnSubscribeStarLogin_Click"/>
+                </Grid>
             </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:75-97 ==== -->
-        <Border x:Name="DiscordLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="15" Margin="0,0,0,15"
+        <Border x:Name="DiscordLoginCard" x:FieldModifier="internal" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
                 BorderBrush="#5865F2" BorderThickness="1">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#5865F2"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <TextBlock x:Name="TxtDiscordStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtDiscordInfo" x:FieldModifier="internal" Text="{loc:Str label_link_discord_for_community_features}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
-                </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtDiscordStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtDiscordInfo" x:FieldModifier="internal" Text="{loc:Str label_link_discord_for_community_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
 
-                <Button x:Name="BtnDiscordLogin" x:FieldModifier="internal" Grid.Column="1"
-                        Content="{loc:Str btn_login}"
-                        Background="#5865F2" Foreground="White"
-                        BorderThickness="0" Padding="15,8"
-                        FontWeight="Bold" FontSize="12"
-                        Cursor="Hand"
-                        Click="BtnDiscordLogin_Click"/>
+                    <Button x:Name="BtnDiscordLogin" x:FieldModifier="internal" Grid.Column="1"
+                            Content="{loc:Str btn_login}"
+                            Background="#5865F2" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnDiscordLogin_Click"/>
+                </Grid>
             </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:100-124 ====
              Starts Collapsed; MainWindow.Patreon.cs:UpdateAccountLinkingUI owns it. -->
-        <Border x:Name="AccountLinkingSection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,15"
-                BorderBrush="#FFD700" BorderThickness="1" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="{loc:Str label_link_accounts}" Foreground="#FFD700" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
-                <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
-                           Foreground="#B0B0B0" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+        <Border x:Name="AccountLinkingSection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" Visibility="Collapsed">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_link_accounts}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="BtnLinkPatreon" x:FieldModifier="internal"
-                            Content="{loc:Str btn_link_patreon}"
-                            Background="#FF424D" Foreground="White"
-                            BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand" Visibility="Collapsed"
-                            Click="BtnLinkPatreon_Click"/>
-                    <Button x:Name="BtnLinkDiscord" x:FieldModifier="internal"
-                            Content="{loc:Str btn_link_discord}"
-                            Background="#5865F2" Foreground="White"
-                            BorderThickness="0" Padding="15,8"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand" Visibility="Collapsed"
-                            Click="BtnLinkDiscord_Click"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnLinkPatreon" x:FieldModifier="internal"
+                                Content="{loc:Str btn_link_patreon}"
+                                Background="#FF424D" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand" Visibility="Collapsed"
+                                Click="BtnLinkPatreon_Click"/>
+                        <Button x:Name="BtnLinkDiscord" x:FieldModifier="internal"
+                                Content="{loc:Str btn_link_discord}"
+                                Background="#5865F2" Foreground="White"
+                                BorderThickness="0" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand" Visibility="Collapsed"
+                                Click="BtnLinkDiscord_Click"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:127-152 ====
              Starts Collapsed; shown only with a cloud identity. -->
-        <Border x:Name="CloudSettingsBackupSection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,15"
-                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="{loc:Str label_cloud_settings_backup}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
-                <TextBlock x:Name="TxtCloudBackupStatus" x:FieldModifier="internal"
-                           Text="{loc:Str label_checking_backup_status}"
-                           Foreground="#B0B0B0" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+        <Border x:Name="CloudSettingsBackupSection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" Visibility="Collapsed">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_cloud_settings_backup}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock x:Name="TxtCloudBackupStatus" x:FieldModifier="internal"
+                               Text="{loc:Str label_checking_backup_status}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="BtnBackupSettingsNow" x:FieldModifier="internal"
-                            Content="{loc:Str btn_backup_now}"
-                            Background="{DynamicResource SecondaryBrush}" Foreground="White"
-                            BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand"
-                            Click="BtnBackupSettingsNow_Click"/>
-                    <Button x:Name="BtnRestoreSettings" x:FieldModifier="internal"
-                            Content="{loc:Str btn_restore_from_cloud}"
-                            Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
-                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="15,8"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand"
-                            Click="BtnRestoreSettings_Click"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnBackupSettingsNow" x:FieldModifier="internal"
+                                Content="{loc:Str btn_backup_now}"
+                                Background="{DynamicResource SecondaryBrush}" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnBackupSettingsNow_Click"/>
+                        <Button x:Name="BtnRestoreSettings" x:FieldModifier="internal"
+                                Content="{loc:Str btn_restore_from_cloud}"
+                                Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
+                                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnRestoreSettings_Click"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:155-179 ==== -->
-        <Border x:Name="DataPrivacySection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,15"
-                BorderBrush="#555" BorderThickness="1" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="{loc:Str label_data_privacy}" Foreground="#B0B0B0" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
-                <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
-                           Foreground="#888" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+        <Border x:Name="DataPrivacySection" x:FieldModifier="internal" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" Visibility="Collapsed">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_data_privacy}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="BtnExportData" x:FieldModifier="internal"
-                            Content="{loc:Str btn_export_my_data}"
-                            Background="#555" Foreground="White"
-                            BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand"
-                            Click="BtnExportData_Click"/>
-                    <Button x:Name="BtnPrivacyPolicy"
-                            Content="{loc:Str btn_privacy_policy}"
-                            Background="Transparent" Foreground="#888"
-                            BorderBrush="#555" BorderThickness="1" Padding="15,8"
-                            FontWeight="Bold" FontSize="12"
-                            Cursor="Hand"
-                            Click="BtnPrivacyPolicy_Click"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnExportData" x:FieldModifier="internal"
+                                Content="{loc:Str btn_export_my_data}"
+                                Background="#555" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnExportData_Click"/>
+                        <Button x:Name="BtnPrivacyPolicy"
+                                Content="{loc:Str btn_privacy_policy}"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                                BorderBrush="#555" BorderThickness="1" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnPrivacyPolicy_Click"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- ==== MOVED from PatreonTabView.xaml:407-422 ==== -->
-        <Border x:Name="SupportDevelopmentCard" x:FieldModifier="internal" CornerRadius="12" Padding="15" Margin="0,0,0,15"
+        <Border x:Name="SupportDevelopmentCard" x:FieldModifier="internal" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 Background="{DynamicResource ElevatedSurfaceBrush}"
-                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-            <StackPanel>
-                <TextBlock Text="{loc:Str section_support_development}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
-                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,8,0,0">
-                    <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" x:FieldModifier="internal" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_takeover}" Foreground="White"/>
-                </TextBlock>
-                <Button x:Name="BtnVisitPatreon" Content="{loc:Str btn_visit_patreon}"
-                        Background="{DynamicResource SecondaryBrush}" Foreground="White"
-                        BorderThickness="0" Padding="15,8" Margin="0,12,0,0"
-                        HorizontalAlignment="Left" FontSize="12"
-                        Cursor="Hand"
-                        Click="BtnVisitPatreon_Click"/>
-            </StackPanel>
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str section_support_development}"
+                               Foreground="{StaticResource SectionHueAccountBrush}" FontSize="14" FontWeight="Bold"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,6,0,0">
+                        <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" x:FieldModifier="internal" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_takeover}" Foreground="{DynamicResource TextLightBrush}"/>
+                    </TextBlock>
+                    <Button x:Name="BtnVisitPatreon" Content="{loc:Str btn_visit_patreon}"
+                            Background="{DynamicResource SecondaryBrush}" Foreground="White"
+                            BorderThickness="0" Padding="15,8" Margin="0,10,0,0"
+                            HorizontalAlignment="Left" FontSize="12"
+                            Cursor="Hand"
+                            Click="BtnVisitPatreon_Click"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
     </StackPanel>

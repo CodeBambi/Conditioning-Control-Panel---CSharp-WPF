@@ -67,18 +67,19 @@ namespace ConditioningControlPanel.Models.Deeper
         public const string Spiral     = "spiral";
         public const string BrainDrain = "braindrain";
         /// <summary>Melt variant of Brain Drain. Shares the one underlying blur overlay (and all of
-        /// its hold/ramp state) with <see cref="BrainDrain"/> — the two never co-exist. The melt warp
-        /// itself lands in Phase 2; today it behaves identically to <see cref="BrainDrain"/>.</summary>
+        /// its hold/ramp state) with <see cref="BrainDrain"/> — the two never co-exist. The melt
+        /// warp is live: the same blur plus a slow Perlin displacement drift, rendered on the
+        /// compositor's capture pump (Services/Compositor/BrainDrainCapturePump).</summary>
         public const string BrainDrainMelt = "braindrain_melt";
 
         /// <summary>
-        /// True for overlay kinds withheld while Brain Drain is reworked. These stay VALID
-        /// (existing creator content loads, validates and saves unchanged) but are hidden from
-        /// the editor pickers and skipped at playback — see OverlayService.BrainDrainWithheld,
-        /// which is the runtime half of the same decision. Keep the two in sync.
+        /// True for overlay kinds withheld from the editor pickers and playback. NONE today:
+        /// Brain Drain / Brain Melt were re-enabled when the rework shipped (see
+        /// OverlayService.BrainDrainWithheld, the runtime half of the same decision — keep the
+        /// two in sync). The helper and its editor plumbing stay so a future withholding is a
+        /// two-line change again.
         /// </summary>
-        public static bool IsWithheld(string? kind) =>
-            kind == BrainDrain || kind == BrainDrainMelt;
+        public static bool IsWithheld(string? kind) => false;
     }
 
     /// <summary>

@@ -843,8 +843,6 @@ namespace ConditioningControlPanel
                     TxtBannerPrimary.Foreground = new SolidColorBrush(LockdownCrimson);
                 if (TxtBannerSecondary != null)
                     TxtBannerSecondary.Foreground = new SolidColorBrush(LockdownCrimson);
-                if (TxtBannerTertiary != null)
-                    TxtBannerTertiary.Foreground = new SolidColorBrush(LockdownCrimson);
 
                 // Lockdown card border → red glow
                 if (LockdownTab.LockdownCardBorder != null)

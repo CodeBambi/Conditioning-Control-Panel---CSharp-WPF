@@ -122,6 +122,7 @@ function fireBoot(config) {
 /** Map a host `init` message to a BootConfig. */
 function fromHostInit(m) {
   const c = (m && m.config) || {};
+  const media = normalizeMedia(c.media, !!c.remoteMedia);
   return defaultBootConfig({
     niche: NICHES.includes(c.niche) ? c.niche : Niche.Bambi,
     caps: Object.assign({}, DEFAULT_CAPS, c.caps || {}),
@@ -133,7 +134,10 @@ function fromHostInit(m) {
     m2Test: !!c.m2Test,
     // Additive (protocol unchanged): host MAY ride reward media + a stable
     // fiction subject id on the same `init` config it already sends.
-    media: (c.media && typeof c.media === 'object') ? c.media : null,
+    media,
+    // The remote pool is a LATER arrival (see the remote-media block below), so the
+    // page has to know at boot whether asking is worth it at all.
+    remoteMedia: !!c.remoteMedia,
     subjectId: (typeof c.subjectId === 'string' && c.subjectId) ? c.subjectId : null,
     // Additive: the user's ENABLED subliminal pool as { text, audio? } entries, replicated
     // in-page by render/subliminals.js (audio is a data: URI when a connected clip exists).
@@ -156,11 +160,89 @@ function standaloneConfig() {
     ai: q.get('ai') ? { serverBase: q.get('ai'), authToken: q.get('token') || '' } : (saved.ai || null),
     hosted: false,
     m2Test: q.has('m2test'),
-    media: saved.media || null,
+    // Normalized through the same seam as the hosted path so the render modules see one
+    // shape. Standalone has no host to ask, so the remote pool is always off.
+    media: normalizeMedia(saved.media, false),
+    remoteMedia: false,
     subjectId: q.get('subject') || saved.subjectId || null,
     subliminals: Array.isArray(saved.subliminals) ? saved.subliminals : null,
   });
 }
+
+/* ----------------------------------------------------------------------------
+ * REMOTE MEDIA — the `need-remote` / `assets-append` pair.
+ *
+ * The host's MediaManifest is built once, from disk, and rides `init`. Remote stills
+ * cannot: fetching them is a network round trip the host will not make on the thread that
+ * builds `init`. So the page asks, and batches arrive later — the same bridge pair the For
+ * You feed uses, and for the same reason.
+ *
+ * THE ONE RULE THAT MAKES IT WORK: an append MUTATES THE EXISTING ARRAYS. `config.media`
+ * was handed to effects/background/beats/steering at boot and none of them can be re-handed
+ * one, so growth has to happen inside the arrays they already hold — which is why
+ * normalizeMedia() guarantees `gifs`/`images` exist as arrays even when the host sent no
+ * media at all. Appending is never a reset: nothing already on screen is disturbed.
+ *
+ * REMOTE STILLS GO IN `images`, NEVER `gifs`. They do not animate (the provider has no
+ * usable gifs), and the surfaces that read `gifs` — the captcha's rotting tiles, the
+ * jumpscare — are built around something that moves.
+ * -------------------------------------------------------------------------- */
+const REMOTE_CAP = 80;          // page-side ceiling on how big the remote pool may grow
+let remoteAdded = 0;            // how many remote urls we have taken this run
+let remoteInFlight = false;
+let mediaRef = null;            // the live MediaManifest the render modules hold
+const mediaAppendCbs = [];
+
+/** Ensure a MediaManifest object with real arrays, so later appends have somewhere to land.
+ *  Returns null only when there is genuinely nothing and never will be — the exact case the
+ *  render modules already handle by falling back to their particle stand-ins. */
+function normalizeMedia(raw, remoteEnabled) {
+  const has = raw && typeof raw === 'object';
+  if (!has && !remoteEnabled) return null;
+  const src = has ? raw : {};
+  const list = (v) => (Array.isArray(v) ? v.filter((u) => typeof u === 'string' && u.length > 0) : []);
+  mediaRef = Object.assign({}, src, { gifs: list(src.gifs), images: list(src.images) });
+  return mediaRef;
+}
+
+/** Ask the host for another batch of remote stills. No-op standalone, when the pool is
+ *  full, or while one ask is already in the air. */
+export function requestRemoteMedia() {
+  if (!isHosted || remoteInFlight || !mediaRef || remoteAdded >= REMOTE_CAP) return;
+  remoteInFlight = true;
+  send({ type: 'need-remote' });
+}
+
+/** Register a callback fired after every append that actually added urls. Additive: the
+ *  caller uses it to keep asking until the pool is stocked. */
+export function onMediaAppend(cb) { if (typeof cb === 'function') mediaAppendCbs.push(cb); }
+
+on('assets-append', (m) => {
+  remoteInFlight = false;
+  if (!mediaRef) return;
+  const incoming = Array.isArray(m && m.images) ? m.images : [];
+  const known = new Set(mediaRef.images);
+  let added = 0;
+  for (const u of incoming) {
+    if (typeof u !== 'string' || !u.length || known.has(u)) continue;
+    if (remoteAdded >= REMOTE_CAP) break;
+    mediaRef.images.push(u);      // IN PLACE — see the block comment above
+    known.add(u);
+    remoteAdded++;
+    added++;
+  }
+  if (added) {
+    log(`remote media: +${added} still(s) (pool ${mediaRef.images.length})`);
+    for (const cb of mediaAppendCbs) { try { cb(added); } catch (_e) { /* never break the bridge */ } }
+  }
+});
+
+// Arrives after every attempt, success or not. It is what stops the page asking in a tight
+// loop when every channel is dry or the machine is offline.
+on('online-status', (m) => {
+  remoteInFlight = false;
+  if (m && m.ok === false) log('remote media: ' + ((m && m.error) || 'unavailable'));
+});
 
 /* ----------------------------------------------------------------------------
  * SUBJECT ID (standalone) — the fiction's stable per-install "Subject #NNNN".

@@ -1,5 +1,7 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -21,9 +23,81 @@ namespace ConditioningControlPanel.Views.Tabs
         public HapticsTabView()
         {
             InitializeComponent();
+            Loaded += HapticsTabView_Loaded;
+            Unloaded += HapticsTabView_Unloaded;
         }
 
         private MainWindow? Owner => Window.GetWindow(this) as MainWindow;
+
+        // ==== mod-aware feature art =====================================================
+        // Both vibe.png plates author a pack:// URI in XAML, which is the BASE art and stays
+        // as the fallback. A mod shipping resources/features/vibe.png has to repaint them,
+        // and only ModChanged is authoritative about that: ApplyActiveModChange is never
+        // reached when the ACTIVE mod is uninstalled (ModService activates the fallback
+        // itself), which used to leave the dead mod's art on screen.
+        //
+        // LAYOUT IS UNTOUCHED. The hero lives inside HapticsContentGrid and must stay there -
+        // MainWindow.Patreon.cs dims and un-hit-tests that grid to gate entitlement, and the
+        // master enable rides the hero pill, so a hero parked outside it would hand free users
+        // a live master toggle. This pass changes brush SOURCES only.
+
+        /// <summary>Guards against a double subscription if Loaded fires again after a re-parent.</summary>
+        private bool _modArtHooked;
+
+        private void HapticsTabView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged += OnModChangedArt;
+                _modArtHooked = true;
+            }
+            ApplyFeatureArt();
+        }
+
+        private void HapticsTabView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_modArtHooked && App.Mods != null)
+            {
+                App.Mods.ModChanged -= OnModChangedArt;
+                _modArtHooked = false;
+            }
+        }
+
+        // ModChanged can be raised off the UI thread; marshal before touching the brushes.
+        private void OnModChangedArt(object? sender, Models.ModPackage mod)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(ApplyFeatureArt));
+                return;
+            }
+            ApplyFeatureArt();
+        }
+
+        /// <summary>
+        /// Repaints the hero and side-art plates from the active mod's vibe.png, if it has one.
+        /// A null resolve is left alone deliberately: the plate degrades to its authored
+        /// pack:// art rather than to an empty rectangle.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            try
+            {
+                const string Art = "features/vibe.png";
+
+                var hero = ModResourceResolver.ResolveImageDecoded(Art, 480);
+                if (hero != null && HapticsHeroArtBrush != null && !HapticsHeroArtBrush.IsFrozen)
+                    HapticsHeroArtBrush.ImageSource = hero;
+
+                var side = ModResourceResolver.ResolveImageDecoded(Art, 800);
+                if (side != null && HapticsSideArtBrush != null && !HapticsSideArtBrush.IsFrozen)
+                    HapticsSideArtBrush.ImageSource = side;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("HapticsTabView feature art: {E}", ex.Message);
+            }
+        }
 
         private void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnGateUnlock_Click(sender, e);

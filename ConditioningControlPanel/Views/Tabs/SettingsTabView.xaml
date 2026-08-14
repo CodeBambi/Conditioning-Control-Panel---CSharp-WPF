@@ -279,11 +279,18 @@
                     <Setter Property="Margin" Value="0,0,0,4"/>
                     <Setter Property="Height" Value="42"/>
                     <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+                    <!-- Routed through the Button's own BorderBrush (was a literal
+                         GlassBorderBrush on cb) so a chip can override it: the Tier 1
+                         chips wear the gold tier livery (Brushes.xaml) permanently,
+                         while ChipGradedIntake - a weekly pass, not a tier - keeps this
+                         glass default. Hover still wins: the triggers below set cb
+                         directly, and a template trigger outranks a TemplateBinding. -->
+                    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="cb" Background="{TemplateBinding Background}"
-                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                                         CornerRadius="9" RenderOptions.BitmapScalingMode="HighQuality">
                                     <!-- CornerRadius 8 = the chip's 9 minus the 1px border, so the
                                          overlays follow the inner curve instead of squaring it off. -->
@@ -428,6 +435,7 @@
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtTakeover}"
                             Click="ChipTakeover_Click" ToolTip="Takeover — the companion triggers effects on her own · left-click opens it, right-click turns it on">
                         <Grid>
@@ -443,6 +451,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipAwareness" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtAwareness}"
                             Click="ChipAwareness_Click" ToolTip="Awareness — reacts to what's on your screen · left-click opens it, right-click turns it on">
                         <Grid>
@@ -457,6 +466,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipHaptics" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtHaptics}"
                             Click="ChipHaptics_Click" ToolTip="Haptics — connect a toy · left-click opens it, right-click turns it on">
                         <Grid>
@@ -492,6 +502,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtVoice}"
                             Click="ChipVoice_Click" ToolTip="She's Listening — voice control (&quot;Hey Bambi&quot;) and the mic · left-click opens it, right-click turns it on">
                         <Grid>
@@ -515,6 +526,7 @@
                          premium gate — the chip itself never blocks, exactly like its siblings.
                          No state dot for the same reason Intake has none. -->
                     <Button x:Name="ChipFyp" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtFyp}"
                             Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library · left- or right-click opens it">
                         <Grid>
@@ -537,7 +549,7 @@
                          cost this card in height. -->
                     <Border x:Name="CardLockdown" x:FieldModifier="internal"
                             Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Lockdown — locks you in for the set time (panic key disabled)">
                         <Grid>
@@ -578,7 +590,7 @@
                          full-bleed treatment as Lockdown. -->
                     <Border x:Name="CardBlink" x:FieldModifier="internal"
                             Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Blink Trainer — webcam blink-gated visuals">
                         <Grid>
@@ -615,6 +627,7 @@
                     </Border>
                     <!-- Remote — opens a flyout to compose + start a remote session -->
                     <Button x:Name="ChipRemote" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtRemote}"
                             Click="ChipRemote_Click" ToolTip="Remote Control — let someone drive your session">
                         <Grid>
@@ -644,7 +657,7 @@
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="420">
                                     <StackPanel>
                                         <TextBlock Text="Go available" FontWeight="Bold" Foreground="White" FontSize="13" Margin="0,0,0,6"/>
-                                        <TextBlock Text="Difficulty" Foreground="{DynamicResource SecondaryBrush}" FontSize="10"/>
+                                        <TextBlock Text="Difficulty" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
                                             <RadioButton x:Name="RemoteDiffEasy" x:FieldModifier="internal" GroupName="RemoteDiff" Content="Easy" Foreground="White" Margin="0,0,10,0"/>
                                             <RadioButton x:Name="RemoteDiffMed" x:FieldModifier="internal" GroupName="RemoteDiff" Content="Medium" IsChecked="True" Foreground="White" Margin="0,0,10,0"/>
@@ -652,10 +665,10 @@
                                         </StackPanel>
                                         <CheckBox x:Name="RemoteShareCheck" x:FieldModifier="internal" Content="Share in Available Subjects"
                                                   Foreground="White" FontSize="11" Margin="0,0,0,6"/>
-                                        <TextBlock Text="Message" Foreground="{DynamicResource SecondaryBrush}" FontSize="10"/>
+                                        <TextBlock Text="Message" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
                                         <TextBox x:Name="RemoteMessageBox" x:FieldModifier="internal" MaxLength="80" Height="40"
                                                  TextWrapping="Wrap" AcceptsReturn="True" Margin="0,2,0,6"/>
-                                        <TextBlock Text="Tags (up to 5)" Foreground="{DynamicResource SecondaryBrush}" FontSize="10"/>
+                                        <TextBlock Text="Tags (up to 5)" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
                                         <WrapPanel x:Name="RemoteTagPanel" x:FieldModifier="internal" Margin="0,2,0,0">
                                             <ToggleButton Content="Bimbo" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
                                             <ToggleButton Content="Drone" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
@@ -766,9 +779,9 @@
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
                  with the mod-aware localized name (same keys as the Studio rack rows).
-                 "Just Drop" stays a literal (unbuilt placeholder), and the ? box's title
-                 is runtime-owned outright: RefreshMysteryTile() writes today's feature
-                 name over it on every repaint. -->
+                 Two tiles are runtime-owned outright instead: the ? box (RefreshMysteryTile()
+                 writes today's feature name over it on every repaint) and the tease tile
+                 (ApplyTeaseCard() owns its title, badge, tooltip and blur together). -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
@@ -796,14 +809,25 @@
                                   Click="CardBouncingText_Click"
                                   ToggleRequested="CardBouncingText_Toggle"/>
 
-            <!-- Row 2: Just Drop (far left, owner spec) + centre logo + spiral pair -->
-            <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder
-                 for now"). SOON badge + toast; wire the real launcher when feat/justdrop-door
-                 merges and delete the toast. Title stays an English literal on purpose. -->
+            <!-- Row 2: the TEASE tile (far left, owner spec) + centre logo + spiral pair -->
+            <!-- THE TEASE TILE. Nameless on purpose (owner, 2026-08-13): the art below is
+                 blurred past recognition by FeatureCard.TeaseTier, the title is "???", the rim
+                 is the teased feature's tier livery and the click opens a cryptic teaser rather
+                 than a door. Nothing here may name the feature.
+
+                 The art IS still loaded, and must be: it is the substrate the blur smears into,
+                 which is what makes the tile a shape rather than an empty box. It is never
+                 legible - see the blur radius note in FeatureCard.
+
+                 Title and TeaseTier here are FIRST-FRAME values, not the authority: the switch
+                 block at the top of MainWindow.TeaseCard.cs owns both and rewrites them on every
+                 mosaic repaint (and the instant the teased feature is revealed). They are
+                 authored rather than left blank so the tile can never flash a name or an
+                 unblurred face in the frames before the first repaint. -->
             <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardJustDrop" x:FieldModifier="internal"
-                                  Title="Just Drop"
+                                  Title="???"
+                                  TeaseTier="2"
                                   Icon="pack://application:,,,/Resources/features/justdrop.png"
-                                  Glyph="🎚"
                                   Click="CardJustDrop_Click"/>
 
             <!-- Centre logo, back at 2x2 (the 3x3 interlude had it 1x1).
@@ -1112,6 +1136,17 @@
                                            FontSize="15" FontWeight="Black"/>
                             </StackPanel>
                         </Border>
+
+                        <!-- The gift's price, re-stamped. On the REVEAL face only: this is the
+                             side that names today's feature, so it is the side that can say what
+                             the feature normally costs and that today it does not. The ? box face
+                             keeps its own gold ring and its FREE TODAY text pill - putting a tier
+                             sign on the unopened box would price a gift nobody has looked at yet.
+                             Painted by RefreshMysteryTile; collapsed for premium accounts, who own
+                             the whole pool and are not being given anything. -->
+                        <fx:TierBadge x:Name="MysteryRevealBadge" x:FieldModifier="internal"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                                      Margin="0,-4,-4,0" Panel.ZIndex="9"/>
                     </Grid>
                 </Border>
 
@@ -1589,14 +1624,14 @@
                                               ToolTip="{loc:Str browser_enhance_tooltip}"/>
                                     <TextBlock x:Name="TxtEnhanceMatchStatus" x:FieldModifier="internal" Grid.Column="1"
                                                Text="{loc:Str browser_enhance_match_none}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                VerticalAlignment="Center"
                                                Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
                                     <!-- User override: reveal the BambiCloud site toggle even on mods
                                          whose manifest hides it (issue #596). -->
                                     <CheckBox x:Name="ChkForceShowBambiCloud" x:FieldModifier="internal" Grid.Column="2"
                                               Content="{loc:Str browser_show_bambicloud_label}"
-                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                               VerticalAlignment="Center" Cursor="Hand" Margin="12,0,0,0"
                                               Checked="ChkForceShowBambiCloud_Changed"
                                               Unchecked="ChkForceShowBambiCloud_Changed"
@@ -1838,7 +1873,7 @@
                                    TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
                                    Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="10" Margin="0,1,0,0"
+                                   FontSize="11" Margin="0,1,0,0"
                                    TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                     <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
@@ -1928,7 +1963,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                     <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
                                                Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
                                                TextTrimming="CharacterEllipsis">
@@ -2015,11 +2050,11 @@
                                     <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
                                         <StackPanel MaxWidth="280">
                                             <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                                            <TextBlock Foreground="#CCCCCC" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
                                                 Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
                                             </TextBlock>
                                             <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                                            <TextBlock Foreground="#AAAAAA" FontSize="10" TextWrapping="Wrap">
+                                            <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
                                                 Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
                                             </TextBlock>
                                         </StackPanel>

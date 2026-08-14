@@ -195,9 +195,13 @@ namespace ConditioningControlPanel
                 s.StreakFixCharges = 0; // per-account, server-authoritative balance
                 s.HighestLevelEver = 0;
 
-                // Quest streak
+                // Quest streak. The Perfect Week latch goes with it: leaving it standing means an
+                // incoming account whose cloud streak happens to equal the old account's latch has
+                // its milestone silently eaten (the latch is a "already paid for THIS streak" mark
+                // and it belongs to the account being cleared).
                 s.DailyQuestStreak = 0;
                 s.LastDailyQuestDate = null;
+                s.LastPerfectWeekStreakAwarded = 0;
 
                 // Streak shields
                 s.StreakShieldsRemaining = 0;
@@ -277,6 +281,13 @@ namespace ConditioningControlPanel
             // before it can PUSH those zeros — otherwise the quest/login streak flashes 0
             // until a later sync repaints it. Every logout path funnels through here.
             App.ProfileSync?.ResetLoadedProfileState();
+
+            // THE VAT belongs to the account that was just signed out. On a shared
+            // install user B must not open the Trainer Card onto user A's fill, and
+            // B's keyless account must not inherit A's 60s poll — Reset drops the
+            // block, the block-seen flag and the fetch floor, and raises BlockChanged
+            // so the surface disarms (which resets the fill coordinator with it).
+            App.Descent?.Reset();
 
             // Update all UI
             UpdateQuickLoginUI();

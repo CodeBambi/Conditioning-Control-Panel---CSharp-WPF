@@ -262,6 +262,13 @@ namespace ConditioningControlPanel
         /// Spending it in the constructor is the only way to guarantee a first-run user never gets
         /// that modal on top of the wizard; the Welcome step carries the folder affordance
         /// instead. The property keeps its persistence either way.</item>
+        /// <item><c>LastSeenVersion</c> - the first-run branch is the ONE path that never reaches
+        /// <c>MainWindow.ShowWhatsNewIfNeeded</c>, which is where every other launch stamps it.
+        /// Left blank, this install's first upgrade hit that method's empty-string guard, was
+        /// read as "fresh install", and had its first ever patch notes stamped away unshown.
+        /// Stamping here is correct on both wizard outcomes: it IS a fresh install of this
+        /// version whether or not the wizard ended up on screen, so <see cref="HandBackFirstRun"/>
+        /// deliberately does not undo it (the next launch re-stamps whatever version it is).</item>
         /// </list>
         /// </summary>
         public static bool ShouldRunAndClaim()
@@ -274,6 +281,7 @@ namespace ConditioningControlPanel
 
                 settings.Welcomed = true;
                 settings.FirstRunAssetsPromptShown = true;
+                settings.LastSeenVersion = UpdateService.AppVersion;
                 App.Settings?.Save();
                 return true;
             }

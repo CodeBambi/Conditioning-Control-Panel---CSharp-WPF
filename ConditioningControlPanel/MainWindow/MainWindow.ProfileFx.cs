@@ -56,6 +56,10 @@ namespace ConditioningControlPanel
                 // the incoming one — parking it is exactly what a hide should do.
                 InitializeProfileFx();
                 ApplyOgBorderLoop();
+                // THE VAT (MainWindow.ProfileVat.cs). "On screen" means the Trainer
+                // Card is the tab being arrived at — a hide, and the outgoing tab's
+                // fade-out re-show, both park the 60s poll.
+                OnProfileVatVisibilityChanged(visible && IsIncomingTab("discord"));
                 if (!visible) return;
                 // The rail's footer reads settings, not checkboxes, so it is right even before the
                 // Privacy & Sharing dialog has ever been opened. Refreshed on every show because a
@@ -92,7 +96,14 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Warning(ex, "InitializeProfileFx failed"); }
         }
 
-        private void OnProfileFxWindowStateish(object? sender, EventArgs e) => ApplyOgBorderLoop();
+        private void OnProfileFxWindowStateish(object? sender, EventArgs e)
+        {
+            ApplyOgBorderLoop();
+            // THE VAT'S POLL rides the same three window events: it is a network
+            // cadence, and a minimised or backgrounded app has no business fetching a
+            // meter nobody is looking at (MainWindow.ProfileVat.EvaluateVatPoll).
+            EvaluateVatPoll();
+        }
 
         // ============================== OG border loop ==============================
 

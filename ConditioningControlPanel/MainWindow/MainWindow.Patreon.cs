@@ -754,6 +754,12 @@ namespace ConditioningControlPanel
             {
                 UpdatePatreonUI();
                 UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                // Programs gate on the same entitlement: locked browse cards, the "needs a pledge"
+                // task badges and RequiredTasks itself all read HasPremiumAccess at BUILD time. A
+                // subscriber who opened the tab before async validation landed saw everything locked
+                // until they re-entered it, and a logout left it stale unlocked. Cheap: behind a
+                // hidden tab the refresh is a dirty flag and the Dashboard card.
+                if (ProgramsTab != null) RefreshProgramsUI();
                 MaybeShowPremiumCelebration();
             });
         }
@@ -844,11 +850,10 @@ namespace ConditioningControlPanel
             // Restore the Companion accordion open/closed state (sections default to collapsed)
             RestoreCompanionSectionStates();
 
-            // Hide avatar if disabled
-            if (!settings.AvatarEnabled)
-            {
-                HideAvatarTube();
-            }
+            // (The old "hide avatar if disabled" guard is gone: it ran in the ctor, before
+            // MainWindow_Loaded builds the tube, so it was always a no-op. #888 moved the decision
+            // to the only place it can work — the tube is not created at all when AvatarEnabled
+            // is false.)
 
             UpdatePatreonUI();
         }

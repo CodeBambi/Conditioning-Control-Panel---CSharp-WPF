@@ -402,6 +402,19 @@ namespace ConditioningControlPanel.Models
             set { _dailyQuestStreak = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        private int _lastPerfectWeekStreakAwarded = 0;
+        /// <summary>
+        /// The <see cref="DailyQuestStreak"/> value the "Perfect Bimbo Week" milestone bonus was
+        /// last paid out for. Without this latch the bonus re-fired on every daily quest completed
+        /// that day, and again after every restart (#895). Cleared when the streak falls below it,
+        /// so a broken-and-rebuilt streak earns the milestone again.
+        /// </summary>
+        public int LastPerfectWeekStreakAwarded
+        {
+            get => _lastPerfectWeekStreakAwarded;
+            set { _lastPerfectWeekStreakAwarded = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         #region Bark system
 
         private int _barkChatSuppressionMs = 10000;
@@ -703,10 +716,16 @@ namespace ConditioningControlPanel.Models
             set { _flashEnabled = value; OnPropertyChanged(); }
         }
 
+        // [JsonProperty] on the field + [JsonIgnore] on the property: the FILE keeps the user's own
+        // value while the getter can hand readers a session's live ramp. Same JSON key as before, so
+        // existing settings.json round-trips unchanged. See SetSessionFlashRamp.
+        [JsonProperty("FlashFrequency")]
         private int _flashFrequency = 10; // Flashes per hour (1-180)
+
+        [JsonIgnore]
         public int FlashFrequency
         {
-            get => _flashFrequency;
+            get => _sessionFlashFrequency ?? _flashFrequency;
             set { _flashFrequency = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
         }
 
@@ -776,23 +795,59 @@ namespace ConditioningControlPanel.Models
             set { _simultaneousImages = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        [JsonProperty("ImageScale")]
         private int _imageScale = 100; // 50-250% (100 = normal size, 200 = double, etc)
+
         /// <summary>
         /// Image scale as percentage. 50 = half size, 100 = normal, 200 = double size.
         /// Base size is 40% of monitor, then multiplied by this percentage.
         /// </summary>
+        [JsonIgnore]
         public int ImageScale
         {
-            get => _imageScale;
+            get => _sessionImageScale ?? _imageScale;
             set { _imageScale = Math.Clamp(value, 50, 250); OnPropertyChanged(); }
         }
 
+        [JsonProperty("FlashOpacity")]
         private int _flashOpacity = 100; // 10-100%
+
+        [JsonIgnore]
         public int FlashOpacity
         {
-            get => _flashOpacity;
+            get => _sessionFlashOpacity ?? _flashOpacity;
             set { _flashOpacity = Math.Clamp(value, 10, 100); OnPropertyChanged(); }
         }
+
+        // ---- Session ramp overlay (never persisted) ----
+
+        [JsonIgnore] private int? _sessionFlashOpacity;
+        [JsonIgnore] private int? _sessionFlashFrequency;
+        [JsonIgnore] private int? _sessionImageScale;
+
+        /// <summary>
+        /// Park a session's live flash values over the user's own, or pass nulls to hand them back.
+        ///
+        /// SessionEngine ramps flash opacity, frequency and scale every second. Those used to be
+        /// written straight into the persisted fields, so an app kill or crash mid-session froze the
+        /// ramp's maximum into settings.json permanently - the same shape of bug as the pink filter's
+        /// "screen keeps getting more pink and stays that way" (#471, #476), whose ramp was moved off
+        /// this path for exactly this reason. RestoreSettings only heals a CLEAN stop.
+        ///
+        /// Readers (FlashService) see the ramped value because the getters prefer the overlay; the
+        /// file, the settings sliders and every restore path still see the user's own. Deliberately
+        /// silent - no PropertyChanged - so a running session does not drag the user's sliders around
+        /// mid-ramp, matching how the pink and spiral ramps already behave.
+        /// </summary>
+        public void SetSessionFlashRamp(int? opacity, int? frequency, int? imageScale)
+        {
+            _sessionFlashOpacity = opacity.HasValue ? Math.Clamp(opacity.Value, 10, 100) : null;
+            _sessionFlashFrequency = frequency.HasValue ? Math.Clamp(frequency.Value, 1, 180) : null;
+            _sessionImageScale = imageScale.HasValue ? Math.Clamp(imageScale.Value, 50, 250) : null;
+        }
+
+        /// <summary>Hand the flash values back to the user. Safe to call when none were taken.</summary>
+        public void ClearSessionFlashRamp() => SetSessionFlashRamp(null, null, null);
 
         private int _fadeDuration = 40; // 0-200 (0-2 seconds, stored as percentage)
         public int FadeDuration
@@ -1198,13 +1253,18 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Tracks default subliminal triggers the user explicitly removed,
         /// so they don't get re-added on startup by MergeNewDefaultSubliminalTriggers.
+        /// Case-insensitive like <see cref="UserAddedSubliminals"/>: the editor upper-cases what
+        /// it writes back, so an ordinal set stopped matching the default it was recorded for and
+        /// the phrase resurrected on the next launch (#892).
         /// </summary>
-        private HashSet<string> _removedDefaultSubliminals = new();
+        private HashSet<string> _removedDefaultSubliminals = new(StringComparer.OrdinalIgnoreCase);
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public HashSet<string> RemovedDefaultSubliminals
         {
             get => _removedDefaultSubliminals;
-            set => _removedDefaultSubliminals = value ?? new();
+            set => _removedDefaultSubliminals = value == null
+                ? new(StringComparer.OrdinalIgnoreCase)
+                : new(value, StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -3079,6 +3139,120 @@ namespace ConditioningControlPanel.Models
             get => _fypOnlineConsented;
             set { _fypOnlineConsented = value; OnPropertyChanged(); }
         }
+
+        // ---- remote-media blocklist (app-wide, not FYP-only) ----
+        //
+        // The user's only content control over remote media, and deliberately the ONLY one:
+        // there is no NSFW filter and no safe-mode toggle (owner decision 2026-08-12). The
+        // niche catalog is entirely adult, so filtering on scrolller's isNsfw would empty the
+        // pool rather than shape it — that field stays fetched-and-unread on purpose.
+        //
+        // RemoteMedia* rather than FypOnline* because every consumer of the remote pool
+        // (feed, flashes, intake, DTRH) shares one blocklist, applied in FypOnlineCoordinator
+        // before entries reach any pool. Both are edited in place by the picker, so callers
+        // must App.Settings.Save() themselves — nothing here auto-persists.
+
+        private List<string> _remoteMediaBlockedSubs = new();
+        /// <summary>Subreddits the user never wants to see again (bare names, no "r/").
+        /// Excluded from every consumer's active channel set.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> RemoteMediaBlockedSubs
+        {
+            get => _remoteMediaBlockedSubs;
+            set
+            {
+                var clean = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var raw in value ?? new List<string>())
+                {
+                    var sub = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(raw);
+                    if (sub != null && seen.Add(sub)) clean.Add(sub);
+                }
+                // Over the cap the OLDEST entries go: a fresh block is the one the user just
+                // asked for, and silently dropping it would read as the button not working.
+                if (clean.Count > MaxRemoteMediaBlockedSubs)
+                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedSubs);
+                _remoteMediaBlockedSubs = clean;
+                OnPropertyChanged();
+            }
+        }
+
+        private List<string> _remoteMediaBlockedIds = new();
+        /// <summary>Individual remote entries the user blocked, by entry id
+        /// ("scrolller/&lt;sub&gt;/&lt;post&gt;"). Filtered out of every fetched page.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> RemoteMediaBlockedIds
+        {
+            get => _remoteMediaBlockedIds;
+            set
+            {
+                var clean = new List<string>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var raw in value ?? new List<string>())
+                {
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+                    var id = raw.Trim();
+                    if (id.Length > 120) continue;   // an id this long isn't one of ours
+                    if (seen.Add(id)) clean.Add(id);
+                }
+                if (clean.Count > MaxRemoteMediaBlockedIds)
+                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedIds);
+                _remoteMediaBlockedIds = clean;
+                OnPropertyChanged();
+            }
+        }
+
+        private const int MaxRemoteMediaBlockedSubs = 200;
+        private const int MaxRemoteMediaBlockedIds = 1000;
+
+        // ---- app-wide media source ----
+        //
+        // The whole point of the feature: a user with an empty assets folder should still be
+        // able to run flashes, videos, the intake and DTRH. This is the app-wide default;
+        // FypSource stays separate so the feed and the rest of the app can disagree.
+        //
+        // NICHE SELECTION IS DELIBERATELY NOT DUPLICATED HERE. Both the WPF picker in the
+        // Assets tab and the FYP page's popover edit FypOnlineNiches / FypOnlineCustomSubs —
+        // one taxonomy, one selection, two surfaces. A second app-wide niche list would drift
+        // from the feed's within a week and there is no user story for wanting them different.
+
+        private string _mediaSource = "local";
+        /// <summary>App-wide asset source: "local" (the user's assets folder, today's only
+        /// behaviour), "online" (remote media only) or "mixed" (both, blended by
+        /// <see cref="RemoteMediaRatio"/>). Whitelisted string rather than an enum, matching
+        /// <see cref="FypSource"/> — an unknown value from a synced or hand-edited settings
+        /// file must degrade to local, not throw.</summary>
+        public string MediaSource
+        {
+            get => _mediaSource;
+            set { _mediaSource = value is "local" or "online" or "mixed" ? value : "local"; OnPropertyChanged(); }
+        }
+
+        private int _remoteMediaRatio = 30;
+        /// <summary>In "mixed" mode, the share of picks drawn from the remote pool (%).</summary>
+        public int RemoteMediaRatio
+        {
+            get => _remoteMediaRatio;
+            set { _remoteMediaRatio = Math.Clamp(value, 5, 95); OnPropertyChanged(); }
+        }
+
+        private bool _remoteMediaConsented = false;
+        /// <summary>The one-time coaching card was accepted. Until then
+        /// <see cref="MediaSource"/> cannot leave "local" — see
+        /// <see cref="HasRemoteMediaConsent"/> for why this isn't read directly.</summary>
+        public bool RemoteMediaConsented
+        {
+            get => _remoteMediaConsented;
+            set { _remoteMediaConsented = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>True when the user has agreed to see remote content anywhere. Read THIS,
+        /// not the raw flag: users who already accepted the FYP feed's consent card agreed to
+        /// exactly this, and asking them a second time in different words would read as the
+        /// app having forgotten. Consent flows one way only — accepting the app-wide card
+        /// does not silently enable the premium feed.</summary>
+        [JsonIgnore]
+        public bool HasRemoteMediaConsent => _remoteMediaConsented || _fypOnlineConsented;
         #endregion
 
         #region Lock Card (Unlocks Lv.35)
@@ -3600,6 +3774,35 @@ namespace ConditioningControlPanel.Models
         {
             get => _brainDrainHighRefresh;
             set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
+        }
+
+        private int _brainDrainBlurStrength = 50; // 1-100
+        /// <summary>
+        /// Strength of the Brain Drain SCREEN BLUR (1-100). Deliberately separate from
+        /// <see cref="BrainDrainIntensity"/>, which is the AUDIO half's per-minute trigger
+        /// probability - the rework gave the visual its own dial. Drives both the gaussian
+        /// sigma and the draw alpha on the compositor layer (see BrainDrainLayer.SetIntensity);
+        /// applied live via OverlayService's settings hook while the overlay is showing.
+        /// </summary>
+        [JsonProperty]
+        public int BrainDrainBlurStrength
+        {
+            get => _brainDrainBlurStrength;
+            set { _brainDrainBlurStrength = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private bool _brainDrainMeltEnabled = false;
+        /// <summary>
+        /// Melting mode for the Brain Drain screen effect: the blur plus a slow Perlin
+        /// displacement warp ("melting glass"), i.e. the "braindrain_melt" overlay variant.
+        /// The capture pump fixes the melt flag per run, so OverlayService bounces the overlay
+        /// when this flips mid-show.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainMeltEnabled
+        {
+            get => _brainDrainMeltEnabled;
+            set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
         #endregion
 
@@ -5181,6 +5384,212 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Descent — Spiral rail
+
+        private bool _descentSpiralRailEnabled = false;
+        /// <summary>
+        /// Shows the Spiral Track miniature in the nav rail (CONTRACTS-0812-FINISH §9).
+        ///
+        /// FALSE IN EVERY SHIPPED BUILD, and deliberately without a settings editor: the
+        /// `/embed/spiral` route it hosts has not deployed, and a visible toggle for a
+        /// surface that cannot draw yet is worse than no toggle. Flip it by hand in
+        /// settings.json to exercise the host. When the Spiral goes public this becomes a
+        /// normal preference with a normal editor — or disappears, if the rail ends up
+        /// always-on.
+        ///
+        /// Even set true the rail stays dark unless the server has shipped this account a
+        /// descent block (SpiralRailHost.Arm), so turning it on cannot conjure a spiral
+        /// for an account outside the rollout dial.
+        /// </summary>
+        public bool DescentSpiralRailEnabled
+        {
+            get => _descentSpiralRailEnabled;
+            set { _descentSpiralRailEnabled = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Web XP claim (claim-on-sync handshake)
+
+        private string? _lastWebXpClaimId = null;
+        /// <summary>
+        /// Id of the last web-XP claim this client APPLIED to the local ledger. The server mints XP
+        /// for verified web activity into a pending bucket and offers it back on /v2/user/sync as
+        /// {id, amount}; this field is both the "already paid" marker and the ack we echo up on every
+        /// subsequent sync so the server can settle. Persisted before the XP is added, never after —
+        /// see the handshake comment in ProfileSyncService. Null until the first claim ever lands.
+        /// </summary>
+        [JsonProperty]
+        public string? LastWebXpClaimId
+        {
+            get => _lastWebXpClaimId;
+            set { _lastWebXpClaimId = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region The Descent — migration ceremony state
+
+        // Everything in this region is written by exactly one place: the migration ceremony
+        // (Services/Descent/DescentMigrationService). It is all inert on a fresh install and on
+        // every install today — the server has to offer the ceremony before any of it moves.
+        //
+        // TWO FLAGS, TWO MEANINGS, and mixing them up is the bug this comment exists to prevent:
+        //   DescentEpoch            — "which curve is my ledger denominated in". Set at SUBMIT,
+        //                             because the ledger we send must be derived under the curve
+        //                             we claim to be on.
+        //   DescentMigrationCompleted — "the server has acknowledged my choice". Set ONLY on the
+        //                             server's completed:true ack (CONTRACTS §2.4). A crash in
+        //                             between re-offers the ceremony and loses nothing, because
+        //                             both choices are idempotent against an unchanged lifetime XP.
+
+        private int _descentEpoch = 0;
+        /// <summary>
+        /// This ACCOUNT's curve epoch. 0 = curve v1 (everybody, today). 1 = post-ceremony, curve
+        /// v2 live. Read by ProgressionService.ActiveCurveEpoch. NOT the wire constant — see
+        /// DescentEpochs.ClientEpoch, which is a property of the build and is always 1.
+        /// </summary>
+        [JsonProperty]
+        public int DescentEpoch
+        {
+            get => _descentEpoch;
+            set { _descentEpoch = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentMigrationCompleted = false;
+        /// <summary>
+        /// True only once the server has answered a submit with descent_migration.completed.
+        /// The ceremony will not re-offer while this is set, and nothing else may set it.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentMigrationCompleted
+        {
+            get => _descentMigrationCompleted;
+            set { _descentMigrationCompleted = value; OnPropertyChanged(); }
+        }
+
+        private string? _descentMigrationChoice = null;
+        /// <summary>"restore" or "cycle" — the acknowledged choice. Null until the ack lands.</summary>
+        [JsonProperty]
+        public string? DescentMigrationChoice
+        {
+            get => _descentMigrationChoice;
+            set { _descentMigrationChoice = value; OnPropertyChanged(); }
+        }
+
+        private string? _pendingDescentMigrationChoice = null;
+        /// <summary>
+        /// A choice the user has made and this client has applied locally, but which the server
+        /// has not acked yet. Its presence is what makes the next sync carry descent_migration,
+        /// and what stops the ceremony re-opening in front of somebody who already chose. Cleared
+        /// by the ack. A submit that never lands simply retries on every subsequent sync — the
+        /// server treats a repeat submit as a silent no-op (CONTRACTS §2.6).
+        /// </summary>
+        [JsonProperty]
+        public string? PendingDescentMigrationChoice
+        {
+            get => _pendingDescentMigrationChoice;
+            set { _pendingDescentMigrationChoice = value; OnPropertyChanged(); }
+        }
+
+        private DateTime? _descentAnchorUtc = null;
+        /// <summary>
+        /// Year One anchor: the ceremony date (§10). For veterans this is the birth of their
+        /// year, which is why the spiral starts at Day 1 for everybody — nobody's track arrives
+        /// pre-lit. Local mirror of the server's descent.anchor; the server's copy is canonical.
+        /// </summary>
+        [JsonProperty]
+        public DateTime? DescentAnchorUtc
+        {
+            get => _descentAnchorUtc;
+            set { _descentAnchorUtc = value; OnPropertyChanged(); }
+        }
+
+        private int _descentCycle = 0;
+        /// <summary>Cycles taken. 1 after choosing "Descend again". The permanent mark on the card.</summary>
+        [JsonProperty]
+        public int DescentCycle
+        {
+            get => _descentCycle;
+            set { _descentCycle = value; OnPropertyChanged(); }
+        }
+
+        private double _descentCycleXpBonus = 1.0;
+        /// <summary>
+        /// The lasting XP multiplier a Cycle grants. 1.0 = none. Written from
+        /// DescentMigration.CycleXpBonus at submit and clamped to it on read, so the persisted
+        /// figure can never exceed the blessed constant even if the file is edited by hand.
+        /// </summary>
+        [JsonProperty]
+        public double DescentCycleXpBonus
+        {
+            get => _descentCycleXpBonus;
+            set { _descentCycleXpBonus = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentVeteranArchive = false;
+        /// <summary>
+        /// The keepsake marker (§6 reveal ruling): veterans are paid in an archive of every recap
+        /// card they ever earned plus a badge that says they were here before the fall — NOT in
+        /// spiral position. Set for both choices. The server grants the same marker; this is the
+        /// local mirror so the badge renders before the next profile read.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentVeteranArchive
+        {
+            get => _descentVeteranArchive;
+            set { _descentVeteranArchive = value; OnPropertyChanged(); }
+        }
+
+        private int _descentPreMigrationLevel = 0;
+        /// <summary>The level the subject stood at when the ceremony opened. Keepsake copy; 0 = never migrated.</summary>
+        [JsonProperty]
+        public int DescentPreMigrationLevel
+        {
+            get => _descentPreMigrationLevel;
+            set { _descentPreMigrationLevel = value; OnPropertyChanged(); }
+        }
+
+        private double _descentPreMigrationLifetimeXp = 0;
+        /// <summary>Lifetime XP as the server reported it in the offer. Keepsake copy.</summary>
+        [JsonProperty]
+        public double DescentPreMigrationLifetimeXp
+        {
+            get => _descentPreMigrationLifetimeXp;
+            set { _descentPreMigrationLifetimeXp = value; OnPropertyChanged(); }
+        }
+
+        private List<int> _descentPendingStageCeremonies = new();
+        /// <summary>
+        /// THE DRIP (§6). "Take it all back" restores a veteran to a stage they never watched
+        /// themselves reach, so the stage ceremonies they skipped are queued here and released
+        /// ONE PER LOGIN DAY instead of firing in a single unwatchable burst — a veteran relives
+        /// the ladder across a week or two. Client-paced: no server involvement, no timer, just
+        /// this queue and <see cref="DescentLastStageDripDate"/>. Empty for a Cycle, which has no
+        /// ladder to re-walk.
+        /// </summary>
+        [JsonProperty]
+        public List<int> DescentPendingStageCeremonies
+        {
+            get => _descentPendingStageCeremonies;
+            set { _descentPendingStageCeremonies = value ?? new List<int>(); OnPropertyChanged(); }
+        }
+
+        private string? _descentLastStageDripDate = null;
+        /// <summary>
+        /// Local yyyy-MM-dd the last queued stage ceremony was released on. One per DAY, not per
+        /// launch — a user who restarts the app five times gets one, and a user who never opens
+        /// it loses nothing (the queue waits).
+        /// </summary>
+        [JsonProperty]
+        public string? DescentLastStageDripDate
+        {
+            get => _descentLastStageDripDate;
+            set { _descentLastStageDripDate = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Season Recap (local-only, per-device)
 
         // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.
@@ -6285,6 +6694,33 @@ namespace ConditioningControlPanel.Models
         {
             get => _videoEnhanceIfPossible;
             set { _videoEnhanceIfPossible = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region One Descent
+
+        private string? _installDate = null;
+        /// <summary>
+        /// Best available evidence of when this install first appeared on this machine, as a UTC
+        /// <c>yyyy-MM-dd</c> string. Written ONCE by <c>App.EnsureInstallDateRecorded</c> on the
+        /// first launch that finds it absent (see that method for the evidence ordering) and never
+        /// touched again — a re-derived value would drift downward as old files are cleaned up.
+        ///
+        /// Sent to the server as <c>install_date</c> on POST /v2/user/sync, where it lands in
+        /// <c>legacy_install_date</c> (also stored once). This is LEGACY FALLBACK DATA ONLY: the
+        /// Descent's Year One anchor is the migration-ceremony date for veterans and account
+        /// creation for new users (DECISIONS.md 2026-08-10). Nothing in the UI reads it.
+        ///
+        /// Null on installs that predate this field only until their next launch. Never blank —
+        /// the recorder falls back to today rather than writing an empty string, so
+        /// "null" reliably means "not recorded yet".
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string? InstallDate
+        {
+            get => _installDate;
+            set { _installDate = value; OnPropertyChanged(); }
         }
 
         #endregion

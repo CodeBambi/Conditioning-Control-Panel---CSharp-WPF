@@ -204,6 +204,18 @@ shim.onBoot(async (config) => {
 
     if (dom.loader) dom.loader.hidden = true;
 
+    // --- REMOTE MEDIA: stock the pool while the menu is up ------------------
+    // The host's manifest is local and one-shot; remote stills arrive in batches over
+    // `need-remote`/`assets-append` and land IN PLACE in config.media.images, which every
+    // module above already holds. Self-clocking: each successful append asks again until
+    // the shim's cap is hit, so by the time the first reward fires the pool is stocked.
+    // Costs nothing when the feature is off — requestRemoteMedia() no-ops standalone and
+    // whenever the host did not set remoteMedia.
+    if (config.remoteMedia) {
+      shim.onMediaAppend(() => shim.requestRemoteMedia());
+      shim.requestRemoteMedia();
+    }
+
     // --- kawaii MAIN MENU (ui/menu.js) ------------------------------------
     // The storefront goes up the instant the loader drops and BEFORE buildHud /
     // the clinical briefing, so the run's HUD never sits behind the title screen

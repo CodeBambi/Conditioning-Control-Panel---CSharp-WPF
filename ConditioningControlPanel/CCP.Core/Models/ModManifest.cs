@@ -179,6 +179,30 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("rankSubject")]
         public string? RankSubject { get; set; }
+
+        /// <summary>
+        /// Descent vocabulary: what this mod calls ONE user inside narrative copy — the value that
+        /// replaces the <c>{petname}</c> token in localized strings (see
+        /// <see cref="Localization.VocabTokens"/>). Unset on every built-in mod today, which means
+        /// every token resolves to the vanilla default.
+        ///
+        /// Deliberately NOT the same field as <see cref="UserTerm"/>: UserTerm is a UI label
+        /// ("Bambi", "Subject", "Unit") that appears title-cased in buttons and headings, while
+        /// petName is written into running prose and wants the mod's in-fiction lowercase address.
+        /// A mod that wants them identical just sets both.
+        /// </summary>
+        [JsonProperty("petName")]
+        public string? PetName { get; set; }
+
+        /// <summary>
+        /// Descent vocabulary: what this mod calls the user base as a group — the value that
+        /// replaces the <c>{collective}</c> token (plural of <see cref="PetName"/> in practice, but
+        /// free-form: a mod may prefer a group noun over a plural). Unset falls back to the vanilla
+        /// default; there is no automatic pluralization of <see cref="PetName"/>, because guessing
+        /// plurals across nine localized languages is a worse failure than a default.
+        /// </summary>
+        [JsonProperty("collective")]
+        public string? Collective { get; set; }
     }
 
     public class ModTriggers

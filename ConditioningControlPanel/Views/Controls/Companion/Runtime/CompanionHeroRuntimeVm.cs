@@ -45,8 +45,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public ICommand TutorialCommand { get; }
         public ICommand OpenPatreonCommand { get; }
 
-        /// <summary>Re-reads entitlement. Called from the room's Sync, which MainWindow drives.</summary>
-        public void Sync() => HasAiAccess = App.Patreon?.HasAiAccess == true;
+        /// <summary>Re-reads entitlement. Called from the room's Sync, which MainWindow drives.
+        /// Identity counts: AI chat is not a tier perk (usage is), so a signed-in free account is
+        /// entitled and the plate lights - same bar the send path and Z2's veil use.</summary>
+        public void Sync() => HasAiAccess = App.Patreon?.HasAiAccess == true || App.HasCloudIdentity;
     }
 
     /// <summary>
@@ -69,6 +71,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     /// </summary>
     internal sealed class CompanionHeroRuntimeVm : CompanionObservable, ICompanionHeroCardVm
     {
+        /// <summary>
+        /// Decode cap for the bust, in the mod-awareness sweep's width-keyed idiom. The ring's hole
+        /// is 132 DIP — 264px at 200% scaling — and the figure's own ink is roughly half the art's
+        /// width, so 512 is the first cap that is still a downscale of the shipped 540px pose and
+        /// never a visible one. The width belongs in the cache key because the SAME path is asked
+        /// for full-res elsewhere (the avatar tube draws it at native size).
+        /// </summary>
+        private const int PortraitDecodeWidth = 512;
+
         private readonly CompanionRuntimeContext _ctx;
 
         private string _name = string.Empty;
@@ -184,7 +195,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             Name = App.Mods?.MakeModAware(display) ?? display;
             ModName = App.Mods?.ActiveMod?.Name ?? string.Empty;
             Flavor = App.Mods?.MakeModAware(def.Description) ?? def.Description;
-            Portrait = LoadPortrait();
+
+            // Null means neither the mod nor the embedded copy could be decoded: keep whatever is
+            // already in the ring rather than blanking her out of her own card.
+            Portrait = LoadPortrait() ?? Portrait;
 
             // ---- progression (the COMPANION's bar, as the old hero strip showed) ----
             var progress = App.Companion?.ActiveProgress;
@@ -246,6 +260,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// <summary>
         /// The old <c>RefreshHeroAvatar</c>, moved whole: the active avatar set's pose-1 bitmap,
         /// resolved through the mod resolver first so a themed mod's bust wins.
+        ///
+        /// <para>Returns null when nothing resolved. The caller keeps the bitmap already painted —
+        /// the hand-rolled <c>pack://</c> fallback this used to end with was the resolver's OWN last
+        /// link written out a second time, so a null here now genuinely means "there is no such
+        /// art", not "the resolver declined to look in Resources/".</para>
         /// </summary>
         private static ImageSource? LoadPortrait()
         {
@@ -260,16 +279,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                 var prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
                 var resourceName = $"{prefix}1.png";
 
-                var resolved = Services.ModResourceResolver.ResolveImage(resourceName);
-                if (resolved != null) return resolved;
-
-                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri($"pack://application:,,,/Resources/{resourceName}", UriKind.Absolute);
-                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                return bitmap;
+                return Services.ModResourceResolver.ResolveImageDecoded(resourceName, PortraitDecodeWidth)
+                       ?? Services.ModResourceResolver.ResolveImage(resourceName);
             }
             catch (Exception ex)
             {

@@ -234,7 +234,7 @@
                     </DataTrigger>
                     <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                         <Setter TargetName="EnableChk" Property="Content" Value="Off"/>
-                        <Setter TargetName="EnableChk" Property="Foreground" Value="#808080"/>
+                        <Setter TargetName="EnableChk" Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
                         <Setter TargetName="BuiltInText" Property="Foreground" Value="#606060"/>
                         <Setter TargetName="CustomText" Property="Foreground" Value="#606060"/>
                     </DataTrigger>
@@ -259,7 +259,7 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock Text="{loc:Str label_phrase_manager}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
             <TextBlock Text="{loc:Str label_manage_companion_speech_bubble_phrases_and_co}"
-                       Foreground="#808080" FontSize="11" Margin="0,3,0,0"/>
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"/>
         </StackPanel>
 
         <!-- Toolbar -->
@@ -286,7 +286,7 @@
                                    Margin="9,0,0,0" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
-                <TextBlock Text="{loc:Str label_filter}" Foreground="#808080" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="{loc:Str label_filter}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <ComboBox x:Name="CmbCategoryFilter" Width="160" Style="{StaticResource DarkComboBox}"
                           FontSize="11" SelectionChanged="CmbCategoryFilter_SelectionChanged"/>
             </StackPanel>
@@ -328,7 +328,7 @@
                         Foreground="#FF6B6B" Click="BtnRemoveSelected_Click"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBlock x:Name="TxtTotalCount" Foreground="#808080" FontSize="11"
+                <TextBlock x:Name="TxtTotalCount" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,12,0"/>
                 <Button Content="{loc:Str btn_close}" Style="{StaticResource SecondaryButton}" Padding="16,6"
                         Click="BtnClose_Click"/>

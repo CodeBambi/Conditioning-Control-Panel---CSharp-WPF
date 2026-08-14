@@ -90,17 +90,40 @@ namespace ConditioningControlPanel.Services
             "^\\s*«[^«»\r\n]{0,80}?\\bsaid aloud:\\s*(?<inner>.*?)\\s*»?\\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
+        // Third live shape (0813, first seen after a mod switch): the model answers with a whole
+        // multi-speaker TRANSCRIPT — several «X said aloud: "…"» blocks back to back, often
+        // attributed to DIFFERENT companions («BambiSprite …» next to «DroneOS …» when stale
+        // bark echoes from the previous mod were still in the window). The anchored wrapper above
+        // strips only the first opener of such a reply and leaves the rest, which is exactly the
+        // mangled shape that reached the bubble. This matches one block anywhere in the text,
+        // tolerating an unclosed final block (the token cap eats the close).
+        private static readonly Regex EmbeddedSpokenSigil = new(
+            "«(?<speaker>[^«»\r\n]{0,80}?)\\bsaid aloud:\\s*(?<inner>[^«»]*?)\\s*(?:»|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
         /// <summary>
         /// Unwraps a reply the model delivered inside the bark-echo sigil («X said aloud: "…"»),
         /// returning the inner speech. Applied repeatedly (bounded) for the double-wrapped case.
         /// Text that does not start with the sigil is returned unchanged; an all-shell reply unwraps
         /// to empty and the caller decides what to say instead.
+        ///
+        /// <para><paramref name="activeSpeaker"/> is the current companion's name, when the caller
+        /// knows it. It only matters for the transcript shape (several sigil blocks in one reply):
+        /// blocks attributed to a DIFFERENT speaker are the model roleplaying someone else — e.g.
+        /// the previous mod's companion — and are dropped rather than unwrapped. Null keeps every
+        /// block's inner speech, which is the safe choice for persisted-history repair.</para>
         /// </summary>
-        internal static string UnwrapSpokenSigil(string? text)
+        internal static string UnwrapSpokenSigil(string? text, string? activeSpeaker = null)
         {
             if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
 
             var current = TrimSigilDebris(text.Trim());
+
+            // Two or more blocks = a transcript, not a wrapped reply. The anchored loop below
+            // would eat only the first opener and hand the rest to the bubble verbatim.
+            if (EmbeddedSpokenSigil.Matches(current).Count >= 2)
+                return SalvageSigilTranscript(current, activeSpeaker);
+
             for (int i = 0; i < 2; i++)
             {
                 var m = SpokenSigilWrapper.Match(current);
@@ -117,7 +140,44 @@ namespace ConditioningControlPanel.Services
                 if (current.Length == 0) break;
             }
 
+            // A single block buried mid-text ("sure! «X said aloud: …» anyway") never matches the
+            // start-anchored wrapper; salvage it the same way.
+            if (current.Length > 0 && EmbeddedSpokenSigil.IsMatch(current) && current.IndexOf('«') >= 0)
+                current = SalvageSigilTranscript(current, activeSpeaker);
+
             return current;
+        }
+
+        /// <summary>
+        /// Flattens a sigil-transcript reply into plain speech: each block attributed to
+        /// <paramref name="activeSpeaker"/> (or to nobody we can rule out) is replaced by its inner
+        /// speech, blocks attributed to anyone else are removed, and the guillemet/quote debris the
+        /// blocks leave behind is swept up. Empty result means the whole reply was other people's
+        /// lines — the caller falls back exactly as for an all-shell reply.
+        /// </summary>
+        private static string SalvageSigilTranscript(string text, string? activeSpeaker)
+        {
+            var flattened = EmbeddedSpokenSigil.Replace(text, m =>
+            {
+                var speaker = m.Groups["speaker"].Value.Trim();
+                if (!string.IsNullOrEmpty(activeSpeaker) && speaker.Length > 0 &&
+                    speaker.IndexOf(activeSpeaker, System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                    activeSpeaker!.IndexOf(speaker, System.StringComparison.OrdinalIgnoreCase) < 0)
+                    return " ";
+
+                var inner = m.Groups["inner"].Value.Trim();
+                if (inner.StartsWith("\"", System.StringComparison.Ordinal))
+                    inner = inner.Substring(1);
+                if (inner.EndsWith("\"", System.StringComparison.Ordinal))
+                    inner = inner.Substring(0, inner.Length - 1);
+                return " " + inner.Trim() + " ";
+            });
+
+            // In a reply that carried sigil blocks, a leftover "» pair (a close the model never
+            // opened) or a lone guillemet is scaffolding from the same failure, not prose.
+            flattened = flattened.Replace("\"»", " ").Replace("«", " ").Replace("»", " ");
+            flattened = Regex.Replace(flattened, @"\s{2,}", " ").Trim();
+            return TrimSigilDebris(flattened);
         }
 
         // Second live shape (0806): the model closed a sigil it never opened and tacked on the

@@ -62,7 +62,7 @@
                     Grid.Column="1"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="28" Height="28" Margin="0,8,12,0"
-                    Background="Transparent" Foreground="#888888"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Panel.ZIndex="1"
                     Click="BtnDismiss_Click">
@@ -97,37 +97,74 @@
                            TextWrapping="Wrap" LineHeight="18"
                            Margin="0,4,0,16"/>
 
-                <Button x:Name="BtnDismiss" Content="Got it" Click="BtnDismiss_Click"
-                        HorizontalAlignment="Left"
-                        Width="132" Height="37"
-                        Cursor="Hand"
-                        FontSize="14" FontWeight="SemiBold">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                            <Setter Property="Foreground" Value="White"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                CornerRadius="18" Padding="16,6">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <!-- v6.8.0: an optional CTA ahead of the dismiss button (built for the
+                     one-account card). Collapsed unless the content carries both an ActionLabel
+                     and an OnAction, so every existing card renders exactly as before. When the
+                     CTA is present, code-behind gives it the accent fill and steps the dismiss
+                     button back to a quiet ghost. -->
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnAction" Click="BtnAction_Click"
+                            Visibility="Collapsed"
+                            Height="37" MinWidth="132" Margin="0,0,12,0"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    CornerRadius="18" Padding="16,6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnDismiss" Content="Got it" Click="BtnDismiss_Click"
+                            Height="37" MinWidth="132"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    CornerRadius="18" Padding="16,6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Border>

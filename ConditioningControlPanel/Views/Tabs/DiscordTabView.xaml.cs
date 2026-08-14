@@ -101,6 +101,16 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnViewMyProfile_Click(sender, e);
         }
+        /// <summary>
+        /// The link-notice button reuses the Privacy panel's login/link flow verbatim - that
+        /// handler drives BtnDiscordTabLogin (which lives on the long-lived panel instance and
+        /// is therefore addressable whether or not the dialog is open).
+        /// </summary>
+        private void BtnDiscordTabLogin_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnDiscordTabLogin_Click(sender, e);
+        }
         private void BtnProfilePrivacy_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -115,6 +125,13 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.TxtProfileSearch_KeyDown(sender, e);
+        }
+        /// <summary>The Trainer Card's spiral plate. Opens the expanded map window - the
+        /// same door the nav rail's miniature uses (MainWindow.ProfileSpiral.cs).</summary>
+        private void ProfileSpiralPlate_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OpenSpiralMapFromProfile();
         }
         private void ProfileAchievementTile_Click(object sender, MouseButtonEventArgs e)
         {

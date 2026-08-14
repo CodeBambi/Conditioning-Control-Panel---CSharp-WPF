@@ -228,7 +228,10 @@ namespace ConditioningControlPanel.Services
                             // screen until the 5-min stuck backstop, and could bounce indefinitely. Give up
                             // after this single re-defer and release the slot so the queue keeps moving.
                             App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase: {Phrase}", blocker, phraseSnippet);
-                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
+                            // CompleteIfCurrent, not Complete: if the card blocking us is the one
+                            // holding the slot, a type-blind Complete would release SOMEONE ELSE's
+                            // live claim and dequeue the next interaction over their open window.
+                            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.LockCard);
                             break;
 
                         case BlockedCardAction.Defer:
@@ -254,7 +257,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.TryStart(
                         InteractionQueueService.InteractionType.LockCard,
-                        () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest),
+                        () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
                         queue: true);
                     return;
                 }

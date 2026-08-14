@@ -4,510 +4,657 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:cmp="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <!-- ============================================================================
+         Velvet Kit 2 · Round 4 — premium tab parity pass.
+
+         Hue identity: WATCHFUL AMBER. Declared LOCALLY with literal colors on purpose -
+         a fresh cross-dictionary StaticResource inserted into Resources/Theme/* trips
+         WPF's deferred-BAML EndOfStreamException and takes every styled control down
+         with it. Same alpha family as the Theme section hues: full / 0x40 border / 0x14 wash.
+         ============================================================================ -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TabHueBrush" Color="#FFB84E"/>
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40FFB84E"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+            <GradientStop Color="#14FFB84E" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+
+        <!-- The base (non-mod) feature art. Shared by the hidden mod-art carrier Image, the
+             72px hero plate and the side-art card, so a mod switch repaints all three from
+             one assignment - see the carrier comment in the hero below. -->
+        <BitmapImage x:Key="AwarenessArt"
+                     UriSource="pack://application:,,,/Resources/features/awareness.png"
+                     DecodePixelWidth="800"/>
+    </UserControl.Resources>
+
       <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid Margin="28,20,28,20" MaxWidth="980" HorizontalAlignment="Center">
+            <Grid Margin="28,20,28,20" MaxWidth="1300" HorizontalAlignment="Center">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Header -->
-                    <RowDefinition Height="Auto"/> <!-- Pulse -->
-                    <RowDefinition Height="Auto"/> <!-- Presets -->
-                    <RowDefinition Height="Auto"/> <!-- Timing (two sliders) -->
-                    <RowDefinition Height="Auto"/> <!-- Sources + Safety (two columns) -->
-                    <RowDefinition Height="Auto"/> <!-- Custom triggers (Phase 5 G3 rescue) -->
-                    <RowDefinition Height="Auto"/> <!-- Advanced link -->
+                    <RowDefinition Height="Auto"/> <!-- Hero -->
+                    <RowDefinition Height="Auto"/> <!-- Capped settings column + side art -->
                 </Grid.RowDefinitions>
-    
-                <!-- ==================== HERO BANNER + HEADER ==================== -->
-                <StackPanel Grid.Row="0">
-                <Border CornerRadius="14" Margin="0,0,0,18" ClipToBounds="True" MaxHeight="320"
-                        HorizontalAlignment="Center" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                    <Image x:Name="ImgAwarenessFeature" x:FieldModifier="internal" Source="pack://application:,,,/Resources/features/awareness.png"
-                           Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Border>
-                <Grid Margin="0,0,0,22">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Image Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center" Margin="0,0,14,0"
-                           Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Awareness Engine" Foreground="White" FontSize="22" FontWeight="Bold"/>
-                        <TextBlock Text="She's watching your screen and your typing. React in real time."
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="BtnAwarenessTutorial" Content="🎓 Tutorial"
-                                Style="{StaticResource SmallPinkButton}"
-                                VerticalAlignment="Center" Margin="0,0,16,0"
-                                Click="BtnAwarenessTutorial_Click"
-                                ToolTip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor."/>
-                        <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off" Foreground="#A0A0A0"
-                                   FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                        <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
-                                  VerticalAlignment="Center"
-                                  Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed">
-                            <CheckBox.ToolTip>
-                                <ToolTip>
-                                    <StackPanel MaxWidth="320">
-                                        <TextBlock Text="Awareness Engine — Master Switch" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                            Turns the whole Awareness system on or off. When ON, enabled signal sources (OCR + keyboard) feed words into the trigger engine and matching keywords fire their actions in real time. When OFF, nothing detects anything — installed presets stay on disk but do nothing.
-                                        </TextBlock>
-                                    </StackPanel>
-                                </ToolTip>
-                            </CheckBox.ToolTip>
-                        </CheckBox>
-                    </StackPanel>
-                </Grid>
-                </StackPanel>
-    
-                <!-- ==================== LIVE PULSE ==================== -->
-                <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                        BorderThickness="1" CornerRadius="10" Padding="18,16" Margin="0,0,0,18">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,10">
-                            <TextBlock Text="LAST DETECTED" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtAwarenessFireCount" x:FieldModifier="internal" Text="" HorizontalAlignment="Right"
-                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10"/>
-                        </Grid>
-                        <StackPanel x:Name="AwarenessPulseFeed" x:FieldModifier="internal">
-                            <!-- Empty state shown when no fires yet -->
-                            <TextBlock x:Name="TxtAwarenessPulseEmpty" x:FieldModifier="internal"
-                                       Text="Nothing yet. Enable the engine and she'll start noticing things."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontStyle="Italic"
-                                       TextAlignment="Center" Margin="0,18,0,18"/>
+
+                <!-- ==================== HERO ====================
+                     Replaces the old MaxHeight="320" banner + the separate 22px header row.
+                     Absorbs the title, subtitle, tutorial button, status dot/label and the
+                     master toggle (in the pill) exactly as they were, names and handlers intact. -->
+                <Border Grid.Row="0" Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,12">
+                    <Grid>
+                        <!-- MOD-ART CARRIER. MainWindow.xaml.cs (descImageMap) writes
+                             AwarenessTab.ImgAwarenessFeature.Source when a mod overrides
+                             features/awareness.png, and that file is shared - it may not be
+                             edited from this pass. So the named Image stays alive as a
+                             zero-size carrier and the hero/side plates take their ImageSource
+                             from it by ElementName binding: the mod swap still repaints both,
+                             and if the binding ever fails they fall back to the base art. -->
+                        <Image x:Name="ImgAwarenessFeature" x:FieldModifier="internal"
+                               Source="{StaticResource AwarenessArt}"
+                               Width="0" Height="0" Visibility="Collapsed"/>
+
+                        <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
+                            <Border.Background>
+                                <ImageBrush Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9"
+                                            ImageSource="{Binding Source, ElementName=ImgAwarenessFeature,
+                                                          FallbackValue={StaticResource AwarenessArt},
+                                                          TargetNullValue={StaticResource AwarenessArt}}"/>
+                            </Border.Background>
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#00000000" Offset="0"/>
+                                    <GradientStop Color="#E6000000" Offset="0.55"/>
+                                </LinearGradientBrush>
+                            </Border.OpacityMask>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                            <Image Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0"
+                                   Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Awareness Engine" FontSize="17" FontWeight="Bold"
+                                           Foreground="{StaticResource TextLightBrush}"/>
+                                <TextBlock Text="She's watching your screen and your typing. React in real time."
+                                           FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-    
-                <!-- ==================== PRESETS ==================== -->
-                <StackPanel Grid.Row="2" Margin="0,0,0,18">
-                    <Grid Margin="4,0,4,10">
-                        <TextBlock Text="PRESETS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                                   VerticalAlignment="Center"/>
-                        <TextBlock Text="One-click packs — click any card to preview or install"
-                                   HorizontalAlignment="Right"
-                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Margin="0,0,16,0">
+                            <Button x:Name="BtnAwarenessTutorial" Content="🎓 Tutorial"
+                                    Style="{StaticResource SmallPinkButton}"
+                                    VerticalAlignment="Center" Margin="0,0,14,0"
+                                    Click="BtnAwarenessTutorial_Click"
+                                    ToolTip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor."/>
+                            <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8"
+                                     Fill="#606060" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Border CornerRadius="99" Background="#8C131320" VerticalAlignment="Center"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                    Padding="12,5,12,5">
+                                <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" feat:SessionLock.Owned="True"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed">
+                                    <CheckBox.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="320">
+                                                <TextBlock Text="Awareness Engine — Master Switch" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    Turns the whole Awareness system on or off. When ON, enabled signal sources (OCR + keyboard) feed words into the trigger engine and matching keywords fire their actions in real time. When OFF, nothing detects anything — installed presets stay on disk but do nothing.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </CheckBox.ToolTip>
+                                </CheckBox>
+                            </Border>
+                        </StackPanel>
                     </Grid>
-                    <!-- Cards are built imperatively in MainWindow.RefreshAwarenessPresetCards
-                         so the trailing "+ New Preset" card can share the wrap flow with the
-                         real preset cards. -->
-                    <WrapPanel x:Name="AwarenessPresetItems" x:FieldModifier="internal" HorizontalAlignment="Stretch"/>
-                </StackPanel>
-    
-                <!-- ==================== TIMING ==================== -->
-                <StackPanel Grid.Row="3" Margin="0,0,0,14">
-                    <TextBlock Text="TIMING" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                               Margin="4,0,4,10"/>
-                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                            BorderThickness="1" CornerRadius="10" Padding="18,14">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="14"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-    
-                            <!-- Col 0: global effect cooldown -->
-                            <StackPanel Grid.Column="0">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="Cooldown between effects" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                                               VerticalAlignment="Center"/>
-                                    <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
-                                        <Button.ToolTip>
+                </Border>
+
+                <!-- ==================== ROUND-3 WIDE LAYOUT ====================
+                     The settings column is capped (3*, MaxWidth 780) so a cooldown slider stops
+                     being a ~1200px runway, and the width that buys back becomes one big art
+                     card instead of dead margin. Below 1000px the art column goes to zero and
+                     the settings retake the full width: Features/AdaptiveSideArt.cs. -->
+                <Grid Grid.Row="1" feat:AdaptiveSideArt.CollapseBelow="1000">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MaxWidth="780"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+
+                        <!-- ==================== LIVE PULSE ====================
+                             The heartbeat of the tab: amber wash + edge bar so it reads as the
+                             one live surface on the page. Rows are built imperatively in
+                             MainWindow.RefreshAwarenessPulseFeed - AwarenessPulseFeed keeps its
+                             name AND its StackPanel type. -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <Grid Margin="0,0,0,10">
+                                        <TextBlock Text="LAST DETECTED" Foreground="{StaticResource TabHueBrush}"
+                                                   FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtAwarenessFireCount" x:FieldModifier="internal" Text="" HorizontalAlignment="Right"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"/>
+                                    </Grid>
+                                    <StackPanel x:Name="AwarenessPulseFeed" x:FieldModifier="internal">
+                                        <!-- Empty state shown when no fires yet -->
+                                        <TextBlock x:Name="TxtAwarenessPulseEmpty" x:FieldModifier="internal"
+                                                   Text="Nothing yet. Enable the engine and she'll start noticing things."
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontStyle="Italic"
+                                                   TextAlignment="Center" Margin="0,18,0,18"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- ==================== PRESETS ====================
+                             Deliberately NOT compressed: a preset wall is rich content, it only
+                             gets the kicker recolor. Cards are built imperatively in
+                             MainWindow.RefreshAwarenessPresetCards so the trailing "+ New Preset"
+                             card can share the wrap flow - AwarenessPresetItems keeps its name
+                             AND its WrapPanel type. -->
+                        <StackPanel Margin="0,4,0,14">
+                            <Grid Margin="4,0,4,10">
+                                <TextBlock Text="PRESETS" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="One-click packs — click any card to preview or install"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
+                            </Grid>
+                            <WrapPanel x:Name="AwarenessPresetItems" x:FieldModifier="internal" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+
+                        <!-- ==================== TIMING ====================
+                             Two 36px slider rows in ONE dense card. The old per-slider help
+                             buttons are gone: their long copy is the row's own ToolTip now, so
+                             the whole row explains itself on hover instead of a 14px target. -->
+                        <TextBlock Text="TIMING" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                   Margin="4,0,4,8"/>
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,8,16,8">
+
+                                    <Grid Height="36" Background="Transparent">
+                                        <Grid.ToolTip>
                                             <ToolTip>
                                                 <StackPanel MaxWidth="340">
                                                     <TextBlock Text="Cooldown between effects" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
-                                        </Button.ToolTip>
-                                    </Button>
-                                </StackPanel>
-                                <Grid>
-                                    <Slider x:Name="SliderAwarenessGlobalCooldown" x:FieldModifier="internal" Minimum="1" Maximum="180"
-                                            TickFrequency="1" IsSnapToTickEnabled="True"
-                                            ValueChanged="SliderAwarenessGlobalCooldown_ValueChanged"/>
-                                    <TextBlock x:Name="TxtAwarenessGlobalCooldown" x:FieldModifier="internal" Text="10s"
-                                               Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                </Grid>
-                            </StackPanel>
-    
-                            <!-- Col 2: same-word cooldown -->
-                            <StackPanel Grid.Column="2">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="Same-word cooldown" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                                               VerticalAlignment="Center"/>
-                                    <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
-                                        <Button.ToolTip>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Cooldown between effects" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" x:Name="SliderAwarenessGlobalCooldown" x:FieldModifier="internal"
+                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                VerticalAlignment="Center" Margin="14,0"
+                                                ValueChanged="SliderAwarenessGlobalCooldown_ValueChanged"/>
+                                        <TextBlock Grid.Column="2" x:Name="TxtAwarenessGlobalCooldown" x:FieldModifier="internal" Text="10s"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="36" Background="Transparent">
+                                        <Grid.ToolTip>
                                             <ToolTip>
                                                 <StackPanel MaxWidth="340">
                                                     <TextBlock Text="Same-word cooldown" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
                                                         Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
                                                         Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Max 180s.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
-                                        </Button.ToolTip>
-                                    </Button>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Same-word cooldown" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" x:Name="SliderAwarenessSameWordCooldown" x:FieldModifier="internal"
+                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                VerticalAlignment="Center" Margin="14,0"
+                                                ValueChanged="SliderAwarenessSameWordCooldown_ValueChanged"/>
+                                        <TextBlock Grid.Column="2" x:Name="TxtAwarenessSameWordCooldown" x:FieldModifier="internal" Text="15s"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
                                 </StackPanel>
-                                <Grid>
-                                    <Slider x:Name="SliderAwarenessSameWordCooldown" x:FieldModifier="internal" Minimum="1" Maximum="180"
-                                            TickFrequency="1" IsSnapToTickEnabled="True"
-                                            ValueChanged="SliderAwarenessSameWordCooldown_ValueChanged"/>
-                                    <TextBlock x:Name="TxtAwarenessSameWordCooldown" x:FieldModifier="internal" Text="15s"
-                                               Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                </Grid>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-                </StackPanel>
-    
-                <!-- ==================== SOURCES + SAFETY ==================== -->
-                <Grid Grid.Row="4" Margin="0,0,0,14">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="14"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-    
-                    <!-- Signal Sources -->
-                    <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                            BorderThickness="1" CornerRadius="10" Padding="18,14">
-                        <StackPanel>
-                            <TextBlock Text="SIGNAL SOURCES" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                                       Margin="0,0,0,10"/>
-                            <Grid Margin="0,4,0,8">
-                                <Grid.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Screen OCR" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how she notices text inside other apps — Discord, browsers, image viewers, game UIs, anything visible.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                Uses modest CPU/GPU during active sessions. Turn off if you don't want screen-based triggers or want to save power.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </Grid.ToolTip>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                           Source="{Binding Source='🖵', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Screen OCR" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Reads words from what's on your screen"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <CheckBox x:Name="ChkAwarenessOcr" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                          Checked="ChkAwarenessOcr_Changed" Unchecked="ChkAwarenessOcr_Changed"/>
                             </Grid>
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Keyboard Capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                Listens to your keystrokes and assembles a rolling buffer of recent typing. When you type a trigger keyword, it fires immediately — no OCR delay.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                Only trigger words are acted on; nothing else is stored or logged. Fastest signal source. Turn off if you don't want typing-based triggers.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </Grid.ToolTip>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="⌨" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Keyboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Catches trigger words as you type them"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <CheckBox x:Name="ChkAwarenessKeyboard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                          Checked="ChkAwarenessKeyboard_Changed" Unchecked="ChkAwarenessKeyboard_Changed"/>
-                            </Grid>
-                            <TextBlock Text="More sources coming: browser URL, active window title, process"
-                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"
-                                       Margin="0,10,0,0"/>
-                        </StackPanel>
-                    </Border>
-    
-                    <!-- Safety -->
-                    <Border Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                            BorderThickness="1" CornerRadius="10" Padding="18,14">
-                        <StackPanel>
-                            <TextBlock Text="SAFETY" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                                       Margin="0,0,0,10"/>
-                            <CheckBox x:Name="ChkAwarenessIgnoreOwnUi" x:FieldModifier="internal"
-                                      Foreground="White" FontSize="12" Margin="0,4,0,2"
-                                      Checked="ChkAwarenessIgnoreOwnUi_Changed" Unchecked="ChkAwarenessIgnoreOwnUi_Changed">
-                                <CheckBox.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Ignore CCP's own windows" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                OCR will skip words drawn by Control Panel itself — avatar speech bubbles, subliminal flash overlays, bouncing text, and the main window. Prevents Awareness from reacting to her own voice and creating feedback loops.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                Strongly recommended ON. Only turn off if you're debugging why a specific overlay isn't being detected.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </CheckBox.ToolTip>
-                                <TextBlock Text="Ignore CCP's own windows" FontWeight="SemiBold"/>
-                            </CheckBox>
-                            <TextBlock Text="OCR skips words inside Control Panel, avatar bubbles, and subliminal flashes — so she won't react to her own voice."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+                        </Border>
 
-                            <!-- ===== Where triggers may fire =====
-                                 Scopes every source (OCR, keyboard, clipboard) by the process that
-                                 owns the foreground window. Defaults to Everywhere, which is exactly
-                                 what shipped before this existed, so this panel is inert until the
-                                 mode is changed. The list + chips collapse in that state - see
-                                 MainWindow.Awareness.cs RefreshAwarenessAppScopeUi. -->
-                            <Border Background="#141426" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="8" Padding="10,8" Margin="0,0,0,10">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                        <TextBlock Text="Where she may notice" Foreground="White"
-                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <TextBlock Text="Triggers normally fire in whatever app you're in. Narrow that here — it applies to typing, OCR and clipboard alike."
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
-                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                    <ComboBox x:Name="CmbAwarenessAppScope" x:FieldModifier="internal"
-                                              SelectionChanged="CmbAwarenessAppScope_SelectionChanged"
-                                              Background="White" Foreground="Black"
-                                              FontSize="11" Padding="6,4" HorizontalAlignment="Left" MinWidth="210">
-                                        <ComboBox.ToolTip>
+                        <!-- ==================== SIGNAL SOURCES ====================
+                             Stacked above SAFETY rather than beside it: inside the capped column
+                             a side-by-side pair leaves ~260px per card, which clips the highlight
+                             swatch row. Both are dense cards now, so they're short anyway. -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <TextBlock Text="SIGNAL SOURCES" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
                                             <ToolTip>
                                                 <StackPanel MaxWidth="340">
-                                                    <TextBlock Text="Where triggers may fire" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="Screen OCR" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                        Judged by the app that owns the window you're focused on, checked at the moment a keyword would fire.
+                                                        Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how she notices text inside other apps — Discord, browsers, image viewers, game UIs, anything visible.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                        Use "Everywhere except" to keep her out of work, calls and shared screens. Use "Only in" when you want her limited to one or two apps. If an app refuses to identify itself, "Only in" stays quiet and "except" still fires.
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                        Reads words from what's on your screen. Uses modest CPU/GPU during active sessions. Turn off if you don't want screen-based triggers or want to save power.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
-                                        </ComboBox.ToolTip>
-                                        <ComboBoxItem Content="Everywhere" Tag="Everywhere"
-                                                      Foreground="Black" Background="White" IsSelected="True"/>
-                                        <ComboBoxItem Content="Everywhere except these apps" Tag="ExceptListed"
-                                                      Foreground="Black" Background="White"/>
-                                        <ComboBoxItem Content="Only in these apps" Tag="OnlyListed"
-                                                      Foreground="Black" Background="White"/>
-                                    </ComboBox>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                   Source="{Binding Source='🖥', Converter={StaticResource EmojiToImageSource}}"/>
+                                            <TextBlock Text="Screen OCR" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessOcr" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessOcr_Changed" Unchecked="ChkAwarenessOcr_Changed"/>
+                                    </Grid>
 
-                                    <StackPanel x:Name="AwarenessAppListPanel" x:FieldModifier="internal"
-                                                Visibility="Collapsed" Margin="0,8,0,0">
-                                        <TextBox x:Name="TxtAwarenessAppList" x:FieldModifier="internal"
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Keyboard Capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        Listens to your keystrokes and assembles a rolling buffer of recent typing. When you type a trigger keyword, it fires immediately — no OCR delay.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                        Catches trigger words as you type them. Only trigger words are acted on; nothing else is stored or logged. Fastest signal source. Turn off if you don't want typing-based triggers.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                   Source="{Binding Source='⌨', Converter={StaticResource EmojiToImageSource}}"/>
+                                            <TextBlock Text="Keyboard" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessKeyboard" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessKeyboard_Changed" Unchecked="ChkAwarenessKeyboard_Changed"/>
+                                    </Grid>
+
+                                    <TextBlock Text="More sources coming: browser URL, active window title, process"
+                                               Foreground="{DynamicResource TextDimBrush}" FontSize="11" FontStyle="Italic"
+                                               Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- ==================== SAFETY ==================== -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <TextBlock Text="SAFETY" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Ignore CCP's own windows" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        OCR will skip words drawn by Control Panel itself — avatar speech bubbles, subliminal flash overlays, bouncing text, and the main window. Prevents Awareness from reacting to her own voice and creating feedback loops.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                        Strongly recommended ON. Only turn off if you're debugging why a specific overlay isn't being detected.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Ignore CCP's own windows" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessIgnoreOwnUi" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessIgnoreOwnUi_Changed" Unchecked="ChkAwarenessIgnoreOwnUi_Changed"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Loop protection" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        When a trigger fires, its keyword is silenced for a few seconds. Stops a single mention on screen from firing multiple times in quick succession if OCR keeps catching it.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                        Also works across sources — a keyword fired via Keyboard is muted for OCR detection too, and vice versa.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Loop protection" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessLoopProtection" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessLoopProtection_Changed" Unchecked="ChkAwarenessLoopProtection_Changed"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <!-- On-screen highlight: toggle + swatch row + capture toggle. The swatch
+                                         row keeps its layout (and its name - TutorialService spotlights
+                                         AwarenessHighlightColorPanel by name). -->
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Highlight matched words on screen" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        Draws a glowing rectangle around every OCR-detected trigger word on your screen, just long enough to see it catch your eye. Gives you a visual confirmation that Awareness is watching.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                        Only shows for OCR detections, not keyboard triggers. Pick the glow color from the swatches below.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Highlight matched words on screen" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessHighlight" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessHighlight_Changed" Unchecked="ChkAwarenessHighlight_Changed"/>
+                                    </Grid>
+
+                                    <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="0,2,0,0"
+                                                ToolTip="Click a swatch to pick the highlight glow color, or type a custom hex in the box.">
+                                        <TextBlock Text="Color:" Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                   VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <Border x:Name="SwatchHighlightPink" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
+                                                ToolTip="Hot pink — CCP default"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <Border x:Name="SwatchHighlightCyan" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
+                                                ToolTip="Electric cyan — max contrast on dark UIs"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <Border x:Name="SwatchHighlightLime" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
+                                                ToolTip="Lime — visible on pink/purple themes"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <Border x:Name="SwatchHighlightOrange" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
+                                                ToolTip="Amber orange — warm alternative"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <Border x:Name="SwatchHighlightViolet" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
+                                                ToolTip="Soft violet — matches SissyHypno theme"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <Border x:Name="SwatchHighlightWhite" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
+                                                Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                                Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
+                                                ToolTip="Pure white — most neutral option"
+                                                MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                        <TextBox x:Name="TxtAwarenessHighlightHex" x:FieldModifier="internal" Width="74" FontSize="10"
                                                  Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
-                                                 FontSize="11" Padding="6,4"
-                                                 ToolTip="App names, comma separated — e.g. chrome, discord, ms-teams. The .exe is optional. Press Enter or click away to apply."
-                                                 LostFocus="TxtAwarenessAppList_LostFocus"
-                                                 KeyDown="TxtAwarenessAppList_KeyDown"/>
-                                        <TextBlock Text="Comma separated app names. The .exe is optional."
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
-                                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                        <TextBlock x:Name="TxtAwarenessSeenAppsLabel" x:FieldModifier="internal"
-                                                   Text="Recently focused — click to add:"
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
-                                                   Margin="0,8,0,4" Visibility="Collapsed"/>
-                                        <!-- Filled at runtime from KeywordTriggerService.GetRecentForegroundApps():
-                                             nobody knows offhand that Teams is "ms-teams", so the list is
-                                             unusable without this. -->
-                                        <WrapPanel x:Name="AwarenessSeenAppsPanel" x:FieldModifier="internal"/>
+                                                 Padding="4,3" VerticalAlignment="Center"
+                                                 ToolTip="Custom hex color (e.g. #FF00AA). Type and press Enter or Tab to apply."
+                                                 LostFocus="TxtAwarenessHighlightHex_LostFocus"
+                                                 KeyDown="TxtAwarenessHighlightHex_KeyDown"/>
                                     </StackPanel>
 
-                                    <CheckBox x:Name="ChkAwarenessIgnoreOwnFocus" x:FieldModifier="internal"
-                                              Foreground="White" FontSize="11" Margin="0,10,0,0"
-                                              Checked="ChkAwarenessIgnoreOwnFocus_Changed"
-                                              Unchecked="ChkAwarenessIgnoreOwnFocus_Changed">
-                                        <CheckBox.ToolTip>
+                                    <Grid Height="34" Background="Transparent">
+                                        <Grid.ToolTip>
                                             <ToolTip>
                                                 <StackPanel MaxWidth="340">
-                                                    <TextBlock Text="Stay quiet while Control Panel has focus" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="Visible in screen capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                        Stops a keyword firing when you type it into Control Panel itself — the trigger editor, the search box, or the companion's chat box.
+                                                        Off (default): highlights render on your desktop but are excluded from screen capture via WDA_EXCLUDEFROMCAPTURE, so OBS, Discord, and screen recordings don't see them.
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                        Different from "Ignore CCP's own windows" above, which only filters OCR by screen position and cannot see your typing at all. Leave this off if you want her reacting to what you say to her in chat.
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White" Margin="0,6,0,0">
+                                                        On: lets the highlights show up in recordings — useful for streaming or demos. Also a fallback if your GPU driver is one of the few that hides excluded windows from the desktop itself.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
-                                        </CheckBox.ToolTip>
-                                        <TextBlock Text="Stay quiet while Control Panel has focus" TextWrapping="Wrap"/>
-                                    </CheckBox>
-                                </StackPanel>
-                            </Border>
-                            <CheckBox x:Name="ChkAwarenessLoopProtection" x:FieldModifier="internal"
-                                      Foreground="White" FontSize="12" Margin="0,4,0,2"
-                                      Checked="ChkAwarenessLoopProtection_Changed" Unchecked="ChkAwarenessLoopProtection_Changed">
-                                <CheckBox.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Loop protection" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                When a trigger fires, its keyword is silenced for a few seconds. Stops a single mention on screen from firing multiple times in quick succession if OCR keeps catching it.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                Also works across sources — a keyword fired via Keyboard is muted for OCR detection too, and vice versa.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </CheckBox.ToolTip>
-                                <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
-                            </CheckBox>
-                            <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
-    
-                            <!-- On-screen highlight: toggle + color picker. The highlight overlay
-                                 draws a glowing box around OCR-matched words on your screen. -->
-                            <CheckBox x:Name="ChkAwarenessHighlight" x:FieldModifier="internal"
-                                      Foreground="White" FontSize="12" Margin="0,4,0,2"
-                                      Checked="ChkAwarenessHighlight_Changed" Unchecked="ChkAwarenessHighlight_Changed">
-                                <CheckBox.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Highlight matched words on screen" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                Draws a glowing rectangle around every OCR-detected trigger word on your screen, just long enough to see it catch your eye. Gives you a visual confirmation that Awareness is watching.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                Only shows for OCR detections, not keyboard triggers. Pick the glow color from the swatches below.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </CheckBox.ToolTip>
-                                <TextBlock Text="Highlight matched words on screen" FontWeight="SemiBold"/>
-                            </CheckBox>
-                            <TextBlock Text="Draws a glowing box around OCR-detected trigger words. Pick the glow color below."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,6"/>
-                            <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0"
-                                        ToolTip="Click a swatch to pick the highlight glow color, or type a custom hex in the box.">
-                                <TextBlock Text="Color:" Foreground="#A0A0B8" FontSize="10"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <Border x:Name="SwatchHighlightPink" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
-                                        ToolTip="Hot pink — CCP default"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <Border x:Name="SwatchHighlightCyan" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
-                                        ToolTip="Electric cyan — max contrast on dark UIs"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <Border x:Name="SwatchHighlightLime" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
-                                        ToolTip="Lime — visible on pink/purple themes"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <Border x:Name="SwatchHighlightOrange" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
-                                        ToolTip="Amber orange — warm alternative"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <Border x:Name="SwatchHighlightViolet" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
-                                        ToolTip="Soft violet — matches SissyHypno theme"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <Border x:Name="SwatchHighlightWhite" x:FieldModifier="internal" Width="22" Height="22" CornerRadius="3"
-                                        Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
-                                        Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
-                                        ToolTip="Pure white — most neutral option"
-                                        MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
-                                <TextBox x:Name="TxtAwarenessHighlightHex" x:FieldModifier="internal" Width="74" FontSize="10"
-                                         Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
-                                         Padding="4,3" VerticalAlignment="Center"
-                                         ToolTip="Custom hex color (e.g. #FF00AA). Type and press Enter or Tab to apply."
-                                         LostFocus="TxtAwarenessHighlightHex_LostFocus"
-                                         KeyDown="TxtAwarenessHighlightHex_KeyDown"/>
-                            </StackPanel>
-                            <CheckBox x:Name="ChkAwarenessHighlightVisibleInCapture" x:FieldModifier="internal"
-                                      Content="Visible in screen capture / streams"
-                                      Foreground="#A0A0A0" FontSize="10" Margin="22,6,0,0"
-                                      Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
-                                      Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed">
-                                <CheckBox.ToolTip>
-                                    <ToolTip>
-                                        <StackPanel MaxWidth="340">
-                                            <TextBlock Text="Visible in screen capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                Off (default): highlights render on your desktop but are excluded from screen capture via WDA_EXCLUDEFROMCAPTURE, so OBS, Discord, and screen recordings don't see them.
-                                            </TextBlock>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White" Margin="0,6,0,0">
-                                                On: lets the highlights show up in recordings — useful for streaming or demos. Also a fallback if your GPU driver is one of the few that hides excluded windows from the desktop itself.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </CheckBox.ToolTip>
-                            </CheckBox>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-    
-                <!-- ==================== CUSTOM TRIGGERS (Phase 5 / G3 rescue) ====================
-                     The keyword-trigger list + the Screen OCR / highlight detail editors, rescued
-                     from the dead PatreonTabView. Collapsed by default: the masters that most
-                     people touch (sources, cooldowns, presets, highlight colour) are the rows
-                     above; this drawer is the authoring surface underneath them. It deliberately
-                     re-hosts NO app-scoping UI - CmbAwarenessAppScope in SAFETY above is the one
-                     editor for KeywordTriggerAppScope. -->
-                <cmp:KeywordTriggersPanel x:Name="KeywordPanel" x:FieldModifier="internal"
-                                          Grid.Row="5" Margin="0,0,0,4"
-                                          AutomationProperties.AutomationId="AwarenessCustomTriggers"/>
+                                        </Grid.ToolTip>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Visible in screen capture / streams" FontSize="12"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkAwarenessHighlightVisibleInCapture" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
+                                                  Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed"/>
+                                    </Grid>
 
-                <!-- ==================== ADVANCED LINK ==================== -->
-                <Grid Grid.Row="6" Margin="0,0,0,0"
-                      ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, this link opens the App Info &amp; Data popup instead.">
-                    <TextBlock HorizontalAlignment="Center">
-                        <Hyperlink x:Name="LnkAwarenessAdvanced"
-                                   Foreground="{DynamicResource PinkBrush}"
-                                   TextDecorations="Underline"
-                                   Click="LnkAwarenessAdvanced_Click">
-                            <Run x:Name="LnkAwarenessAdvancedText" x:FieldModifier="internal" Text="Customize individual triggers (advanced) →"/>
-                        </Hyperlink>
-                    </TextBlock>
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <!-- ===== Where triggers may fire =====
+                                         Scopes every source (OCR, keyboard, clipboard) by the process that
+                                         owns the foreground window. Defaults to Everywhere, which is exactly
+                                         what shipped before this existed, so this panel is inert until the
+                                         mode is changed. The list + chips collapse in that state - see
+                                         MainWindow.Awareness.cs RefreshAwarenessAppScopeUi. -->
+                                    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                                            BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,2,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Where she may notice" Foreground="{StaticResource TextLightBrush}"
+                                                       FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                            <TextBlock Text="Triggers normally fire in whatever app you're in. Narrow that here — it applies to typing, OCR and clipboard alike."
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                            <ComboBox x:Name="CmbAwarenessAppScope" x:FieldModifier="internal"
+                                                      Style="{DynamicResource DarkComboBoxStyle}"
+                                                      SelectionChanged="CmbAwarenessAppScope_SelectionChanged"
+                                                      FontSize="11" Padding="6,4" HorizontalAlignment="Left" MinWidth="210">
+                                                <ComboBox.ToolTip>
+                                                    <ToolTip>
+                                                        <StackPanel MaxWidth="340">
+                                                            <TextBlock Text="Where triggers may fire" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                                Judged by the app that owns the window you're focused on, checked at the moment a keyword would fire.
+                                                            </TextBlock>
+                                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                                Use "Everywhere except" to keep her out of work, calls and shared screens. Use "Only in" when you want her limited to one or two apps. If an app refuses to identify itself, "Only in" stays quiet and "except" still fires.
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </ToolTip>
+                                                </ComboBox.ToolTip>
+                                                <ComboBoxItem Content="Everywhere" Tag="Everywhere"
+                                                              IsSelected="True"/>
+                                                <ComboBoxItem Content="Everywhere except these apps" Tag="ExceptListed"/>
+                                                <ComboBoxItem Content="Only in these apps" Tag="OnlyListed"/>
+                                            </ComboBox>
+
+                                            <StackPanel x:Name="AwarenessAppListPanel" x:FieldModifier="internal"
+                                                        Visibility="Collapsed" Margin="0,8,0,0">
+                                                <TextBox x:Name="TxtAwarenessAppList" x:FieldModifier="internal"
+                                                         Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                                         FontSize="11" Padding="6,4"
+                                                         ToolTip="App names, comma separated — e.g. chrome, discord, ms-teams. The .exe is optional. Press Enter or click away to apply."
+                                                         LostFocus="TxtAwarenessAppList_LostFocus"
+                                                         KeyDown="TxtAwarenessAppList_KeyDown"/>
+                                                <TextBlock Text="Comma separated app names. The .exe is optional."
+                                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                           TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                <TextBlock x:Name="TxtAwarenessSeenAppsLabel" x:FieldModifier="internal"
+                                                           Text="Recently focused — click to add:"
+                                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                           Margin="0,8,0,4" Visibility="Collapsed"/>
+                                                <!-- Filled at runtime from KeywordTriggerService.GetRecentForegroundApps():
+                                                     nobody knows offhand that Teams is "ms-teams", so the list is
+                                                     unusable without this. Keeps name AND WrapPanel type. -->
+                                                <WrapPanel x:Name="AwarenessSeenAppsPanel" x:FieldModifier="internal"/>
+                                            </StackPanel>
+
+                                            <Grid Height="34" Background="Transparent" Margin="0,4,0,0">
+                                                <Grid.ToolTip>
+                                                    <ToolTip>
+                                                        <StackPanel MaxWidth="340">
+                                                            <TextBlock Text="Stay quiet while Control Panel has focus" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                                Stops a keyword firing when you type it into Control Panel itself — the trigger editor, the search box, or the companion's chat box.
+                                                            </TextBlock>
+                                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
+                                                                Different from "Ignore CCP's own windows" above, which only filters OCR by screen position and cannot see your typing at all. Leave this off if you want her reacting to what you say to her in chat.
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </ToolTip>
+                                                </Grid.ToolTip>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Stay quiet while Control Panel has focus"
+                                                           FontSize="12" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkAwarenessIgnoreOwnFocus" x:FieldModifier="internal"
+                                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          Checked="ChkAwarenessIgnoreOwnFocus_Changed"
+                                                          Unchecked="ChkAwarenessIgnoreOwnFocus_Changed"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- ==================== CUSTOM TRIGGERS (Phase 5 / G3 rescue) ====================
+                             The keyword-trigger list + the Screen OCR / highlight detail editors, rescued
+                             from the dead PatreonTabView. Collapsed by default: the masters that most
+                             people touch (sources, cooldowns, presets, highlight colour) are the rows
+                             above; this drawer is the authoring surface underneath them. It deliberately
+                             re-hosts NO app-scoping UI - CmbAwarenessAppScope in SAFETY above is the one
+                             editor for KeywordTriggerAppScope. Internals untouched by round 4. -->
+                        <cmp:KeywordTriggersPanel x:Name="KeywordPanel" x:FieldModifier="internal"
+                                                  Margin="0,4,0,4"
+                                                  AutomationProperties.AutomationId="AwarenessCustomTriggers"/>
+
+                        <!-- ==================== ADVANCED LINK ==================== -->
+                        <Grid Margin="0,0,0,0"
+                              ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, it opens the custom-trigger drawer just above instead, where you can build your own keywords from scratch.">
+                            <TextBlock HorizontalAlignment="Center">
+                                <Hyperlink x:Name="LnkAwarenessAdvanced"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextDecorations="Underline"
+                                           Click="LnkAwarenessAdvanced_Click">
+                                    <Run x:Name="LnkAwarenessAdvancedText" x:FieldModifier="internal" Text="Customize individual triggers (advanced) →"/>
+                                </Hyperlink>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
+                         clips its Background to CornerRadius but does NOT clip child content, so a
+                         child Image would square off the rounded corners (round-2 lesson). Pinned to
+                         the top with a MaxHeight - this is a very tall page and a stretched plate
+                         would be a 2000px column of upscaled art. -->
+                    <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                            BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                            VerticalAlignment="Top" Height="520"
+                            hover:HoverPop.IsEnabled="True">
+                        <Border.Background>
+                            <ImageBrush Stretch="UniformToFill"
+                                        ImageSource="{Binding Source, ElementName=ImgAwarenessFeature,
+                                                      FallbackValue={StaticResource AwarenessArt},
+                                                      TargetNullValue={StaticResource AwarenessArt}}"/>
+                        </Border.Background>
+                        <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                        <Border CornerRadius="12">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                    <GradientStop Color="#66000000" Offset="0"/>
+                                    <GradientStop Color="#00000000" Offset="0.45"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Border>
                 </Grid>
             </Grid>
         </ScrollViewer>
-    
-        <!-- Translucent gating overlay (only for free users) -->
+
+        <!-- Translucent gating overlay (only for free users). Last sibling of the root Grid so it
+             covers the hero AND both columns; name + click handler are load-bearing
+             (RefreshPremiumGate(AwarenessTab.AwarenessGate)). -->
         <Border x:Name="AwarenessGate" x:FieldModifier="internal" Visibility="Collapsed"
                 Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
-                CornerRadius="10" IsHitTestVisible="True">
+                CornerRadius="14" IsHitTestVisible="True">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                           Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                           Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                 <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                         Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                     <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>

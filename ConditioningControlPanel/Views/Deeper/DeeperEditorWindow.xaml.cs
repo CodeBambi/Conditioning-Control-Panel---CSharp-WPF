@@ -3613,10 +3613,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 te.DurationMs, v => te.DurationMs = Math.Max(50, v));
         }
 
-        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral; matches the inline
-        // overlay editor's CmbOverlayKind (same order, same friendly labels, same Tag = raw
-        // kind constant round-trip). Brain Drain / Brain Melt are withheld while the effect
-        // is reworked and are only listed when THIS action already uses one.
+        // Overlay-kind combo for TriggerEffect. Matches the inline overlay editor's
+        // CmbOverlayKind (same order, same friendly labels, same Tag = raw kind constant
+        // round-trip). Brain Drain / Brain Melt are LIVE again post-rework
+        // (OverlayService.BrainDrainWithheld == false); the IsWithheld injection below is
+        // kept as the fallback for any future re-withholding.
         private void AddOverlayKindCombo(Panel host, TriggerEffectAction te)
         {
             host.Children.Add(new TextBlock
@@ -3631,8 +3632,9 @@ namespace ConditioningControlPanel.Views.Deeper
             };
             // Tag stays the raw kind constant (what gets serialized); Content is the
             // friendly label the inline CmbOverlayKind picker shows.
-            var kinds  = new List<string> { OverlayKinds.PinkFilter, OverlayKinds.Spiral };
-            var labels = new List<string> { "Pink Filter", "Spiral" };
+            var kinds  = new List<string> { OverlayKinds.PinkFilter, OverlayKinds.Spiral,
+                                            OverlayKinds.BrainDrain, OverlayKinds.BrainDrainMelt };
+            var labels = new List<string> { "Pink Filter", "Spiral", "Brain Drain", "Brain Melt" };
             var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
             // Keep an already-authored withheld kind selectable so a rule that uses one still
             // displays honestly and round-trips on save, without offering it for new actions.

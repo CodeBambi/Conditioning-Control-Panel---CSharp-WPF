@@ -33,7 +33,7 @@
                 <TextBlock x:Name="TxtStepTitle" Foreground="{StaticResource PinkBrush}" FontSize="16"
                            FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,15"/>
                 <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
-                    <TextBlock x:Name="TxtRequirement" Foreground="#AAAAAA" FontSize="13"
+                    <TextBlock x:Name="TxtRequirement" Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
                                TextWrapping="Wrap"/>
                 </Border>
             </StackPanel>

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -57,7 +58,7 @@
                                 <Button x:Name="HelpBtnQuests" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Quests"/>
                             </StackPanel>
                             <TextBlock x:Name="TxtQuestStats" x:FieldModifier="internal" Text="{loc:Str label_0_completed_this_week}"
-                                       Foreground="#888888" FontSize="12" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" HorizontalAlignment="Right"
                                        VerticalAlignment="Center"/>
                         </Grid>
     
@@ -88,8 +89,8 @@
                                                        Foreground="#FFD700" FontSize="11" FontWeight="Bold"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="{loc:Str label_resets_at_midnight}" Foreground="#666666"
-                                               FontSize="10" HorizontalAlignment="Right"
+                                    <TextBlock Text="{loc:Str label_resets_at_midnight}" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" HorizontalAlignment="Right"
                                                VerticalAlignment="Center"/>
                                 </Grid>
     
@@ -110,7 +111,7 @@
                                             CornerRadius="3" Height="6"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_complete_3_daily_quests_1_weekly_quest}"
-                                           Foreground="#666666" FontSize="10"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                            HorizontalAlignment="Center" Margin="0,0,0,8"/>
     
                                 <!-- Quest Content -->
@@ -128,7 +129,7 @@
                                                        Foreground="White" FontSize="16" FontWeight="Bold"
                                                        HorizontalAlignment="Left" Margin="0,0,0,5"/>
                                             <TextBlock x:Name="TxtDailyQuestDesc" x:FieldModifier="internal" Text=""
-                                                       Foreground="#AAAAAA" FontSize="12"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                                        MaxWidth="180"/>
     
@@ -172,7 +173,14 @@
                                                 <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
                                             </Border.Clip>
                                             <Grid>
-                                                <Image x:Name="ImgDailyQuest" x:FieldModifier="internal" Stretch="UniformToFill"/>
+                                                <!-- The parent's rounded Border.Clip is applied before
+                                                     this RenderTransform, so the pop zooms INSIDE the
+                                                     150x150 rounded frame. Once the quest is done the
+                                                     completed overlay covers the art and takes the
+                                                     hover, which is the right answer - a finished
+                                                     quest has nothing left to invite. -->
+                                                <Image x:Name="ImgDailyQuest" x:FieldModifier="internal" Stretch="UniformToFill"
+                                                       hover:HoverPop.IsEnabled="True"/>
                                                 <!-- Checkmark overlay for completed state -->
                                                 <Border x:Name="DailyCompletedOverlay" x:FieldModifier="internal" Background="#802D4A2D"
                                                         Visibility="Collapsed">
@@ -198,7 +206,7 @@
                                         <TextBlock Text="{loc:Str label_all_daily_quests_completed}" Foreground="#00E676"
                                                    FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"
                                                    Margin="0,0,0,5"/>
-                                        <TextBlock Text="{loc:Str label_check_back_tomorrow_for_new_quests}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_check_back_tomorrow_for_new_quests}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="12" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
@@ -224,12 +232,12 @@
                                                    FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
-                                    <TextBlock Text="{loc:Str label_resets_sunday}" Foreground="#666666"
-                                               FontSize="10" HorizontalAlignment="Right"
+                                    <TextBlock Text="{loc:Str label_resets_sunday}" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" HorizontalAlignment="Right"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_1_weekly_quest_to_complete}"
-                                           Foreground="#666666" FontSize="10"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                            HorizontalAlignment="Center" Margin="0,0,0,8"/>
     
                                 <!-- Quest Content -->
@@ -247,7 +255,7 @@
                                                        Foreground="White" FontSize="16" FontWeight="Bold"
                                                        HorizontalAlignment="Left" Margin="0,0,0,5"/>
                                             <TextBlock x:Name="TxtWeeklyQuestDesc" x:FieldModifier="internal" Text=""
-                                                       Foreground="#AAAAAA" FontSize="12"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                                        HorizontalAlignment="Left" TextWrapping="Wrap"
                                                        MaxWidth="180"/>
     
@@ -291,7 +299,8 @@
                                                 <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
                                             </Border.Clip>
                                             <Grid>
-                                                <Image x:Name="ImgWeeklyQuest" x:FieldModifier="internal" Stretch="UniformToFill"/>
+                                                <Image x:Name="ImgWeeklyQuest" x:FieldModifier="internal" Stretch="UniformToFill"
+                                                       hover:HoverPop.IsEnabled="True"/>
                                                 <!-- Checkmark overlay for completed state -->
                                                 <Border x:Name="WeeklyCompletedOverlay" x:FieldModifier="internal" Background="#802D4A2D"
                                                         Visibility="Collapsed">
@@ -378,7 +387,7 @@
                                 <!-- The rules, one sentence. Never names the prize - it is still TBD, and a
                                      promise made here is a promise we would have to keep. -->
                                 <TextBlock x:Name="TxtPunchCardRules" x:FieldModifier="internal" Text=""
-                                           Foreground="#888888" FontSize="11"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                            TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
@@ -426,7 +435,7 @@
                                         <TextBlock x:Name="TxtTotalDailyCompleted" x:FieldModifier="internal" Text="0"
                                                    Foreground="#FFD700" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_daily_completed}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_daily_completed}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -434,7 +443,7 @@
                                         <TextBlock x:Name="TxtTotalWeeklyCompleted" x:FieldModifier="internal" Text="0"
                                                    Foreground="#9370DB" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_weekly_completed}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_weekly_completed}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -442,7 +451,7 @@
                                         <TextBlock x:Name="TxtTotalQuestXP" x:FieldModifier="internal" Text="0"
                                                    Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_total_xp_earned}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_total_xp_earned}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -450,7 +459,7 @@
                                         <TextBlock x:Name="TxtStreakFixCharges" x:FieldModifier="internal" Text="0"
                                                    Foreground="#4FC3F7" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_streak_fixes}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_streak_fixes}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -507,9 +516,9 @@
                                     <TextBlock x:Name="TxtRoadmapTrackName" x:FieldModifier="internal" Text="{loc:Str btn_the_empty_doll}"
                                                Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"/>
                                     <TextBlock x:Name="TxtRoadmapTrackSubtitle" x:FieldModifier="internal" Text="{loc:Str label_gateway_phase}"
-                                               Foreground="#888888" FontSize="14"/>
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="14"/>
                                     <TextBlock x:Name="TxtRoadmapTrackProgress" x:FieldModifier="internal" Text="{loc:Str label_0_7_steps_completed}"
-                                               Foreground="#AAAAAA" FontSize="12" Margin="0,5,0,0"/>
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,5,0,0"/>
                                 </StackPanel>
                                 <!-- Badge indicator for final track -->
                                 <StackPanel x:Name="BadgeIndicator" x:FieldModifier="internal" Orientation="Horizontal"
@@ -561,21 +570,21 @@
                                         <TextBlock x:Name="TxtRoadmapTotalSteps" x:FieldModifier="internal" Text="0 / 21"
                                                    Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_steps_completed}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_steps_completed}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                                         <TextBlock x:Name="TxtRoadmapPhotos" x:FieldModifier="internal" Text="0"
                                                    Foreground="#9370DB" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_photos_submitted}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_photos_submitted}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" HorizontalAlignment="Center">
                                         <TextBlock x:Name="TxtRoadmapJourneyDays" x:FieldModifier="internal" Text="--"
                                                    Foreground="#FFD700" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_days_on_journey}" Foreground="#888888"
+                                        <TextBlock Text="{loc:Str label_days_on_journey}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>

@@ -202,7 +202,7 @@ namespace ConditioningControlPanel.Models
                 DifficultyWeight = 1,
                 Settings = new()
                 {
-                    new() { Name = "Opacity %", Key = "opacity", Type = SettingType.Slider, Min = 5, Max = 50, Default = 15, SupportsRamp = true }
+                    new() { Name = "Opacity %", Key = "opacity", Type = SettingType.Slider, Min = 5, Max = 100, Default = 15, SupportsRamp = true }
                 }
             },
             new()

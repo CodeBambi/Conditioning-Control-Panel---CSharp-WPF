@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Chaos;
+using ConditioningControlPanel.Services.Fyp.Online;
 
 namespace ConditioningControlPanel.Services.Quiz
 {
@@ -267,6 +270,12 @@ namespace ConditioningControlPanel.Services.Quiz
                         // spotlights). Served through the ccp.assets virtual host mapped above;
                         // a small random sample per launch keeps the init message light.
                         media = BuildMediaManifest(),
+                        // REMOTE MEDIA (Phase 2): the manifest above is one-shot and local.
+                        // Remote stills cannot ride it - fetching them is a network round
+                        // trip and `init` is on the UI thread - so the page is told only
+                        // that the door is open, and asks for batches over `need-remote`
+                        // once it is up. Same bridge pair the For You feed uses.
+                        remoteMedia = RemoteMediaEnabled(),
                         // Stable per-install fiction id ("Subject #0417" page-side). Host-supplied
                         // so it survives WebView2 user-data clears; page mints its own standalone.
                         subjectId = GetSubjectId(),
@@ -329,6 +338,9 @@ namespace ConditioningControlPanel.Services.Quiz
                     break;
                 case "intake-save-image":  // outro spiral recap: "Save PNG" -> intake_spirals/
                     OnSaveSpiralImage(o);
+                    break;
+                case "need-remote":    // the page's remote still pool is running low
+                    ServeRemoteBatch();
                     break;
                 case "exit-done":
                     DisposeAll();
@@ -796,7 +808,12 @@ namespace ConditioningControlPanel.Services.Quiz
         /// #762/#798/#619: this walk used to list the images folder RAW, so anything the user
         /// unchecked in the Assets tree still rode the manifest and showed up in the intake page's
         /// effect layer / captcha grid. It now applies the same DisabledAssetPaths filter the flash
-        /// pool uses; users with nothing deselected see exactly what they saw before.</summary>
+        /// pool uses; users with nothing deselected see exactly what they saw before.
+        ///
+        /// LOCAL ONLY, and one-shot. Remote stills reach the page through the `need-remote` /
+        /// `assets-append` pair below instead, because a fetch cannot happen on this thread at
+        /// init time. A user with no images folder still gets null here — the page then builds
+        /// its own empty pool from the `remoteMedia` flag and fills it by asking.</summary>
         private static object? BuildMediaManifest()
         {
             try
@@ -859,6 +876,94 @@ namespace ConditioningControlPanel.Services.Quiz
                 App.Logger?.Debug("IntakeHostService.BuildMediaManifest: {E}", ex.Message);
                 return null;
             }
+        }
+
+        // ==================== remote media (Phase 2, Contract 3) ====================
+        //
+        // The intake's media manifest is built ONCE, at init (blocker B10), because it walks
+        // the disk and rides the same message as the rest of the BootConfig. Remote media
+        // cannot work that way: a fetch is a network round trip on the UI thread's watch.
+        //
+        // So the page gets an append path instead - the SAME one the For You feed already
+        // uses, deliberately, rather than a second invention:
+        //
+        //     page -> host   { type: 'need-remote' }             (buffer running low)
+        //     host -> page   { type: 'assets-append', images }   (a batch, may be empty)
+        //     host -> page   { type: 'online-status', ok, ... }  (always, so the page can
+        //                                                         clear its in-flight latch)
+        //
+        // web-shim.js merges the batch into the SAME config.media.images array the render
+        // modules already hold, so nothing has to be re-handed to effects/beats/steering.
+        //
+        // STILLS ONLY. Remote video is not requested at all: every intake surface that could
+        // host a clip is an <img>/background-image, and the provider has no usable gifs
+        // (planning Appendix A) so a "still" is honestly still. FeedMediaKind.Image is the
+        // ask, and RemoteMediaFormats re-checks every entry before it reaches the page.
+        //
+        // BRIGHT LINE: this machine talks to the provider directly. No CC Labs server is in
+        // the path, and nothing is cached to disk.
+
+        private const string RemoteConsumerId = "intake";
+        private const int RemoteBatchCap = 24;      // per reply; the page asks again if it wants more
+        private static int _remoteFetchInFlight;    // 0/1 via Interlocked
+
+        /// <summary>True when remote media may appear anywhere in the app. Reads
+        /// <c>HasRemoteMediaConsent</c>, never the raw consent flag - a user who accepted the
+        /// For You feed's card has already agreed to exactly this.</summary>
+        private static bool RemoteMediaEnabled()
+        {
+            var s = App.Settings?.Current;
+            return s != null && s.MediaSource != "local" && s.HasRemoteMediaConsent;
+        }
+
+        /// <summary>Fetch one batch of remote stills and append it to the page's pool.
+        /// Single-flight; a second ask while one is in the air is dropped (the page re-asks
+        /// after every reply until it is satisfied). Never throws.</summary>
+        private static async void ServeRemoteBatch()
+        {
+            if (!RemoteMediaEnabled()) return;
+            if (Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
+            try
+            {
+                var coord = FypOnlineCoordinator.For(RemoteConsumerId, RemoteChannels, FeedMediaKind.Image);
+                var (entries, error) = await coord.FetchBatchAsync(CancellationToken.None).ConfigureAwait(false);
+
+                var urls = new List<string>();
+                foreach (var e in entries)
+                {
+                    if (!RemoteMediaFormats.Validate(e, FeedMediaKind.Image, out var reason))
+                    {
+                        App.Logger?.Debug("IntakeHost: rejected remote entry {Id}: {Reason}", e.Id, reason);
+                        continue;
+                    }
+                    urls.Add(e.Url);
+                    if (urls.Count >= RemoteBatchCap) break;
+                }
+
+                var win = _host?.Window;
+                if (win == null) return;   // intake closed while fetching
+                await win.Dispatcher.InvokeAsync(() =>
+                {
+                    if (_host == null) return;
+                    if (urls.Count > 0) _host.Post(new { type = "assets-append", images = urls });
+                    // Sent either way: it is what clears the page's in-flight latch and stops
+                    // it asking in a tight loop when every channel is dry.
+                    _host.Post(new { type = "online-status", ok = error == null, error, added = urls.Count });
+                });
+                if (urls.Count > 0)
+                    App.Logger?.Information("IntakeHost: appended {N} remote stills", urls.Count);
+            }
+            catch (Exception ex) { App.Logger?.Warning("IntakeHost: remote batch failed: {E}", ex.Message); }
+            finally { Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
+        }
+
+        /// <summary>The intake's channel set. The niche selection is shared app-wide by design
+        /// (see the AppSettings remarks beside MediaSource) - only the rotation and dwell state
+        /// is per-consumer, which is what asking for our own tenant buys.</summary>
+        private static IReadOnlyList<string> RemoteChannels()
+        {
+            var s = App.Settings?.Current;
+            return FypOnlineCoordinator.ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
         }
 
         /// <summary>The app's REAL bubble sprite (mod-aware: an active BS/sissy mod's bubble.png

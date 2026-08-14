@@ -18,10 +18,17 @@
          markup: they depend on ActualWidth/Height and are rebuilt in
          code on SizeChanged.
 
-         Per-half hit-testing is positional (x/W + y/H vs 1), so there are
-         no per-half input elements and the whole card stays one hit
-         surface - same reason FeatureCard keeps one handler for the
-         help-button carve-out. -->
+         Per-half hit-testing is positional (x/W + y/H vs the seam's
+         CURRENT position), so there are no per-half input elements and the
+         whole card stays one hit surface - same reason FeatureCard keeps
+         one handler for the help-button carve-out.
+
+         HOVER FILL (owner, 2026-08-13): hovering a half sweeps the seam
+         off the card until that half owns the whole square and its title
+         is the only label left; leaving sweeps it back. One number drives
+         it (SplitProgress in the code-behind) - clips, washes, seam,
+         rings and the hit test are all functions of it, so the half
+         genuinely FILLS rather than two stacked layers cross-fading. -->
 
     <Border x:Name="RootBorder"
             Background="{DynamicResource ElevatedSurfaceBrush}"
@@ -49,7 +56,8 @@
             <Border x:Name="HalfHostB" CornerRadius="11"
                     RenderOptions.BitmapScalingMode="HighQuality"/>
 
-            <!-- Per-half hover wash (opacity flips on MouseMove, no clocks). -->
+            <!-- Per-half hover wash: opacity flips on MouseMove, and the geometry rides
+                 the same seam parameter as the clips, so the wash fills with its half. -->
             <Path x:Name="HoverWashA" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
             <Path x:Name="HoverWashB" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
 
@@ -68,17 +76,45 @@
                   Visibility="Collapsed" IsHitTestVisible="False"/>
 
             <!-- Half titles: A pinned to its top-left corner, B to its bottom-right,
-                 each on a dark pill so they survive busy art. -->
-            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                 each on a dark pill so they survive busy art.
+
+                 TextTrimming, not TextWrapping: a pill in a triangle's corner has one line
+                 of room, and the longer localised titles (fr/de/ru run half again as long
+                 as en) were running into the root border's ClipToBounds and being cut
+                 mid-glyph with nothing to say they had been. An ellipsis at least admits
+                 it. No ToolTip to carry the full string: both pills are
+                 IsHitTestVisible="False" so the whole card stays ONE hit surface for the
+                 positional per-half test, and a tooltip on an unhittable element never
+                 opens.
+
+                 Each pill render-scales up when its half fills the card, anchored to its
+                 own corner (RenderTransformOrigin 0,0 / 1,1) so it grows into the tile
+                 instead of sliding across it. A render scale is measured at 1.0, so the
+                 code-behind caps the TextBlock's MaxWidth while grown - otherwise the
+                 long localised titles would grow straight under ClipToBounds. -->
+
+            <Border x:Name="TitlePillA"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="8,8,0,0" CornerRadius="7" Background="#B01A1A2E"
-                    Padding="7,2,8,3" IsHitTestVisible="False">
+                    Padding="7,2,8,3" IsHitTestVisible="False"
+                    RenderTransformOrigin="0,0">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="TitleScaleA" ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
                 <TextBlock x:Name="TxtTitleA" Text="A" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
                            FontSize="11" FontWeight="SemiBold"/>
             </Border>
-            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            <Border x:Name="TitlePillB"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,8,8" CornerRadius="7" Background="#B01A1A2E"
-                    Padding="7,2,8,3" IsHitTestVisible="False">
+                    Padding="7,2,8,3" IsHitTestVisible="False"
+                    RenderTransformOrigin="1,1">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="TitleScaleB" ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
                 <TextBlock x:Name="TxtTitleB" Text="B" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
                            FontSize="11" FontWeight="SemiBold"/>
             </Border>
 

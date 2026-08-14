@@ -52,6 +52,9 @@ const BUDGET = {
   mobile:  { slots: 16, pool: 8,  anim: 3, texMax: 224 },
 };
 const POOL_INFLIGHT = 2;          // concurrent decodes while filling the pool
+/** Urls served by the page's own host (ccp.* virtual hosts, data:/blob:, page-relative).
+ *  Anything else is a third-party CDN and cannot be uploaded to a texture — see the deck. */
+const LOCAL_URL_RE = /^(?:https?:\/\/ccp\.[a-z0-9-]+\/|data:|blob:|\.{0,2}\/)/i;
 const ANIM_MAX_FRAMES = 18;       // frames kept per gif (long gifs loop their opening)
 const ANIM_UPLOADS_PER_TICK = 2;  // texture redraws per anim tick (~20fps)
 
@@ -89,10 +92,18 @@ export function createWallDecals({ THREE, scene, renderer, media, tier, radius }
   // The URL deck: gifs first (this layer exists to plaster GIFs), stills only to
   // top the pool up when the user has few or none. Same manifest render/effects.js
   // draws its bursts from — no new sourcing, no hardcoded names.
-  const gifUrls = (media && Array.isArray(media.gifs))
-    ? media.gifs.filter((u) => typeof u === 'string' && u.length > 0) : [];
-  const stillUrls = (media && Array.isArray(media.images))
-    ? media.images.filter((u) => typeof u === 'string' && u.length > 0) : [];
+  //
+  // LOCAL URLS ONLY, AND NOT AS AN OPTIMISATION. Every url here ends up as a WebGL
+  // texture: gifs go through DtRH's gifWorker (fetch -> ImageBitmap) and stills through
+  // TextureLoader. The manifest may now also carry REMOTE stills, whose CDN sends no
+  // Access-Control-Allow-Origin — `fetch` rejects them outright and uploading one as a
+  // texture throws SecurityError. This layer is therefore local-media-only by design;
+  // the DOM layers (effects.js bursts, beats.js backdrops, the captcha tiles) are where
+  // remote media shows up. The filter is explicit here rather than left to a catch,
+  // because a swallowed security error looks exactly like "the wall is just empty".
+  const local = (u) => typeof u === 'string' && LOCAL_URL_RE.test(u);
+  const gifUrls = (media && Array.isArray(media.gifs)) ? media.gifs.filter(local) : [];
+  const stillUrls = (media && Array.isArray(media.images)) ? media.images.filter(local) : [];
   const urls = gifUrls.concat(stillUrls);
 
   const group = new THREE.Group();

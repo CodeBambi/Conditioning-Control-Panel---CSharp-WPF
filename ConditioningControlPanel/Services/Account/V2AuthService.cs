@@ -101,6 +101,18 @@ namespace ConditioningControlPanel.Services
             public Unlocks? Unlocks { get; set; }
         }
 
+        /// <summary>
+        /// DO NOT ADD A DateTime OR DateTimeOffset MEMBER HERE without revisiting
+        /// <see cref="Descent.DescentReader.ParseWire"/>.
+        ///
+        /// This DTO is materialised from a JObject that was loaded with
+        /// DateParseHandling.None, because the additive `descent` block needs its
+        /// date-ish STRINGS left as strings. Today every member is a string, a
+        /// number, a bool or a nested object, so that setting is invisible here —
+        /// Newtonsoft converts a plain string to a DateTime happily on ToObject. The
+        /// moment a member's parsing depends on the token ALREADY being a Date, this
+        /// class and that reader are coupled and only one of them says so.
+        /// </summary>
         public class V2User
         {
             [JsonProperty("unified_id")]
@@ -466,6 +478,23 @@ namespace ConditioningControlPanel.Services
         /// Get user profile from v2 API
         /// </summary>
         public async Task<V2User?> GetUserProfileAsync(string unifiedId)
+            => (await GetUserProfileNodeAsync(unifiedId))?.ToObject<V2User>();
+
+        /// <summary>
+        /// The RAW `user` node of /v2/user/profile.
+        ///
+        /// V2User is a fixed DTO and drops every key it does not declare, which is
+        /// fine for the account fields and useless for anything additive the server
+        /// grows later. The `descent` block is exactly that (ccp-server server.js
+        /// attachDescentBlocks) — it rides inside this node, ships only to accounts
+        /// inside the rollout dial, and is read straight off the JSON by
+        /// Services.Descent.DescentReader.
+        ///
+        /// One request path, one set of auth headers, one place a 401 can be handled:
+        /// GetUserProfileAsync is a thin projection of this method rather than a
+        /// second copy of it.
+        /// </summary>
+        public async Task<JObject?> GetUserProfileNodeAsync(string unifiedId)
         {
             try
             {
@@ -476,18 +505,36 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Log.Warning("[V2Auth] Get profile failed: {Json}", json);
+                    // TRUNCATED, and it matters more here than at the other call
+                    // sites: the vat put this request on a 60s cadence, so a server
+                    // erroring out with a fat body would write that whole body into
+                    // the log once a minute for as long as the Trainer Card is open.
+                    // The status plus the first 200 chars is all triage ever needs.
+                    Log.Warning("[V2Auth] Get profile failed: {Status} {Body}",
+                        (int)response.StatusCode, TruncateForLog(json));
                     return null;
                 }
 
-                var result = JObject.Parse(json);
-                return result["user"]?.ToObject<V2User>();
+                // NOT JObject.Parse: date coercion has to be off or every date-ish
+                // string in the additive `descent` block reads as absent. See
+                // Services.Descent.DescentReader.ParseWire for the whole trap.
+                // V2User is unaffected — its DateTime members still deserialize from
+                // plain strings.
+                var result = Descent.DescentReader.ParseWire(json);
+                return result?["user"] as JObject;
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[V2Auth] Get profile failed");
                 return null;
             }
+        }
+
+        /// <summary>First 200 characters of a response body, for a non-2xx log line.</summary>
+        private static string TruncateForLog(string? body)
+        {
+            if (string.IsNullOrEmpty(body)) return string.Empty;
+            return body.Length <= 200 ? body : body.Substring(0, 200) + "…";
         }
 
         /// <summary>

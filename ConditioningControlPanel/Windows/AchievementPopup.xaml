@@ -27,7 +27,7 @@
             </Grid.ColumnDefinitions>
             
             <!-- Achievement Image -->
-            <Border Grid.Column="0" Width="120" Height="120" Background="{DynamicResource DarkerBgBrush}" Margin="0,0,15,0">
+            <Border Grid.Column="0" Width="120" Height="120" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Margin="0,0,15,0">
                 <Image x:Name="AchievementImage" Stretch="Uniform" Margin="5"/>
             </Border>
             
@@ -49,7 +49,7 @@
                 
                 <!-- Flavor Text -->
                 <TextBlock x:Name="TxtFlavor" Text="Flavor text goes here..." 
-                           Foreground="#AAAAAA" FontSize="12" 
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                            TextWrapping="Wrap" FontStyle="Italic"/>
             </StackPanel>
             
@@ -57,7 +57,7 @@
             <Button Grid.Column="1" Content="✕" 
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="24" Height="24" Margin="0,-5,-5,0"
-                    Background="Transparent" Foreground="#888888"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand"
                     Click="BtnClose_Click">
                 <Button.Style>

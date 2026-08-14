@@ -69,6 +69,20 @@ internal static class AnimatedWebp
     // crashed at 228s survived a 15-min soak with burst width capped to 2 (A/B, 2026-07-12).
     private static readonly SemaphoreSlim _decodeGate = new(2, 2);
 
+    /// <summary>
+    /// Run a native Skia decode under the SAME global gate the entry points above use, for
+    /// callers that drive their own SKCodec/SKBitmap (FlashService's remote-still fallback).
+    /// The gate only bounds aggregate native memory if EVERY Skia decode in the app passes
+    /// through it — a second, ungated fan-out re-opens the 0xc0000374 heap corruption this
+    /// exists to stop. Heavy and blocking: call off the UI thread.
+    /// </summary>
+    internal static T RunGatedDecode<T>(Func<T> decode)
+    {
+        _decodeGate.Wait();
+        try { return decode(); }
+        finally { _decodeGate.Release(); }
+    }
+
     // Hard CPU ceiling on frames decoded for pathological files (composition is sequential,
     // so this bounds work even when only a handful of frames are kept).
     internal const int DECODE_CEILING = 600;

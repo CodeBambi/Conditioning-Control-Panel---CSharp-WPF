@@ -30,7 +30,7 @@
                 <TextBlock x:Name="TxtVersionInfo"
                            Foreground="#E0E0E0" FontSize="15" TextWrapping="Wrap" LineHeight="22"/>
                 <TextBlock x:Name="TxtFileSize"
-                           Foreground="#808080" FontSize="13" Margin="0,6,0,0"/>
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,6,0,0"/>
             </StackPanel>
 
             <!-- Release Notes -->

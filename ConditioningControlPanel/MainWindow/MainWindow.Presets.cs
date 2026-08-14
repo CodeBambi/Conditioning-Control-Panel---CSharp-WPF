@@ -273,74 +273,134 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The Presets tab's mod-switch repaint, called by the sweep in MainWindow.UiUpdates.cs
+        /// (immediately if the tab is on screen, otherwise off the dirty flag on its next show).
+        ///
+        /// <para>Every card is rebuilt because both halves of it are mod-derived: the name goes
+        /// through MakeModAware and the selected card's border is PinkBrush. The detail pane is only
+        /// re-titled when a PRESET is what it is showing - the pane is shared with sessions, and
+        /// calling SelectPreset here would yank a user who had a session open back onto a preset.</para>
+        /// </summary>
+        private void RefreshPresetsModVisuals()
+        {
+            RefreshPresetsList();
+
+            if (_selectedPreset == null) return;
+            if (PresetsTab?.PresetDetailScroller?.Visibility != Visibility.Visible) return;
+
+            if (PresetsTab.TxtDetailTitle != null)
+                PresetsTab.TxtDetailTitle.Text = App.Mods?.MakeModAware(_selectedPreset.Name) ?? _selectedPreset.Name;
+            if (PresetsTab.TxtDetailSubtitle != null)
+                PresetsTab.TxtDetailSubtitle.Text = App.Mods?.MakeModAware(_selectedPreset.Description) ?? _selectedPreset.Description;
+        }
+
+        /// <summary>
+        /// One chip in the Presets strip.
+        ///
+        /// <para><b>Styled from the tab, not from here (Session Door Overhaul, 2026-08-13).</b> The
+        /// geometry and every colour now come from <c>SdPresetChip</c> / <c>SdPresetChipSelected</c>
+        /// in PresetsTabView.xaml, reached through <see cref="TryFindTabStyle"/>. That is what makes
+        /// the strip re-tint on a mod switch: the old card hard-coded #2A2A4A / #3C3C64 / a
+        /// 2px border and was the reason this page stayed Bambi-coloured on a drone build.</para>
+        ///
+        /// <para>Hover is a Style trigger now, not two handlers. Nothing here may set BorderBrush or
+        /// Background as a LOCAL value - a local value outranks a trigger in WPF's precedence order,
+        /// so painting the border by hand would silently kill the hover the style provides.</para>
+        /// </summary>
         private Border CreatePresetCard(Models.Preset preset)
         {
             var isSelected = _selectedPreset?.Id == preset.Id;
-            var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
-            
+
             var card = new Border
             {
-                Background = new SolidColorBrush(isSelected ? Color.FromRgb(60, 60, 100) : Color.FromRgb(42, 42, 74)),
-                BorderBrush = isSelected ? pinkBrush : (Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96))),
-                BorderThickness = new Thickness(2),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(8),
-                // 1px of vertical margin is headroom for the hover lift: the row sits in a
-                // ScrollViewer whose viewport is exactly the card height, and WPF would clip the
-                // top and bottom of a 1.02 scale without so much as a warning.
-                Margin = new Thickness(0, 1, 6, 1),
-                Width = 100,
-                Height = 70,
-                Cursor = Cursors.Hand,
+                // The margin is NOT in the style: it is hover headroom, and the style is shared with
+                // a chip whose geometry the XAML owns. 1px top/bottom because the strip's
+                // ScrollViewer viewport is exactly the chip height and WPF clips a 1.02 scale
+                // without so much as a warning.
+                Margin = new Thickness(0, 1, 7, 1),
                 Tag = preset.Id
             };
+            var chipStyle = TryFindTabStyle(isSelected ? "SdPresetChipSelected" : "SdPresetChip");
+            if (chipStyle != null) card.Style = chipStyle;
+            else
+            {
+                // The tab's resources are unreachable (the view was never loaded). Fall back to
+                // theme brushes rather than to the literals this method used to carry.
+                card.Background = Application.Current.Resources["SurfaceBgBrush"] as Brush;
+                card.BorderBrush = Application.Current.Resources[isSelected ? "PinkBrush" : "PanelAccentBrush"] as Brush;
+                card.BorderThickness = new Thickness(isSelected ? 2 : 1);
+                card.CornerRadius = new CornerRadius(11);
+                card.Padding = new Thickness(9, 8, 9, 8);
+                card.Width = 96;
+                card.Height = 70;   // keep in step with SdPresetChip - see its comment
+                card.Cursor = Cursors.Hand;
+            }
             PreparePresetCardFx(card);
 
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
-            card.MouseEnter += (s, e) => {
-                if (_selectedPreset?.Id != preset.Id)
-                    card.BorderBrush = pinkBrush;
-            };
-            card.MouseLeave += (s, e) => {
-                if (_selectedPreset?.Id != preset.Id)
-                    card.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
-            };
-            
+
             var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
-            
-            // Name
+
             var nameText = new TextBlock
             {
                 Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
-                Foreground = Brushes.White,
+                Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? Brushes.White,
                 FontWeight = FontWeights.SemiBold,
-                FontSize = 10,
+                FontSize = 11,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
             stack.Children.Add(nameText);
-            
-            // Badge
-            var badge = new TextBlock
-            {
-                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
-                Foreground = preset.IsDefault ? pinkBrush : new SolidColorBrush(Color.FromRgb(100, 200, 100)),
-                FontSize = 7,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 1, 0, 0)
-            };
-            stack.Children.Add(badge);
-            
-            // Quick stats (icons only for compact view)
-            var statsPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+            // Feature glyphs. Still emoji - they are the same five the detail pane uses, and a
+            // 96px chip has no room for words.
+            var statsPanel = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
             if (preset.FlashEnabled) AddStatIcon(statsPanel, "⚡", 10);
             if (preset.MandatoryVideosEnabled) AddStatIcon(statsPanel, "🎬", 10);
             if (preset.SubliminalEnabled) AddStatIcon(statsPanel, "💭", 10);
             if (preset.SpiralEnabled) AddStatIcon(statsPanel, "🌀", 10);
             if (preset.LockCardEnabled) AddStatIcon(statsPanel, "🔒", 10);
             stack.Children.Add(statsPanel);
-            
+
+            // DEFAULT / CUSTOM in Consolas, matching the zone tags: on this page mono means
+            // "structural label", never content.
+            var badge = new TextBlock
+            {
+                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
+                Foreground = preset.IsDefault
+                    ? Application.Current.Resources["PinkBrush"] as Brush
+                    : Application.Current.Resources["SuccessGreenBrush"] as Brush,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 8,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            stack.Children.Add(badge);
+
             card.Child = stack;
             return card;
+        }
+
+        /// <summary>
+        /// Looks a Style up in the Presets tab's OWN resource dictionary.
+        ///
+        /// <para>The card vocabulary for this page lives in PresetsTabView.xaml rather than in
+        /// Resources/Theme, so <c>MainWindow.FindResource</c> cannot see it - the window is above
+        /// the view, and resource lookup walks upward. <c>FrameworkElement.TryFindResource</c> on
+        /// the VIEW checks the view's dictionary first, which is exactly what is wanted, and falls
+        /// through to the app dictionaries if the key is not there.</para>
+        ///
+        /// <para>Returns null (never throws) when the tab has not been built yet, so callers can
+        /// fall back rather than crash a list rebuild.</para>
+        /// </summary>
+        private Style? TryFindTabStyle(string key)
+        {
+            try { return PresetsTab?.TryFindResource(key) as Style; }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("TryFindTabStyle({Key}) failed: {E}", key, ex.Message);
+                return null;
+            }
         }
         
         private void AddStatIcon(WrapPanel panel, string icon, int size = 12)
@@ -980,21 +1040,15 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// Just Drop: the session maker, not built yet (owner, 2026-08-11 — placeholder tile).
+        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
+        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
+        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
         ///
-        /// <para>A toast and nothing else, on purpose. The tile is on the wall to announce the
-        /// feature, and there is no window to open; a tile that silently does nothing when
-        /// clicked reads as a bug, and this app has shipped that bug before. When the real
-        /// launcher lands, replace this body with it and drop the SOON badge in
-        /// <see cref="RefreshMosaicTierBadges"/> — nothing else on the wall changes.</para>
+        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
+        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
+        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
         /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
-        {
-            // Literal copy, like the tile's own title: naming a placeholder in nine language
-            // files buys nine rows to re-translate the day it gets its real name.
-            App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
-                                    + "future update.", NotificationType.Info, TimeSpan.FromSeconds(6));
-        }
+        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
@@ -1011,9 +1065,11 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Nobody has Just Drop, including the owner, so this one never clears. Literal,
-                // like the tile's title - see CardJustDrop_Click.
-                SetTierBadge(dash.CardJustDrop, false, "SOON");
+                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
+                // price tag. It owns its own badge now (same SetTierBadge helper, called from
+                // there) because the badge, the title, the tooltip and the blur have to move as
+                // one costume - see MainWindow.TeaseCard.cs.
+                ApplyTeaseCard();
 
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
@@ -1059,6 +1115,19 @@ namespace ConditioningControlPanel
                     if (art != null) dash.MysteryRevealArtBrush.ImageSource = art;
                 }
 
+                // The re-stamp: today's feature's tier sign, dimmed, with the FREE TODAY stamp
+                // slammed over it. Only for accounts that are actually being given something -
+                // premium owns the pool, so its reveal face carries no sign at all rather than a
+                // tier badge with nothing stamped on it, which would read as a price on a door
+                // that is already open.
+                if (dash.MysteryRevealBadge != null)
+                {
+                    bool premium = App.Patreon?.HasPremiumAccess == true;
+                    int tier = premium ? 0 : MysteryFeatureTier(key);
+                    dash.MysteryRevealBadge.Tier = tier;
+                    dash.MysteryRevealBadge.FreeToday = tier > 0;
+                }
+
                 // The plate's hover flip and its gold breath are hooked/armed off the same
                 // repaint triggers this method already has (Home shown, patron status, override
                 // landing). One-shot latched, so it is safe to hammer - see DashboardFx 2c.
@@ -1080,6 +1149,24 @@ namespace ConditioningControlPanel
             // nobody translates (same call as the Play door's lockband).
             "dtrh" => "Down the Rabbit Hole",
             _ => null,
+        };
+
+        /// <summary>
+        /// The LIVERY tier of a DailyFreeService key: which sign the reveal face wears before the
+        /// FREE TODAY stamp lands on it. Every pool feature is a Tier 1 exclusive except the
+        /// descent, which is the wall's Tier 2 door (Play's DTRH hero wears the same diamond).
+        /// An unknown key gets 0, i.e. no sign - the same silence the box falls back to when it
+        /// cannot name the day's feature either.
+        ///
+        /// <para>Kept beside <see cref="MysteryFeatureName"/> and <see cref="MysteryFeatureArtPath"/>
+        /// on purpose: three switches over one key set, so adding a pool feature is three lines in
+        /// one place rather than a hunt.</para>
+        /// </summary>
+        private static int MysteryFeatureTier(string? key) => key switch
+        {
+            "dtrh" => 2,
+            "takeover" or "awareness" or "haptics" or "voice" or "fyp" or "remote" => 1,
+            _ => 0,
         };
 
         /// <summary>
@@ -1464,7 +1551,35 @@ namespace ConditioningControlPanel
             }
 
             var log = e.Log;
-            Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+            Dispatcher.BeginInvoke(() =>
+            {
+                // The run that just ended is a receipt now. Refreshed here rather than only on the
+                // next tab show, so closing the summary drops the user onto a shelf that already
+                // carries it.
+                //
+                // Deliberately AFTER the suppressed-summary return above: a withdrawn session did
+                // write a log, but that path is specified to pass without comment, and a card
+                // appearing on the shelf in the same beat is comment. It lands on the next tab
+                // show like any other.
+                RefreshTakeawayShelf();
+                ShowSessionSummaryWhenClear(log, attempt: 0);
+            });
+        }
+
+        /// <summary>
+        /// The one recap shown non-modally (video still on screen); null whenever the last one
+        /// was modal or has been dismissed. Modal recaps need no tracking - they cannot stack.
+        /// </summary>
+        private SessionCompleteWindow? _liveSessionRecap;
+        private bool _liveSessionRecapTeardownHooked;
+
+        private void CloseLiveSessionRecap()
+        {
+            var stale = _liveSessionRecap;
+            _liveSessionRecap = null;
+            if (stale == null) return;
+            try { stale.Close(); }
+            catch (Exception ex) { App.Logger?.Debug("Closing previous session recap: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -1485,8 +1600,14 @@ namespace ConditioningControlPanel
                 if (Dispatcher.HasShutdownStarted) return;
 
                 var cleaning = App.Video?.IsCleaningUp == true;
+                // IsBrowserSessionActive alongside IsPlaying, the same pairing AudioService uses:
+                // when the clip is routed to the WebView2 engine the surface on screen is a
+                // browser window, and the run's phases do not line up with the LibVLC flag the
+                // way this wait assumes. A modal opened against a live browser video lands
+                // BEHIND its topmost surface, invisible and holding the input queue (#905).
                 var videoBusy = cleaning
                     || App.Video?.IsPlaying == true
+                    || App.Video?.IsBrowserSessionActive == true
                     || App.Video?.HasOpenWindows == true;
                 // Soft cap ~3s; while a CloseAll is actively in flight keep waiting up to 10s
                 // (its flag clears in a finally, so this terminates).
@@ -1511,8 +1632,12 @@ namespace ConditioningControlPanel
                         if (Dispatcher.HasShutdownStarted) return;
                         // If we capped out because a NEW video legitimately started (autonomy
                         // can trigger one right after session end), don't steal topmost/focus
-                        // from it — show buried, like the pre-fix behavior.
-                        var videoUp = App.Video?.IsPlaying == true;
+                        // from it — but NEVER show a buried MODAL: an invisible ShowDialog owns
+                        // the input queue and freezes the app for as long as the video runs
+                        // (#905). Buried case goes non-modal + non-activating instead; the
+                        // recap is simply there when the video surface goes away.
+                        var videoUp = App.Video?.IsPlaying == true
+                                      || App.Video?.IsBrowserSessionActive == true;
                         var dialog = new SessionCompleteWindow(log)
                         {
                             Owner = IsLoaded ? this : null,
@@ -1520,15 +1645,36 @@ namespace ConditioningControlPanel
                             // rendered so the summary can't pin itself over other apps.
                             Topmost = !videoUp,
                         };
-                        if (!videoUp)
+                        if (videoUp)
+                        {
+                            // Non-modal recaps do not block the next session, so two runs ending
+                            // in quick succession would stack two live cards. Keep exactly one.
+                            CloseLiveSessionRecap();
+                            _liveSessionRecap = dialog;
+                            dialog.Closed += (_, _) =>
+                            {
+                                if (ReferenceEquals(_liveSessionRecap, dialog)) _liveSessionRecap = null;
+                            };
+                            if (!_liveSessionRecapTeardownHooked)
+                            {
+                                _liveSessionRecapTeardownHooked = true;
+                                // Owner is null while this window is not yet loaded, and under
+                                // ShutdownMode=OnLastWindowClose an orphaned recap would keep the
+                                // process alive after the main window goes away.
+                                Closed += (_, _) => CloseLiveSessionRecap();
+                            }
+                            dialog.ShowActivated = false;
+                            dialog.Show();
+                        }
+                        else
                         {
                             dialog.ContentRendered += (_, _) =>
                             {
                                 dialog.Topmost = false;
                                 dialog.Activate();
                             };
+                            dialog.ShowDialog();
                         }
-                        dialog.ShowDialog();
                     }
                     catch (Exception ex)
                     {
@@ -1660,6 +1806,10 @@ namespace ConditioningControlPanel
 
                 // Restore pink color
                 BtnStart.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
+                // ...and let the idle charge take it back (Velvet Kit 2, FX lane B). The ClearValue
+                // above wipes the gradient with everything else, so this is the one place outside
+                // UpdateStartButton that has to ask for it.
+                ApplyStartHeroState();
 
                 // Hide pause button
                 BtnPauseSession.Visibility = Visibility.Collapsed;

@@ -203,12 +203,116 @@ namespace ConditioningControlPanel
                     {
                         _warnedMissingCustomAssetsPath = true;
                         Logger?.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
+
+                        // This getter runs during startup, long before there is a window to ask
+                        // on, and it is hot enough that it must never do real work. So only
+                        // *record* that a remote-media offer is warranted; MainWindow drains it
+                        // at a safe moment (see FlushPendingRemoteMediaOffer). A plain field
+                        // write cannot throw, so the fallback behaviour above is untouched.
+                        _pendingRemoteMediaOfferSurface ??= "custom-assets-path-missing";
                     }
                 }
                 return UserAssetsPath;
             }
         }
         private static bool _warnedMissingCustomAssetsPath;
+
+        #region Remote media handoff (Phase 1.5)
+
+        // A user with an empty assets folder used to get near-silence: flashes logged once and
+        // gave up, the wallpaper effect refused, videos threw a dead-end MessageBox. Those are
+        // exactly the moments to offer the remote source instead. The budget lives HERE, in one
+        // place, because a user with an empty folder trips several of those sites inside the
+        // first minute and five independent flag checks would nag five times.
+
+        /// <summary>
+        /// Feature-intro key for the app-wide remote-media coaching card. The card's copy lives in
+        /// <c>FeatureIntros.All</c>; <c>ShowIfFirstTime</c> looks the key up with TryGetValue and
+        /// returns silently when it is missing, so calling this before the card is registered is
+        /// a no-op rather than a crash.
+        /// </summary>
+        private const string RemoteMediaIntroKey = "remotemedia";
+
+        /// <summary>0 until some empty-assets dead end has claimed this launch's single offer.</summary>
+        private static int _remoteMediaOfferClaimed;
+
+        /// <summary>
+        /// Set by a dead end that hit too early (or behind a modal) to show anything. Drained by
+        /// <see cref="FlushPendingRemoteMediaOffer"/> once a window exists and the startup modals
+        /// are down. Never volatile - it is exchanged through Interlocked.
+        /// </summary>
+        private static string? _pendingRemoteMediaOfferSurface;
+
+        /// <summary>
+        /// Offers the remote media source at an empty-assets dead end, at most once per launch
+        /// across every call site. Non-blocking and safe from any thread: it only reads settings
+        /// and queues the coaching card, so callers may invoke it while holding a lock or from a
+        /// background thread. Every failure path is swallowed - the caller's original behaviour
+        /// (log line, MessageBox, "return false") must happen whether or not the offer does.
+        /// </summary>
+        /// <param name="surface">Short id of the dead end, for the log only.</param>
+        /// <param name="owner">Owner window, or null to resolve MainWindow when on the UI thread.</param>
+        internal static void OfferRemoteMediaSource(string surface, Window? owner = null)
+        {
+            try
+            {
+                var settings = Settings?.Current;
+                if (settings == null) return;
+
+                // Already pointed at the remote pool - the dead end is a different problem
+                // (no niches selected, no network) and a "try online media" card would be noise.
+                if (!string.Equals(settings.MediaSource, "local", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                // Never stack on the What's New / update modals. Those pump their own message
+                // loop, so the card's Normal-priority BeginInvoke would run *inside* the modal.
+                // Leave the budget unspent and park it for the flush instead.
+                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
+                {
+                    _pendingRemoteMediaOfferSurface ??= surface;
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+
+                // Application.MainWindow is a DependencyProperty and verifies thread access, so
+                // only touch it when we are actually on the UI thread; a null owner is fine.
+                if (owner == null && dispatcher.CheckAccess())
+                {
+                    try { owner = Current?.MainWindow; } catch { owner = null; }
+                }
+
+                Logger?.Information("RemoteMedia: empty assets at {Surface} — offering the online source", surface);
+                FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, owner);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "RemoteMedia: offer failed at {Surface}", surface);
+            }
+        }
+
+        /// <summary>
+        /// Surfaces an offer recorded by a site that ran too early to show one (startup, or
+        /// behind a modal). Safe to call whenever - it does nothing when nothing is parked.
+        /// </summary>
+        internal static void FlushPendingRemoteMediaOffer(Window? owner = null)
+        {
+            try
+            {
+                var surface = Interlocked.Exchange<string?>(ref _pendingRemoteMediaOfferSurface, null);
+                if (surface == null) return;
+                OfferRemoteMediaSource(surface, owner);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "RemoteMedia: pending offer flush failed");
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Returns a temp directory for media files (decrypted packs, video downloads, etc.)
@@ -383,6 +487,31 @@ namespace ConditioningControlPanel
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
+
+        /// <summary>
+        /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
+        /// ladder, the relapse bonus). Nullable and normally EMPTY: the server ships
+        /// the block only to accounts inside the rollout dial, and every surface that
+        /// reads it renders nothing at all when it is absent.
+        /// </summary>
+        public static Services.Descent.DescentService? Descent { get; private set; }
+
+        /// <summary>
+        /// LIVE EVENTS — the world event switchboard (themed bubble skin, accent
+        /// override, capped XP boost). Constructed dark and never armed in this
+        /// build: nothing calls Apply(), so every consumer falls through to the
+        /// behaviour it had before the seam existed. See LiveEventService.
+        /// </summary>
+        public static Services.Events.LiveEventService? LiveEvent { get; private set; }
+
+        /// <summary>
+        /// THE MIGRATION CEREMONY's runtime (CONTRACTS-0812 §4). Constructed on every launch and
+        /// DORMANT on every launch: the only thing that can wake it is a /v2/user/sync response
+        /// carrying <c>descent_migration.required</c>, which the server sends only with
+        /// DESCENT_MIGRATION armed. There is no client flag and no other entry point.
+        /// </summary>
+        public static Services.Descent.DescentMigrationService? DescentMigration { get; private set; }
+
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -412,6 +541,9 @@ namespace ConditioningControlPanel
         /// <summary>Multi-day Training Programs runtime. Fully qualified because the namespace
         /// segment <c>Program</c> collides with the <c>Program</c> type in C# name resolution.</summary>
         public static Services.Program.ProgramService Programs { get; private set; } = null!;
+        /// <summary>Turns a banked chapter reward into the thing it promised - a filed session, an
+        /// installed phrase - and answers what the user owns.</summary>
+        public static Services.Program.ProgramRewardService ProgramRewards { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
@@ -446,7 +578,8 @@ namespace ConditioningControlPanel
         public static AttentionCheckService AttentionCheck { get; private set; } = null!;
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
-        public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        /// <summary>Null when Skia could not be initialized (#912) — every call site is null-conditional.</summary>
+        public static GazeDebugCursorService? GazeCursor { get; private set; }
         public static GazeDriftCorrectionService GazeDrift { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
@@ -665,6 +798,15 @@ namespace ConditioningControlPanel
         private static DateTime _ccpWindowRectsCacheTime = DateTime.MinValue;
         private static readonly TimeSpan CcpWindowRectsCacheDuration = TimeSpan.FromMilliseconds(250);
         private static readonly object _ccpWindowRectsLock = new();
+        private static int _ccpWindowRectsVersion;
+        // Ceiling on the UI-thread hop below. A wedged dispatcher must never wedge the OCR loop.
+        private static readonly TimeSpan CcpWindowRectsUiTimeout = TimeSpan.FromSeconds(2);
+        // A UI thread that just blew that ceiling will not answer the next scan either, and paying
+        // another full 2s per scan is how a busy UI thread turns into a stalled OCR loop. After a
+        // timeout the stale cache is served outright for this long before the hop is retried. Kept
+        // short so the exclusion set can't drift for long behind a UI thread that has recovered.
+        private static readonly TimeSpan CcpWindowRectsTimeoutBackoff = TimeSpan.FromSeconds(3);
+        private static DateTime _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
@@ -695,6 +837,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public static System.Drawing.Rectangle[] GetCcpWindowRectsCached()
         {
+            int version;
             lock (_ccpWindowRectsLock)
             {
                 if (_cachedCcpWindowRects != null &&
@@ -702,108 +845,167 @@ namespace ConditioningControlPanel
                 {
                     return _cachedCcpWindowRects;
                 }
-
-                var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
-                try
+                if (DateTime.Now < _ccpWindowRectsTimeoutBackoffUntil)
                 {
-                    // Must run on the UI thread to enumerate Application.Current.Windows safely.
-                    var dispatcher = Current?.Dispatcher;
-                    if (dispatcher == null || dispatcher.HasShutdownStarted)
-                    {
-                        _cachedCcpWindowRects = Array.Empty<System.Drawing.Rectangle>();
-                        _ccpWindowRectsCacheTime = DateTime.Now;
-                        return _cachedCcpWindowRects;
-                    }
+                    // Still inside the back-off from a hop that timed out — serve the stale rects
+                    // without queueing another 2s wait behind the same busy UI thread. Not gated on
+                    // a non-null cache: if the very FIRST call is the one that times out there is
+                    // nothing to serve but empty, and requiring non-null here made every subsequent
+                    // scan pay a fresh 2s wait for as long as the UI thread stayed wedged. Empty is
+                    // exactly what the timeout path itself returns in that case.
+                    return _cachedCcpWindowRects ?? Array.Empty<System.Drawing.Rectangle>();
+                }
+                version = _ccpWindowRectsVersion;
+            }
 
-                    // Collect the HWNDs on the UI thread, then call GetWindowRect
-                    // outside the dispatcher lock — GetWindowRect is a thread-safe
-                    // Win32 call and doesn't need dispatcher affinity.
+            // The rebuild below hops to the UI thread and MUST NOT hold
+            // _ccpWindowRectsLock while it does: InvalidateCcpWindowRectsCache takes
+            // that same lock from the UI thread, so holding it across the hop is a
+            // lock-order inversion that freezes the whole app (#919). Collect from
+            // the dispatcher first, then take the lock only to swap the cache in.
+            var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
+            try
+            {
+                // Must run on the UI thread to enumerate Application.Current.Windows safely.
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    return StoreCcpWindowRects(Array.Empty<System.Drawing.Rectangle>(), version);
+                }
+
+                // Collect the HWNDs on the UI thread, then call GetWindowRect
+                // off-thread — GetWindowRect is a thread-safe Win32 call and
+                // doesn't need dispatcher affinity.
+                (System.Collections.Generic.List<IntPtr> Hwnds,
+                 System.Drawing.Rectangle[] Bouncing,
+                 System.Drawing.Rectangle[] Subliminal) CollectOnUi()
+                {
                     var hwnds = new System.Collections.Generic.List<IntPtr>();
-                    System.Drawing.Rectangle[] bouncingRects = Array.Empty<System.Drawing.Rectangle>();
-                    System.Drawing.Rectangle[] subliminalRects = Array.Empty<System.Drawing.Rectangle>();
-                    dispatcher.Invoke(() =>
+                    foreach (var w in Current!.Windows.OfType<Window>())
                     {
-                        foreach (var w in Current!.Windows.OfType<Window>())
+                        try
                         {
-                            try
-                            {
-                                if (!w.IsVisible) continue;
-                                if (w.WindowState == WindowState.Minimized) continue;
+                            if (!w.IsVisible) continue;
+                            if (w.WindowState == WindowState.Minimized) continue;
 
-                                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                                if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
-                            }
-                            catch { /* skip malformed window */ }
+                            var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                            if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
                         }
-
-                        // Bouncing text lives in a full-screen overlay window that
-                        // the per-monitor span filter below drops, so its small
-                        // moving text rect would otherwise be read back by the
-                        // awareness OCR (#287). Capture it here on the UI thread.
-                        bouncingRects = BouncingText?.GetActiveTextScreenRects()
-                                        ?? Array.Empty<System.Drawing.Rectangle>();
-
-                        // Subliminal cards are full-screen keep-alive overlays (dropped by the
-                        // span filter below) but are now intentionally left in screen capture so
-                        // they record. To still keep them out of the awareness OCR, exclude just
-                        // the centered text rect of any subliminal currently flashing (#287 pattern).
-                        subliminalRects = Subliminal?.GetActiveTextScreenRects()
-                                          ?? Array.Empty<System.Drawing.Rectangle>();
-                    });
-
-                    // Per-monitor span filter: any CCP window whose rect fully
-                    // covers any single screen is a full-screen overlay
-                    // container (flash/gaze/bubble surfaces, blur overlays,
-                    // and the BouncingText overlay). Those carry no readable
-                    // text at the window level but spanned monitor-sized
-                    // exclusion rects were swallowing every OCR'd word in
-                    // multi-monitor setups (#273). Sized windows like
-                    // AvatarTube, MantraWindow, LockCard, subliminal popups,
-                    // etc. fall well below per-monitor bounds and stay in the
-                    // exclusion list where they belong. BouncingText IS
-                    // full-screen, so its actual text rect is added separately
-                    // below (#287) rather than excluding the whole monitor.
-                    var screens = GetAllScreensCached();
-
-                    foreach (var hwnd in hwnds)
-                    {
-                        if (!IsWindowVisible(hwnd)) continue;
-                        if (!GetWindowRect(hwnd, out var r)) continue;
-
-                        int w = r.Right - r.Left;
-                        int h = r.Bottom - r.Top;
-                        if (w <= 0 || h <= 0) continue;
-
-                        if (SpansAnyMonitor(w, h, screens)) continue;
-
-                        rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                        catch { /* skip malformed window */ }
                     }
 
-                    // Add the bouncing-text rect (captured on the UI thread above).
-                    // It rode through the span filter as a full-screen window, so
-                    // only its small moving text region is excluded — not the
-                    // whole monitor (which would regress #273).
-                    foreach (var br in bouncingRects)
-                    {
-                        if (br.Width > 0 && br.Height > 0) rects.Add(br);
-                    }
+                    // Bouncing text lives in a full-screen overlay window that
+                    // the per-monitor span filter below drops, so its small
+                    // moving text rect would otherwise be read back by the
+                    // awareness OCR (#287). Capture it here on the UI thread.
+                    var bouncing = BouncingText?.GetActiveTextScreenRects()
+                                   ?? Array.Empty<System.Drawing.Rectangle>();
 
-                    // Subliminal text rects (captured on the UI thread above), same rationale as
-                    // bouncing text: the full-screen window was span-filtered out, so only the small
-                    // visible text region is excluded — not the whole monitor.
-                    foreach (var sr in subliminalRects)
-                    {
-                        if (sr.Width > 0 && sr.Height > 0) rects.Add(sr);
-                    }
+                    // Subliminal cards are full-screen keep-alive overlays (dropped by the
+                    // span filter below) but are now intentionally left in screen capture so
+                    // they record. To still keep them out of the awareness OCR, exclude just
+                    // the centered text rect of any subliminal currently flashing (#287 pattern).
+                    var subliminal = Subliminal?.GetActiveTextScreenRects()
+                                     ?? Array.Empty<System.Drawing.Rectangle>();
+
+                    return (Hwnds: hwnds, Bouncing: bouncing, Subliminal: subliminal);
                 }
-                catch (Exception ex)
+
+                (System.Collections.Generic.List<IntPtr> Hwnds,
+                 System.Drawing.Rectangle[] Bouncing,
+                 System.Drawing.Rectangle[] Subliminal) snapshot;
+
+                if (dispatcher.CheckAccess())
                 {
-                    Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+                    snapshot = CollectOnUi();
+                }
+                else
+                {
+                    var op = dispatcher.InvokeAsync(CollectOnUi);
+                    if (!op.Task.Wait(CcpWindowRectsUiTimeout))
+                    {
+                        // UI thread is busy/wedged. Reuse the last known rects rather than
+                        // reporting "no CCP windows" — an empty set lets the awareness OCR
+                        // read our own overlay text back.
+                        Logger?.Debug("GetCcpWindowRectsCached: UI thread did not respond in time, reusing last rects");
+                        lock (_ccpWindowRectsLock)
+                        {
+                            _ccpWindowRectsTimeoutBackoffUntil = DateTime.Now + CcpWindowRectsTimeoutBackoff;
+                            return _cachedCcpWindowRects ?? Array.Empty<System.Drawing.Rectangle>();
+                        }
+                    }
+                    snapshot = op.Task.Result;
                 }
 
-                _cachedCcpWindowRects = rects.ToArray();
-                _ccpWindowRectsCacheTime = DateTime.Now;
-                return _cachedCcpWindowRects;
+                // Per-monitor span filter: any CCP window whose rect fully
+                // covers any single screen is a full-screen overlay
+                // container (flash/gaze/bubble surfaces, blur overlays,
+                // and the BouncingText overlay). Those carry no readable
+                // text at the window level but spanned monitor-sized
+                // exclusion rects were swallowing every OCR'd word in
+                // multi-monitor setups (#273). Sized windows like
+                // AvatarTube, MantraWindow, LockCard, subliminal popups,
+                // etc. fall well below per-monitor bounds and stay in the
+                // exclusion list where they belong. BouncingText IS
+                // full-screen, so its actual text rect is added separately
+                // below (#287) rather than excluding the whole monitor.
+                var screens = GetAllScreensCached();
+
+                foreach (var hwnd in snapshot.Hwnds)
+                {
+                    if (!IsWindowVisible(hwnd)) continue;
+                    if (!GetWindowRect(hwnd, out var r)) continue;
+
+                    int w = r.Right - r.Left;
+                    int h = r.Bottom - r.Top;
+                    if (w <= 0 || h <= 0) continue;
+
+                    if (SpansAnyMonitor(w, h, screens)) continue;
+
+                    rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                }
+
+                // Add the bouncing-text rect (captured on the UI thread above).
+                // It rode through the span filter as a full-screen window, so
+                // only its small moving text region is excluded — not the
+                // whole monitor (which would regress #273).
+                foreach (var br in snapshot.Bouncing)
+                {
+                    if (br.Width > 0 && br.Height > 0) rects.Add(br);
+                }
+
+                // Subliminal text rects (captured on the UI thread above), same rationale as
+                // bouncing text: the full-screen window was span-filtered out, so only the small
+                // visible text region is excluded — not the whole monitor.
+                foreach (var sr in snapshot.Subliminal)
+                {
+                    if (sr.Width > 0 && sr.Height > 0) rects.Add(sr);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+            }
+
+            return StoreCcpWindowRects(rects.ToArray(), version);
+        }
+
+        private static System.Drawing.Rectangle[] StoreCcpWindowRects(
+            System.Drawing.Rectangle[] rects, int version)
+        {
+            lock (_ccpWindowRectsLock)
+            {
+                // An invalidate that landed mid-rebuild means these rects can predate the overlay
+                // that triggered it. They are still handed to THIS caller, but they must not enter
+                // the cache at all: refusing only the freshness stamp still left them in
+                // _cachedCcpWindowRects, where the timeout path above serves them regardless of age.
+                if (_ccpWindowRectsVersion == version)
+                {
+                    _cachedCcpWindowRects = rects;
+                    _ccpWindowRectsCacheTime = DateTime.Now;
+                    _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;   // UI thread answered
+                }
+                return rects;
             }
         }
 
@@ -818,6 +1020,13 @@ namespace ConditioningControlPanel
             lock (_ccpWindowRectsLock)
             {
                 _ccpWindowRectsCacheTime = DateTime.MinValue;
+                // The back-off must never survive an explicit invalidation. This runs ON the UI
+                // thread, which is proof that thread is alive — and the back-off exists only to
+                // avoid re-paying the 2s wait against a wedged one. Leaving it set would make the
+                // stale rects outlive the invalidation that a sub-250ms subliminal flash depends on
+                // to be excluded before the awareness OCR reads our own text back.
+                _ccpWindowRectsTimeoutBackoffUntil = DateTime.MinValue;
+                _ccpWindowRectsVersion++;
             }
         }
 
@@ -1400,6 +1609,12 @@ namespace ConditioningControlPanel
                 Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
             }
 
+            // One Descent: stamp this install's age once, from whatever on-disk evidence still
+            // exists. Silent — nothing in the UI reads it. Must run after Settings so it can read
+            // and persist the field, and early enough that the first profile sync of the session
+            // (which is what ships it) already has it.
+            EnsureInstallDateRecorded();
+
             // Migrate assets from old location (install dir) to new location (user data) in background.
             // MUST run after Settings is initialized: the migration both READS the "already migrated"
             // guard and WRITES the completion flag, and if Settings.Current is still null (as it was
@@ -1430,9 +1645,16 @@ namespace ConditioningControlPanel
 
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
+            Services.Fyp.Online.RemoteMediaCache.CleanupStaleTempFiles();
 
             // Initialize localization (must be after settings, before UI)
             LocalizationManager.Instance.Initialize(Settings?.Current?.Language ?? "en");
+
+            // The world-event switchboard, constructed DARK and never armed in this build.
+            // It goes up before ModService because the mod palette + resource chains both
+            // consult it on their very first resolve; constructed-but-empty is the state
+            // they are written against, and a null App.LiveEvent resolves identically.
+            LiveEvent = new Services.Events.LiveEventService();
 
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();
@@ -1453,6 +1675,26 @@ namespace ConditioningControlPanel
             {
                 void Recolor()
                 {
+                    Services.RecapTheme.ApplyForActiveMod();
+                    Services.FxTheme.ApplyForActiveMod();
+                    foreach (Window w in Current.Windows)
+                        Services.WindowChromeHelper.ApplyDarkTitleBar(w);
+                }
+                if (Current?.Dispatcher?.CheckAccess() == true) Recolor();
+                else Current?.Dispatcher?.Invoke(Recolor);
+            };
+
+            // An event starting or ending is the same repaint as a mod switch — the accent
+            // chain and the sprite chain both changed answer — with one addition: the
+            // resource cache is keyed on the event skin id, so stale entries must go or
+            // the old bubble would outlive the event. NEVER FIRES IN THIS BUILD; nothing
+            // calls LiveEventService.Apply/Clear. It is wired now so the day it does, the
+            // repaint is already correct instead of being discovered live.
+            LiveEvent.EventChanged += (_, __) =>
+            {
+                void Recolor()
+                {
+                    Services.ModResourceResolver.ClearCache();
                     Services.RecapTheme.ApplyForActiveMod();
                     Services.FxTheme.ApplyForActiveMod();
                     foreach (Window w in Current.Windows)
@@ -1543,6 +1785,15 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             BrainDrain = new BrainDrainService();
 
+            // Entitlement providers come BEFORE anything that gates on them at construction time
+            // (#889: QuestService discarded every premium quest on launch because App.Patreon was
+            // still null when it loaded, so the gate read "no access" and rerolled a free quest).
+            // Both constructors are self-contained — secure token storage + an HttpClient + the
+            // cached state on disk — and neither issues a request; the async validation still runs
+            // later in OnStartup, so this only moves the entitlement READ earlier.
+            Patreon = new PatreonService();
+            SubscribeStar = new SubscribeStarService();
+
             splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
             // Single seam between feature events and achievement tracking. Constructed
@@ -1571,9 +1822,13 @@ namespace ConditioningControlPanel
             DailyFree = new DailyFreeService();
             _ = DailyFree.RefreshAsync();
             Roadmap = new RoadmapService();
-            // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
-            // safe here even though Patreon is not constructed until later in OnStartup.
+            // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
+            // Must follow Programs (it subscribes to ChapterCompleted and catches up on everything
+            // already banked). Its constructor never toasts, so being ahead of App.Notifications is
+            // fine; the session it may file lands before MainWindow's SessionManager enumerates the
+            // CustomSessions folder, which is exactly when it wants to be there.
+            ProgramRewards = new Services.Program.ProgramRewardService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
 
@@ -1752,14 +2007,19 @@ namespace ConditioningControlPanel
                 Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
             }
 
-            Patreon = new PatreonService();
-            SubscribeStar = new SubscribeStarService();
+            // Patreon + SubscribeStar are constructed earlier (see the #889 note there).
             // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
             // which only resolves once the async validation below returns. Hook both providers now
             // that they exist so the pass re-evaluates (and every listener repaints) the moment the
             // answer lands, instead of leaving a patron looking free until something else refreshes.
             IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
+            // Constructing it costs nothing and issues no request: it fetches only
+            // when a surface asks, and the Trainer Card is the only one that does.
+            Descent = new Services.Descent.DescentService();
+            // Costs one allocation and issues nothing. See the property doc: it cannot act until
+            // a server offer arrives.
+            DescentMigration = new Services.Descent.DescentMigrationService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
@@ -1875,7 +2135,18 @@ namespace ConditioningControlPanel
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
             Webcam = new WebcamTrackingService();
             FocusGame = new FocusGameService();
-            GazeCursor = new GazeDebugCursorService();
+            // #912: a debug cursor must never be able to kill the launch. Its Skia resources are
+            // lazy now, but a broken/missing libSkiaSharp.dll could still fault the type load —
+            // every call site is null-conditional, so "no gaze debug cursor" is a clean degrade.
+            try
+            {
+                GazeCursor = new GazeDebugCursorService();
+            }
+            catch (Exception ex)
+            {
+                GazeCursor = null;
+                Logger?.Warning(ex, "GazeDebugCursorService failed to initialize - gaze debug cursor unavailable this session");
+            }
             GazeFocus = new GazeFocusService();
             // Click-driven implicit recal — installs its mouse hook only while
             // tracking runs with a calibration loaded (and the setting is on).
@@ -3884,6 +4155,117 @@ Application State:
         }
 
         /// <summary>
+        /// Earliest install date this client will ever report. Mirrors the server's
+        /// INSTALL_DATE_FLOOR (ccp-server proxy/descent.js): anything older is a broken clock or a
+        /// file-system artefact, not a real install, and the server drops it silently.
+        /// </summary>
+        private static readonly DateTime InstallDateFloorUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        /// <summary>
+        /// One Descent (PLAN.md Phase A): record this install's age ONCE, from the oldest on-disk
+        /// evidence still available. Silent — no UI reads <see cref="AppSettings.InstallDate"/>; the
+        /// only consumer is the <c>install_date</c> field on the v2 profile-sync payload, which the
+        /// server stores as <c>legacy_install_date</c> (also once) as fallback data for the Year One
+        /// anchor.
+        ///
+        /// Written once and only once, because every source of evidence decays: log files rotate,
+        /// installers rewrite the program folder, and settings.json is recreated by the corrupt-file
+        /// recovery path. A value re-derived a year from now would look NEWER than the truth, so the
+        /// first stamp — taken while the evidence is freshest — is the one that stands.
+        ///
+        /// Never throws and never blocks startup: every probe is individually guarded and the whole
+        /// thing falls back to today.
+        /// </summary>
+        private static void EnsureInstallDateRecorded()
+        {
+            try
+            {
+                var settings = Settings?.Current;
+                if (settings == null) return;
+                if (!string.IsNullOrWhiteSpace(settings.InstallDate)) return;
+
+                var resolved = ResolveInstallDateUtc();
+                settings.InstallDate = resolved.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                Settings?.Save();
+                Logger?.Information("[Descent] Recorded install date {Date} (one-shot, from on-disk evidence)", settings.InstallDate);
+            }
+            catch (Exception ex)
+            {
+                // Deliberately Debug, not Warning: this is inert fallback data. A user whose
+                // install date never gets recorded loses nothing they can see.
+                Logger?.Debug(ex, "[Descent] Install-date recording failed (non-fatal, field stays unset)");
+            }
+        }
+
+        /// <summary>
+        /// Best evidence of true install age, as the EARLIEST of, in order of trustworthiness
+        /// (they are all compared, not short-circuited — the oldest wins):
+        /// <list type="number">
+        /// <item>settings.json CreationTimeUtc — written on the first launch that ever saved settings;</item>
+        /// <item>the executable directory's CreationTimeUtc — written by the installer, but an
+        /// in-place upgrade or a move/copy of the install folder resets it, so it can read NEWER
+        /// than the truth;</item>
+        /// <item>the oldest file in the logs folder — survives reinstalls that keep user data, but
+        /// Serilog's retention window eventually eats the early ones.</item>
+        /// </list>
+        /// Falls back to today when nothing is readable, then clamps into
+        /// [<see cref="InstallDateFloorUtc"/>, today] — a future date (bad clock) would be rejected
+        /// by the server anyway, and a pre-2020 one is an artefact.
+        /// </summary>
+        private static DateTime ResolveInstallDateUtc()
+        {
+            var today = DateTime.UtcNow.Date;
+            DateTime? earliest = null;
+
+            void Consider(DateTime? candidate)
+            {
+                if (candidate is not DateTime c) return;
+                // A missing file reports 1601-01-01 rather than throwing; the floor check below
+                // would catch it, but rejecting it here keeps "earliest" honest.
+                if (c < InstallDateFloorUtc) return;
+                if (earliest == null || c < earliest) earliest = c;
+            }
+
+            // 1. settings.json
+            try
+            {
+                var settingsPath = Path.Combine(UserDataPath, "settings.json");
+                if (File.Exists(settingsPath))
+                    Consider(File.GetCreationTimeUtc(settingsPath));
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] settings.json install-date probe failed"); }
+
+            // 2. Executable directory
+            try
+            {
+                var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+                if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir))
+                    Consider(Directory.GetCreationTimeUtc(exeDir));
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] exe-dir install-date probe failed"); }
+
+            // 3. Oldest file in the logs folder
+            try
+            {
+                var logDir = Path.Combine(UserDataPath, "logs");
+                if (Directory.Exists(logDir))
+                {
+                    foreach (var file in Directory.EnumerateFiles(logDir))
+                    {
+                        try { Consider(File.GetCreationTimeUtc(file)); }
+                        catch { /* one unreadable log file must not lose the other candidates */ }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger?.Debug(ex, "[Descent] logs install-date probe failed"); }
+
+            var result = (earliest ?? DateTime.UtcNow).Date;
+            if (result < InstallDateFloorUtc) result = InstallDateFloorUtc.Date;
+            if (result > today) result = today;
+            return result;
+        }
+
+        /// <summary>
         /// Ensures a configured custom assets folder and its standard subfolders
         /// (images/videos/wallpapers) exist. The default UserAssetsPath subdirs are
         /// created unconditionally at startup, but a custom path is only known after
@@ -4082,6 +4464,7 @@ Application State:
             ContentPacks?.Dispose();
             ReleaseContent?.Dispose();
             Roadmap?.Dispose();
+            ProgramRewards?.Dispose();
             Programs?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();

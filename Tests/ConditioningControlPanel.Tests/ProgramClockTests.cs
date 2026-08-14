@@ -124,6 +124,88 @@ public class ProgramClockTests
     }
 
     [Fact]
+    public void ClockRolledBackwards_IsReportedSoTheRunCanBeReAnchored()
+    {
+        // Not advancing is only half the answer. The anchor stays in the future, so the gap is
+        // negative on every later evaluation too and the run parks on this day FOREVER - no misses,
+        // no rollover, no lapse, nothing in the log. The service needs to be told so it can move
+        // the anchor back to today and treat the whole thing as a clock correction.
+        var result = ProgramClock.Evaluate(
+            currentDayDate: new DateTime(2026, 7, 10),
+            currentDay: 4,
+            todayProgramDate: new DateTime(2026, 7, 8),
+            lengthDays: 28,
+            daysOffRemaining: 1,
+            isDayComplete: _ => false);
+
+        Assert.True(result.ClockWentBackwards);
+        Assert.False(result.Lapsed);
+        Assert.Equal(0, result.DaysOffSpent);
+        Assert.False(result.IsReturnDay);
+    }
+
+    [Fact]
+    public void SameProgramDate_IsNotMistakenForABackwardsClock()
+    {
+        var anchor = new DateTime(2026, 7, 10);
+
+        var result = ProgramClock.Evaluate(anchor, 3, anchor, 28, 1, _ => false);
+
+        Assert.False(result.ClockWentBackwards);
+        Assert.False(result.Advanced);
+    }
+
+    [Fact]
+    public void SessionAcrossTheBoundaryHour_CreditsTheDayItWasStartedFor()
+    {
+        // The 03:30 case, as far as the pure clock can express it. A session begun at 03:30 on the
+        // 10th belongs to program-date the 9th; it finishes at 04:30, by which point today is the
+        // 10th. Once the day it was prescribed for is marked complete, the rollover that follows
+        // must advance cleanly - no miss, no allowance spent, no lapse - which is exactly what the
+        // service's deferral buys by holding this evaluation until the completion has landed.
+        var startedAt = new DateTime(2026, 7, 10, 3, 30, 0);
+        var finishedAt = new DateTime(2026, 7, 10, 4, 30, 0);
+
+        var sessionDate = ProgramClock.ProgramDate(startedAt, 4);
+        var afterDate = ProgramClock.ProgramDate(finishedAt, 4);
+
+        Assert.Equal(new DateTime(2026, 7, 9), sessionDate);
+        Assert.Equal(new DateTime(2026, 7, 10), afterDate);
+
+        var result = ProgramClock.Evaluate(
+            currentDayDate: sessionDate,
+            currentDay: 6,
+            todayProgramDate: afterDate,
+            lengthDays: 28,
+            daysOffRemaining: 1,
+            isDayComplete: day => day == 6);   // credited before the clock was allowed to judge
+
+        Assert.True(result.Advanced);
+        Assert.Empty(result.MissedDays);
+        Assert.Equal(0, result.DaysOffSpent);
+        Assert.False(result.Lapsed);
+        Assert.Equal(7, result.NewCurrentDay);
+    }
+
+    [Fact]
+    public void SessionAcrossTheBoundaryHour_UncreditedWouldHaveLapsedAStrictRun()
+    {
+        // The other half of the same moment, kept as the reason the deferral exists: judged before
+        // the completion is credited, the identical absence spends the allowance - and on a strict
+        // run it ends the whole thing, for a day the user was mid-way through finishing.
+        var result = ProgramClock.Evaluate(
+            currentDayDate: new DateTime(2026, 7, 9),
+            currentDay: 6,
+            todayProgramDate: new DateTime(2026, 7, 10),
+            lengthDays: 28,
+            daysOffRemaining: 0,
+            isDayComplete: _ => false);
+
+        Assert.Equal(new[] { 6 }, result.MissedDays.ToArray());
+        Assert.True(result.Lapsed);
+    }
+
+    [Fact]
     public void OneDayElapsed_WithCurrentDayComplete_AdvancesCleanly()
     {
         var result = ProgramClock.Evaluate(
@@ -281,6 +363,53 @@ public class ProgramClockTests
         Assert.True(result.Advanced);
         Assert.True(result.RanPastEnd);
         Assert.Equal(7, result.NewCurrentDay);
+    }
+
+    [Fact]
+    public void TheDayTheRunClampsBackTo_IsNeverAlsoReportedMissed()
+    {
+        // Vanishing on the FINAL day used to stamp that day Missed and then hand it straight back
+        // as the current day, because the clamp lands on the same index the sweep just condemned.
+        // The record then carried Missed AND, once the user finished it, DayCompleted - which is
+        // not a state that means anything, breaks PerfectDayCount, and spent a day off for a day
+        // still in front of the user.
+        var result = ProgramClock.Evaluate(
+            currentDayDate: new DateTime(2026, 7, 10),
+            currentDay: 7,
+            todayProgramDate: new DateTime(2026, 7, 14),
+            lengthDays: 7,
+            daysOffRemaining: 1,
+            isDayComplete: _ => false);
+
+        Assert.True(result.RanPastEnd);
+        Assert.Equal(7, result.NewCurrentDay);
+        Assert.DoesNotContain(result.NewCurrentDay, result.MissedDays);
+        Assert.Empty(result.MissedDays);
+
+        // Nothing was missed, so nothing is spent and an unbounded absence on the last day cannot
+        // lapse a run that still has its final day to run.
+        Assert.Equal(0, result.DaysOffSpent);
+        Assert.False(result.Lapsed);
+        Assert.False(result.IsReturnDay);
+    }
+
+    [Fact]
+    public void ClampingPastTheEnd_StillCountsTheDaysGenuinelySkipped()
+    {
+        // The exclusion is only ever the one day being stood on. Days 5 and 6 really did go by.
+        var result = ProgramClock.Evaluate(
+            currentDayDate: new DateTime(2026, 7, 10),
+            currentDay: 5,
+            todayProgramDate: new DateTime(2026, 7, 20),
+            lengthDays: 7,
+            daysOffRemaining: 9,
+            isDayComplete: _ => false);
+
+        Assert.True(result.RanPastEnd);
+        Assert.Equal(new[] { 5, 6 }, result.MissedDays.ToArray());
+        Assert.Equal(2, result.DaysOffSpent);
+        Assert.Equal(7, result.NewCurrentDay);
+        Assert.True(result.IsReturnDay);
     }
 
     [Fact]

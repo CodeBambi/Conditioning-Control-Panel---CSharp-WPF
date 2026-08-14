@@ -1377,21 +1377,49 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Sync checkbox states
-            if (s != null)
+            // The tab's own link prompt. The Privacy panel's "Not Connected" line above is inside
+            // the Privacy dialog, so this is the only place a logged-out user is actually told
+            // why the card is empty and what to do about it.
+            if (DiscordTab.ProfileLinkNotice != null)
             {
-                if (DiscordTab.ChkDiscordTabRichPresence != null) DiscordTab.ChkDiscordTabRichPresence.IsChecked = s.DiscordRichPresenceEnabled;
-                if (DiscordTab.ChkDiscordTabShowLevel != null) DiscordTab.ChkDiscordTabShowLevel.IsChecked = s.DiscordShowLevelInPresence;
-                if (DiscordTab.ChkDiscordTabShareAchievements != null) DiscordTab.ChkDiscordTabShareAchievements.IsChecked = s.DiscordShareAchievements;
-                if (DiscordTab.ChkDiscordTabShareLevelUps != null) DiscordTab.ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
-                if (DiscordTab.ChkDiscordTabAllowDm != null) DiscordTab.ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
-                if (DiscordTab.ChkDiscordTabSharePfp != null) DiscordTab.ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
-                if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
-                // Goon Game sharing (all default off). The handlers no-op when the value is
-                // unchanged, so these programmatic assignments never trigger a sync push.
-                if (DiscordTab.ChkGoonShareAvatar != null) DiscordTab.ChkGoonShareAvatar.IsChecked = s.GoonShareAvatar;
-                if (DiscordTab.ChkGoonShareDiscordDm != null) DiscordTab.ChkGoonShareDiscordDm.IsChecked = s.GoonShareDiscordDm;
-                if (DiscordTab.ChkGoonRichPresence != null) DiscordTab.ChkGoonRichPresence.IsChecked = s.GoonRichPresence;
+                DiscordTab.ProfileLinkNotice.Visibility =
+                    App.Settings?.Current?.HasLinkedDiscord == true ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            // Sync checkbox states.
+            //
+            // Under _isLoading, because these are REPAINTS of stored settings, not user intent.
+            // Without the guard the very first paint of the tab raises Checked on every switch
+            // whose stored value is true, and the handlers treat that as a click:
+            // ChkDiscordRichPresence_Changed answers an unlinked account with a "Discord Rich
+            // Presence requires a linked Discord account" modal, so merely OPENING the Profile
+            // tab while logged out threw an error at the user about a toggle they never touched
+            // (logout clears HasLinkedDiscord but leaves DiscordRichPresenceEnabled standing).
+            // The previous value is saved rather than assumed false because this method is also
+            // called from inside login/link flows that are already loading.
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try
+            {
+                if (s != null)
+                {
+                    if (DiscordTab.ChkDiscordTabRichPresence != null) DiscordTab.ChkDiscordTabRichPresence.IsChecked = s.DiscordRichPresenceEnabled;
+                    if (DiscordTab.ChkDiscordTabShowLevel != null) DiscordTab.ChkDiscordTabShowLevel.IsChecked = s.DiscordShowLevelInPresence;
+                    if (DiscordTab.ChkDiscordTabShareAchievements != null) DiscordTab.ChkDiscordTabShareAchievements.IsChecked = s.DiscordShareAchievements;
+                    if (DiscordTab.ChkDiscordTabShareLevelUps != null) DiscordTab.ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
+                    if (DiscordTab.ChkDiscordTabAllowDm != null) DiscordTab.ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
+                    if (DiscordTab.ChkDiscordTabSharePfp != null) DiscordTab.ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
+                    if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
+                    // Goon Game sharing (all default off). The handlers no-op when the value is
+                    // unchanged, so these programmatic assignments never trigger a sync push.
+                    if (DiscordTab.ChkGoonShareAvatar != null) DiscordTab.ChkGoonShareAvatar.IsChecked = s.GoonShareAvatar;
+                    if (DiscordTab.ChkGoonShareDiscordDm != null) DiscordTab.ChkGoonShareDiscordDm.IsChecked = s.GoonShareDiscordDm;
+                    if (DiscordTab.ChkGoonRichPresence != null) DiscordTab.ChkGoonRichPresence.IsChecked = s.GoonRichPresence;
+                }
+            }
+            finally
+            {
+                _isLoading = wasLoading;
             }
 
             // Pre-fill search bar with user's unified display name (V2 auth) or fallback

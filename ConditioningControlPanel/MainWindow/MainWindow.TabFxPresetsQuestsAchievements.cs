@@ -8,6 +8,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using ConditioningControlPanel.Behaviors;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -56,8 +57,12 @@ namespace ConditioningControlPanel
         private const double AchievementTiltDegrees = 0.8;
         private const int AchievementTiltMs = 160;
 
-        private const double PresetCardCornerRadius = 6;
-        private const double SessionCardCornerRadius = 8;
+        /// <summary>Must MATCH the radii in PresetsTabView.xaml (SdPresetChip / SdSessionRow). The
+        /// sheen and the sweep draw their own rounded rect in the adorner layer, so a radius that
+        /// drifts from the card's shows up as a bright corner outside the card's outline. Went 6/8
+        /// to 11/12 with the Session Door Overhaul.</summary>
+        private const double PresetCardCornerRadius = 11;
+        private const double SessionCardCornerRadius = 12;
 
         // ---- state -----------------------------------------------------------------
 
@@ -74,6 +79,22 @@ namespace ConditioningControlPanel
         private AdornerLayer? _cardSheenLayer;
         private bool _presetsTabVisible;
 
+        /// <summary>
+        /// The hover sweep, and there is exactly ONE of it: only one row can be under the pointer at
+        /// a time, so a per-row adorner would be N objects to build, track and tear down for a
+        /// decoration that is only ever visible on one of them. Same host/layer trio the sheen
+        /// keeps, and for the same reason - a row can leave the tree (a custom session being
+        /// deleted rebuilds the panel) while we still hold its adorner, and by then
+        /// GetAdornerLayer would hand back null.
+        ///
+        /// <para>It is left ATTACHED but at rest after a MouseLeave rather than removed: at
+        /// Progress 0 the adorner early-returns from OnRender and has no clock running, so parking
+        /// it costs nothing and saves a rebuild on every pointer pass down a list.</para>
+        /// </summary>
+        private RowSweepAdorner? _rowSweep;
+        private FrameworkElement? _rowSweepHost;
+        private AdornerLayer? _rowSweepLayer;
+
         /// <summary>Last known quest fill fractions, so the bars can be re-applied once the track
         /// actually has a width (RefreshQuestUI runs before the tab has ever been laid out).</summary>
         private double _dailyQuestFraction = -1;
@@ -88,6 +109,15 @@ namespace ConditioningControlPanel
         /// drawer sliding open underneath the pointer. Doubles as the "already wired" set.
         /// </summary>
         private readonly Dictionary<FrameworkElement, FrameworkElement> _achievementTiltTargets = new();
+
+        /// <summary>
+        /// Hover source (the card) → the badge ART itself, which gets the 1.06 "hover pop". A third
+        /// element again: the tilt lands on the badge HOST so the foil catches the light, and the
+        /// pop lands on the Image inside it, so the two compose instead of overwriting one
+        /// another's transform. The card's Chrome border clips, so the zoom stays inside the
+        /// rounded frame.
+        /// </summary>
+        private readonly Dictionary<FrameworkElement, FrameworkElement> _achievementPopTargets = new();
 
         /// <summary>The single gate for this file's one ambient loop.</summary>
         private bool TabFxAmbientAllowed =>
@@ -143,6 +173,10 @@ namespace ConditioningControlPanel
                 }
                 DetachCardSheen();
                 RefreshCardSheen();
+                // The sweep re-reads FxTheme on every Enter, so it would re-tint on its own - but
+                // a row that is hovered AT THE MOMENT of the switch is holding the old colour with
+                // no further Enter coming. Dropping it makes the next hover rebuild it.
+                DetachRowSweep();
             }
             catch (Exception ex) { App.Logger?.Debug("TabFx_ModChanged: {E}", ex.Message); }
         }
@@ -224,6 +258,10 @@ namespace ConditioningControlPanel
                     // a collapsed UserControl.
                     _presetsTabVisible = false;
                     DetachCardSheen();
+                    // The sweep parks itself after a MouseLeave, but leaving the tab mid-hover
+                    // (keyboard nav, a dialog stealing focus) never raises one - so drop it here
+                    // rather than let a lit row sit behind a collapsed UserControl.
+                    DetachRowSweep();
                     return;
                 }
                 if (!IsIncomingTab("presets")) return;  // the outgoing tab's fade-out re-show
@@ -233,6 +271,10 @@ namespace ConditioningControlPanel
                 // Intake ducks the whole window for the run) must be on the list before the
                 // stagger animates it in - see SyncCustomSessionsFromDisk / #614.
                 SyncCustomSessionsFromDisk();
+
+                // Same rule, for the same reason: a run that finished while this tab was collapsed
+                // must be ON the shelf before the stagger animates the shelf in.
+                RefreshTakeawayShelf();
 
                 InitializePresetsFx();
                 StaggerPresetCards();
@@ -305,9 +347,77 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("PrepareSessionRowFx: {E}", ex.Message); }
         }
 
-        private void SessionRow_MouseEnter(object sender, MouseEventArgs e) => LiftSessionRow(sender, true);
+        private void SessionRow_MouseEnter(object sender, MouseEventArgs e)
+        {
+            LiftSessionRow(sender, true);
+            AttachRowSweep(sender as FrameworkElement);
+        }
 
-        private void SessionRow_MouseLeave(object sender, MouseEventArgs e) => LiftSessionRow(sender, false);
+        private void SessionRow_MouseLeave(object sender, MouseEventArgs e)
+        {
+            LiftSessionRow(sender, false);
+            ReleaseRowSweep(sender as FrameworkElement);
+        }
+
+        /// <summary>Moves the single sweep onto this row and plays it in.</summary>
+        private void AttachRowSweep(FrameworkElement? row)
+        {
+            try
+            {
+                if (row == null || !row.IsVisible) return;
+
+                if (ReferenceEquals(row, _rowSweepHost) && _rowSweep != null)
+                {
+                    _rowSweep.Enter();   // re-entering the row we are already parked on
+                    return;
+                }
+
+                DetachRowSweep();
+                var layer = AdornerLayer.GetAdornerLayer(row);
+                if (layer == null)
+                {
+                    // No adorner layer yet (the row has not been rendered). Nothing to do - the
+                    // next hover tries again. Debug, not Warning: this is a decoration.
+                    App.Logger?.Debug("AttachRowSweep: no adorner layer for the hovered row");
+                    return;
+                }
+
+                var sweep = new RowSweepAdorner(row, SessionCardCornerRadius);
+                layer.Add(sweep);
+                sweep.Enter();
+                _rowSweep = sweep;
+                _rowSweepHost = row;
+                _rowSweepLayer = layer;
+            }
+            catch (Exception ex) { App.Logger?.Debug("AttachRowSweep: {E}", ex.Message); }
+        }
+
+        /// <summary>Plays the sweep back out. Leaves it attached and idle - see the field remarks.</summary>
+        private void ReleaseRowSweep(FrameworkElement? row)
+        {
+            try
+            {
+                if (row == null || !ReferenceEquals(row, _rowSweepHost)) return;
+                _rowSweep?.Leave();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ReleaseRowSweep: {E}", ex.Message); }
+        }
+
+        private void DetachRowSweep()
+        {
+            try
+            {
+                var sweep = _rowSweep;
+                var layer = _rowSweepLayer;
+                _rowSweep = null;
+                _rowSweepHost = null;
+                _rowSweepLayer = null;
+                if (sweep == null) return;
+                sweep.Reset();
+                layer?.Remove(sweep);
+            }
+            catch (Exception ex) { App.Logger?.Debug("DetachRowSweep: {E}", ex.Message); }
+        }
 
         private void LiftSessionRow(object sender, bool on)
         {
@@ -343,17 +453,52 @@ namespace ConditioningControlPanel
             try
             {
                 if (!MotionFx.AllowTransitions) return;
+
+                // PER ZONE, not one list (Session Door Overhaul). The page now has a Presets strip
+                // and a Sessions list under separate zone headers, and a single stagger across both
+                // made the first session row arrive as the seventh preset chip - the two zones read
+                // as one long queue instead of as two groups. Two calls means each zone runs its own
+                // 6-slot ramp and they land together.
+                StaggerZone(PresetsTab?.PresetCardsPanel);
+
+                // The session zone is one group even though it is two panels: the built-in rows and
+                // the user's own rows are the same list to the reader, and the "Your sessions"
+                // header between them is not a zone boundary.
+                var rows = new List<FrameworkElement>();
+                CollectVisible(PresetsTab?.SessionsPanel, rows);
+                CollectVisible(PresetsTab?.CustomSessionsPanel, rows);
+                StaggerCards(rows);
+
+                // The Takeaway shelf is its own zone and rides its own ramp, so the receipts arrive
+                // as a group rather than as the tail of the session list.
+                StaggerZone(PresetsTab?.TakeawayShelf);
+            }
+            catch (Exception ex) { App.Logger?.Debug("StaggerPresetCards: {E}", ex.Message); }
+
+            void StaggerZone(Panel? panel)
+            {
                 var cards = new List<FrameworkElement>();
-                if (PresetsTab?.PresetCardsPanel != null)
-                    cards.AddRange(PresetsTab.PresetCardsPanel.Children.OfType<FrameworkElement>());
-                if (PresetsTab?.SessionsPanel != null)
-                    cards.AddRange(PresetsTab.SessionsPanel.Children.OfType<Border>()
-                        .Where(b => b.Visibility == Visibility.Visible));
+                CollectVisible(panel, cards);
+                StaggerCards(cards);
+            }
+
+            // Borders only, and that is load-bearing rather than tidy: SessionsPanel also holds the
+            // "Your sessions" TextBlock header AND the CustomSessionsPanel StackPanel itself, so an
+            // OfType<FrameworkElement> here would stagger that container and then stagger its rows
+            // again a line later - two TranslateTransforms compounding on the same rows.
+            static void CollectVisible(Panel? panel, List<FrameworkElement> into)
+            {
+                if (panel == null) return;
+                into.AddRange(panel.Children.OfType<Border>()
+                                   .Where(c => c.Visibility == Visibility.Visible));
+            }
+
+            static void StaggerCards(List<FrameworkElement> cards)
+            {
                 if (cards.Count == 0) return;
                 foreach (var card in cards) EnsureCardTransforms(card);
                 MotionFx.StaggerIn(cards);
             }
-            catch (Exception ex) { App.Logger?.Debug("StaggerPresetCards: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -582,8 +727,13 @@ namespace ConditioningControlPanel
         /// their badge-art host: the card must stay still so the drawer can slide open under a
         /// stationary pointer.
         /// </param>
+        /// <param name="popTarget">
+        /// The badge art that gets the hover pop, when there is one. Kept separate from
+        /// <paramref name="tiltTarget"/> so the pop and the tilt never share a transform.
+        /// </param>
         internal void PrepareAchievementTileFx(FrameworkElement tile, bool unlocked,
-                                               FrameworkElement? tiltTarget = null)
+                                               FrameworkElement? tiltTarget = null,
+                                               FrameworkElement? popTarget = null)
         {
             if (tile == null) return;
             try
@@ -593,6 +743,7 @@ namespace ConditioningControlPanel
                 var target = tiltTarget ?? tile;
                 EnsureCardTransforms(target, withRotate: true);
                 _achievementTiltTargets[tile] = target;
+                if (popTarget != null) _achievementPopTargets[tile] = popTarget;
                 tile.MouseEnter += AchievementTile_MouseEnter;
                 tile.MouseLeave += AchievementTile_MouseLeave;
             }
@@ -629,6 +780,7 @@ namespace ConditioningControlPanel
                 if (tile.ActualWidth > 0) sign = p.X < tile.ActualWidth / 2 ? -1 : 1;
                 MotionFx.HoverLift(target, true);
                 TiltAchievementTile(target, sign * AchievementTiltDegrees, true);
+                if (_achievementPopTargets.TryGetValue(tile, out var art)) HoverPop.Enter(art);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseEnter: {E}", ex.Message); }
         }
@@ -641,6 +793,7 @@ namespace ConditioningControlPanel
                 var target = TiltTargetFor(tile);
                 MotionFx.HoverLift(target, false);
                 TiltAchievementTile(target, 0, true);
+                if (_achievementPopTargets.TryGetValue(tile, out var art)) HoverPop.Leave(art);
             }
             catch (Exception ex) { App.Logger?.Debug("AchievementTile_MouseLeave: {E}", ex.Message); }
         }

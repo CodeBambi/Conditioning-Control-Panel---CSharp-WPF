@@ -55,7 +55,7 @@
                         <TextBlock Text="{loc:Str profile_customize_banner}" Foreground="#B478FF"
                                    FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
                         <TextBlock Text="{loc:Str profile_customize_banner_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
                         <WrapPanel x:Name="BannerHost"/>
                     </StackPanel>
                 </Border>
@@ -67,7 +67,7 @@
                         <TextBlock Text="{loc:Str profile_customize_avatar}" Foreground="#B478FF"
                                    FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
                         <TextBlock Text="{loc:Str profile_customize_avatar_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
                         <WrapPanel x:Name="AvatarHost"/>
                     </StackPanel>
                 </Border>
@@ -79,7 +79,7 @@
                         <TextBlock Text="{loc:Str profile_customize_accent}" Foreground="#FF69B4"
                                    FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
                         <TextBlock Text="{loc:Str profile_customize_accent_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
                         <WrapPanel x:Name="AccentHost"/>
                     </StackPanel>
                 </Border>
@@ -91,7 +91,7 @@
                         <TextBlock Text="{loc:Str profile_customize_title_section}" Foreground="#FFD700"
                                    FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
                         <TextBlock Text="{loc:Str profile_customize_title_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
                         <TextBlock x:Name="TxtNoTitlesYet" Text="{loc:Str profile_customize_locked_empty}"
                                    Foreground="#8079A3" FontSize="11" FontStyle="Italic"
                                    Visibility="Collapsed" Margin="0,0,0,6"/>
@@ -114,7 +114,7 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
                         <TextBlock Text="{loc:Str profile_customize_pins_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
                         <TextBlock x:Name="TxtNoPinsYet" Text="{loc:Str profile_customize_locked_empty}"
                                    Foreground="#8079A3" FontSize="11" FontStyle="Italic"
                                    Visibility="Collapsed" Margin="0,0,0,6"/>
@@ -149,7 +149,7 @@
                             </StackPanel>
                         </Grid>
                         <TextBlock Text="{loc:Str profile_customize_wardrobe_hint}" Foreground="#8079A3"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                         <!-- mod tabs -->
                         <WrapPanel x:Name="WardrobeModTabs" Margin="0,0,0,10"/>

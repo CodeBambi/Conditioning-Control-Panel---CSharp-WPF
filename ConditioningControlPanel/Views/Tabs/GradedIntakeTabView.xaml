@@ -3,254 +3,331 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:hover="clr-namespace:ConditioningControlPanel.Behaviors"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+
+    <!-- Velvet Kit 2 · round 4. Lime is the intake's hue - the graded, clinical end of the app,
+         a marking pen rather than the house pink. LOCAL literals only: a fresh cross-dictionary
+         StaticResource added to Resources/Theme/* trips WPF's deferred-BAML EndOfStreamException
+         and takes every styled control in the app down with it. -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TabHueBrush" Color="#B8E85C"/>
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40B8E85C"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0,0" EndPoint="0.9,0.7">
+            <GradientStop Color="#14B8E85C" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="36,28,36,28">
-            <StackPanel MaxWidth="960" HorizontalAlignment="Center">
+            <StackPanel MaxWidth="1100" HorizontalAlignment="Center">
 
-                <!-- Hero banner. Same artwork the Lab card used; still an ImageBrush (not an
-                     Image) so the mod resource resolver can swap it - see the labHeroMap in
-                     MainWindow.xaml.cs, which drone mods override with a green variant. -->
-                <Border CornerRadius="14" Margin="0,0,0,24" Height="260" ClipToBounds="True"
-                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                <!-- HERO. Absorbs the old 260px banner and the header row below it. The art is
+                     still an ImageBrush (not an Image) and still named GradedIntakeHeroBrush,
+                     because MainWindow.xaml.cs's labHeroMap writes its ImageSource so drone mods
+                     can swap in their green variant. -->
+                <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
                     <Grid>
-                        <Border CornerRadius="14">
+                        <Border x:Name="GradedIntakeHeroArtHost" CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                             <Border.Background>
                                 <ImageBrush x:Name="GradedIntakeHeroBrush" x:FieldModifier="internal"
-                                            ImageSource="pack://application:,,,/Resources/features/lab_quiz_hero.png"
-                                            Stretch="UniformToFill"/>
+                                            Stretch="UniformToFill" AlignmentX="Right" Opacity="0.9">
+                                    <ImageBrush.ImageSource>
+                                        <BitmapImage UriSource="pack://application:,,,/Resources/features/lab_quiz_hero.png"
+                                                     DecodePixelWidth="800"/>
+                                    </ImageBrush.ImageSource>
+                                </ImageBrush>
                             </Border.Background>
-                        </Border>
-                        <Border CornerRadius="14">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
-                                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
-                                    <GradientStop Color="Transparent" Offset="0.9"/>
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#00000000" Offset="0"/>
+                                    <GradientStop Color="#E6000000" Offset="0.55"/>
                                 </LinearGradientBrush>
-                            </Border.Background>
+                            </Border.OpacityMask>
                         </Border>
-                    </Grid>
-                </Border>
 
-                <!-- ═══ HEADER ZONE ═══ -->
-                <Grid Margin="0,0,0,22">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="44" Height="44" CornerRadius="12" Margin="0,0,14,0"
-                                Background="{DynamicResource AccentTintedBgBrush}"
-                                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                            <Image Width="24" Height="24" Source="{Binding Source='❓', Converter={StaticResource EmojiToImageSource}}"/>
-                        </Border>
-                        <StackPanel VerticalAlignment="Center">
+                        <StackPanel VerticalAlignment="Center" Margin="18,0,258,0">
                             <StackPanel Orientation="Horizontal">
                                 <!-- Literal, not a loc key: the intake's own page content is
                                      English-only, and the launch button beside it has always been
                                      a literal too. Localise both together when the page localises. -->
-                                <TextBlock Text="Graded Intake" Foreground="White" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="Graded Intake" FontSize="17" FontWeight="Bold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        CornerRadius="6" Padding="6,2" Margin="11,0,0,0" VerticalAlignment="Center">
+                                        CornerRadius="6" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="9.5"/>
                                 </Border>
                             </StackPanel>
                             <TextBlock Text="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11.5"
+                                       Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
-                    </StackPanel>
-                    <Button x:Name="HelpBtnQuiz" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
-                            HorizontalAlignment="Right" VerticalAlignment="Top" Tag="Quiz"/>
-                </Grid>
 
-                <!-- ═══ INTAKE ZONE (t1 gated) ═══
-                     Wrapped in a Grid so GradedIntakeGate can sit over just this section:
-                     Pop Quiz below is NOT premium and stays reachable for everyone, exactly
-                     as it was in the Lab. -->
-                <Grid Margin="0,0,0,10">
-                    <Border x:Name="GradedIntakeGatedContent" x:FieldModifier="internal"
-                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                            BorderThickness="1" CornerRadius="10" Padding="20,18" MinHeight="150">
-                        <StackPanel>
-                            <!-- Weekly-pass banner (IntakePassState.Available only). Deliberately
-                                 INSIDE the gated content rather than being another overlay: in this
-                                 state the user may actually run the intake, so nothing should be
-                                 dimmed, blocked or hit-tested away. It reads as a grant ("here is
-                                 your run") rather than a cap ("you only get one"), because the
-                                 upsell for retakes is already carried by the Spent gate below. -->
-                            <Border x:Name="GradedIntakePassBanner" x:FieldModifier="internal" Visibility="Collapsed"
-                                    Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}"
-                                    BorderThickness="1" CornerRadius="8" Padding="14,11" Margin="0,0,0,14">
+                        <Button x:Name="HelpBtnQuiz" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" Tag="Quiz"/>
+                    </Grid>
+                </Border>
+
+                <!-- Round-3 capped column + side art. Below 1000px the art column collapses to zero
+                     and the settings retake the full width: Features/AdaptiveSideArt.cs. -->
+                <Grid feat:AdaptiveSideArt.CollapseBelow="1000">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MaxWidth="780"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+
+                        <!-- ═══ INTAKE ZONE (t1 gated) ═══
+                             Wrapped in a Grid so GradedIntakeGate can sit over just this section:
+                             Pop Quiz below is NOT premium and stays reachable for everyone, exactly
+                             as it was in the Lab. That is why this gate is NOT hoisted to cover the
+                             whole page the way a single-feature premium tab's gate is. -->
+                        <Grid>
+                            <Border x:Name="GradedIntakeGatedContent" x:FieldModifier="internal"
+                                    Style="{StaticResource SettingCardStyle}" MinHeight="150">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Top" Margin="0,1,12,0"
-                                           Source="{Binding Source='🎟️', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{loc:Str intake_pass_banner_headline}" Foreground="{DynamicResource PinkBrush}"
-                                                   FontWeight="Bold" FontSize="12.5" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{loc:Str intake_pass_banner_body}" Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontSize="11.5" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                            Background="{StaticResource TabHueBrush}"/>
+                                    <StackPanel Margin="16,12,16,14">
+                                        <!-- Weekly-pass banner (IntakePassState.Available only). Deliberately
+                                             INSIDE the gated content rather than being another overlay: in this
+                                             state the user may actually run the intake, so nothing should be
+                                             dimmed, blocked or hit-tested away. It reads as a grant ("here is
+                                             your run") rather than a cap ("you only get one"), because the
+                                             upsell for retakes is already carried by the Spent gate below. -->
+                                        <Border x:Name="GradedIntakePassBanner" x:FieldModifier="internal" Visibility="Collapsed"
+                                                Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}"
+                                                BorderThickness="1" CornerRadius="8" Padding="14,11" Margin="0,0,0,12">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Top" Margin="0,1,12,0"
+                                                       Source="{Binding Source='🎟️', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{loc:Str intake_pass_banner_headline}" Foreground="{DynamicResource PinkBrush}"
+                                                               FontWeight="Bold" FontSize="12.5" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{loc:Str intake_pass_banner_body}" Foreground="{StaticResource TextMutedBrush}"
+                                                               FontSize="11.5" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <TextBlock Text="Begin a run" Foreground="{StaticResource TabHueBrush}" FontWeight="Bold"
+                                                   FontSize="10" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Each intake runs in its own window. Answer honestly - the pacing of your answers counts as much as the answers themselves."
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                        <!-- HIDDEN (pending removal): classic-quiz launch options. Still read by
+                                             BtnStartQuiz_Click, so the fallback keeps its last-set values. -->
+                                        <CheckBox x:Name="ChkQuizFullscreen" x:FieldModifier="internal" Content="{loc:Str btn_fullscreen}" IsChecked="True" Visibility="Collapsed"
+                                                  Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                        <CheckBox x:Name="ChkQuizDrone" x:FieldModifier="internal" Content="{loc:Str setting_play_drone_in_background}" IsChecked="False" Visibility="Collapsed"
+                                                  Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                            <!-- HIDDEN (pending removal): the classic AI quiz. Handler left intact
+                                                 so it can be re-shown by deleting one attribute if the intake regresses. -->
+                                            <Button x:Name="BtnStartQuiz" x:FieldModifier="internal" Content="{loc:Str btn_start_quiz}" Cursor="Hand" Visibility="Collapsed"
+                                                    Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                                    BorderThickness="0" Padding="12,8"
+                                                    Click="BtnStartQuiz_Click">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="8"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
+                                            <!-- "Graded Intake": hosted in WebView2, drafts a themed session from a
+                                                 banded-descent run. The page's primary (and only visible) action. -->
+                                            <Button x:Name="BtnStartIntake" x:FieldModifier="internal" Content="✨ Begin Intake" Cursor="Hand"
+                                                    Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="13"
+                                                    BorderThickness="0" Padding="18,10"
+                                                    ToolTip="A banded descent that drafts a personalised session from how you answer (Beta)."
+                                                    Click="BtnStartIntake_Click">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="8"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </StackPanel>
+
+                                        <TextBlock Text="{loc:Str label_past_quizzes}" Foreground="{StaticResource TabHueBrush}" FontWeight="Bold"
+                                                   FontSize="10" Margin="0,14,0,4"
+                                                   x:Name="TxtPastQuizzesHeader" x:FieldModifier="internal" Visibility="Collapsed"/>
+                                        <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" x:FieldModifier="internal" Visibility="Collapsed"
+                                                Background="#10FFFFFF" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <StackPanel x:Name="PastQuizzesList" x:FieldModifier="internal"/>
+                                            </ScrollViewer>
+                                        </Border>
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
-                            <TextBlock Text="Begin a run" Foreground="White" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4"/>
-                            <TextBlock Text="Each intake runs in its own window. Answer honestly - the pacing of your answers counts as much as the answers themselves."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                            <!-- Gating overlay. Structure copied verbatim from BlinkTrainerGate (scrim +
+                                 gradient-bordered card) so every locked Exclusive in the app reads as the
+                                 same object; this one used to be hand-rolled hex and literal English.
 
-                            <!-- HIDDEN (pending removal): classic-quiz launch options. Still read by
-                                 BtnStartQuiz_Click, so the fallback keeps its last-set values. -->
-                            <CheckBox x:Name="ChkQuizFullscreen" x:FieldModifier="internal" Content="{loc:Str btn_fullscreen}" IsChecked="True" Visibility="Collapsed"
-                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4"/>
-                            <CheckBox x:Name="ChkQuizDrone" x:FieldModifier="internal" Content="{loc:Str setting_play_drone_in_background}" IsChecked="False" Visibility="Collapsed"
-                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+                                 ONE gate, three states, text swapped from RefreshGradedIntakeGate rather
+                                 than three sibling Borders: the Spent copy has to interpolate a live day
+                                 count anyway, so code-behind owns the strings regardless, and duplicating
+                                 the ~30 lines of card chrome per state is how gates drift apart visually.
+                                 (Premium is the fourth state and simply never shows this.)
 
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                                <!-- HIDDEN (pending removal): the classic AI quiz. Handler left intact
-                                     so it can be re-shown by deleting one attribute if the intake regresses. -->
-                                <Button x:Name="BtnStartQuiz" x:FieldModifier="internal" Content="{loc:Str btn_start_quiz}" Cursor="Hand" Visibility="Collapsed"
-                                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
-                                        BorderThickness="0" Padding="12,8"
-                                        Click="BtnStartQuiz_Click">
-                                    <Button.Resources>
-                                        <Style TargetType="Border">
-                                            <Setter Property="CornerRadius" Value="8"/>
-                                        </Style>
-                                    </Button.Resources>
-                                </Button>
-                                <!-- "Graded Intake": hosted in WebView2, drafts a themed session from a
-                                     banded-descent run. The page's primary (and only visible) action. -->
-                                <Button x:Name="BtnStartIntake" x:FieldModifier="internal" Content="✨ Begin Intake" Cursor="Hand"
-                                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="13"
-                                        BorderThickness="0" Padding="18,10"
-                                        ToolTip="A banded descent that drafts a personalised session from how you answer (Beta)."
-                                        Click="BtnStartIntake_Click">
-                                    <Button.Resources>
-                                        <Style TargetType="Border">
-                                            <Setter Property="CornerRadius" Value="8"/>
-                                        </Style>
-                                    </Button.Resources>
-                                </Button>
-                            </StackPanel>
-
-                            <TextBlock Text="{loc:Str label_past_quizzes}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,14,0,4"
-                                       x:Name="TxtPastQuizzesHeader" x:FieldModifier="internal" Visibility="Collapsed"/>
-                            <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                    Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <StackPanel x:Name="PastQuizzesList" x:FieldModifier="internal"/>
-                                </ScrollViewer>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Gating overlay. Structure copied verbatim from BlinkTrainerGate (scrim +
-                         gradient-bordered card) so every locked Exclusive in the app reads as the
-                         same object; this one used to be hand-rolled hex and literal English.
-
-                         ONE gate, three states, text swapped from RefreshGradedIntakeGate rather
-                         than three sibling Borders: the Spent copy has to interpolate a live day
-                         count anyway, so code-behind owns the strings regardless, and duplicating
-                         the ~30 lines of card chrome per state is how gates drift apart visually.
-                         (Premium is the fourth state and simply never shows this.)
-
-                         CornerRadius on the scrim - the only deviation from Blink Trainer - matches
-                         GradedIntakeGatedContent's rounded card underneath, which Blink's gate does
-                         not have to contend with. -->
-                    <Border x:Name="GradedIntakeGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#CC0A0A14" CornerRadius="10" IsHitTestVisible="True">
-                        <Border CornerRadius="16"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderThickness="2"
-                                MaxWidth="480"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Padding="36,32">
-                            <Border.BorderBrush>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-                                    <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.BorderBrush>
-                            <Border.Effect>
-                                <DropShadowEffect Color="{DynamicResource PinkColor}"
-                                                  BlurRadius="40" ShadowDepth="0" Opacity="0.4"/>
-                            </Border.Effect>
-
-                            <StackPanel HorizontalAlignment="Center">
-                                <Image Width="44" Height="44"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,0,0,12"
-                                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                                <!-- The three text values below are placeholders for the designer and
-                                     for the (impossible) case of the gate being shown before a refresh:
-                                     RefreshGradedIntakeGate rewrites all three every time it runs, and
-                                     it runs before the gate is ever made visible. NeedsLogin copy is
-                                     used as the default because it is the only variant with no runtime
-                                     substitution in it. -->
-                                <TextBlock x:Name="TxtGradedIntakeGateHeadline" x:FieldModifier="internal"
-                                           Text="{loc:Str intake_gate_login_headline}"
-                                           Foreground="White"
-                                           FontSize="22" FontWeight="Bold"
-                                           TextAlignment="Center" TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,0,0,8"/>
-                                <TextBlock x:Name="TxtGradedIntakeGateBody" x:FieldModifier="internal"
-                                           Text="{loc:Str intake_gate_login_body}"
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="13"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           MaxWidth="340"
-                                           Margin="0,0,0,24"/>
-                                <Button x:Name="BtnGradedIntakeGateUnlock" x:FieldModifier="internal"
-                                        Content="{loc:Str intake_gate_login_cta}"
-                                        Padding="32,12"
-                                        FontSize="14" FontWeight="Bold"
-                                        Style="{StaticResource SmallPinkButton}"
+                                 CornerRadius on the scrim - the only deviation from Blink Trainer - matches
+                                 GradedIntakeGatedContent's rounded card underneath, which Blink's gate does
+                                 not have to contend with. -->
+                            <Border x:Name="GradedIntakeGate" x:FieldModifier="internal" Visibility="Collapsed"
+                                    Background="#CC0A0A14" CornerRadius="12" Margin="0,0,0,10" IsHitTestVisible="True">
+                                <Border CornerRadius="16"
+                                        Background="{DynamicResource ElevatedSurfaceBrush}"
+                                        BorderThickness="2"
+                                        MaxWidth="480"
                                         HorizontalAlignment="Center"
-                                        Click="BtnGI_GateUnlock_Click"/>
-                            </StackPanel>
+                                        VerticalAlignment="Center"
+                                        Padding="36,32">
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                                          BlurRadius="40" ShadowDepth="0" Opacity="0.4"/>
+                                    </Border.Effect>
+
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <Image Width="44" Height="44"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,12"
+                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <!-- The three text values below are placeholders for the designer and
+                                             for the (impossible) case of the gate being shown before a refresh:
+                                             RefreshGradedIntakeGate rewrites all three every time it runs, and
+                                             it runs before the gate is ever made visible. NeedsLogin copy is
+                                             used as the default because it is the only variant with no runtime
+                                             substitution in it. -->
+                                        <TextBlock x:Name="TxtGradedIntakeGateHeadline" x:FieldModifier="internal"
+                                                   Text="{loc:Str intake_gate_login_headline}"
+                                                   Foreground="White"
+                                                   FontSize="22" FontWeight="Bold"
+                                                   TextAlignment="Center" TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="TxtGradedIntakeGateBody" x:FieldModifier="internal"
+                                                   Text="{loc:Str intake_gate_login_body}"
+                                                   Foreground="{StaticResource TextMutedBrush}"
+                                                   FontSize="13"
+                                                   TextAlignment="Center"
+                                                   TextWrapping="Wrap"
+                                                   MaxWidth="340"
+                                                   Margin="0,0,0,24"/>
+                                        <Button x:Name="BtnGradedIntakeGateUnlock" x:FieldModifier="internal"
+                                                Content="{loc:Str intake_gate_login_cta}"
+                                                Padding="32,12"
+                                                FontSize="14" FontWeight="Bold"
+                                                Style="{StaticResource SmallPinkButton}"
+                                                HorizontalAlignment="Center"
+                                                Click="BtnGI_GateUnlock_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </Border>
+                        </Grid>
+
+                        <!-- ═══ POP QUIZ ZONE (not premium - unchanged from the Lab card) ═══ -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                        Background="{StaticResource TabHueBrush}"/>
+                                <StackPanel Margin="16,10,16,12">
+                                    <TextBlock Text="{loc:Str label_pop_quiz}" Foreground="{StaticResource TabHueBrush}"
+                                               FontWeight="Bold" FontSize="10" Margin="0,0,0,4"/>
+
+                                    <Grid Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str label_reinforcement_questions_pop_up_during_session}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_enable_pop_up_questions}" FontSize="13"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkPopQuizEnabled" x:FieldModifier="internal"
+                                                  feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center"
+                                                  Checked="ChkPopQuizEnabled_Changed" Unchecked="ChkPopQuizEnabled_Changed"/>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="36" Background="Transparent">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="100"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str label_frequency}" FontSize="13"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" x:Name="SliderPopQuizFrequency" x:FieldModifier="internal"
+                                                feat:SessionLock.Owned="True" Minimum="1" Maximum="100"
+                                                VerticalAlignment="Center" Margin="14,0"
+                                                ValueChanged="SliderPopQuizFrequency_ValueChanged"/>
+                                        <TextBlock Grid.Column="2" x:Name="TxtPopQuizFrequency" x:FieldModifier="internal"
+                                                   Text="{loc:Str label_2_session_hr}" HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+
+                                    <Button x:Name="BtnTestPopQuiz" Content="{loc:Str btn_test}" Cursor="Hand"
+                                            Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                            BorderThickness="0" Padding="12,8" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                            Click="BtnTestPopQuiz_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="8"/>
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border
+                         clips its Background to CornerRadius but does NOT clip child content, so a
+                         child Image would square off the rounded corners (round-2 lesson). It binds
+                         the hero strip's brush rather than declaring a second one, so a drone mod's
+                         green hero repaints both plates from labHeroMap's single assignment. -->
+                    <Border Grid.Column="1" Margin="10,0,0,10" CornerRadius="14"
+                            BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                            VerticalAlignment="Stretch" MinHeight="200" MaxHeight="560"
+                            Background="{Binding Background, ElementName=GradedIntakeHeroArtHost}"
+                            hover:HoverPop.IsEnabled="True">
+                        <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                        <Border CornerRadius="12" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                    <GradientStop Color="#66000000" Offset="0"/>
+                                    <GradientStop Color="#00000000" Offset="0.45"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
                         </Border>
                     </Border>
                 </Grid>
-
-                <!-- ═══ POP QUIZ ZONE (not premium - unchanged from the Lab card) ═══ -->
-                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
-                        BorderThickness="1" CornerRadius="10" Padding="20,18" Margin="0,14,0,0">
-                    <StackPanel>
-                        <TextBlock Text="{loc:Str label_pop_quiz}" Foreground="White" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,2"/>
-                        <TextBlock Text="{loc:Str label_reinforcement_questions_pop_up_during_session}"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                        <CheckBox x:Name="ChkPopQuizEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Content="{loc:Str setting_enable_pop_up_questions}"
-                                  Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"
-                                  Checked="ChkPopQuizEnabled_Changed" Unchecked="ChkPopQuizEnabled_Changed"/>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <TextBlock Text="{loc:Str label_frequency}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Slider x:Name="SliderPopQuizFrequency" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="100" Width="160"
-                                    VerticalAlignment="Center"
-                                    ValueChanged="SliderPopQuizFrequency_ValueChanged"/>
-                            <TextBlock x:Name="TxtPopQuizFrequency" x:FieldModifier="internal" Foreground="#B0B0C8" FontSize="12"
-                                       VerticalAlignment="Center" Margin="8,0,0,0" Text="{loc:Str label_2_session_hr}"/>
-                        </StackPanel>
-
-                        <Button x:Name="BtnTestPopQuiz" Content="{loc:Str btn_test}" Cursor="Hand"
-                                Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
-                                BorderThickness="0" Padding="12,8" HorizontalAlignment="Left"
-                                Click="BtnTestPopQuiz_Click">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="8"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
-                    </StackPanel>
-                </Border>
 
             </StackPanel>
         </Grid>

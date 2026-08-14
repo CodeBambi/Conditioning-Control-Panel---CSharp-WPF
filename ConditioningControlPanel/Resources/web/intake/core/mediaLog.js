@@ -24,6 +24,10 @@
  *  ceiling is comfortably above a normal run's whole pool. */
 export const MAX_NOTED = 24;
 
+/** Urls the page's own host serves (ccp.* virtual hosts, inlined data: URIs, page-relative
+ *  paths). Anything else came off a third-party CDN — see noteMedia(). */
+const LOCAL_URL_RE = /^(?:https?:\/\/ccp\.[a-z0-9-]+\/|data:|blob:|\.{0,2}\/)/i;
+
 const log = {
   order: [],                    // urls, arrival order (<= MAX_NOTED)
   byUrl: Object.create(null),   // url -> { url, kind, count }
@@ -47,6 +51,11 @@ export function noteMedia(url, kind) {
   try {
     if (typeof url !== 'string' || !url) return url;
     log.shown += 1;
+    // REMOTE PAYLOADS COUNT BUT ARE NOT KEPT. The archive re-renders these urls weeks
+    // later out of IndexedDB; a third-party CDN url is not ours and will not still be
+    // there, so retaining one buys a broken thumbnail in the Records Office and a stored
+    // reference to somebody else's server. The run's "shown" tally above still includes it.
+    if (!LOCAL_URL_RE.test(url)) return url;
     const hit = log.byUrl[url];
     if (hit) { hit.count += 1; return url; }
     if (log.order.length >= MAX_NOTED) return url;

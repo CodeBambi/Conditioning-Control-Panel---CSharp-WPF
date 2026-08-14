@@ -117,9 +117,16 @@ a pre-buffer. **One handler per type** — a second `on('x')` silently displaces
 
 - **Page → host**: `ready` · `log` (400-char clamp) · `boot-error` · `heartbeat` · `pong` ·
   `quiz-result` · `exit` · `intake-close` (jumpscare abort) · `fullscreen-set` · `loom-save` ·
-  `intake-save-image`.
+  `intake-save-image` · `need-remote`.
 - **Host → page**: `init {config, ai}` · `fullscreen {on}` · `session-drafted {ok,name,path}` ·
-  `loom-result` · `intake-save-image-result` · `ping` · `payload-state` · `end-run` *(no page handler)*.
+  `loom-result` · `intake-save-image-result` · `ping` · `payload-state` · `end-run` *(no page handler)* ·
+  `assets-append {images}` · `online-status {ok,error,added}`.
+- **Remote media** (`config.remoteMedia`): the `media` manifest is local and one-shot, so remote
+  stills arrive later — the page posts `need-remote`, the host replies `assets-append`, and
+  web-shim pushes the urls **into the existing `media.images` array** (never a reset), which is
+  why `effects.js` holds that array by reference instead of copying it. Remote stills never enter
+  `media.gifs` (they do not animate) and are explicitly excluded from the two CORS-hostile paths:
+  `wallDecals.js` (WebGL texture upload) and `grid.js`'s frozen-tile canvas.
 - Standalone path: `?niche=&endless=&steer=&ai=&token=&m2test=&subject=` + `localStorage['intake.bootConfig']`;
   results to `intake.lastResult` / `intake.resultHistory`.
 

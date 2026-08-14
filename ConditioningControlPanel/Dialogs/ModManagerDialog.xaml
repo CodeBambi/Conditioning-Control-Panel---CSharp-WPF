@@ -26,7 +26,7 @@
                                VerticalAlignment="Center"/>
                     <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
                             BorderThickness="0" Cursor="Hand" Padding="8,2"
                             Width="30" Height="30"/>
                 </Grid>
@@ -79,9 +79,21 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
                             <TextBlock x:Name="TxtModName" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtModAuthor" FontSize="12" Foreground="#808080" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="#808080" Margin="0,0,0,12"/>
+                            <TextBlock x:Name="TxtModAuthor" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
                             <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#C0C0C0" TextWrapping="Wrap" Margin="0,0,0,15"/>
+
+                            <!-- Read-only art summary. The manifest's previewImage had never been
+                                 rendered anywhere in the app before this; it is a mod-relative path
+                                 inside the mod's own folder, so both rows are hidden for built-ins
+                                 and anything without an InstalledPath. -->
+                            <Border x:Name="PreviewImagePanel" Background="{DynamicResource PanelAccentBrush}"
+                                    CornerRadius="8" Padding="6" Margin="0,0,0,10"
+                                    HorizontalAlignment="Left" Visibility="Collapsed">
+                                <Image x:Name="ImgModPreview" MaxWidth="260" MaxHeight="146" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock x:Name="TxtArtOverrides" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                                       TextWrapping="Wrap" Margin="0,0,0,15" Visibility="Collapsed"/>
 
                             <!-- Content pack row: built-in mods whose media (voice lines, portraits,
                                  DTRH barks) lives in a release-hosted pack that is not downloaded yet.
@@ -91,7 +103,7 @@
                                 <StackPanel>
                                     <TextBlock x:Name="TxtPackState" Text="{loc:Str modmgr_pack_not_downloaded}"
                                                Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="#A0A0A0" FontSize="11"
+                                    <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                TextWrapping="Wrap" Margin="0,5,0,0"/>
                                     <ProgressBar x:Name="PackProgress" Height="6" Minimum="0" Maximum="100" Value="0"
                                                  Background="#252542" Foreground="{DynamicResource PinkBrush}"
@@ -128,15 +140,15 @@
 
                             <!-- Theme Color Preview -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="{loc:Str label_theme}" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="{loc:Str label_theme}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <Border x:Name="ThemeColorPreview" Width="20" Height="20" CornerRadius="4" Margin="0,0,5,0"/>
-                                <TextBlock x:Name="TxtThemeColor" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtThemeColor" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <!-- Companion Info -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="{loc:Str label_companion}" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="TxtCompanion" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str label_companion}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="TxtCompanion" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <!-- Active Indicator -->

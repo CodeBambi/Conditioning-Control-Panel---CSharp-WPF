@@ -35,6 +35,10 @@ namespace ConditioningControlPanel.Services
             "discord", "quests", "achievements", "enhancements",
             "programs", "leaderboard",                                         // You
             "assets",                                                          // Library
+            // No "justdrop" row: it stopped being a rail door when the shop became a window
+            // (JustDropHostService). This list is the VISUAL order and the slide direction is read
+            // straight off it, so removing the key put "appsettings" back from 24 to 23 - and
+            // ChromeFxNavTests asserts that index by number, so its InlineData row moved back too.
             "appsettings",                                                     // Settings (pinned last)
         };
 
@@ -44,6 +48,8 @@ namespace ConditioningControlPanel.Services
         /// would tear the browser away from its card for the length of the transition. They get
         /// the crossfade only.
         /// </summary>
+        /// <remarks>"justdrop" was here while the shop was a tab. It is a separate window now, so
+        /// it has no tab transition to be exempted from at all.</remarks>
         private static readonly HashSet<string> Airspace =
             new(StringComparer.OrdinalIgnoreCase) { "settings", "progression", "gradedintake" };
 

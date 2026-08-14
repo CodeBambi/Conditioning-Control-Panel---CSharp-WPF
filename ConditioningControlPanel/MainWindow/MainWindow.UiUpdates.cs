@@ -104,8 +104,10 @@ namespace ConditioningControlPanel
             // design-time fallbacks, so this is the only place they get localized AND
             // mod-renamed. Same keys as the matching Studio rack rows (RefreshRackLabels), so a
             // mod that renames "Flash Images" renames the tile, the rack row and the panel title
-            // together. Just Drop stays a literal (placeholder); the ? box's title belongs to
-            // RefreshMysteryTile; the Vault's title uses the Exclusives tab's own key.
+            // together. Two tiles are absent on purpose: the ? box's title belongs to
+            // RefreshMysteryTile, and the tease tile's belongs to ApplyTeaseCard (a mod-aware
+            // rename of a feature nobody is allowed to name would defeat the tease). The Vault's
+            // title uses the Exclusives tab's own key.
             if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
             if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
             if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
@@ -186,6 +188,156 @@ namespace ConditioningControlPanel
 
             // Show/hide the Bimbo Journal sub-tab based on the active mod.
             ApplyBimboJournalModVisibility();
+
+            // Everything this method does NOT reach: the code-built surfaces that captured a
+            // mod colour, name or piece of art when they were constructed. See the sweep below.
+            QueueModAwareSurfaceSweep();
+        }
+
+        // ======================= mod-switch stale-surface sweep (lane E) =======================
+        //
+        // Every surface the sweep touches captures a mod-derived colour, name or piece of art at
+        // CONSTRUCTION time. ModChanged clears the resource cache and rewrites the palette, but a
+        // control that already read the old answer keeps it until something repaints it - so a user
+        // who switched mods while parked on a tab kept looking at the previous mod's accent, art and
+        // wording until the app was restarted.
+        //
+        // The rules this sweep follows:
+        //
+        //   * IT HANGS OFF ApplyModFeatureNames. That method is already the app's central ModChanged
+        //     text pass, so the sweep costs no new subscription (and cannot leak one). It rides the
+        //     LanguageChanged caller too, which is correct: the mod-aware names it refreshes are the
+        //     same strings a language switch changes.
+        //
+        //   * IT RUNS AT Background PRIORITY, i.e. after every other ModChanged handler has finished.
+        //     Handlers run in subscription order and RefreshThemeAwareElements - the one that rewrites
+        //     PinkBrush/PinkColor - is subscribed LAST (MainWindow.xaml.cs). A sweep running inline
+        //     would repaint the presets row from the OUTGOING mod's PinkBrush and be wrong in a new
+        //     way rather than right. Background (not Normal) is the level that clears the whole
+        //     handler chain in both raise shapes: on the UI thread the chain is one dispatcher
+        //     operation, but off-thread every handler is its own Invoke, and a Normal-priority post
+        //     made from the first of them would be queued AHEAD of the ones still to come.
+        //
+        //   * CHEAP REPAINTS RUN UNCONDITIONALLY; anything that rebuilds a whole tab runs only while
+        //     that tab is actually on screen, because each of those tabs repopulates itself on show
+        //     (see ShowTab in MainWindow.TabNavigation.cs). DrawSkillTree in particular is the most
+        //     expensive redraw in the app and is never run for a tab nobody is looking at.
+        //
+        //   * THE ONE EXCEPTION IS THE PRESETS TAB, whose ShowTab case does NOT rebuild the card row
+        //     (only the nav BUTTON calls RefreshPresetsList). It gets a dirty flag instead, drained
+        //     by its own IsVisibleChanged.
+        //
+        // Not in the sweep, deliberately: the four accent reads in MainWindow.Assets.cs. All four
+        // build a MODAL dialog inside a Click handler (Save asset preset / Save phrase preset), so
+        // they re-read the accent every time the dialog opens and cannot go stale.
+
+        /// <summary>True while a sweep is already sitting in the dispatcher queue.</summary>
+        private bool _modSweepQueued;
+
+        /// <summary>Latches the one-shot IsVisibleChanged wiring in <see cref="EnsureModSweepWatchers"/>.</summary>
+        private bool _modSweepWatchersHooked;
+
+        /// <summary>
+        /// The Presets tab is showing a mod that is no longer active. Drained the next time the tab
+        /// becomes visible, because its ShowTab case does not rebuild the card row by itself.
+        /// </summary>
+        private bool _presetsModDirty;
+
+        /// <summary>
+        /// Posts <see cref="RefreshModAwareSurfaces"/> behind the rest of the ModChanged chain.
+        /// Coalescing: a mod switch that also raises LanguageChanged sweeps once, not twice.
+        /// </summary>
+        private void QueueModAwareSurfaceSweep()
+        {
+            if (_modSweepQueued) return;
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            _modSweepQueued = true;
+            dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshModAwareSurfaces));
+        }
+
+        private void RefreshModAwareSurfaces()
+        {
+            _modSweepQueued = false;
+            if (Application.Current?.Dispatcher == null) return;
+            if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            EnsureModSweepWatchers();
+
+            // ---- always: a handful of property writes each, and none of them self-heal ----
+
+            // The idle/charged Start button's three gradient stops are hue rotations of the mod's
+            // glow colour, written in place on a brush that is built once. A no-op until the charge
+            // has been applied at least once, and it starts no storyboard of its own.
+            SweepStep(TintStartCharge, "start charge");
+
+            // Takeover's start/stop button paints its "on" state in the accent.
+            SweepStep(() => UpdateAutonomyButtonState(App.Settings?.Current?.AutonomyModeEnabled == true),
+                      "takeover button");
+
+            // The leaderboard's row style, "you" bar and mode buttons are accent-tinted, and nothing
+            // else repaints them: RefreshLeaderboardAsync re-renders the DATA, not the theme, so even
+            // a full board refresh would keep the outgoing mod's accent.
+            SweepStep(UpdateLeaderboardModeButtons, "leaderboard theme");
+
+            // Showcase pins are achievement art, and both shipped mods override all 58 PNGs.
+            SweepStep(RefreshShowcasePinArt, "showcase pins");
+
+            // The header preset dropdown is mod-renamed per item, plus an accent "Save as New" row.
+            SweepStep(RefreshPresetsDropdown, "presets dropdown");
+
+            // ---- on screen only: these tabs rebuild themselves on their next show ----
+
+            if (AchievementsTab?.IsVisible == true)
+                SweepStep(RefreshAllAchievementTiles, "achievement grid");
+
+            if (QuestsTab?.IsVisible == true)
+                SweepStep(RefreshQuestUI, "quests tab");
+
+            if (EnhancementsTab?.IsVisible == true)
+                SweepStep(RefreshEnhancementsUI, "skill tree");
+
+            // ---- visible-or-dirty: nothing else rebuilds the presets card row ----
+
+            if (PresetsTab?.IsVisible == true)
+            {
+                _presetsModDirty = false;
+                SweepStep(RefreshPresetsModVisuals, "presets tab");
+            }
+            else
+            {
+                _presetsModDirty = true;
+            }
+        }
+
+        /// <summary>
+        /// One sweep step. Each repaint is independent, so a surface that throws (a tab whose
+        /// controls are not realised yet, a service that went away mid-switch) must not take the
+        /// rest of the sweep down with it.
+        /// </summary>
+        private static void SweepStep(Action step, string what)
+        {
+            try { step(); }
+            catch (Exception ex) { App.Logger?.Debug("Mod sweep [{What}] failed: {E}", what, ex.Message); }
+        }
+
+        /// <summary>
+        /// Wires the dirty-flag drains. One-shot, and hung off the sweep rather than the constructor
+        /// so it can never run before the tab controls exist.
+        /// </summary>
+        private void EnsureModSweepWatchers()
+        {
+            if (_modSweepWatchersHooked) return;
+            if (PresetsTab == null) return;
+            _modSweepWatchersHooked = true;
+
+            PresetsTab.IsVisibleChanged += (_, e) =>
+            {
+                if (!_presetsModDirty || e.NewValue is not true) return;
+                _presetsModDirty = false;
+                SweepStep(RefreshPresetsModVisuals, "presets tab (deferred)");
+            };
         }
 
         /// <summary>
@@ -270,6 +422,9 @@ namespace ConditioningControlPanel
             // calls it (and UpdatePatreonUI is what OnPatreonTierChanged, both SubscribeStar
             // paths, ClearAccountData and every login/link flow call), plus UpdateLevelDisplay.
             RefreshAccountChip();
+            // The header profile bubble paints the same identity truth; it rides the same
+            // choke point for the same reason (MainWindow.ProfileBubble.cs).
+            RefreshProfileBubble();
         }
 
         // Tier colours for the account chip. Fixed brand values, not mod-owned: gold is the
@@ -1881,7 +2036,10 @@ namespace ConditioningControlPanel
         internal void BtnManageMessages_Click(object sender, RoutedEventArgs e)
         {
             var oldKeys = new HashSet<string>(App.Settings.Current.SubliminalPool.Keys);
-            var defaults = App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>();
+            // OrdinalIgnoreCase to match the removed-set and ModService's top-up comparison.
+            var defaults = new HashSet<string>(
+                (App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
+                StringComparer.OrdinalIgnoreCase);
 
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);
             dialog.Owner = this;
@@ -1892,7 +2050,7 @@ namespace ConditioningControlPanel
                 var newKeys = new HashSet<string>(dialog.ResultData.Keys);
                 foreach (var key in oldKeys)
                 {
-                    if (!newKeys.Contains(key) && defaults.ContainsKey(key))
+                    if (!newKeys.Contains(key) && defaults.Contains(key))
                         App.Settings.Current.RemovedDefaultSubliminals.Add(key);
                 }
 
@@ -2331,6 +2489,10 @@ namespace ConditioningControlPanel
             StartMarqueeAnimation();
             // The OG border re-evaluates both ways too (PR-5 gave it a gate at last).
             ApplyOgBorderLoop();
+            // The two spiral glyphs breathe on an ambient clock as well, and they are
+            // code-built controls with no XAML storyboard for the stops above to reach -
+            // they re-read the gate here (MainWindow.ProfileSpiral.cs).
+            RefreshSpiralGlyphMotion();
             // Chrome loops (nav glow breath, START glow + sheen, XP gloss) re-evaluate both ways:
             // down to Reduced/Off stops them now, back up to Full re-arms them without a restart.
             // RefreshChromeFx also drives the dashboard loops (see ApplyChromeFxLoops).

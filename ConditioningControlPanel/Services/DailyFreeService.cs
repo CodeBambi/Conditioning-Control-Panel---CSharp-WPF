@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
@@ -50,13 +51,80 @@ namespace ConditioningControlPanel.Services
         private const string OverrideEndpoint = "https://codebambi-proxy.vercel.app/config/daily-feature";
         private static readonly TimeSpan RefetchEvery = TimeSpan.FromHours(6);
 
+        /// <summary>
+        /// Floor between two ATTEMPTS on the same day, whatever they returned. The success gate
+        /// above cannot carry this on its own: it is keyed on <see cref="_serverKeyForDate"/>,
+        /// which only a 200 ever writes, so while the endpoint 404s (it does not exist yet
+        /// server-side) every dashboard repaint would fire a live HTTPS GET.
+        /// </summary>
+        private static readonly TimeSpan RetryEvery = TimeSpan.FromMinutes(10);
+
         private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
         private string? _serverKey;          // today's override, when the server sent one
         private string? _serverKeyForDate;   // the local date the override was fetched for
         private DateTime _lastFetchUtc = DateTime.MinValue;
+        private DateTime _lastAttemptUtc = DateTime.MinValue;
+        private string? _lastAttemptForDate; // the local date the last attempt was made for
 
-        /// <summary>Raised when the effective key may have changed (override landed).</summary>
+        /// <summary>Raised when the effective key may have changed (override landed, or the
+        /// local day rolled over).</summary>
         public event Action? TodayChanged;
+
+        private readonly Timer _dayRollTimer;
+        private string _dayRollLastStamp = LocalDateStamp();
+
+        /// <summary>
+        /// Longest a single wait may be. <see cref="TodayKey"/> is computed live, so nothing here
+        /// EXPIRES - but nothing repaints either, and a wall painted before midnight goes on
+        /// naming yesterday's feature while a click on it resolves today's. The tick is what
+        /// closes that gap. Capped rather than armed once at midnight because a machine that
+        /// sleeps through the rollover wakes with a one-shot timer that is simply late; a capped
+        /// re-arm notices the new day within one interval however long the sleep was.
+        /// </summary>
+        private static readonly TimeSpan DayRollMaxWait = TimeSpan.FromMinutes(10);
+
+        public DailyFreeService()
+        {
+            _dayRollTimer = new Timer(_ => OnDayRollTick(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            ArmDayRollTimer();
+        }
+
+        private void ArmDayRollTimer()
+        {
+            try
+            {
+                var now = DateTime.Now;
+                // +2s past midnight: a tick that lands a hair EARLY would read yesterday's date
+                // and re-arm for two more seconds, which is harmless but pointless.
+                var untilMidnight = now.Date.AddDays(1).AddSeconds(2) - now;
+                var due = untilMidnight < DayRollMaxWait ? untilMidnight : DayRollMaxWait;
+                if (due < TimeSpan.FromSeconds(1)) due = TimeSpan.FromSeconds(1);
+                _dayRollTimer.Change(due, Timeout.InfiniteTimeSpan);
+            }
+            catch (Exception ex) { App.Logger?.Debug("DailyFree: day-roll re-arm failed: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Fires on a threadpool thread; every subscriber marshals for itself (MainWindow's does).
+        /// Only a real date change raises anything, so the capped heartbeat above costs one
+        /// string compare per tick on the 143 ticks a day that are not the rollover.
+        /// </summary>
+        private void OnDayRollTick()
+        {
+            try
+            {
+                var stamp = LocalDateStamp();
+                if (stamp == _dayRollLastStamp) return;
+                _dayRollLastStamp = stamp;
+                App.Logger?.Information("DailyFree: local day rolled over to {Date}", stamp);
+                // Yesterday's override must not survive the rollover, and the seeded pick has
+                // already moved on by itself - so this is a repaint signal, not an invalidation.
+                _ = RefreshAsync();
+                TodayChanged?.Invoke();
+            }
+            catch (Exception ex) { App.Logger?.Debug("DailyFree: day-roll tick failed: {E}", ex.Message); }
+            finally { ArmDayRollTimer(); }
+        }
 
         /// <summary>
         /// Today's free feature key. Server override wins when it was fetched for today's local
@@ -115,6 +183,7 @@ namespace ConditioningControlPanel.Services
         private string SeededPick(DateTime date)
         {
             date = date.Date;
+            if (Pool.Length == 0) return string.Empty;   // nothing to give away; matches no key
             lock (_chainLock)
             {
                 if (_chainKey != null && _chainDate == date) return _chainKey;
@@ -142,6 +211,11 @@ namespace ConditioningControlPanel.Services
                     // Pool order minus the last two picks keeps the candidate list stable, so
                     // appending to the pool stays calendar-safe for all dates before the append.
                     var candidates = Pool.Where(k => k != key && k != prev).ToArray();
+                    // A pool shrunk below the 3-day window leaves nothing to choose from, and an
+                    // empty candidate list is a DivideByZero on the modulo below. Widen the
+                    // window instead of throwing: 2 keys alternate, 1 key parks on itself.
+                    if (candidates.Length == 0) candidates = Pool.Where(k => k != key).ToArray();
+                    if (candidates.Length == 0) candidates = Pool;
                     var next = candidates[Fnv1a(DateStamp(d)) % (uint)candidates.Length];
                     prev = key;
                     key = next;
@@ -174,15 +248,28 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Fetches the server override if the cache is stale. Fire-and-forget from startup and
-        /// cheap to call opportunistically (RefreshPremiumRail does): the 6h gate makes repeat
-        /// calls free. 404 / offline / bad payload all mean "no override" - the seeded pick is
-        /// the designed fallback, so the box works on day one with no server deploy at all.
+        /// cheap to call opportunistically (RefreshPremiumRail does): the two gates below make
+        /// repeat calls free whether the last one succeeded or not. 404 / offline / bad payload
+        /// all mean "no override" - the seeded pick is the designed fallback, so the box works on
+        /// day one with no server deploy at all.
         /// </summary>
         public async Task RefreshAsync()
         {
-            if (DateTime.UtcNow - _lastFetchUtc < RefetchEvery && _serverKeyForDate == LocalDateStamp())
-                return;
-            _lastFetchUtc = DateTime.UtcNow;
+            var today = LocalDateStamp();
+            var now = DateTime.UtcNow;
+
+            // Success gate, unchanged: today's override is in hand and still fresh.
+            if (_serverKeyForDate == today && now - _lastFetchUtc < RefetchEvery) return;
+
+            // Attempt gate. Keyed on the day so a rollover still refetches at once, and set
+            // BEFORE the await so the overlapping fire-and-forget calls a repaint storm makes
+            // cannot each slip through.
+            if (_lastAttemptForDate == today && now - _lastAttemptUtc < RetryEvery) return;
+            _lastAttemptForDate = today;
+            _lastAttemptUtc = now;
+            // _lastFetchUtc is stamped on the SUCCESS path only. Stamping it here would let a
+            // failed afternoon attempt re-close the 6h success gate opened by the morning's
+            // success, hiding a server-side override for six hours instead of ten minutes.
             try
             {
                 var url = $"{OverrideEndpoint}?date={LocalDateStamp()}";
@@ -209,6 +296,7 @@ namespace ConditioningControlPanel.Services
                 var changed = _serverKey != key || _serverKeyForDate != LocalDateStamp();
                 _serverKey = key;
                 _serverKeyForDate = LocalDateStamp();
+                _lastFetchUtc = DateTime.UtcNow;
                 App.Logger?.Information("DailyFree: server override for {Date}: {Key}", _serverKeyForDate, key);
                 if (changed) TodayChanged?.Invoke();
             }
