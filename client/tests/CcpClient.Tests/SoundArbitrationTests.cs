@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CcpClient.Desktop.Audio;
 using Xunit;
 
@@ -16,7 +17,7 @@ public sealed class SoundArbitrationTests
     private readonly List<string> _log = [];
 
     private (SoundArbitration arb, FakeBackend backend, FakeDuckSink duck, ManualClock clock) Make(
-        int maxSfx = 8, string[]? devices = null)
+        int maxSfx = 8, string[]? devices = null, TimeSpan? teardownBudget = null)
     {
         var backend = new FakeBackend { Devices = devices ?? ["RDP Sink"] };
         var duck = new FakeDuckSink();
@@ -26,6 +27,9 @@ public sealed class SoundArbitrationTests
             MaxSfxVoices = maxSfx,
             DuckWatchdog = TimeSpan.FromMinutes(5),
             VoicePacingDelay = TimeSpan.FromSeconds(2),
+            // Budgets whose elapsing is NOT the subject get the shared 60s injection (SP-063);
+            // the SP-071 give-up facts pass their own short literal (elapsing IS the subject).
+            TeardownBudget = teardownBudget ?? TestWait.InjectedBudget,
         }, _log.Add);
         return (arb, backend, duck, clock);
     }
@@ -591,6 +595,171 @@ public sealed class SoundArbitrationTests
         Assert.Equal(3, backend.EnumerateCallCount);
     }
 
+    // ---------- SP-071: teardown off the UI thread (host close must not wait on a wedged probe) ----------
+
+    // The give-up facts inject a 200ms budget whose ELAPSING is the subject (TestWait
+    // population 2). Every rendezvous is a deterministic signal: the probe is PROVEN parked
+    // (TryInitInFlight) before Dispose is called, so the budget always expires with the
+    // native call still in flight — the outcome never depends on scheduler timing.
+    private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// Drive the REAL probe path (suppressed → kick → the scheduled one-shot fires on a
+    /// background thread) into a backend whose TryInit parks until released. Returns with
+    /// the probe PROVEN parked inside the native call, holding `_initLock` — exactly the
+    /// dead-endpoint window the DTRH host close can hit.
+    /// </summary>
+    private (SoundArbitration arb, FakeBackend backend, Thread probe, ManualResetEventSlim probeDone) ParkedProbe()
+    {
+        var (arb, backend, _, clock) = Make(devices: [], teardownBudget: GiveUpBudget);
+        Assert.IsType<SoundOutcome.Unavailable>(arb.Initialize(null)); // endpoint down — suppressed
+        backend.Devices = ["RDP Sink"];
+        backend.TryInitRelease = new ManualResetEventSlim();
+        clock.Advance(TimeSpan.FromSeconds(31)); // cooldown expires
+        arb.PlayVoice("kick.mp3", 1f); // schedule the single-flight re-probe
+
+        var probeDone = new ManualResetEventSlim();
+        var probe = new Thread(() => { clock.Advance(TimeSpan.Zero); probeDone.Set(); })
+            { IsBackground = true, Name = "test-probe" };
+        probe.Start();
+        TestWait.UntilSync(
+            () => backend.TryInitInFlight,
+            "the recovery probe parked inside the native init (fixture never reached the mechanism)",
+            () => $"initCalls={backend.InitCallCount} enumerateCalls={backend.EnumerateCallCount}");
+        return (arb, backend, probe, probeDone);
+    }
+
+    private static Thread RunDispose(SoundArbitration arb, ManualResetEventSlim returned)
+        => new(() => { arb.Dispose(); returned.Set(); }) { IsBackground = true, Name = "test-dispose" };
+
+    private static string TeardownState(FakeBackend backend)
+        => $"inFlight={backend.TryInitInFlight} disposeCalls={backend.DisposeCallCount} events=[{string.Join(",", backend.NativeEvents)}]";
+
+    [Fact]
+    public void Teardown_ProbeParked_DisposeReturnsBounded_GiveUpLogged_BackendUntouched()
+    {
+        // The defect pin (pre-fix RED captured in evidence/pre-fix-red.txt): with a native
+        // init parked, Dispose must return within the budget, log ONE typed give-up line,
+        // and the give-up path must NEVER touch the backend.
+        var (arb, backend, probe, probeDone) = ParkedProbe();
+        try
+        {
+            var disposeReturned = new ManualResetEventSlim();
+            RunDispose(arb, disposeReturned).Start();
+            TestWait.UntilSync(
+                () => disposeReturned.IsSet,
+                "Dispose returns bounded while the native call is parked",
+                () => TeardownState(backend));
+            Assert.True(backend.TryInitInFlight); // the native call is STILL parked...
+            Assert.Equal(0, backend.DisposeCallCount); // ...and the give-up never touched the backend
+            Assert.Equal(1, _log.Count(l => l.Contains("teardown exceeds"))); // ONE typed give-up line
+        }
+        finally
+        {
+            backend.TryInitRelease!.Set(); // unwedge the fixture whatever the verdict
+        }
+        TestWait.UntilSync(() => probeDone.IsSet, "probe thread drains after release", () => TeardownState(backend));
+        probe.Join();
+    }
+
+    [Fact]
+    public void Teardown_ProbeParked_BackendDisposedOnlyAfterNativeCallReturns()
+    {
+        // The safety fact: the backend is NEVER disposed while a native call is in flight.
+        // Asserted as ORDERING (the fake records when its TryInit returns and when Dispose
+        // is called on it), not merely that nothing threw.
+        var (arb, backend, probe, probeDone) = ParkedProbe();
+        var disposeReturned = new ManualResetEventSlim();
+        try
+        {
+            RunDispose(arb, disposeReturned).Start();
+            // No assertion on HOW the caller returned (bounded give-up = the defect pin
+            // above); this pin's subject is the ORDER the fake records.
+            TestWait.UntilSync(() => disposeReturned.IsSet, "Dispose returned", () => TeardownState(backend));
+        }
+        finally
+        {
+            backend.TryInitRelease!.Set();
+        }
+        TestWait.UntilSync(() => probeDone.IsSet && backend.DisposeCallCount == 1, "teardown completes after the native call returns", () => TeardownState(backend));
+        probe.Join();
+        Assert.False(backend.DisposedWhileInitInFlight); // never concurrent with the native call
+        var events = backend.NativeEvents.ToArray();
+        Assert.True(
+            Array.IndexOf(events, "init-returned") < Array.IndexOf(events, "backend-disposed"),
+            $"the native init returned BEFORE the backend was disposed — events: {string.Join(",", events)}");
+    }
+
+    [Fact]
+    public void Teardown_GiveUp_BackgroundCompletes_ExactlyOneDispose_CompletionLogged()
+    {
+        // The completion fact: after the caller gives up, the backgrounded teardown still
+        // runs and disposes the backend EXACTLY ONCE when the native call finally returns —
+        // the host can be closed and reopened, so the give-up must not leak.
+        var (arb, backend, probe, probeDone) = ParkedProbe();
+        var disposeReturned = new ManualResetEventSlim();
+        try
+        {
+            RunDispose(arb, disposeReturned).Start();
+            TestWait.UntilSync(() => disposeReturned.IsSet, "caller gives up bounded", () => TeardownState(backend));
+            Assert.Equal(1, _log.Count(l => l.Contains("teardown exceeds")));
+        }
+        finally
+        {
+            backend.TryInitRelease!.Set();
+        }
+        TestWait.UntilSync(() => probeDone.IsSet && backend.DisposeCallCount == 1, "backgrounded teardown disposes exactly once", () => TeardownState(backend));
+        probe.Join();
+        Assert.Equal(1, backend.DisposeCallCount); // exactly once — never zero (leak), never two
+        Assert.Equal(1, _log.Count(l => l.Contains("backgrounded backend teardown completed"))); // the transition pair
+    }
+
+    [Fact]
+    public void Dispose_TwiceWhileTeardownParked_OneBackendDispose_OneTeardown()
+    {
+        // Idempotence: two Dispose calls → ONE backend dispose, ONE teardown; the second
+        // returns promptly (it never waits on the parked native call).
+        var (arb, backend, probe, probeDone) = ParkedProbe();
+        var firstReturned = new ManualResetEventSlim();
+        var secondReturned = new ManualResetEventSlim();
+        try
+        {
+            RunDispose(arb, firstReturned).Start();
+            TestWait.UntilSync(() => firstReturned.IsSet, "first Dispose gives up bounded", () => TeardownState(backend));
+            RunDispose(arb, secondReturned).Start();
+            TestWait.UntilSync(() => secondReturned.IsSet, "second Dispose returns promptly", () => TeardownState(backend));
+            Assert.Equal(0, backend.DisposeCallCount);
+            Assert.Equal(1, _log.Count(l => l.Contains("teardown exceeds"))); // the second call logged nothing
+        }
+        finally
+        {
+            backend.TryInitRelease!.Set();
+        }
+        TestWait.UntilSync(() => probeDone.IsSet && backend.DisposeCallCount == 1, "single teardown disposes once", () => TeardownState(backend));
+        probe.Join();
+        Assert.Equal(1, backend.DisposeCallCount); // one dispose across TWO Dispose calls
+        Assert.Equal(1, _log.Count(l => l.Contains("backgrounded backend teardown completed")));
+    }
+
+    [Fact]
+    public void Dispose_NoProbeInFlight_DisposesOnce_NoGiveUpLines()
+    {
+        // Negative control — ordinary teardown is unchanged: no probe in flight → the
+        // backend is disposed exactly once with the same observable outcome as before
+        // SP-071 (panic line as before, channels stopped) and NO give-up/completion lines.
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        arb.PlayVoice("v.mp3", 1f);
+        var player = backend.Players[^1];
+
+        arb.Dispose();
+
+        Assert.Equal(1, backend.DisposeCallCount);
+        Assert.True(player.Stopped && player.Disposed); // PanicReset still ran on the caller
+        Assert.DoesNotContain(_log, l => l.Contains("teardown exceeds") || l.Contains("backgrounded backend teardown"));
+        Assert.Contains(_log, l => l.Contains("panic-reset")); // the pre-SP-071 observable line
+    }
+
     /// <summary>Run <paramref name="count"/> failed re-probes (each: expire window → play kicks → advance fires the failed probe).</summary>
     private static void FailProbes(SoundArbitration arb, ManualClock clock, int count)
     {
@@ -737,6 +906,17 @@ public sealed class SoundArbitrationTests
         public bool ThrowOnTryInit { get; set; }
         public Action<FakePlayer>? PlayerHook { get; set; }
 
+        // SP-071 cross-thread teardown instrumentation. Both gates null = today's synchronous
+        // behavior, so the landed facts are byte-identical. TryInitRelease parked = the wedged
+        // native call; the fake RECORDS the moment TryInit returns and the moment Dispose is
+        // called on it so the ordering fact asserts the order, not merely that nothing threw.
+        public ManualResetEventSlim? TryInitRelease { get; set; }
+        public volatile bool TryInitInFlight;
+        public volatile bool DisposedWhileInitInFlight;
+        public ConcurrentQueue<string> NativeEvents { get; } = new();
+        private int _disposeCallCount;
+        public int DisposeCallCount => Volatile.Read(ref _disposeCallCount);
+
         public IReadOnlyList<string> EnumerateDevices()
         {
             EnumerateCallCount++;
@@ -747,6 +927,13 @@ public sealed class SoundArbitrationTests
         {
             InitCallCount++;
             RequestedDeviceName = deviceName;
+            if (TryInitRelease is { } release)
+            {
+                TryInitInFlight = true;
+                release.Wait(); // the wedged native call — released by the test, never by timing
+                TryInitInFlight = false;
+                NativeEvents.Enqueue("init-returned");
+            }
             if (ThrowOnTryInit)
             {
                 throw new InvalidOperationException("backend wedged in the audio stack");
@@ -770,7 +957,15 @@ public sealed class SoundArbitrationTests
             return p;
         }
 
-        public void Dispose() { }
+        public void Dispose()
+        {
+            if (TryInitInFlight)
+            {
+                DisposedWhileInitInFlight = true; // the concurrent-native-call class, observed
+            }
+            NativeEvents.Enqueue("backend-disposed");
+            Interlocked.Increment(ref _disposeCallCount);
+        }
     }
 
     private sealed class FakePlayer(string path, float volume) : IAudioPlayer

@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** Not started
-**Last Updated:** 2026-08-14 (orchestrator, authoring)
+**Current Step:** done
+**Last Updated:** 2026-08-14 (worker, all steps complete — .DONE)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -38,68 +38,69 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 ---
 
 ### Step 1: Prove the block, census the class, then design the handoff
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195 — recorded in record.md)
 
-- [ ] Update STATUS.md before starting work
-- [ ] Captured pre-fix RED under `evidence/` (fake parked in `TryInit`, `Dispose` does not return)
-- [ ] Caller chain re-derived with own cites (thread, close handler, process survives)
-- [ ] **Census of every blocking wait in `client/src/**`** — file:line, reaching thread(s), bounded?, what
+- [x] Update STATUS.md before starting work
+- [x] Captured pre-fix RED under `evidence/` (fake parked in `TryInit`, `Dispose` does not return)
+- [x] Caller chain re-derived with own cites (thread, close handler, process survives)
+- [x] **Census of every blocking wait in `client/src/**`** — file:line, reaching thread(s), bounded?, what
       it waits on, consequence if it never returns; the two `CreatePlayer` sites named as a separate packet
-- [ ] Invariant written first, then the design that satisfies it (single disposer, never concurrent with a
+- [x] Invariant written first, then the design that satisfies it (single disposer, never concurrent with a
       native call, bounded UI wait, give-up never touches the backend, completion still disposes once,
       idempotent)
-- [ ] Why a lock timeout is the WRONG fix, stated plainly (stop condition if the design contains it)
-- [ ] Budget chosen with in-repo justification and its home named; no wall clock
-- [ ] Reopened-host answer recorded
-- [ ] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
+- [x] Why a lock timeout is the WRONG fix, stated plainly (stop condition if the design contains it)
+- [x] Budget chosen with in-repo justification and its home named; no wall clock
+- [x] Reopened-host answer recorded
+- [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement the handoff in one file
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195)
 
-- [ ] UI-safe work stays on the caller; backend teardown handed to a background thread
-- [ ] Bounded UI-side wait with a typed, once-logged give-up that never touches `_backend`
-- [ ] Background teardown takes `_initLock`, waits as long as needed, disposes exactly once
-- [ ] `Dispose` idempotent (no double dispose, no second teardown, prompt return)
-- [ ] `PanicReset` placement decided deliberately and justified
-- [ ] Every SP-070 property preserved (no post-teardown probe, play seam never takes `_initLock`, one-way
+- [x] UI-safe work stays on the caller; backend teardown handed to a background thread
+- [x] Bounded UI-side wait with a typed, once-logged give-up that never touches `_backend`
+- [x] Background teardown takes `_initLock`, waits as long as needed, disposes exactly once
+- [x] `Dispose` idempotent (no double dispose, no second teardown, prompt return)
+- [x] `PanicReset` placement decided deliberately and justified
+- [x] Every SP-070 property preserved (no post-teardown probe, play seam never takes `_initLock`, one-way
       lock order)
-- [ ] Transition-only logging; nothing new observed, persisted, or transmitted
-- [ ] No new dispatch primitive, no awaitable UI dispatch, no `SynchronizationContext.Current` capture
-- [ ] Product-file `git diff` summarized; no edit outside File Scope
+- [x] Transition-only logging; nothing new observed, persisted, or transmitted
+- [x] No new dispatch primitive, no awaitable UI dispatch, no `SynchronizationContext.Current` capture
+- [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195; bite matrix A/B/C captured under evidence/)
 
-- [ ] Bounded-return fact (the pin that captures today's behavior as RED)
-- [ ] **Ordering fact:** backend not disposed while the native call is in flight (assert the order, not
+- [x] Bounded-return fact (the pin that captures today's behavior as RED)
+- [x] **Ordering fact:** backend not disposed while the native call is in flight (assert the order, not
       merely that nothing threw)
-- [ ] Completion fact: after a give-up, teardown still disposes exactly once
-- [ ] Idempotence fact
-- [ ] Negative control: ordinary teardown observably unchanged, no give-up line
-- [ ] SP-070's teardown fact and all landed facts green and unchanged in meaning
-- [ ] Bite matrix: separate reverts, separate REDs, each pin's fixture shown to reach its mechanism
-- [ ] No timing-dependent determinism; no waits outside `TestWait`
-- [ ] `floor.json` `total` bumped in the same commit as the facts
+- [x] Completion fact: after a give-up, teardown still disposes exactly once
+- [x] Idempotence fact
+- [x] Negative control: ordinary teardown observably unchanged, no give-up line
+- [x] SP-070's teardown fact and all landed facts green and unchanged in meaning
+- [x] Bite matrix: separate reverts, separate REDs, each pin's fixture shown to reach its mechanism
+- [x] No timing-dependent determinism; no waits outside `TestWait`
+- [x] `floor.json` `total` bumped in the same commit as the facts
 
 ### Step 4: Record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (record.md; 2 consults, solo, verdicts + models recorded; pre-completion consult's 2 record edits applied)
 
-- [ ] `record.md` complete (pre-fix RED, caller chain, **census table**, invariant + design, why-not-timeout,
+- [x] `record.md` complete (pre-fix RED, caller chain, **census table**, invariant + design, why-not-timeout,
       budget justification, reopened-host answer, bite matrix, floor bump, run table, consults + actual
       models, engine-review presence, intended board filings incl. the `CreatePlayer` row)
-- [ ] Honesty cell (fake vs real wedged native call + manual gate; give-up residue; execution vs reading;
-      Linux unproven; **this closes one member of the class, not the class**)
-- [ ] Named flake recorded by name + TRX if it fired, never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`
+- [x] Honesty cell (fake vs real wedged native call + manual gate; give-up residue; execution vs reading;
+      Linux unproven; **this closes one member of the class, not the class**; + residual PanicReset native
+      wait, pre-completion consult finding)
+- [x] Named flake recorded by name + TRX if it fired, never retried away (did NOT fire in any run)
+- [x] Pre-completion solo consult; verdict + actual model recorded
+- [x] STATUS.md accurate before `.DONE`
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, exact counts, 2 pinned skips)
-- [ ] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build; per-run table with TRX paths
-- [ ] Cross-thread facts run >= 20 times filtered, zero flakes, count stated
-- [ ] Bite matrix complete
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+- [x] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, 1010 unit / 35 headless, 2 pinned skips)
+- [x] 3 consecutive full-suite greens, run 2 a fresh-checkout first-ever build (`C:\Code\sp071-cold`); per-run table with TRX paths in record.md
+- [x] Cross-thread facts run 20x filtered (23 matched facts), zero flakes
+- [x] Bite matrix complete (A/B/C, evidence/bite-revert-*.txt)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
