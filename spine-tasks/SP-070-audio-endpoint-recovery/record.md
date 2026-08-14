@@ -343,4 +343,18 @@ flight)` / `arbitration torn down`.
 ## Flake watch
 
 The named flake `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` did
-NOT fire in any run of this packet (runs 1+ below); nothing was retried away.
+NOT fire in any run of this packet (runs 1-3 below + 4 filtered + 3 bite runs); nothing was
+retried away.
+
+## Run table (3 consecutive full-suite greens at exact counts; >= 1 cold)
+
+| Run | Worktree | Cold/warm | Unit | Headless | Skipped (exact names) | TRX |
+|---|---|---|---|---|---|---|
+| 1 | lane-1 (d818e834 tree) | warm | 1005/1005 (1003 passed) | 35/35 | `SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`, `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps` | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-UnNXJi\CcpClient.Tests\results.trx` |
+| 2 | `C:\Code\sp070-cold` (new worktree, first-ever build; removed after) | **COLD** | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-QwPmVp\CcpClient.Tests\results.trx` |
+| 3 | lane-1 | warm | 1005/1005 | 35/35 | same 2 pinned names | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-lvZN2z\CcpClient.Tests\results.trx` |
+
+Each run: `node .spine/patches/verify.mjs` OK → `dotnet build client/CcpClient.sln -c Debug
+--nologo` 0W/0E → `node client/tests/floor/check-floor.mjs` FLOOR OK. (Cold run: the
+T-14-staged `.pi/npm` tooling was copied into the fresh worktree so `verify.mjs` could run;
+the .NET tree itself was a first-ever build — no `bin/`/`obj/` existed there.)
