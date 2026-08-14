@@ -520,7 +520,7 @@ namespace ConditioningControlPanel
                 Bullets = new[]
                 {
                     "You don't need a library to start. The app can pull images and clips straight from Reddit, through Scrolller.",
-                    "You choose the niches, and you can add any subreddit by name. Anything you never want to see again goes on the blocklist.",
+                    "You choose the niches, and you can add any subreddit by name - only what you picked is ever fetched.",
                     "It streams from your machine to your screen - nothing is saved, nothing is uploaded, and none of it passes through our servers.",
                     "Switch back to your own assets whenever you like. The choice lives at the top of the Assets tab."
                 },
