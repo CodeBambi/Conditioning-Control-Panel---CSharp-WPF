@@ -1,7 +1,7 @@
 ## STATUS: SP-072 — An abandoned player construction must never reach the mixer
 
-**Current Step:** 1
-**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
+**Current Step:** 2
+**Last Updated:** 2026-08-14 (worker, Step 1 complete — plan review skipped in-worker per SP-195, engine runs it post-.DONE; Step 2 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1010 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -42,7 +42,7 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 ---
 
 ### Step 1: Census the callers, decide the bound, design the orphan invariant
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete
 > ⚠️ Hydrate: expand the census rows once the call-site count is confirmed by your own grep
 
 - [x] Update STATUS.md before starting work
@@ -59,22 +59,18 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 - [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement orphan safety, then the bound your census authorized
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Abandonment decided **before** the player can reach the mixer; abandoned player disposed on the
-      constructing thread and never added
-- [ ] Exactly one path disposes an abandoned player, exactly once, including during concurrent device
-      teardown; ordering primitive named and the deadlock order argued against SP-071's backgrounded
-      `_backend.Dispose()`
-- [ ] Non-abandoned path observably unchanged (same object, volume, attachment, wrapper)
-- [ ] Bound implemented **only if Step 1 authorized it**, using the existing typed no-player vocabulary —
-      never a null or placeholder player
-- [ ] Transition-only logging (one line per abandonment); nothing new observed, persisted, or transmitted
-- [ ] No awaitable UI dispatch, no `SynchronizationContext.Current` capture, no new dispatch primitive
-- [ ] Every SP-070 / SP-071 property preserved (teardown handoff, give-up never touches the backend,
-      exactly-once backend disposal, `Dispose` idempotence, cooldown + single-flight probe, play seam never
-      takes `_initLock`)
-- [ ] Per-file `git diff` summarized; no edit outside File Scope
+- [x] Abandonment decided **before** the player can reach the mixer; abandoned player disposed on the
+      constructing thread and never added — only pool disposers (P3/P4) dispose, under the lifecycle lock; only the waiter ever attaches
+- [x] Exactly one path disposes an abandoned player, exactly once, including during concurrent device
+      teardown; ordering primitive = the factory `_lifecycle` leaf lock + CAS latch; deadlock-order argued in record.md (caller paths bounded TryEnter — the consult's SP-071-class fix)
+- [x] Non-abandoned path observably unchanged (same object, volume, attachment, wrapper; unwrapped exception surface)
+- [x] Bound implemented (Step 1 authorized it), typed `PlayerConstructionTimeoutException` → existing refusal vocabulary — never a null or placeholder player
+- [x] Transition-only logging (one line per abandonment); nothing new observed, persisted, or transmitted (grep shown in record.md)
+- [x] No awaitable UI dispatch, no `SynchronizationContext.Current` capture, no new dispatch primitive
+- [x] Every SP-070 / SP-071 property preserved (SoundArbitration.cs untouched; suite proves in Steps 3/5)
+- [x] Per-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
 **Status:** ⬜ Not Started

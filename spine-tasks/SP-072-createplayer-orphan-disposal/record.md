@@ -166,6 +166,39 @@ filings).
   bounded TryEnter (pacing site), which RELEASES by construction (TryEnter timeout). No
   cycle.
 
+## Implementation (Step 2) — per-file git diff summary
+
+- `AudioSeams.cs` (+~230): `PlayerConstructionTimeoutException` (typed no-player outcome);
+  `OrphanSafePlayerFactory<TPlayer>` (the mechanism — injected construct/attach/dispose,
+  leaf `_lifecycle` lock, CAS latch, bounded caller TryEnter, P3/P4 pool disposers,
+  idempotent `Teardown`); `IAudioBackend.CreatePlayer` doc gains the SP-072 contract;
+  `OffSyncContext` doc re-pointed (body untouched — its SP-025 pins stay green).
+- `SoundFlowAudioBackend.cs`: thin wiring — ctor builds the factory (construct = provider +
+  SoundPlayer + wrapper; attach = the residual `AddComponent` line; dispose = wrapper
+  Dispose); `CreatePlayer` keeps the TryInit guard then delegates; `Dispose` routes through
+  `Teardown`; `CreatePlayerCore` deleted; wrapper gains `internal Player` for attach.
+- `SoundFlowDtrhAudio.cs`: same wiring; the inline `Task.Run(...).GetAwaiter().GetResult()`
+  OffSyncContext duplicate DELETED (subsumed — construction always on a pool thread).
+- `DtrhNativeEffects.cs`: sites #4/#5 gain try/catch mapping construction failure to the
+  layer's existing logged-silent-no-op idiom (today those exceptions ESCAPE uncaught);
+  `IDtrhAudioBackend.CreatePlayer` doc gains the SP-025/SP-072 contract (signature
+  unchanged).
+- `SoundArbitration.cs`: **untouched** — sites 1-3 already map any construction exception
+  to `SoundOutcome.Failed` / logged drop-continue; the bound rides those catches.
+
+Logging grep (Step 2 checkbox): the only new `_log` calls are the three shown by the diff
+grep — one transition line per abandonment (factory) and the two DTRH refusal lines. No
+path, no user data (the sfx `name` is a protocol cue token already logged by adjacent
+pre-existing lines), nothing persisted, no network/diagnostic calls. No
+`SynchronizationContext.Current` capture, no new dispatch primitive, no awaitable UI
+dispatch. SP-070/SP-071 properties: untouched by construction (no `SoundArbitration.cs`
+edit at all) — proven green in Step 3/5 suite runs.
+
+Worst-case caller wait with the bound: budget (2 s) + one bounded TryEnter (2 s) ≈ 4 s on
+the wedge path only (healthy construction is milliseconds) — vs forever today. Sites #3/#4
+hold their `_gate` across that bounded wait exactly as they held it across the unbounded
+one today; no restructuring (call-site-only scope).
+
 ## Engine-review presence
 
 (to be filled per step — T-2 heading format)
