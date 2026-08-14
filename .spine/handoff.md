@@ -1,8 +1,31 @@
 # HANDOFF — 2026-08-14 — wave 29 AUTHORED + LAUNCHED (SP-072), nothing landed
 
+> **AMENDED 2026-08-14 MID-BATCH — READ THIS FIRST: WAVE 29'S INTEGRATE IS NOT A FAST-FORWARD.**
+> An **upstream WPF sync landed on base while this batch was running** (owner request): `db3e842f`,
+> v6.7.4 → v6.8.0, 125 commits, 384 files, zero conflicts. Base moved from `02ae3017`, so the free
+> tree-identity proof is gone and the land must use the **SCOPED** form:
+> `git diff <verified> HEAD -- client/ scripts/ ConditioningControlPanel/ docs/`, naming the non-code
+> deltas (wave-25 precedent). Everything else in the land discipline below is unchanged.
+>
+> **What the sync did NOT do, all verified rather than assumed:** it touched **zero** files under
+> `client/`, `spine-tasks/`, `.spine/`; it left `client/tests/floor/floor.json` untouched (no test moved —
+> 1010/1010 + 35/35 before and after), so **it cannot collide with this lane's floor bump**; and
+> **SP-072 has no WPF archaeology dependency** (its only two `ConditioningControlPanel` mentions are
+> exclusions), so the packet was **not** retargeted and no follow-up row is owed for it. The merge was
+> verified in scratch worktree `/c/Code/ccp-sync-v680` and landed with `git diff <verified> HEAD` EMPTY.
+>
+> **Also landed with the sync (orchestrator, docs + data only):** the ledger section in
+> `client/docs/upstream-sync.md`, five board rows (a **P1 defect-class** row — the port's SP-069 reply
+> hygiene misses the transcript shape upstream just fixed; THE DESCENT **BLOCKED** on an owner network/auth
+> decision; JUST DROP; a v6.8.0 backlog row; **T-19** tooling), a new owner decision, the baseline block in
+> `client/docs/upstream-payload-inventory.json`, and `client/memories/port-status.md`.
+> **`upstream-payload-inventory.json` is READ BY TESTS** — it was re-verified green after the edit.
+
 **Status: BATCH LAUNCHED.** Written in the authoring commit, **before** `spine batch start` — that is what
 bought waves 27 and 28 their fast-forwards, and it is the rule: any orchestrator commit to base between
-`batch start` and integrate converts a free tree-identity proof into a manual one.
+`batch start` and integrate converts a free tree-identity proof into a manual one. **This wave paid that
+price deliberately for the sync above; it was not an accident, and the next authoring phase should return
+to the rule.**
 Wave 28 (SP-071) is landed at `d1c69617`, reconciled at `5851179b` + `993d253f`, archived.
 **Base floor at launch: 1010 unit / 35 headless / 2 NAMED skips, build 0W/0E.**
 
@@ -53,6 +76,11 @@ to be named as verified by reading only.
    that "helpfully" does so has changed a different mechanism.
 5. **Append the wave-29 lessons to `client/docs/port-lessons.md` AT LAND — not before** (spine
    `referenceDocs`, `.spine/spine-config.json:97`: editing it mid-batch mutates a live worker's input).
+6b. **Re-verify the MERGED state before landing, not just the lane.** A sync landed on base mid-batch, and
+   the skill's in-flight rule is that each side can be green alone and red together. Build + run both
+   suites on the merged tree in a scratch worktree BEFORE `spine integrate`. (Expected clean here: the
+   merge is confined to `ConditioningControlPanel/**`, `Tests/**` and installer files, and the lane to
+   `client/**` — but the check is the point, not the expectation.)
 6. **Verify the `.DONE` template fix worked** (this wave is its first live test). A healthy lane-commit
    produces `feat(SP-072): batch <id> worker completion` containing `.DONE`. If the batch is recorded
    `failed` on `GitignoredDirtyWorktree` again, the line did not take — recovery below.

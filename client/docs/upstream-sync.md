@@ -16,6 +16,98 @@ filed so nothing is silently left behind.
 
 ---
 
+## Sync 2026-08-14 — v6.7.4 → v6.8.0 (merge `db3e842f`)
+
+| | |
+|---|---|
+| Previous baseline | `0c9947a6` (main tip 2026-08-11, in-tree `<Version>6.7.4</Version>`) |
+| New baseline | `79feea84` (main tip 2026-08-14, in-tree `<Version>6.8.0</Version>`) |
+| Upstream commits | 125 |
+| Merge | `db3e842f` — 384 files, +54 757 / −11 206 |
+| Conflicts | **none** (0 unresolved, 0 markers) |
+| Port health after merge | `client/CcpClient.sln` 0W/0E, **1010/1010 unit + 35/35 headless**, skip set exactly the 2 pinned Linux-gated names — no drift breakage |
+| Port files touched by the merge | **none** (verified: `git diff HEAD~1 HEAD -- client/ spine-tasks/ .spine/` empty) |
+| Release notes | **none in this delta** — v6.7.5…v6.8.0 shipped without notes files; the version claim cites `ConditioningControlPanel.csproj`, per the standing rule |
+| Batch in flight | **yes** — wave 29 (`20260814T090009`, SP-072) was executing. Checkout-free path used (`git fetch origin main:main`, never `git checkout main`). See §E |
+
+**Verified BEFORE landing, not after.** The merge was performed and fully verified in scratch worktree
+`/c/Code/ccp-sync-v680`, then landed on the branch with `git diff <verified> HEAD` **EMPTY** — so the tree
+that moved the base is byte-identical to the tree that was built and tested.
+
+### A. New product surfaces (each got its own board row)
+
+| Upstream surface | Evidence | Port obligation |
+|---|---|---|
+| **THE DESCENT** | `Services/Descent/` (**8 new files**: `DescentService`, `DescentReader`, `DescentModels`, `DescentMigration`, `DescentMigrationService`, `DescentCeremonyCopy`, `VatFaucetHold`, `VatFillCoordinator`) + `Resources/programs/`, `Resources/achievements/` additions; 6 new upstream test files (`DescentPhase1DormancyTests`, `VatFillCoordinatorTests`, `VatFaucetHoldTests`, …) | **Owner-decision shaped, not merely unported.** Its own doc comment: *"the desktop app's reader for the server's `descent` block… rides inside the `user` node of `GET /v2/user/profile`… X-Auth-Token"* — i.e. a NETWORK + AUTH surface. The constitution forbids broadening network/secret boundaries without owner approval, so this cannot be scheduled as ordinary parity work. Row filed as **BLOCKED on an owner decision**, with the ceremony/vat UI half named separately |
+| **JUST DROP** | `Services/JustDrop/` (**4 new files**: `JustDropService`, `JustDropHostService`, `JustDropOrdersService`, `CreditedOrders`) | Its own doc comment says *"the web session shop, **hosted rather than ported**"* — upstream itself treats it as a hosted web surface, so the port obligation is a web-core host plus order crediting, not a native rebuild. Same network/auth question as Descent. Row filed |
+| **For You Feed grew** | `Services/Fyp/` +2 files (`FypAssetManifest`, `FypGhostOverlay`) and a new `Online/` subdirectory | **The existing FYP row already exists and stays `not-ported`** (payload tree `web/fyp/` unchanged at 8 files). Recorded on that row rather than as a new one — the surface did not appear, it deepened |
+
+### B. Behavior changes to code the port has ALREADY ported (parity drift — defect-class)
+
+Measured mechanically, not by reading notes: the 344 WPF files upstream changed were intersected with the
+**84 distinct WPF filenames the port's own code cites as its behavioral evidence** (`File.cs:line` comments
+under `client/src/**`). **12 files hit.** The dangerous ones are fixes to code the port already copied —
+the port now carries a bug upstream retired, and no test on either side says so.
+
+| Change | Evidence | Impact on landed port code |
+|---|---|---|
+| **Companion reply hygiene missed the TRANSCRIPT shape** — the sharpest finding of this sync | `Services/AIService/AiTextHygiene.cs` (**+61/−1**): new `EmbeddedSpokenSigil` regex + `SalvageSigilTranscript`, and `UnwrapSpokenSigil` gained an `activeSpeaker` parameter. Upstream comment dates it *"0813, first seen after a mod switch"* | **Direct hit on SP-069 (wave 26), on a LIVE user-visible path.** The port ported the start-anchored wrapper strip only, so a multi-speaker reply (several `«X said aloud: "…"»` blocks) has its first opener stripped and **the rest reaches the chat bubble verbatim** — exactly the mangled shape upstream fixed. Worse, blocks attributed to a *different* companion (stale bark echoes from a previous mod) are shown as if the current one said them. **Defect-class row, P1** |
+| **`AppSettings` +441/−5** | `Models/AppSettings.cs` | The port's settings/companion state cite it in three files. Most of the +441 is new-feature surface (Descent/JustDrop/Programs), but any *changed* existing key is silent divergence in landed persistence. Itemized in the backlog row |
+| **`VideoService` +364/−11** | `Services/Video/VideoService.cs` | Cited by `DtrhHostWindow` and `DtrhNativeEffects`. The unified-video row is still BLOCKED, so this is not a landed-code defect — it is a **moved baseline for a row not yet started**. Recorded, not filed as a defect |
+| **`DtrhAssetManifest` +270/−2** | `Services/Chaos/DtrhAssetManifest.cs` | Cited by `DtrhUserMedia` (landed, SP-055 active-pool work). Second consecutive sync in which this file moved — the previous sync's `EnumerateActive()` row came from here. Needs a re-read against the landed active-pool code |
+| **`MainWindow.Presets` +213/−63** | `MainWindow/MainWindow.Presets.cs` | Cited by `QuickToggleDispatch` (**landed, and the row's WPF ground truth**), `FeaturePopupManager`, `FeaturePopupWindow`. A 63-line deletion in the port's reference-identity dispatch evidence is exactly the kind of change that silently invalidates a landed parity claim |
+| **`IntakeHostService` +106/−1** | `Services/Quiz/IntakeHostService.cs` | Cited by three landed Intake files (`IntakeDraft`, `IntakeDraftSink`, `DtrhUserMedia`). Third consecutive sync touching the Intake host contract |
+| **`ChaosWebViewHost` +43/−6** | `Chaos/ChaosWebViewHost.cs` | The class both port web-core hosts are modeled on. Moved in the previous sync too (+19 then) |
+| **`CompanionBrain` +27/−2**, **`AiService` +8/−2**, **`KeywordTriggerService` +11/−1** | as cited | All three are cited by landed AI pipeline / awareness code. Small, but on the same live path as the transcript defect |
+| **`MainWindow.Settings` +16/−0**, **`MainWindow.Lab` +0/−2** | as cited | Smallest of the twelve; itemized only |
+
+### C. Smaller deltas (tracked in the backlog row, itemized here)
+
+- **384 files, 91 added / 292 modified / 1 renamed**, spread over `Services` (67), `Views` (53),
+  `MainWindow` (45), `Resources` (37), `Windows` (34), `Dialogs` (33), `Features` (31),
+  `Localization` (11), `Controls` (10), `Models` (9).
+- **37 new upstream test files** under `Tests/ConditioningControlPanel.Tests/` — they are the cheapest
+  available map of what upstream considers behavior worth pinning this release (`VatFillCoordinatorTests`,
+  `ProgramHeatTests`, `SpiralGlyphProgressTests`, `NavRailFlyoutTests`, `ModAware*Tests` ×5,
+  `TierBadgeRenderTests`, `TeaseCardRenderTests`, `WebNudgeTests`, `VocabTokensTests`, …).
+- New non-web resource trees: `Resources/programs/` (4), `Resources/achievements/` (4),
+  `Resources/features/` (3), `Resources/sounds/` (2). **None are under `Resources/web/`**, so the payload
+  inventory guard is correctly silent about them — they are native WPF assets, not served payloads.
+- Installer/modding touched: `installer.iss`, `build-installer.bat`, `MODDING.md`.
+- `Localization/` ×11 files — the port still has **no localization system at all** (A-014 honest absence),
+  so every localization delta is a standing non-obligation, recorded so it is never re-derived as work.
+
+### D. Gaps this sync exposed in the port's own guards
+
+- **The payload-inventory guard (SP-056) worked exactly as designed and proved a real negative.** All 7
+  `Resources/web/` trees are present and **byte-count identical** to the previous baseline
+  (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9). The green is honest, not blind.
+- **But the guard covers only `Resources/web/`.** Four new resource trees appeared outside it
+  (`programs`, `achievements`, `features`, `sounds`) with zero test signal. That is correct for *payload*
+  purposes and a blind spot for *asset* purposes; folded into the backlog row rather than widened blindly.
+- **Nothing in this repository detects that upstream changed a file the port cites as its evidence.** The
+  12-file intersection in §B was computed by hand this sync. Every future sync will need it, and a stale
+  `File.cs:line` citation is how a landed parity claim rots silently. **Filed as a tooling row.**
+
+### E. In-flight batch — what this sync does and does not cost wave 29
+
+- The lane worktree was branched from `02ae3017` at batch start, so the running worker is **insulated**;
+  no in-flight packet was retargeted (standing rule).
+- **SP-072 has no WPF archaeology dependency** — verified, not assumed: its only two mentions of
+  `ConditioningControlPanel` are *exclusions* (File Scope "NOT in scope" and `fileScopeMustNotChange`).
+  So the merge does not move its baseline and **no follow-up row is owed** for it.
+- **No file collision is possible at integrate:** the merge touches only `ConditioningControlPanel/**`,
+  `Tests/**` and installer files; the lane touches only `client/**` and its own packet directory. The one
+  file that could have collided is `client/tests/floor/floor.json`, and this sync does not touch it — no
+  test moved (1010 before, 1010 after), because the payload guard is data-driven (11 fixed test methods
+  reading `upstream-payload-inventory.json`) and needed no new entries.
+- **The real cost, paid deliberately:** wave 29's integrate is no longer a fast-forward. The land must use
+  the SCOPED tree-identity form (`git diff <verified> HEAD -- client/ scripts/ ConditioningControlPanel/ docs/`)
+  and name the non-code deltas, per the wave-25 precedent. `.spine/handoff.md` was rewritten at this sync
+  so the fresh land session does not inherit a false fast-forward premise.
+
+---
+
 ## Sync 2026-08-11 — v6.6.3 → v6.7.4 (merge `42286638`)
 
 | | |

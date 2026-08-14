@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "upstreamVersion": "v6.7.4",
-    "merge": "42286638",
-    "recorded": "2026-08-11",
-    "note": "Top-level payload trees under ConditioningControlPanel/Resources/web/ known at the v6.6.3 -> v6.7.4 sync. Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite. fileCountAtBaseline is record data, not an assertion (in-tree count drift is pinned by the per-tree manifest tests)."
+    "upstreamVersion": "v6.8.0",
+    "merge": "db3e842f",
+    "recorded": "2026-08-14",
+    "note": "Top-level payload trees under ConditioningControlPanel/Resources/web/ re-verified at the v6.7.4 -> v6.8.0 sync: all 7 trees present and byte-count IDENTICAL to the previous baseline (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9), so no disposition changed. The v6.8.0 delta's new resource trees (Resources/programs, achievements, features, sounds) are NOT under Resources/web/ and are deliberately out of this guard's scope - they are native WPF assets, not served payloads. Previous baseline: v6.7.4 / merge 42286638 (2026-08-11). Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite. fileCountAtBaseline is record data, not an assertion (in-tree count drift is pinned by the per-tree manifest tests)."
   },
   "trees": [
     {
