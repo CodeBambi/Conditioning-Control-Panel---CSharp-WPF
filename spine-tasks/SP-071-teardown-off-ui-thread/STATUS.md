@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** Not started
-**Last Updated:** 2026-08-14 (orchestrator, authoring)
+**Current Step:** 1
+**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -38,20 +38,20 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 ---
 
 ### Step 1: Prove the block, census the class, then design the handoff
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
-- [ ] Update STATUS.md before starting work
-- [ ] Captured pre-fix RED under `evidence/` (fake parked in `TryInit`, `Dispose` does not return)
-- [ ] Caller chain re-derived with own cites (thread, close handler, process survives)
-- [ ] **Census of every blocking wait in `client/src/**`** — file:line, reaching thread(s), bounded?, what
+- [x] Update STATUS.md before starting work
+- [x] Captured pre-fix RED under `evidence/` (fake parked in `TryInit`, `Dispose` does not return)
+- [x] Caller chain re-derived with own cites (thread, close handler, process survives)
+- [x] **Census of every blocking wait in `client/src/**`** — file:line, reaching thread(s), bounded?, what
       it waits on, consequence if it never returns; the two `CreatePlayer` sites named as a separate packet
-- [ ] Invariant written first, then the design that satisfies it (single disposer, never concurrent with a
+- [x] Invariant written first, then the design that satisfies it (single disposer, never concurrent with a
       native call, bounded UI wait, give-up never touches the backend, completion still disposes once,
       idempotent)
-- [ ] Why a lock timeout is the WRONG fix, stated plainly (stop condition if the design contains it)
-- [ ] Budget chosen with in-repo justification and its home named; no wall clock
-- [ ] Reopened-host answer recorded
-- [ ] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
+- [x] Why a lock timeout is the WRONG fix, stated plainly (stop condition if the design contains it)
+- [x] Budget chosen with in-repo justification and its home named; no wall clock
+- [x] Reopened-host answer recorded
+- [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement the handoff in one file
 **Status:** ⬜ Not Started
