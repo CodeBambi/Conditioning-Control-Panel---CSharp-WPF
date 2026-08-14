@@ -887,6 +887,280 @@ public sealed class SoundArbitrationTests
         Assert.Equal(0, arb.ActiveSfxVoices);
     }
 
+    // ---------- SP-072: an abandoned player construction never reaches the mixer ----------
+
+    // The budget whose ELAPSING is the subject (TestWait population 2 — same pinned-literal
+    // discipline as SP-071's GiveUpBudget). Every rendezvous below is a deterministic signal
+    // (gates + the recorded event stream), never timing.
+    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);
+
+    private sealed class OrphanPlayer(string path, float volume)
+    {
+        public string Path { get; } = path;
+        public float Volume { get; } = volume;
+        public int PlayCount;
+        public int DisposeCount;
+        public void Play() => Interlocked.Increment(ref PlayCount);
+        public void Dispose() => Interlocked.Increment(ref DisposeCount);
+    }
+
+    /// <summary>
+    /// Drives <see cref="OrphanSafePlayerFactory{TPlayer}"/> with recording delegates — the
+    /// mechanism the real backends cannot exercise headless. The fake's own record is the
+    /// assertion surface (never the absence of an exception). ConstructGate parked = the
+    /// wedged AssetDataProvider stand-in, released by the test, never by timing.
+    /// </summary>
+    private sealed class OrphanHarness
+    {
+        public readonly List<string> Log = [];
+        public readonly ConcurrentQueue<string> Events = new();
+        public volatile ManualResetEventSlim? ConstructGate;
+        public volatile ManualResetEventSlim? ConstructStarted;
+        public volatile OrphanPlayer? LastPlayer;
+        public int AttachCount;
+        public int DisposeCount;
+        public readonly OrphanSafePlayerFactory<OrphanPlayer> Factory;
+
+        public OrphanHarness(TimeSpan budget, Action<string>? logHook = null)
+        {
+            Factory = new OrphanSafePlayerFactory<OrphanPlayer>(
+                construct: (path, volume) =>
+                {
+                    ConstructStarted?.Set();
+                    ConstructGate?.Wait(); // the wedge — released by the test, never by timing
+                    Events.Enqueue("construct-returned");
+                    var p = new OrphanPlayer(path, volume);
+                    LastPlayer = p;
+                    return p;
+                },
+                attach: p => { Interlocked.Increment(ref AttachCount); Events.Enqueue("attached"); },
+                dispose: p => { p.Dispose(); Interlocked.Increment(ref DisposeCount); Events.Enqueue("orphan-disposed"); },
+                log: line => { lock (Log) Log.Add(line); logHook?.Invoke(line); },
+                tag: "test",
+                budget: budget);
+        }
+
+        public int AbandonmentLines
+        {
+            get { lock (Log) return Log.Count(l => l.Contains("construction abandoned")); }
+        }
+
+        public string State() =>
+            $"attach={AttachCount} dispose={DisposeCount} abandonmentLines={AbandonmentLines} events=[{string.Join(",", Events)}]";
+    }
+
+    private static (Thread Thread, ManualResetEventSlim Done, Func<Exception?> Thrown) StartCreate(
+        OrphanSafePlayerFactory<OrphanPlayer> factory)
+    {
+        Exception? thrown = null;
+        var done = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            try { factory.Create("orphan.mp3", 0.5f); }
+            catch (Exception ex) { thrown = ex; }
+            finally { done.Set(); }
+        })
+        { IsBackground = true, Name = "test-create" };
+        return (thread, done, () => thrown);
+    }
+
+    [Fact]
+    public void Construction_Abandoned_NeverAttached_NeverPlayed_DisposedOnce()
+    {
+        // The orphan fact: a construction that completes AFTER its caller stopped waiting is
+        // never attached (never reaches the mixer), never plays, and is disposed exactly once.
+        var h = new OrphanHarness(ConstructionBudget) { ConstructGate = new ManualResetEventSlim(false) };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+
+        TestWait.UntilSync(() => done.IsSet, "the caller's wait expired — typed abandonment", () => h.State());
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown()); // the typed no-player outcome
+        Assert.Equal(0, h.AttachCount); // abandoned BEFORE it could reach the mixer
+        Assert.Equal(1, h.AbandonmentLines); // ONE transition line, never per-call
+
+        h.ConstructGate!.Set(); // the wedge clears LATE — the moment has passed
+        TestWait.UntilSync(() => h.DisposeCount == 1, "the late completion disposes the orphan", () => h.State());
+        thread.Join();
+
+        var player = h.LastPlayer!;
+        Assert.Equal(0, player.PlayCount); // never plays
+        // Exactly once: the completion continuation is the ONLY armed disposer in this
+        // scenario, and the observed dispose is its last act — the count can never change.
+        Assert.Equal(1, player.DisposeCount);
+        Assert.Equal(1, h.DisposeCount); // never zero (leak), never two
+        Assert.Equal(0, h.AttachCount); // still never attached after the late completion
+    }
+
+    [Fact]
+    public void Construction_CompletionRacesAbandonment_DisposedExactlyOnce()
+    {
+        // The exactly-once fact, at the race the latch exists for: BOTH orphan disposers are
+        // armed — P4 (the completion continuation) AND P3 (the waiter's completed-check
+        // disposer). Forced deterministically: the abandonment log runs ON the waiter thread;
+        // the hook opens the wedge and holds the waiter until P4 has claimed the latch and
+        // disposed — after which the task is PROVABLY complete, so the waiter's check
+        // provably spawns P3. The latch must admit exactly one disposal.
+        var constructGate = new ManualResetEventSlim(false);
+        OrphanHarness? h = null;
+        h = new OrphanHarness(ConstructionBudget, logHook: _ =>
+        {
+            constructGate.Set();
+            TestWait.UntilSync(() => h!.DisposeCount == 1, "P4 claimed the latch and disposed the orphan", () => h!.State());
+        })
+        { ConstructGate = constructGate };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+
+        TestWait.UntilSync(() => done.IsSet, "the caller's wait expired — typed abandonment", () => h.State());
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown());
+        thread.Join();
+
+        // Never zero: the UntilSync inside the hook already failed loudly if P4 never fired.
+        // Never two: P3 was provably spawned (the waiter proceeded only after the task
+        // completed); the latch is the only thing that can keep the count at 1 — and it is
+        // timing-independent (CAS), so this green never depends on scheduling.
+        Assert.Equal(1, h.DisposeCount);
+        Assert.Equal(1, h.LastPlayer!.DisposeCount);
+        Assert.Equal(0, h.AttachCount);
+        Assert.Equal(0, h.LastPlayer.PlayCount);
+        Assert.Equal(1, h.AbandonmentLines);
+    }
+
+    [Fact]
+    public void Construction_OrphanDisposal_OrderedAgainstDeviceTeardown()
+    {
+        // The ordering fact: abandoned-player disposal NEVER overlaps device teardown
+        // (SP-071 made that teardown concurrent). The teardown delegate parks INSIDE the
+        // lifecycle lock (the wedged native device teardown); the late construction
+        // completes during it; disposal must land strictly after teardown releases the lock.
+        var h = new OrphanHarness(ConstructionBudget) { ConstructGate = new ManualResetEventSlim(false) };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+        TestWait.UntilSync(() => done.IsSet, "the caller abandoned the construction", () => h.State());
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown());
+        thread.Join();
+
+        var teardownStarted = new ManualResetEventSlim();
+        var teardownMayFinish = new ManualResetEventSlim();
+        var disposeCountAtTeardownEnd = -1;
+        var teardown = new Thread(() => h.Factory.Teardown(() =>
+        {
+            h.Events.Enqueue("teardown-start");
+            teardownStarted.Set();
+            teardownMayFinish.Wait(); // the wedged native teardown — holds the lifecycle lock
+            disposeCountAtTeardownEnd = h.DisposeCount; // the ordering observation
+            h.Events.Enqueue("teardown-end");
+        }))
+        { IsBackground = true, Name = "test-teardown" };
+        teardown.Start();
+        TestWait.UntilSync(() => teardownStarted.IsSet, "teardown holds the lifecycle lock", () => h.State());
+
+        h.ConstructGate!.Set(); // the late completion lands DURING the wedged teardown
+        TestWait.UntilSync(() => h.Events.Contains("construct-returned"), "the construction completed during teardown", () => h.State());
+        // The orphan disposer claimed the latch and is blocked on the lifecycle lock — it
+        // CANNOT have disposed (deterministic: disposal happens only under that lock).
+        Assert.Equal(0, h.DisposeCount);
+
+        teardownMayFinish.Set();
+        TestWait.UntilSync(() => h.DisposeCount == 1, "the orphan is disposed after teardown released the lock", () => h.State());
+        teardown.Join();
+
+        // THE ordering assertion — absence of the event is a FAILURE (the UntilSync above),
+        // never a vacuous pass; and the observation from inside the teardown proves
+        // non-overlap directly.
+        Assert.Equal(0, disposeCountAtTeardownEnd);
+        Assert.Contains(h.Events, e => e == "teardown-start");
+        Assert.Contains(h.Events, e => e == "construct-returned");
+        Assert.Contains(h.Events, e => e == "teardown-end");
+        Assert.Contains(h.Events, e => e == "orphan-disposed");
+        Assert.Equal(0, h.AttachCount);
+        Assert.Equal(1, h.AbandonmentLines);
+    }
+
+    [Fact]
+    public void Construction_Ordinary_AttachedOnce_NeverDisposed_NoAbandonmentLine()
+    {
+        // Negative control: the non-abandoned path is observably unchanged — same object
+        // returned, same path/volume passthrough, attached exactly once, never disposed, no
+        // abandonment line. Budget elapsing is NOT the subject (the shared 60s injection).
+        var h = new OrphanHarness(TestWait.InjectedBudget);
+        var player = h.Factory.Create("ok.mp3", 0.7f);
+
+        Assert.Same(h.LastPlayer, player);
+        Assert.Equal("ok.mp3", player.Path);
+        Assert.Equal(0.7f, player.Volume);
+        Assert.Equal(1, h.AttachCount);
+        Assert.Equal(0, h.DisposeCount);
+        Assert.Equal(0, h.AbandonmentLines);
+        Assert.Equal(["construct-returned", "attached"], h.Events.ToArray());
+    }
+
+    [Fact]
+    public void Construction_TornDownDuringWait_DisposedOnce_TypedRefusal_NeverAttached()
+    {
+        // Teardown lands while a construction is in flight: the completed player is disposed
+        // exactly once (the waiter path, under the lock), never attached, and the caller gets
+        // the typed refusal. A Create AFTER teardown is refused before constructing.
+        var h = new OrphanHarness(TestWait.InjectedBudget)
+        {
+            ConstructGate = new ManualResetEventSlim(false),
+            ConstructStarted = new ManualResetEventSlim(false),
+        };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+
+        // The construction is PROVABLY parked inside the native call before teardown lands —
+        // the in-flight window, never a pre-construction refusal.
+        TestWait.UntilSync(() => h.ConstructStarted!.IsSet, "the construction is in flight", () => h.State());
+        h.Factory.Teardown(() => h.Events.Enqueue("teardown-end"));
+        h.ConstructGate!.Set();
+
+        TestWait.UntilSync(() => done.IsSet, "the in-flight construction completes into a torn-down backend", () => h.State());
+        thread.Join();
+        Assert.IsType<InvalidOperationException>(thrown());
+        Assert.Equal(1, h.DisposeCount); // the within-budget waiter-dispose path
+        Assert.Equal(0, h.AttachCount);
+        Assert.Equal(0, h.LastPlayer!.PlayCount);
+
+        var refusal = Assert.Throws<InvalidOperationException>(() => h.Factory.Create("late.mp3", 1f));
+        Assert.Contains("torn down", refusal.Message);
+        Assert.Equal(1, h.DisposeCount); // the refused construction never ran
+    }
+
+    [Fact]
+    public void PlaySfx_ConstructionTimeout_TypedFailed_NeverInPool()
+    {
+        // The bound's caller vocabulary (SP-072): the typed construction expiry rides the
+        // EXISTING catch → SoundOutcome.Failed — no new refusal semantic, no silent player.
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        backend.ThrowOnCreatePlayer = new PlayerConstructionTimeoutException("test: wedged construction");
+
+        var outcome = arb.PlaySfx("s.mp3", 1f);
+
+        Assert.IsType<SoundOutcome.Failed>(outcome);
+        Assert.Empty(backend.Players);
+        Assert.Equal(0, arb.ActiveSfxVoices);
+        Assert.Contains(_log, l => l.Contains("sfx player construction failed"));
+    }
+
+    [Fact]
+    public void PlayVoice_ConstructionTimeout_TypedFailed_ChannelStaysIdle()
+    {
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        backend.ThrowOnCreatePlayer = new PlayerConstructionTimeoutException("test: wedged construction");
+        var completed = new List<long>();
+        arb.VoiceCompleted += completed.Add;
+
+        var outcome = arb.PlayVoice("v.mp3", 1f);
+
+        Assert.IsType<SoundOutcome.Failed>(outcome);
+        Assert.Empty(backend.Players);
+        Assert.Empty(completed); // no phantom completion on a channel that never started
+        Assert.Contains(_log, l => l.Contains("Voice player construction failed"));
+    }
+
     // ---------- fakes ----------
 
     private sealed class NeverPumpingSyncContext : SynchronizationContext
@@ -905,6 +1179,8 @@ public sealed class SoundArbitrationTests
         public string? TryInitError { get; set; }
         public bool ThrowOnTryInit { get; set; }
         public Action<FakePlayer>? PlayerHook { get; set; }
+        // SP-072: inject a typed construction failure (the bound's expiry) at the seam.
+        public Exception? ThrowOnCreatePlayer { get; set; }
 
         // SP-071 cross-thread teardown instrumentation. Both gates null = today's synchronous
         // behavior, so the landed facts are byte-identical. TryInitRelease parked = the wedged
@@ -951,6 +1227,11 @@ public sealed class SoundArbitrationTests
 
         public IAudioPlayer CreatePlayer(string path, float volume)
         {
+            if (ThrowOnCreatePlayer is { } constructionFailure)
+            {
+                throw constructionFailure;
+            }
+
             var p = new FakePlayer(path, volume);
             PlayerHook?.Invoke(p);
             Players.Add(p);
