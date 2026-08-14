@@ -22,3 +22,7 @@ guard so EVERY refused play with an expired cooldown schedules a probe (the unco
 and passed even with the guard reverted — the probe callback's not-suppressed no-op absorbed
 the duplicate schedules (SP-067-class falsely-verified pin, caught and fixed by keeping the
 endpoint down during the burst so duplicate schedules produce duplicate backend init calls).
+
+**Re-confirmed at the final tree** (after the pre-completion-consult `_initLock` hardening,
+commit 233d2c61): the same revert was re-applied on the final code and produced the identical
+RED set; all other pins green; then restored and re-verified green.

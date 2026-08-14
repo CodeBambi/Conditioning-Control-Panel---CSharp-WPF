@@ -18,3 +18,7 @@
 `Recovery_Teardown_NoProbeAfterDispose_Ever`,
 `Recovery_HealthySession_NoExtraDeviceCalls_NoNewLogLines`, and all 21 landed arbitration
 facts (voice/whisper/SFX/queue/duck/panic/device/off-sync-context suites untouched).
+
+**Re-confirmed at the final tree** (after the pre-completion-consult `_initLock` hardening,
+commit 233d2c61): the same revert was re-applied on the final code and produced the identical
+RED set; all other pins green; then restored and re-verified green.

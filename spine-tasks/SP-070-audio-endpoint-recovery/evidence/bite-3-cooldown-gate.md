@@ -24,3 +24,7 @@ user-story pin that traverses the gate by construction):
 `Recovery_SingleFlight_ConcurrentAttempts_OneInitCall`, `Recovery_Panic_...`,
 `Recovery_Teardown_...`, `Recovery_HealthySession_...`, `Recovery_ProbeThrows_...`, and all
 21 landed arbitration facts.
+
+**Re-confirmed at the final tree** (after the pre-completion-consult `_initLock` hardening,
+commit 233d2c61): the same revert was re-applied on the final code and produced the identical
+RED set; all other pins green; then restored and re-verified green.
