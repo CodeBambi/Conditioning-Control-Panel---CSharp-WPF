@@ -20,7 +20,15 @@ Paths are repository-relative; this repo lives at a different absolute path on e
 6. **No TODO markers, no placeholders, no partial code.** Blocked means say so in the report.
 7. **Tests go in `client/tests/CcpClient.Tests/`** (pure logic, no Avalonia runtime) **or `client/tests/CcpClient.HeadlessTests/`** (visual tree, AXAML, bindings). xunit.v3. Keep them in the right project: the headless project carries an assembly-wide Avalonia application and must not absorb pure logic tests.
 8. **No new wall-clock waits in tests.** The only approved wait is the shared helper at `client/tests/CcpClient.Tests/TestWait.cs`. `Thread.Sleep`, bare `Task.Delay`, and `DateTime`/`Environment.TickCount64` polls fail the timing guard.
-9. **The floor pin is law.** `client/tests/floor/floor.json` pins exact totals. If your tests move the count, bump `total` in the SAME commit as the test change and state the reason in the commit message. Never widen the pin, disable a test, or special-case anything to make a step pass. Never add a name to `allowedSkips` unless its precondition is a property of the machine or OS.
+9. **The floor pin is law, and it is NOT yours to edit.** `client/tests/floor/floor.json` pins exact totals and is a shared chokepoint: every lane that adds a test would otherwise bump `total` on the same line, so concurrent lanes collide every wave. **Never open it.** Instead declare your count change in your own packet folder, at `spine-tasks/SP-NNN-slug/floor-delta.json`:
+
+   ```json
+   { "packet": "SP-NNN-slug", "unit": 5, "headless": 0, "reason": "one line naming the facts you added" }
+   ```
+
+   `unit` is `CcpClient.Tests`, `headless` is `CcpClient.HeadlessTests`; both are integers and may be negative. **Declare `0`/`0` if you add no tests** — omitting the file is not the same as declaring zero. The orchestrator sums every packet's delta at land and applies one bump. `FloorWrapperGuardTests` enforces this and will red your run if the packet's `floorDelta` row or its `floor.json` disclaimer is missing.
+
+   **Your floor run will therefore report a total that does NOT match the pin.** That is expected and is not a failure: confirm the observed total equals `pin + your declared delta`, and state both numbers in your report. Never widen the pin, disable a test, or special-case anything to make a step pass. Never add a name to `allowedSkips` unless its precondition is a property of the machine or OS.
 10. **Never export `CCP_DATA_ROOT` process-wide.** It makes the SP-057 pin skip and the floor goes blind. Set it per headed-evidence run only.
 11. **Do not commit the board.** `client/docs/task-board.md` is a shared chokepoint reconciled by the orchestrator at land time.
 
