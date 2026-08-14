@@ -52,6 +52,14 @@ logs/
 # This negation must stay below the bare `settings.json` rule above to win.
 !.claude/settings.json
 
+# Claude Code port orchestration run state (.port/): WAVE-LOCK, LOOP-LOCK, STOP,
+# handoff.md and phase/audit logs. This is per-machine execution state, never shared.
+# It MUST be ignored: the phase prompt writes .port/WAVE-LOCK while a wave runs, and an
+# unignored .port/ leaves `git status` dirty, which makes the fail-closed blind audit
+# report a false FAIL on a perfectly good tree — the exact class that halted a run under
+# the old engine. The durable queue is client/docs/task-board.md, not this directory.
+.port/
+
 # Pi port orchestration
 # Share the exact project package declaration, but not installed npm contents or
 # crash-safe task run state. Pi restores the pinned package after project trust.
@@ -173,7 +181,14 @@ nul
 # Avatar-emote production tooling (private generation pipeline — Kling prompts,
 # seeds, scratch GIFs). The produced Resources\*_emotes\ assets ARE committed; the
 # scripts that make them are not. See tools/avatar-emotes/README.md (local only).
-tools/
+#
+# ROOT-ANCHORED 2026-08-14. This was a bare `tools/`, which git matches at ANY depth,
+# so it silently swallowed `client/tools/` as well. The 18 files already tracked there
+# survived only because they predate the rule — every NEW file under client/tools/ was
+# being ignored, which is how the multi-lane gate and wave tooling nearly shipped as
+# untracked and would have vanished from every lane worktree. The rule only ever meant
+# the root-level private pipeline its own comment names.
+/tools/
 
 # ...except the Bureau pack-indexer (builds packs-index.json / bureau-catalogue.json
 # for the labeling game — no secrets, meant to be re-runnable by anyone).

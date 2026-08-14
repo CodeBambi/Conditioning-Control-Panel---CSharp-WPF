@@ -1,3 +1,24 @@
+# Port Status (as of 2026-08-14, nineteenth export — laptop)
+
+## ENGINE: pi-spine RETIRED, Claude Code lanes LIVE and multi-lane-ENABLED (2026-08-14)
+
+Read this first. It changes how every later session runs work.
+
+- **The migration is committed** (`42b2992c`). Lanes are `port-slice-executor` subagents in git worktrees; review is `port-plan-reviewer` / `port-code-reviewer` / `port-final-reviewer`; advice is `port-advisor` + `port-advisor-critic`. `.pi/`, `.spine/` and the 74 old packets are frozen history. Packets stay at `spine-tasks/SP-NNN-slug/PROMPT.md` because `FloorWrapperGuardTests` binds that path and fails closed.
+- **NAMED LIMIT, do not forget it:** every advisor and reviewer seat is now an Anthropic model. Cross-vendor disagreement is gone, so seat agreement is weak evidence. Weight the mechanical checks — floor wrapper, 0W/0E build, scoped diff, tree identity at land — above any verdict.
+- **The engine was smoke-tested before use, not assumed.** A lane worktree at `.claude/worktrees/agent-<id>` carries the tracked `.claude/` (26 files), builds 0W/0E, and runs the floor green. A reviewer negative control — a GREEN-gated diff whose only defect was `Assert.NotNull(host)` on a value a constructor returns unconditionally — came back **REVISE** with the exact reverting mutation named, and additionally found the fact was already pinned elsewhere. The review layer is not theater.
+- **THE FLOOR PIN IS NO LONGER LANE-WRITABLE.** Lanes declare `spine-tasks/SP-NNN-slug/floor-delta.json` = `{packet, unit, headless, reason}`; the land sums with `node client/tests/floor/sum-deltas.mjs --apply --packets ...`. Enforced by `FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin`, proven to bite on both halves. **This is what unblocked multi-lane waves** — it was the one chokepoint every test-adding lane collided on.
+- **Pre-launch gate:** `node client/tools/wave/validate-wave.mjs SP-0NN-a SP-0NN-b` — glob-aware File Scope disjointness, contract rows, ID reuse. Run it before every wave; a wave it rejects must be fixed in the packets, never in the script.
+- **Build concurrency != model concurrency:** gate builds/tests through `node client/tools/gate/with-slot.mjs --slots 3 -- <cmd>`. Verified: exit codes pass through unchanged, 6 waiters over 2 slots never exceeded 2. Windows-verified only; Linux is an API audit.
+- **`core.longpaths` is ON and must stay on.** Before it, the worst-case lane path was ~3 characters under the 260 limit (a 168-char WPF audio asset is the deepest tracked file), and `git worktree add` provably failed at a longer path.
+- **`.gitignore` had a latent bug:** a bare `tools/` matched `client/tools/` at any depth, so ALL new tooling there was silently untracked and would have vanished from every lane worktree. Root-anchored to `/tools/`. If tooling ever "disappears", check this first.
+- **Machine, measured:** 8 physical / 16 logical cores, 31.3 GB RAM, 514 GB free, 4.61 GB per built client tree, ~10.3 GB per lane worktree. Disk is not the constraint; CPU and RAM are.
+- **STILL UNPROVEN at multi-lane:** no two lanes have ever run at once. Lane write/commit/merge-back is unproven at ANY lane count until wave 30 lands. Go 1 → 2 → 3-4, not straight to 8; the two-lane wave is where the floor-delta mechanism is first actually exercised.
+
+## A P1 ROW WAS FILED ON A FALSE PREMISE — check port-side symbols before believing a defect row
+
+Board row `:118` claimed the port's reply hygiene "carries a bug upstream fixed" in ALREADY-LANDED code. Both halves were false: the port has **no** spoken-sigil unwrap at all (SP-068 deferred the whole half by name, reason recorded at `AiPrivacyFilters.cs:28`), and it has **no sigil emitter** either (WPF induces the shape via `CompanionTurn.FormatBarkEcho`; zero occurrences of `«`, `»`, `BarkEcho` or `said aloud` in `client/src/**`). It is a missing feature at lower likelihood, not a landed defect. Row facts corrected; **priority deliberately left at P1 pending an owner call.** Second mis-filing in two days, both from reading upstream diffs without grepping the port — a row citing upstream evidence must also cite the port-side symbol it claims is defective.
+
 # Port Status (as of 2026-08-14, eighteenth export — laptop)
 
 ## Wave 29 LANDED (2026-08-14, integrate `c04ecb67` — a real MERGE, not a ff; floor 1010/35/2 → **1017 unit / 35 headless / 2 NAMED skips, 0W/0E**)

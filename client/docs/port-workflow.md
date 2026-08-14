@@ -45,9 +45,46 @@ A generated spec or advisor verdict cannot override a higher source. If it confl
 
 **Worktree base.** `.claude/settings.json` sets `worktree.baseRef: "head"`. Left unset, Claude Code branches lane worktrees from the repository default branch (`main`), which carries neither `client/` nor `spine-tasks/`. That failure is silent: the lane builds, and it builds the wrong tree. Verify this setting at reconciliation.
 
-**Chokepoints.** `client/tests/floor/floor.json`, `client/docs/task-board.md`, `client/docs/port-digest.md`, `client/docs/port-lessons.md`, and `spine-tasks/CONTEXT.md` are orchestrator-owned. At eight lanes, `floor.json` in particular collides every wave, because every lane that adds tests must bump `total`. Resolving that at merge time by setting `total` to the observed count would recreate exactly the vacuous-green class the pin exists to prevent. Lanes must instead write their delta into their own packet folder, and the land sums the deltas in one commit naming every contributing packet. A mismatch between the summed pin and the observed count is a hard halt, not a pin adjustment.
+**Chokepoints.** `client/tests/floor/floor.json`, `client/docs/task-board.md`, `client/docs/port-digest.md`, `client/docs/port-lessons.md`, and `spine-tasks/CONTEXT.md` are orchestrator-owned. At eight lanes, `floor.json` in particular collides every wave, because every lane that adds tests must bump `total`. Resolving that at merge time by setting `total` to the observed count would recreate exactly the vacuous-green class the pin exists to prevent.
 
-**Machine limits, measured.** Eight lanes is a model-concurrency target, not a build-concurrency target. This machine has 8 cores and 31GB RAM, and a built `client/` tree is roughly 4.6GB. Builds and test runs need their own smaller semaphore, and `MSBUILDDISABLENODEREUSE=1` should be set so eight worktrees do not accumulate msbuild nodes holding file locks.
+**The floor-delta mechanism (built 2026-08-14, and mechanically enforced).** A lane never touches `floor.json`. It declares its count change in its own packet folder:
+
+```json
+{ "packet": "SP-NNN-slug", "unit": 5, "headless": 0, "reason": "one line naming the facts added" }
+```
+
+at `spine-tasks/SP-NNN-slug/floor-delta.json`. `unit` targets `CcpClient.Tests`, `headless` targets `CcpClient.HeadlessTests`; both are integers and may be negative. A packet that adds no tests declares `0`/`0` — omitting the file is not the same as declaring zero, and the two are distinguished deliberately, because only one of them is a decision.
+
+The land sums them and applies ONE bump:
+```bash
+node client/tests/floor/sum-deltas.mjs --check --packets SP-073-slug,SP-074-slug
+```
+```bash
+node client/tests/floor/sum-deltas.mjs --apply --packets SP-073-slug,SP-074-slug
+```
+`--apply` splices only the two totals and `lastMovedBy`; every other byte of `floor.json` survives, because `allowedSkips`, `skipSemantics`, `admissionRule` and `bumpRule` are prose that packets cite verbatim and a reserialize would reflow them. Run WITHOUT `--packets` only to inspect: it sums every delta file on disk, including already-landed ones, and says so loudly.
+
+**This is enforced, not merely documented.** `FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin` fails the suite when a packet at or above SP-073 lacks a `| floorDelta |` row naming its own folder, or fails to list `client/tests/floor/floor.json` in `fileScopeMustNotChange`. Grandfathering is by explicit ID rule, never a suppression list — the same shape as the SP-065 rule above it.
+
+**A summed pin that disagrees with the observed count is a hard halt, not a pin adjustment.** `sum-deltas.mjs` sums DECLARATIONS and never observes a test count; `check-floor.mjs` observes and never sums. Keeping those two apart is the point: if they disagree, a lane declared something it did not do.
+
+**Validate the wave before any lane launches.**
+```bash
+node client/tools/wave/validate-wave.mjs SP-073-slug SP-074-slug
+```
+Checks packet parse, the `testCommand` row and its floor-wrapper routing, the `floorDelta` row naming its own folder, the two `fileScopeMustNotChange` disclaimers, **glob-aware File Scope disjointness across the wave**, duplicate arguments, and task-ID reuse against the on-disk high-water mark. It reports every violation rather than stopping at the first, and it over-reports rather than under-reports on ambiguous globs by design: an over-report costs a re-read, an under-report costs two lanes.
+
+**Machine limits, measured 2026-08-14.** Eight lanes is a model-concurrency target, not a build-concurrency target. This machine has 8 physical / 16 logical cores, 31.3 GB RAM, 514 GB free; a built `client/` tree is 4.61 GB and a full lane worktree is ~10.3 GB, so eight lanes is ~82 GB — **disk is not the constraint, CPU and RAM are.**
+
+Gate every build and test run through the slot semaphore so model concurrency and build concurrency stay different numbers:
+```bash
+node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+```
+It passes the child's exit code through unchanged — a wrapper that swallowed a red gate would be the worst thing in this repo — holds one lock file per slot in the OS temp dir, and reaps locks whose owning pid is provably gone on this host, with a hard age ceiling as the backstop for a recycled pid. Default slots come from `CCP_GATE_SLOTS`, else 3. Set `MSBUILDDISABLENODEREUSE=1` so parallel worktrees do not accumulate msbuild nodes holding file locks.
+
+**Named limit:** the semaphore is verified on Windows only. There is no WSL distro on this machine, so its Linux behaviour is an API audit, not a test. Two Linux caveats are recorded in the file: a shared `/tmp` with the sticky bit can refuse another user's lock unlink (it logs and keeps waiting rather than crashing), and `O_EXCL` is unreliable on old NFS.
+
+**Lane worktrees.** Claude Code creates them at `.claude/worktrees/agent-<id>` — inside the repo, ignored by the `.claude/*` rule, auto-removed when unchanged. `core.longpaths` is now enabled and must stay enabled: the deepest tracked file is a 168-character WPF audio asset, which put the worst-case lane path within ~3 characters of the 260-character limit before the fix.
 
 ## Advisory gates
 

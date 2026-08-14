@@ -611,6 +611,18 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
     },
     {
+      "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin",
+      "path": "CcpClient.Tests/FloorWrapperGuardTests.cs",
+      "line": 161,
+      "method": "FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "same shape and same disposition as the SP-065 sibling above: the fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0, and a missing spine-tasks/ FAILS rather than skips. Recorded during the 2026-08-14 multi-lane enablement: the shared EnumeratePackets helper deliberately does NOT own that existence check — this detector is lexical, so a never-skip checkpoint moved into a helper stops being visible here, and both guards keep the two-line check in their own bodies for exactly that reason"
+    },
+    {
       "key": "CcpClient.Tests/HarnessEntryPointGateTests.cs::HarnessEntryPointGateTests.HarnessEntries_AreSingledOut_TableDrivenOverRegistry",
       "path": "CcpClient.Tests/HarnessEntryPointGateTests.cs",
       "line": 20,
