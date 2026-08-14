@@ -31,10 +31,28 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
     };
 
     private readonly Action<string> _log;
+    private readonly OrphanSafePlayerFactory<SoundFlowPlayer> _players;
     private MiniAudioEngine? _engine;
     private AudioPlaybackDevice? _device;
 
-    public SoundFlowAudioBackend(Action<string> log) => _log = log;
+    public SoundFlowAudioBackend(Action<string> log)
+    {
+        _log = log;
+        // SP-072: bounded orphan-safe construction (see AudioSeams.OrphanSafePlayerFactory).
+        // The residual line verified by READING only (no headless fact can reach it):
+        // attach's `_device!.MasterMixer.AddComponent(p.Player)`.
+        _players = new OrphanSafePlayerFactory<SoundFlowPlayer>(
+            construct: (path, volume) =>
+            {
+                var provider = new AssetDataProvider(_engine!, path);
+                var player = new SoundPlayer(_engine!, Format, provider) { Volume = volume };
+                return new SoundFlowPlayer(player, _device!);
+            },
+            attach: p => _device!.MasterMixer.AddComponent(p.Player),
+            dispose: p => p.Dispose(),
+            log: log,
+            tag: "sound");
+    }
 
     /// <inheritdoc/>
     public IReadOnlyList<string> EnumerateDevices()
@@ -99,31 +117,24 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
             throw new InvalidOperationException("SoundFlowAudioBackend: TryInit must succeed before players are created.");
         }
 
-        // SoundFlow 1.4.1's AssetDataProvider ctor is SYNC-OVER-ASYNC (GetResult on an
-        // async metadata read). On a thread carrying a SynchronizationContext (the
-        // Avalonia UI thread) its continuation can never run → dispatcher DEADLOCK
-        // (SP-025 run-A wedge; dump: Task.InternalWait under
-        // AvaloniaSynchronizationContext.Wait inside AssetDataProvider..ctor). The spike
-        // never saw it (console host = no sync context). Build players off-context.
-        return OffSyncContext.Run(() => CreatePlayerCore(path, volume));
-    }
-
-    private IAudioPlayer CreatePlayerCore(string path, float volume)
-    {
-        var provider = new AssetDataProvider(_engine!, path);
-        var player = new SoundPlayer(_engine!, Format, provider) { Volume = volume };
-        _device!.MasterMixer.AddComponent(player);
-        return new SoundFlowPlayer(player, _device);
+        // SP-025 off-sync-context + SP-072 bound/orphan invariant live in the factory —
+        // construction always on a pool thread, never a SynchronizationContext.
+        return _players.Create(path, volume);
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        try { _device?.Stop(); } catch { /* best-effort */ }
-        try { _device?.Dispose(); } catch { /* best-effort */ }
-        _device = null;
-        try { _engine?.Dispose(); } catch { /* best-effort */ }
-        _engine = null;
+        // SP-072: teardown runs under the factory lifecycle lock — serialized against
+        // orphan disposal, never concurrent with it.
+        _players.Teardown(() =>
+        {
+            try { _device?.Stop(); } catch { /* best-effort */ }
+            try { _device?.Dispose(); } catch { /* best-effort */ }
+            _device = null;
+            try { _engine?.Dispose(); } catch { /* best-effort */ }
+            _engine = null;
+        });
     }
 
     private sealed class SoundFlowPlayer : IAudioPlayer
@@ -137,6 +148,9 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
             _device = device;
             _player.PlaybackEnded += (_, _) => PlaybackEnded?.Invoke(this, EventArgs.Empty);
         }
+
+        /// <summary>The wrapped player — the factory's attach delegate adds THIS to the mixer.</summary>
+        internal SoundPlayer Player => _player;
 
         public event EventHandler? PlaybackEnded;
 
