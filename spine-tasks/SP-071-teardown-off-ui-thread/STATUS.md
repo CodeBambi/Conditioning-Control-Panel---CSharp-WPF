@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** 1
-**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
+**Current Step:** 2
+**Last Updated:** 2026-08-14 (worker, Step 2 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -38,7 +38,7 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 ---
 
 ### Step 1: Prove the block, census the class, then design the handoff
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195 — recorded in record.md)
 
 - [x] Update STATUS.md before starting work
 - [x] Captured pre-fix RED under `evidence/` (fake parked in `TryInit`, `Dispose` does not return)
@@ -54,18 +54,18 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 - [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement the handoff in one file
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
-- [ ] UI-safe work stays on the caller; backend teardown handed to a background thread
-- [ ] Bounded UI-side wait with a typed, once-logged give-up that never touches `_backend`
-- [ ] Background teardown takes `_initLock`, waits as long as needed, disposes exactly once
-- [ ] `Dispose` idempotent (no double dispose, no second teardown, prompt return)
-- [ ] `PanicReset` placement decided deliberately and justified
-- [ ] Every SP-070 property preserved (no post-teardown probe, play seam never takes `_initLock`, one-way
+- [x] UI-safe work stays on the caller; backend teardown handed to a background thread
+- [x] Bounded UI-side wait with a typed, once-logged give-up that never touches `_backend`
+- [x] Background teardown takes `_initLock`, waits as long as needed, disposes exactly once
+- [x] `Dispose` idempotent (no double dispose, no second teardown, prompt return)
+- [x] `PanicReset` placement decided deliberately and justified
+- [x] Every SP-070 property preserved (no post-teardown probe, play seam never takes `_initLock`, one-way
       lock order)
-- [ ] Transition-only logging; nothing new observed, persisted, or transmitted
-- [ ] No new dispatch primitive, no awaitable UI dispatch, no `SynchronizationContext.Current` capture
-- [ ] Product-file `git diff` summarized; no edit outside File Scope
+- [x] Transition-only logging; nothing new observed, persisted, or transmitted
+- [x] No new dispatch primitive, no awaitable UI dispatch, no `SynchronizationContext.Current` capture
+- [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
 **Status:** ⬜ Not Started
