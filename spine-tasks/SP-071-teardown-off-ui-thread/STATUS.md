@@ -1,7 +1,7 @@
 ## STATUS: SP-071 — Host close must not wait on a wedged native audio probe
 
-**Current Step:** 2
-**Last Updated:** 2026-08-14 (worker, Step 2 in progress)
+**Current Step:** 3
+**Last Updated:** 2026-08-14 (worker, Step 3 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1005 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -54,7 +54,7 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 - [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement the handoff in one file
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped, SP-195)
 
 - [x] UI-safe work stays on the caller; backend teardown handed to a background thread
 - [x] Bounded UI-side wait with a typed, once-logged give-up that never touches `_backend`
@@ -68,7 +68,7 @@ native `AssetDataProvider` construction. They change a **synchronous seam contra
 - [x] Product-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
 - [ ] Bounded-return fact (the pin that captures today's behavior as RED)
 - [ ] **Ordering fact:** backend not disposed while the native call is in flight (assert the order, not
