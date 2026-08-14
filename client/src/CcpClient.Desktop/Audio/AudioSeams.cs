@@ -298,6 +298,12 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         // completion after it is seen by P4 (Abandoned visible via the volatile + task
         // completion barriers). If both fire, the latch decides.
         slot.Abandoned = true;
+        // LOAD-BEARING ORDER (pre-completion consult, SP-072): the log line must precede the
+        // completed-check below. This is the only window in which BOTH orphan disposers can
+        // be armed for one slot (P4 fires at completion, P3 at the check) —
+        // Construction_CompletionRacesAbandonment_DisposedExactlyOnce rendezvous on this
+        // line to force that race. Moving the log after the check makes that pin pass
+        // without ever exercising the latch (the SP-067/SP-070 vacuous class).
         _log($"{_tag}: player construction abandoned after {(int)_budget.TotalMilliseconds}ms — orphan disposed, never attached");
         if (task.IsCompletedSuccessfully)
         {

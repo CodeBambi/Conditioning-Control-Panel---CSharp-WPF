@@ -1000,6 +1000,10 @@ public sealed class SoundArbitrationTests
         // the hook opens the wedge and holds the waiter until P4 has claimed the latch and
         // disposed — after which the task is PROVABLY complete, so the waiter's check
         // provably spawns P3. The latch must admit exactly one disposal.
+        // ARMING DEPENDENCY: this rendezvous relies on the product logging the abandonment
+        // line BEFORE its completed-check (marked LOAD-BEARING ORDER in
+        // OrphanSafePlayerFactory.Create). If that order ever moves, this pin degenerates to
+        // a single-disposer scenario and passes WITHOUT exercising the latch.
         var constructGate = new ManualResetEventSlim(false);
         OrphanHarness? h = null;
         h = new OrphanHarness(ConstructionBudget, logHook: _ =>

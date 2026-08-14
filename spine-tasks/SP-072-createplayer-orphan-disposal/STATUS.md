@@ -1,7 +1,7 @@
 ## STATUS: SP-072 — An abandoned player construction must never reach the mixer
 
-**Current Step:** 4
-**Last Updated:** 2026-08-14 (worker, Step 3 complete — floor 1017/1017 + 35/35 green, bite matrix 3/3 isolated, 20/20 cross-thread repetitions; plan review skipped in-worker per SP-195; Step 4 in progress)
+**Current Step:** 5
+**Last Updated:** 2026-08-14 (worker, Step 4 complete — record.md full, pre-completion solo consult verdict adopted (load-bearing-order comments), 4 consecutive contract greens incl. 1 cold; Step 5 final checks clean)
 **Blockers:** none
 
 **Floor at authoring:** 1010 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -86,28 +86,22 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 - [x] `floor.json` `total` bumped 1010 → 1017 in the same commit as the facts (reason in message)
 
 ### Step 4: Record + pre-completion consult
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete
 
-- [ ] `record.md` complete (pre-fix observation, census table, decision-rule branch + reason, invariant +
-      design, testability/placement argument with the residual read-only line, deadlock-order argument,
-      bite matrix, floor bump, run table, consults + actual models, engine-review presence, intended board
-      filings)
-- [ ] Honesty cell (fake vs a real wedged `AssetDataProvider`; the real `AddComponent` line never exercised;
-      any caller left unbounded; execution vs reading; **Linux unproven**; whether SP-071's give-up residue
-      row got cheaper or is untouched)
-- [ ] Named flake recorded by name + TRX if it fired, never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`; intended board filings named (set no row state)
+- [x] `record.md` complete (pre-fix observation, census table, branch + reason, invariant + design, testability/placement with residual read-only line, deadlock-order argument, bite matrix, floor bump, run table, consults + model-surfacing honesty, engine-review presence, intended board filings)
+- [x] Honesty cell (fake vs real wedge; real `AddComponent` never exercised; no caller left unbounded; execution vs reading; Linux unproven; SP-071 residue row untouched)
+- [x] Named flake did not fire in any run (recorded by name)
+- [x] Pre-completion solo consult; verdict adopted (load-bearing-order comments both ends) and recorded
+- [x] STATUS.md accurate before `.DONE`; intended board filings named (no row state set)
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green through the wrapper (verify.mjs exit 0, build 0W/0E, new exact unit count /
-      35 headless, skip set exactly the 2 pinned Windows names)
-- [ ] 3 consecutive full-suite greens, >= 1 a fresh-checkout first-ever build; per-run table with TRX paths
-- [ ] Cross-thread facts run >= 20x filtered, zero flakes, count stated
-- [ ] Bite matrix complete (each revert named with the pins it reddened and the pins that stayed green)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+- [x] Contract testCommand green through the wrapper (verify.mjs exit 0, build 0W/0E, 1017 unit / 35 headless, skip set exactly the 2 pinned Windows names)
+- [x] 4 consecutive full-suite greens (3 required), run 2 a fresh-checkout first-ever build (`C:\Code\sp072-cold`, removed after); per-run table with results dirs in record.md
+- [x] Cross-thread facts run 20× filtered, zero flakes (20/20)
+- [x] Bite matrix complete (each revert named with pins reddened / stayed green — record.md table + evidence/)
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact (probe built in %TEMP%; cold worktree removed)
 - [ ] `.DONE` created as the last action and **NOT committed** (the engine's lane-commit stages it)

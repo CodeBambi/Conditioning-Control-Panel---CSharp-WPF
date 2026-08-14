@@ -166,6 +166,20 @@ filings).
   bounded TryEnter (pacing site), which RELEASES by construction (TryEnter timeout). No
   cycle.
 
+### Pre-completion (Step 4) — solo
+
+Asked narrowly with a 200-word cap; the tool again did not surface the answering-model id
+(mode `solo`, session model `kimi-coding/k3`; complete on-topic verdict, no truncation).
+
+**Verdict: no functional hole in the mechanism; one real fragility + unrun gates.**
+(1) FRAGILITY — ADOPTED: the exactly-once pin arms P3 only because the product logs the
+abandonment line BEFORE the completed-check; an innocuous reorder would degenerate the pin
+to a single-disposer scenario that passes without exercising the latch (the SP-067/SP-070
+vacuous class). Fixed with load-bearing-order comments on BOTH ends (product `Create` + the
+pin), no behavior change; final-tree green re-run after (run 4). (2) Unrun gates listed —
+all now executed and clean (Step 5). (3) `.DONE` uncommitted — followed. "Everything else —
+the ordering argument, bite isolation, 20/20, floor 1010→1017, honesty cell — is sound."
+
 ## Implementation (Step 2) — per-file git diff summary
 
 - `AudioSeams.cs` (+~230): `PlayerConstructionTimeoutException` (typed no-player outcome);
@@ -201,20 +215,112 @@ one today; no restructuring (call-site-only scope).
 
 ## Engine-review presence
 
-(to be filled per step — T-2 heading format)
+- Step 1 plan review: **skipped in-worker** (nested-spawn block, SP-195) — artifact `.reviews/1-20260814T094516.md`; the engine runs plan/code review post-.DONE.
+- Step 2 plan review: **skipped in-worker** (same) — `.reviews/2-20260814T095451.md`.
+- Step 3 plan review: **skipped in-worker** (same) — `.reviews/3-20260814T101111.md`.
+- Steps 4/5: plan reviews attempted and skipped in-worker identically (recorded before .DONE).
 
 ## Bite matrix
 
-(to be filled in Step 3)
+Filtered evidence runs (`dotnet test --filter`, the SP-070 bite-run technique — the wrapper
+owns the floor; stated deviation, same as SP-071). Each revert applied to `AudioSeams.cs`
+alone, product rebuilt, capture under `evidence/`, then `git checkout` restore (restore
+verified: 42/42 SoundArbitrationTests green).
+
+| Revert | Line(s) reverted | Expected RED | Actual | Others green |
+|---|---|---|---|---|
+| 1 — abandonment decision | `slot.Abandoned = true;` | orphan pin | orphan pin RED at its UntilSync (CONDITION-NEVER-TRUE, polls on schedule, `threadpool-pending=0` — fixture reaches the mechanism); exactly-once + ordering pins RED as the EXPECTED CASCADE (no mark → no disposer can ever fire → every pin awaiting a disposal fails its UntilSync) | negative control, torn-down, both caller facts + all 36 landed audio facts green (39/42) — `evidence/bite-1-abandonment-check.txt` |
+| 2 — single-dispose latch | the CAS guard in `DisposeOrphan` | ONLY exactly-once pin | ONLY `Construction_CompletionRacesAbandonment_DisposedExactlyOnce` RED, at the count assertion (Expected 1, Actual 2 — both armed disposers disposed), 3/3 runs | orphan, ordering, negative control, torn-down green every run — `evidence/bite-2-single-dispose-latch.txt` |
+| 3 — ordering guard | `lock (_lifecycle)` around the orphan dispose | ONLY ordering pin | ONLY `Construction_OrphanDisposal_OrderedAgainstDeviceTeardown` RED, at its ordering assertion (Expected 0, Actual 1 — the orphan was disposed DURING the parked teardown), 3/3 runs | orphan, exactly-once (latch untouched, still arbitrates), negative control, torn-down green every run — `evidence/bite-3-ordering-guard.txt` |
+
+Bite-1 cascade note (honest): the PROMPT's "only" qualifier is on the latch and ordering
+reverts — both achieved. Killing the abandonment mark kills disposal entirely, so every
+disposal-awaiting pin reds; the cascade IS the proof each fixture reaches the mechanism.
+
+Fixture-reach proof (SP-070 class): bite 1's reds are CONDITION-NEVER-TRUE with actor state
+showing the construct returned and no disposal ever occurring; bites 2/3 red at value
+assertions (2 vs 1, 1 vs 0) that can only differ if the fixture drove the mechanism.
 
 ## Run table
 
-(to be filled in Step 5)
+Contract testCommand = `node .spine/patches/verify.mjs && dotnet build client/CcpClient.sln -c Debug --nologo && node client/tests/floor/check-floor.mjs`.
+All counts: unit 1017/1017 (1015 passed + 2 skipped), headless 35/35. Skipped names in
+every run: exactly the 2 Windows-observed pinned names
+(`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
+`ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`).
+
+| Run | Worktree | Cold/warm | Unit | Headless | Results dir |
+|---|---|---|---|---|---|
+| 1 | lane-1 (final tree) | warm | 1017/1017 | 35/35 | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-csm9mR` |
+| 2 | `C:\Code\sp072-cold` (NEW worktree, first-ever build; T-14 `.pi/npm` copied in for verify.mjs and removed after; worktree removed after) | **COLD** | 1017/1017 | 35/35 | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-vR8wlu` |
+| 3 | lane-1 | warm | 1017/1017 | 35/35 | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-Knu57i` |
+| 4 | lane-1 (final tree, post-consult comment additions) | warm | 1017/1017 | 35/35 | `C:\Users\Micha\AppData\Local\Temp\ccp-floor-chcDlf` |
+
+An earlier full-suite green on the final tree (post-bump, pre-bite-work) also passed
+1017/1017 + 35/35 — listed for honesty, not counted toward the 3. Run 4 is the definitive
+final-tree green (the tree that .DONE ships; runs 1-3 predate only the two comment
+additions the pre-completion consult required). 4 consecutive greens total, 1 cold.
+
+**Cross-thread repetition:** 20 consecutive filtered runs
+(`dotnet test --filter "FullyQualifiedName~SoundArbitrationTests.Construction_"`, 5 matched
+facts — the 3 cross-thread pins + negative control + torn-down refusal), **20/20 Passed,
+0 flakes**. Stated deviation (SP-071 precedent): the 20× repetition — and nothing else —
+used `dotnet test --filter` outside the wrapper; the contract testCommand ran ONLY through
+`verify.mjs → build → check-floor.mjs`.
+
+**Named flake:** `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery`
+did NOT fire in any run of this packet (3 contract greens + 20 filtered + the bite runs);
+nothing was retried away.
 
 ## Honesty cell
 
-(to be filled in Step 4)
+1. **What is proven** is the abandonment/disposal/ordering logic against a RECORDING FAKE
+   driving `OrphanSafePlayerFactory<TPlayer>` — NOT that a real wedged `AssetDataProvider`
+   construction behaves as the fake's parked gate does, and NOT that the real
+   `_device!.MasterMixer.AddComponent(p.Player)` line is ever exercised: that line (one per
+   backend, in the `attach` delegates) plus the real native `SoundPlayer`/provider disposal
+   behavior are **verified by reading only**. No real audio device, endpoint death, or
+   wedged native construction can be induced on this machine — that manual gate is named,
+   not simulated.
+2. **Every caller is bounded** — no caller left unbounded, no remainder row needed. Sites
+   1-3 (SoundArbitration) ride existing catches → `SoundOutcome.Failed`; sites 4-5 (DTRH
+   effects) gained try/catch → the layer's existing logged-silent-no-op idiom. The DTRH
+   call-site catches are verified by BUILD + READING only (their test file is not in this
+   packet's File Scope).
+3. **Execution vs reading:** executed — the 7 new facts + the whole suite; reading only —
+   the two real `attach` lines, real native dispose behavior, the DTRH catches, and the
+   SoundFlowDtrhAudio inline-duplicate removal (its behavior is factory-bound; the deletion
+   itself is compile-verified).
+4. **Linux unproven** — zero WSL distros on this machine; no Linux run claimed. The
+   mechanism is platform-neutral managed code (locks, CAS, tasks), but that is an argument,
+   not evidence.
+5. **SP-071's give-up residue row: UNTOUCHED** (not cheaper, not closed). This packet's own
+   residue note is a NEW intended filing (below): each wedged-then-abandoned construction
+   parks its construct pool thread until the native call returns (forever on a truly wedged
+   endpoint) — sibling mechanism, sibling row class.
+6. Worst-case caller wait is now budget + one bounded TryEnter (~4 s) on the wedge path —
+   vs forever today; sites #3/#4 hold their `_gate` across it exactly as they did across
+   the unbounded wait (no restructuring — call-site-only scope).
 
-## Intended board filings
+## Intended board filings (orchestrator reconciles at land; no row state set by the worker)
 
-(to be filled in Step 4)
+1. **This row (SP-072)** — evidence: this record + evidence/; orphan invariant pinned
+   (orphan / exactly-once / ordering / negative control / torn-down / caller-vocabulary ×2),
+   floor 1010 → 1017, bite matrix 3/3 isolated, 20/20 cross-thread repetitions, 3 contract
+   greens (1 cold).
+2. **NEW ROW — wedged-construction pool-thread residue** (pre-approach consult's named
+   second-order): every abandoned construction whose native ctor never returns parks its
+   construct task's pool thread permanently; repeated cues on a dead endpoint accumulate
+   them. Sibling of SP-071's open give-up-residue row (which counts backgrounded teardowns;
+   this counts backgrounded CONSTRUCTIONS). Do not fold into the SP-071 row — different
+   mechanism.
+3. **SP-071 give-up residue row stays OPEN** — untouched by this packet (honesty 5).
+4. **Owed contract wording** (`client/docs/async-lifecycle-fault-contract.md` is read-only
+   this packet): a §5.6-sibling clause for abandoned construction, proposed text —
+   "An abandoned player construction (caller wait expired) never reaches the mixer, never
+   plays, and is disposed exactly once; its disposal is ordered against device teardown by
+   the backend's lifecycle lock; caller-side waits on that lock are always bounded."
+5. **Census corrections for the board's record:** the packet predicted "one of five call
+   sites constructs inside a lock" — the census found TWO (`SoundArbitration.OnPacingFire`
+   :877 under `_gate`; `DtrhNativeEffects.PlaySfx` :112 under `_gate`); "two have no
+   try/catch" confirmed exactly (:112, :439 — both now contain typed refusals).
