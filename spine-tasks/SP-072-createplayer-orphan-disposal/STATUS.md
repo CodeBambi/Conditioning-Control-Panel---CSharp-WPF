@@ -1,7 +1,7 @@
 ## STATUS: SP-072 — An abandoned player construction must never reach the mixer
 
 **Current Step:** 1
-**Last Updated:** 2026-08-14 (authoring)
+**Last Updated:** 2026-08-14 (worker, Step 1 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1010 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -42,21 +42,21 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 ---
 
 ### Step 1: Census the callers, decide the bound, design the orphan invariant
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 > ⚠️ Hydrate: expand the census rows once the call-site count is confirmed by your own grep
 
-- [ ] Update STATUS.md before starting work
-- [ ] Pre-fix observation captured under `evidence/` (a late construction reaches the mixer and nothing
+- [x] Update STATUS.md before starting work
+- [x] Pre-fix observation captured under `evidence/` (a late construction reaches the mixer and nothing
       disposes it); if unobservable against the real backends, say so and capture the seam-level equivalent
       with the difference named
-- [ ] **Census of every caller of both `CreatePlayer` seams** — file:line, reaching thread(s), what is held
+- [x] **Census of every caller of both `CreatePlayer` seams** — file:line, reaching thread(s), what is held
       while waiting, existing typed no-player path?, cost of a wedged construction beyond the calling thread
-- [ ] Decision-rule branch chosen and recorded (bound lands here / bound partial + remainder named as a row)
-- [ ] Orphan invariant written before code (never reaches `MasterMixer`, never plays, disposed exactly once,
+- [x] Decision-rule branch chosen and recorded (bound lands here / bound partial + remainder named as a row)
+- [x] Orphan invariant written before code (never reaches `MasterMixer`, never plays, disposed exactly once,
       disposal ordered against device teardown, ordinary path unchanged)
-- [ ] Placement decided on **testability** grounds and justified; residual read-only line named
-- [ ] SP-025 off-sync-context rule preserved and re-argued if `OffSyncContext` or its inline duplicate moves
-- [ ] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
+- [x] Placement decided on **testability** grounds and justified; residual read-only line named
+- [x] SP-025 off-sync-context rule preserved and re-argued if `OffSyncContext` or its inline duplicate moves
+- [x] Pre-approach solo consult (`mode: "solo"`); verdict + actual answering model in `record.md`
 
 ### Step 2: Implement orphan safety, then the bound your census authorized
 **Status:** ⬜ Not Started
