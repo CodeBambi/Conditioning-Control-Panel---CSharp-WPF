@@ -200,6 +200,8 @@ The `VERIFY` block is task-specific and tiered:
 
 The mechanical gate is `node client/tests/floor/check-floor.mjs`. A bare `dotnet test` is not it, and `FloorWrapperGuardTests` enforces that for packets and for the auditor prompt.
 
+**Always build immediately before the gate, in the same tree.** The wrapper runs `dotnet test --no-build`, so it tests whatever DLLs are sitting in `bin/` — which need not correspond to the source in the working tree. `git reset --hard`, `git checkout`, and switching branches all leave gitignored build output untouched. Observed at the wave-30 close (2026-08-14): after the port branch was reset back over a lane's commits, the gate reported **1022 against a source tree containing 1018** — a clean pass on tests that no longer existed in the checkout. It fails the other way just as easily: a stale DLL can red a tree that is actually green, or green a tree that is actually red. The count is only evidence about the source if the build that produced it is.
+
 Do not inherit the first attempt's long all-tabs smoke test or generic layer sweep. They consumed substantial time and missed visual defects.
 
 If a headed check cannot be automated, the task remains `WIP` or `BLOCKED` with the exact manual gate named. Do not mark it `DONE` because a command exited successfully.
