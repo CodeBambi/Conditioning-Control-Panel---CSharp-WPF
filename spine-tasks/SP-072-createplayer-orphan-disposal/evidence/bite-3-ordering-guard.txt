@@ -1,0 +1,18 @@
+BITE 3 — reverted lines: the ordering guard in OrphanSafePlayerFactory.DisposeOrphan
+(`lock (_lifecycle) { SafeDispose(player); }` — lock removed, dispose runs unlocked).
+Run: dotnet test --filter "FullyQualifiedName~SoundArbitrationTests.Construction_" (filtered evidence run —
+the SP-070 bite-run technique; the wrapper owns the floor), product rebuilt with ONLY the lock removed.
+Verdict: ONLY the ordering pin RED — at its ordering assertion (Expected 0, Actual 1: the orphan was
+disposed DURING the parked device teardown — the pre-fix concurrency class, observed from inside the
+teardown). RED 3/3 consecutive filtered runs before this capture. STAYED GREEN in every run:
+Construction_Abandoned (orphan pin), Construction_CompletionRacesAbandonment (exactly-once pin — the
+latch is untouched and still arbitrates), Construction_Ordinary, Construction_TornDownDuringWait
+(4/5 passed each run).
+
+[xUnit.net 00:00:02.55]     CcpClient.Tests.SoundArbitrationTests.Construction_OrphanDisposal_OrderedAgainstDeviceTeardown [FAIL]
+[xUnit.net 00:00:02.55]       Assert.Equal() Failure: Values differ
+[xUnit.net 00:00:02.55]       Expected: 0
+[xUnit.net 00:00:02.55]       Actual:   1
+   Assert.Equal() Failure: Values differ
+Expected: 0
+Actual:   1

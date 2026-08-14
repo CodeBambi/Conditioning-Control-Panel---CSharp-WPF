@@ -1,7 +1,7 @@
 ## STATUS: SP-072 — An abandoned player construction must never reach the mixer
 
-**Current Step:** 2
-**Last Updated:** 2026-08-14 (worker, Step 1 complete — plan review skipped in-worker per SP-195, engine runs it post-.DONE; Step 2 in progress)
+**Current Step:** 4
+**Last Updated:** 2026-08-14 (worker, Step 3 complete — floor 1017/1017 + 35/35 green, bite matrix 3/3 isolated, 20/20 cross-thread repetitions; plan review skipped in-worker per SP-195; Step 4 in progress)
 **Blockers:** none
 
 **Floor at authoring:** 1010 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -73,23 +73,20 @@ backgrounded teardowns; this packet is player lifecycle. Do not close it here.
 - [x] Per-file `git diff` summarized; no edit outside File Scope
 
 ### Step 3: Bind the behavior, one source at a time
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Orphan fact: abandoned construction never added to the mixer, never plays (asserted from the fake's
-      own record, not from the absence of an exception)
-- [ ] Exactly-once fact: the abandoned player is disposed once — never zero, never twice
-- [ ] Ordering fact: abandoned-player disposal does not overlap device teardown; **a missing event fails**,
-      it does not pass vacuously (no new `IndexOf`-sentinel shape)
-- [ ] Negative control: ordinary construction unchanged, no abandonment line
-- [ ] Bound's caller behavior proven, if the bound landed
-- [ ] Every landed SoundArbitration + DTRH-effects fact green and unchanged in meaning (per-file diff proof)
-- [ ] Bite matrix: abandonment check / single-dispose latch / ordering guard reverted **separately**, each
-      RED captured under `evidence/`, others confirmed green, each fixture shown to reach its mechanism
-- [ ] No timing-dependent determinism; no waits outside `TestWait`
-- [ ] `floor.json` `total` bumped in the same commit as the facts
+- [x] Orphan fact: `Construction_Abandoned_NeverAttached_NeverPlayed_DisposedOnce` — asserted from the fake's own event record
+- [x] Exactly-once fact: `Construction_CompletionRacesAbandonment_DisposedExactlyOnce` — both disposers provably armed (log-hook rendezvous), CAS latch admits one
+- [x] Ordering fact: `Construction_OrphanDisposal_OrderedAgainstDeviceTeardown` — non-overlap observed from INSIDE the parked teardown + UntilSync-fails-on-absence (no IndexOf-sentinel shape)
+- [x] Negative control: `Construction_Ordinary_AttachedOnce_NeverDisposed_NoAbandonmentLine`
+- [x] Bound's caller behavior proven: `PlaySfx_ConstructionTimeout_TypedFailed_NeverInPool`, `PlayVoice_ConstructionTimeout_TypedFailed_ChannelStaysIdle` (+ torn-down refusal fact)
+- [x] Every landed SoundArbitration + DTRH-effects fact green and unchanged in meaning (test file diff = pure addition + one fake hook)
+- [x] Bite matrix: 3 reverts captured separately under evidence/ (bite-1 abandonment mark → orphan pin RED at UntilSync + documented cascade; bite-2 CAS latch → ONLY exactly-once pin RED, 3/3; bite-3 ordering lock → ONLY ordering pin RED at its ordering assertion, 3/3); restore verified 42/42 green
+- [x] No timing-dependent determinism; every rendezvous is a gate/signal; no waits outside TestWait
+- [x] `floor.json` `total` bumped 1010 → 1017 in the same commit as the facts (reason in message)
 
 ### Step 4: Record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
 - [ ] `record.md` complete (pre-fix observation, census table, decision-rule branch + reason, invariant +
       design, testability/placement argument with the residual read-only line, deadlock-order argument,
