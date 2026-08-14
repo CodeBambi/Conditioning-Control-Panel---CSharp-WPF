@@ -1,7 +1,7 @@
 ## STATUS: SP-070 — Audio comes back when the endpoint comes back
 
-**Current Step:** 5
-**Last Updated:** 2026-08-14 (worker, Step 5 final checks)
+**Current Step:** done
+**Last Updated:** 2026-08-14 (worker, all steps complete)
 **Blockers:** none
 
 **Floor at authoring:** 996 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -88,11 +88,11 @@ device, no new seam.**
 - [x] STATUS.md accurate before `.DONE`
 
 ### Step 5: Testing & Verification
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
 - [x] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, exact counts, 2 pinned skips)
 - [x] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build; per-run table with TRX paths
 - [x] Bite matrix complete (3 reverts, 3 REDs)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` shows only File Scope paths
-- [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
+- [x] `git diff --check` clean
+- [x] `git status --short` shows only File Scope paths
+- [x] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
