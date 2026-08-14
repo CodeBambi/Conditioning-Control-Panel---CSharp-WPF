@@ -341,7 +341,13 @@ flight)` / `arbitration torn down`.
   probe (concurrent native inits; `_preferredDeviceName` last-writer-wins).
 - Fix for both: `_initLock` (see Step 2 section). Re-verified: arbitration suite 30/30
   green, bite matrix re-confirmed at the final tree (identical RED sets).
-- **Re-asked verdict: (see below — appended after the re-ask)**
+- **Re-asked verdict: SHIP.** "The two races are closed correctly: `_initLock` → `_gate`
+  one-way ordering with the play seam never taking `_initLock` preserves the non-blocking
+  discovery path, and the `Dispose`-blocks-on-wedged-probe trade-off is the right call and
+  is recorded. Bite matrix re-confirmed at this exact tree plus three greens (one cold)
+  means the evidence matches the shipped code." **Actual answering model: NOT SURFACED by
+  the tool** (no model identity in any consult output this session — recorded as returned,
+  never guessed).
 
 ## Honesty cell
 

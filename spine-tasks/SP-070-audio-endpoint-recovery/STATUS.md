@@ -1,7 +1,7 @@
 ## STATUS: SP-070 — Audio comes back when the endpoint comes back
 
-**Current Step:** 4
-**Last Updated:** 2026-08-14 (worker, Step 4 in progress; Step 3 contract green 1005/1005 + 35/35)
+**Current Step:** 5
+**Last Updated:** 2026-08-14 (worker, Step 5 final checks)
 **Blockers:** none
 
 **Floor at authoring:** 996 unit / 35 headless / **2 skipped on Windows** (5 fully-qualified names pinned in
@@ -76,23 +76,23 @@ device, no new seam.**
 - [x] `floor.json` `total` bumped in the same commit as the facts
 
 ### Step 4: Record + pre-completion consult
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete (pre-completion consult SHIP; T-18 reasoning-only first call re-asked; races hardened via `_initLock`)
 
-- [ ] `record.md` complete (anchors found-vs-given, non-items, FACT 1, FACT 2, design, knobs, clearance
+- [x] `record.md` complete (anchors found-vs-given, non-items, FACT 1, FACT 2, design, knobs, clearance
       table, bite matrix, floor bump, run table, consults + actual models, engine-review presence,
       intended board filings with no row state set)
-- [ ] Honesty cell (no endpoint watcher → recovery waits for the next play attempt; **no real endpoint death
+- [x] Honesty cell (no endpoint watcher → recovery waits for the next play attempt; **no real endpoint death
       exercised**; execution vs reading; Linux unproven; the restorative direction and its bound)
-- [ ] Named flake recorded by name + TRX if it fired, never retried away
-- [ ] Pre-completion solo consult; verdict + actual model recorded
-- [ ] STATUS.md accurate before `.DONE`
+- [x] Named flake recorded by name + TRX if it fired, never retried away
+- [x] Pre-completion solo consult; verdict + actual model recorded
+- [x] STATUS.md accurate before `.DONE`
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, exact counts, 2 pinned skips)
-- [ ] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build; per-run table with TRX paths
-- [ ] Bite matrix complete (3 reverts, 3 REDs)
+- [x] Contract testCommand green through the wrapper (verify.mjs OK, build 0W/0E, exact counts, 2 pinned skips)
+- [x] 3 consecutive full-suite greens, >= 1 fresh-checkout first-ever build; per-run table with TRX paths
+- [x] Bite matrix complete (3 reverts, 3 REDs)
 - [ ] `git diff --check` clean
 - [ ] `git status --short` shows only File Scope paths
 - [ ] `git status --porcelain --ignored=matching -uall` shows no new ignored artifact
