@@ -6,7 +6,27 @@
 
 ---
 
-### Wave 31 (**RAN 2026-08-15 — the FIRST CONCURRENT WAVE. 8 lanes launched, 2 passed the full ladder, 6 escalated at the PLAN gate. NOTHING LANDED.**)
+### Wave 31 (**LANDED 2026-08-15 — the FIRST CONCURRENT WAVE. 8 lanes launched, 2 landed, 6 escalated at the plan gate. Floor 1022 → 1028.**)
+
+**THE LAND.** SP-079 and SP-081 cherry-picked onto `26a1a9de` in scratch worktree
+`.worktrees/land-w31`, **built first** (the wrapper is `--no-build`), then **three consecutive
+`check-floor.mjs` runs, all exit 0: 1028/1028 unit, 35/35 headless**, exactly the two pinned
+Linux-gated skips (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
+`ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`) — **both permanent bans
+absent**, checked first. **THE FIRST MULTI-PACKET SUM AGREED WITH OBSERVATION:**
+`sum-deltas --apply --packets SP-079…,SP-081…` declared 1022 +6 → **1028**, and `check-floor`
+independently observed **1028**. No halt condition. Consumed `floor-delta.json` files deleted, as
+the tool instructs — verified safe first: `FloorWrapperGuardTests` asserts the delta path only as
+a ROW STRING in `PROMPT.md` and never opens the file. **All reconciliation edits were made BEFORE
+the final verification run**, so the last tree verified is the exact tree pushed (the wave-18
+red-base class, designed out rather than guarded against).
+
+**FRESH-SESSION LANDING WAS NOT AVAILABLE AND THE SUBSTITUTE IS NAMED, NOT GLOSSED.** `port-loop.ps1`
+cannot start on this machine (T-20) — every phase and every blind audit is a separately spawned
+`claude.exe` with no credentials. So the land was performed in the session that ran the wave, with
+a fresh-context SUBAGENT blind audit on its own detached worktree as the substitute. That is real
+fresh context but it is **not** process isolation and **not** `--safe-mode`; it is weaker evidence
+than the loop's auditor and must never be recorded as equivalent.
 
 **CONCURRENCY ITSELF PASSED. THE REVIEW LADDER IS WHAT FAILED, and that inverts the prediction.**
 The owner decision expected the first concurrent wave to break at the seams — floor pin, worktree
@@ -37,6 +57,19 @@ uniform: SP-074, SP-077, SP-078 and SP-080 carry at least one genuinely blocking
 exemption in the tree and void 4 of 7 bite rows; a caller enumeration false by ~8x; a fact whose
 own revert lands in an undefined outcome cell). SP-075 and SP-076 are prose and record corrections
 only. **Cost of the non-convergence: 51 agents, 6.29M subagent tokens, 68 minutes, 6 dead lanes.**
+
+**DO NOT READ "6 OF 8 DIED" AS "75% MISCALIBRATION" — THAT OVERSTATEMENT WAS MINE AND THE FABLE
+SEAT CORRECTED IT.** Four of the six escalated on at least one finding that is blocking under the
+contract's own list, so those verdicts were the gate WORKING; roughly a quarter to a third of the
+wave was miscalibration, and the rest of the cost was correct verdicts reached only after the
+budget had already been spent on suggestion-class churn in earlier rounds. The remedy is therefore
+enforcement of the existing contract plus persistence plumbing (**T-21**), never a looser gate:
+the first proposal — a third `APPROVE_WITH_CONDITIONS` verdict plus `MAX_REVISE` 2 → 3 — was
+rejected as a second definition of the blocking boundary that can drift from the documented one,
+and as "pay the gate until it passes". **`MAX_REVISE` stays 2.** A second correction worth keeping:
+on the throw the plan is **not persisted anywhere**, so a re-run is a from-scratch re-plan no matter
+what is decided — which is why persisting plan and feedback as FILES in the packet folder is part
+of the acceptance rather than a nicety.
 
 Reviewer quality was NOT the problem and must not be "fixed": one reviewer independently rebuilt
 the lane's probe binary and re-ran it (reproducing 20/20 fixed vs 0/20 unfixed at 256 KB), another

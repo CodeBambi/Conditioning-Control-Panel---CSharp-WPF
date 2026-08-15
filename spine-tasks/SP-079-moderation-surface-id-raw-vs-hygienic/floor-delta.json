@@ -1,6 +1,0 @@
-{
-  "packet": "SP-079-moderation-surface-id-raw-vs-hygienic",
-  "unit": 6,
-  "headless": 0,
-  "reason": "the hygienic half of the SP-069 output union gets its own content-free refusal code, pinned in both operation classes against the raw half's unchanged refused:output, plus the in-scope raw-only BLOCK-MORE fact and the soft-hit precedence fact that makes the ?? chain order mechanical"
-}
