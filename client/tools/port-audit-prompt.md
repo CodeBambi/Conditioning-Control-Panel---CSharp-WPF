@@ -27,6 +27,14 @@ loop or lane logs.
    and an override makes the SP-057 pin skip, blinding the exact-count floor it exists to
    enforce.
 
+   Run these two commands ADJACENTLY, in the same checkout, with nothing in between: not a
+   branch switch, not a reset, not a copy from another tree. The wrapper invokes the runner
+   with `--no-build`, so it measures whatever DLLs are sitting in `bin/`, and `git reset
+   --hard`, `git checkout` and switching branches all leave gitignored build output
+   untouched. Observed at the wave-30 close (2026-08-14): the gate reported 1022 against a
+   source tree containing 1018, a clean pass on tests that were no longer in the checkout. A
+   count is evidence about the source only if the build that produced it is.
+
 3. Check every one of these:
    - build reports 0 warnings and 0 errors;
    - the wrapper exits 0 and its `FLOOR OK` line reports totals matching the claim EXACTLY

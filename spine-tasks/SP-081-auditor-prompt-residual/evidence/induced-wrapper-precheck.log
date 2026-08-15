@@ -1,0 +1,12 @@
+[with-slot] acquired slot 0/3 of "ccp-gate" after 3ms (pid 28132)
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-DIM4rV
+FLOOR CHECK FAILED (SP-065):
+  CcpClient.Tests: FLOOR VIOLATION — unexpected skip: CcpClient.Tests.AiTextHygieneTests.H1_ReasoningBlock_CaseInsensitive is NotExecuted but NOT in allowedSkips. An unexpected skip fails the contract (SP-066 framing e/f). Either fix the precondition so the test runs, or — only under the admission rule in floor.json (machine/OS property, never a quarantine; the SP-057 pin and the named privacy flake are permanently banned) — pin the name in allowedSkips in the SAME commit, naming the machine class where it executes.
+  --- CcpClient.Tests dotnet output tail ---
+  Skipped CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps [1 ms]
+[xUnit.net 00:00:05.74]     CcpClient.Tests.AiTextHygieneTests.H1_ReasoningBlock_CaseInsensitive [SKIP]
+  Skipped CcpClient.Tests.AiTextHygieneTests.H1_ReasoningBlock_CaseInsensitive [1 ms]
+Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-DIM4rV\CcpClient.Tests\results.trx
+
+Passed!  - Failed:     0, Passed:  1019, Skipped:     3, Total:  1022, Duration: 39 s - CcpClient.Tests.dll (net10.0)
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-DIM4rV

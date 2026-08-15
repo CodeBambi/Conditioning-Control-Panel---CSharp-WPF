@@ -1,0 +1,4 @@
+[with-slot] acquired slot 0/3 of "ccp-gate" after 2ms (pid 28304)
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-yP4gSo
+FLOOR OK: CcpClient.Tests: 1022/1022 total, 2 skipped [CcpClient.Tests.SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked, CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps]; CcpClient.HeadlessTests: 35/35 total, 0 skipped
+results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-yP4gSo

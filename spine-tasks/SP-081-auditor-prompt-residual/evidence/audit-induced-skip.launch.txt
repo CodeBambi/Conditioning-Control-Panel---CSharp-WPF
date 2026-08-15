@@ -1,0 +1,10 @@
+[audit-induced] exe        C:\Users\Micha\.local\bin\claude.exe
+[audit-induced] args       -p --safe-mode --model sonnet --permission-mode bypassPermissions --no-session-persistence --tools Bash,Read,Grep,Glob
+[audit-induced] cwd        C:\ccp-sp081\induced
+[audit-induced] stdin      C:\ccp-sp081\induced\client\tools\port-audit-prompt.md
+[audit-induced] stdout     C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\sp-081\spine-tasks\SP-081-auditor-prompt-residual\evidence\audit-induced-skip.log
+[audit-induced] stderr     C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\sp-081\spine-tasks\SP-081-auditor-prompt-residual\evidence\audit-induced-skip.err.log
+[audit-induced] rendered   C:\Users\Micha\.local\bin\claude.exe -p --safe-mode --model sonnet --permission-mode bypassPermissions --no-session-persistence --tools Bash,Read,Grep,Glob < C:\ccp-sp081\induced\client\tools\port-audit-prompt.md
+[audit-induced] EXITCODE=1 TIMEDOUT=False MINUTES=0.1
+
+[exited with code 0]
