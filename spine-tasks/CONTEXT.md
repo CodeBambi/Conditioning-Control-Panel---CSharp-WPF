@@ -6,16 +6,42 @@
 
 ---
 
-### Wave 31 (**AUTHORED + VALIDATED 2026-08-15 — NOT LAUNCHED. 8 lanes, owner-approved.**)
+### Wave 31 (**RAN 2026-08-15 — the FIRST CONCURRENT WAVE. 8 lanes launched, 2 passed the full ladder, 6 escalated at the PLAN gate. NOTHING LANDED.**)
 
-**A fresh session launches this. One call, nothing else to prepare:**
+**CONCURRENCY ITSELF PASSED. THE REVIEW LADDER IS WHAT FAILED, and that inverts the prediction.**
+The owner decision expected the first concurrent wave to break at the seams — floor pin, worktree
+disk/RAM, merge order. **None of those moved.** Isolation held at 8 lanes (base stayed at
+`f2db1e25`, main tree clean, each passing lane on its own branch and worktree — the wave-30
+lost-worktree class did NOT recur); no lane touched `client/tests/floor/floor.json`; disk went
+512 GB → 495 GB with 2 lane worktrees (~8.5 GB each, so 8 would be ~70 GB against 495 GB free);
+free RAM moved 12.2 GB → 11.6 GB. The failure was **75% of the wave producing no product code
+because the plan gate never converged.**
 
-```
-Workflow({
-  scriptPath: "C:\\Code\\Conditioning-Control-Panel---CSharp-WPF\\client\\tools\\wave\\port-wave.workflow.mjs",
-  args: ["SP-074-orphan-construction-pool-residue","SP-075-capability-probe-cancelled-completed","SP-076-tunnel-logging-named-flake","SP-077-process-env-collection-guard","SP-078-disk-store-unbounded-waits","SP-079-moderation-surface-id-raw-vs-hygienic","SP-080-upstream-citation-drift-detector","SP-081-auditor-prompt-residual"]
-})
-```
+| Lane | Verdict | Branch / head | Declared delta |
+|---|---|---|---|
+| SP-079-moderation-surface-id-raw-vs-hygienic | **PASS** | `sp-079-moderation-surface-id` @ `b44d34407b930da12e46bdc1a5615a7a5c98bcb8` | +6 unit / +0 headless |
+| SP-081-auditor-prompt-residual | **PASS** | `sp-081-auditor-prompt-residual` @ `8d4cef3a3fe31777c85cfb55f5b304f53fc12350` | +0 / +0 |
+| SP-074, SP-075, SP-076, SP-077, SP-078, SP-080 | **ESCALATED** — "plan still REVISE after 3 rounds" | none; no code written | none |
+
+**THE MECHANISM OF THE FAILURE, stated so it is not re-diagnosed as flakiness.** `MAX_REVISE = 2`
+gives 3 plan-review rounds and then THROWS. All six escalations hit that cap, and the round-3
+reviewers were not rejecting the designs — several approved them in the same breath. SP-076
+round 3, verbatim: *"REVISE (bounded; three text corrections, no re-plan) … No source change, no
+fact, no revert row, no delta, and no verification command needs to move."* SP-075: *"The core is
+now correct and I am not asking for re-planning."* SP-074: *"the mechanism design is otherwise
+sound and I am not asking for it to be rethought."* The gate's vocabulary is binary
+(APPROVE/REVISE), so a reviewer wanting "approved, carry these corrections" can only say REVISE,
+and the pipeline then discards a thrice-reviewed plan **and every finding in it**. The six are not
+uniform: SP-074, SP-077, SP-078 and SP-080 carry at least one genuinely blocking defect each
+(a load-bearing clause with no fact and no revert row; a backward-scan spec that would fail every
+exemption in the tree and void 4 of 7 bite rows; a caller enumeration false by ~8x; a fact whose
+own revert lands in an undefined outcome cell). SP-075 and SP-076 are prose and record corrections
+only. **Cost of the non-convergence: 51 agents, 6.29M subagent tokens, 68 minutes, 6 dead lanes.**
+
+Reviewer quality was NOT the problem and must not be "fixed": one reviewer independently rebuilt
+the lane's probe binary and re-ran it (reproducing 20/20 fixed vs 0/20 unfixed at 256 KB), another
+re-derived an extractor and every set-shaped count from scratch. The plan artifact is unbounded
+prose that grows each round, so each round hands the next reviewer more surface to audit.
 
 The driver validates the wave first and launches nothing if `validate-wave.mjs` exits non-zero. It runs plan → plan review → implement → code review → final review per packet as INDEPENDENT pipelines, fails closed on any missing or unparseable verdict, bounds REVISE loops at 2 rounds then escalates, and **never lands**. It returns each lane's branch, head SHA and declared delta.
 
@@ -32,12 +58,12 @@ The driver validates the wave first and launches nothing if `validate-wave.mjs` 
 
 **All eight premises were VERIFIED in the port tree before authoring** — the rule earned when row `:118` turned out to describe a defect the port never had. `validate-wave.mjs`: WAVE OK, scopes pairwise disjoint. `FloorWrapperGuardTests` green with all eight on disk, so each carries its `floorDelta` row and disclaims the shared pin.
 
-**LAND OBLIGATIONS FOR WHOEVER LANDS THIS (do not rediscover them):**
-1. `sum-deltas.mjs --apply --packets <all eight, comma-separated>` — **this is the first multi-packet sum.** If `sum-deltas` and `check-floor` disagree, HALT: a lane declared something it did not do. That is a pause condition, not a pin adjustment.
+**LAND OBLIGATIONS — AMENDED 2026-08-15 AFTER THE RUN. Only two packets are landable:**
+1. `sum-deltas.mjs --apply --packets SP-079-moderation-surface-id-raw-vs-hygienic,SP-081-auditor-prompt-residual` — **NOT all eight.** Six packets produced nothing and have no `floor-delta.json`; summing them would be summing declarations that do not exist. Expected: pin 1022/35 + (6/0) → **1028 unit / 35 headless**. If `sum-deltas` and `check-floor` disagree, HALT: a lane declared something it did not do. That is a pause condition, not a pin adjustment.
 2. Verify the merged state yourself in a scratch worktree, **built first** (the wrapper is `--no-build`), three consecutive runs to files, and prove `git diff` EMPTY between the tree you verified and the integrated tip.
 3. Give the blind auditor its **own detached worktree at the exact SHA** and do not write into it — the wave-30 land violated this and the auditor caught it.
-4. Eight lanes means eight merges. Expect the first concurrency failure at the seams (floor pin, disk, merge order), not in the product code.
-5. Rows stay **WIP**, never DONE, until the owner ratifies.
+4. **SP-081 edits `client/tools/port-audit-prompt.md`, which is READ BY TWO TESTS** (wave-23 rule: a doc a test reads is CODE). Its land is a verified run, never a docs drive-by, and never a post-verification reconciliation edit. SP-081 also correctly records its own auditor run as **blocked, not done** — do not upgrade that claim at the land.
+5. Rows stay **WIP**, never DONE, until the owner ratifies. The six escalated rows stay OPEN and unclaimed; nothing about them was closed.
 
 **Next unused task ID: SP-082.**
 
