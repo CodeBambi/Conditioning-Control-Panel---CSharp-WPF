@@ -247,6 +247,15 @@ public sealed class AiOperationPipeline
             : AiModerationSurfaces.AwarenessReplyOutput;
         string? softHitCode = null;
 
+        // SP-079: the hygienic half of the SP-069 union is otherwise indistinguishable in the
+        // only channel this seam owns. This is a DIAGNOSTIC stable code, NOT a moderation
+        // surface: no AiModerationSurface is constructed, the closed inventory
+        // (AiModerationBoundary.cs:101-151) and its 6/5 pin are untouched, and BOTH
+        // EvaluateOutput calls still pass the SAME outputSurface computed at :245-247.
+        // Content-free (contract §12): a fixed literal carrying no category, no policy token,
+        // no surface id, and no reply text.
+        string? outputRefusalCode = null;
+
         if (operationClass == AiOperationClass.Interactive &&
             _moderation.Escalation.GetState().CooldownActive)
         {
@@ -362,6 +371,7 @@ public sealed class AiOperationPipeline
                     switch (_moderation.EvaluateOutput(hygienic, outputSurface))
                     {
                         case AiModerationVerdict.Block outputBlock:
+                            outputRefusalCode = "refused:output-hygienic";
                             reply = new AiReply.Refused(new AiModerationRefusal(outputBlock.CategoryCode, AiModerationSource.Output));
                             return OperationOutcome.Completed.Instance;
                         case AiModerationVerdict.SoftHit:
@@ -423,8 +433,22 @@ public sealed class AiOperationPipeline
         Track(completion);
         var outcome = await completion.ConfigureAwait(false);
         var appliedReply = outcome is OperationOutcome.Completed ? reply : null;
+
+        // SP-079: SUBSTITUTES for the shared refused:output that StableCodeOf (:523) would
+        // otherwise emit on the hygienic-only block; never a second record, never a second
+        // field. Exactly ONE emission changes: a hygienic-only output block with no prior soft
+        // hit, refused:output becomes refused:output-hygienic (that changed emission IS this
+        // packet's deliverable). No soft-hit emission and no raw-block emission changes:
+        // softHitCode keeps first place in the chain, so the pre-existing "a soft hit masks a
+        // refusal here" residue is preserved exactly, not fixed. The `is AiReply.Refused` test
+        // is a TOTALITY GUARD that is unreachable-false today (the only writer of
+        // outputRefusalCode also sets reply = Refused and returns Completed, and RunAsync
+        // (OperationRegistry.cs:216-245) returns the body's outcome verbatim). It closes no
+        // live hole; it exists so a future edit that lets `reply` survive a non-Completed
+        // outcome cannot carry this code onto a Cancelled or Faulted record.
+        var refusalCode = appliedReply is AiReply.Refused ? outputRefusalCode : null;
         Emit(operationClass, descriptor.EndpointClass, OutcomeOf(outcome, appliedReply),
-            softHitCode ?? StableCodeOf(outcome, appliedReply), ElapsedMs(started), _owner.Generation);
+            softHitCode ?? refusalCode ?? StableCodeOf(outcome, appliedReply), ElapsedMs(started), _owner.Generation);
         return new AiOperationResult(outcome, appliedReply, AiAdmission.Admitted.Instance);
     }
 

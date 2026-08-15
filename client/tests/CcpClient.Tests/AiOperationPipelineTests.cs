@@ -349,4 +349,185 @@ public class AiOperationPipelineTests
         Assert.DoesNotContain("prompt-text-never-in-diagnostics", json);
         Assert.Matches("^[a-z-]+$", record.StableCode!);
     }
+
+    // ---- SP-079: the two halves of the SP-069 output union, distinguishable in the ONE
+    // channel this seam owns (the diagnostic stable code composed at
+    // AiOperationPipeline.cs:427). NOT a moderation surface: no AiModerationSurface is
+    // constructed here, both EvaluateOutput calls still pass the same outputSurface, and the
+    // closed 6-Wired/5-Reserved inventory is untouched (SP-079 record.md §1).
+
+    private const string BlockCategory = "test-block-category";
+
+    /// <summary>
+    /// Both block tokens sit in ONE Block rule so the raw/hygienic split is the only variable;
+    /// the SoftHit rule exists solely to drive the soft-hit precedence fact.
+    /// </summary>
+    private static readonly AiModerationPolicy ModerationPolicy = new(
+    [
+        new AiModerationRule(BlockCategory, AiModerationAction.Block, ["sensitive-token", "forbidden-token"]),
+        new AiModerationRule("test-soft-category", AiModerationAction.SoftHit, ["soft-token"]),
+    ]);
+
+    /// <summary>The canonical HYGIENIC-ONLY shape: the raw text carries no policy token (the
+    /// tag splits it), H1 removes the reasoning block, the token joins, and only the hygienic
+    /// scan can see it.</summary>
+    private const string HygienicOnlyBlockText = "sensi<thinking>scratch</thinking>tive-token here";
+
+    /// <summary>Hygiene is byte-identical on this text, so the RAW scan blocks and returns
+    /// before the :360 guard is ever evaluated.</summary>
+    private const string RawBlockText = "model said forbidden-token";
+
+    /// <summary>The reverse direction (the SP-069 BLOCK-MORE shape): the token is INSIDE a
+    /// stripped reasoning block, so the hygienic text is "hello" and passes. Only the raw scan
+    /// can refuse this, which is why deleting it would ADMIT text refused today.</summary>
+    private const string RawOnlyBlockText = "<thinking>sensitive-token</thinking> hello";
+
+    /// <summary>Raw SOFT-hits, and hygiene joins a split BLOCK token so the hygienic half
+    /// blocks: the interleaving that pins the ?? chain order.</summary>
+    private const string SoftThenHygienicBlockText = "soft-token and forbi<thinking>x</thinking>dden-token";
+
+    private sealed class TextProvider : IAiProvider
+    {
+        public AiReply Reply { get; set; } = new AiReply.Generated("clean reply", AiEndpointClass.Loopback);
+
+        public AiProviderDescriptor Descriptor { get; } =
+            new(AiProviderId.LocalOllama, AiEndpointClass.Loopback);
+
+        public Func<CancellationToken, Task<CapabilityState>>? Probe { get; } =
+            _ => Task.FromResult<CapabilityState>(new CapabilityState.Available("text-probe"));
+
+        /// <summary>Synchronous by construction: no wall-clock wait, no gate to release.</summary>
+        public Task<AiReply> CompleteAsync(AiRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(Reply);
+    }
+
+    private sealed class ModeratedHarness
+    {
+        public OperationRegistry Registry { get; } = new();
+        public CapabilityRegistry Capabilities { get; } = new();
+        public CollectingAiDiagnosticsSink Diagnostics { get; } = new();
+        public TextProvider Provider { get; } = new();
+        public AiOperationPipeline Pipeline { get; }
+
+        public ModeratedHarness(AiModerationPolicy policy)
+        {
+            Pipeline = new AiOperationPipeline(
+                Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics, new AiModerationBoundary(policy));
+        }
+
+        public async Task AdmitAsync()
+        {
+            Pipeline.RegisterProvider(Provider);
+            Pipeline.SelectProvider(AiProviderId.LocalOllama);
+            var runner = new CapabilityProbeRunner(Registry.OwnerFor("probes"), Capabilities);
+            await runner.RunAllAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task HygienicOnlyOutputBlock_Interactive_EmitsTheHygienicHalfsOwnRefusalCode()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(HygienicOnlyBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
+
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal("refused:output-hygienic", record.StableCode);
+        Assert.DoesNotContain(h.Diagnostics.Records, r => r.StableCode == "refused:output");
+        // Content-free (contract §12) on a path AiModerationCoverageTests.cs:332-334 does not
+        // exercise: this record is the only one the SP-079 mechanism writes. Ridden here rather
+        // than standing alone, because alone it would pass with the mechanism reverted.
+        var serialized = System.Text.Json.JsonSerializer.Serialize(record);
+        Assert.DoesNotContain(BlockCategory, serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("sensitive-token", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain(HygienicOnlyBlockText, serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RawOutputBlock_Interactive_KeepsTheUnsuffixedRefusedOutputCode()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(RawBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
+
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal("refused:output", record.StableCode);
+        Assert.DoesNotContain(h.Diagnostics.Records, r => r.StableCode == "refused:output-hygienic");
+    }
+
+    [Fact]
+    public async Task RawOnlyToken_StrippedByHygiene_StillRefuses_TheUnionBlocksMore()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(RawOnlyBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
+
+        // The hygienic text is "hello" and passes. Deleting the raw scan ADMITS this reply,
+        // which is the SP-069 invariant this packet inherits: the union may only refuse MORE.
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal("refused:output", record.StableCode);
+    }
+
+    [Fact]
+    public async Task HygienicOnlyOutputBlock_Awareness_EmitsTheHygienicHalfsOwnRefusalCode()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(HygienicOnlyBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), AiAwarenessConsent.Given);
+
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal(AiOperationClass.Awareness, record.OperationClass);
+        Assert.Equal("refused:output-hygienic", record.StableCode);
+    }
+
+    [Fact]
+    public async Task RawOutputBlock_Awareness_KeepsTheUnsuffixedRefusedOutputCode()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(RawBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), AiAwarenessConsent.Given);
+
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal(AiOperationClass.Awareness, record.OperationClass);
+        Assert.Equal("refused:output", record.StableCode);
+    }
+
+    [Fact]
+    public async Task RawSoftHitThenHygienicBlock_SoftHitCodeKeepsFirstPlaceInTheChain()
+    {
+        var h = new ModeratedHarness(ModerationPolicy);
+        await h.AdmitAsync();
+        h.Provider.Reply = new AiReply.Generated(SoftThenHygienicBlockText, AiEndpointClass.Loopback);
+
+        var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
+
+        // The honest limit on this packet's claim, made mechanical (SP-079 record.md §6 item 1):
+        // when the same operation ALSO soft-hits, the soft-hit code still masks the refusal, so
+        // the two halves are NOT distinguishable on this path. Pre-existing and deliberately
+        // preserved; this fact is what stops a future reorder of the ?? chain from being silent.
+        var refused = Assert.IsType<AiReply.Refused>(result.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
+        Assert.Equal("soft-hit:output", record.StableCode);
+    }
 }
