@@ -466,14 +466,49 @@ namespace ConditioningControlPanel
         private void ProfileMenuPublicProfile_Click(object sender, RoutedEventArgs e)
         {
             if (ProfileBubblePopup != null) ProfileBubblePopup.IsOpen = false;
+            OpenPublicProfilePage();
+        }
+
+        /// <summary>
+        /// THE ONE DOOR to the public profile, shared by the header account menu's row and the
+        /// Trainer Card's Share Profile CTA (owner ask 2026-08-16). Both land on the dashboard's
+        /// sharing page rather than on /u/&lt;slug&gt; directly, because this app has never held a
+        /// slug and must not start: that page is where the link is shown, copied, opened,
+        /// rotated and switched off, so it is the correct destination for "share my profile"
+        /// as well as for "manage it".
+        /// </summary>
+        internal void OpenPublicProfilePage()
+        {
             try
             {
-                Helpers.BrowserLauncher.OpenUrlOrPrompt(ProfileSharingUrl, "manage your public profile");
+                Helpers.BrowserLauncher.OpenUrlOrPrompt(ProfileSharingUrl, "open your public profile");
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ProfileMenuPublicProfile_Click failed");
+                App.Logger?.Warning(ex, "OpenPublicProfilePage failed");
             }
+        }
+
+        /// <summary>
+        /// The Share Profile CTA's account gate. VISIBLE-BUT-DISABLED rather than hidden: the
+        /// button is how a signed-out user learns a public profile exists at all, and the
+        /// tooltip is the only place that says what to do about it. Cheap and idempotent —
+        /// called on every Profile-tab entry and from UpdateDiscordTabUI, so it survives a
+        /// login or logout that happens while the card is already on screen.
+        /// </summary>
+        internal void RefreshProfileShareButton()
+        {
+            try
+            {
+                var btn = DiscordTab?.BtnProfileShare;
+                if (btn == null) return;
+
+                bool signedIn = App.IsLoggedIn;
+                btn.IsEnabled = signedIn;
+                btn.Opacity = signedIn ? 1.0 : 0.55;
+                btn.ToolTip = Loc.Get(signedIn ? "profile_btn_share_tip" : "profile_btn_share_tip_locked");
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshProfileShareButton: {E}", ex.Message); }
         }
 
         private void ProfileMenuAchievements_Click(object sender, RoutedEventArgs e)

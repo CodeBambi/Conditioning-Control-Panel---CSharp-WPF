@@ -65,6 +65,10 @@ namespace ConditioningControlPanel
                 // Privacy & Sharing dialog has ever been opened. Refreshed on every show because a
                 // toggle can be flipped from Settings or the Goon tab in between.
                 UpdateProfileSharingSummary();
+                // The hero's Share Profile CTA is account-gated; re-tested on every show so a
+                // login or logout that happened on another tab is reflected the moment the card
+                // comes back (MainWindow.ProfileBubble.cs).
+                RefreshProfileShareButton();
                 // Me-first (redesign Phase 1): the tab opens on your own card, not a placeholder.
                 EnsureProfileMeFirst();
                 if (!IsIncomingTab("discord")) return;  // the outgoing tab's fade-out re-show

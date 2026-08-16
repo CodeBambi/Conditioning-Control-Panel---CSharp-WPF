@@ -1386,6 +1386,10 @@ namespace ConditioningControlPanel
                     App.Settings?.Current?.HasLinkedDiscord == true ? Visibility.Collapsed : Visibility.Visible;
             }
 
+            // The hero's Share Profile CTA is gated on having an account at all, and this method
+            // is what every login/link/logout flow calls when it lands.
+            RefreshProfileShareButton();
+
             // Sync checkbox states.
             //
             // Under _isLoading, because these are REPAINTS of stored settings, not user intent.

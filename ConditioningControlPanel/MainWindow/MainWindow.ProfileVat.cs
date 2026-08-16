@@ -1,7 +1,9 @@
 using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Descent;
 
 namespace ConditioningControlPanel
@@ -54,6 +56,14 @@ namespace ConditioningControlPanel
         private bool _vatWired;
         private bool _vatArmed;
         private bool _vatOnScreen;
+
+        /// <summary>
+        /// The server's daily cap for the last accepted reading — the divisor the
+        /// readout needs to turn the DRAWN fill fraction back into an XP amount.
+        /// 0 means "no cap known", and the readout falls back to the bare percent it
+        /// showed before this number existed rather than inventing a total.
+        /// </summary>
+        private int _vatCap;
 
         // ============================== lifecycle ==============================
 
@@ -187,12 +197,59 @@ namespace ConditioningControlPanel
 
         private void OnVatFillPercentChanged(object? sender, int pct)
         {
-            try
-            {
-                var readout = DiscordTab?.ProfileVatReadout;
-                if (readout != null) readout.Text = pct + "%";
-            }
+            try { UpdateVatReadout(); }
             catch (Exception ex) { App.Logger?.Debug("OnVatFillPercentChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// THE READOUT under the jar: banked XP, the level-scaled total that fills it,
+        /// and the percent, on one line (owner ask 2026-08-16,
+        /// "we need a number for how much XP fills the vat at each level" — the cap is
+        /// level-scaled, so the percent alone never says how big today's jar is).
+        ///
+        /// IT READS THE DRAWN LEVEL, NOT THE SERVER'S. <see cref="VatGlassCanvas.Fill"/>
+        /// is the fraction actually on screen, which is the whole point: the desktop
+        /// faucet HOLDS earned XP until the user pours it, and a readout sourced from
+        /// the block would print XP that the liquid has not risen to yet. Both halves
+        /// therefore come off the same number the percent does, and the pour animation
+        /// walks them up together.
+        ///
+        /// The cap is the last accepted server cap (<see cref="_vatCap"/>); with none
+        /// known the line degrades to the bare percent rather than guessing a total.
+        /// </summary>
+        private void UpdateVatReadout()
+        {
+            var readout = DiscordTab?.ProfileVatReadout;
+            if (readout == null) return;
+
+            double fill = DiscordTab?.ProfileVatGlass?.Fill ?? 0;
+            // Same rounding as VatGlassCanvas.NotifyPercent, so the two can never
+            // disagree about which whole percent is on screen.
+            int pct = (int)Math.Round(fill * 100);
+
+            if (_vatCap <= 0)
+            {
+                readout.Text = pct.ToString(CultureInfo.CurrentCulture) + "%";
+                readout.ToolTip = null;
+                return;
+            }
+
+            int shown = (int)Math.Round(fill * _vatCap);
+            int toFill = Math.Max(0, _vatCap - shown);
+
+            readout.Text = Loc.GetF("profile_vat_readout",
+                shown.ToString("N0", CultureInfo.CurrentCulture),
+                _vatCap.ToString("N0", CultureInfo.CurrentCulture),
+                pct);
+
+            readout.ToolTip = toFill > 0
+                ? Loc.GetF("profile_vat_readout_tip",
+                    shown.ToString("N0", CultureInfo.CurrentCulture),
+                    _vatCap.ToString("N0", CultureInfo.CurrentCulture),
+                    toFill.ToString("N0", CultureInfo.CurrentCulture))
+                : Loc.GetF("profile_vat_readout_tip_full",
+                    shown.ToString("N0", CultureInfo.CurrentCulture),
+                    _vatCap.ToString("N0", CultureInfo.CurrentCulture));
         }
 
         // ============================== the apply ==============================
@@ -213,6 +270,12 @@ namespace ConditioningControlPanel
 
             ArmVat(glass);
             glass.SetLip(read.Lip);
+
+            // BEFORE the fold below, because Snap/Ease can raise FillPercentChanged
+            // synchronously and the readout must already know this reading's divisor.
+            // Guaranteed > 0 here: the only VatRead that carries no cap is the
+            // null-vat one, and both disarm exits above have already taken it.
+            _vatCap = read.Cap;
 
             // THE EXPLAINER, and this is the only line in the app that may fire it. Past this
             // point the jar demonstrably exists for this account - both disarm exits are above -
@@ -264,6 +327,10 @@ namespace ConditioningControlPanel
             if (read.DeltaXp > 0 && step.Action == FaucetActionKind.None)
                 App.Logger?.Debug("[Descent] faucet holding +{Xp} XP ({Held} total)", read.DeltaXp, _faucetHold.HeldXp);
 
+            // A CAP RETUNE MOVES THE TOTAL WITHOUT MOVING THE PERCENT (levelling up is
+            // exactly that), and FillPercentChanged only fires on a whole-percent
+            // change — so the readout is refreshed unconditionally here as well.
+            UpdateVatReadout();
             UpdateFaucetPresentation();
         }
 
@@ -303,6 +370,7 @@ namespace ConditioningControlPanel
                 readout.Width = jarW;
                 readout.Visibility = Visibility.Visible;
             }
+            UpdateVatReadout();
 
             ArmFaucet(glass, jarW, jarH);
 
@@ -325,6 +393,7 @@ namespace ConditioningControlPanel
                 return;
             }
             _vatArmed = false;
+            _vatCap = 0;
 
             var glass = DiscordTab?.ProfileVatGlass;
             if (glass != null) glass.Visibility = Visibility.Collapsed;

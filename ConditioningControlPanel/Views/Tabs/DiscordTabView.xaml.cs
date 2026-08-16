@@ -121,6 +121,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OpenProfileCustomizeDialog();
         }
+        /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
+        /// "Public profile" row - MainWindow owns the URL and the launcher.</summary>
+        private void BtnProfileShare_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OpenPublicProfilePage();
+        }
         private void TxtProfileSearch_KeyDown(object sender, KeyEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
