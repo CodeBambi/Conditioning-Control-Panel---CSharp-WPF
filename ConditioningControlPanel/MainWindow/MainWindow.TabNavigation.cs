@@ -133,17 +133,24 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // The Just Drop door is WITHHELD until the server says otherwise (see
-            // Services/JustDrop/JustDropService.cs). The rail rows are Collapsed in that state,
-            // but ShowTab is reachable from things the rail does not own - a bark rule, the
-            // dashboard mosaic tile, a future Ctrl+K palette - so the refusal lives HERE, at the
-            // one door every caller comes through, and it is a no-op rather than a redirect: the
-            // user asked for a page that does not exist for them, and moving them somewhere else
-            // would be a teleport they did not ask for. Deliberately before the bark hook, so a
-            // door nobody can see never announces itself.
-            if (tab == "justdrop" && !Services.JustDrop.JustDropService.DoorAvailable)
+            // "justdrop" is a WINDOW too, exactly like "fyp" above - it stopped being a tab when
+            // the shop moved into its own ChaosWebViewHost (Services/JustDrop/JustDropHostService).
+            // The key survives as a launcher because half the app already speaks it: the dashboard
+            // tease tile, the Ctrl+K palette row and any bark rule all route through ShowTab, and
+            // giving them each a different entry point would be four ways to open one shop.
+            //
+            // The withheld refusal stays HERE, at the one door every caller comes through, and is
+            // still a no-op rather than a redirect: the user asked for a page that does not exist
+            // for them, and moving them somewhere else would be a teleport they did not ask for.
+            // Deliberately before the bark hook, so a door nobody can see never announces itself.
+            if (tab == "justdrop")
             {
-                App.Logger?.Debug("ShowTab(justdrop) ignored - the door is not available on this account");
+                if (!Services.JustDrop.JustDropService.DoorAvailable)
+                {
+                    App.Logger?.Debug("ShowTab(justdrop) ignored - the door is not available on this account");
+                    return;
+                }
+                Services.JustDrop.JustDropHostService.LaunchShop();
                 return;
             }
 
@@ -223,7 +230,6 @@ namespace ConditioningControlPanel
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
-            if (JustDropTab != null) JustDropTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
             // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
@@ -526,18 +532,6 @@ namespace ConditioningControlPanel
                     AppSettingsTab.RefreshSections();
                     break;
 
-                // The Just Drop door. Unreachable unless JustDropService.DoorAvailable is true -
-                // the guard at the top of this method is what enforces it, not this case.
-                //
-                // OnTabShown is where the WebView2 is actually built (lazily, on first entry) and
-                // where a previously failed load retries, so it has to run on EVERY show, not just
-                // the first. It is a cheap no-op once the page is up.
-                case "justdrop":
-                    JustDropTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(JustDropTab);
-                    JustDropTab.OnTabShown();
-                    break;
-
                 case "exclusives":
                     ExclusivesTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ExclusivesTab);
@@ -589,13 +583,29 @@ namespace ConditioningControlPanel
             ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
-            // Withheld door: listed here like any other so the accordion, the active indicator and
-            // ExpandDoorForTab all work the moment it is revealed. Its rail rows are Collapsed
-            // until MainWindow.JustDrop.cs shows them, and MeasureDoorPanel already skips
-            // Collapsed entries, so a hidden door contributes nothing to the rail's geometry.
-            ("justdrop",  "justdrop",  new[] { "justdrop" }),
             ("appsettings", "appsettings", new[] { "appsettings" }),
         };
+
+        /// <summary>
+        /// v6.8.0: rail doors that LAUNCH instead of navigating - full medallion treatment, no
+        /// tab, no NavDoorMap row (a map row drags in a default tab, a ShowTab case and a
+        /// palette door row, none of which a browser link has). CacheNavDoorRows walks
+        /// NavDoorMap + this list so the tile growth, label rise and fx animate for them too;
+        /// the "you are here" ring never lights because ChromeFx never targets them.
+        /// Each needs its own Click handler - NavDoor_Click on an unmapped Tag is a logged no-op.
+        /// </summary>
+        internal static readonly string[] NavLauncherDoors = { "webapp" };
+
+        /// <summary>Where the Web App door (and every other web nudge) points. The dashboard
+        /// root, not the link-device page: sign-in and device linking are both discoverable from
+        /// there, and the safe-room rule applies on arrival.</summary>
+        internal const string WebAppUrl = "https://app.cclabs.app";
+
+        /// <summary>Where a public profile is created, edited, rotated and switched off. Web-only
+        /// on purpose: that page is the one surface that shows a profile's slug, and keeping it
+        /// behind the dashboard's login means no slug ever renders in the desktop app - not in a
+        /// settings row, not in a tooltip, not in anything a screenshot could catch.</summary>
+        internal const string ProfileSharingUrl = WebAppUrl + "/dashboard/profile-sharing";
 
         /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
         /// The accordion computes its open height from this instead of forcing a measure pass,
@@ -616,9 +626,11 @@ namespace ConditioningControlPanel
             "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
             "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
             "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
-            "justdrop" => (DoorJustDrop, DoorPanelJustDrop, DoorEntriesJustDrop),
             // Pinned, entry-less: a header to light, nothing to expand.
             "appsettings" => (DoorSettings, null, null),
+            // Launcher door (NavLauncherDoors): a header to animate, nothing to expand and no
+            // tab to light - it opens the web app in the browser.
+            "webapp" => (DoorWebApp, null, null),
             _ => (null, null, null),
         };
 
@@ -852,8 +864,26 @@ namespace ConditioningControlPanel
             }
             // Every door in the rail is in NavDoorMap, Settings included since Phase 2. A Tag
             // that matches nothing is an authoring mistake, not a navigation - say so and stay
-            // put rather than teleporting the user to the Dashboard.
+            // put rather than teleporting the user to the Dashboard. (Launcher doors like
+            // DoorWebApp never route here - they carry their own Click.)
             App.Logger?.Warning("NavDoor_Click: no NavDoorMap entry for door {Door}", door);
+        }
+
+        /// <summary>
+        /// The Web App door (v6.8.0, One Account). A launcher, not a navigation: it opens the
+        /// web dashboard in the default browser through BrowserLauncher - the 4-strategy opener
+        /// with the clipboard fallback, because this door exists for people who have never been
+        /// to the web side and "nothing happened" is the one first impression it must not make.
+        /// Visiting the web also retires the One Account banner beat: the nudge worked.
+        /// </summary>
+        private void DoorWebApp_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Helpers.BrowserLauncher.OpenUrlOrPrompt(WebAppUrl, "open the CC Labs web app");
+                RetireWebBannerBeat();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "DoorWebApp_Click failed"); }
         }
 
         /// <summary>
@@ -899,9 +929,6 @@ namespace ConditioningControlPanel
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
 
-        /// <summary>The Just Drop door's only rail entry. ShowTab owns the withheld refusal, so
-        /// this stays a bare navigation like every other row.</summary>
-        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
 
         /// <summary>
         /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows
@@ -993,6 +1020,12 @@ namespace ConditioningControlPanel
                 if (_sessionEngine?.IsRunning == true) return;
                 _dashboardIntroQueued = true;
                 FeatureIntroPopup.ShowWhenStartupSettles("daily-free", this, NavDoorForTab("settings"));
+                // v6.8.0 One Account. Same settle path, same owning door, queued second: the
+                // Home door's one-card-per-launch budget means daily-free introduces itself on
+                // the first quiet launch and this card takes the NEXT one - a deliberate drip,
+                // not a pile-up. Fresh installs get it too, which matters: they never see
+                // What's New, so this card is their first mention of the web at all.
+                FeatureIntroPopup.ShowWhenStartupSettles("one-account", this, NavDoorForTab("settings"));
             }
             catch (Exception ex)
             {

@@ -23,6 +23,16 @@ namespace ConditioningControlPanel
         /// <summary>Accent hex; falls back to app pink when unset or invalid.</summary>
         public string? Accent { get; init; }
         public string DismissLabel { get; init; } = "Got it";
+
+        /// <summary>
+        /// Optional CTA (v6.8.0, built for the one-account card). Both must be set or the card
+        /// renders exactly as it always did - one dismiss button. When present, the CTA takes
+        /// the accent fill and the dismiss button steps back to a quiet ghost, and the action
+        /// runs AFTER the modal unwinds (the WhatsNewDialog tour-button pattern), never inside
+        /// the card's own message loop.
+        /// </summary>
+        public string? ActionLabel { get; init; }
+        public Action? OnAction { get; init; }
     }
 
     /// <summary>
@@ -35,6 +45,8 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class FeatureIntroPopup : Window
     {
+        private Action? _onAction;
+
         private FeatureIntroPopup(FeatureIntroContent content)
         {
             InitializeComponent();
@@ -235,6 +247,16 @@ namespace ConditioningControlPanel
                 ? Visibility.Collapsed
                 : Visibility.Visible;
 
+            // Optional CTA: only when both halves are provided. The CTA takes the accent fill
+            // below; the dismiss button steps back so the card has one obvious action.
+            var hasAction = !string.IsNullOrWhiteSpace(content.ActionLabel) && content.OnAction != null;
+            if (hasAction)
+            {
+                _onAction = content.OnAction;
+                BtnAction.Content = content.ActionLabel;
+                BtnAction.Visibility = Visibility.Visible;
+            }
+
             var accent = AccentBrush(content.Accent);
             try
             {
@@ -247,7 +269,17 @@ namespace ConditioningControlPanel
                     CardShadow.Color = solid.Color;
                     RailSeam.Fill = new SolidColorBrush(
                         Color.FromArgb(0x55, solid.Color.R, solid.Color.G, solid.Color.B));
-                    BtnDismiss.Background = accent;
+                    if (hasAction)
+                    {
+                        BtnAction.Background = accent;
+                        // Quiet ghost: readable, clearly secondary, still themed by the card.
+                        BtnDismiss.Background = new SolidColorBrush(
+                            Color.FromArgb(0x30, solid.Color.R, solid.Color.G, solid.Color.B));
+                    }
+                    else
+                    {
+                        BtnDismiss.Background = accent;
+                    }
                 }
             }
             catch { /* accent dressing is decoration - the pink defaults stand */ }
@@ -337,6 +369,25 @@ namespace ConditioningControlPanel
         private void BtnDismiss_Click(object sender, RoutedEventArgs e)
         {
             try { Close(); } catch { }
+        }
+
+        /// <summary>
+        /// The optional CTA. QUEUED, never called inline - Close() only starts the modal unwind,
+        /// and the action (typically a browser launch, possibly ending in a fallback MessageBox)
+        /// must run after ShowDialog() has returned to whoever opened this card. Same pattern,
+        /// same reason, as WhatsNewDialog.BtnTour_Click.
+        /// </summary>
+        private void BtnAction_Click(object sender, RoutedEventArgs e)
+        {
+            try { Close(); } catch { }
+
+            var action = _onAction;
+            if (action == null) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { action(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "Feature intro CTA threw"); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
         }
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -469,7 +520,7 @@ namespace ConditioningControlPanel
                 Bullets = new[]
                 {
                     "You don't need a library to start. The app can pull images and clips straight from Reddit, through Scrolller.",
-                    "You choose the niches, and you can add any subreddit by name. Anything you never want to see again goes on the blocklist.",
+                    "You choose the niches, and you can add any subreddit by name - only what you picked is ever fetched.",
                     "It streams from your machine to your screen - nothing is saved, nothing is uploaded, and none of it passes through our servers.",
                     "Switch back to your own assets whenever you like. The choice lives at the top of the Assets tab."
                 },
@@ -577,6 +628,42 @@ namespace ConditioningControlPanel
                     "Overnight it empties, and tomorrow you start pouring again."
                 },
                 Footer = "Rolling out gradually. If you can see the jar, you are in."
+            },
+
+            // v6.8.0, the One Account lane: the first card with a real CTA, because a card about
+            // a DESTINATION must be able to take you there. Queued on the same settle path as
+            // daily-free (MainWindow.TabNavigation.OnDashboardTabVisibilityChanged) and owned by
+            // the Home door, so the two drip across launches instead of stacking. Fires for
+            // fresh installs too - they never see What's New, so without this card they hear
+            // nothing about the web at all. The spiral bullet reuses the exact phrasing already
+            // public in the v6.8.0 release notes - it is a tease, not an explanation, and it
+            // stays that way until the Sept 1 announcement.
+            ["one-account"] = new FeatureIntroContent
+            {
+                Key = "one-account",
+                Glyph = "🌐",
+                RailTitle = "One Account",
+                Title = "🌐  One Account",
+                Tagline = "Desktop, web and mobile are windows onto the same account now.",
+                Accent = "#5EC8F2",
+                Bullets = new[]
+                {
+                    "Sign in at app.cclabs.app with the same account you use here.",
+                    "XP you earn on the web lands in your desktop level through the normal sync.",
+                    "Link this device in seconds with a 6-digit code from the web dashboard.",
+                    "A sealed spiral has quietly appeared on the web dashboard. It is not explained."
+                },
+                Footer = "The new Web door above Settings takes you there any time.",
+                ActionLabel = "Open the web app",
+                DismissLabel = "Later",
+                // BrowserLauncher, not Process.Start: this click is the app's invitation to the
+                // web, and the no-default-browser machines are exactly who must not see it fail.
+                // Acting on the card also retires the One Account banner beat - the nudge worked.
+                OnAction = () =>
+                {
+                    Helpers.BrowserLauncher.OpenUrlOrPrompt(MainWindow.WebAppUrl, "open the CC Labs web app");
+                    (Application.Current?.MainWindow as MainWindow)?.RetireWebBannerBeat();
+                }
             },
 
             [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent

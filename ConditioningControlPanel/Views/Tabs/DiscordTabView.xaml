@@ -91,6 +91,32 @@
                                 Tag="DiscordProfile"/>
                     </Grid>
 
+                    <!-- Link-your-account notice. Up only while no Discord is linked
+                         (MainWindow.Browser.cs UpdateDiscordTabUI). The Privacy panel's own
+                         "Not Connected" line cannot do this job: that panel lives inside the
+                         Privacy DIALOG, so a logged-out user opening this tab never sees it -
+                         which is how the only feedback they got was an unrelated Rich Presence
+                         modal. Inline and quiet on purpose; the tab still shows the local card
+                         underneath, so this informs rather than blocks. -->
+                    <Border x:Name="ProfileLinkNotice" x:FieldModifier="internal" Visibility="Collapsed"
+                            Background="#22212A44" BorderBrush="#5865F2" BorderThickness="1"
+                            CornerRadius="10" Padding="14,11" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Text="{loc:Str profile_link_discord_notice}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                            <Button Grid.Column="1" x:Name="BtnProfileLinkNotice" x:FieldModifier="internal"
+                                    Content="{loc:Str btn_link_discord_2}" Background="#5865F2"
+                                    Foreground="White" BorderThickness="0" Padding="15,8" Margin="12,0,0,0"
+                                    FontWeight="Bold" FontSize="11" Cursor="Hand"
+                                    Click="BtnDiscordTabLogin_Click"/>
+                        </Grid>
+                    </Border>
+
                     <!-- ===================== 2. the hero ===================== -->
                     <Grid x:Name="ProfileCardWrapper" x:FieldModifier="internal" Visibility="Collapsed"
                           Margin="0,0,0,14">

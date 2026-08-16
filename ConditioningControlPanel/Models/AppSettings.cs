@@ -3190,70 +3190,12 @@ namespace ConditioningControlPanel.Models
             set { _fypOnlineConsented = value; OnPropertyChanged(); }
         }
 
-        // ---- remote-media blocklist (app-wide, not FYP-only) ----
-        //
-        // The user's only content control over remote media, and deliberately the ONLY one:
-        // there is no NSFW filter and no safe-mode toggle (owner decision 2026-08-12). The
-        // niche catalog is entirely adult, so filtering on scrolller's isNsfw would empty the
-        // pool rather than shape it — that field stays fetched-and-unread on purpose.
-        //
-        // RemoteMedia* rather than FypOnline* because every consumer of the remote pool
-        // (feed, flashes, intake, DTRH) shares one blocklist, applied in FypOnlineCoordinator
-        // before entries reach any pool. Both are edited in place by the picker, so callers
-        // must App.Settings.Save() themselves — nothing here auto-persists.
-
-        private List<string> _remoteMediaBlockedSubs = new();
-        /// <summary>Subreddits the user never wants to see again (bare names, no "r/").
-        /// Excluded from every consumer's active channel set.</summary>
-        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public List<string> RemoteMediaBlockedSubs
-        {
-            get => _remoteMediaBlockedSubs;
-            set
-            {
-                var clean = new List<string>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var raw in value ?? new List<string>())
-                {
-                    var sub = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(raw);
-                    if (sub != null && seen.Add(sub)) clean.Add(sub);
-                }
-                // Over the cap the OLDEST entries go: a fresh block is the one the user just
-                // asked for, and silently dropping it would read as the button not working.
-                if (clean.Count > MaxRemoteMediaBlockedSubs)
-                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedSubs);
-                _remoteMediaBlockedSubs = clean;
-                OnPropertyChanged();
-            }
-        }
-
-        private List<string> _remoteMediaBlockedIds = new();
-        /// <summary>Individual remote entries the user blocked, by entry id
-        /// ("scrolller/&lt;sub&gt;/&lt;post&gt;"). Filtered out of every fetched page.</summary>
-        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public List<string> RemoteMediaBlockedIds
-        {
-            get => _remoteMediaBlockedIds;
-            set
-            {
-                var clean = new List<string>();
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var raw in value ?? new List<string>())
-                {
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
-                    var id = raw.Trim();
-                    if (id.Length > 120) continue;   // an id this long isn't one of ours
-                    if (seen.Add(id)) clean.Add(id);
-                }
-                if (clean.Count > MaxRemoteMediaBlockedIds)
-                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedIds);
-                _remoteMediaBlockedIds = clean;
-                OnPropertyChanged();
-            }
-        }
-
-        private const int MaxRemoteMediaBlockedSubs = 200;
-        private const int MaxRemoteMediaBlockedIds = 1000;
+        // NOTE: a remote-media blocklist (RemoteMediaBlockedSubs / RemoteMediaBlockedIds)
+        // lived here until 2026-08-14. Nothing in the UI could ever add to it, so it was
+        // removed rather than finished: picking the niches/subreddits IS the content control,
+        // and there is still no NSFW filter (owner decision 2026-08-12 — the catalog is
+        // entirely adult, filtering on scrolller's isNsfw would empty the pool). Stale keys
+        // in settings.json are simply ignored on load.
 
         // ---- app-wide media source ----
         //

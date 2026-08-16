@@ -135,7 +135,7 @@ public class ModAwareDecodedArtTests
     }
 
     // =====================================================================================
-    //  the nav rail's seven medallions
+    //  the nav rail's medallions (eight since v6.8.0: seven tab doors + the Web App launcher)
     // =====================================================================================
 
     /// <summary>
@@ -150,6 +150,8 @@ public class ModAwareDecodedArtTests
         ("ImgDoorPlay",      "nav/door_play.png"),
         ("ImgDoorYou",       "nav/door_you.png"),
         ("ImgDoorLibrary",   "nav/door_library.png"),
+        // v6.8.0: the Web App launcher door - a full medallion, mod-reskinnable like the rest.
+        ("ImgDoorWebApp",    "nav/door_webapp.png"),
         ("ImgDoorSettings",  "nav/door_settings.png"),
     };
 
@@ -183,7 +185,7 @@ public class ModAwareDecodedArtTests
     }
 
     [Fact]
-    public void ApplyDoorArtCoversAllSevenDoorsAndNeverBlanksOne()
+    public void ApplyDoorArtCoversEveryDoorAndNeverBlanksOne()
     {
         var navRail = AppFile("MainWindow", "MainWindow.NavRail.cs");
 

@@ -354,31 +354,14 @@ internal static class DtrhAssetManifest
     }
 
     /// <summary>
-    /// Drop entries older than the TTL (a CDN url is not forever) and anything the user has
-    /// blocked SINCE it was cached. The coordinator's blocklist runs before entries ever
-    /// reach the cache, but this pool outlives the session that filled it, so a block made
-    /// today has to reach yesterday's cache too - otherwise "block this subreddit" would be
-    /// visibly ignored for up to the TTL. Caller holds <see cref="RemoteLock"/>.
+    /// Drop entries older than the TTL (a CDN url is not forever). Caller holds
+    /// <see cref="RemoteLock"/>.
     /// </summary>
     private static void PruneRemoteLocked()
     {
         if (_remoteCache == null) return;
         long cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - (long)RemoteEntryTtl.TotalSeconds;
         _remoteCache.RemoveAll(e => e.AtUnix < cutoff);
-
-        var s = App.Settings?.Current;
-        var subs = new HashSet<string>(s?.RemoteMediaBlockedSubs ?? new List<string>(),
-            StringComparer.OrdinalIgnoreCase);
-        var ids = new HashSet<string>(s?.RemoteMediaBlockedIds ?? new List<string>(), StringComparer.Ordinal);
-        if (subs.Count > 0 || ids.Count > 0)
-        {
-            _remoteCache.RemoveAll(e =>
-            {
-                if (ids.Contains(e.Id)) return true;
-                var parts = e.Id.Split('/');
-                return parts.Length >= 3 && subs.Contains(parts[1]);
-            });
-        }
 
         if (_remoteCache.Count > MaxRemoteEntries)
             _remoteCache.RemoveRange(0, _remoteCache.Count - MaxRemoteEntries);

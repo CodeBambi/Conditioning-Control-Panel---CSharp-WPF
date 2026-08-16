@@ -33,6 +33,21 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// marketing site and does not serve this route.</para></summary>
         public const string ExpressUrl = "https://app.cclabs.app/dashboard/express";
 
+        /// <summary>
+        /// The PUBLIC taste page - a capped, signed-out preview of one order code. This is the
+        /// only form a shared drop travels as, and note the host: the NAKED <c>cclabs.app</c>,
+        /// which permanently redirects to the dashboard app. Short enough to read aloud, and
+        /// unfurlers follow the redirect, so the pretty link is also the working one.
+        /// <para>Building the URL is all the desktop does with it. Sharing is still not a desktop
+        /// feature in the sense the doctrine above forbids - there is no share dialog, no expiry
+        /// picker and no order created here; the clipboard gets a link to a page the web owns.</para>
+        /// </summary>
+        private const string TasteBaseUrl = "https://cclabs.app/taste";
+
+        /// <summary>Taste-page URL for one order code. Codes are base64url, but escape anyway.</summary>
+        public static string TasteUrl(string orderCode) =>
+            $"{TasteBaseUrl}/{Uri.EscapeDataString(orderCode ?? string.Empty)}";
+
         /// <summary>The bridge envelope's <c>source</c> discriminator. Fixed by the web player.</summary>
         private const string BridgeSource = "justdrop";
 
@@ -179,9 +194,9 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// This — never the page's durationSec — is what the settlement measures elapsed time with.</summary>
         private static readonly Dictionary<string, DateTime> SessionStartUtc = new(StringComparer.Ordinal);
 
-        /// <summary>Once per order code, for the life of the process: a page that re-posts the same
-        /// completion (replay, reload, double-fire) credits nothing the second time.</summary>
-        private static readonly HashSet<string> CreditedOrders = new(StringComparer.Ordinal);
+        // Once-per-order-ever bookkeeping lives in the CreditedOrders class (a persisted
+        // ledger in the user-data folder), not a process-lifetime set: a restart must not
+        // make an already-paid drop payable again.
 
         /// <summary>
         /// Consumes one raw <c>WebMessageReceived</c> payload. MUST be called on the UI thread
@@ -261,55 +276,77 @@ namespace ConditioningControlPanel.Services.JustDrop
 
         /// <summary>
         /// The one thing a finished drop changes in the app: XP, and a toast saying so.
+        ///
+        /// <para><b>Once per order, ever.</b> This used to pay on every <c>session-complete</c> with
+        /// no idea whether it was a first play or a fifth, which made a single 8-minute drop an
+        /// unbounded XP faucet the moment anything could replay it. The web side already draws this
+        /// line for its own currency - host-bridge.ts says plainly that replays and embedded plays
+        /// never pay Pocket Money - so paying XP for them was the desktop disagreeing with the
+        /// contract it was implementing. A replay still gets a toast, because silence would read as
+        /// the session not having registered.</para>
+        ///
         /// <para>AddXP self-guards (not logged in, idle anti-cheat, skill multipliers), so there is
-        /// nothing to pre-check here - but it can still throw, and a throw from a web message must
+        /// nothing else to pre-check - but it can still throw, and a throw from a web message must
         /// not take the door down, so each half is caught separately: a failed grant should not
         /// cost the user the toast, and a failed toast should not cost them the XP.</para>
         /// </summary>
+        /// <param name="orderCode">
+        /// The order this run belongs to. A missing code is treated as ALREADY CREDITED - not as a
+        /// fresh one. A page that stops sending codes must not silently become a faucet, and the
+        /// only run that legitimately has no code is one we cannot tell apart from a replay anyway.
+        /// </param>
         private static void AwardSessionComplete(string? orderCode, string? sizeId)
         {
-            int xp;
-            try
+            var code = orderCode?.Trim();
+            bool firstPlay = !string.IsNullOrEmpty(code) && CreditedOrders.TryCredit(code!);
+
+            int xp = 0;
+            if (firstPlay)
             {
-                // Once per order code. A code we have already paid is a replayed message, not a
-                // second session; it also does not consume a daily-diminish slot.
-                if (!string.IsNullOrEmpty(orderCode) && !CreditedOrders.Add(orderCode))
+                try
                 {
-                    App.Logger?.Information("JustDrop: order {Order} already credited — replay pays nothing", orderCode);
+                    // The host's clock, or no clock at all. durationSec from the payload is
+                    // deliberately not consulted (see the settlement table's header note).
+                    // Keyed by the RAW code — session-start stored it untrimmed.
+                    double? hostElapsedSec = null;
+                    if (SessionStartUtc.Remove(orderCode!, out var startedUtc))
+                    {
+                        var elapsed = (DateTime.UtcNow - startedUtc).TotalSeconds;
+                        if (elapsed >= 0) hostElapsedSec = elapsed;
+                    }
+
+                    xp = SettleDropXp(sizeId, hostElapsedSec, out var quickTaste, out var diminished);
+
+                    // XPSource.Other, matching Programs / Quests / Pop Quiz / the Intake. NOT
+                    // XPSource.Session: that source is the session engine's, and borrowing it would
+                    // make companion bonuses and quest counters read a web drop as a local session.
+                    App.Progression?.AddXP(xp, XPSource.Other);
+                    App.Settings?.Save();   // the daily counter must survive a crash between drops
+
+                    App.Logger?.Information("JustDrop: drop settled — order={Order} size={Size} elapsed={Elapsed}s taste={Taste} diminished={Dim} xp={Xp}",
+                        code, sizeId ?? "?", hostElapsedSec.HasValue ? (int)hostElapsedSec.Value : -1,
+                        quickTaste, diminished, xp);
+                }
+                catch (Exception ex)
+                {
+                    // No toast on a failed grant: the completion toast quotes the amount paid,
+                    // and quoting XP that was never granted would be worse than silence.
+                    App.Logger?.Warning(ex, "JustDrop: session-complete XP failed");
                     return;
                 }
-
-                // The host's clock, or no clock at all. durationSec from the payload is
-                // deliberately not consulted (see the settlement table's header note).
-                double? hostElapsedSec = null;
-                if (!string.IsNullOrEmpty(orderCode) && SessionStartUtc.Remove(orderCode, out var startedUtc))
-                {
-                    var elapsed = (DateTime.UtcNow - startedUtc).TotalSeconds;
-                    if (elapsed >= 0) hostElapsedSec = elapsed;
-                }
-
-                xp = SettleDropXp(sizeId, hostElapsedSec, out var quickTaste, out var diminished);
-
-                // XPSource.Other, matching Programs / Quests / Pop Quiz / the Intake. NOT
-                // XPSource.Session: that source is the session engine's, and borrowing it would
-                // make companion bonuses and quest counters read a web drop as a local session.
-                App.Progression?.AddXP(xp, XPSource.Other);
-                App.Settings?.Save();   // the daily counter must survive a crash between drops
-
-                App.Logger?.Information("JustDrop: drop settled — order={Order} size={Size} elapsed={Elapsed}s taste={Taste} diminished={Dim} xp={Xp}",
-                    orderCode ?? "?", sizeId ?? "?", hostElapsedSec.HasValue ? (int)hostElapsedSec.Value : -1,
-                    quickTaste, diminished, xp);
             }
-            catch (Exception ex)
+            else
             {
-                App.Logger?.Warning(ex, "JustDrop: session-complete XP failed");
-                return;
+                App.Logger?.Information("JustDrop: session-complete for {Order} paid nothing (replay)",
+                    string.IsNullOrEmpty(code) ? "(no code)" : code);
             }
 
             try
             {
-                App.Notifications?.Show(Loc.GetF("jd_toast_session_complete", xp),
-                    NotificationType.Success, TimeSpan.FromSeconds(6));
+                var message = firstPlay
+                    ? Loc.GetF("jd_toast_session_complete", xp)
+                    : Loc.Get("jd_toast_session_replayed");
+                App.Notifications?.Show(message, NotificationType.Success, TimeSpan.FromSeconds(6));
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "JustDrop: session-complete toast failed"); }
         }

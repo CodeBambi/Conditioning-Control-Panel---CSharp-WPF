@@ -1095,44 +1095,18 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ===== JUST DROP (default: justdrop) =====
-                             WITHHELD BY DEFAULT. Both the header and its panel ship Collapsed and
-                             are revealed only by MainWindow.JustDrop.cs when
-                             JustDropService.DoorAvailable turns true - which needs a server flag
-                             that defaults to false and is never persisted. On a machine the server
-                             has not opened this for, the rail below Library simply ends: no greyed
-                             row and no "coming soon" tease, because the Play door's lockbands are
-                             for things you could buy and this is a thing that does not exist for
-                             you yet.
+                        <!-- ===== NO JUST DROP DOOR HERE, DELIBERATELY =====
+                             Just Drop had a rail door and a tab until it became a WINDOW
+                             (Services/JustDrop/JustDropHostService.cs), the same shell the Graded
+                             Intake and DtRH use. A shop that opens borderless over the app has no
+                             business also being a row in the rail, and the two places it is
+                             actually reached from - the Play door's rack and the Exclusives shelf -
+                             are where someone looking for a session already is.
 
-                             The dashboard's tile for this feature is now the nameless TEASE tile
-                             (SettingsTabView.xaml, CardJustDrop - see MainWindow.TeaseCard.cs),
-                             so it carries no glyph of its own to share. This door keeps the emoji
-                             strip rather than the medallion the art-backed doors moved to,
-                             because no PNG exists for this feature anywhere in the app - real art
-                             is a separate pipeline. -->
-                        <Button x:Name="DoorJustDrop" Tag="justdrop" Style="{StaticResource NavDoorButton}"
-                                Visibility="Collapsed"
-                                Click="NavDoor_Click" ToolTip="{loc:Str jd_door_tip}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                        <Border x:Name="DoorPanelJustDrop" ClipToBounds="True" Height="0" IsHitTestVisible="False"
-                                Visibility="Collapsed">
-                            <StackPanel x:Name="DoorEntriesJustDrop">
-                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
+                             The key "justdrop" still exists and still routes through ShowTab, which
+                             intercepts it and launches the window (exactly as it does for "fyp").
+                             That is what keeps the dashboard tease tile and the Ctrl+K palette row
+                             working without either of them knowing a window is involved. -->
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
@@ -1148,6 +1122,46 @@
                          See Controls/SpiralRailHost.cs - especially the airspace note. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
+                    <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
+                         launchers) - it opens app.cclabs.app in the default browser, so it has its
+                         own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
+                         would log-and-stay, and the "you are here" ring must never light for a
+                         door you cannot be in. The medallion keeps the full four-child shape
+                         (see DoorHome) because CacheNavDoorRows walks it via NavLauncherDoors. -->
+                    <Button x:Name="DoorWebApp" Tag="webapp" Style="{StaticResource NavDoorButton}"
+                            Background="#225EC8F2" BorderBrush="#5EC8F2"
+                            Click="DoorWebApp_Click" ToolTip="{loc:Str tooltip_nav_door_webapp}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                     IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Column="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorWebApp"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_webapp.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str nav_door_webapp}"
+                                               Style="{StaticResource NavDoorLabelText}"/>
+                                </Viewbox>
+                            </Grid>
+                        </Grid>
+                    </Button>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
                             Background="#225CE0A5" BorderBrush="#5CE0A5"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
@@ -1507,6 +1521,24 @@
                                        TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                        Opacity="0" IsHitTestVisible="False"
                                        Text="{loc:Str login_welcome_back}"/>
+                            <!-- v6.8.0 One Account beat. In the rotation ONLY until acted on:
+                                 InitializeBannerRotation includes it while SeenFeatureIntros lacks
+                                 "banner-web", and RetireWebBannerBeat spends that key from the
+                                 hyperlink here, the Web App door, and the one-account card's CTA.
+                                 An inline Hyperlink, never a printed URL (comms rule: the banner
+                                 carries no addresses). Remove the whole beat in 6.9 with the NEW
+                                 pills. -->
+                            <TextBlock x:Name="TxtBannerWeb" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="0" IsHitTestVisible="False">
+                                <Run Text="{loc:Str label_banner_web_xp}"/>
+                                <Run Text=" "/>
+                                <Hyperlink NavigateUri="https://app.cclabs.app" RequestNavigate="BannerWebLink_Click">
+                                    <Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold"/>
+                                </Hyperlink>
+                            </TextBlock>
                             <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
                                  message changes. Its own ClipToBounds host so the band can't
                                  escape the card - deliberately NOT ClipToBounds on the shared
@@ -1956,6 +1988,14 @@
                                     </Button>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_profile}" Click="ProfileMenuProfile_Click"/>
+                                    <!-- The outward-facing half of the row above, and a door out of
+                                         the app rather than a tab: everything about a public profile
+                                         (the slug, the featured drops, the kill switch) lives on the
+                                         web, and deliberately never renders here. -->
+                                    <Button Style="{StaticResource ProfileMenuItemStyle}"
+                                            Content="{loc:Str profile_menu_public}"
+                                            ToolTip="{loc:Str tooltip_profile_menu_public}"
+                                            Click="ProfileMenuPublicProfile_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
                                             Content="{loc:Str tab_achievements}" Click="ProfileMenuAchievements_Click"/>
                                     <Button Style="{StaticResource ProfileMenuItemStyle}"
@@ -2289,16 +2329,8 @@
                 <views:StudioTabView x:Name="StudioTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-                <!-- Just Drop Tab ("justdrop") — a thin WebView2 host of the web session shop at
-                     app.cclabs.app/dashboard/express. The shop, its order book and its share/delete/replay
-                     actions are the PAGE's; nothing here duplicates them, by doctrine. The control is
-                     constructed with the window like every other tab, but its WebView2 is not built until
-                     the door is first opened (JustDropTabView.OnTabShown), so a user who never opens it
-                     never pays for a second Chromium.
-
-                     Reachable only while JustDropService.DoorAvailable is true — the rail rows above are
-                     Collapsed until the server flag says otherwise. -->
-                <views:JustDropTabView x:Name="JustDropTab" Margin="10,5,10,10" Visibility="Collapsed" />
+                <!-- No Just Drop tab. It is a window now - see the rail comment above and
+                     Services/JustDrop/JustDropHostService.cs. -->
             </Grid>
         </AdornerDecorator>
 

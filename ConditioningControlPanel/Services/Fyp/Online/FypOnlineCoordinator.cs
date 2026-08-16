@@ -107,8 +107,8 @@ internal sealed class FypOnlineCoordinator
         foreach (var c in all) c.Save();
     }
 
-    /// <summary>The blocklist changed (it is app-wide, unlike niche selection): drop every
-    /// tenant's rotation state so blocked subs leave the active sets immediately.</summary>
+    /// <summary>A channel-shaping setting changed app-wide (media source, niche selection,
+    /// custom subs): drop every tenant's rotation state so the new set takes effect at once.</summary>
     public static void ResetAllChannels()
     {
         List<FypOnlineCoordinator> all;
@@ -150,7 +150,7 @@ internal sealed class FypOnlineCoordinator
     }
 
     /// <summary>The subreddits this consumer's settings currently select, before the
-    /// blocklist and the dedupe cap. Never throws: a provider that fails means "no
+    /// dedupe cap. Never throws: a provider that fails means "no
     /// channels", which <see cref="ActiveChannels"/> turns into the catalog fallback.</summary>
     private IReadOnlyList<string> ProvidedChannels()
     {
@@ -186,19 +186,17 @@ internal sealed class FypOnlineCoordinator
         return ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
     }
 
-    /// <summary>Channel names currently in play for this consumer (its selection minus the
-    /// user's blocked subs; the first catalog niche when nothing is selected, so "Online" can
-    /// never mean "nothing" — unless the user blocked that too, which is their call).</summary>
+    /// <summary>Channel names currently in play for this consumer (its selection, with the
+    /// first catalog niche as fallback when nothing is selected, so "Online" can never mean
+    /// "nothing").</summary>
     public List<string> ActiveChannels()
     {
-        var blocked = BlockedSubs();
         var distinct = ProvidedChannels()
-            .Where(name => !blocked.Contains(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaxChannels)
             .ToList();
         if (distinct.Count == 0)
-            distinct.AddRange(Catalog[0].Subs.Where(name => !blocked.Contains(name)));
+            distinct.AddRange(Catalog[0].Subs);
         return distinct;
     }
 
@@ -214,85 +212,14 @@ internal sealed class FypOnlineCoordinator
         return s.Length is >= 2 and <= 40 ? s : null;
     }
 
-    // ---- blocklist (B4) ------------------------------------------------------------
-    //
-    // The ONE choke point: blocked subs never reach an active channel set and blocked entry
-    // ids never reach a pool, so every consumer built on this class inherits the filter for
-    // free. Deliberately NOT an NSFW filter — scrolller's isNsfw is fetched by the query and
-    // read by nothing here (or in the mobile / web ports), because the whole niche catalog is
+    // There is deliberately NO content filter between the query and the pool: picking the
+    // subreddits IS the content control. Scrolller's isNsfw is fetched by the query and read
+    // by nothing here (or in the mobile / web ports), because the whole niche catalog is
     // adult: filtering on it would empty the pool rather than shape it. Owner decision
-    // 2026-08-12; leave isNsfw unread, it is not an oversight.
+    // 2026-08-12; leave isNsfw unread, it is not an oversight. (A per-sub/per-post blocklist
+    // existed here until 2026-08-14 but nothing ever fed it, so it was removed.)
 
-    private static HashSet<string> BlockedSubs()
-    {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var s in App.Settings?.Current?.RemoteMediaBlockedSubs ?? new List<string>())
-            if (!string.IsNullOrWhiteSpace(s)) set.Add(s);
-        return set;
-    }
-
-    private static HashSet<string> BlockedIds()
-    {
-        var set = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var s in App.Settings?.Current?.RemoteMediaBlockedIds ?? new List<string>())
-            if (!string.IsNullOrWhiteSpace(s)) set.Add(s);
-        return set;
-    }
-
-    /// <summary>Block a whole subreddit, everywhere, and persist immediately (settings saving
-    /// is manual). Rotation state is dropped so the sub leaves every active set at once.</summary>
-    public static void BlockSub(string? raw)
-    {
-        var sub = SanitizeSub(raw);
-        var s = App.Settings?.Current;
-        if (sub == null || s == null) return;
-        try
-        {
-            var list = new List<string>(s.RemoteMediaBlockedSubs) { sub };
-            s.RemoteMediaBlockedSubs = list;      // the setter sanitizes, dedupes and caps
-            App.Settings?.Save();
-            ResetAllChannels();
-            App.Logger?.Information("[remote media] blocked r/{Sub}", sub);
-        }
-        catch (Exception ex) { App.Logger?.Debug("FypOnline: block sub failed: {E}", ex.Message); }
-    }
-
-    /// <summary>Block one entry by id ("scrolller/&lt;sub&gt;/&lt;post&gt;") and persist. Channels
-    /// are left alone — one dud post says nothing about the rest of its subreddit.</summary>
-    public static void BlockEntry(string? entryId)
-    {
-        var s = App.Settings?.Current;
-        if (string.IsNullOrWhiteSpace(entryId) || s == null) return;
-        try
-        {
-            var list = new List<string>(s.RemoteMediaBlockedIds) { entryId.Trim() };
-            s.RemoteMediaBlockedIds = list;
-            App.Settings?.Save();
-            App.Logger?.Information("[remote media] blocked entry {Id}", entryId);
-        }
-        catch (Exception ex) { App.Logger?.Debug("FypOnline: block entry failed: {E}", ex.Message); }
-    }
-
-    /// <summary>Entry ids look like "scrolller/&lt;sub&gt;/&lt;post&gt;"; the middle segment is
-    /// re-checked against the blocked subs so an entry can't slip through on a channel that
-    /// was blocked after the page was already in flight.</summary>
-    private static List<FypAssetManifest.Entry> ApplyBlocklist(List<FypAssetManifest.Entry> entries)
-    {
-        var ids = BlockedIds();
-        var subs = BlockedSubs();
-        if (ids.Count == 0 && subs.Count == 0) return entries;
-        var kept = new List<FypAssetManifest.Entry>(entries.Count);
-        foreach (var e in entries)
-        {
-            if (ids.Contains(e.Id)) continue;
-            var parts = e.Id.Split('/');
-            if (parts.Length >= 3 && subs.Contains(parts[1])) continue;
-            kept.Add(e);
-        }
-        return kept;
-    }
-
-    /// <summary>Niche selection / custom subs / blocklist changed: drop rotation state
+    /// <summary>Niche selection / custom subs changed: drop rotation state
     /// (iterators, dead flags, backoff) but keep the learned dwell — taste survives a
     /// channel reshuffle.</summary>
     public void ResetChannels()
@@ -341,7 +268,7 @@ internal sealed class FypOnlineCoordinator
     /// <summary>
     /// Fetch the next batch of entries from the rotation, in this consumer's media kind.
     /// Returns (entries, error): a null error with zero entries means "nothing new right
-    /// now" (all channels dry, cooling down or fully blocked), a non-null error means the
+    /// now" (all channels dry or cooling down), a non-null error means the
     /// API itself is unreachable. Runs off the UI thread.
     /// </summary>
     public Task<(List<FypAssetManifest.Entry> Entries, string? Error)> FetchBatchAsync(CancellationToken ct)
@@ -389,7 +316,7 @@ internal sealed class FypOnlineCoordinator
             // A drained iterator restarts from the top: RANDOM sort deals different pages
             // and the page's cooldown machinery absorbs the occasional repeat.
             channel.Iterator = page.NextIterator;
-            var entries = ApplyBlocklist(page.Entries);
+            var entries = page.Entries;
             if (entries.Count > 0)
             {
                 App.Logger?.Information("[FYP online] +{N} entries from r/{Sub} ({Consumer})",

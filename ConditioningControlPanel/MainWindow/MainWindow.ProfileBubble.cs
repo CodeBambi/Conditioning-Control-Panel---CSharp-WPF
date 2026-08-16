@@ -458,6 +458,24 @@ namespace ConditioningControlPanel
             ShowTab("discord");
         }
 
+        /// <summary>
+        /// Opens the web's profile-sharing page in the default browser. No WebView2 host, on the
+        /// same doctrine the Just Drop shop states: the web owns the page, the desktop owns the
+        /// door. Nothing about the profile - least of all its slug - is read or shown here.
+        /// </summary>
+        private void ProfileMenuPublicProfile_Click(object sender, RoutedEventArgs e)
+        {
+            if (ProfileBubblePopup != null) ProfileBubblePopup.IsOpen = false;
+            try
+            {
+                Helpers.BrowserLauncher.OpenUrlOrPrompt(ProfileSharingUrl, "manage your public profile");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ProfileMenuPublicProfile_Click failed");
+            }
+        }
+
         private void ProfileMenuAchievements_Click(object sender, RoutedEventArgs e)
         {
             if (ProfileBubblePopup != null) ProfileBubblePopup.IsOpen = false;

@@ -53,6 +53,25 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// <summary>Raised when the WebView2 browser/render process dies. Host does NOT auto-recover.</summary>
         public Action<CoreWebView2ProcessFailedKind>? OnProcessFailed { get; init; }
 
+        /// <summary>
+        /// Raised once CoreWebView2 exists and every shared setting/mapping is applied, but BEFORE
+        /// the first navigation. The one seam for per-host plumbing that has to be in place before
+        /// the start URL is fetched — the JustDrop host uses it to attach the request filter that
+        /// puts the account's auth header on its sign-in navigation, which is worthless if it lands
+        /// after the request has already gone out.
+        ///
+        /// <para>Anything thrown here is logged and swallowed: a host that fails to add an extra
+        /// handler still gets its page.</para>
+        /// </summary>
+        public Action<CoreWebView2>? OnCoreCreated { get; init; }
+
+        /// <summary>
+        /// Extra origins this window may navigate to, beyond <see cref="PrimaryHost"/>. Empty by
+        /// default, and deliberately so: the lockdown in OnNavigationStarting is what stops a
+        /// hosted page wandering off to somewhere with no chrome to escape from.
+        /// </summary>
+        public IReadOnlyList<string> AdditionalNavigationHosts { get; init; } = Array.Empty<string>();
+
         /// <summary>Serilog-ish tag used in log lines, e.g. "DtrhHost".</summary>
         public string LogTag { get; init; } = "ChaosWebViewHost";
 
@@ -560,6 +579,10 @@ internal sealed class ChaosWebViewHost : IDisposable
             // element-fullscreen borderless-maximizes the host, exiting restores the titled window.
             core.ContainsFullScreenElementChanged += OnContainsFullScreenElementChanged;
 
+            // Last seam before the first byte is requested - see Options.OnCoreCreated.
+            try { _opts.OnCoreCreated?.Invoke(core); }
+            catch (Exception ex) { App.Logger?.Warning("{Tag}: OnCoreCreated threw: {E}", _opts.LogTag, ex.Message); }
+
             core.Navigate(_opts.StartUrl);
         }
         catch (Exception ex)
@@ -570,12 +593,26 @@ internal sealed class ChaosWebViewHost : IDisposable
 
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
-        // Only ever our local page. Block anything else (defence in depth).
-        if (string.IsNullOrEmpty(e.Uri) ||
-            !e.Uri.StartsWith("https://" + _opts.PrimaryHost + "/", StringComparison.OrdinalIgnoreCase))
-        {
-            e.Cancel = true;
-        }
+        // Only ever our own page. Block anything else (defence in depth).
+        if (string.IsNullOrEmpty(e.Uri)) { e.Cancel = true; return; }
+        if (IsAllowedNavigationHost(e.Uri, _opts.PrimaryHost)) return;
+        foreach (var host in _opts.AdditionalNavigationHosts)
+            if (IsAllowedNavigationHost(e.Uri, host)) return;
+        App.Logger?.Debug("{Tag}: blocked navigation to {Uri}", _opts.LogTag, e.Uri);
+        e.Cancel = true;
+    }
+
+    /// <summary>
+    /// Prefix match on "https://host/", which is exact rather than a substring test: the trailing
+    /// slash is what stops "https://ccp.game.evil.com/" from passing as ccp.game. A bare
+    /// "https://host" with no path is accepted too, since that is a legal way to name the root.
+    /// </summary>
+    private static bool IsAllowedNavigationHost(string uri, string host)
+    {
+        if (string.IsNullOrEmpty(host)) return false;
+        var origin = "https://" + host;
+        if (uri.Equals(origin, StringComparison.OrdinalIgnoreCase)) return true;
+        return uri.StartsWith(origin + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnContainsFullScreenElementChanged(object? sender, object e)

@@ -114,6 +114,16 @@ namespace ConditioningControlPanel
                 // --- Graded Intake: four states, not two ------------------------------------
                 RefreshPlayIntakeCard();
 
+                // --- Just Drop: present or absent, never locked -----------------------------
+                // A HIDE, not a lockband, and the distinction is the point: a lockband advertises
+                // something this account could buy, and a door the server has not opened is not
+                // for sale. Same posture the rail took before the shop became a window - on an
+                // account without it, the zone simply has three cards.
+                if (tab.SlotJustDrop != null)
+                    tab.SlotJustDrop.Visibility = Services.JustDrop.JustDropService.DoorAvailable
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+
                 // Nothing else on this wall is conditional. The Deeper master-switch flip and the
                 // Bureau's account chip used to live here; both cards left the page on 2026-08-12
                 // and the Deeper flag is still honoured where it always mattered - BtnDeeper's
