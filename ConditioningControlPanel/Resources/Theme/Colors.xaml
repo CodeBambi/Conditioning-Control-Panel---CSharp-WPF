@@ -176,6 +176,34 @@
     <Color x:Key="SectionHueUpdatesWash">#143EE87A</Color>
     <Color x:Key="SectionHueUpdatesBorder">#403EE87A</Color>
 
+    <!-- ============================ Session Rack ============================
+         The colour code for the compact session list (Session Rack, 2026-08-16).
+         Two families, both STATIC across mods on purpose - exactly like Danger and
+         SuccessGreen above. Difficulty and provenance are semantics, not brand: if
+         these followed the mod accent, a drone-green build would paint EASY and
+         EXTREME the same green and the stripe would stop meaning anything.
+
+         Each entry ships a solid (the 4px stripe, the pill text) and a *Wash sibling
+         at 0x22 alpha (~13%) for the pill/chip background - the same solid+wash shape
+         the SectionHue* family above uses. A mod that genuinely wants its own
+         difficulty palette can still override these fourteen keys wholesale.
+         ====================================================================== -->
+    <Color x:Key="SessionDiffEasy">#FF57D9A3</Color>
+    <Color x:Key="SessionDiffEasyWash">#2257D9A3</Color>
+    <Color x:Key="SessionDiffMedium">#FFF5C242</Color>
+    <Color x:Key="SessionDiffMediumWash">#22F5C242</Color>
+    <Color x:Key="SessionDiffHard">#FFFF8A4C</Color>
+    <Color x:Key="SessionDiffHardWash">#22FF8A4C</Color>
+    <Color x:Key="SessionDiffExtreme">#FFF23557</Color>
+    <Color x:Key="SessionDiffExtremeWash">#22F23557</Color>
+
+    <Color x:Key="SessionSrcBuiltIn">#FF5CC8FF</Color>
+    <Color x:Key="SessionSrcBuiltInWash">#225CC8FF</Color>
+    <Color x:Key="SessionSrcCustom">#FFFF69B4</Color>
+    <Color x:Key="SessionSrcCustomWash">#22FF69B4</Color>
+    <Color x:Key="SessionSrcImported">#FFB07CFF</Color>
+    <Color x:Key="SessionSrcImportedWash">#22B07CFF</Color>
+
     <!-- Ambient FX palette. DESIGN-TIME SEEDS ONLY (the Bambi pink family):
          Services/FxTheme.ApplyForActiveMod overwrites all four at startup and on every mod
          switch from the active mod's fxPalette → filterColor → accentColor chain. Never

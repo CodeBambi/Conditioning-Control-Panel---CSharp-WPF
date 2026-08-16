@@ -47,7 +47,7 @@ namespace ConditioningControlPanel
         /// <summary>Rise for a full-width session row on hover. Rows stretch edge to edge inside a
         /// ScrollViewer, so the shared 1.02 scale would push ~5px past the viewport on each side and
         /// WPF would clip it without a word. A 2px rise reads as the same "lift" and cannot clip -
-        /// the rows carry an 8px bottom margin.</summary>
+        /// the rack rows carry a 5px bottom margin.</summary>
         private const double SessionRowLiftPx = 2.0;
         private const int CardLiftMs = 150;
 
@@ -60,9 +60,11 @@ namespace ConditioningControlPanel
         /// <summary>Must MATCH the radii in PresetsTabView.xaml (SdPresetChip / SdSessionRow). The
         /// sheen and the sweep draw their own rounded rect in the adorner layer, so a radius that
         /// drifts from the card's shows up as a bright corner outside the card's outline. Went 6/8
-        /// to 11/12 with the Session Door Overhaul.</summary>
-        private const double PresetCardCornerRadius = 11;
-        private const double SessionCardCornerRadius = 12;
+        /// to 11/12 with the Session Door Overhaul, the session half to 10 with the Session Rack -
+        /// a 44px row wears a smaller radius than a 90px card did - and the preset half to 17 with
+        /// the chip rail, where the chip is a 34px pill and the radius is exactly half its height.</summary>
+        private const double PresetCardCornerRadius = 17;
+        private const double SessionCardCornerRadius = 10;
 
         // ---- state -----------------------------------------------------------------
 
@@ -272,6 +274,14 @@ namespace ConditioningControlPanel
                 // stagger animates it in - see SyncCustomSessionsFromDisk / #614.
                 SyncCustomSessionsFromDisk();
 
+                // Same rule again, and the rack's safety net. SyncCustomSessionsFromDisk only
+                // repaints when it finds a file the manager has never seen, but "Recent" sorts on
+                // File.GetLastWriteTime - editing a session re-dates it without adding one - and
+                // this is also the one guaranteed repaint after the tab exists, so a rack that
+                // missed its startup paint (PresetsTab not built yet) still fills in here rather
+                // than staying empty until something is imported.
+                RepaintSessionRack();
+
                 // Same rule, for the same reason: a run that finished while this tab was collapsed
                 // must be ON the shelf before the stagger animates the shelf in.
                 RefreshTakeawayShelf();
@@ -291,14 +301,11 @@ namespace ConditioningControlPanel
             {
                 HookTabFxWindowEvents();
 
-                // The four built-in session rows are static XAML, so they are wired once and never
-                // again. The dynamic ones (custom sessions, preset cards) are wired where they are
-                // built - see PrepareSessionRowFx / PreparePresetCardFx.
-                var panel = PresetsTab?.SessionsPanel;
-                if (panel != null)
-                    foreach (var row in panel.Children.OfType<Border>())
-                        PrepareSessionRowFx(row);
-
+                // No session rows are wired here any more. There is no static XAML row left on
+                // this page (Session Rack, 2026-08-16) - every rack row is built by
+                // MainWindow.SessionIO.BuildSessionRackRow, which calls PrepareSessionRowFx on
+                // the way out, exactly as CreatePresetCard does for a chip. Re-wiring them from
+                // here would double-hook MouseEnter and attach the sweep twice per hover.
                 WireButtonPress(PresetsTab?.BtnLoadPreset);
                 WireButtonPress(PresetsTab?.BtnStartSession);
             }
@@ -306,8 +313,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Hover lift on a preset card (100x70, so the shared 1.02 scale fits). Called from
-        /// CreatePresetCard, which rebuilds the whole row on every selection change.
+        /// Hover lift on a preset chip and on a Takeaway chip - the shared 1.02 scale, which is
+        /// sub-pixel on a 32-34px pill and has room in the WrapPanel's 6px row gap. Called from
+        /// CreatePresetCard (which rebuilds the whole rail on every selection change) and from the
+        /// Takeaway strip builders.
         /// </summary>
         internal void PreparePresetCardFx(FrameworkElement card)
         {
@@ -461,12 +470,11 @@ namespace ConditioningControlPanel
                 // 6-slot ramp and they land together.
                 StaggerZone(PresetsTab?.PresetCardsPanel);
 
-                // The session zone is one group even though it is two panels: the built-in rows and
-                // the user's own rows are the same list to the reader, and the "Your sessions"
-                // header between them is not a zone boundary.
+                // The session zone is ONE panel now (Session Rack) - it used to be two, a static
+                // built-in list plus a code-built "Your sessions" annexe, staggered together
+                // because they read as one list anyway. They are one list for real now.
                 var rows = new List<FrameworkElement>();
-                CollectVisible(PresetsTab?.SessionsPanel, rows);
-                CollectVisible(PresetsTab?.CustomSessionsPanel, rows);
+                CollectVisible(PresetsTab?.SessionRackPanel, rows);
                 StaggerCards(rows);
 
                 // The Takeaway shelf is its own zone and rides its own ramp, so the receipts arrive
@@ -482,10 +490,12 @@ namespace ConditioningControlPanel
                 StaggerCards(cards);
             }
 
-            // Borders only, and that is load-bearing rather than tidy: SessionsPanel also holds the
-            // "Your sessions" TextBlock header AND the CustomSessionsPanel StackPanel itself, so an
-            // OfType<FrameworkElement> here would stagger that container and then stagger its rows
-            // again a line later - two TranslateTransforms compounding on the same rows.
+            // Borders only, and that is still load-bearing rather than tidy. It used to guard
+            // against SessionsPanel's "Your sessions" TextBlock header and the nested
+            // CustomSessionsPanel (staggering the container AND its rows compounded two
+            // TranslateTransforms on the same rows). Both are gone, but SessionRackPanel holds a
+            // TextBlock of its own - the "no sessions match" empty line - which must not be
+            // animated in as though it were a row.
             static void CollectVisible(Panel? panel, List<FrameworkElement> into)
             {
                 if (panel == null) return;
@@ -573,8 +583,7 @@ namespace ConditioningControlPanel
                 return ByTag(tab.PresetCardsPanel, _selectedPreset.Id);
 
             if (_selectedSession != null)
-                return ByTag(tab.SessionsPanel, _selectedSession.Id)
-                    ?? ByTag(tab.CustomSessionsPanel, _selectedSession.Id);
+                return ByTag(tab.SessionRackPanel, _selectedSession.Id);
 
             return null;
 
