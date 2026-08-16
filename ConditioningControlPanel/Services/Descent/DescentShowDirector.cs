@@ -202,15 +202,124 @@ namespace ConditioningControlPanel.Services.Descent
             try
             {
                 var window = DescentFuseWindow.Open(DescentShowKind.Ignition);
-                if (window is null) { RestoreChrome(); return; }
+                if (window is null) { RestoreChrome(); BeginFirstLight(); return; }
 
-                window.Closed += (_, _) => RestoreChrome();
+                window.Closed += (_, _) => { RestoreChrome(); BeginFirstLight(); };
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[Fuse] The Year One ignition could not start.");
                 RestoreChrome();
+                BeginFirstLight();
             }
+        }
+
+        // ------------------------------------------------------------------
+        // The first light (§2.4, owner ruling 2026-08-16)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// ONE PER PROCESS. The reveal is the payment for taking the ceremony, and paying it twice
+        /// in one session would be a bug rather than a bonus — the ignition can close more than once
+        /// in theory (a second ceremony cannot happen, but a handler firing twice is the kind of
+        /// thing that is only ever discovered on the night).
+        ///
+        /// <para><b>Deliberately NOT persisted.</b> If the app dies between the commit and the
+        /// reveal, the next launch simply has an open gate and a visible spiral — the surfaces are
+        /// unlocked, every ordinary door works, and the user has lost an animation rather than an
+        /// unlock. A settings flag would buy replaying a four-second intro at some random later
+        /// launch, out of the context that gave it its meaning, at the cost of another line of
+        /// account state that has to be right forever.</para>
+        /// </summary>
+        private static bool _firstLightPlayed;
+
+        /// <summary>The commit path's entry: the one-shot guard, then the reveal.</summary>
+        private static void BeginFirstLight()
+        {
+            if (_firstLightPlayed) return;
+            _firstLightPlayed = true;
+            RunFirstLightReveal();
+        }
+
+        /// <summary>
+        /// THE FIRST LIGHT, whole (CONTRACT-FUSE-0816 §2.4, owner ruling 2026-08-16): "hide the
+        /// spiral till the ceremony finishes, and go to the profile page, and have some highlight
+        /// animation that catches the user's attention and reveals the spiral, even opens it for
+        /// them."
+        ///
+        /// <list type="number">
+        /// <item>Bring the main window forward and navigate to the profile tab THROUGH THE REAL
+        /// PATH — <c>MainWindow.ShowTab("discord")</c>, the same door the nav rail, the bark rules
+        /// and the command palette all use. A parallel navigation would be a second way to change
+        /// tabs that the rest of the app does not know about.</item>
+        /// <item>Repaint the spiral surfaces (the withhold opened at the commit) and pulse the
+        /// Trainer Card's plate — opacity and transform only, skipped under reduced motion.</item>
+        /// <item>Open the map FOR them, with the reveal playing inside it
+        /// (<c>SpiralMapWindow.ShowMapFirstLight</c>), which is the door that tolerates the descent
+        /// block still being in flight.</item>
+        /// </list>
+        ///
+        /// <para><b>INTERNAL, AND THE DEMO RIG'S ENTRY POINT.</b> The owner's capture rig calls this
+        /// directly to film the reveal without standing up a server, a veteran account and a
+        /// ceremony. It is deliberately not public, has no command-line wiring and is not on any
+        /// menu — the rig adds its own scratch hook — and it deliberately skips the one-shot guard
+        /// so the rig can re-run it; <see cref="BeginFirstLight"/> is the guarded path the ceremony
+        /// itself takes.</para>
+        /// </summary>
+        internal static void RunFirstLightReveal()
+        {
+            // CLAUDE.md async rules 6/8 on every hop: this is reached from a window's Closed
+            // handler, from a fallback path and from a test rig, and none of them can promise a
+            // living dispatcher.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+
+            if (dispatcher.CheckAccess()) FirstLightOnUiThread();
+            else _ = dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(FirstLightOnUiThread));
+        }
+
+        private static void FirstLightOnUiThread()
+        {
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+
+            try
+            {
+                Log.Information("[Fuse] First light: the spiral is being revealed to this account for the first time.");
+
+                if (Application.Current?.MainWindow is not MainWindow main || !main.IsLoaded)
+                {
+                    // No window to walk them through, but the map is its own top-level HWND and does
+                    // not need one. Better a reveal with no walk-up than no reveal.
+                    Log.Debug("[Fuse] First light: no main window — opening the map on its own.");
+                    OpenFirstLightMap();
+                    return;
+                }
+
+                try
+                {
+                    if (main.WindowState == WindowState.Minimized) main.WindowState = WindowState.Normal;
+                    main.Activate();
+                }
+                catch (Exception ex) { Log.Debug("[Fuse] First light could not bring the window forward: {Error}", ex.Message); }
+
+                main.ShowTab("discord");
+
+                // The pulse owns the hand-off so the map opens AFTER the plate has finished asking
+                // for attention — and the callback runs on every path, including the ones where
+                // there is no plate to pulse.
+                main.PlayFirstLightHighlight(OpenFirstLightMap);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Fuse] The first-light reveal failed on the way to the profile tab — opening the map directly.");
+                OpenFirstLightMap();
+            }
+        }
+
+        private static void OpenFirstLightMap()
+        {
+            try { SpiralMapWindow.ShowMapFirstLight(); }
+            catch (Exception ex) { Log.Error(ex, "[Fuse] The first-light map could not open."); }
         }
 
         /// <summary>
