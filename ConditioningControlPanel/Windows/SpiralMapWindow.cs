@@ -78,7 +78,15 @@ namespace ConditioningControlPanel
         private void OnBlockChanged(object? sender, EventArgs e)
         {
             // DescentService already marshalled to the UI thread before raising.
-            try { _embed.PostState(App.Descent?.Current); }
+            // A WITHDRAWN block (server dial narrowed, logout) closes the map — every other
+            // spiral surface retracts on withdrawal, and a map showing a day-0 spiral for an
+            // account the server just stopped serving is a leak, not a view (§2.5).
+            try
+            {
+                var block = App.Descent?.Current;
+                if (block is null) { Close(); return; }
+                _embed.PostState(block);
+            }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] map state: {E}", ex.Message); }
         }
 
@@ -87,6 +95,10 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Self-enforcing gate: every call site hangs off block-gated chrome, but the
+                // invariant "no block ⇒ no map" belongs to the door, not to the hallway (§2.5).
+                if (App.Descent?.Current is null) return;
+
                 if (_open != null)
                 {
                     _open.Activate();
