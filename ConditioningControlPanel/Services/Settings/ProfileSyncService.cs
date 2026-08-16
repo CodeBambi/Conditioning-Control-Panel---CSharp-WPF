@@ -3996,11 +3996,12 @@ namespace ConditioningControlPanel.Services
             var offer = new DescentMigrationOffer
             {
                 TotalXpEarned = block.TotalXpEarned ?? 0,
-                DevotionDays = block.DevotionDays ?? 0
+                DevotionDays = block.DevotionDays ?? 0,
+                RestoreBasisXp = block.RestoreBasisXp ?? 0
             };
 
-            App.Logger?.Information("[Descent] Server is offering the migration ceremony (lifetime {Xp} XP, {Days} devotion days).",
-                (int)offer.TotalXpEarned, offer.DevotionDays);
+            App.Logger?.Information("[Descent] Server is offering the migration ceremony (lifetime {Xp} XP, {Days} devotion days, restore basis {Basis}).",
+                (int)offer.TotalXpEarned, offer.DevotionDays, (int)offer.RestoreBasisXp);
 
             App.DescentMigration?.OfferReceived(offer);
         }
@@ -4310,6 +4311,12 @@ namespace ConditioningControlPanel.Services
             /// <summary>Server-side devotion days, already backfilled. Display only.</summary>
             [JsonProperty("devotion_days")]
             public int? DevotionDays { get; set; }
+
+            /// <summary>The figure Option A derives from: lifetime + the veteran credit
+            /// (server-computed, 2026-08-16). Absent on older servers — the offer falls back to
+            /// <see cref="TotalXpEarned"/>.</summary>
+            [JsonProperty("restore_basis_xp")]
+            public double? RestoreBasisXp { get; set; }
 
             /// <summary>The ack. The ONLY thing that may mark this client migrated (§2.4).</summary>
             [JsonProperty("completed")]
