@@ -1825,6 +1825,25 @@
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
+                    <!-- THE FUSE's spark (CONTRACT-FUSE-0816 2.2). A small gold glyph that appears
+                         seven days before the ceremony and says NOTHING - no digits, no tooltip, no
+                         explanation until T-72h, at which point hovering it reads out T-minus.
+                         Collapsed here and only ever shown by MainWindow.DescentFuse.cs, which does
+                         nothing at all without a cached ceremony timestamp, so on every install
+                         today this is one collapsed 18px Grid and no code.
+                         Background="Transparent" so the host hit-tests for the hover readout; the
+                         glyph itself is pure decoration. -->
+                    <Grid x:Name="FuseSparkHost" Width="18" Height="18" Margin="10,0,0,0"
+                          VerticalAlignment="Center" Visibility="Collapsed"
+                          Background="Transparent" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <ScaleTransform x:Name="FuseSparkScale"/>
+                        </Grid.RenderTransform>
+                        <Path x:Name="FuseSparkGlyph" Width="14" Height="14" Stretch="Uniform"
+                              Fill="#FFE0B052" IsHitTestVisible="False"
+                              Data="M 8,0 L 9.5,6.5 L 16,8 L 9.5,9.5 L 8,16 L 6.5,9.5 L 0,8 L 6.5,6.5 Z"/>
+                    </Grid>
+
                     <!-- Profile bubble: the user's avatar (Discord photo / preset bust / initials).
                          Hover opens the account menu below; a direct click jumps to the Profile
                          tab (key "discord"). It also reacts to app moments - XP pulses, level-up
@@ -3135,5 +3154,30 @@
     <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" Panel.ZIndex="9997"
             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
             IsHitTestVisible="False"/>
+
+    <!-- THE FUSE's corner readout (CONTRACT-FUSE-0816 2.2). From T-1h the T-minus stops being a
+         hover reward and becomes a thing in the room: a small clock in the corner that does not go
+         away. IN-APP, deliberately not a separate window - the contract is explicit, and a topmost
+         countdown window would be the app shouting rather than waiting.
+
+         OUTSIDE the Viewbox for the same reason EventFxHost is: everything inside is bitmap-scaled
+         from the fixed design canvas, and small tabular digits are exactly what that ruins. Here it
+         renders in native window pixels. ZIndex 9996 puts it under the accent frame (9997), the FX
+         layer and the fullscreen browser overlay, so nothing it can ever cover matters.
+
+         Collapsed, hit-test invisible, and owned entirely by MainWindow.DescentFuse.cs. -->
+    <Border x:Name="FuseCornerReadout" Panel.ZIndex="9996"
+            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,20"
+            Padding="10,5" CornerRadius="6" Visibility="Collapsed" IsHitTestVisible="False"
+            Background="#B00A0514" BorderBrush="#40E0B052" BorderThickness="1">
+        <StackPanel>
+            <TextBlock x:Name="FuseCornerDigits" Text=""
+                       FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="15"
+                       Foreground="#FFC9C4D6" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="FuseCornerPresence" Text="" Visibility="Collapsed"
+                       FontSize="10" Margin="0,3,0,0" Foreground="#8AC9C4D6"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Border>
     </Grid>
 </Window>
