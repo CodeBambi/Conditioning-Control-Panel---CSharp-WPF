@@ -5545,6 +5545,35 @@ namespace ConditioningControlPanel.Models
             set { _pendingDescentMigrationChoice = value; OnPropertyChanged(); }
         }
 
+        private bool _descentMigrationOffered = false;
+        /// <summary>
+        /// THE WITHHOLD'S MEMORY. True from the moment this account is first handed a migration
+        /// offer, and cleared the moment a choice is committed (DescentMigrationService.ApplyChoice)
+        /// or the server acks one.
+        ///
+        /// <para><b>Why a persisted flag and not just the live offer.</b> The spiral is withheld
+        /// from an account that is OWED the ceremony (see
+        /// <c>DescentMigrationService.SpiralWithheld</c>), and in-session that question is answered
+        /// by <c>LiveOffer</c> — which is never cleared, so a "Not tonight" deferral keeps the
+        /// spiral hidden for the rest of the session. Across a RELAUNCH there is nothing in memory
+        /// to ask: the descent block can land from the profile poll before the sync that re-delivers
+        /// the offer does, and for those seconds the veteran would watch the plate and the rail
+        /// light up in front of a question they have not answered yet. That flash is exactly what
+        /// the withhold exists to prevent, so the fact that an offer was ever made has to survive
+        /// the process.</para>
+        ///
+        /// <para>It is deliberately NOT "the account is a veteran" — it says only that a ceremony
+        /// was offered and not yet taken, which is why committing clears it. A settings file that
+        /// somehow keeps it set past a completed migration still reads as not-withheld, because
+        /// <c>DescentMigrationCompleted</c> outranks it in the predicate.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool DescentMigrationOffered
+        {
+            get => _descentMigrationOffered;
+            set { _descentMigrationOffered = value; OnPropertyChanged(); }
+        }
+
         private DateTime? _descentAnchorUtc = null;
         /// <summary>
         /// Year One anchor: the ceremony date (§10). For veterans this is the birth of their
@@ -5639,6 +5668,107 @@ namespace ConditioningControlPanel.Models
         {
             get => _descentLastStageDripDate;
             set { _descentLastStageDripDate = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region The Descent — the Fuse (countdown to the ceremony)
+
+        // Written by exactly two places: ProfileSyncService (the cached timestamp, from the sync
+        // response's additive `descent_countdown` block) and DescentCountdownService / the zero
+        // show (the witness flags and the witness ratchet). All of them are inert on every install
+        // today, because the server does not send `descent_countdown` until the owner arms
+        // DESCENT_CEREMONY_AT.
+        //
+        // DescentCeremonyAtUtc IS THE KILL SWITCH. Null = the fuse does not exist: no timer, no
+        // spark, no chrome dimming, no candle. Clearing it at runtime tears every surface down
+        // and restores the chrome, live. Nothing else gates the feature.
+
+        private string? _descentCeremonyAtUtc = null;
+        /// <summary>
+        /// The ceremony instant, ISO-8601 UTC, exactly as the server wrote it — cached so the
+        /// countdown keeps running offline. Null = no fuse (and null is the state of every
+        /// install until the server arms it).
+        ///
+        /// <para><b>Kept as a STRING on purpose.</b> The wire value is an ISO string and this is a
+        /// cache of the wire, not an interpretation of it; storing a DateTime here would bake this
+        /// client's parse (and Newtonsoft's date coercion, see DescentReader.ParseWire) into the
+        /// settings file, so a re-read could disagree with what the server actually said. The one
+        /// place it becomes an instant is <see cref="Services.Descent.DescentCountdownService"/>,
+        /// which parses it round-trip/UTC on every read.</para>
+        /// </summary>
+        [JsonProperty]
+        public string? DescentCeremonyAtUtc
+        {
+            get => _descentCeremonyAtUtc;
+            set { _descentCeremonyAtUtc = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentLastNightWitnessed = false;
+        /// <summary>
+        /// True once the LIVE zero sequence was watched all the way to its bloom. The keepsake
+        /// hook — "you were there the night it happened" — and the flag that tells the catch-up
+        /// path it has nothing to do.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentLastNightWitnessed
+        {
+            get => _descentLastNightWitnessed;
+            set { _descentLastNightWitnessed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCatchUpCrackPlayed = false;
+        /// <summary>
+        /// True once the condensed catch-up crack has played for a subject who was not running the
+        /// app at zero. Once per account: the shortened sequence is an apology for missing the
+        /// night, not a thing to re-watch on every launch.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCatchUpCrackPlayed
+        {
+            get => _descentCatchUpCrackPlayed;
+            set { _descentCatchUpCrackPlayed = value; OnPropertyChanged(); }
+        }
+
+        private int _descentFuseMaxPhaseWitnessed = 0;
+        /// <summary>
+        /// THE KEEPSAKE RATCHET: the highest <see cref="Services.Descent.DescentFusePhase"/> (0..7)
+        /// this subject actually LIVED THROUGH, as an int. 0 on every install today.
+        ///
+        /// <para><b>It only ever goes up.</b> Never reset, never lowered — not by the kill switch
+        /// clearing the timestamp, not by the owner moving the ceremony date backwards, not by
+        /// completing the migration. It is a record of what a person saw, and nothing that happens
+        /// afterwards can un-see it.</para>
+        ///
+        /// <para><b>Zero (7) means they kept the vigil.</b> A launch the morning after gets Zero
+        /// announced at startup like everyone else, and that announcement deliberately does NOT
+        /// ratchet — otherwise the person who watched the crack live and the person who slept
+        /// through it would be stored identically. Someone who watched the Vigil and closed the app
+        /// half an hour early keeps 5. See <c>DescentCountdownService.WitnessRatchet</c>.</para>
+        ///
+        /// <para><b>Nothing reads it yet.</b> It is written this wave so that the easter-egg and
+        /// keepsake surfaces of a later wave have a truthful answer to "were you there", instead of
+        /// having to invent one for a user who joined afterwards.</para>
+        /// </summary>
+        [JsonProperty]
+        public int DescentFuseMaxPhaseWitnessed
+        {
+            get => _descentFuseMaxPhaseWitnessed;
+            set { _descentFuseMaxPhaseWitnessed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCountdownAudio = true;
+        /// <summary>
+        /// Gate for the countdown's audio hook (the Terminal-phase heartbeat). Defaults ON and has
+        /// NO settings UI this wave — it is the switch that exists so the hook can be turned off
+        /// without a patch, not a knob anyone is asked about. The hook itself is a no-op unless
+        /// the audio asset ships, so this defaulting true changes nothing today.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCountdownAudio
+        {
+            get => _descentCountdownAudio;
+            set { _descentCountdownAudio = value; OnPropertyChanged(); }
         }
 
         #endregion

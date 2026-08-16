@@ -99,18 +99,28 @@ namespace ConditioningControlPanel.Controls
         // ============================== lifecycle ==============================
 
         /// <summary>
-        /// Light the rail up, if it is allowed to be lit. Three gates, all required: the
-        /// flag, an account the server has actually shipped a descent block to, and a
-        /// live DescentService. Missing any one leaves the control Collapsed.
+        /// Light the rail up, if it is allowed to be lit. Four gates, all required: the
+        /// flag, an account the server has actually shipped a descent block to, a live
+        /// DescentService, and no migration ceremony still owed. Missing any one leaves
+        /// the control Collapsed.
         ///
         /// Called on every block change, so an account whose key lights up mid-session
         /// gets the rail without a restart — and one whose key is withdrawn loses it.
+        ///
+        /// THE WITHHOLD (CONTRACT-FUSE-0816 §2.4) is the fourth gate and the newest: at
+        /// zero the server's block dial promotes to 'all' on the same sync that offers a
+        /// veteran the migration ceremony, so block presence alone would light this rail
+        /// up while the question is still on screen. DescentMigrationService raises
+        /// BlockChanged when the withhold flips, which is why re-reading it here — in the
+        /// method that already re-runs on every block change — is the entire wiring.
         /// </summary>
         public void Arm()
         {
             try
             {
-                bool allowed = FlagEnabled && App.Descent?.Current is not null;
+                bool allowed = FlagEnabled
+                               && App.Descent?.Current is not null
+                               && App.DescentMigration?.SpiralWithheld != true;
                 if (!allowed)
                 {
                     Visibility = Visibility.Collapsed;
@@ -225,15 +235,28 @@ namespace ConditioningControlPanel.Controls
         }
 
         /// <summary>
-        /// Click-to-expand: the same canvas at ?mode=map, in its own window. A window and
-        /// not an in-tab panel on purpose — the map is the one surface big enough for the
-        /// airspace problem to be unmanageable, and a separate top-level HWND has no
-        /// airspace problem at all.
+        /// Click-to-expand: the same canvas at ?mode=map, in the SPIRAL ROOM.
+        ///
+        /// <para><b>It used to be a window</b> (<c>SpiralMapWindow</c>), on the reasoning that a
+        /// separate top-level HWND has no airspace problem at all. True — but it also meant the one
+        /// moment this feature was built for opened a second window over the app instead of opening
+        /// a room in it, so the window retired on 2026-08-16 and the tab took over. The airspace
+        /// problem is solved there by NOT BUILDING the browser except while that tab is the one on
+        /// screen in the spiral state; see Views/Tabs/SpiralTabView.xaml.cs.</para>
+        ///
+        /// <para><b>The gates moved with it.</b> This method deliberately no longer tests the block
+        /// or the withhold: the tab re-reads every gate on entry and shows the fog, the waiting room
+        /// or the canvas accordingly, so a deep link, a stale click or a future caller lands on the
+        /// right room rather than on nothing happening.</para>
         /// </summary>
-        private void OpenMap()
+        private static void OpenMap()
         {
             if (!FlagEnabled) return;
-            try { SpiralMapWindow.ShowMap(); }
+            try
+            {
+                if (Application.Current?.MainWindow is ConditioningControlPanel.MainWindow main)
+                    main.ShowTab(SpiralRoom.TabKey);
+            }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] OpenMap: {E}", ex.Message); }
         }
     }

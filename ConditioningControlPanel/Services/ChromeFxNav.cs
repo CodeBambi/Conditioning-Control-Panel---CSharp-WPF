@@ -40,6 +40,13 @@ namespace ConditioningControlPanel.Services
             // straight off it, so removing the key put "appsettings" back from 24 to 23 - and
             // ChromeFxNavTests asserts that index by number, so its InlineData row moved back too.
             "appsettings",                                                     // Settings (pinned last)
+            // APPENDED, NOT INSERTED. "spiral" is the You door's second row visually, but putting it
+            // there would shift every later index and ChromeFxNavTests pins four of them by number
+            // (settings=0, lab=8, assets=22, appsettings=23). The cost of appending is that the
+            // slide direction into and out of the Spiral Room is computed from the wrong end of the
+            // strip - which costs exactly nothing, because "spiral" is an AIRSPACE tab: it hosts a
+            // WebView2, it never slides at all, and EntranceOffset's answer for it is discarded.
+            "spiral",
         };
 
         /// <summary>
@@ -51,7 +58,7 @@ namespace ConditioningControlPanel.Services
         /// <remarks>"justdrop" was here while the shop was a tab. It is a separate window now, so
         /// it has no tab transition to be exempted from at all.</remarks>
         private static readonly HashSet<string> Airspace =
-            new(StringComparer.OrdinalIgnoreCase) { "settings", "progression", "gradedintake" };
+            new(StringComparer.OrdinalIgnoreCase) { "settings", "progression", "gradedintake", "spiral" };
 
         public static bool IsAirspaceTab(string? tab) =>
             !string.IsNullOrEmpty(tab) && Airspace.Contains(tab);

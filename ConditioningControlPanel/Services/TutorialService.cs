@@ -175,6 +175,10 @@ namespace ConditioningControlPanel.Services
             ["BtnLeaderboard"] = "leaderboard",
             ["BtnCompanion"] = "companion",
             ["BtnDiscordTab"] = "discord",
+            // The Spiral Room shares the You door with the profile. The row is Collapsed for most
+            // accounts, so a step spotlighting it would only ever be authored for one that has it -
+            // but the door still has to open, or the spotlight lands inside a clipped panel.
+            ["BtnNavSpiral"] = "spiral",
             // The x:Name is API and never changes; the VALUE is the live ShowTab key, so it moved
             // to "play" when Phase 6 retired the Lab page into the Play door's card wall.
             // ("lab" would still resolve — ExpandDoorForTab canonicalises the alias — but a door

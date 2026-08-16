@@ -1,0 +1,190 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.SpiralTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="620" d:DesignWidth="1460">
+
+    <!-- ================================================================
+         THE SPIRAL ROOM (CONTRACT-FUSE-0816 2.4) - three states in one tab.
+
+           FOG      - a ceremony is owed or scheduled. A full-bleed fog layer
+                      (SpiralFirstLightVisual held before its first stroke, with
+                      its ambient clock free-running) under centred copy in the
+                      fuse's voice. Nothing is clickable.
+           FIRST    - the one-shot reveal, played INSIDE this tab the moment the
+           LIGHT      user's own ceremony commits. Same canvas, clock running.
+           SPIRAL   - the /embed/spiral canvas at ?mode=map, full tab width,
+                      behind a loading splash until it has actually navigated.
+                      Falls back to the waiting panel, which is today's live path
+                      because the map route is not deployed yet.
+
+         THE AIRSPACE STRATEGY, and it is why this file is shaped like this.
+         A WebView2 is a native child HWND: it paints OVER every WPF element in
+         the same window whatever the z-order says. So the embed is not merely
+         hidden while the fog or the reveal is up - it is NEVER CONSTRUCTED. The
+         code-behind builds it on entering the spiral state and disposes it on
+         the way out, so there is no idle Chromium behind a tab nobody is
+         looking at and nothing can paint over the fog.
+
+         The SPLASH is the same problem one layer down. A constructed browser
+         paints its own dark slab the instant its HWND exists, which is what made
+         the wait read as a hang. So EmbedHost is parked at Visibility.Hidden -
+         ARRANGED, so the browser gets a real rectangle and navigates normally,
+         but with no airspace - and is only promoted to Visible once the embed
+         reports a successful navigation. Until then the splash owns the surface
+         and nothing native can paint over it.
+
+         Everything visible here is authored in code-behind or literal: the
+         copy is hardcoded English by contract (4, see DescentFuseCopy) and
+         every colour is the fuse's own gold, never the mod accent.
+
+         ANIMATION LAW: opacity and transform only, everywhere in this file. The
+         two BlurEffects below are STATIC - set once, never animated - and the
+         glow they sit on breathes by opacity.
+         ================================================================ -->
+
+    <Grid Background="#0A0514">
+
+        <!-- The fog / reveal canvas. SpiralFirstLightVisual takes an accent Color
+             in its constructor, so it is built in code and dropped in here. -->
+        <Grid x:Name="FogHost"/>
+
+        <!-- The fog era's embers: a handful of gold specks drifting up through the
+             weather, seeded and driven from code-behind. Clipped, hit-test dead,
+             and it never exists at all under reduced motion. -->
+        <Canvas x:Name="EmberHost" Visibility="Collapsed"
+                IsHitTestVisible="False" ClipToBounds="True"/>
+
+        <!-- The fog era's copy. Hit-test invisible as a whole: there is nothing to
+             click in the fog, and a caret or a hover state would imply otherwise. -->
+        <StackPanel x:Name="FogCopy" Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MaxWidth="620" IsHitTestVisible="False">
+
+            <TextBlock x:Name="FogEyebrow" HorizontalAlignment="Center"
+                       FontSize="12" Foreground="#E0B052" Opacity="0.85"
+                       Typography.Capitals="SmallCaps"/>
+
+            <TextBlock x:Name="FogLine" HorizontalAlignment="Center"
+                       Margin="0,14,0,0" FontSize="21" LineHeight="30"
+                       TextAlignment="Center" TextWrapping="Wrap"
+                       Foreground="#F2ECF7"/>
+
+            <!-- THE HERO. Two TextBlocks carrying the same string: a blurred gold
+                 duplicate underneath for the bloom, the crisp digits over it. The
+                 glow's Text and FontSize follow the crisp one so the readout can
+                 change size (digits are big, the "any moment now" phrase is not)
+                 without either half being retyped twice.
+
+                 The pulse and the phase flare both live on this host: the scale is
+                 the heartbeat, the glow's opacity is the flare. -->
+            <Grid x:Name="FogDigitsHost" Margin="0,30,0,0"
+                  HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="FogDigitsPulse" ScaleX="1" ScaleY="1"/>
+                </Grid.RenderTransform>
+
+                <TextBlock x:Name="FogDigitsGlow" HorizontalAlignment="Center"
+                           Text="{Binding Text, ElementName=FogDigits}"
+                           FontSize="{Binding FontSize, ElementName=FogDigits}"
+                           FontFamily="Cascadia Mono, Consolas, Courier New"
+                           FontWeight="Bold" Foreground="#E0B052" Opacity="0.42"
+                           Typography.NumeralAlignment="Tabular"
+                           IsHitTestVisible="False">
+                    <TextBlock.Effect>
+                        <BlurEffect Radius="16" KernelType="Gaussian" RenderingBias="Performance"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <TextBlock x:Name="FogDigits" HorizontalAlignment="Center"
+                           FontSize="56" FontWeight="Bold"
+                           FontFamily="Cascadia Mono, Consolas, Courier New"
+                           Foreground="#E0B052"
+                           Typography.NumeralAlignment="Tabular"/>
+            </Grid>
+
+            <!-- The ornament: one gold hairline that breathes under the digits. A
+                 Rectangle rather than a Border so nothing about it is layout. -->
+            <Rectangle x:Name="FogHairline" HorizontalAlignment="Center"
+                       Margin="0,20,0,0" Width="190" Height="1"
+                       Fill="#E0B052" Opacity="0.30"/>
+
+            <TextBlock x:Name="FogTail" HorizontalAlignment="Center"
+                       Margin="0,22,0,0" FontSize="12" LineHeight="19"
+                       TextAlignment="Center" TextWrapping="Wrap"
+                       Foreground="#8AC9C4D6"/>
+        </StackPanel>
+
+        <!-- The embed's slab. Empty until the spiral state builds one, and Hidden
+             rather than Visible until that embed has navigated - see the airspace
+             note at the top of this file. -->
+        <Grid x:Name="EmbedHost" Visibility="Collapsed"/>
+
+        <!-- THE SPLASH. Opaque, because its whole job is to be the thing on screen
+             while a browser is being built behind it. Drawn from a spiral the
+             code-behind builds as geometry; the ring, the arm and the three dots
+             are all opacity and rotation. -->
+        <Grid x:Name="SpiralSplash" Visibility="Collapsed" Background="#0A0514">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+                <Grid Width="104" Height="104" HorizontalAlignment="Center">
+                    <Ellipse x:Name="SplashHalo" Width="104" Height="104"
+                             Stroke="#E0B052" StrokeThickness="1" Opacity="0.16"/>
+
+                    <Path x:Name="SplashGlyph" Width="78" Height="78"
+                          Stretch="Uniform" Stroke="#E0B052" StrokeThickness="2.2"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Opacity="0.92" RenderTransformOrigin="0.5,0.5">
+                        <Path.RenderTransform>
+                            <RotateTransform x:Name="SplashSpin" Angle="0"/>
+                        </Path.RenderTransform>
+                    </Path>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                            Margin="0,26,0,0">
+                    <TextBlock x:Name="SplashLine" FontSize="14"
+                               Foreground="#E0B052" Opacity="0.88"/>
+                    <TextBlock x:Name="SplashDot1" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                    <TextBlock x:Name="SplashDot2" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                    <TextBlock x:Name="SplashDot3" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- The waiting room. Same chrome as the fuse's corner readout, so a user
+             who has seen the countdown recognises the voice. It gets its own
+             ambient loop - a breathing line over a few drifting motes - because a
+             static panel that says "finding you" reads as a panel that has
+             stopped looking. -->
+        <Border x:Name="WaitingPanel" Visibility="Collapsed"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Padding="26,18" CornerRadius="10"
+                Background="#B00A0514" BorderBrush="#40E0B052" BorderThickness="1">
+            <StackPanel>
+                <Grid HorizontalAlignment="Center">
+                    <TextBlock x:Name="WaitingGlow" HorizontalAlignment="Center"
+                               Text="{Binding Text, ElementName=WaitingLine}"
+                               FontSize="16" Foreground="#E0B052" Opacity="0.5"
+                               IsHitTestVisible="False">
+                        <TextBlock.Effect>
+                            <BlurEffect Radius="9" KernelType="Gaussian" RenderingBias="Performance"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+
+                    <TextBlock x:Name="WaitingLine" HorizontalAlignment="Center"
+                               FontSize="16" Foreground="#E0B052"/>
+                </Grid>
+
+                <Canvas x:Name="WaitingMotes" Height="34" Width="216"
+                        Margin="0,10,0,0" HorizontalAlignment="Center"
+                        IsHitTestVisible="False" ClipToBounds="True"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

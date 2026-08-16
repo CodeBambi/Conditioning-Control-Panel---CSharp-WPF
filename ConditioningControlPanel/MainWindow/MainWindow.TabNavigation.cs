@@ -229,6 +229,10 @@ namespace ConditioningControlPanel
             if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
+            // Collapsing the Spiral Room is what tears its WebView2 down: the view watches
+            // IsVisibleChanged (Loaded fires once) and disposes the embed on the way out, so
+            // leaving the tab leaves no idle Chromium behind it.
+            if (SpiralTab != null) SpiralTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
@@ -532,6 +536,21 @@ namespace ConditioningControlPanel
                     AppSettingsTab.RefreshSections();
                     break;
 
+                // THE SPIRAL ROOM (CONTRACT-FUSE-0816 §2.4). Reachable at any time and from five
+                // doors - the rail row, the fuse chip, the Trainer Card plate, the account menu row
+                // and the first-light reveal - so the view re-reads every gate on the way in rather
+                // than trusting whatever it last painted. The old window's "return without opening"
+                // refusal is now "show the appropriate state": withheld or fog era => the fog, no
+                // block => the waiting room, otherwise the canvas.
+                case "spiral":
+                    if (SpiralTab != null)
+                    {
+                        SpiralTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(SpiralTab);
+                        SpiralTab.OnTabShown();
+                    }
+                    break;
+
                 case "exclusives":
                     ExclusivesTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ExclusivesTab);
@@ -580,7 +599,11 @@ namespace ConditioningControlPanel
             // as a real entry would claim the rail has a row for it, which it does not.
             ("play",      "play",      new[] { "play", "deeper", "exclusives", "gradedintake", "lockdown",
                                                "blinktrainer", "remotecontrol", "availablesubjects" }),
-            ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
+            // "spiral" sits right after "discord": the Spiral Room's other two doors are both on
+            // the profile (the Trainer Card plate and the account menu row), so the rail row belongs
+            // beside the tab those live on. Its entry is Collapsed unless this account is in the fog
+            // era or has an open spiral - see MainWindow.SpiralRoom.cs.
+            ("you",       "discord",   new[] { "discord", "spiral", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
             ("appsettings", "appsettings", new[] { "appsettings" }),

@@ -415,6 +415,16 @@ namespace ConditioningControlPanel
             // (XP pulse / level-up burst / flash wobble). MainWindow.ProfileBubble.cs.
             InitializeProfileBubble();
 
+            // THE FUSE's tease surfaces: header spark, hover readout, corner clock, chrome dimming
+            // repaint. MainWindow.DescentFuse.cs. Subscribes to a service that raises nothing
+            // without a cached ceremony timestamp, so this is inert on every install today.
+            InitializeDescentFuse();
+
+            // The Spiral Room's rail row: Collapsed unless this account is in the fog era or has an
+            // open spiral. MainWindow.SpiralRoom.cs. Three subscriptions and one Collapsed write on
+            // an account with neither, which is every install today.
+            InitializeSpiralRoom();
+
             // Subscribe to quest events
             if (App.Quests != null)
             {
@@ -1557,27 +1567,47 @@ namespace ConditioningControlPanel
                 var panelColor = (Color)ColorConverter.ConvertFromString(panelHex);
                 var surfaceColor = (Color)ColorConverter.ConvertFromString(surfaceHex);
 
+                // THE FUSE'S DIMMING (CONTRACT-FUSE-0816 §2.2). In the last 24 hours before the
+                // ceremony the neutral chrome walks toward the ceremony's black, one step per six
+                // hours. Zero steps on every install that has no countdown — which is all of them
+                // until the owner arms DESCENT_CEREMONY_AT — and DescentFuseChrome.Dim returns its
+                // input unchanged at step 0, so this is a no-op with a null check in front of it.
+                //
+                // SEPARATE VARIABLES ON PURPOSE. Only the neutral block below sees the dimmed
+                // trio; the accent-tinted backgrounds further down still blend onto the mod's TRUE
+                // bgColor. That is the hard law from the contract — the fuse darkens the room, it
+                // never restyles somebody's mod.
+                //
+                // This is also the whole restore path: the step drops to 0 (kill switch, or the
+                // ceremony passing) and re-running this method repaints the original palette. There
+                // is no cached "before" state to leak, because the originals are re-read from the
+                // active mod on every call.
+                var dimStep = Services.Descent.DescentFuseChrome.CurrentStep;
+                var neutralBg = Services.Descent.DescentFuseChrome.Dim(bgColor, dimStep);
+                var neutralPanel = Services.Descent.DescentFuseChrome.Dim(panelColor, dimStep);
+                var neutralSurface = Services.Descent.DescentFuseChrome.Dim(surfaceColor, dimStep);
+
                 // Auto-computed derivatives
-                var panelAccentColor = LightenColor(panelColor, 0.15);
-                var panelAccentHoverColor = LightenColor(panelColor, 0.25);
-                var previewBgColor = DarkenColor(bgColor, 0.15);
-                var panelBgTransparent = Color.FromArgb(0xB0, panelColor.R, panelColor.G, panelColor.B);
+                var panelAccentColor = LightenColor(neutralPanel, 0.15);
+                var panelAccentHoverColor = LightenColor(neutralPanel, 0.25);
+                var previewBgColor = DarkenColor(neutralBg, 0.15);
+                var panelBgTransparent = Color.FromArgb(0xB0, neutralPanel.R, neutralPanel.G, neutralPanel.B);
 
                 var res = Application.Current.Resources;
 
                 // Update background Color resources
-                res["DarkerBg"] = bgColor;
-                res["PanelBg"] = panelColor;
-                res["SurfaceBg"] = surfaceColor;
+                res["DarkerBg"] = neutralBg;
+                res["PanelBg"] = neutralPanel;
+                res["SurfaceBg"] = neutralSurface;
                 res["PanelAccent"] = panelAccentColor;
                 res["PanelAccentHover"] = panelAccentHoverColor;
                 res["PreviewBg"] = previewBgColor;
                 res["PanelBgTransparent"] = panelBgTransparent;
 
                 // Update background Brush resources
-                res["DarkerBgBrush"] = new SolidColorBrush(bgColor);
-                res["PanelBgBrush"] = new SolidColorBrush(panelColor);
-                res["SurfaceBgBrush"] = new SolidColorBrush(surfaceColor);
+                res["DarkerBgBrush"] = new SolidColorBrush(neutralBg);
+                res["PanelBgBrush"] = new SolidColorBrush(neutralPanel);
+                res["SurfaceBgBrush"] = new SolidColorBrush(neutralSurface);
                 res["PanelAccentBrush"] = new SolidColorBrush(panelAccentColor);
                 res["PanelAccentHoverBrush"] = new SolidColorBrush(panelAccentHoverColor);
                 res["PreviewBgBrush"] = new SolidColorBrush(previewBgColor);

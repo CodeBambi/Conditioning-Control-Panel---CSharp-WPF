@@ -283,6 +283,13 @@ namespace ConditioningControlPanel.Services
             Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
             Tab("availablesubjects", "tab_available_subjects", "🛰️", "availablesubjects", "subjects online users");
             Tab("discord", "tab_profile", "👤", "discord", "profile trainer card wardrobe");
+            // The Spiral Room (CONTRACT-FUSE-0816 2.4), which replaced the map window. Listed like
+            // every other live ShowTab key and deliberately NOT gated on the block: the palette has
+            // exactly one verb and the ROOM does the deciding, so an account that is not meant to
+            // see a spiral yet lands on the fog or on the waiting panel, exactly as it would from
+            // any other door. A row that appeared and disappeared with the block would also turn
+            // the search box into a place that leaks who has one.
+            Tab("spiral", "tab_spiral", "🌀", "spiral", "spiral descent map devotion stage year one");
             Tab("quests", "tab_quests", "📜", "quests", "quests daily weekly");
             Tab("achievements", "tab_achievements", "🏆", "achievements", "achievements trophies badges");
             Tab("enhancements", "tab_enhancements", "✨", "enhancements", "skill tree enhancements perks");
