@@ -1076,6 +1076,8 @@
   "label_beta_2": "[베타]",
   "label_ai_generated_personality_quiz_10_questions_th": "AI 생성 성격 퀴즈. 답변에 따라 점점 자극적이 되는 10개 질문. 당신이 정말 누구인지 알아보세요.",
   "btn_fullscreen": "전체 화면",
+  "btn_exit_fullscreen": "전체 화면 종료",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "화면을 가득 채웁니다. Esc를 누르면 창으로 돌아옵니다.",
   "setting_play_drone_in_background": "백그라운드에서 드론 재생",
   "btn_start_quiz": "퀴즈 시작",
   "label_past_quizzes": "과거 퀴즈",

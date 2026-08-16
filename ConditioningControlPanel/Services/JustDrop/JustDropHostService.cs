@@ -17,8 +17,16 @@ namespace ConditioningControlPanel.Services.JustDrop
     /// wrong: the user had to sign in again inside the app they were already signed into, and a
     /// full-bleed session played inside a tab with the app's chrome around it. This service is the
     /// same shell <see cref="Services.Quiz.IntakeHostService"/> and
-    /// <see cref="DtrhHostService"/> use - a real window, natively owned by MainWindow, that the
-    /// page can take fullscreen - plus the handoff below.</para>
+    /// <see cref="DtrhHostService"/> use - a real window, natively owned by MainWindow - plus the
+    /// handoff below.</para>
+    ///
+    /// <para><b>The window stays the host's.</b> Unlike those two, this one runs
+    /// <see cref="ChaosWebViewHost.Options.HostOwnedFullscreen"/>. The shop's player calls
+    /// <c>requestFullscreen()</c> the moment an order opens, and that used to hard-fullscreen the
+    /// WPF window: title bar gone, no toggle, Esc unheard because a focused WebView2 never gave it
+    /// to WPF, and the taskbar still painted over the page's own exit button. Page fullscreen now
+    /// fills the client area and stops there; the window is windowed unless the user says
+    /// otherwise, from a toggle that is always on screen.</para>
     ///
     /// <para><b>The sign-in handoff.</b> The app holds a ccp-server token; the site wants a Supabase
     /// session. Rather than ask the user to bridge that gap by typing a password, the window's FIRST
@@ -60,12 +68,16 @@ namespace ConditioningControlPanel.Services.JustDrop
         /// Open the shop. Windowed and WITHOUT ducking the control panel: this is browsing, and
         /// minimizing the app out from under someone who is picking a session reads as a glitch.
         /// The player below is the opposite case.
+        ///
+        /// <para>And it STAYS windowed: opening an order used to drag the window borderless behind
+        /// the page's back. Fullscreen is now a choice the user makes, from the strip.</para>
         /// </summary>
         public static void LaunchShop() => Launch(ShopPath, fullscreen: false, duckMain: false);
 
         /// <summary>
         /// Replay a delivered order. Fullscreen and ducking, because this one IS the experience -
-        /// same posture the Intake takes.
+        /// same posture the Intake takes. Fullscreen here is the host's, so the strip and Esc are
+        /// both live from the first frame: cinematic, never a cage.
         ///
         /// <para>Free, and not by our restraint: the bare player mints nothing, and the desktop's
         /// own XP grant is deduplicated per order code (see
@@ -100,6 +112,9 @@ namespace ConditioningControlPanel.Services.JustDrop
                     UserDataFolderName = "browser_data_justdrop",
                     InputEnabled = true,
                     StartFullscreen = fullscreen,
+                    // The window's fullscreen is ours, not the remote page's: a visible toggle, a
+                    // live Esc, and a fullscreen that clears the taskbar when it IS asked for.
+                    HostOwnedFullscreen = true,
                     // Keep it above MainWindow by native ownership, not Topmost - main gets raised
                     // by things a session does not control and would otherwise bury the page.
                     OwnedByMainWindow = true,

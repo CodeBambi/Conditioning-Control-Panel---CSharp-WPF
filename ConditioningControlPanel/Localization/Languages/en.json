@@ -1995,6 +1995,8 @@
   "label_beta_2": "[BETA]",
   "label_ai_generated_personality_quiz_10_questions_th": "AI-generated personality quiz. 10 questions that get spicier based on your answers. Find out who you really are.",
   "btn_fullscreen": "Fullscreen",
+  "btn_exit_fullscreen": "Exit Fullscreen",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "Fill the screen. Esc brings the window back.",
   "setting_play_drone_in_background": "Play drone in background",
   "btn_start_quiz": "Start Quiz",
   "label_past_quizzes": "Past Quizzes",
