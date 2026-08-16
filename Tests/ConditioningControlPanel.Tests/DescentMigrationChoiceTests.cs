@@ -120,6 +120,85 @@ public class DescentMigrationChoiceTests
         Assert.Equal(117, restore.Level);
     }
 
+    // -------------------------------------------------- the veteran credit basis
+
+    /// <summary>
+    /// THE VETERAN CREDIT (owner ruling 2026-08-16). The server prices Option A on
+    /// <c>restore_basis_xp</c> — lifetime plus 300 XP per witnessed devotion day — and the offer
+    /// carries the computed figure so this client never re-derives the credit with a constant
+    /// that could go stale. When the basis is present, it is the relevel's ONLY input.
+    /// </summary>
+    [Fact]
+    public void Restore_PricesTheServersBasisWhenItIsPresent()
+    {
+        var lifetime = ProgressionService.CumulativeXpToReachLevel(30, ProgressionService.CurveEpochLegacy);
+        var basis = ProgressionService.CumulativeXpToReachLevel(50, ProgressionService.CurveEpochDescent);
+        var offer = new DescentMigrationOffer
+            { TotalXpEarned = lifetime, DevotionDays = 180, RestoreBasisXp = basis };
+
+        var result = DescentMigration.Resolve(DescentMigrationChoices.Restore, offer);
+
+        Assert.Equal(50, result.Level);
+    }
+
+    /// <summary>
+    /// The ledger xp written home is the BASIS, not the raw lifetime. The next sync's level/XP
+    /// consistency check re-derives level from xp under curve v2 — a level bought by the credit
+    /// but an xp without it would be demoted right back one sync later.
+    /// </summary>
+    [Fact]
+    public void Restore_TheLedgerCarriesTheBasisSoTheNextSyncAgreesWithIt()
+    {
+        var offer = new DescentMigrationOffer
+            { TotalXpEarned = 16_343, DevotionDays = 180, RestoreBasisXp = 70_343 };
+
+        var result = DescentMigration.Resolve(DescentMigrationChoices.Restore, offer);
+
+        Assert.Equal(70_343, result.LedgerXp);
+        var floor = ProgressionService.CumulativeXpToReachLevel(result.Level, ProgressionService.CurveEpochDescent);
+        Assert.Equal(70_343, floor + result.XpIntoLevel);
+    }
+
+    /// <summary>An older server sends no basis (0), and the relevel is the pre-credit arithmetic
+    /// exactly — derived from the lifetime figure alone.</summary>
+    [Fact]
+    public void Restore_FallsBackToLifetimeWhenTheServerSentNoBasis()
+    {
+        var lifetime = ProgressionService.CumulativeXpToReachLevel(30, ProgressionService.CurveEpochLegacy);
+
+        var withBasisZero = DescentMigration.Resolve(DescentMigrationChoices.Restore,
+            new DescentMigrationOffer { TotalXpEarned = lifetime, RestoreBasisXp = 0 });
+
+        Assert.Equal(30, withBasisZero.Level);
+        Assert.Equal(lifetime, withBasisZero.LedgerXp);
+    }
+
+    /// <summary>The credit never rides the Cycle door: level 1, xp 0, lifetime carried through
+    /// RAW — a Cycle's keepsake records what was witnessed, not what a restore would have paid.</summary>
+    [Fact]
+    public void Cycle_IgnoresTheBasisEntirely()
+    {
+        var result = DescentMigration.Resolve(DescentMigrationChoices.Cycle,
+            new DescentMigrationOffer { TotalXpEarned = 16_343, RestoreBasisXp = 70_343 });
+
+        Assert.Equal(1, result.Level);
+        Assert.Equal(16_343, result.LifetimeXp);
+    }
+
+    /// <summary>A junk basis (NaN, negative) degrades to the lifetime fallback, never to a throw
+    /// and never to level 0.</summary>
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(-500)]
+    public void Restore_TreatsAJunkBasisAsAbsent(double basis)
+    {
+        var lifetime = ProgressionService.CumulativeXpToReachLevel(30, ProgressionService.CurveEpochLegacy);
+        var result = DescentMigration.Resolve(DescentMigrationChoices.Restore,
+            new DescentMigrationOffer { TotalXpEarned = lifetime, RestoreBasisXp = basis });
+
+        Assert.Equal(30, result.Level);
+    }
+
     // ------------------------------------------------------------ hostile input
 
     [Theory]
