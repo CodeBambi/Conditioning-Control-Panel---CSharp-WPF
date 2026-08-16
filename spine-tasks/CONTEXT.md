@@ -21,6 +21,25 @@ a ROW STRING in `PROMPT.md` and never opens the file. **All reconciliation edits
 the final verification run**, so the last tree verified is the exact tree pushed (the wave-18
 red-base class, designed out rather than guarded against).
 
+**THE BLIND AUDIT RETURNED FAIL, AND IT WAS RIGHT TO. THE LAND STILL STANDS, AND HERE IS WHY —
+READ THE CONTROL BEFORE ACCEPTING THAT.** The auditor, on its own detached worktree at
+`ee6c9164`, observed the floor **1026 passed / 2 failed**, against the three consecutive
+**1028/1028** greens this orchestrator had recorded at the same SHA about an hour earlier. Both
+failures are `AiAwarenessTests` — `TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable`
+(`:399`) and `TitleObservation_GatedByConsentAndCapability_TitleNeverLogged` (`:428`) — and both
+fail identically: a real `GetForegroundWindow` probe returned `Unavailable` where the test asserts
+`Available`. **The decisive control: re-running exactly those two tests, at the same commit, in the
+very worktree that had gated green three times, reproduces the failure. The tree did not change;
+the machine did** — the owner stepped away and the Windows session stopped being interactive. The
+test's own comment already names the precondition and predicts this exact outcome. So the failure
+is **pre-existing, environment-driven, and untouched by either landed packet** (SP-079 is the AI
+moderation pipeline, SP-081 is docs and evidence; neither goes near awareness or capabilities).
+**Filed P0.** Do not record this land as "audited PASS" — it was audited, it FAILED, and the
+failure was explained by evidence rather than waved through. **The operational consequence is
+larger than the land: `check-floor.mjs` is the port's one mechanical pre-land gate, and it is
+RED for as long as nobody is at the desk. Every unattended run happens in exactly that state, so
+the P0 fix gates all further landing tonight.**
+
 **FRESH-SESSION LANDING WAS NOT AVAILABLE AND THE SUBSTITUTE IS NAMED, NOT GLOSSED.** `port-loop.ps1`
 cannot start on this machine (T-20) — every phase and every blind audit is a separately spawned
 `claude.exe` with no credentials. So the land was performed in the session that ran the wave, with

@@ -123,6 +123,10 @@ Produce the plan a fresh-context reviewer will judge before any code is written:
 5. The facts you will add, and the INDEPENDENT revert that reds each one. An assertion that passes with the mechanism reverted is not a fact.
 6. Anything out of File Scope you discovered, to be filed rather than fixed.
 
+PERSIST IT BEFORE YOU RETURN. Write your plan to
+  C:\\Code\\Conditioning-Control-Panel---CSharp-WPF\\.port\\plans\\${packet}\\plan-round-1.md
+creating directories as needed. That path is gitignored, so it dirties no tree and collides with no lane's File Scope. Write it even though you are also returning it as text: if this packet later escalates, the returned text is discarded with the pipeline and the file is the only surviving artifact. Wave 31 lost six plans that way.
+
 ${RULES}`,
     { label: `plan:${packet}`, phase: 'Plan' }
   ),
@@ -137,7 +141,9 @@ Repo: C:\\Code\\Conditioning-Control-Panel---CSharp-WPF.
 
 Verify the plan's load-bearing claims against source yourself — do not accept them. Press hardest on: concurrency and lock-ordering arguments (check the lock the change ACTUALLY nests, not the one the plan names); any race the plan claims to have closed (walk the interleaving); whether each proposed fact would pin the semantics or merely execute the code; and whether the decision-rule branch is sound.
 
-Return APPROVE or REVISE in your documented contract form.
+Return APPROVE or REVISE in your documented contract form. REVISE requires at least one finding in one of the blocking classes your contract enumerates — that list is exhaustive. Prose, wrong counts that do not select the edit target, a test name that misdescribes a correct fact, and anything about record.md content are SUGGESTIONS, and suggestions do not change the verdict.${round === 0 ? '' : `
+
+THIS IS ROUND ${round + 1}: you are re-reviewing a REVISION, not re-opening the plan. Judge exactly two things — are the previous round's blocking issues resolved, and did the revision introduce a NEW defect in a blocking class. Do not raise fresh suggestion-class findings now.`}
 
 --- PLAN (round ${round + 1}) ---
 ${current}`,
@@ -163,8 +169,12 @@ Packet: spine-tasks/${packet}/PROMPT.md
 --- YOUR PLAN ---
 ${current}
 
---- REVIEW (blocking) ---
+--- REVIEW ---
 ${verdict.feedback}
+
+ONLY the reviewer's \`### Blocking issues\` bind you. Address those.
+
+Its \`### Suggestions (non-blocking)\` section MUST NOT change your plan's mechanism, fact set, revert matrix or floor delta. Carry those items forward VERBATIM under a \`## Carried conditions\` heading at the END of your plan so they reach the implementer, and do not expand the plan to pre-empt them. A plan that grows every round is exactly how this gate consumed six lanes in wave 31 without producing a line of code: each round handed the next fresh reviewer more surface to audit.
 
 Verify each defect against source before accepting it, and say plainly if you believe one is wrong. If two defects share a root, say so and fix the root.
 
@@ -186,6 +196,8 @@ ${approved.plan}
 --- REVIEWER'S NOTES ON THAT APPROVAL ---
 ${approved.planFeedback}
 
+Any \`## Carried conditions\` in the approved plan, and any \`### Suggestions (non-blocking)\` in those notes, are OBLIGATIONS you inherit — they were approved WITH, not waived. Discharge each one, or state in record.md why it does not apply. The final reviewer is given this same list and checks it, and a condition counts as discharged only when it is WRITTEN DOWN.
+
 Execute the revert matrix for real: revert each mechanism source ONE AT A TIME, record how many facts red, and restore the tree byte-identically between reverts. Write spine-tasks/${packet}/record.md (census, decision, revert matrix with red counts, and an honesty section naming what is NOT proven) and spine-tasks/${packet}/floor-delta.json.
 
 Do not merge, do not land, do not touch the board. Commit on YOUR branch.
@@ -194,7 +206,7 @@ Before reporting, run "git worktree list" and "git rev-parse --abbrev-ref HEAD" 
 
 ${RULES}`,
     { label: `implement:${packet}`, phase: 'Implement', schema: LANE_RESULT }
-  ),
+  ).then((lane) => (lane ? { ...lane, conditions: approved.planFeedback } : lane)),
 
   // --- Code review, bounded fix loop.
   async (lane, packet) => {
@@ -216,7 +228,10 @@ Build and gate through the semaphore, as separate commands, because up to eight 
     node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
 BUILD FIRST — the wrapper is --no-build and a stale bin/ will lie about the source.
 
-Judge whether the new tests pin the claimed semantics or merely execute the code; treat them as vacuous until shown otherwise. Return APPROVE or REVISE in your documented contract form.`,
+Judge whether the new tests pin the claimed semantics or merely execute the code; treat them as vacuous until shown otherwise. Return APPROVE or REVISE in your documented contract form.
+
+--- CONDITIONS THIS PLAN WAS APPROVED WITH (not waived) ---
+${lane.conditions ?? '(none recorded)'}`,
         { label: `code-review:${packet}`, phase: 'Review code', schema: VERDICT }
       )
 
@@ -256,7 +271,12 @@ Judge the whole packet against its own contract: did the stated OUTCOME land, ar
 Return PASS, REVISE, or REPLAN in your documented contract form.
 
 --- CODE REVIEW NOTES ---
-${reviewed.codeFeedback}`,
+${reviewed.codeFeedback}
+
+--- CONDITIONS THE PLAN WAS APPROVED WITH ---
+${reviewed.conditions ?? '(none recorded)'}
+
+Treat that list as part of the packet's contract: each item was approved WITH, not waived. A condition is discharged only if the shipped tree or record.md actually says so — deciding to file something is not filing it. An undischarged, unmentioned condition is a REVISE.`,
       { label: `final-review:${packet}`, phase: 'Review final', schema: VERDICT }
     )
     if (!verdict) throw new Error(`${packet}: final review returned no parseable verdict — failing closed`)
