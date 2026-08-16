@@ -92,11 +92,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkCornerGifEnabled_Changed(sender, e);
         }
-        private void PacksScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PacksScrollViewer_PreviewMouseWheel(sender, e);
-        }
+        // PacksScrollViewer_PreviewMouseWheel is gone with the two horizontal scrollers it served
+        // (the preset strip and the Takeaway shelf, 2026-08-16). The preset rail wraps and the
+        // Takeaway strip is one clipped line, so neither scrolls sideways any more. MainWindow
+        // still owns the handler - the Assets tab's pack strip is its other consumer.
         private void SessionBtn_Edit(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

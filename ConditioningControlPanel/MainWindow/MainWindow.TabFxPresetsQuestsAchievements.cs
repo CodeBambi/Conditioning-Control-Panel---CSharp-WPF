@@ -60,9 +60,10 @@ namespace ConditioningControlPanel
         /// <summary>Must MATCH the radii in PresetsTabView.xaml (SdPresetChip / SdSessionRow). The
         /// sheen and the sweep draw their own rounded rect in the adorner layer, so a radius that
         /// drifts from the card's shows up as a bright corner outside the card's outline. Went 6/8
-        /// to 11/12 with the Session Door Overhaul, and the session half to 10 with the Session
-        /// Rack - a 44px row wears a smaller radius than a 90px card did.</summary>
-        private const double PresetCardCornerRadius = 11;
+        /// to 11/12 with the Session Door Overhaul, the session half to 10 with the Session Rack -
+        /// a 44px row wears a smaller radius than a 90px card did - and the preset half to 17 with
+        /// the chip rail, where the chip is a 34px pill and the radius is exactly half its height.</summary>
+        private const double PresetCardCornerRadius = 17;
         private const double SessionCardCornerRadius = 10;
 
         // ---- state -----------------------------------------------------------------
@@ -312,8 +313,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Hover lift on a preset card (100x70, so the shared 1.02 scale fits). Called from
-        /// CreatePresetCard, which rebuilds the whole row on every selection change.
+        /// Hover lift on a preset chip and on a Takeaway chip - the shared 1.02 scale, which is
+        /// sub-pixel on a 32-34px pill and has room in the WrapPanel's 6px row gap. Called from
+        /// CreatePresetCard (which rebuilds the whole rail on every selection change) and from the
+        /// Takeaway strip builders.
         /// </summary>
         internal void PreparePresetCardFx(FrameworkElement card)
         {

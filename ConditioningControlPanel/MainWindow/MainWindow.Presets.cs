@@ -260,17 +260,36 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Repaint the preset chip rail.
+        ///
+        /// <para><b>Surgical, not Children.Clear() (chip rail, 2026-08-16).</b> The fixed
+        /// "+ New" chip is a child of this same WrapPanel - it has to wrap with the rest, and a
+        /// sibling panel would strand it on the first line - so a blanket clear would delete it on
+        /// the first repaint and never put it back. Chips this method built are the ones carrying a
+        /// preset id in Tag; the "+ New" chip has none, which is what tells them apart.</para>
+        /// </summary>
         private void RefreshPresetsList()
         {
-            PresetsTab.PresetCardsPanel.Children.Clear();
+            // The model list first, and unconditionally: _allPresets backs the CmbPresets dropdown
+            // and every lookup by id, so it may not be left stale just because the tab has not been
+            // built yet.
             _allPresets = Models.Preset.GetDefaultPresets();
             _allPresets.AddRange(App.Settings.Current.UserPresets);
-            
-            foreach (var preset in _allPresets)
+
+            var panel = PresetsTab?.PresetCardsPanel;
+            if (panel == null) return;
+
+            for (int i = panel.Children.Count - 1; i >= 0; i--)
             {
-                var card = CreatePresetCard(preset);
-                PresetsTab.PresetCardsPanel.Children.Add(card);
+                if (panel.Children[i] is Border b && b.Tag is string)
+                    panel.Children.RemoveAt(i);
             }
+
+            // Insert, so the chips stay ahead of the trailing "+ New" chip.
+            int at = 0;
+            foreach (var preset in _allPresets)
+                panel.Children.Insert(at++, CreatePresetCard(preset));
         }
 
         /// <summary>
@@ -301,88 +320,97 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// One chip in the Presets strip.
+        /// One chip on the Presets rail.
+        ///
+        /// <para><b>One line, 34px (chip rail, 2026-08-16).</b> Was a 96x70 card stacking name,
+        /// glyphs and a DEFAULT/CUSTOM badge; is now a pill reading
+        /// <c>[glyphs] [name] [DEF|CUSTOM]</c> left to right, so a dozen presets fit on the rail's
+        /// two wrapped lines instead of hiding behind a horizontal scrollbar.</para>
         ///
         /// <para><b>Styled from the tab, not from here (Session Door Overhaul, 2026-08-13).</b> The
-        /// geometry and every colour now come from <c>SdPresetChip</c> / <c>SdPresetChipSelected</c>
+        /// geometry and every colour come from <c>SdPresetChip</c> / <c>SdPresetChipSelected</c>
         /// in PresetsTabView.xaml, reached through <see cref="TryFindTabStyle"/>. That is what makes
-        /// the strip re-tint on a mod switch: the old card hard-coded #2A2A4A / #3C3C64 / a
+        /// the rail re-tint on a mod switch: the old card hard-coded #2A2A4A / #3C3C64 / a
         /// 2px border and was the reason this page stayed Bambi-coloured on a drone build.</para>
         ///
         /// <para>Hover is a Style trigger now, not two handlers. Nothing here may set BorderBrush or
         /// Background as a LOCAL value - a local value outranks a trigger in WPF's precedence order,
         /// so painting the border by hand would silently kill the hover the style provides.</para>
+        ///
+        /// <para><b>Tag is the preset id and that is contractual</b> - RefreshPresetsList tells its
+        /// own chips from the fixed "+ New" one by it, and FindSelectedCard parks the ambient sheen
+        /// by matching it.</para>
         /// </summary>
         private Border CreatePresetCard(Models.Preset preset)
         {
             var isSelected = _selectedPreset?.Id == preset.Id;
 
-            var card = new Border
-            {
-                // The margin is NOT in the style: it is hover headroom, and the style is shared with
-                // a chip whose geometry the XAML owns. 1px top/bottom because the strip's
-                // ScrollViewer viewport is exactly the chip height and WPF clips a 1.02 scale
-                // without so much as a warning.
-                Margin = new Thickness(0, 1, 7, 1),
-                Tag = preset.Id
-            };
+            // No local Margin any more: on a WrapPanel the gap between chips AND between wrapped
+            // lines is geometry, which the style owns like every other dimension here.
+            var card = new Border { Tag = preset.Id };
             var chipStyle = TryFindTabStyle(isSelected ? "SdPresetChipSelected" : "SdPresetChip");
             if (chipStyle != null) card.Style = chipStyle;
             else
             {
                 // The tab's resources are unreachable (the view was never loaded). Fall back to
                 // theme brushes rather than to the literals this method used to carry.
-                card.Background = Application.Current.Resources["SurfaceBgBrush"] as Brush;
+                card.Background = Application.Current.Resources[isSelected ? "TransparentPink20Brush" : "SurfaceBgBrush"] as Brush;
                 card.BorderBrush = Application.Current.Resources[isSelected ? "PinkBrush" : "PanelAccentBrush"] as Brush;
-                card.BorderThickness = new Thickness(isSelected ? 2 : 1);
-                card.CornerRadius = new CornerRadius(11);
-                card.Padding = new Thickness(9, 8, 9, 8);
-                card.Width = 96;
-                card.Height = 70;   // keep in step with SdPresetChip - see its comment
+                card.BorderThickness = new Thickness(1);
+                card.CornerRadius = new CornerRadius(17);
+                card.Padding = new Thickness(11, 0, 11, 0);
+                card.Margin = new Thickness(0, 0, 7, 6);
+                card.Height = 34;   // keep in step with SdPresetChip
                 card.Cursor = Cursors.Hand;
             }
             PreparePresetCardFx(card);
 
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
 
-            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
+            var line = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            // Feature glyphs, ahead of the name. Still emoji - they are the same five the detail
+            // pane uses, and a chip has no room for words.
+            if (preset.FlashEnabled) AddStatIcon(line, "⚡", 10);
+            if (preset.MandatoryVideosEnabled) AddStatIcon(line, "🎬", 10);
+            if (preset.SubliminalEnabled) AddStatIcon(line, "💭", 10);
+            if (preset.SpiralEnabled) AddStatIcon(line, "🌀", 10);
+            if (preset.LockCardEnabled) AddStatIcon(line, "🔒", 10);
 
             var nameText = new TextBlock
             {
                 Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
-                Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? Brushes.White,
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 11,
-                TextTrimming = TextTrimming.CharacterEllipsis
+                // A cap, not a width: short names keep short chips. Without it a long custom name
+                // would make one chip as wide as the rail and wrap everything after it.
+                MaxWidth = 150,
+                ToolTip = App.Mods?.MakeModAware(preset.Description) ?? preset.Description
             };
-            stack.Children.Add(nameText);
-
-            // Feature glyphs. Still emoji - they are the same five the detail pane uses, and a
-            // 96px chip has no room for words.
-            var statsPanel = new WrapPanel { Margin = new Thickness(0, 5, 0, 0) };
-            if (preset.FlashEnabled) AddStatIcon(statsPanel, "⚡", 10);
-            if (preset.MandatoryVideosEnabled) AddStatIcon(statsPanel, "🎬", 10);
-            if (preset.SubliminalEnabled) AddStatIcon(statsPanel, "💭", 10);
-            if (preset.SpiralEnabled) AddStatIcon(statsPanel, "🌀", 10);
-            if (preset.LockCardEnabled) AddStatIcon(statsPanel, "🔒", 10);
-            stack.Children.Add(statsPanel);
-
-            // DEFAULT / CUSTOM in Consolas, matching the zone tags: on this page mono means
-            // "structural label", never content.
-            var badge = new TextBlock
+            var nameStyle = TryFindTabStyle("SdPresetChipName");
+            if (nameStyle != null) nameText.Style = nameStyle;
+            else
             {
-                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
-                Foreground = preset.IsDefault
-                    ? Application.Current.Resources["PinkBrush"] as Brush
-                    : Application.Current.Resources["SuccessGreenBrush"] as Brush,
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 8,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 4, 0, 0)
-            };
-            stack.Children.Add(badge);
+                nameText.Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? Brushes.White;
+                nameText.FontWeight = FontWeights.SemiBold;
+                nameText.FontSize = 12.5;
+                nameText.VerticalAlignment = VerticalAlignment.Center;
+                nameText.TextTrimming = TextTrimming.CharacterEllipsis;
+            }
+            line.Children.Add(nameText);
 
-            card.Child = stack;
+            // DEF / CUSTOM, in the RACK's provenance colours rather than pink-and-green: a
+            // built-in preset and a built-in session are the same kind of thing, so they wear the
+            // same cyan, and "yours" is the same pink on both lists. The keys are the static
+            // SessionSrc* families - provenance is a semantic, not the brand accent.
+            var (tagText, tagSolid, tagWash) = preset.IsDefault
+                ? (LocOr("preset_tag_default", "DEF"), "SessionSrcBuiltInBrush", "SessionSrcBuiltInWashBrush")
+                : (LocOr("preset_tag_custom", "CUSTOM"), "SessionSrcCustomBrush", "SessionSrcCustomWashBrush");
+            line.Children.Add(MakeRackPill(tagText, tagWash, tagSolid, "SdRackBadgeText", "SdChipTag"));
+
+            card.Child = line;
             return card;
         }
 
@@ -408,13 +436,16 @@ namespace ConditioningControlPanel
             }
         }
         
-        private void AddStatIcon(WrapPanel panel, string icon, int size = 12)
+        /// <summary>A feature glyph on a preset chip. Takes a <see cref="Panel"/> rather than the
+        /// WrapPanel it used to: the chip's content is a one-line horizontal StackPanel now.</summary>
+        private void AddStatIcon(Panel panel, string icon, int size = 12)
         {
             panel.Children.Add(new TextBlock
             {
                 Text = icon,
                 FontSize = size,
-                Margin = new Thickness(0, 0, 2, 0)
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 3, 0)
             });
         }
 

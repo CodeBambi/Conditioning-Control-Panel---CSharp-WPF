@@ -917,11 +917,16 @@ namespace ConditioningControlPanel
         /// Resources/Theme: they encode difficulty and provenance, NOT brand, so they must not
         /// follow the mod accent - a drone-green build would otherwise paint EASY and EXTREME the
         /// same green.</para>
+        ///
+        /// <para><paramref name="pillStyleKey"/> exists for the preset rail: a 34px chip needs the
+        /// tighter <c>SdChipTag</c> geometry, because <c>SdPill</c>'s padding and 9px lead are
+        /// tuned for a 44px rack row and overflow a pill sitting inside another pill.</para>
         /// </summary>
-        private Border MakeRackPill(string text, string washKey, string solidKey, string? textStyleKey = null)
+        private Border MakeRackPill(string text, string washKey, string solidKey,
+                                    string? textStyleKey = null, string pillStyleKey = "SdPill")
         {
             var pill = new Border();
-            var pillStyle = TryFindTabStyle("SdPill");
+            var pillStyle = TryFindTabStyle(pillStyleKey);
             if (pillStyle != null) pill.Style = pillStyle;
             else
             {
