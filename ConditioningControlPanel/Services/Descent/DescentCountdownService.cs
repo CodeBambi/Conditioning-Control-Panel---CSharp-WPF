@@ -243,6 +243,18 @@ namespace ConditioningControlPanel.Services.Descent
         /// </summary>
         public bool AudioEnabled => App.Settings?.Current?.DescentCountdownAudio ?? true;
 
+        /// <summary>
+        /// MEMORY LANE — the highest phase this subject actually lived through, 0..7, read straight
+        /// off the persisted ratchet (<see cref="AppSettings.DescentFuseMaxPhaseWitnessed"/>).
+        ///
+        /// <para>Exposed for the keepsake and easter-egg surfaces of a later wave, which need to
+        /// tell somebody who kept the vigil apart from somebody who installed the app afterwards.
+        /// NOTHING in this wave reads it to change behaviour: every visible surface still keys off
+        /// the live <see cref="Phase"/>, and that is deliberate — the ratchet is a record, not a
+        /// second source of truth about what is on screen right now.</para>
+        /// </summary>
+        public int MaxPhaseWitnessed => App.Settings?.Current?.DescentFuseMaxPhaseWitnessed ?? 0;
+
         // ------------------------------------------------------------------
         // Lifecycle
         // ------------------------------------------------------------------
@@ -473,6 +485,11 @@ namespace ConditioningControlPanel.Services.Descent
             if (previous != current)
                 Log.Information("[Fuse] Phase {Previous} -> {Current}.", previous, current);
 
+            // The keepsake ratchet, at the one seam every announcement passes through. An announced
+            // phase is a phase with surfaces on screen, so announcing it IS witnessing it — which is
+            // why this is here and not in the tick, the show, or six call sites.
+            RecordWitness(current);
+
             try { PhaseChanged?.Invoke(this, new DescentFusePhaseChangedEventArgs(previous, current)); }
             catch (Exception ex) { Log.Debug("[Fuse] A PhaseChanged handler threw: {Error}", ex.Message); }
 
@@ -545,6 +562,33 @@ namespace ConditioningControlPanel.Services.Descent
                 Log.Information("[Fuse] Last night witnessed, live. Keepsake flag set.");
             }
             catch (Exception ex) { Log.Debug("[Fuse] Could not persist the witnessed flag: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Move the keepsake ratchet up to an announced phase, if that phase is higher than what is
+        /// already recorded. Called from <see cref="AnnouncePhase"/> and nowhere else.
+        ///
+        /// <para>The decision itself is <see cref="WitnessRatchet"/> — pure, so the whole truth
+        /// table is pinned by tests without a dispatcher. All this does is read, apply and save, and
+        /// it saves ONLY on an actual increase: the announcement fires on every kill-switch flip and
+        /// on every re-arm, and a Save on each of those would be settings churn for no new fact.</para>
+        /// </summary>
+        private void RecordWitness(DescentFusePhase announced)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s is null) return;
+
+                var next = WitnessRatchet(s.DescentFuseMaxPhaseWitnessed, announced, ZeroPassedWhileAway);
+                if (next == s.DescentFuseMaxPhaseWitnessed) return;
+
+                s.DescentFuseMaxPhaseWitnessed = next;
+                App.Settings?.Save();
+                Log.Information("[Fuse] Witnessed up to {Phase} ({Value}). The ratchet does not go back.",
+                    (DescentFusePhase)next, next);
+            }
+            catch (Exception ex) { Log.Debug("[Fuse] Could not persist the witness ratchet: {Error}", ex.Message); }
         }
 
         /// <summary>Record that the condensed catch-up crack has played. Once per account.</summary>
@@ -737,6 +781,55 @@ namespace ConditioningControlPanel.Services.Descent
             if (left <= ClockAt)        return DescentFusePhase.Clock;
             if (left <= WhisperAt)      return DescentFusePhase.Whisper;
             return DescentFusePhase.Dark;
+        }
+
+        /// <summary>
+        /// THE KEEPSAKE RATCHET, whole (<see cref="AppSettings.DescentFuseMaxPhaseWitnessed"/>).
+        /// Given what is already recorded and a phase that is being announced, returns what should
+        /// be recorded. Pure and total: it never throws, and it never returns less than
+        /// <paramref name="current"/>.
+        ///
+        /// <para><b>Rule one: it only goes up.</b> Every path that could lower it is a path where
+        /// the app forgets something the person actually did. The owner moving the ceremony date
+        /// forward walks the phases backwards (Vigil → Whisper); the kill switch announces Dark; a
+        /// completed migration ends the countdown. None of those un-happen a night.</para>
+        ///
+        /// <para><b>Rule two: Dark never writes.</b> Dark is the absence of a countdown — the state
+        /// of every install on today's server — so there is nothing to have witnessed. It is also
+        /// what the kill switch and the disarm announce, which is the same answer for the same
+        /// reason.</para>
+        ///
+        /// <para><b>Rule three: Zero is earned, not attended.</b> Whisper..Terminal always arrive
+        /// with something on screen, so announcing them is witnessing them. Zero is different: a
+        /// launch the morning after gets Zero announced at <see cref="Start"/> exactly like the
+        /// session that sat through the crack did, and those two people must not end up stored
+        /// identically. So an announced Zero ratchets to 7 only on the live path
+        /// (<paramref name="zeroPassedWhileAway"/> false); the away path keeps whatever the subject
+        /// last lived through — 5 for someone who watched the Vigil and then closed the app half an
+        /// hour early.</para>
+        ///
+        /// <para>Values outside the enum (a hand-edited settings file, a future phase this build
+        /// does not know) are ignored rather than clamped, because clamping a stored 42 down to 7
+        /// would be the one thing rule one forbids.</para>
+        /// </summary>
+        /// <param name="current">The persisted ratchet as it stands.</param>
+        /// <param name="announced">The phase <see cref="AnnouncePhase"/> is publishing.</param>
+        /// <param name="zeroPassedWhileAway">
+        /// <see cref="ZeroPassedWhileAway"/> — TRUE when this process started up to find the instant
+        /// already behind it, which is precisely the case that must not claim the vigil.
+        /// </param>
+        internal static int WitnessRatchet(int current, DescentFusePhase announced, bool zeroPassedWhileAway)
+        {
+            // A negative in the file is junk, not a memory; reading it as "nothing yet" is a raise.
+            var floor = current < 0 ? 0 : current;
+
+            var value = (int)announced;
+            if (value <= (int)DescentFusePhase.Dark) return floor;
+            if (value > (int)DescentFusePhase.Zero) return floor;
+
+            if (announced == DescentFusePhase.Zero && zeroPassedWhileAway) return floor;
+
+            return value > floor ? value : floor;
         }
 
         /// <summary>

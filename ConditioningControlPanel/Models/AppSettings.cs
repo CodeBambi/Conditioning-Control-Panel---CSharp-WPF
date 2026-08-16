@@ -5615,8 +5615,9 @@ namespace ConditioningControlPanel.Models
 
         // Written by exactly two places: ProfileSyncService (the cached timestamp, from the sync
         // response's additive `descent_countdown` block) and DescentCountdownService / the zero
-        // show (the two witness flags). All four are inert on every install today, because the
-        // server does not send `descent_countdown` until the owner arms DESCENT_CEREMONY_AT.
+        // show (the witness flags and the witness ratchet). All of them are inert on every install
+        // today, because the server does not send `descent_countdown` until the owner arms
+        // DESCENT_CEREMONY_AT.
         //
         // DescentCeremonyAtUtc IS THE KILL SWITCH. Null = the fuse does not exist: no timer, no
         // spark, no chrome dimming, no candle. Clearing it at runtime tears every surface down
@@ -5666,6 +5667,33 @@ namespace ConditioningControlPanel.Models
         {
             get => _descentCatchUpCrackPlayed;
             set { _descentCatchUpCrackPlayed = value; OnPropertyChanged(); }
+        }
+
+        private int _descentFuseMaxPhaseWitnessed = 0;
+        /// <summary>
+        /// THE KEEPSAKE RATCHET: the highest <see cref="Services.Descent.DescentFusePhase"/> (0..7)
+        /// this subject actually LIVED THROUGH, as an int. 0 on every install today.
+        ///
+        /// <para><b>It only ever goes up.</b> Never reset, never lowered — not by the kill switch
+        /// clearing the timestamp, not by the owner moving the ceremony date backwards, not by
+        /// completing the migration. It is a record of what a person saw, and nothing that happens
+        /// afterwards can un-see it.</para>
+        ///
+        /// <para><b>Zero (7) means they kept the vigil.</b> A launch the morning after gets Zero
+        /// announced at startup like everyone else, and that announcement deliberately does NOT
+        /// ratchet — otherwise the person who watched the crack live and the person who slept
+        /// through it would be stored identically. Someone who watched the Vigil and closed the app
+        /// half an hour early keeps 5. See <c>DescentCountdownService.WitnessRatchet</c>.</para>
+        ///
+        /// <para><b>Nothing reads it yet.</b> It is written this wave so that the easter-egg and
+        /// keepsake surfaces of a later wave have a truthful answer to "were you there", instead of
+        /// having to invent one for a user who joined afterwards.</para>
+        /// </summary>
+        [JsonProperty]
+        public int DescentFuseMaxPhaseWitnessed
+        {
+            get => _descentFuseMaxPhaseWitnessed;
+            set { _descentFuseMaxPhaseWitnessed = value; OnPropertyChanged(); }
         }
 
         private bool _descentCountdownAudio = true;
