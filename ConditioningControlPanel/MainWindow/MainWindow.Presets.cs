@@ -286,6 +286,11 @@ namespace ConditioningControlPanel
         {
             RefreshPresetsList();
 
+            // The rack for the same reason the chips: every row's name and blurb go through
+            // GetModeAwareName / GetModeAwareDescription, so a mod switch changes the text on
+            // every one of them.
+            RepaintSessionRack();
+
             if (_selectedPreset == null) return;
             if (PresetsTab?.PresetDetailScroller?.Visibility != Visibility.Visible) return;
 
@@ -470,6 +475,10 @@ namespace ConditioningControlPanel
             PresetsTab.BtnExportPreset.IsEnabled = true;
             PresetsTab.BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
+
+            // Selecting a preset DESELECTS the session (see the top of this method), so the rack
+            // has to give its selected livery back - nothing else would take it off.
+            RefreshSessionRackSelection();
 
             // Move the tab's one ambient loop onto the card that is now selected. After
             // RefreshPresetsList, deliberately - it rebuilt every card in the row.

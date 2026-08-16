@@ -30,8 +30,8 @@
             ChromeFxNav and the dashboard mosaic.
 
         THE CARD VOCABULARY BELOW IS SHARED WITH CODE-BUILT CARDS. Preset chips are built by
-        MainWindow.Presets.CreatePresetCard and custom session rows by
-        MainWindow.SessionIO.AddCustomSessionCard - both reach these styles through
+        MainWindow.Presets.CreatePresetCard and every session row by
+        MainWindow.SessionIO.RepaintSessionRack - both reach these styles through
         PresetsTab.TryFindResource(...), which finds a UserControl-local resource because
         FrameworkElement.FindResource walks the element's OWN dictionary first. That is why
         these styles live here and not in Resources/Theme: a fresh cross-dictionary
@@ -67,70 +67,196 @@
             <Setter Property="Margin" Value="0,0,10,0"/>
         </Style>
 
-        <!-- ============================ session rows ============================ -->
-        <!-- r12 and a 1px stroke, against the old r8/2px. The 7px bottom margin IS the hover
-             headroom: LiftSessionRow raises a row 2px and a full-width row inside a ScrollViewer
-             would be clipped without a word if the margin were zero. -->
+        <!-- ============================ THE SESSION RACK ============================
+             Session Rack, 2026-08-16. The list used to be four hard-coded 90px cards in this
+             file plus a code-built "Your Sessions" annexe underneath, which meant three or four
+             sessions on screen, a page-wide row that was half empty from the middle out, and
+             two places to change whenever a row grew a field.
+
+             It is now ONE list, 44px per row, built entirely in code from the session registry
+             by MainWindow.SessionIO.RepaintSessionRack - built-in, custom and catalogue rows are
+             the same object, told apart by a colour code rather than by which panel they sit in.
+             Every style below is reached from there through TryFindTabStyle, which is why they
+             live in this dictionary and not in Resources/Theme (see the header comment).
+
+             The 5px bottom margin is hover headroom: LiftSessionRow raises a row 2px and a
+             full-width row inside a ScrollViewer clips silently without it.
+             ========================================================================= -->
         <Style x:Key="SdSessionRow" TargetType="Border">
+            <Setter Property="Height" Value="44"/>
             <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="13,11"/>
-            <Setter Property="Margin" Value="0,0,0,7"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <!-- Zero padding on purpose: the difficulty stripe is full-bleed to the row's left
+                 edge, and a Padding would inset it into a grey gutter. -->
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- Selection. Accent-tinted fill plus the accent stroke, the same two moves
+             SdPresetChipSelected makes, so a selected row and a selected preset chip read as
+             the same state. It stays lit while hovered: the hover trigger below re-states the
+             tint rather than letting the base style's hover fill overwrite it. -->
+        <Style x:Key="SdSessionRowSelected" TargetType="Border" BasedOn="{StaticResource SdSessionRow}">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- The art plate at the head of a row. A Border does NOT clip its child to its own
-             CornerRadius (0813 finding), so anything image-shaped that lands in here later needs
-             its own clipped ContentRoot - the gradient below is a fill, so it is safe as is. -->
-        <Style x:Key="SdRowThumb" TargetType="Border">
-            <Setter Property="Width" Value="52"/>
-            <Setter Property="Height" Value="38"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
-            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
-            <Setter Property="Margin" Value="0,0,12,0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-        <Style x:Key="SdRowThumbGlyph" TargetType="helpers:EmojiTextBlock">
-            <Setter Property="FontSize" Value="17"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
+        <!-- The session's own glyph. The old 52x38 art plate is gone - at 44px a plate ate a
+             third of the row for a border around one emoji. -->
+        <Style x:Key="SdRackIcon" TargetType="helpers:EmojiTextBlock">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="SdRowTitle" TargetType="helpers:EmojiTextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="14.5"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
+        <!-- The spoiler-free blurb, on the SAME line as the name now. Trimming is the
+             TextBlock's job; the full text is on the row's ToolTip. -->
         <Style x:Key="SdRowBlurb" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
+        <!-- Duration and reward. Consolas so the numbers form a column down the list instead of
+             jittering with the proportional widths of 5 / 45 / 120. -->
+        <Style x:Key="SdRackMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+        </Style>
 
-        <!-- ============================ pills ============================ -->
-        <!-- One pill shape for duration / grade / reward. The grade and reward pills still carry
-             literal semantic colours (green / gold / orange) because those encode difficulty, not
-             brand: they must NOT follow the mod accent or a drone-green build would paint "HARD"
-             the same green as "EASY". -->
+        <!-- The action buttons only exist on hover. Hidden rather than Collapsed so the row's
+             right edge does not shuffle as the pointer crosses the list. -->
+        <Style x:Key="SdRackActions" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Hidden"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ============================ pills and badges ============================ -->
+        <!-- Difficulty pill and source badge. Both wear a colour that encodes MEANING, never
+             brand: the eight SessionDiff* / SessionSrc* keys in Resources/Theme are static
+             across mods so a drone-green build cannot paint EASY and EXTREME the same green.
+             Foreground is the solid, Background the 13% wash sibling. -->
         <Style x:Key="SdPill" TargetType="Border">
             <Setter Property="CornerRadius" Value="5"/>
-            <Setter Property="Padding" Value="8,2.5"/>
+            <Setter Property="Padding" Value="7,1.5"/>
             <Setter Property="Margin" Value="9,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="SdPillText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="9.5"/>
             <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <!-- The provenance chip: BUILT-IN / YOURS / CAT. Consolas and uppercase because on this
+             page mono means "structural label", never content. -->
+        <Style x:Key="SdRackBadgeText" TargetType="TextBlock" BasedOn="{StaticResource SdPillText}">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="9"/>
+        </Style>
+
+        <!-- ============================ rack toolbar ============================ -->
+        <!-- Source chips and difficulty dots. Same pill language as AchievementFilterChip (the
+             app's filter chip, which the Assets tab's source and niche rows build from in code),
+             restated here rather than BasedOn'd: that key lives in Resources/Theme/MainWindow.xaml
+             and a fresh cross-dictionary StaticResource is exactly what took BAML - and 181 tests
+             - down once already. Restated in theme brushes, so unlike the original these re-tint
+             with the active mod. -->
+        <Style x:Key="SdRackChip" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chip" CornerRadius="11" Padding="9,3"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource PanelAccentBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- A difficulty dot carries its OWN colour in Foreground (set per dot in code), so the
+             checked state may not repaint it - it dims the whole button instead. -->
+        <Style x:Key="SdRackDot" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Opacity" Value="0.32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Dot" CornerRadius="11" Padding="6,3"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource PanelAccentBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Opacity" Value="1"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- The line the list shows instead of rows when a filter has emptied it. -->
+        <Style x:Key="SdRackEmpty" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,26,0,0"/>
         </Style>
 
         <!-- ============================ row actions ============================ -->
@@ -242,7 +368,7 @@
              recap the session already produced (SessionCompleteWindow) - it does NOT start anything,
              which is the whole reason the shelf can sit under a list of things that DO start.
 
-             158x74 with r12, matching SdSessionRow's radius rather than the chips' r11: these read
+             158x74 with r12, a shade rounder than the rack rows' r10 and the chips' r11: these read
              as small session rows turned on their side, not as presets. The 1px vertical margin is
              hover-lift headroom, same as the chips - the shelf's ScrollViewer viewport is the card
              height and a 1.02 scale clips silently without it. -->
@@ -498,10 +624,29 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ============================ ZONE: SESSIONS ============================ -->
+                <!-- ============================ ZONE: SESSIONS ============================
+                     THE SESSION RACK (2026-08-16). One list, one repaint, no XAML rows.
+
+                     What used to be here: four hard-coded ~90px built-in cards (Morning Drift /
+                     Gamer Girl / Distant Doll / Good Girls) written out longhand, then a second
+                     code-built "Your Sessions" panel under a header of its own. Three or four
+                     rows fit on screen, the split was invisible to the reader but load-bearing to
+                     four call sites, and a fifth built-in meant hand-writing another 40 lines.
+
+                     What is here now: a toolbar and ONE StackPanel. Every row - built-in, custom,
+                     imported - is built by MainWindow.SessionIO.RepaintSessionRack from the
+                     session registry, colour-coded by difficulty and provenance instead of by
+                     which panel it landed in. Nothing in this file knows a session's name any
+                     more, which is the point: the four cards' loc keys had drifted from the
+                     .session.json files they were supposed to mirror.
+
+                     Rows carry the session id in Tag. That is contractual - SessionCard_Click,
+                     FindSelectedCard and RevealSessionInLibrary all match on it.
+                     ======================================================================= -->
                 <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
                     <Grid>
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
@@ -522,171 +667,86 @@
                                     </LinearGradientBrush>
                                 </Border.Background>
                             </Border>
-                            <TextBlock Grid.Column="2" Style="{StaticResource SdZoneHint}" Text="{loc:Str sd_zone_sessions_hint}"/>
+                            <!-- The static "Built-in · Yours · Catalogue" caption that sat here is
+                                 gone: the toolbar's source chips say the same thing and carry a
+                                 live count each, so the caption was a legend for a colour code
+                                 that did not exist yet. -->
+                            <TextBlock Grid.Column="2" x:Name="TxtRackCount" x:FieldModifier="internal"
+                                       Style="{StaticResource SdZoneHint}" Text=""/>
                             <Button Grid.Column="3" x:Name="HelpBtnSessions" x:FieldModifier="internal"
                                     Style="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
                         </Grid>
 
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                            <StackPanel x:Name="SessionsPanel" x:FieldModifier="internal">
+                        <!-- ============================ THE RACK TOOLBAR ============================
+                             28px, one line, and every control here is a VIEW over the same list -
+                             none of them mutate a session. Source is single-select, difficulty is
+                             four independent toggles, sort and search are free.
 
-                                <!-- Morning Drift -->
-                                <Border Style="{StaticResource SdSessionRow}"
-                                        x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
-                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🌅"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_morning_drift}"/>
-                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_30_min}" Foreground="White"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#2A3A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_easy}" Foreground="#90EE90"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#2A4A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_400_xp}" Foreground="#90EE90"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Style="{StaticResource SdRowBlurb}"
-                                                       Text="{loc:Str label_gentle_subliminals_bouncing_text_with_gradual}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
-                                                    Tag="morning_drift" Click="SessionBtn_Edit"/>
-                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
-                                                    Tag="morning_drift" Click="SessionBtn_Export"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                             The chips are built in code (BuildSessionRackToolbar) for the same
+                             reason the Assets tab builds its source chips there: each one carries a
+                             live count, and a count in XAML is a binding to a view-model this page
+                             deliberately does not have. Sort and search are declared here because
+                             they are fixed furniture - their handlers are thin forwarders into
+                             MainWindow like every other handler on this page.
 
-                                <!-- Gamer Girl -->
-                                <Border Style="{StaticResource SdSessionRow}"
-                                        x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
-                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🎮"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_gamer_girl}"/>
-                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_45_min}" Foreground="White"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#3A3A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_medium}" Foreground="#FFD700"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#3A4A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_800_xp}" Foreground="#FFD700"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Style="{StaticResource SdRowBlurb}"
-                                                       Text="{loc:Str label_non_intrusive_conditioning_with_pink_filter_s}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
-                                                    Tag="gamer_girl" Click="SessionBtn_Edit"/>
-                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
-                                                    Tag="gamer_girl" Click="SessionBtn_Export"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                             Source filter and sort PERSIST (AppSettings.SessionRackSourceFilter /
+                             SessionRackSort). The difficulty dots and the search box do NOT, on
+                             purpose: a filter you cannot see the cause of, restored a week later,
+                             reads as "my sessions are gone".
+                             ==================================================================== -->
+                        <Grid Grid.Row="1" Height="28" Margin="0,0,0,9">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                                <!-- The Distant Doll -->
-                                <Border Style="{StaticResource SdSessionRow}"
-                                        x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
-                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🪞"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_the_distant_doll}"/>
-                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_45_min}" Foreground="White"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#2A3A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_easy}" Foreground="#90EE90"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#2A4A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_400_xp}" Foreground="#90EE90"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Style="{StaticResource SdRowBlurb}"
-                                                       Text="{loc:Str label_large_visuals_for_couch_viewing_no_audio_duck}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
-                                                    Tag="distant_doll" Click="SessionBtn_Edit"/>
-                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
-                                                    Tag="distant_doll" Click="SessionBtn_Export"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                            <StackPanel Grid.Column="0" x:Name="RackSourceChips" x:FieldModifier="internal"
+                                        Orientation="Horizontal" VerticalAlignment="Center"/>
 
-                                <!-- Good Girls Don't Cum -->
-                                <Border Style="{StaticResource SdSessionRow}"
-                                        x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Style="{StaticResource SdRowThumb}">
-                                            <helpers:EmojiTextBlock Style="{StaticResource SdRowThumbGlyph}" Text="🔒"/>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <helpers:EmojiTextBlock Style="{StaticResource SdRowTitle}" Text="{loc:Str label_good_girls_don_t_cum}"/>
-                                                <Border Style="{StaticResource SdPill}" Background="{DynamicResource PinkBrush}">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_60_min}" Foreground="White"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#4A3A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_hard}" Foreground="#FFA500"/>
-                                                </Border>
-                                                <Border Style="{StaticResource SdPill}" Background="#4A4A2A">
-                                                    <TextBlock Style="{StaticResource SdPillText}" Text="{loc:Str label_1200_xp}" Foreground="#FFA500"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Style="{StaticResource SdRowBlurb}"
-                                                       Text="{loc:Str label_denial_session_with_heavy_conditioning_and_es}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SdRowAction}" Content="✎" ToolTip="{loc:Str tooltip_edit_session}"
-                                                    Tag="good_girls_dont_cum" Click="SessionBtn_Edit"/>
-                                            <Button Style="{StaticResource SdRowAction}" Content="↗" ToolTip="{loc:Str tooltip_export_session}"
-                                                    Tag="good_girls_dont_cum" Click="SessionBtn_Export"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                            <StackPanel Grid.Column="1" x:Name="RackDifficultyChips" x:FieldModifier="internal"
+                                        Orientation="Horizontal" VerticalAlignment="Center" Margin="9,0,0,0"/>
 
-                                <!-- Custom / imported sessions. Rows are built by
-                                     MainWindow.SessionIO.AddCustomSessionCard against the same
-                                     SdSessionRow vocabulary. -->
-                                <TextBlock x:Name="TxtCustomSessionsHeader" x:FieldModifier="internal"
-                                           Text="{loc:Str label_your_sessions}" Foreground="{DynamicResource PinkBrush}"
-                                           FontFamily="Consolas" FontSize="11.5" FontWeight="Bold"
-                                           Margin="0,14,0,9" Visibility="Collapsed"/>
-                                <StackPanel x:Name="CustomSessionsPanel" x:FieldModifier="internal"/>
-                            </StackPanel>
+                            <ComboBox Grid.Column="3" x:Name="CmbRackSort" x:FieldModifier="internal"
+                                      Width="128" Height="26" VerticalAlignment="Center" FontSize="11"
+                                      Margin="8,0,7,0"
+                                      ToolTip="{loc:Str tooltip_rack_sort}"
+                                      SelectionChanged="CmbRackSort_SelectionChanged">
+                                <!-- Tag is the persisted token; the face text is localized. Never
+                                     key the sort off SelectedIndex - reordering this list would
+                                     silently repoint every saved preference. -->
+                                <ComboBoxItem Tag="recent" Content="{loc:Str rack_sort_recent}"/>
+                                <ComboBoxItem Tag="name" Content="{loc:Str rack_sort_name}"/>
+                                <ComboBoxItem Tag="easiest" Content="{loc:Str rack_sort_easiest}"/>
+                                <ComboBoxItem Tag="hardest" Content="{loc:Str rack_sort_hardest}"/>
+                                <ComboBoxItem Tag="shortest" Content="{loc:Str rack_sort_shortest}"/>
+                                <ComboBoxItem Tag="xp" Content="{loc:Str rack_sort_xp}"/>
+                            </ComboBox>
+
+                            <!-- Watermark is a sibling TextBlock rather than the templated one in
+                                 Resources/Theme: that template hangs off EmoteHelper's attached
+                                 properties and a converter, which is a lot of machinery to borrow
+                                 for one hint. RackSearch_TextChanged collapses it. -->
+                            <Grid Grid.Column="4" Width="150" VerticalAlignment="Center">
+                                <TextBox x:Name="TxtRackSearch" x:FieldModifier="internal"
+                                         Height="26" FontSize="11" Padding="7,0"
+                                         VerticalContentAlignment="Center"
+                                         TextChanged="TxtRackSearch_TextChanged"/>
+                                <TextBlock x:Name="TxtRackSearchHint" x:FieldModifier="internal"
+                                           Text="{loc:Str rack_search_watermark}" IsHitTestVisible="False"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                           Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <!-- ONE panel. RepaintSessionRack clears and refills it; nothing else
+                                 may add a child, or the FX sweep in
+                                 MainWindow.TabFxPresetsQuestsAchievements (which walks Borders
+                                 here and matches the selected row by Tag) picks up a stranger. -->
+                            <StackPanel x:Name="SessionRackPanel" x:FieldModifier="internal"/>
                         </ScrollViewer>
                     </Grid>
                 </Border>

@@ -118,6 +118,46 @@ namespace ConditioningControlPanel.Models
             set { _userPresets = value ?? new(); OnPropertyChanged(); }
         }
 
+        // ---- Session Rack (the compact session list on the Sessions door) ----
+        //
+        // Only the two settings a user picks ON PURPOSE and expects to find again are here.
+        // The difficulty dots and the search box deliberately do NOT persist: a filter whose
+        // cause is off screen, restored a week later, reads as "my sessions are gone", and the
+        // rack has no other surface that would explain the empty list.
+        //
+        // Whitelisted strings rather than enums, matching MediaSource/FypSource: a value from a
+        // hand-edited or cloud-synced settings.json must degrade to the default, not throw, and
+        // the tokens are the ComboBoxItem/chip Tags in PresetsTabView.xaml - never an index, so
+        // reordering the sort list cannot silently repoint everybody's preference.
+
+        private string _sessionRackSort = "recent";
+        /// <summary>Rack sort order: "recent" (default), "name", "easiest", "hardest",
+        /// "shortest" or "xp".</summary>
+        public string SessionRackSort
+        {
+            get => _sessionRackSort;
+            set
+            {
+                _sessionRackSort = value is "recent" or "name" or "easiest" or "hardest" or "shortest" or "xp"
+                    ? value : "recent";
+                OnPropertyChanged();
+            }
+        }
+
+        private string _sessionRackSourceFilter = "all";
+        /// <summary>Rack provenance filter: "all" (default), "builtin", "yours" (custom) or
+        /// "catalogue" (imported).</summary>
+        public string SessionRackSourceFilter
+        {
+            get => _sessionRackSourceFilter;
+            set
+            {
+                _sessionRackSourceFilter = value is "all" or "builtin" or "yours" or "catalogue"
+                    ? value : "all";
+                OnPropertyChanged();
+            }
+        }
+
         // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
         // pads or truncates to exactly 5 so the UI never has to defend against
         // odd counts. Default set lives in DefaultRemoteEmotePresets() below.

@@ -117,6 +117,16 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SessionCard_Click(sender, e);
         }
+        private void CmbRackSort_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CmbRackSort_SelectionChanged(sender, e);
+        }
+        private void TxtRackSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.TxtRackSearch_TextChanged(sender, e);
+        }
         private void SliderCornerGifOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
