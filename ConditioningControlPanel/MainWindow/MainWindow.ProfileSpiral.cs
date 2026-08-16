@@ -11,7 +11,7 @@ namespace ConditioningControlPanel
     /// caption, both open <see cref="SpiralMapWindow.ShowMap"/>, and both are dark
     /// until the server says otherwise.
     ///
-    /// THE GATE IS BLOCK PRESENCE, AND ONLY BLOCK PRESENCE. These surfaces
+    /// THE GATE IS BLOCK PRESENCE, PLUS THE MIGRATION WITHHOLD. These surfaces
     /// deliberately do NOT consult SpiralRailHost.FlagEnabled /
     /// AppSettings.DescentSpiralRailEnabled: that flag guards the nav rail's
     /// WebView2 miniature, which is a browser HWND in the middle of every tab
@@ -32,10 +32,26 @@ namespace ConditioningControlPanel
     /// paint path - own card, searched card, cleared card - lands here.
     ///
     /// The header row has no such gate: the header is always yours.
+    ///
+    /// THE WITHHOLD IS THE SECOND HALF OF THE GATE (CONTRACT-FUSE-0816 §2.4).
+    /// Block presence alone was right until zero armed the auto-promote: from that
+    /// night the sync that carries a veteran's migration OFFER also carries their
+    /// first block, so presence-only would light these surfaces up beside a ceremony
+    /// window that is still asking the question. DescentMigrationService.SpiralWithheld
+    /// is that test, and it opens the instant a choice is committed - the reveal that
+    /// follows the ceremony stands on the gate already being open when it runs.
     /// </summary>
     public partial class MainWindow
     {
         private bool _profileSpiralWired;
+
+        /// <summary>
+        /// Is the spiral being held back from this account? One reader for both surfaces, so
+        /// the plate and the menu row cannot disagree about whether tonight's question has been
+        /// answered. A missing migration service reads as "not withheld" - that is every install
+        /// on today's server, and it is the state these surfaces shipped in.
+        /// </summary>
+        private static bool SpiralWithheld => App.DescentMigration?.SpiralWithheld == true;
 
         // ============================== wiring ==============================
 
@@ -106,7 +122,7 @@ namespace ConditioningControlPanel
             try
             {
                 var block = App.Descent?.Current;
-                bool show = block is not null && _profileViewingSelf;
+                bool show = block is not null && _profileViewingSelf && !SpiralWithheld;
                 plate.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
                 if (!show) return;
 
@@ -131,8 +147,9 @@ namespace ConditioningControlPanel
             try
             {
                 var block = App.Descent?.Current;
-                ProfileMenuSpiralRow.Visibility = block is not null ? Visibility.Visible : Visibility.Collapsed;
-                if (block is null) return;
+                bool show = block is not null && !SpiralWithheld;
+                ProfileMenuSpiralRow.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                if (!show || block is null) return;
 
                 ProfileMenuSpiralGlyph?.Apply(block);
                 if (ProfileMenuSpiralSummary != null)

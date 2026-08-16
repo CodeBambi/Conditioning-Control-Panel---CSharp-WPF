@@ -3955,6 +3955,12 @@ namespace ConditioningControlPanel.Services
             settings.DescentMigrationCompleted = true;
             settings.DescentMigrationChoice = choice;
             settings.PendingDescentMigrationChoice = null;
+
+            // The withhold's memory is spent here too, and not only in ApplyChoice: an account that
+            // migrated on ANOTHER device never ran ApplyChoice locally, so this is the only place
+            // that clears the marker for it. The predicate does not depend on the clear (Completed
+            // outranks it) — it keeps the settings file from claiming a ceremony is still owed.
+            settings.DescentMigrationOffered = false;
             App.Settings?.Save();
 
             App.Logger?.Information("[Descent] Migration ACKNOWLEDGED by server (choice={Choice}). Curve v2 is now this account's curve, permanently.",

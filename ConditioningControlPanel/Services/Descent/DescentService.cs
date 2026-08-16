@@ -228,6 +228,29 @@ namespace ConditioningControlPanel.Services.Descent
         }
 
         /// <summary>
+        /// RE-ASK THE GATES, WITHOUT RE-ASKING THE SERVER. The block has not moved; something
+        /// ELSE that every spiral surface gates on has — today that is the migration withhold
+        /// flipping when a ceremony is offered or a choice is committed
+        /// (<see cref="DescentMigrationService.SpiralWithheld"/>).
+        ///
+        /// <para><b>Why re-raise BlockChanged rather than mint an event.</b> Every spiral surface
+        /// already subscribes to it, and every one of them re-reads its WHOLE gate from scratch
+        /// when it fires — the rail's Arm, the Trainer Card plate, the profile menu row. A second
+        /// event would be a second subscription list to keep in step, and the first surface added
+        /// after it would forget to join. This costs one synchronous handler pass and no network.
+        /// </para>
+        ///
+        /// <para>Deliberately does NOT touch <see cref="Current"/> or <see cref="HasSeenBlock"/>:
+        /// this is a re-evaluation, not a fetch. A caller that wants fresh numbers wants
+        /// <see cref="RequestRefresh"/>.</para>
+        /// </summary>
+        public void NotifySurfaces(string reason)
+        {
+            Log.Debug("[Descent] surfaces re-evaluating ({Reason})", reason);
+            RaiseBlockChanged();
+        }
+
+        /// <summary>
         /// Marshal to the UI thread the way the rest of the app does: bail out
         /// entirely if the dispatcher is gone or shutting down (CLAUDE.md async
         /// rules 6/8 — a fire-and-forget callback on a dead dispatcher is a crash

@@ -99,18 +99,28 @@ namespace ConditioningControlPanel.Controls
         // ============================== lifecycle ==============================
 
         /// <summary>
-        /// Light the rail up, if it is allowed to be lit. Three gates, all required: the
-        /// flag, an account the server has actually shipped a descent block to, and a
-        /// live DescentService. Missing any one leaves the control Collapsed.
+        /// Light the rail up, if it is allowed to be lit. Four gates, all required: the
+        /// flag, an account the server has actually shipped a descent block to, a live
+        /// DescentService, and no migration ceremony still owed. Missing any one leaves
+        /// the control Collapsed.
         ///
         /// Called on every block change, so an account whose key lights up mid-session
         /// gets the rail without a restart — and one whose key is withdrawn loses it.
+        ///
+        /// THE WITHHOLD (CONTRACT-FUSE-0816 §2.4) is the fourth gate and the newest: at
+        /// zero the server's block dial promotes to 'all' on the same sync that offers a
+        /// veteran the migration ceremony, so block presence alone would light this rail
+        /// up while the question is still on screen. DescentMigrationService raises
+        /// BlockChanged when the withhold flips, which is why re-reading it here — in the
+        /// method that already re-runs on every block change — is the entire wiring.
         /// </summary>
         public void Arm()
         {
             try
             {
-                bool allowed = FlagEnabled && App.Descent?.Current is not null;
+                bool allowed = FlagEnabled
+                               && App.Descent?.Current is not null
+                               && App.DescentMigration?.SpiralWithheld != true;
                 if (!allowed)
                 {
                     Visibility = Visibility.Collapsed;

@@ -5484,6 +5484,35 @@ namespace ConditioningControlPanel.Models
             set { _pendingDescentMigrationChoice = value; OnPropertyChanged(); }
         }
 
+        private bool _descentMigrationOffered = false;
+        /// <summary>
+        /// THE WITHHOLD'S MEMORY. True from the moment this account is first handed a migration
+        /// offer, and cleared the moment a choice is committed (DescentMigrationService.ApplyChoice)
+        /// or the server acks one.
+        ///
+        /// <para><b>Why a persisted flag and not just the live offer.</b> The spiral is withheld
+        /// from an account that is OWED the ceremony (see
+        /// <c>DescentMigrationService.SpiralWithheld</c>), and in-session that question is answered
+        /// by <c>LiveOffer</c> — which is never cleared, so a "Not tonight" deferral keeps the
+        /// spiral hidden for the rest of the session. Across a RELAUNCH there is nothing in memory
+        /// to ask: the descent block can land from the profile poll before the sync that re-delivers
+        /// the offer does, and for those seconds the veteran would watch the plate and the rail
+        /// light up in front of a question they have not answered yet. That flash is exactly what
+        /// the withhold exists to prevent, so the fact that an offer was ever made has to survive
+        /// the process.</para>
+        ///
+        /// <para>It is deliberately NOT "the account is a veteran" — it says only that a ceremony
+        /// was offered and not yet taken, which is why committing clears it. A settings file that
+        /// somehow keeps it set past a completed migration still reads as not-withheld, because
+        /// <c>DescentMigrationCompleted</c> outranks it in the predicate.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool DescentMigrationOffered
+        {
+            get => _descentMigrationOffered;
+            set { _descentMigrationOffered = value; OnPropertyChanged(); }
+        }
+
         private DateTime? _descentAnchorUtc = null;
         /// <summary>
         /// Year One anchor: the ceremony date (§10). For veterans this is the birth of their

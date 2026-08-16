@@ -80,6 +80,98 @@ namespace ConditioningControlPanel.Services.Descent
         public DescentMigrationOffer? LiveOffer { get { lock (_gate) return _liveOffer; } }
 
         // ------------------------------------------------------------------
+        // The withhold (the spiral stays hidden until the question is answered)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// TRUE while this account is OWED the ceremony — and therefore must not see the spiral
+        /// yet, on any surface.
+        ///
+        /// <para><b>The hole this closes.</b> Every spiral surface used to gate on block presence
+        /// alone (<c>App.Descent?.Current</c>). At zero the server's block dial auto-promotes to
+        /// 'all' (CONTRACT-FUSE-0816 §1.4), so the very sync that carries a veteran's migration
+        /// OFFER also carries their first descent BLOCK. Gated on presence alone, the rail and the
+        /// Trainer Card plate would light up beside — or under — a ceremony window that is still
+        /// asking them which half of their history they want to keep. The reveal is the payment for
+        /// answering; it cannot arrive before the question.</para>
+        ///
+        /// <para><b>It is not "is there an offer".</b> It is "is there an offer AND no answer": the
+        /// gate opens the instant <see cref="ApplyChoice"/> writes the pending choice, which is what
+        /// lets the first-light reveal (§2.4) find the surfaces already unlocked when it runs a
+        /// second later. Nothing waits for the server ack — the user answered, and the spiral is
+        /// theirs from that moment.</para>
+        ///
+        /// <para><b>Fresh accounts are never withheld.</b> A post-zero signup is offered no
+        /// migration at all (there is no history to migrate), so all three "outstanding" inputs are
+        /// false and this reads false forever — they see the spiral the moment the block lands,
+        /// which is the whole point of the dial promoting.</para>
+        /// </summary>
+        public bool SpiralWithheld
+        {
+            get
+            {
+                try
+                {
+                    return SpiralWithheldFor(App.Settings?.Current, LiveOffer is not null, IsCeremonyOpen);
+                }
+                catch (Exception ex)
+                {
+                    // A predicate that throws must not blank a surface that was fine a moment ago:
+                    // "not withheld" is the state of every account on today's server, so it is also
+                    // the correct answer when the question cannot be asked.
+                    Log.Debug("[Descent] SpiralWithheld could not be evaluated: {Error}", ex.Message);
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The withhold, as arithmetic — every input passed in, so the personas can be pinned in a
+        /// test without an <c>Application</c>, a settings singleton or a server.
+        ///
+        /// <para>Read it as two halves. OUTSTANDING is "a ceremony is in the room": an offer in
+        /// hand (<paramref name="offerInHand"/> — note <c>_liveOffer</c> is never cleared, so this
+        /// stays true across a "Not tonight" deferral for the rest of the session), the window
+        /// actually on screen (<paramref name="ceremonyOpen"/>, which covers the one frame between
+        /// the open and the offer being readable), or the persisted memory that one was offered on
+        /// an earlier launch (<see cref="AppSettings.DescentMigrationOffered"/> — see that field for
+        /// why memory is required at all). ANSWERED is the account having committed: the server has
+        /// acked (<see cref="AppSettings.DescentMigrationCompleted"/>) or a valid choice is on disk
+        /// waiting to be submitted.</para>
+        ///
+        /// <para>ANSWERED WINS. That ordering is not decoration: after a commit the ceremony window
+        /// is still closing and <c>_liveOffer</c> is still set, so a predicate that let OUTSTANDING
+        /// win would hold the spiral shut through the exact seconds the reveal is trying to open
+        /// it.</para>
+        ///
+        /// <para>Null settings (headless, or a settings load that failed) read as NOT withheld, for
+        /// the same reason the property's catch does: no settings means no account, no block and no
+        /// surface to withhold anything from.</para>
+        /// </summary>
+        internal static bool SpiralWithheldFor(Models.AppSettings? settings, bool offerInHand, bool ceremonyOpen)
+        {
+            if (settings is null) return false;
+
+            if (settings.DescentMigrationCompleted) return false;
+            if (DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice)) return false;
+
+            return offerInHand || ceremonyOpen || settings.DescentMigrationOffered;
+        }
+
+        /// <summary>
+        /// Tell every spiral surface to look again. The withhold has no event of its own on purpose:
+        /// all three surfaces (the rail host, the Trainer Card plate, the profile menu row) already
+        /// subscribe to <c>DescentService.BlockChanged</c> and re-read their gates from scratch when
+        /// it fires, so re-raising that one signal is the whole re-evaluation — no new event bus, no
+        /// new subscription to leak, and no surface that can be added later and forget to listen.
+        /// </summary>
+        private static void NotifySpiralSurfaces(string reason)
+        {
+            try { App.Descent?.NotifySurfaces(reason); }
+            catch (Exception ex) { Log.Debug("[Descent] Could not refresh the spiral surfaces: {Error}", ex.Message); }
+        }
+
+        // ------------------------------------------------------------------
         // The offer
         // ------------------------------------------------------------------
 
@@ -97,6 +189,26 @@ namespace ConditioningControlPanel.Services.Descent
                 if (_ceremonyOpen) return;
                 _liveOffer = offer;
             }
+
+            // REMEMBER THAT THE QUESTION WAS ASKED, before anything opens. This is what withholds
+            // the spiral on the NEXT launch if the subject defers tonight — see
+            // AppSettings.DescentMigrationOffered for why in-memory state cannot answer that. Cheap
+            // and idempotent: a re-offer on every sync writes the file once.
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings is not null && !settings.DescentMigrationOffered)
+                {
+                    settings.DescentMigrationOffered = true;
+                    App.Settings?.Save();
+                }
+            }
+            catch (Exception ex) { Log.Debug("[Descent] Could not persist the offer marker: {Error}", ex.Message); }
+
+            // The withhold has just flipped ON. Any spiral surface already drawn — a plate that
+            // caught an earlier block, a rail armed a second ago — has to retract now rather than
+            // stand beside the question.
+            NotifySpiralSurfaces("descent migration offered");
 
             // CLAUDE.md async rules 6/8: a fire-and-forget hop onto a dispatcher that has begun
             // shutting down is a crash report nobody can read.
@@ -280,11 +392,24 @@ namespace ConditioningControlPanel.Services.Descent
             // level_reset path uses — this is the same kind of event: a sanctioned rewrite.
             ProfileSyncService.ClearXpWatermark(settings, "descent migration ceremony");
 
+            // THE WITHHOLD'S MEMORY IS SPENT. The question has been answered, so the fact that it
+            // was ever asked stops meaning anything — and leaving it set would be one more way for
+            // a future reader of the settings file to think this account is still owed a ceremony.
+            // The predicate does not depend on this clear (the pending choice below already opens
+            // the gate); it is here so the file stays honest.
+            settings.DescentMigrationOffered = false;
+
             // LAST: arm the submit. Written after the ledger so a crash between the two leaves a
             // rewritten-but-unsubmitted client, which the server's next offer simply re-runs to
             // the same answer — rather than an armed submit with a stale ledger behind it.
             settings.PendingDescentMigrationChoice = choice;
             App.Settings?.Save();
+
+            // THE GATE IS OPEN, EFFECTIVE NOW. The spiral belongs to this account from the moment
+            // they answered — not from the server's ack, and not from the next block poll — so the
+            // surfaces are told immediately. The first-light reveal (§2.4) runs a few seconds later
+            // and depends on finding them already unlocked.
+            NotifySpiralSurfaces("descent migration committed");
 
             Log.Information("[Descent] Choice '{Choice}' applied locally: Level {OldLevel} -> {NewLevel} on curve v2 (lifetime {Xp} XP). Awaiting server ack.",
                 choice, settings.DescentPreMigrationLevel, result.Level, (int)result.LifetimeXp);
