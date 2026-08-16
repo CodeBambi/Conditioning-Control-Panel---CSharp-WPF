@@ -5582,6 +5582,79 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Descent — the Fuse (countdown to the ceremony)
+
+        // Written by exactly two places: ProfileSyncService (the cached timestamp, from the sync
+        // response's additive `descent_countdown` block) and DescentCountdownService / the zero
+        // show (the two witness flags). All four are inert on every install today, because the
+        // server does not send `descent_countdown` until the owner arms DESCENT_CEREMONY_AT.
+        //
+        // DescentCeremonyAtUtc IS THE KILL SWITCH. Null = the fuse does not exist: no timer, no
+        // spark, no chrome dimming, no candle. Clearing it at runtime tears every surface down
+        // and restores the chrome, live. Nothing else gates the feature.
+
+        private string? _descentCeremonyAtUtc = null;
+        /// <summary>
+        /// The ceremony instant, ISO-8601 UTC, exactly as the server wrote it — cached so the
+        /// countdown keeps running offline. Null = no fuse (and null is the state of every
+        /// install until the server arms it).
+        ///
+        /// <para><b>Kept as a STRING on purpose.</b> The wire value is an ISO string and this is a
+        /// cache of the wire, not an interpretation of it; storing a DateTime here would bake this
+        /// client's parse (and Newtonsoft's date coercion, see DescentReader.ParseWire) into the
+        /// settings file, so a re-read could disagree with what the server actually said. The one
+        /// place it becomes an instant is <see cref="Services.Descent.DescentCountdownService"/>,
+        /// which parses it round-trip/UTC on every read.</para>
+        /// </summary>
+        [JsonProperty]
+        public string? DescentCeremonyAtUtc
+        {
+            get => _descentCeremonyAtUtc;
+            set { _descentCeremonyAtUtc = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentLastNightWitnessed = false;
+        /// <summary>
+        /// True once the LIVE zero sequence was watched all the way to its bloom. The keepsake
+        /// hook — "you were there the night it happened" — and the flag that tells the catch-up
+        /// path it has nothing to do.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentLastNightWitnessed
+        {
+            get => _descentLastNightWitnessed;
+            set { _descentLastNightWitnessed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCatchUpCrackPlayed = false;
+        /// <summary>
+        /// True once the condensed catch-up crack has played for a subject who was not running the
+        /// app at zero. Once per account: the shortened sequence is an apology for missing the
+        /// night, not a thing to re-watch on every launch.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCatchUpCrackPlayed
+        {
+            get => _descentCatchUpCrackPlayed;
+            set { _descentCatchUpCrackPlayed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCountdownAudio = true;
+        /// <summary>
+        /// Gate for the countdown's audio hook (the Terminal-phase heartbeat). Defaults ON and has
+        /// NO settings UI this wave — it is the switch that exists so the hook can be turned off
+        /// without a patch, not a knob anyone is asked about. The hook itself is a no-op unless
+        /// the audio asset ships, so this defaulting true changes nothing today.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCountdownAudio
+        {
+            get => _descentCountdownAudio;
+            set { _descentCountdownAudio = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Season Recap (local-only, per-device)
 
         // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.

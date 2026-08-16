@@ -1551,6 +1551,10 @@ namespace ConditioningControlPanel.Services
                         HandleDescentMigrationAck(settings, v2Result?.DescentMigration);
                         HandleDescentMigrationOffer(settings, v2Result?.DescentMigration);
 
+                        // THE FUSE's cache (CONTRACT-FUSE-0816 §1.3). Additive, optional, and read
+                        // off the RAW body rather than off v2Result — see the method for why.
+                        HandleDescentCountdown(v2Json);
+
                         // The stage-ceremony drip (§6). A successful sync is the cheapest honest
                         // proxy for "signed in and awake today" that needs no new lifecycle
                         // wiring, and the tick is a same-local-day no-op, so syncing forty times
@@ -3987,6 +3991,51 @@ namespace ConditioningControlPanel.Services
                 (int)offer.TotalXpEarned, offer.DevotionDays);
 
             App.DescentMigration?.OfferReceived(offer);
+        }
+
+        /// <summary>
+        /// THE FUSE's cache line (CONTRACT-FUSE-0816 §1.3). The sync response may carry an additive
+        /// <c>descent_countdown: { "ceremony_at": "&lt;iso&gt;" }</c>; this is the desktop's only
+        /// source for that instant, and therefore the only thing that can light the countdown.
+        ///
+        /// <para><b>ABSENCE IS THE KILL SWITCH.</b> A successful sync with no block clears the
+        /// cached timestamp, which tears every fuse surface down live. That is why this runs on
+        /// EVERY successful sync rather than only when the key is present — "the server stopped
+        /// saying it" has to be as loud as "the server started saying it", or the owner could never
+        /// call the whole thing off without shipping a patch.</para>
+        ///
+        /// <para><b>Parsed off the RAW body, not off the deserialized result, and that is not
+        /// stylistic.</b> <c>JsonConvert.DeserializeObject</c> runs with
+        /// <c>DateParseHandling.DateTime</c>, so Newtonsoft rewrites any ISO-8601-shaped STRING
+        /// into a date token before a <c>string</c> property ever sees it — and what comes back out
+        /// is that DateTime's round-trip, not what the server sent. Reading through
+        /// <see cref="DescentReader.ParseWire"/> (DateParseHandling.None) is the same fix, at the
+        /// same boundary, that the descent block itself needed. See the essay on ParseWire.</para>
+        ///
+        /// <para>An unparseable body is NOT treated as absence: the countdown is left exactly as it
+        /// was. A transport that mangled the payload has told us nothing about the owner's
+        /// intentions, and inferring "call it off" from a truncated response would be the one
+        /// failure mode that silently un-ships the feature.</para>
+        /// </summary>
+        private static void HandleDescentCountdown(string? rawJson)
+        {
+            try
+            {
+                var countdown = App.DescentCountdown;
+                if (countdown is null) return;
+
+                // Tri-state: false = unreadable payload, change nothing. True = the answer below is
+                // authoritative, value or null. See TryReadCeremonyAt for the full reasoning.
+                if (!DescentCountdownService.TryReadCeremonyAt(rawJson, out var ceremonyAt)) return;
+
+                // Present ⇒ cache it. Absent ⇒ clear. ApplyCeremonyAt is a no-op when the value has
+                // not moved, so the 60s heartbeat costs one string compare.
+                countdown.ApplyCeremonyAt(ceremonyAt);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[Fuse] descent_countdown parse failed (the countdown is unchanged): {Error}", ex.Message);
+            }
         }
 
         #endregion

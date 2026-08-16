@@ -512,6 +512,15 @@ namespace ConditioningControlPanel
         /// </summary>
         public static Services.Descent.DescentMigrationService? DescentMigration { get; private set; }
 
+        /// <summary>
+        /// THE FUSE (CONTRACT-FUSE-0816 §2.1) — the countdown to the ceremony, and the one clock
+        /// every tease surface reads. Constructed on every launch and DORMANT on every launch: it
+        /// hangs off a single cached timestamp that only a /v2/user/sync response carrying
+        /// <c>descent_countdown</c> can write, and the server sends that only with
+        /// DESCENT_CEREMONY_AT armed. No timestamp ⇒ no timer, no surface, no request.
+        /// </summary>
+        public static Services.Descent.DescentCountdownService? DescentCountdown { get; private set; }
+
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -2025,6 +2034,12 @@ namespace ConditioningControlPanel
             // Costs one allocation and issues nothing. See the property doc: it cannot act until
             // a server offer arrives.
             DescentMigration = new Services.Descent.DescentMigrationService();
+            // THE FUSE. Constructed here (after Settings, beside its siblings) and started
+            // immediately: Start() reads the cached timestamp, finds none on every install today,
+            // and returns without arming a timer or issuing a request. It must exist before
+            // MainWindow so the header spark can subscribe during construction.
+            DescentCountdown = new Services.Descent.DescentCountdownService();
+            DescentCountdown.Start();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
