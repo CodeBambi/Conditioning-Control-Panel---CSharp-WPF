@@ -145,6 +145,23 @@
             </Grid>
         </Border>
 
+        <!-- Sibling of the toggle above, deliberately adjacent so the pair reads as
+             "signed in users" then "the whole internet". Separate consent: the one above
+             never covers the public web card. Bordered because the audience is unbounded. -->
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                BorderBrush="#B478FF" BorderThickness="1"
+                ToolTip="{loc:Str tooltip_public_share_real_avatar}">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{loc:Str label_public_share_real_avatar}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{loc:Str label_public_share_real_avatar_desc}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkPublicShareRealAvatar" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                          Checked="ChkPublicShareRealAvatar_Changed" Unchecked="ChkPublicShareRealAvatar_Changed"/>
+            </Grid>
+        </Border>
+
         <!-- ==== Goon Game sharing (opt-in, sharer-only; all three default OFF).
                  Separate audience from the community-sharing block above: these only
                  affect the person you are currently duelling. ==== -->

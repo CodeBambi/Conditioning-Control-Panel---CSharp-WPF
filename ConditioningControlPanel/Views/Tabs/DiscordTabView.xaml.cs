@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Views.Tabs
         internal CheckBox ChkDiscordTabShareLevelUps => PrivacyPanel.ChkDiscordTabShareLevelUps;
         internal CheckBox ChkDiscordTabAllowDm => PrivacyPanel.ChkDiscordTabAllowDm;
         internal CheckBox ChkDiscordTabSharePfp => PrivacyPanel.ChkDiscordTabSharePfp;
+        internal CheckBox ChkPublicShareRealAvatar => PrivacyPanel.ChkPublicShareRealAvatar;
         internal CheckBox ChkGoonShareAvatar => PrivacyPanel.ChkGoonShareAvatar;
         internal CheckBox ChkGoonShareDiscordDm => PrivacyPanel.ChkGoonShareDiscordDm;
         internal CheckBox ChkGoonRichPresence => PrivacyPanel.ChkGoonRichPresence;

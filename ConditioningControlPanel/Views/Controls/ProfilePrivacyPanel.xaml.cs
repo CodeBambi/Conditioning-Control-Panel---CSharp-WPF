@@ -61,6 +61,9 @@ namespace ConditioningControlPanel.Views.Controls
         private void ChkShareProfilePicture_Changed(object sender, RoutedEventArgs e)
             => Host?.ChkShareProfilePicture_Changed(sender, e);
 
+        private void ChkPublicShareRealAvatar_Changed(object sender, RoutedEventArgs e)
+            => Host?.ChkPublicShareRealAvatar_Changed(sender, e);
+
         private void ChkGoonShareAvatar_Changed(object sender, RoutedEventArgs e)
             => Host?.ChkGoonShareAvatar_Changed(sender, e);
 

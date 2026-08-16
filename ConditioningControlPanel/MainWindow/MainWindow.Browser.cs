@@ -1409,6 +1409,9 @@ namespace ConditioningControlPanel
                     if (DiscordTab.ChkDiscordTabShareLevelUps != null) DiscordTab.ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
                     if (DiscordTab.ChkDiscordTabAllowDm != null) DiscordTab.ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
                     if (DiscordTab.ChkDiscordTabSharePfp != null) DiscordTab.ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
+                    // Public web profile card consent (default off). Its handler no-ops on an
+                    // unchanged value, so this assignment never triggers a sync push.
+                    if (DiscordTab.ChkPublicShareRealAvatar != null) DiscordTab.ChkPublicShareRealAvatar.IsChecked = s.PublicShareRealAvatar;
                     if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
                     // Goon Game sharing (all default off). The handlers no-op when the value is
                     // unchanged, so these programmatic assignments never trigger a sync push.
