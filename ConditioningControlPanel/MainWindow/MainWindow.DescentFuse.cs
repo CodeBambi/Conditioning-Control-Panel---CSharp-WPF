@@ -44,6 +44,27 @@ namespace ConditioningControlPanel
         private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
         /// <summary>
+        /// Repaint the neutral chrome at whatever the fuse's live dim step now is. The Year One
+        /// ignition calls this on close (CONTRACT-FUSE-0816 §2.4).
+        ///
+        /// <para><b>It exists so the show never touches a palette cache.</b>
+        /// <c>RefreshThemeAwareElements</c> is the app's single writer of the neutral colour family
+        /// and it re-derives everything from the ACTIVE MOD every time — which is what makes the
+        /// dimming restorable without anyone having stashed an "original" that could go stale. This
+        /// wrapper is here purely because that method is private and a service has no window
+        /// reference to hand; it adds no behaviour of its own.</para>
+        ///
+        /// <para>A no-op when there is no main window (a show still fading during shutdown), which
+        /// is correct — there is no chrome left to restore.</para>
+        /// </summary>
+        internal static void RestoreFuseChrome()
+        {
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            if (Application.Current?.MainWindow is not MainWindow main) return;
+            main.RefreshThemeAwareElements();
+        }
+
+        /// <summary>
         /// Wire the fuse surfaces. Called once from the MainWindow constructor, beside the other
         /// header initializers. Costs two event subscriptions and one phase read.
         /// </summary>

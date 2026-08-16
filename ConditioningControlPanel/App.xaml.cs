@@ -521,6 +521,14 @@ namespace ConditioningControlPanel
         /// </summary>
         public static Services.Descent.DescentCountdownService? DescentCountdown { get; private set; }
 
+        /// <summary>
+        /// THE ZERO SHOW's stage manager (CONTRACT-FUSE-0816 §2.3/§2.4) — decides which of the three
+        /// fullscreen shows plays and when, and owns the ordering between the catch-up crack and the
+        /// ceremony offer. Dormant with <see cref="DescentCountdown"/>: no cached timestamp ⇒ no
+        /// ZeroReached, no catch-up, nothing but two event subscriptions.
+        /// </summary>
+        public static Services.Descent.DescentShowDirector? DescentShow { get; private set; }
+
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -2040,6 +2048,14 @@ namespace ConditioningControlPanel
             // MainWindow so the header spark can subscribe during construction.
             DescentCountdown = new Services.Descent.DescentCountdownService();
             DescentCountdown.Start();
+            // THE ZERO SHOW. Armed on the same line as the clock it watches, and SYNCHRONOUSLY:
+            // when a launch owes the catch-up crack, Arm() takes the ceremony's offer hold before
+            // it returns, which is what makes the crack provably win the race against an offer
+            // already in flight on the startup sync (the offer's window-open marshals onto this
+            // same dispatcher, and it cannot pump until OnStartup has returned). See the ordering
+            // note on DescentShowDirector.
+            DescentShow = new Services.Descent.DescentShowDirector();
+            DescentShow.Arm();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);

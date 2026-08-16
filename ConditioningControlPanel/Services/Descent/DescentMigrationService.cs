@@ -25,6 +25,7 @@ namespace ConditioningControlPanel.Services.Descent
         private readonly object _gate = new();
         private DescentMigrationOffer? _liveOffer;
         private bool _ceremonyOpen;
+        private int _offerHold;
 
         /// <summary>
         /// Raised when a queued stage ceremony comes due — one per login day, after a "Take it
@@ -38,8 +39,42 @@ namespace ConditioningControlPanel.Services.Descent
         /// </summary>
         public event EventHandler<int>? StageCeremonyDue;
 
+        /// <summary>
+        /// The ceremony window has closed. The bool is TRUE when a choice was COMMITTED — which is
+        /// the only thing the Year One ignition (CONTRACT-FUSE-0816 §2.4) cares about, since a
+        /// "Not tonight" close is a free deferral with nothing to light.
+        ///
+        /// <para><b>Additive, and it changes nothing about the offer flow.</b> The raise sits in the
+        /// window's existing Closed handler beside the guard reset; with no subscriber it is a null
+        /// check. It exists because the alternative — the show polling
+        /// <see cref="IsCeremonyOpen"/> forever and then guessing at the settings — would be both
+        /// more invasive and less correct.</para>
+        ///
+        /// <para>"Committed" is read off the settings rather than passed down from the window,
+        /// because the window's own <c>_committed</c> flag is private and, more importantly, the
+        /// settings are the thing that is actually true: <c>ApplyChoice</c> writes the pending
+        /// choice, and the server ack later turns it into <c>DescentMigrationCompleted</c>. Either
+        /// of those means the choice was taken.</para>
+        /// </summary>
+        public event EventHandler<bool>? CeremonyClosed;
+
         /// <summary>True while the ceremony window is on screen. Guards a second open.</summary>
         public bool IsCeremonyOpen { get { lock (_gate) return _ceremonyOpen; } }
+
+        /// <summary>How many holders are currently suppressing the ceremony. Test seam.</summary>
+        internal int OfferHoldDepth { get { lock (_gate) return _offerHold; } }
+
+        /// <summary>
+        /// Whether an offer could open the ceremony RIGHT NOW: one is in hand, none is on screen,
+        /// and nothing is holding it back. Read by <see cref="ReleaseOffers"/> to decide whether a
+        /// release has anything to replay, and by the tests — the hold's whole behaviour is this
+        /// one predicate, and a state machine that can only be observed through a window opening is
+        /// a state machine nobody can test.
+        /// </summary>
+        internal bool CanOpenCeremony()
+        {
+            lock (_gate) return !_ceremonyOpen && _offerHold == 0 && _liveOffer != null;
+        }
 
         /// <summary>The offer the live ceremony is running against, or null.</summary>
         public DescentMigrationOffer? LiveOffer { get { lock (_gate) return _liveOffer; } }
@@ -72,6 +107,44 @@ namespace ConditioningControlPanel.Services.Descent
             else dispatcher.BeginInvoke(new Action(OpenCeremonyWindow));
         }
 
+        /// <summary>
+        /// Suppress ceremony opens until the matching <see cref="ReleaseOffers"/>.
+        ///
+        /// <para><b>Additive, and inert with no holder</b> (CONTRACT-FUSE-0816 §2.4). It exists for
+        /// exactly one situation: the catch-up crack plays over the same startup sync that carries
+        /// the offer, and the ceremony must open AFTER that fullscreen window has left rather than
+        /// underneath it. A held offer is not dropped — it stays in <c>_liveOffer</c> and is
+        /// replayed on release, so the hold delays the ceremony and never cancels it.</para>
+        ///
+        /// <para>Depth-counted so nested or duplicated holders cannot release each other's, and
+        /// paired in the show director with a Closed handler that fires on every exit path
+        /// including the panic key's ForceCloseAll.</para>
+        /// </summary>
+        public void HoldOffers()
+        {
+            lock (_gate) _offerHold++;
+        }
+
+        /// <summary>
+        /// Drop one hold, and open the ceremony now if an offer arrived while it was up.
+        /// Over-releasing is a no-op rather than a negative depth — a teardown path that calls this
+        /// twice must not arm the gate backwards.
+        /// </summary>
+        public void ReleaseOffers()
+        {
+            lock (_gate) { if (_offerHold > 0) _offerHold--; }
+
+            if (!CanOpenCeremony()) return;
+
+            Log.Information("[Descent] An offer arrived while the ceremony was held — opening it now.");
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+
+            if (dispatcher.CheckAccess()) OpenCeremonyWindow();
+            else dispatcher.BeginInvoke(new Action(OpenCeremonyWindow));
+        }
+
         private void OpenCeremonyWindow()
         {
             try
@@ -82,6 +155,13 @@ namespace ConditioningControlPanel.Services.Descent
                 lock (_gate)
                 {
                     if (_ceremonyOpen) return;
+                    // HELD. Note what is NOT done here: _ceremonyOpen stays false and _liveOffer
+                    // stays set, which is precisely what lets ReleaseOffers replay this call.
+                    if (_offerHold > 0)
+                    {
+                        Log.Debug("[Descent] Ceremony offer held behind a fullscreen show — it will open when the hold lifts.");
+                        return;
+                    }
                     offer = _liveOffer;
                     if (offer is null) return;
                     _ceremonyOpen = true;
@@ -89,7 +169,11 @@ namespace ConditioningControlPanel.Services.Descent
 
                 // Flat namespace — see the trap note at the top of DescentCeremonyWindow.xaml.cs.
                 var window = new DescentCeremonyWindow(offer);
-                window.Closed += (_, _) => { lock (_gate) _ceremonyOpen = false; };
+                window.Closed += (_, _) =>
+                {
+                    lock (_gate) _ceremonyOpen = false;
+                    RaiseCeremonyClosed();
+                };
 
                 var main = Application.Current?.MainWindow;
                 if (main != null && main.IsLoaded) window.Owner = main;
@@ -104,6 +188,26 @@ namespace ConditioningControlPanel.Services.Descent
                 lock (_gate) _ceremonyOpen = false;
                 Log.Error(ex, "[Descent] Could not open the migration ceremony window — the server will re-offer on the next sync.");
             }
+        }
+
+        /// <summary>
+        /// Announce the close, with whether a choice was actually taken. Isolated from the caller
+        /// so a subscriber that throws cannot leave the ceremony's own guard half-reset.
+        /// </summary>
+        private void RaiseCeremonyClosed()
+        {
+            bool committed;
+            try
+            {
+                var s = App.Settings?.Current;
+                committed = s != null &&
+                            (s.DescentMigrationCompleted ||
+                             DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice));
+            }
+            catch { committed = false; }
+
+            try { CeremonyClosed?.Invoke(this, committed); }
+            catch (Exception ex) { Log.Debug("[Descent] A CeremonyClosed handler threw: {Error}", ex.Message); }
         }
 
         // ------------------------------------------------------------------

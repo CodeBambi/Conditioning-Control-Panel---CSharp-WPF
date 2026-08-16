@@ -374,6 +374,11 @@ namespace ConditioningControlPanel
             // been written and the server simply re-offers; after it, the choice is already on
             // disk and riding the sync queue.
             DescentCeremonyWindow.ForceCloseAll();
+            // Same rule for the fuse's fullscreen show (the crack at zero, the catch-up, the Year
+            // One ignition). The only thing it persists is the keepsake flag, written the moment
+            // the bloom starts — so panicking out of it costs a keepsake at worst and never a
+            // choice, a level or an XP total.
+            DescentFuseWindow.ForceCloseAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();

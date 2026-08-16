@@ -192,7 +192,8 @@ namespace ConditioningControlPanel.Services.Descent
         /// How dark the chrome should be right now: 0 before the Dimming phase, then 1..4, one step
         /// per six hours. Read by the chrome choke point and by nothing else.
         /// </summary>
-        public int DimStep => DimStepFor(CeremonyAtUtc, DateTime.UtcNow);
+        public int DimStep => DimStepFor(CeremonyAtUtc, DateTime.UtcNow,
+            App.Settings?.Current?.DescentMigrationCompleted ?? false);
 
         /// <summary>
         /// The server's presence reading, or null when it did not speak — which is the state unless
@@ -743,8 +744,26 @@ namespace ConditioningControlPanel.Services.Descent
         /// elapsed since T-24h. Four steps over the last day, and step 4 holds through zero — the
         /// chrome does not brighten back up while the show is starting.
         /// </summary>
-        internal static int DimStepFor(DateTime? ceremonyAtUtc, DateTime nowUtc)
+        internal static int DimStepFor(DateTime? ceremonyAtUtc, DateTime nowUtc) =>
+            DimStepFor(ceremonyAtUtc, nowUtc, migrationCompleted: false);
+
+        /// <summary>
+        /// The same walk, with the one thing that ends it.
+        ///
+        /// <para><b>A migrated account is not in the dark any more</b> (CONTRACT-FUSE-0816 §2.4, the
+        /// ignition's chrome restore). Step 4 deliberately HOLDS through zero so the room does not
+        /// brighten while the show is opening — but "through zero" is not "forever". Without this,
+        /// the pure arithmetic above returns 4 for every moment after the instant, so a subject who
+        /// took the ceremony on the first night would keep a dimmed app until the owner eventually
+        /// unset the server timestamp days later. The ignition's <c>RefreshThemeAwareElements</c>
+        /// call is what repaints; this is what gives it something to repaint back to.</para>
+        ///
+        /// <para>Additive: the two-argument overload is unchanged, so every existing caller and
+        /// every pinned boundary reads exactly as it did.</para>
+        /// </summary>
+        internal static int DimStepFor(DateTime? ceremonyAtUtc, DateTime nowUtc, bool migrationCompleted)
         {
+            if (migrationCompleted) return 0;
             if (ceremonyAtUtc is null) return 0;
 
             var left = ceremonyAtUtc.Value - nowUtc;

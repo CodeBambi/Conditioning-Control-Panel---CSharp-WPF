@@ -113,5 +113,41 @@ namespace ConditioningControlPanel.Services.Descent
         /// pluralization branch is the first step toward putting a noun back in.</para>
         /// </summary>
         public static string Presence(int count) => $"{count} falling with you";
+
+        // ---- the zero show ------------------------------------------------------
+        //
+        // Two sentences, and between them they are every word the fullscreen show says. The crack,
+        // the drain and the bloom are deliberately WORDLESS — nothing is labelled, nothing is
+        // explained, and there is no skip prompt, because a caption under a thing like that turns a
+        // moment into a notification. §0.6 applies here more than anywhere: this is the most-watched
+        // surface of the release and there is not an offer, a price or a tier within a mile of it.
+
+        /// <summary>
+        /// The consolation line, shown ONLY when the ceremony did not arrive inside the show's
+        /// forty-five second window (CONTRACT-FUSE-0816 §2.3).
+        ///
+        /// <para><b>It is a statement, not an apology and not an instruction.</b> The standing
+        /// re-offer contract means the ceremony genuinely does await — the server keeps offering it
+        /// on every sync until a choice is taken — so this line is true whether the miss was a slow
+        /// network, a paused rollout dial or a laptop that woke up on aeroplane mode. It must never
+        /// grow a "try again" button or a "check your connection" hint: both would turn a held
+        /// promise into a support ticket, and neither would make the ceremony come any sooner.</para>
+        ///
+        /// <para>Wording is from the §4 echo family, so the desktop's miss and the web card's echo
+        /// say the same sentence.</para>
+        /// </summary>
+        public const string ShowAwaits = "The ceremony awaits.";
+
+        /// <summary>
+        /// The last line of the Year One ignition, held for two seconds over the finished spiral
+        /// (CONTRACT-FUSE-0816 §2.4).
+        ///
+        /// <para><b>"Yours" is the load-bearing word.</b> The ceremony's closing act already said
+        /// what was chosen; this says what the choice bought — a track that starts tonight, at the
+        /// same place, for everybody who walked through either door. Nobody's spiral arrives pre-lit
+        /// (the anchor is set to the ceremony instant for both choices), which is exactly why the
+        /// sentence can be addressed to every subject without being a lie to half of them.</para>
+        /// </summary>
+        public const string IgnitionLine = "Year One. The spiral is yours.";
     }
 }
