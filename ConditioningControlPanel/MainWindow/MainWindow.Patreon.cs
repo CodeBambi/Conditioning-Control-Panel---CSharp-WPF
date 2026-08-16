@@ -648,6 +648,31 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// PUBLIC web profile card avatar consent. Deliberately its own handler and its own
+        /// setting: <see cref="ChkShareProfilePicture_Changed"/> above governs signed-in surfaces
+        /// only, and no existing consent implies "anyone with the link". Pushes on change (goon
+        /// precedent) so a revoke reaches the server without waiting for the next scheduled sync,
+        /// and no-ops on an unchanged value because LoadDiscordTabState assigns IsChecked
+        /// programmatically, which re-fires Checked/Unchecked.
+        /// </summary>
+        internal async void ChkPublicShareRealAvatar_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.PublicShareRealAvatar == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.PublicShareRealAvatar = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[PublicProfile] real-avatar consent changed: {Enabled}", isChecked);
+
+            if (App.ProfileSync != null)
+            {
+                try { await App.ProfileSync.SyncProfileAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[PublicProfile] immediate avatar-consent sync push failed"); }
+            }
+        }
+
         #region Goon Game sharing toggles
 
         // Goon Game consent flags (docs/GOON_DISCORD_CONTRACT.md §1/§2). Sharer-only:

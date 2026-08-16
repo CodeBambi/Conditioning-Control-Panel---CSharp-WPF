@@ -2332,6 +2332,27 @@ namespace ConditioningControlPanel.Models
             set { _shareProfilePicture = value; OnPropertyChanged(); }
         }
 
+        private bool _publicShareRealAvatar = false;
+        /// <summary>
+        /// Show your REAL Discord avatar on the PUBLIC web profile card at
+        /// app.cclabs.app/u/&lt;slug&gt; - a page anyone with the link can open, signed in or not,
+        /// and one search engines can reach.
+        ///
+        /// Deliberately a SEPARATE consent from <see cref="ShareProfilePicture"/> (leaderboard /
+        /// profile viewer, i.e. signed-in users of the app) and from
+        /// <see cref="GoonShareAvatar"/> (the one opponent you are duelling). Different audience,
+        /// different threat model - do not conflate them or let one imply another. Default false;
+        /// privacy fails closed, and the public card falls back to the chosen cosmetic avatar.
+        ///
+        /// Rides /v2/user/sync as <c>public_share_avatar</c>.
+        /// </summary>
+        [JsonProperty]
+        public bool PublicShareRealAvatar
+        {
+            get => _publicShareRealAvatar;
+            set { _publicShareRealAvatar = value; OnPropertyChanged(); }
+        }
+
         private ProfileCosmetics _profileCosmetics = new();
         /// <summary>
         /// What this subject has equipped on their Trainer Card: banner, accent, worn title,

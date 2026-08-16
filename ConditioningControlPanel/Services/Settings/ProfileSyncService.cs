@@ -1327,6 +1327,12 @@ namespace ConditioningControlPanel.Services
                         allow_discord_dm = settings.AllowDiscordDm,
                         show_online_status = settings.ShowOnlineStatus,
                         share_profile_picture = settings.ShareProfilePicture,
+                        // PUBLIC web profile card (app.cclabs.app/u/<slug>) avatar consent. A
+                        // separate, explicit opt-in: share_profile_picture above governs only
+                        // signed-in surfaces, and neither it nor the goon flags below imply
+                        // "anyone with the link". Default false, so an old client that never
+                        // sends this reads as no-consent server side.
+                        public_share_avatar = settings.PublicShareRealAvatar,
                         // Goon Game consent flags (GOON_DISCORD_CONTRACT §2). Sharer-only;
                         // the server snapshots these into the room card at invite/join and
                         // drops the cached avatar bytes when a flag is revoked.
