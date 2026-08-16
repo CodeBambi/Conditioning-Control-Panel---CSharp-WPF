@@ -81,6 +81,7 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _timer;
         private bool _witnessedMarked;
         private bool _backdropRaised;
+        private bool _crackSounded;
         private bool _closing;
 
         /// <summary>
@@ -295,6 +296,15 @@ namespace ConditioningControlPanel
         {
             var frame = DescentFuseTimeline.FrameAt(_kind, elapsed, _reduced);
             _visual.SetFrame(frame);
+
+            // The sting lands ON the crack, not before it (owner note 0816: it used to play at the
+            // chip's flash-out, 1.5s of freeze ahead of the first hairline). Reduced motion never
+            // reaches the Crack stage, so the crossfade stays silent by construction.
+            if (frame.Stage == DescentFuseStage.Crack && !_crackSounded)
+            {
+                _crackSounded = true;
+                DescentRoomSfx.PlayCrack();
+            }
 
             if (frame.Stage >= DescentFuseStage.Bloom && !_backdropRaised)
             {

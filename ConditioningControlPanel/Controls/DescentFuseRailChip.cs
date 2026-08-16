@@ -633,8 +633,9 @@ namespace ConditioningControlPanel.Controls
                 Visibility = Visibility.Visible;
                 ToolTip = null;   // nothing to read under a pointer while this happens
 
-                DescentRoomSfx.PlayZeroFlashOut();
-
+                // No sound here. The sting belongs to the screen crack, which is still 1.5s of
+                // freeze away — the fuse window plays DescentRoomSfx.PlayCrack on the frame the
+                // hairlines actually split (owner note 0816). The chip goes out visually only.
                 if (MotionFx.AllowTransitions) BeginFlashClocks();
                 else BeginQuietFade();
 

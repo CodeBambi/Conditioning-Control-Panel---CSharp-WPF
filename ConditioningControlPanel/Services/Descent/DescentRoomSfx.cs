@@ -4,8 +4,8 @@ using ConditioningControlPanel.Services.Chaos;
 namespace ConditioningControlPanel.Services.Descent
 {
     /// <summary>
-    /// THE SPIRAL ROOM'S THREE NOTES — the fog era's door, the splash's chime, and the chip's
-    /// flash-out at zero (owner ruling 2026-08-16: "we should add SFX ... so we know its not stuck").
+    /// THE SPIRAL ROOM'S THREE NOTES — the fog era's door, the splash's chime, and the crack of
+    /// the screen at zero (owner ruling 2026-08-16: "we should add SFX ... so we know its not stuck").
     ///
     /// <para><b>Why this exists rather than three bare <see cref="ChaosSfx.Play"/> calls.</b> Three
     /// reasons, and each one is a bug that would otherwise be written three times. First, the
@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services.Descent
     /// owns the feature, instead of three magic strings scattered across a view and a control.</para>
     ///
     /// <para><b>It ships PARTLY dark, on purpose.</b> None of the three dedicated assets
-    /// (<c>descent_fog_enter</c>, <c>descent_spiral_open</c>, <c>descent_zero_flash</c>) exist yet —
+    /// (<c>descent_fog_enter</c>, <c>descent_spiral_open</c>, <c>descent_crack</c>) exist yet —
     /// those are an owner call, exactly like <c>Resources/descent/heartbeat.wav</c> is for
     /// <see cref="DescentHeartbeat"/>. What DOES ship is the second rung of each ladder: three
     /// sounds already in the box that read right for the moment. So the room is audible today and
@@ -51,9 +51,12 @@ namespace ConditioningControlPanel.Services.Descent
         /// remove.</summary>
         private static readonly string[] SplashOpen = { "descent_spiral_open", "reveal_chime" };
 
-        /// <summary>Zero: the chip's flash-out. A hard sting under two and a half seconds of
-        /// flicker, and then the countdown is gone from the rail for good.</summary>
-        private static readonly string[] ZeroFlash = { "descent_zero_flash", "freeze_trigger" };
+        /// <summary>The crack itself. Fired by the fuse window on the frame the first hairline
+        /// splits the glyph — NOT by the chip (owner note 0816: the sting used to ride the chip's
+        /// flash-out and landed 1.5s of freeze ahead of the visual; the chip is silent now and the
+        /// sound belongs to the screen that cracks). Two dedicated slots so the file the owner was
+        /// already told about keeps working, then the shipped stand-in.</summary>
+        private static readonly string[] Crack = { "descent_crack", "descent_zero_flash", "freeze_trigger" };
 
         // ---- the mix ----
 
@@ -65,7 +68,7 @@ namespace ConditioningControlPanel.Services.Descent
         private const float SplashOpenScale = 0.34f;
 
         /// <summary>The loudest, and the only one that is allowed to be startling.</summary>
-        private const float ZeroFlashScale = 0.55f;
+        private const float CrackScale = 0.55f;
 
         private static bool _missingLogged;
 
@@ -84,8 +87,8 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>The loading splash coming up over a spiral that is being built.</summary>
         public static void PlaySplashOpen() => Play(SplashOpen, SplashOpenScale, "descent-spiral-open");
 
-        /// <summary>The rail chip's flash-out as the countdown reaches zero.</summary>
-        public static void PlayZeroFlashOut() => Play(ZeroFlash, ZeroFlashScale, "descent-zero-flash");
+        /// <summary>The screen cracking, on the frame it visually does.</summary>
+        public static void PlayCrack() => Play(Crack, CrackScale, "descent-crack");
 
         /// <summary>
         /// Resolve the first candidate that is actually on disk and play it once. Every failure
