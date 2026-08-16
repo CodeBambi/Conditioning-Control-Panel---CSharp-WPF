@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Models;
@@ -66,6 +69,117 @@ namespace ConditioningControlPanel.Views.Tabs
         /// </summary>
         private static readonly double FogHoldSeconds = SpiralFirstLightTimeline.DrawStartSeconds;
 
+        // ============================== the fog era's FX ==============================
+        //
+        // Owner verdict on the live demo, 2026-08-16: "could use some FX, a bolder text, maybe some
+        // little animation and flair." Everything below is opacity and transform ONLY — the two
+        // BlurEffects in the XAML are set once and never touched by a clock, which is the app's
+        // standing rule (an animated Effect property re-runs the shader graph every frame).
+
+        /// <summary>The hero digits, at their own size. The "any moment now" phrase shares the
+        /// TextBlock and gets <see cref="ImminentFontSize"/> instead: it is a sentence, not a
+        /// readout, and at digit size it would wrap and stop being a hero at all.</summary>
+        private const double HeroFontSize = 56;
+        private const double ImminentFontSize = 30;
+
+        /// <summary>The pulse's whole amplitude. Two percent is the ceiling the owner named, and it
+        /// is deliberately the ONLY thing about the pulse that does not change with the phase —
+        /// see <see cref="SpiralRoom.FogPulseSecondsFor"/> on why the ladder is tempo, not size.</summary>
+        private const double PulseScale = 1.022;
+
+        /// <summary>The glow's resting opacity, and the top of its one-shot flare.</summary>
+        private const double GlowRest = 0.42;
+        private const double GlowFlarePeak = 1.0;
+        private const double GlowFlareSeconds = 0.95;
+
+        private const double HairlineLo = 0.14;
+        private const double HairlineHi = 0.46;
+        private const double HairlineSeconds = 3.6;
+
+        /// <summary>Capped like every other ambient clock in the app (MotionFx.AmbientFrameRate).
+        /// The blurred glow duplicate re-renders with the pulse, so this cap is doing real work.</summary>
+        private const int AmbientFrameRate = 24;
+
+        /// <summary>
+        /// The embers, as fractions of the fog's own rectangle so they reflow with the window
+        /// instead of clustering in a corner on a wide monitor. Curated rather than random: a seeded
+        /// RNG would still be one more thing that can differ between two machines watching the same
+        /// night, and nine specks is few enough to place by hand.
+        ///
+        /// <para>Tuple order: x fraction, y fraction, radius, the drift's period in seconds, and the
+        /// peak opacity at the middle of that drift.</para>
+        /// </summary>
+        private static readonly (double Fx, double Fy, double R, double Seconds, double Peak)[] EmberSeeds =
+        {
+            (0.14, 0.86, 1.6, 19.0, 0.42),
+            (0.27, 0.94, 2.4, 24.0, 0.30),
+            (0.39, 0.80, 1.3, 16.5, 0.50),
+            (0.52, 0.97, 2.0, 27.0, 0.26),
+            (0.63, 0.84, 1.5, 21.0, 0.44),
+            (0.74, 0.92, 2.6, 25.5, 0.24),
+            (0.83, 0.78, 1.4, 17.5, 0.48),
+            (0.91, 0.95, 1.9, 22.5, 0.32),
+            (0.06, 0.90, 2.1, 28.0, 0.22),
+        };
+
+        /// <summary>The waiting panel's motes, in the little canvas's own coordinates rather than
+        /// in fractions — that canvas has a fixed size, so there is nothing to reflow.</summary>
+        private static readonly (double Fx, double Fy, double R, double Seconds, double Peak)[] MoteSeeds =
+        {
+            (0.12, 1.0, 1.5, 5.6, 0.50),
+            (0.31, 1.0, 1.1, 7.4, 0.62),
+            (0.50, 1.0, 1.8, 6.3, 0.38),
+            (0.69, 1.0, 1.2, 8.1, 0.55),
+            (0.88, 1.0, 1.5, 6.9, 0.44),
+        };
+
+        private DriftField? _embers;
+        private DriftField? _motes;
+
+        /// <summary>The phase the fog's pulse is currently keeping time to. Held so a repaint that
+        /// did not change the phase does not throw away a running clock and start an identical one —
+        /// the pulse would visibly jump back to the top of its breath every tick.</summary>
+        private DescentFusePhase? _pulsePhase;
+
+        // ============================== the splash ==============================
+
+        /// <summary>
+        /// How long the splash will wait for an embed that has neither navigated nor failed before
+        /// giving the browser its airspace anyway.
+        ///
+        /// <para><b>It exists so the splash cannot become the hang it was built to hide.</b> The
+        /// embed is held at Visibility.Hidden while it loads, and a hidden WebView2 that somehow
+        /// never raises NavigationCompleted (a wedged renderer, a runtime mid-update) would strand
+        /// the spiral behind a spinning glyph with nothing on screen ever changing. On this deadline
+        /// the room shows whatever the browser actually has, which is either the canvas or its own
+        /// dark slab — and the slab at least tells the truth.</para>
+        /// </summary>
+        private static readonly TimeSpan SplashRevealDeadline = TimeSpan.FromSeconds(10);
+
+        private const double SplashFadeSeconds = 0.4;
+
+        private DispatcherTimer? _splashWatchdog;
+
+        /// <summary>True while the splash owns the surface — set the instant the spiral era is
+        /// painted, cleared when the embed is revealed, when it fails, or on leaving the tab.</summary>
+        private bool _splashUp;
+
+        /// <summary>One chime per ENTRY, never per retry: a cue that repeated while a browser
+        /// struggled would sound exactly like the thing being stuck.</summary>
+        private bool _splashChimed;
+
+        /// <summary>
+        /// One door sound per entry, spent by the first painted fog.
+        ///
+        /// <para><b>SPENT, not armed, and the difference is a double whoosh.</b> Walking into this
+        /// tab paints it TWICE — the tab system flips Visibility (which refreshes) and then calls
+        /// <see cref="OnTabShown"/> (which refreshes again). A flag armed by either of those would be
+        /// re-armed by the other between the two paints and the cue would fire on both. So the flag
+        /// is only ever cleared on the way OUT, in <see cref="Suspend"/>, where there is exactly one
+        /// event.</para>
+        /// </summary>
+        private bool _entrySfxSpent;
+
         // ---- the canvas ----
         private SpiralFirstLightVisual? _visual;
         private DispatcherTimer? _frames;
@@ -98,6 +212,15 @@ namespace ConditioningControlPanel.Views.Tabs
             FogLine.Text = DescentFuseCopy.FogLine;
             FogTail.Text = DescentFuseCopy.FogTail;
             WaitingLine.Text = DescentFuseCopy.WaitingLine;
+            SplashLine.Text = SplashCopy;
+
+            SplashGlyph.Data = BuildSpiralGeometry();
+
+            _embers = new DriftField(EmberHost, EmberSeeds);
+            _motes = new DriftField(WaitingMotes, MoteSeeds);
+
+            // The embers are laid out in fractions of the fog's rectangle, so they follow the window.
+            EmberHost.SizeChanged += (_, _) => _embers?.Reflow();
 
             Loaded += (_, _) => Wire();
             // Unloaded is the window going away or this view being re-parented - NOT a tab switch
@@ -155,7 +278,17 @@ namespace ConditioningControlPanel.Views.Tabs
         private void OnPhaseChanged(object? sender, DescentFusePhaseChangedEventArgs e)
         {
             if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
-            try { if (IsVisible) Refresh(); }
+            try
+            {
+                if (!IsVisible) return;
+
+                Refresh();
+
+                // The flare rides the repaint rather than replacing it: Refresh may have just moved
+                // the room out of the fog entirely (the ceremony landing), and a glow swell over a
+                // surface that is no longer the countdown would be a flash from nowhere.
+                if (_state == SpiralRoomState.Fog && !_firstLight) FlarePhaseChange();
+            }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] room phase repaint: {E}", ex.Message); }
         }
 
@@ -165,7 +298,7 @@ namespace ConditioningControlPanel.Views.Tabs
             try
             {
                 if (!IsVisible || _state != SpiralRoomState.Fog || _firstLight) return;
-                FogDigits.Text = DescentFuseCopy.TMinus(remaining);
+                ApplyReadout(DescentFuseCopy.TMinus(remaining), hero: true);
             }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] room tick: {E}", ex.Message); }
         }
@@ -220,7 +353,8 @@ namespace ConditioningControlPanel.Views.Tabs
         /// </summary>
         internal void OnTabShown()
         {
-            // A fresh entry earns a fresh attempt at the embed - see _embedGaveUp.
+            // A fresh entry earns a fresh attempt at the embed - see _embedGaveUp. The two sound
+            // flags are NOT reset here; they are reset on the way out. See _entrySfxSpent.
             _embedGaveUp = false;
             Wire();
             Refresh();
@@ -231,8 +365,16 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             StopFrames();
             StopBlockWait();
+            StopFogFx();
+            HideSplash(fade: false);
+            StopWaitingAmbience();
             _firstLight = false;
             TeardownEmbed();
+
+            // The one unambiguous "this tab is no longer on screen" event, and therefore the only
+            // safe place to re-arm the two cues that must fire once per entry.
+            _entrySfxSpent = false;
+            _splashChimed = false;
         }
 
         // ============================== the state ==============================
@@ -278,47 +420,97 @@ namespace ConditioningControlPanel.Views.Tabs
                     TeardownEmbed();
                     EmbedHost.Visibility = Visibility.Collapsed;
                     WaitingPanel.Visibility = Visibility.Collapsed;
+                    StopWaitingAmbience();
+                    HideSplash(fade: false);
 
                     EnsureVisual();
                     FogHost.Visibility = Visibility.Visible;
                     FogCopy.Visibility = Visibility.Visible;
-                    FogDigits.Text = FogReadout();
+                    ApplyFogReadout();
                     StartFrames();
+                    StartFogFx();
+                    if (!_entrySfxSpent)
+                    {
+                        _entrySfxSpent = true;
+                        DescentRoomSfx.PlayFogEntry();
+                    }
                     break;
 
                 case SpiralRoomState.Spiral:
                     StopFrames();
+                    StopFogFx();
                     FogHost.Visibility = Visibility.Collapsed;
                     FogCopy.Visibility = Visibility.Collapsed;
+
+                    // A REPAINT IS NOT A RE-ENTRY. This state is re-applied on every BlockChanged,
+                    // and the spiral era is exactly where those keep arriving — so once this entry
+                    // has a browser, whatever state it reached (loading behind the splash, revealed,
+                    // or handed over to the waiting panel because it failed) is the state a repaint
+                    // must leave alone. Without this, a routine sync would drop the splash back over
+                    // a canvas that had already been revealed, with no watchdog left to lift it.
+                    if (_embed != null) break;
+
+                    // Same entry, embed already given up: the fallback stands until the NEXT entry
+                    // clears _embedGaveUp and earns a fresh attempt.
+                    if (_embedGaveUp) { ShowWaitingUnderSpiral(); break; }
+
                     WaitingPanel.Visibility = Visibility.Collapsed;
-                    EmbedHost.Visibility = Visibility.Visible;
+                    StopWaitingAmbience();
+
+                    // AIRSPACE, one layer down. HIDDEN, not Visible: the slab is still arranged, so
+                    // the browser is handed a real rectangle and navigates exactly as it would
+                    // otherwise, but its native HWND cannot paint over the splash while it does.
+                    // OnEmbedNavigated is what promotes it.
+                    EmbedHost.Visibility = Visibility.Hidden;
+                    ShowSplash();
                     EnsureEmbed();
                     break;
 
                 default:
                     StopFrames();
+                    StopFogFx();
                     TeardownEmbed();
+                    HideSplash(fade: false);
                     FogHost.Visibility = Visibility.Collapsed;
                     FogCopy.Visibility = Visibility.Collapsed;
                     EmbedHost.Visibility = Visibility.Collapsed;
                     WaitingPanel.Visibility = Visibility.Visible;
+                    StartWaitingAmbience();
                     break;
             }
         }
 
         /// <summary>
-        /// The fog's digits: T-minus while the fuse is still burning, and a phrase once the instant
+        /// The fog's readout: T-minus while the fuse is still burning, and a phrase once the instant
         /// has gone by without this account's ceremony having reached them. A countdown that ran out
         /// and kept showing 00:00 would read as broken; "any moment now" is what is actually true,
         /// because the server re-offers on every sync until a choice is taken.
         /// </summary>
-        private static string FogReadout()
+        private void ApplyFogReadout()
         {
             var fuse = App.DescentCountdown;
             var remaining = fuse?.Remaining;
             if (fuse is null || remaining is null || remaining.Value <= TimeSpan.Zero)
-                return DescentFuseCopy.FogImminent;
-            return DescentFuseCopy.TMinus(remaining.Value);
+                ApplyReadout(DescentFuseCopy.FogImminent, hero: false);
+            else
+                ApplyReadout(DescentFuseCopy.TMinus(remaining.Value), hero: true);
+        }
+
+        /// <summary>
+        /// Type the readout and size it for what it actually is.
+        ///
+        /// <para><b>The size is passed in, never sniffed off the string.</b> Both callers know which
+        /// of the two things they are showing, and a "does it start with a digit" test would be one
+        /// copy edit away from rendering a sentence at 56px bold — where it wraps, breaks the
+        /// StackPanel's rhythm and stops looking like anything the app meant to draw.</para>
+        ///
+        /// <para>The blurred glow behind it follows both the text and the size by binding, so there
+        /// is nothing to keep in step here.</para>
+        /// </summary>
+        private void ApplyReadout(string text, bool hero)
+        {
+            FogDigits.Text = text;
+            FogDigits.FontSize = hero ? HeroFontSize : ImminentFontSize;
         }
 
         // ============================== the canvas ==============================
@@ -464,6 +656,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 WaitingPanel.Visibility = Visibility.Collapsed;
                 FogCopy.Visibility = Visibility.Collapsed;
 
+                // ...and neither can anything else. The reveal is the one thing on screen for its
+                // three and a half seconds: no splash over it, no embers drifting through it, no
+                // waiting panel breathing underneath.
+                HideSplash(fade: false);
+                StopFogFx();
+                StopWaitingAmbience();
+
                 EnsureVisual();
                 FogHost.Visibility = Visibility.Visible;
 
@@ -572,10 +771,12 @@ namespace ConditioningControlPanel.Views.Tabs
                     TeardownEmbed();
                     ShowWaitingUnderSpiral();
                 };
+                embed.Navigated += (_, _) => OnEmbedNavigated();
                 _embed = embed;
                 EmbedHost.Children.Add(embed);
                 embed.Start();
                 embed.PostState(App.Descent?.Current);
+                StartSplashWatchdog();
             }
             catch (Exception ex)
             {
@@ -586,18 +787,45 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
+        /// <summary>
+        /// The embed navigated. Hand it the airspace it has been held back from and fade the splash
+        /// off it. Guarded on the state because the event arrives on the browser's own schedule: a
+        /// user who left the tab in the second the page landed must not have a browser promoted to
+        /// Visible over whatever they are looking at now.
+        /// </summary>
+        private void OnEmbedNavigated()
+        {
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            try
+            {
+                StopSplashWatchdog();
+                if (_firstLight || _state != SpiralRoomState.Spiral || _embed is null) return;
+
+                EmbedHost.Visibility = Visibility.Visible;
+                HideSplash(fade: true);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] room embed reveal: {E}", ex.Message); }
+        }
+
         /// <summary>The spiral state with no canvas in it. Deliberately NOT a state change: the
         /// gates still say "spiral", and the next entry retries.</summary>
         private void ShowWaitingUnderSpiral()
         {
             if (_firstLight) return;
             if (_state != SpiralRoomState.Spiral) return;
+            StopSplashWatchdog();
+            // No fade here, unlike the successful path: the splash is handing over to another
+            // held-promise panel rather than to a finished spiral, and cross-fading one apology
+            // into another just draws the eye to the swap.
+            HideSplash(fade: false);
             EmbedHost.Visibility = Visibility.Collapsed;
             WaitingPanel.Visibility = Visibility.Visible;
+            StartWaitingAmbience();
         }
 
         private void TeardownEmbed()
         {
+            StopSplashWatchdog();
             if (_embed == null) return;
             try
             {
@@ -606,6 +834,523 @@ namespace ConditioningControlPanel.Views.Tabs
             }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] room embed teardown: {E}", ex.Message); }
             _embed = null;
+        }
+
+        private void StartSplashWatchdog()
+        {
+            StopSplashWatchdog();
+            _splashWatchdog = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+            { Interval = SplashRevealDeadline };
+            _splashWatchdog.Tick += OnSplashDeadline;
+            _splashWatchdog.Start();
+        }
+
+        private void StopSplashWatchdog()
+        {
+            if (_splashWatchdog == null) return;
+            try
+            {
+                _splashWatchdog.Stop();
+                _splashWatchdog.Tick -= OnSplashDeadline;
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] splash watchdog stop: {E}", ex.Message); }
+            _splashWatchdog = null;
+        }
+
+        /// <summary>
+        /// The embed neither navigated nor failed inside the deadline. Reveal it anyway: whatever
+        /// the browser has is more honest than a splash that has stopped meaning "loading" and
+        /// started meaning "hung".
+        /// </summary>
+        private void OnSplashDeadline(object? sender, EventArgs e)
+        {
+            StopSplashWatchdog();
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            if (_firstLight || _state != SpiralRoomState.Spiral || _embed is null) return;
+
+            App.Logger?.Information(
+                "[Spiral] the embed said nothing within {Seconds}s - revealing it behind the splash anyway.",
+                (int)SplashRevealDeadline.TotalSeconds);
+
+            try
+            {
+                EmbedHost.Visibility = Visibility.Visible;
+                HideSplash(fade: true);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] splash deadline: {E}", ex.Message); }
+        }
+
+        // ============================== the fog era's FX ==============================
+
+        /// <summary>
+        /// Light the fog's own clocks: the hero's heartbeat, the hairline's breath, the embers.
+        /// Idempotent and cheap to call again — the pulse only rebuilds when the PHASE it is keeping
+        /// time to has actually changed, so the once-a-second repaint the tick causes does not reset
+        /// the breath to the top of its cycle every second.
+        /// </summary>
+        private void StartFogFx()
+        {
+            var phase = App.DescentCountdown?.LastAnnouncedPhase ?? DescentFusePhase.Dark;
+
+            if (!MotionFx.AllowAmbientLoops)
+            {
+                // Reduced motion gets the LOOK and none of the clocks: the layered glow, the
+                // hairline and the bold digits are all still there, simply held still. The hero is
+                // information; only its heartbeat is decoration.
+                StopFogFx();
+                FogDigitsGlow.Opacity = GlowRest;
+                FogHairline.Opacity = HairlineHi;
+                return;
+            }
+
+            EmberHost.Visibility = Visibility.Visible;
+            _embers?.Start();   // idempotent; a running field is left running
+
+            // Everything below is per-PHASE, and this is what makes the whole method idempotent: a
+            // repaint that did not move the phase must not restart the hairline's breath or the
+            // hero's pulse, or both would visibly jump back to the top of their cycles.
+            if (_pulsePhase == phase) return;
+            _pulsePhase = phase;
+
+            MotionFx.GlowBreath(FogHairline, HairlineLo, HairlineHi, HairlineSeconds);
+
+            // Half a breath in, half a breath out - AutoReverse doubles the seconds, so the ladder
+            // in SpiralRoom is the HALF cycle and that is what the doc there says.
+            var pulse = new DoubleAnimation(1.0, PulseScale,
+                TimeSpan.FromSeconds(SpiralRoom.FogPulseSecondsFor(phase)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Timeline.SetDesiredFrameRate(pulse, AmbientFrameRate);
+            FogDigitsPulse.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+            FogDigitsPulse.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
+        }
+
+        /// <summary>
+        /// Kill every fog clock and park the parts at rest. The nulls are what release the
+        /// animations' HOLD on each property — without them the last animated value sticks, and a
+        /// tab left mid-breath comes back very slightly too large forever.
+        /// </summary>
+        private void StopFogFx()
+        {
+            try
+            {
+                _pulsePhase = null;
+                FogDigitsPulse.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                FogDigitsPulse.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                FogDigitsPulse.ScaleX = FogDigitsPulse.ScaleY = 1.0;
+
+                FogDigitsGlow.BeginAnimation(OpacityProperty, null);
+                FogDigitsGlow.Opacity = GlowRest;
+
+                FogHairline.BeginAnimation(OpacityProperty, null);
+                FogHairline.Opacity = HairlineHi;
+
+                _embers?.Stop();
+                EmberHost.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] fog fx stop: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// THE PHASE FLARE — one glow swell when the countdown crosses into a nearer phase, and the
+        /// only moment in the fog era that is an event rather than a loop.
+        ///
+        /// <para>It is the blurred duplicate's OPACITY that swells, not the blur radius and not the
+        /// digits' size: the effect underneath it is set once and never animated, and the letters
+        /// themselves never move, so a glance away and back does not find the readout a different
+        /// shape. It also re-starts the pulse, because the phase that just changed is the phase the
+        /// pulse keeps time to.</para>
+        /// </summary>
+        private void FlarePhaseChange()
+        {
+            try
+            {
+                StartFogFx();   // the tempo ladder just moved a rung
+
+                if (!MotionFx.AllowTransitions) return;
+
+                var flare = new DoubleAnimationUsingKeyFrames
+                { Duration = TimeSpan.FromSeconds(GlowFlareSeconds) };
+                var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+
+                flare.KeyFrames.Add(new EasingDoubleKeyFrame(GlowRest,
+                    KeyTime.FromTimeSpan(TimeSpan.Zero), ease));
+                flare.KeyFrames.Add(new EasingDoubleKeyFrame(GlowFlarePeak,
+                    KeyTime.FromTimeSpan(TimeSpan.FromSeconds(GlowFlareSeconds * 0.22)), ease));
+                flare.KeyFrames.Add(new EasingDoubleKeyFrame(GlowRest,
+                    KeyTime.FromTimeSpan(TimeSpan.FromSeconds(GlowFlareSeconds)), ease));
+
+                // FillBehavior.Stop hands the property back at the end so the resting 0.42 authored
+                // in the XAML is what stands afterwards, not a held keyframe.
+                flare.FillBehavior = FillBehavior.Stop;
+                Timeline.SetDesiredFrameRate(flare, AmbientFrameRate);
+                FogDigitsGlow.BeginAnimation(OpacityProperty, flare);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] phase flare: {E}", ex.Message); }
+        }
+
+        // ============================== the splash ==============================
+
+        /// <summary>
+        /// The splash's one line. Hardcoded English with the rest of the fuse's copy (CONTRACT-FUSE
+        /// 0816 §4) and lower case to match the waiting room's register — it is the same voice
+        /// saying the same kind of thing, one step earlier.
+        /// </summary>
+        private const string SplashCopy = "opening the spiral";
+
+        /// <summary>
+        /// Raise the splash over the spiral era and start its clocks. Called every time the spiral
+        /// state is painted, so leaving the tab and coming back gets a fresh splash rather than the
+        /// faded-out remains of the last one — which is why the opacity is reset here and not only
+        /// on the way down.
+        /// </summary>
+        private void ShowSplash()
+        {
+            try
+            {
+                _splashUp = true;
+                SpiralSplash.BeginAnimation(OpacityProperty, null);
+                SpiralSplash.Opacity = 1;
+                SpiralSplash.Visibility = Visibility.Visible;
+
+                if (!_splashChimed)
+                {
+                    _splashChimed = true;
+                    DescentRoomSfx.PlaySplashOpen();
+                }
+
+                if (!MotionFx.AllowAmbientLoops)
+                {
+                    // Held still, not hidden: somebody who turned motion off still has to be able to
+                    // tell that something is happening, and the line plus the glyph say so.
+                    SplashSpin.BeginAnimation(RotateTransform.AngleProperty, null);
+                    SplashSpin.Angle = 0;
+                    SplashHalo.Opacity = 0.16;
+                    SplashGlyph.Opacity = 0.92;
+                    SplashDot1.Opacity = SplashDot2.Opacity = SplashDot3.Opacity = 0.6;
+                    return;
+                }
+
+                var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(4.6))
+                { RepeatBehavior = RepeatBehavior.Forever };
+                Timeline.SetDesiredFrameRate(spin, AmbientFrameRate);
+                SplashSpin.BeginAnimation(RotateTransform.AngleProperty, spin);
+
+                MotionFx.GlowBreath(SplashHalo, 0.08, 0.30, 2.2);
+                MotionFx.GlowBreath(SplashGlyph, 0.58, 0.96, 1.7);
+
+                // The ellipsis, one dot at a time. Same clock, three offsets - a marquee rather than
+                // three independent loops that would drift out of order within a minute.
+                BeginDot(SplashDot1, 0.00);
+                BeginDot(SplashDot2, 0.42);
+                BeginDot(SplashDot3, 0.84);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] splash up: {E}", ex.Message); }
+        }
+
+        private static void BeginDot(UIElement dot, double offsetSeconds)
+        {
+            const double cycle = 1.45;
+            var anim = new DoubleAnimationUsingKeyFrames
+            {
+                Duration = TimeSpan.FromSeconds(cycle),
+                RepeatBehavior = RepeatBehavior.Forever,
+                BeginTime = TimeSpan.FromSeconds(offsetSeconds),
+            };
+            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+            anim.KeyFrames.Add(new EasingDoubleKeyFrame(0.15, KeyTime.FromTimeSpan(TimeSpan.Zero), ease));
+            anim.KeyFrames.Add(new EasingDoubleKeyFrame(0.95,
+                KeyTime.FromTimeSpan(TimeSpan.FromSeconds(cycle * 0.34)), ease));
+            anim.KeyFrames.Add(new EasingDoubleKeyFrame(0.15,
+                KeyTime.FromTimeSpan(TimeSpan.FromSeconds(cycle)), ease));
+            Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
+            dot.BeginAnimation(OpacityProperty, anim);
+        }
+
+        /// <summary>
+        /// Take the splash down — faded when it is handing over to a finished spiral, instantly when
+        /// it is handing over to the waiting panel or leaving the tab. Idempotent, and safe to call
+        /// on a splash that was never up.
+        /// </summary>
+        private void HideSplash(bool fade)
+        {
+            try
+            {
+                if (!_splashUp && SpiralSplash.Visibility != Visibility.Visible) return;
+                _splashUp = false;
+
+                StopSplashClocks();
+
+                if (!fade || !MotionFx.AllowTransitions)
+                {
+                    SpiralSplash.BeginAnimation(OpacityProperty, null);
+                    SpiralSplash.Opacity = 1;   // the resting value, for the next time it is raised
+                    SpiralSplash.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(SplashFadeSeconds))
+                { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+                fadeOut.Completed += (_, _) =>
+                {
+                    // A re-entry can raise the splash again inside these 400ms; if it did, _splashUp
+                    // is true again and this stale completion must not collapse the new one.
+                    if (_splashUp) return;
+                    try
+                    {
+                        SpiralSplash.BeginAnimation(OpacityProperty, null);
+                        SpiralSplash.Opacity = 1;
+                        SpiralSplash.Visibility = Visibility.Collapsed;
+                    }
+                    catch { /* the window went away under a 400ms fade */ }
+                };
+                SpiralSplash.BeginAnimation(OpacityProperty, fadeOut);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] splash down: {E}", ex.Message); }
+        }
+
+        private void StopSplashClocks()
+        {
+            try
+            {
+                SplashSpin.BeginAnimation(RotateTransform.AngleProperty, null);
+                SplashSpin.Angle = 0;
+                MotionFx.Stop(SplashHalo);
+                MotionFx.Stop(SplashGlyph);
+                SplashDot1.BeginAnimation(OpacityProperty, null);
+                SplashDot2.BeginAnimation(OpacityProperty, null);
+                SplashDot3.BeginAnimation(OpacityProperty, null);
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] splash clocks: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The splash's glyph: an archimedean spiral, three turns, drawn as one open polyline and
+        /// frozen. Geometry rather than a path string for the same reason the rail chip's clock is —
+        /// the shape is arithmetic, and arithmetic is easier to re-tune than a mini-language.
+        /// </summary>
+        private static Geometry BuildSpiralGeometry()
+        {
+            const double turns = 3.0;
+            const int steps = 200;
+            const double maxRadius = 38;
+            var centre = new Point(40, 40);
+
+            var points = new PointCollection();
+            for (int i = 1; i <= steps; i++)
+            {
+                double t = i / (double)steps;
+                double angle = t * turns * 2 * Math.PI;
+                double radius = t * maxRadius;
+                points.Add(new Point(centre.X + radius * Math.Cos(angle),
+                                     centre.Y + radius * Math.Sin(angle)));
+            }
+
+            var figure = new PathFigure { StartPoint = centre, IsClosed = false, IsFilled = false };
+            figure.Segments.Add(new PolyLineSegment(points, true));
+
+            var geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            geometry.Freeze();
+            return geometry;
+        }
+
+        // ============================== the waiting room's ambience ==============================
+
+        /// <summary>
+        /// Give the held promise a pulse. The line breathes and a few motes drift up behind it,
+        /// because a panel that says "the spiral is finding you" and then sits perfectly still reads
+        /// as a panel that stopped looking — which is the exact impression this whole pass exists to
+        /// remove. Idempotent.
+        /// </summary>
+        private void StartWaitingAmbience()
+        {
+            try
+            {
+                if (!MotionFx.AllowAmbientLoops)
+                {
+                    WaitingGlow.Opacity = 0.5;
+                    _motes?.Stop();
+                    return;
+                }
+
+                MotionFx.GlowBreath(WaitingGlow, 0.18, 0.70, 3.1);
+                _motes?.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] waiting ambience: {E}", ex.Message); }
+        }
+
+        private void StopWaitingAmbience()
+        {
+            try
+            {
+                WaitingGlow.BeginAnimation(OpacityProperty, null);
+                WaitingGlow.Opacity = 0.5;
+                _motes?.Stop();
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] waiting ambience stop: {E}", ex.Message); }
+        }
+
+        // ============================== the drift field ==============================
+
+        /// <summary>
+        /// A handful of specks drifting up through a Canvas, built once and started/stopped with the
+        /// state that owns them. Used twice: the fog's embers (which reflow with the window) and the
+        /// waiting panel's motes (which do not, because that canvas has a fixed size).
+        ///
+        /// <para><b>Transform and opacity only, and one clock per speck.</b> Nothing here touches
+        /// Canvas.Top with an animation — that is a layout property, and animating layout is how the
+        /// app has burned a frame budget before. The specks are POSITIONED by Canvas.Left/Top once
+        /// per size change and MOVED by a TranslateTransform.</para>
+        ///
+        /// <para><b>It parks empty.</b> Stop() releases every animation's hold and drops the specks
+        /// to zero opacity, so a collapsed field costs a few frozen brushes and nothing else.</para>
+        /// </summary>
+        private sealed class DriftField
+        {
+            /// <summary>The fuse's gold, and never the mod accent — same law as every other fuse
+            /// surface (see DescentFuseChrome's "ACCENT IS UNTOUCHABLE").</summary>
+            private static readonly Brush Gold = FrozenGold();
+
+            /// <summary>How far a speck travels in one cycle. Fixed device-independent pixels rather
+            /// than a fraction of the host, so a resize repositions the field without having to
+            /// rebuild every clock in it.</summary>
+            private const double RiseDistance = 190;
+
+            private const int FrameRate = 20;
+
+            private readonly Canvas _host;
+            private readonly (double Fx, double Fy, double R, double Seconds, double Peak)[] _seeds;
+            private readonly List<Ellipse> _dots = new();
+            private bool _running;
+
+            /// <param name="seeds">Positions are FRACTIONS of the host's size, which is what lets
+            /// the same field serve a full-bleed canvas that follows the window and a fixed 216px
+            /// one inside a Border.</param>
+            internal DriftField(Canvas host,
+                                (double Fx, double Fy, double R, double Seconds, double Peak)[] seeds)
+            {
+                _host = host;
+                _seeds = seeds;
+
+                foreach (var seed in _seeds)
+                {
+                    var dot = new Ellipse
+                    {
+                        Width = seed.R * 2,
+                        Height = seed.R * 2,
+                        Fill = Gold,
+                        Opacity = 0,
+                        IsHitTestVisible = false,
+                        RenderTransform = new TranslateTransform(),
+                    };
+                    _dots.Add(dot);
+                    _host.Children.Add(dot);
+                }
+
+                Reflow();
+            }
+
+            /// <summary>Re-seat every speck for the host's current size. Cheap: property sets only,
+            /// and the running clocks are on the transforms, so nothing is interrupted.</summary>
+            internal void Reflow()
+            {
+                try
+                {
+                    double w = _host.ActualWidth;
+                    double h = _host.ActualHeight;
+                    if (w <= 0 || h <= 0)
+                    {
+                        // Before the first layout pass. An authored size is the fallback (the
+                        // waiting panel's canvas has one); the fog's does not, and it gets a real
+                        // size from the SizeChanged hook the moment it is arranged.
+                        w = double.IsNaN(_host.Width) ? 0 : _host.Width;
+                        h = double.IsNaN(_host.Height) ? 0 : _host.Height;
+                        if (w <= 0 || h <= 0) return;
+                    }
+
+                    for (int i = 0; i < _dots.Count; i++)
+                    {
+                        Canvas.SetLeft(_dots[i], _seeds[i].Fx * w - _seeds[i].R);
+                        Canvas.SetTop(_dots[i], _seeds[i].Fy * h - _seeds[i].R);
+                    }
+                }
+                catch { /* a canvas mid-teardown is not worth a log line */ }
+            }
+
+            /// <summary>Start every speck's drift. Idempotent — a second call while running leaves
+            /// the existing clocks alone rather than restarting the whole field in lockstep, which
+            /// is the one thing that would make nine hand-placed specks look like a machine.</summary>
+            internal void Start()
+            {
+                if (_running) return;
+                _running = true;
+
+                Reflow();
+
+                for (int i = 0; i < _dots.Count; i++)
+                {
+                    var seed = _seeds[i];
+                    var dot = _dots[i];
+                    var duration = TimeSpan.FromSeconds(seed.Seconds);
+
+                    // Each speck starts a fraction of its own cycle later, which is what keeps the
+                    // field from breathing as one animal.
+                    var offset = TimeSpan.FromSeconds(seed.Seconds * (i / (double)Math.Max(1, _dots.Count)));
+
+                    var rise = new DoubleAnimation(0, -RiseDistance, duration)
+                    { RepeatBehavior = RepeatBehavior.Forever, BeginTime = offset };
+                    Timeline.SetDesiredFrameRate(rise, FrameRate);
+
+                    var fade = new DoubleAnimationUsingKeyFrames
+                    {
+                        Duration = duration,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        BeginTime = offset,
+                    };
+                    var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+                    fade.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero), ease));
+                    fade.KeyFrames.Add(new EasingDoubleKeyFrame(seed.Peak,
+                        KeyTime.FromTimeSpan(TimeSpan.FromSeconds(seed.Seconds * 0.42)), ease));
+                    fade.KeyFrames.Add(new EasingDoubleKeyFrame(0,
+                        KeyTime.FromTimeSpan(duration), ease));
+                    Timeline.SetDesiredFrameRate(fade, FrameRate);
+
+                    if (dot.RenderTransform is TranslateTransform move)
+                        move.BeginAnimation(TranslateTransform.YProperty, rise);
+                    dot.BeginAnimation(OpacityProperty, fade);
+                }
+            }
+
+            /// <summary>Release every clock's hold and park the field invisible.</summary>
+            internal void Stop()
+            {
+                _running = false;
+                foreach (var dot in _dots)
+                {
+                    try
+                    {
+                        if (dot.RenderTransform is TranslateTransform move)
+                        {
+                            move.BeginAnimation(TranslateTransform.YProperty, null);
+                            move.Y = 0;
+                        }
+                        dot.BeginAnimation(OpacityProperty, null);
+                        dot.Opacity = 0;
+                    }
+                    catch { /* teardown race */ }
+                }
+            }
+
+            private static Brush FrozenGold()
+            {
+                var b = new SolidColorBrush(Color.FromRgb(0xE0, 0xB0, 0x52));
+                b.Freeze();
+                return b;
+            }
         }
     }
 }

@@ -80,6 +80,19 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Raised (UI thread) on 'spiral:ready'.</summary>
         public event EventHandler? Ready;
 
+        /// <summary>
+        /// Raised (UI thread) when a navigation to the embed origin COMPLETED SUCCESSFULLY — the
+        /// document is there, whatever the canvas does with it next.
+        ///
+        /// <para><b>This is the splash's cue, and it is deliberately earlier than
+        /// <see cref="Ready"/>.</b> A host that waited for the handshake would be waiting on the
+        /// page's own boot as well as on the network, and a canvas that loaded but never posted
+        /// 'spiral:ready' (an old deploy, a script error) would leave the splash up forever with
+        /// a perfectly good spiral behind it. Navigation success is the last moment the HOST can
+        /// vouch for on its own, so it is the moment the browser is given its airspace.</para>
+        /// </summary>
+        public event EventHandler? Navigated;
+
         /// <param name="mode">"mini" (the 80px rail miniature) or "map" (the expanded surface).</param>
         public SpiralEmbedView(string mode)
         {
@@ -207,7 +220,12 @@ namespace ConditioningControlPanel.Controls
         /// </summary>
         private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (!e.IsSuccess) Fail("navigation failed: " + e.WebErrorStatus);
+            if (!e.IsSuccess) { Fail("navigation failed: " + e.WebErrorStatus); return; }
+
+            // The host has been holding the browser's airspace back behind a splash since the tab
+            // opened; this is the handoff. A throwing handler must not take the embed down with it.
+            try { Navigated?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] Navigated handler threw: {E}", ex.Message); }
         }
 
         private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)

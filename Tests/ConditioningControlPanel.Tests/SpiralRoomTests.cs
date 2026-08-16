@@ -112,6 +112,143 @@ public class SpiralRoomTests
     }
 
     // ================================================================
+    // THE FUSE RAIL CHIP — the flash-out at zero
+    // ================================================================
+
+    /// <summary>
+    /// THE OWNER'S SCRIPT, 2026-08-16: "Timer goes to 0, starts flashing, and we run the cerimony."
+    /// Every phase the chip was actually on screen for hands over to the flash; nothing else does.
+    /// </summary>
+    [Theory]
+    [InlineData(DescentFusePhase.Whisper)]
+    [InlineData(DescentFusePhase.Clock)]
+    [InlineData(DescentFusePhase.Dimming)]
+    [InlineData(DescentFusePhase.Candle)]
+    [InlineData(DescentFusePhase.Vigil)]
+    [InlineData(DescentFusePhase.Terminal)]
+    public void FlashOut_FiresOnALiveTransitionIntoZero(DescentFusePhase previous)
+        => Assert.True(SpiralRoom.ShouldFlashOutAtZero(previous, DescentFusePhase.Zero));
+
+    /// <summary>
+    /// A COLD START PAST ZERO IS SILENT. Every surface seeds itself from
+    /// <see cref="DescentCountdownService.LastAnnouncedPhase"/>, which is Dark on an install whose
+    /// timestamp the owner has cleared — so "Dark to Zero" is the shape of an app launched the
+    /// morning after, and a rail that flickered violently for a moment the subject slept through
+    /// would be the app performing an event rather than marking one.
+    /// </summary>
+    [Fact]
+    public void FlashOut_DoesNotFireForAnAppThatLaunchedPastZero()
+        => Assert.False(SpiralRoom.ShouldFlashOutAtZero(DescentFusePhase.Dark, DescentFusePhase.Zero));
+
+    /// <summary>
+    /// ZERO TO ZERO IS NOT A TRANSITION. A repaint — the migration flag landing, a settings reload,
+    /// the kill switch travelling through — must not re-fire two and a half seconds of flicker on a
+    /// chip that already left.
+    /// </summary>
+    [Fact]
+    public void FlashOut_DoesNotRepeatOnARepaintAtZero()
+        => Assert.False(SpiralRoom.ShouldFlashOutAtZero(DescentFusePhase.Zero, DescentFusePhase.Zero));
+
+    /// <summary>
+    /// Nothing below Zero flashes, however far the phase jumped. The chip escalating from Whisper
+    /// straight to Terminal (an owner moving the date, a clock correction) is a wobble tier change
+    /// and nothing more — the goodbye belongs to the instant, not to any hurry on the way to it.
+    /// </summary>
+    [Theory]
+    [InlineData(DescentFusePhase.Whisper, DescentFusePhase.Terminal)]
+    [InlineData(DescentFusePhase.Clock, DescentFusePhase.Vigil)]
+    [InlineData(DescentFusePhase.Terminal, DescentFusePhase.Whisper)]  // the owner pushed the date back
+    [InlineData(DescentFusePhase.Vigil, DescentFusePhase.Dark)]        // the kill switch
+    public void FlashOut_OnlyEverFiresIntoZero(DescentFusePhase previous, DescentFusePhase current)
+        => Assert.False(SpiralRoom.ShouldFlashOutAtZero(previous, current));
+
+    // ================================================================
+    // THE FOG ERA — the hero's heartbeat
+    // ================================================================
+
+    /// <summary>
+    /// THE TEMPO LADDER TIGHTENS AND NEVER SLACKENS. The pulse under the fog's hero digits is the
+    /// same instrument as the rail chip's wobble — the room gets less calm as the instant nears,
+    /// never more — so the half-cycle across the visible band has to be monotonically decreasing.
+    /// </summary>
+    [Fact]
+    public void FogPulse_TightensAcrossTheWholeBand()
+    {
+        var band = new[]
+        {
+            DescentFusePhase.Whisper, DescentFusePhase.Clock, DescentFusePhase.Dimming,
+            DescentFusePhase.Candle, DescentFusePhase.Vigil, DescentFusePhase.Terminal,
+        };
+
+        for (int i = 1; i < band.Length; i++)
+            Assert.True(SpiralRoom.FogPulseSecondsFor(band[i]) <= SpiralRoom.FogPulseSecondsFor(band[i - 1]),
+                $"{band[i]} breathes slower than {band[i - 1]}");
+
+        // The ladder actually moves - a flat table would pass the loop above and mean nothing.
+        Assert.True(SpiralRoom.FogPulseSecondsFor(DescentFusePhase.Terminal)
+                    < SpiralRoom.FogPulseSecondsFor(DescentFusePhase.Whisper) / 2);
+    }
+
+    /// <summary>
+    /// THE FOG ERA OUTLIVES THE INSTANT — for anybody whose own ceremony has not reached them yet,
+    /// the room is still the fog and the readout says "any moment now", the least calm sentence in
+    /// the feature. The pulse must not relax at exactly that moment.
+    /// </summary>
+    [Fact]
+    public void FogPulse_IsAsTightAtZeroAsItIsAtTerminal()
+        => Assert.Equal(SpiralRoom.FogPulseSecondsFor(DescentFusePhase.Terminal),
+                        SpiralRoom.FogPulseSecondsFor(DescentFusePhase.Zero));
+
+    /// <summary>
+    /// NEVER ZERO AND NEVER NEGATIVE, at any phase including the ones the fog is never painted at.
+    /// The caller hands this straight to <c>TimeSpan.FromSeconds</c>, where a zero is not a fast
+    /// animation but a stuck one.
+    /// </summary>
+    [Theory]
+    [InlineData(DescentFusePhase.Dark)]
+    [InlineData(DescentFusePhase.Whisper)]
+    [InlineData(DescentFusePhase.Clock)]
+    [InlineData(DescentFusePhase.Dimming)]
+    [InlineData(DescentFusePhase.Candle)]
+    [InlineData(DescentFusePhase.Vigil)]
+    [InlineData(DescentFusePhase.Terminal)]
+    [InlineData(DescentFusePhase.Zero)]
+    public void FogPulse_IsAlwaysAUsableDuration(DescentFusePhase phase)
+        => Assert.True(SpiralRoom.FogPulseSecondsFor(phase) > 0);
+
+    // ================================================================
+    // THE ROOM'S SOUND — silent unless the subject said otherwise
+    // ================================================================
+
+    /// <summary>
+    /// THE MUTE IS THE MUTE. There is no separate sfx flag in this app — a master volume of zero IS
+    /// silence, app-wide — and <c>DescentCountdownAudio</c> is the subject's own switch for this
+    /// feature specifically. Either one alone means the room says nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 40, true)]
+    [InlineData(true, 0, false)]     // the app is muted
+    [InlineData(false, 40, false)]   // the countdown's audio was turned off
+    [InlineData(false, 0, false)]
+    public void RoomSfx_NeedsBothTheSwitchAndSomeVolume(bool audioEnabled, int master, bool expected)
+        => Assert.Equal(expected, DescentRoomSfx.ShouldPlay(audioEnabled, master));
+
+    /// <summary>
+    /// The gate is the same shape as the heartbeat's, minus the asset term — and it has to be, or
+    /// the one switch the owner has for this feature would silence the terminal loop and leave the
+    /// room chiming over it.
+    /// </summary>
+    [Fact]
+    public void RoomSfx_AgreesWithTheHeartbeatAboutSilence()
+    {
+        Assert.False(DescentRoomSfx.ShouldPlay(audioEnabled: false, masterVolume: 100));
+        Assert.False(DescentHeartbeat.ShouldPlay(audioEnabled: false, masterVolume: 100, assetExists: true));
+
+        Assert.False(DescentRoomSfx.ShouldPlay(audioEnabled: true, masterVolume: 0));
+        Assert.False(DescentHeartbeat.ShouldPlay(audioEnabled: true, masterVolume: 0, assetExists: true));
+    }
+
+    // ================================================================
     // THE TAB — state selection
     // ================================================================
 
@@ -526,6 +663,85 @@ public class SpiralRoomTests
         // Both the fog and the reveal tear it down before they paint.
         Assert.Contains("TeardownEmbed", view, StringComparison.Ordinal);
         Assert.Contains("IsVisibleChanged", view, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// THE AIRSPACE STRATEGY, ONE LAYER DOWN — the splash's whole reason to work.
+    ///
+    /// <para>A constructed WebView2 paints its own dark slab the instant its native HWND exists,
+    /// over every WPF element in the window whatever the z-order says. So a splash drawn "on top of"
+    /// a loading browser would be invisible for all but the first few hundred milliseconds, which is
+    /// precisely the stretch the owner reported as looking stuck. The fix is that the embed's slab
+    /// is parked at <c>Visibility.Hidden</c> — ARRANGED, so the browser gets a real rectangle and
+    /// navigates normally, but with no airspace — and is only promoted to Visible from the embed's
+    /// own <c>Navigated</c> event.</para>
+    ///
+    /// <para><b>Collapsed would NOT do</b>: an unarranged WebView2 has no rectangle to lay a page
+    /// out in, and this test exists so a later tidy-up does not "simplify" Hidden into Collapsed and
+    /// silently break loading for everybody whose route actually deploys.</para>
+    /// </summary>
+    [Fact]
+    public void TheSplashHoldsTheBrowsersAirspaceUntilItHasNavigated()
+    {
+        var view = AppFile("Views", "Tabs", "SpiralTabView.xaml.cs");
+
+        Assert.Contains("EmbedHost.Visibility = Visibility.Hidden", view, StringComparison.Ordinal);
+        Assert.Contains("embed.Navigated +=", view, StringComparison.Ordinal);
+        Assert.Contains("ShowSplash()", view, StringComparison.Ordinal);
+
+        // The embed raises it, and only on a SUCCESSFUL navigation - a failure still goes to Fail.
+        var embed = AppFile("Controls", "SpiralEmbedView.cs");
+        Assert.Contains("public event EventHandler? Navigated;", embed, StringComparison.Ordinal);
+        Assert.Contains("Navigated?.Invoke(this, EventArgs.Empty)", embed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// THE SPLASH CANNOT BECOME THE HANG IT WAS BUILT TO HIDE. Holding the browser's airspace back
+    /// means the room is betting on an event arriving; the deadline is the bet's stop-loss, and
+    /// without it a wedged renderer would leave a spinning glyph up forever with a perfectly good
+    /// spiral behind it.
+    /// </summary>
+    [Fact]
+    public void TheSplashHasADeadline()
+    {
+        var view = AppFile("Views", "Tabs", "SpiralTabView.xaml.cs");
+        Assert.Contains("SplashRevealDeadline", view, StringComparison.Ordinal);
+        Assert.Contains("OnSplashDeadline", view, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// ACCENT IS UNTOUCHABLE (DescentFuseChrome). The fuse is the APP's own gold and never the
+    /// active mod's pink — a countdown that took the skin's colour would look like part of whatever
+    /// mod happened to be loaded rather than like the one thing every install is counting down to.
+    ///
+    /// <para>The tab's ONE legal accent read is in code, not markup: the spiral canvas takes the
+    /// mod's colour because it colours the SPIRAL. So the rule this pins is that the fog era's
+    /// MARKUP — every element the countdown is made of — carries literal gold and reaches for no
+    /// resource at all.</para>
+    /// </summary>
+    [Fact]
+    public void TheFogEraWearsTheFusesOwnGoldAndNeverTheModAccent()
+    {
+        var xaml = AppFile("Views", "Tabs", "SpiralTabView.xaml");
+
+        Assert.Contains("#E0B052", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("DynamicResource", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("PinkBrush", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AccentBrush", xaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// THE FUSE SPEAKS HARDCODED ENGLISH (§4), and the FX pass did not quietly change that. The
+    /// splash's line is a const beside the view that draws it, in the same register as the waiting
+    /// room's — a loc key for it would be the localization debt being paid in the wrong place, one
+    /// string at a time, in the file least likely to be found by the pass that eventually pays it.
+    /// </summary>
+    [Fact]
+    public void TheSplashCopyIsNotLocalized()
+    {
+        var view = AppFile("Views", "Tabs", "SpiralTabView.xaml.cs");
+        Assert.Contains("private const string SplashCopy", view, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationManager", view, StringComparison.Ordinal);
     }
 
     private static int CountOf(string haystack, string needle)

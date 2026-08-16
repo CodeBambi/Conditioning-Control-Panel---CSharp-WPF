@@ -199,5 +199,58 @@ namespace ConditioningControlPanel.Services.Descent
             DescentFusePhase.Terminal => FuseWobbleTier.Violent,
             _ => FuseWobbleTier.None,
         };
+
+        /// <summary>
+        /// THE FLASH-OUT GATE (owner ruling 2026-08-16: "Timer goes to 0, starts flashing, and we
+        /// run the cerimony"). TRUE only for a LIVE transition into <see cref="DescentFusePhase.Zero"/>
+        /// from a phase the chip was actually on screen for.
+        ///
+        /// <para><b>The "from a live phase" half is the whole point.</b> An app launched the morning
+        /// after the ceremony seeds its chip from
+        /// <see cref="DescentCountdownService.LastAnnouncedPhase"/>, which is
+        /// <see cref="DescentFusePhase.Dark"/> or already Zero — nothing was ever on screen to flash
+        /// out, and a rail that flickered violently on every cold start for a moment the subject
+        /// slept through would be the app performing an event rather than marking one. The flash is
+        /// a goodbye, and a goodbye needs somebody to have been in the room.</para>
+        ///
+        /// <para><b>Zero to Zero is not a transition</b> either — a repaint (the migration flag
+        /// landing, a settings reload) must not re-fire two and a half seconds of flicker on a chip
+        /// that already left.</para>
+        /// </summary>
+        public static bool ShouldFlashOutAtZero(DescentFusePhase previous, DescentFusePhase current)
+            => current >= DescentFusePhase.Zero
+               && previous >= DescentFusePhase.Whisper
+               && previous < DescentFusePhase.Zero;
+
+        // ==================== the fog era's heartbeat ====================
+
+        /// <summary>
+        /// How long ONE BREATH of the fog countdown's pulse takes, in seconds — the half-cycle of
+        /// the scale animation under the hero digits (owner verdict 2026-08-16: "could use some FX,
+        /// a bolder text, maybe some little animation and flair").
+        ///
+        /// <para><b>It is a tempo ladder, not a size ladder.</b> The amplitude never changes; only
+        /// the rate does, which is the same instrument the rail chip's wobble plays — the last ten
+        /// minutes raise their voice with speed, not with size. A countdown whose digits grew as
+        /// the instant approached would be shouting; one that just breathes faster is somebody
+        /// getting nervous, which is the register the whole fog era is written in.</para>
+        ///
+        /// <para><b>Zero is as tight as Terminal</b> on purpose. The fog era outlives the instant
+        /// for anybody whose own ceremony has not reached them yet, and the readout they are looking
+        /// at says "any moment now" — the least calm sentence in the feature. Slowing the pulse down
+        /// at exactly that moment would read as the room losing interest.</para>
+        ///
+        /// <para>Never zero or negative, at any phase: the caller divides nothing by this, but it
+        /// does hand it to a <c>TimeSpan.FromSeconds</c> that a zero would turn into a stuck
+        /// animation rather than a fast one.</para>
+        /// </summary>
+        public static double FogPulseSecondsFor(DescentFusePhase phase) => phase switch
+        {
+            DescentFusePhase.Whisper => 2.8,
+            DescentFusePhase.Clock or DescentFusePhase.Dimming or DescentFusePhase.Candle => 2.0,
+            DescentFusePhase.Vigil => 1.15,
+            DescentFusePhase.Terminal or DescentFusePhase.Zero => 0.52,
+            _ => 3.0,
+        };
     }
 }

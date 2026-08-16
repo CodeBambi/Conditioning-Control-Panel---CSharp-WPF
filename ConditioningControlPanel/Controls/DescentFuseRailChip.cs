@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Descent;
 
@@ -92,6 +93,31 @@ namespace ConditioningControlPanel.Controls
         /// time this countdown raises its voice, and it does it with speed, not with size.</summary>
         private const double ViolentHalfCycleSeconds = 0.11;
 
+        // ============================== the flash-out ==============================
+        //
+        // Owner's script for zero, 2026-08-16: "Timer goes to 0, starts flashing, and we run the
+        // cerimony." The chip does not simply vanish when the countdown it carries runs out - it
+        // spends two and a half seconds going out loudly, and only then collapses. Opacity and
+        // transform ONLY, like everything else in this file.
+
+        /// <summary>The whole goodbye. Long enough to be seen from the corner of an eye, short
+        /// enough that the ceremony (which the director opens on the same instant) is not kept
+        /// waiting behind a rail element throwing a fit.</summary>
+        private const double FlashOutSeconds = 2.5;
+
+        /// <summary>The shake, in device-independent pixels either side of centre. Six is roughly
+        /// twice the tremble's visual throw and it is the one moment this chip is allowed to be
+        /// alarming.</summary>
+        private const double FlashShakePixels = 6.0;
+
+        /// <summary>The glyph's rotation during the flash-out. Two and a half times the ordinary
+        /// tremble.</summary>
+        private const double FlashSpinDegrees = 7.5;
+
+        /// <summary>The flicker and the shake are the loudest thing in the rail, so they get the
+        /// urgent clock rather than the ambient one.</summary>
+        private const int FlashFrameRate = 50;
+
         private const double RingIdleOpacity = 0.30;
         private const double RingBreathLo = 0.18;
         private const double RingBreathHi = 0.55;
@@ -112,14 +138,22 @@ namespace ConditioningControlPanel.Controls
         private readonly Border _ring;
         private readonly Path _glyph;
         private readonly RotateTransform _rotate = new(0);
+
+        /// <summary>The flash-out's shake, on the WHOLE chip rather than on the glyph. Built here
+        /// per instance for the same reason <see cref="_rotate"/> is: a transform set from a Style
+        /// is one shared frozen instance across every element wearing it.</summary>
+        private readonly TranslateTransform _shake = new(0, 0);
+
         private readonly TextBlock _label;
 
         private TextBlock? _tipDigits;
         private TextBlock? _tipPresence;
         private ToolTip? _tip;
+        private DispatcherTimer? _flashTimer;
 
         private bool _wired;
         private bool _animating;
+        private bool _flashingOut;
         private DescentFusePhase _phase = DescentFusePhase.Dark;
 
         public DescentFuseRailChip()
@@ -130,6 +164,7 @@ namespace ConditioningControlPanel.Controls
             Margin = new Thickness(0, 2, 0, 4);
             Cursor = Cursors.Hand;
             Background = Brushes.Transparent;   // hit-test the whole row, not just the glyph
+            RenderTransform = _shake;           // the flash-out's shake; identity until then
 
             ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(MedallionColumn) });
             ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -245,6 +280,9 @@ namespace ConditioningControlPanel.Controls
                 }
             }
             catch { /* teardown races are not worth a log line */ }
+            // A chip torn out of the rail mid-goodbye finishes the goodbye immediately rather than
+            // leaving a DispatcherTimer holding a reference to an unloaded element.
+            if (_flashingOut) FinishFlashOut();
             StopWobble();
         }
 
@@ -262,6 +300,9 @@ namespace ConditioningControlPanel.Controls
             try
             {
                 if (Visibility != Visibility.Visible) return;
+                // Mid-goodbye the digits are not a readout any more, they are part of the flicker.
+                // Retyping them would also be the one thing that could make the chip reflow.
+                if (_flashingOut) return;
 
                 var text = DescentFuseCopy.TMinus(remaining);
                 _label.Text = text;
@@ -284,20 +325,32 @@ namespace ConditioningControlPanel.Controls
         /// </summary>
         private void Apply(DescentFusePhase phase)
         {
+            var previous = _phase;
             _phase = phase;
+
+            // The flash-out owns the chip for its two and a half seconds. A repaint that arrived
+            // mid-goodbye (a tick, a settings write) must not restart the clocks under it or, worse,
+            // collapse it early and swallow the one moment the countdown was built to have.
+            if (_flashingOut) return;
 
             bool show = SpiralRoom.FuseChipVisible(
                 phase, App.Settings?.Current?.DescentMigrationCompleted == true);
 
             if (!show)
             {
-                Visibility = Visibility.Collapsed;
-                StopWobble();
-                ToolTip = null;
-                _tip = null;
-                _tipDigits = null;
-                _tipPresence = null;
-                _label.Text = string.Empty;
+                // ZERO, LIVE, WITH SOMEBODY WATCHING. The gate above has already decided the chip is
+                // leaving; this decides whether it leaves loudly. The Visibility test is the third
+                // guard on top of SpiralRoom.ShouldFlashOutAtZero's two: an account that took its
+                // ceremony during the final hour has a chip that was collapsed by the migration flag
+                // several minutes ago, and it has nothing left to flash.
+                if (Visibility == Visibility.Visible &&
+                    SpiralRoom.ShouldFlashOutAtZero(previous, phase))
+                {
+                    BeginFlashOut();
+                    return;
+                }
+
+                HideChip();
                 return;
             }
 
@@ -318,6 +371,19 @@ namespace ConditioningControlPanel.Controls
             ApplyPresence();
 
             StartWobble(SpiralRoom.WobbleFor(phase));
+        }
+
+        /// <summary>The chip, gone and cleaned up. The tooltip is dropped rather than kept because a
+        /// countdown that has ended has nothing left to say under a pointer.</summary>
+        private void HideChip()
+        {
+            Visibility = Visibility.Collapsed;
+            StopWobble();
+            ToolTip = null;
+            _tip = null;
+            _tipDigits = null;
+            _tipPresence = null;
+            _label.Text = string.Empty;
         }
 
         /// <summary>
@@ -516,13 +582,174 @@ namespace ConditioningControlPanel.Controls
                 _rotate.Angle = 0;
                 _ring.BeginAnimation(OpacityProperty, null);
                 _ring.Opacity = 0;
+                BeginAnimation(OpacityProperty, null);
+                Opacity = 1;
+                _shake.BeginAnimation(TranslateTransform.XProperty, null);
+                _shake.X = 0;
             }
             catch (Exception ex) { App.Logger?.Debug("[Fuse] rail chip stop: {E}", ex.Message); }
             _animating = false;
         }
 
-        /// <summary>Test/debug seam: is a clock actually running right now?</summary>
-        internal bool IsWobbling => _animating;
+        /// <summary>
+        /// Test/debug seam: is a clock actually running right now?
+        ///
+        /// <para>The flash-out counts. It is the loudest clock this control ever runs, and a seam
+        /// that read "not wobbling" through two and a half seconds of flicker would be answering a
+        /// different question than the one it is named for.</para>
+        /// </summary>
+        internal bool IsWobbling => _animating || _flashingOut;
+
+        /// <summary>Test/debug seam: is the chip specifically in its two-and-a-half second goodbye
+        /// (as opposed to an ordinary tremble)?</summary>
+        internal bool IsFlashingOut => _flashingOut;
+
+        // ============================== the flash-out ==============================
+
+        /// <summary>
+        /// ZERO. Flicker hard, shake hard, flare the ring, and then leave — the chip's whole reason
+        /// to exist just ran out, and the ceremony the director opens on this same instant is what
+        /// it hands over to.
+        ///
+        /// <para><b>Three clocks and a timer, not a Storyboard.Completed.</b> The completion has to
+        /// fire even if one of the animations is released early (a rail teardown, a reduced-motion
+        /// flip mid-flash), and a DispatcherTimer is the one clock that is not attached to any of
+        /// the properties being animated. It is also what makes the collapse unconditional: however
+        /// this goes, the chip is gone <see cref="FlashOutSeconds"/> from now.</para>
+        ///
+        /// <para><b>Reduced motion still gets the moment, quietly.</b> No flicker and no shake —
+        /// but the chip does not simply blink out either: it fades over the same duration, so the
+        /// rail does not reflow under a subject's hand with no warning at all.</para>
+        /// </summary>
+        private void BeginFlashOut()
+        {
+            if (_flashingOut) return;
+            _flashingOut = true;
+
+            try
+            {
+                StopWobble();
+                _animating = false;
+                Visibility = Visibility.Visible;
+                ToolTip = null;   // nothing to read under a pointer while this happens
+
+                DescentRoomSfx.PlayZeroFlashOut();
+
+                if (MotionFx.AllowTransitions) BeginFlashClocks();
+                else BeginQuietFade();
+
+                _flashTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+                { Interval = TimeSpan.FromSeconds(FlashOutSeconds) };
+                _flashTimer.Tick += OnFlashOutDone;
+                _flashTimer.Start();
+
+                App.Logger?.Information("[Fuse] the rail chip is flashing out - zero has arrived.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[Fuse] rail chip flash-out could not start: {E}", ex.Message);
+                FinishFlashOut();
+            }
+        }
+
+        /// <summary>The three clocks: the flicker, the shake, and the ring's flare.</summary>
+        private void BeginFlashClocks()
+        {
+            var span = TimeSpan.FromSeconds(FlashOutSeconds);
+
+            // ---- the flicker. Discrete, never eased: a countdown going out is a contact failing,
+            // and an eased fade in and out of every blink reads as a pulse instead.
+            var flicker = new DoubleAnimationUsingKeyFrames { Duration = span };
+            double at = 0;
+            bool lit = true;
+            while (at < FlashOutSeconds)
+            {
+                flicker.KeyFrames.Add(new DiscreteDoubleKeyFrame(lit ? 1.0 : 0.12,
+                    KeyTime.FromTimeSpan(TimeSpan.FromSeconds(at))));
+                lit = !lit;
+                // Accelerating: the blinks are a fifth of a second apart at the start and a
+                // twentieth by the end, so the chip is visibly running out rather than blinking at
+                // a fixed rate until somebody turns it off.
+                at += 0.20 - 0.15 * (at / FlashOutSeconds);
+            }
+            flicker.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(span)));
+            Timeline.SetDesiredFrameRate(flicker, FlashFrameRate);
+            BeginAnimation(OpacityProperty, flicker);
+
+            // ---- the shake. Sideways only: the rail is a vertical stack, and a chip travelling up
+            // and down would read as the rows above it moving.
+            var shake = new DoubleAnimation(-FlashShakePixels, FlashShakePixels,
+                TimeSpan.FromSeconds(0.045))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+            };
+            Timeline.SetDesiredFrameRate(shake, FlashFrameRate);
+            _shake.BeginAnimation(TranslateTransform.XProperty, shake);
+
+            var spin = new DoubleAnimation(-FlashSpinDegrees, FlashSpinDegrees,
+                TimeSpan.FromSeconds(0.07))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+            };
+            Timeline.SetDesiredFrameRate(spin, FlashFrameRate);
+            _rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
+
+            // ---- the ring's flare: one hard swell up front, then it rides down with the flicker.
+            var flare = new DoubleAnimationUsingKeyFrames { Duration = span };
+            var ease = new SineEase { EasingMode = EasingMode.EaseOut };
+            flare.KeyFrames.Add(new EasingDoubleKeyFrame(RingFlareLo,
+                KeyTime.FromTimeSpan(TimeSpan.Zero), ease));
+            flare.KeyFrames.Add(new EasingDoubleKeyFrame(1.0,
+                KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.14)), ease));
+            flare.KeyFrames.Add(new EasingDoubleKeyFrame(0.55,
+                KeyTime.FromTimeSpan(TimeSpan.FromSeconds(FlashOutSeconds * 0.6)), ease));
+            flare.KeyFrames.Add(new EasingDoubleKeyFrame(0.0,
+                KeyTime.FromTimeSpan(span), ease));
+            Timeline.SetDesiredFrameRate(flare, FlashFrameRate);
+            _ring.BeginAnimation(OpacityProperty, flare);
+        }
+
+        /// <summary>Reduced motion's version of the same moment: one fade, no flicker, no shake.</summary>
+        private void BeginQuietFade()
+        {
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(FlashOutSeconds))
+            { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } };
+            BeginAnimation(OpacityProperty, fade);
+        }
+
+        /// <summary>
+        /// The deadline. Unlike every other queued callback in this control there is no
+        /// shutting-down bail here on purpose: the finish is the teardown, it only sets properties
+        /// on this element, and skipping it on a dispatcher that is going away would leave a stopped
+        /// timer holding a subscription to a chip that is on its way out anyway.
+        /// </summary>
+        private void OnFlashOutDone(object? sender, EventArgs e) => FinishFlashOut();
+
+        /// <summary>
+        /// The goodbye is over: release every clock, park the parts, and collapse for good.
+        /// Idempotent, and the ONE exit from the flash-out — the timer, the failure path and the
+        /// teardown all come through here.
+        /// </summary>
+        private void FinishFlashOut()
+        {
+            _flashingOut = false;
+
+            if (_flashTimer != null)
+            {
+                try
+                {
+                    _flashTimer.Stop();
+                    _flashTimer.Tick -= OnFlashOutDone;
+                }
+                catch (Exception ex) { App.Logger?.Debug("[Fuse] rail chip flash stop: {E}", ex.Message); }
+                _flashTimer = null;
+            }
+
+            try { HideChip(); }
+            catch (Exception ex) { App.Logger?.Debug("[Fuse] rail chip flash finish: {E}", ex.Message); }
+        }
 
         // ============================== the door ==============================
 
