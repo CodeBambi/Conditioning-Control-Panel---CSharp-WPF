@@ -420,6 +420,11 @@ namespace ConditioningControlPanel
             // without a cached ceremony timestamp, so this is inert on every install today.
             InitializeDescentFuse();
 
+            // The Spiral Room's rail row: Collapsed unless this account is in the fog era or has an
+            // open spiral. MainWindow.SpiralRoom.cs. Three subscriptions and one Collapsed write on
+            // an account with neither, which is every install today.
+            InitializeSpiralRoom();
+
             // Subscribe to quest events
             if (App.Quests != null)
             {

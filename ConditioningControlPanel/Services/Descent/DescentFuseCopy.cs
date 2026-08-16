@@ -149,5 +149,57 @@ namespace ConditioningControlPanel.Services.Descent
         /// sentence can be addressed to every subject without being a lie to half of them.</para>
         /// </summary>
         public const string IgnitionLine = "Year One. The spiral is yours.";
+
+        // ---- the spiral room (the tab, the rail chip, the rail entry) -----------
+        //
+        // Same §4 debt as everything above: hardcoded English, collected here so the localization
+        // pass is one file. Same §0.6 rule too — there is not an offer, a price, a tier or a
+        // "learn more" anywhere in this block, and there must never be. The fog is a promise being
+        // kept, not a thing being sold.
+
+        /// <summary>
+        /// The chip's second tooltip line, under the digits. Says nothing the digits do not — which
+        /// is the point: the countdown explains itself exactly as far as "something", and no
+        /// further, until the night it opens.
+        /// </summary>
+        public const string ChipSubtitle = "something is coming";
+
+        /// <summary>
+        /// The fog era's eyebrow. Second person, present tense, and it is a statement of fact
+        /// rather than a tease: there genuinely is a door, and it genuinely has not been opened.
+        /// </summary>
+        public const string FogEyebrow = "a door you haven't opened yet";
+
+        /// <summary>
+        /// The fog era's whole argument, in two sentences. The turn is "from you" -> "for you", and
+        /// it is the difference between a paywall and a held place — which is exactly the
+        /// difference the withhold is trying to communicate.
+        /// </summary>
+        public const string FogLine =
+            "The fog isn't hiding something from you. It's keeping something for you.";
+
+        /// <summary>
+        /// What to do in the meantime, which is: the same thing you were already doing. No task, no
+        /// checklist, no "come back at" — the countdown is not a quest.
+        /// </summary>
+        public const string FogTail =
+            "When the clock runs out, you'll be shown in. Until then, keep your devotion where it belongs.";
+
+        /// <summary>
+        /// What stands where the digits were once the instant has passed but this account's own
+        /// ceremony has not reached them yet. NOT a duration and NOT an apology: the server re-offers
+        /// on every sync, so the honest reading is that it is imminent and unscheduled.
+        /// </summary>
+        public const string FogImminent = "any moment now.";
+
+        /// <summary>
+        /// The waiting room's one line — shown when the gate is open but there is no canvas: no
+        /// descent block yet, or an embed that could not start. Lower case and unpunctuated-looking
+        /// on purpose, matching the fog's register rather than an error's.
+        ///
+        /// <para><b>It must never grow a button.</b> A "retry" would turn a held promise into a
+        /// support ticket, and the tab already retries on the next entry — see SpiralTabView.</para>
+        /// </summary>
+        public const string WaitingLine = "the spiral is finding you.";
     }
 }

@@ -235,15 +235,28 @@ namespace ConditioningControlPanel.Controls
         }
 
         /// <summary>
-        /// Click-to-expand: the same canvas at ?mode=map, in its own window. A window and
-        /// not an in-tab panel on purpose — the map is the one surface big enough for the
-        /// airspace problem to be unmanageable, and a separate top-level HWND has no
-        /// airspace problem at all.
+        /// Click-to-expand: the same canvas at ?mode=map, in the SPIRAL ROOM.
+        ///
+        /// <para><b>It used to be a window</b> (<c>SpiralMapWindow</c>), on the reasoning that a
+        /// separate top-level HWND has no airspace problem at all. True — but it also meant the one
+        /// moment this feature was built for opened a second window over the app instead of opening
+        /// a room in it, so the window retired on 2026-08-16 and the tab took over. The airspace
+        /// problem is solved there by NOT BUILDING the browser except while that tab is the one on
+        /// screen in the spiral state; see Views/Tabs/SpiralTabView.xaml.cs.</para>
+        ///
+        /// <para><b>The gates moved with it.</b> This method deliberately no longer tests the block
+        /// or the withhold: the tab re-reads every gate on entry and shows the fog, the waiting room
+        /// or the canvas accordingly, so a deep link, a stale click or a future caller lands on the
+        /// right room rather than on nothing happening.</para>
         /// </summary>
-        private void OpenMap()
+        private static void OpenMap()
         {
             if (!FlagEnabled) return;
-            try { SpiralMapWindow.ShowMap(); }
+            try
+            {
+                if (Application.Current?.MainWindow is ConditioningControlPanel.MainWindow main)
+                    main.ShowTab(SpiralRoom.TabKey);
+            }
             catch (Exception ex) { App.Logger?.Debug("[Spiral] OpenMap: {E}", ex.Message); }
         }
     }

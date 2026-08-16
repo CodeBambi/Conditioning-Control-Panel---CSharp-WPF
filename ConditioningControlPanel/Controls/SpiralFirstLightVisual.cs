@@ -26,8 +26,9 @@ namespace ConditioningControlPanel.Controls
     ///
     /// <para><b>THE AIRSPACE RULE THIS EXISTS UNDER.</b> A WebView2 is a native child HWND and
     /// paints OVER any WPF content in the same window regardless of z-order, so this canvas can
-    /// never be drawn on top of a live embed. The window keeps the embed collapsed and unstarted
-    /// for the length of the intro and swaps them at the end — see SpiralMapWindow.</para>
+    /// never be drawn on top of a live embed. Its host therefore does not merely hide the embed for
+    /// the length of the intro — it does not CONSTRUCT one, and builds it only at the hand-off. See
+    /// Views/Tabs/SpiralTabView.xaml.cs (the window this used to live in retired 2026-08-16).</para>
     ///
     /// <para><b>The mod's accent, resolved once by the window and handed in.</b> A brush frozen in a
     /// constructor cannot follow a later mod switch, which is the 2026-08-13 sweep's whole bug

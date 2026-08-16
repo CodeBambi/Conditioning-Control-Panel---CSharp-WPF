@@ -243,28 +243,32 @@ namespace ConditioningControlPanel.Services.Descent
 
         /// <summary>
         /// THE FIRST LIGHT, whole (CONTRACT-FUSE-0816 §2.4, owner ruling 2026-08-16): "hide the
-        /// spiral till the ceremony finishes, and go to the profile page, and have some highlight
-        /// animation that catches the user's attention and reveals the spiral, even opens it for
-        /// them."
+        /// spiral till the ceremony finishes, and have some highlight animation that catches the
+        /// user's attention and reveals the spiral, even opens it for them."
         ///
         /// <list type="number">
-        /// <item>Bring the main window forward and navigate to the profile tab THROUGH THE REAL
-        /// PATH — <c>MainWindow.ShowTab("discord")</c>, the same door the nav rail, the bark rules
-        /// and the command palette all use. A parallel navigation would be a second way to change
-        /// tabs that the rest of the app does not know about.</item>
-        /// <item>Repaint the spiral surfaces (the withhold opened at the commit) and pulse the
-        /// Trainer Card's plate — opacity and transform only, skipped under reduced motion.</item>
-        /// <item>Open the map FOR them, with the reveal playing inside it
-        /// (<c>SpiralMapWindow.ShowMapFirstLight</c>), which is the door that tolerates the descent
-        /// block still being in flight.</item>
+        /// <item>Bring the main window forward.</item>
+        /// <item>Navigate to the SPIRAL ROOM through the real path —
+        /// <c>MainWindow.ShowTab("spiral")</c>, the same door the nav rail, the bark rules and the
+        /// command palette all use. A parallel navigation would be a second way to change tabs that
+        /// the rest of the app does not know about.</item>
+        /// <item>Play the reveal INSIDE that tab (<c>SpiralTabView.BeginFirstLight</c>), which is the
+        /// door that tolerates the descent block still being in flight.</item>
         /// </list>
+        ///
+        /// <para><b>2026-08-16: the window and the plate pulse both retired.</b> This used to walk
+        /// the user to the profile tab, breathe the Trainer Card's spiral plate at them, and then
+        /// open <c>SpiralMapWindow</c> with the reveal inside it. There is no window any more — the
+        /// map is a tab — so pointing at a plate on the way past bought a hop and gave nothing back.
+        /// The plate itself STAYS as a second door into the room; only the animation is gone.</para>
         ///
         /// <para><b>INTERNAL, AND THE DEMO RIG'S ENTRY POINT.</b> The owner's capture rig calls this
         /// directly to film the reveal without standing up a server, a veteran account and a
         /// ceremony. It is deliberately not public, has no command-line wiring and is not on any
         /// menu — the rig adds its own scratch hook — and it deliberately skips the one-shot guard
         /// so the rig can re-run it; <see cref="BeginFirstLight"/> is the guarded path the ceremony
-        /// itself takes.</para>
+        /// itself takes. The seam is unchanged by the move: same name, same signature, same
+        /// "no arguments, no server" promise — it just lands in a tab now.</para>
         /// </summary>
         internal static void RunFirstLightReveal()
         {
@@ -288,10 +292,13 @@ namespace ConditioningControlPanel.Services.Descent
 
                 if (Application.Current?.MainWindow is not MainWindow main || !main.IsLoaded)
                 {
-                    // No window to walk them through, but the map is its own top-level HWND and does
-                    // not need one. Better a reveal with no walk-up than no reveal.
-                    Log.Debug("[Fuse] First light: no main window — opening the map on its own.");
-                    OpenFirstLightMap();
+                    // THE ROOM IS A TAB NOW, so there is genuinely nowhere to play this without a
+                    // window — and that is a survivable loss, not a failure. The withhold is already
+                    // open, the surfaces are already unlocked, and every ordinary door into the
+                    // spiral works the moment the user has a window again. What is lost is an
+                    // animation; what is NOT lost is the unlock. (See BeginFirstLight's note on why
+                    // the one-shot is deliberately not persisted.)
+                    Log.Debug("[Fuse] First light: no main window - the spiral is unlocked, the reveal is skipped.");
                     return;
                 }
 
@@ -302,24 +309,15 @@ namespace ConditioningControlPanel.Services.Descent
                 }
                 catch (Exception ex) { Log.Debug("[Fuse] First light could not bring the window forward: {Error}", ex.Message); }
 
-                main.ShowTab("discord");
-
-                // The pulse owns the hand-off so the map opens AFTER the plate has finished asking
-                // for attention — and the callback runs on every path, including the ones where
-                // there is no plate to pulse.
-                main.PlayFirstLightHighlight(OpenFirstLightMap);
+                // Navigate, then reveal. BeginSpiralFirstLight does both in that order for a reason:
+                // the tab's own entry repaint has to happen BEFORE the reveal takes the surface, or
+                // it would stomp it one frame after it started.
+                main.BeginSpiralFirstLight();
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "[Fuse] The first-light reveal failed on the way to the profile tab — opening the map directly.");
-                OpenFirstLightMap();
+                Log.Error(ex, "[Fuse] The first-light reveal failed on the way to the spiral room. The spiral itself is unlocked.");
             }
-        }
-
-        private static void OpenFirstLightMap()
-        {
-            try { SpiralMapWindow.ShowMapFirstLight(); }
-            catch (Exception ex) { Log.Error(ex, "[Fuse] The first-light map could not open."); }
         }
 
         /// <summary>

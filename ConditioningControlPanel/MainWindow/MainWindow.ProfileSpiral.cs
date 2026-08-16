@@ -1,7 +1,5 @@
-using System;
+﻿using System;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Descent;
 
@@ -10,8 +8,14 @@ namespace ConditioningControlPanel
     /// <summary>
     /// THE SPIRAL'S TWO PROFILE DOORS — the Trainer Card plate and the header
     /// bubble menu's row. Both are a <see cref="Controls.SpiralGlyph"/> plus a
-    /// caption, both open <see cref="SpiralMapWindow.ShowMap"/>, and both are dark
-    /// until the server says otherwise.
+    /// caption, both open the SPIRAL ROOM (<c>ShowTab("spiral")</c>), and both are
+    /// dark until the server says otherwise.
+    ///
+    /// THEY ARE SECOND DOORS, NOT LAUNCHERS (2026-08-16). They used to open
+    /// SpiralMapWindow; that window retired when the map became a tab, so these two
+    /// now navigate to it like every other rail row does. Their gates are unchanged -
+    /// what changed is only where the click lands, and the tab re-reads every gate on
+    /// entry so a stale click cannot walk past the ceremony.
     ///
     /// THE GATE IS BLOCK PRESENCE, PLUS THE MIGRATION WITHHOLD. These surfaces
     /// deliberately do NOT consult SpiralRailHost.FlagEnabled /
@@ -176,11 +180,22 @@ namespace ConditioningControlPanel
 
         // ============================== the door ==============================
 
-        /// <summary>The map window, from either surface. Forwarded to by
-        /// DiscordTabView's plate handler and by the menu row's click.</summary>
+        /// <summary>
+        /// The Spiral Room, from either surface. Forwarded to by DiscordTabView's plate handler and
+        /// by the menu row's click.
+        ///
+        /// <para><b>It used to open a window.</b> <c>SpiralMapWindow</c> retired on 2026-08-16 when
+        /// the map became a tab, and these two surfaces became SECOND DOORS into it rather than
+        /// launchers of their own. Their visibility gates are unchanged (block present and not
+        /// withheld); what changed is only where the click lands.</para>
+        ///
+        /// <para>No gate is re-tested here on purpose: the tab re-reads all of them on entry, so a
+        /// stale click on a plate that should have retracted lands on the fog or the waiting room
+        /// rather than on nothing happening at all.</para>
+        /// </summary>
         internal void OpenSpiralMapFromProfile()
         {
-            try { SpiralMapWindow.ShowMap(); }
+            try { ShowTab(SpiralRoom.TabKey); }
             catch (Exception ex) { App.Logger?.Debug("OpenSpiralMapFromProfile: {E}", ex.Message); }
         }
 
@@ -192,111 +207,17 @@ namespace ConditioningControlPanel
         }
 
         // ============================== the first light ==============================
+        //
+        // THE PLATE PULSE RETIRED, 2026-08-16. PlayFirstLightHighlight used to breathe the Trainer
+        // Card's spiral plate for two beats and then open the map WINDOW. There is no window any
+        // more: the reveal plays inside the Spiral Room itself (Views/Tabs/SpiralTabView.cs), which
+        // means the sequence no longer walks the user to the profile tab to point at a plate before
+        // taking them somewhere else. It takes them straight into the room and opens it in front of
+        // them, which is what the owner asked for and one fewer hop to do it in.
+        //
+        // The plate and the menu row STAY. They keep their existing gates (block present, not
+        // withheld) and they are second doors into the tab - see OpenSpiralMapFromProfile above.
+        // What is gone is only the animation that used to introduce them.
 
-        /// <summary>How long the attention pulse runs before the map opens itself. Two beats of
-        /// nine tenths of a second — long enough to be seen crossing the room, short enough that it
-        /// is over before it becomes a thing being waited out.</summary>
-        private const double FirstLightPulseHalfSeconds = 0.45;
-
-        private const int FirstLightPulseBeats = 2;
-
-        /// <summary>
-        /// STEP TWO OF THE FIRST LIGHT (CONTRACT-FUSE-0816 §2.4, owner ruling 2026-08-16): the
-        /// Trainer Card's spiral plate has just been unlocked by the commit, and this is the
-        /// animation that points at it before the map opens itself.
-        ///
-        /// <para><b>Opacity and transform ONLY.</b> A scale breath on a RenderTransform and an
-        /// opacity dip, both on the plate's own Border. Nothing here touches layout, no Effect is
-        /// attached (an Effect's Color is a plain DP that cannot follow a mod switch, which is the
-        /// 2026-08-13 sweep's bug class, and a blur pass on a card that is already animating is a
-        /// cost with no picture behind it), and the plate's pink comes from the DynamicResource
-        /// brushes it already wears — so the "glow" is the mod's own accent breathing rather than a
-        /// colour this method invented.</para>
-        ///
-        /// <para><b>Reduced motion proceeds immediately</b> (contract §0): the plate is simply
-        /// there, lit, and the map opens. The reveal is not skipped for anyone — the pulse is, and
-        /// the pulse is the one part of the sequence that is pure ambience.</para>
-        ///
-        /// <para><b>The plate may not be there at all,</b> and that is a legal outcome rather than a
-        /// failure: the descent block can still be in flight this soon after the commit, and the
-        /// card can be showing a searched profile instead of your own. Either way the callback still
-        /// runs — the map's own reveal is the part that matters, and it does not need the plate.</para>
-        /// </summary>
-        /// <param name="onComplete">Runs on the UI thread when the pulse is over (or at once when
-        /// there is nothing to pulse). Never dropped: every path calls it exactly once.</param>
-        internal void PlayFirstLightHighlight(Action onComplete)
-        {
-            var done = false;
-            void Finish()
-            {
-                if (done) return;
-                done = true;
-                try { onComplete(); }
-                catch (Exception ex) { App.Logger?.Debug("[Spiral] first-light continuation threw: {E}", ex.Message); }
-            }
-
-            try
-            {
-                // The withhold opened a moment ago and nothing has repainted since — this is what
-                // makes the plate appear at all.
-                RefreshProfileSpiralPlate();
-                RefreshProfileMenuSpiral();
-
-                var plate = DiscordTab?.ProfileSpiralPlate;
-                if (plate == null || plate.Visibility != Visibility.Visible) { Finish(); return; }
-
-                if (Services.MotionFx.Level != Models.MotionLevel.Full) { Finish(); return; }
-
-                var scale = new ScaleTransform(1, 1);
-                plate.RenderTransformOrigin = new Point(0.5, 0.5);
-                plate.RenderTransform = scale;
-
-                var span = TimeSpan.FromSeconds(FirstLightPulseHalfSeconds);
-                var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-
-                var breathe = new DoubleAnimation(1.0, 1.10, span)
-                {
-                    AutoReverse = true,
-                    RepeatBehavior = new RepeatBehavior(FirstLightPulseBeats),
-                    EasingFunction = ease,
-                };
-                Timeline.SetDesiredFrameRate(breathe, 30);
-
-                var glow = new DoubleAnimation(1.0, 0.45, span)
-                {
-                    AutoReverse = true,
-                    RepeatBehavior = new RepeatBehavior(FirstLightPulseBeats),
-                    EasingFunction = ease,
-                };
-                Timeline.SetDesiredFrameRate(glow, 30);
-
-                // The opacity animation carries the completion because it is the one that must be
-                // released either way: a plate left holding an animated Opacity would ignore every
-                // later refresh that tried to set it.
-                glow.Completed += (_, _) =>
-                {
-                    try
-                    {
-                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                        plate.BeginAnimation(OpacityProperty, null);
-                        plate.Opacity = 1.0;
-                        plate.RenderTransform = null;
-                    }
-                    catch (Exception ex) { App.Logger?.Debug("[Spiral] first-light pulse release: {E}", ex.Message); }
-
-                    Finish();
-                };
-
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, breathe);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, breathe);
-                plate.BeginAnimation(OpacityProperty, glow);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[Spiral] first-light highlight failed: {E}", ex.Message);
-                Finish();
-            }
-        }
     }
 }
