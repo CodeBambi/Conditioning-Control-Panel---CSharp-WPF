@@ -84,6 +84,14 @@ namespace ConditioningControlPanel
         private bool _closing;
 
         /// <summary>
+        /// TRUE while this window is holding the ceremony back (live path only — the catch-up's
+        /// hold belongs to the director, which takes it before this window exists). Tracked as a
+        /// bool rather than trusting the depth counter, so a release cannot run twice and decrement
+        /// somebody else's hold.
+        /// </summary>
+        private bool _holdingOffers;
+
+        /// <summary>
         /// TRUE once this window saw the ceremony come up and started dissolving into it. The
         /// director reads it on Closed to decide whether to hand focus over.
         /// </summary>
@@ -118,6 +126,27 @@ namespace ConditioningControlPanel
                 // just closed was already this backdrop at full.
                 BackdropLayer.Opacity = 1.0;
                 _backdropRaised = true;
+            }
+
+            if (kind == DescentShowKind.Live)
+            {
+                // HOLD THE CEREMONY UNTIL THE LIGHT COMES BACK, and this is choreography rather
+                // than defence. The show asks for a sync the moment its bloom starts, but the
+                // app's own sixty-second heartbeat is running the whole time too — so without a
+                // hold, an offer answered during the drain would drop the ceremony window on top
+                // of a crack that is four seconds from finishing, and the night's one animation
+                // would be replaced mid-beat by a dialog.
+                //
+                // Released at the bloom (see FrameCrack) and, as a backstop, on Closed — so a
+                // panic key or a throw during the crack cannot leave the ceremony held forever.
+                // The catch-up does NOT take a hold here: the director already holds one on its
+                // behalf, from before this window existed.
+                try
+                {
+                    App.DescentMigration?.HoldOffers();
+                    _holdingOffers = true;
+                }
+                catch (Exception ex) { Log.Debug("[Fuse] Could not hold the ceremony for the crack: {Error}", ex.Message); }
             }
 
             Loaded += OnLoadedInternal;
@@ -214,6 +243,12 @@ namespace ConditioningControlPanel
         {
             lock (Live) Live.Remove(this);
 
+            // THE BACKSTOP, and it has to be here rather than only at the bloom: Closed fires on
+            // every exit path including the panic key's ForceCloseAll and a throw during the crack,
+            // and a ceremony held forever by a window that no longer exists would be the one bug
+            // this feature could not recover from without a restart.
+            ReleaseOfferHold();
+
             try
             {
                 if (_timer != null)
@@ -279,6 +314,12 @@ namespace ConditioningControlPanel
                     _witnessedMarked = true;
                     App.DescentCountdown?.MarkLastNightWitnessed();
                 }
+
+                // The light is back, so the door may open. If an offer landed during the crack it
+                // is replayed right here and the ceremony comes up over the held bloom — which is
+                // the choreography the contract describes, and it is why the handoff's first poll
+                // can already find it.
+                ReleaseOfferHold();
             }
 
             if (_kind == DescentShowKind.CatchUp)
@@ -445,6 +486,15 @@ namespace ConditioningControlPanel
                 SafeClose();
             };
             wait.Start();
+        }
+
+        /// <summary>Drop this window's hold, at most once.</summary>
+        private void ReleaseOfferHold()
+        {
+            if (!_holdingOffers) return;
+            _holdingOffers = false;
+            try { App.DescentMigration?.ReleaseOffers(); }
+            catch (Exception ex) { Log.Debug("[Fuse] Releasing the ceremony hold failed: {Error}", ex.Message); }
         }
 
         private void SafeClose()
