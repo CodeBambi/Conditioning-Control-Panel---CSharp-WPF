@@ -371,6 +371,88 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// CROSS-DEVICE ADOPT FROM THE 60s PROFILE POLL (the "restart desktop to see phone XP" fix).
+        ///
+        /// The Descent vat already fetches GET /v2/user/profile on a 60s cadence and used to throw
+        /// the response's level/xp away; DescentService now hands them here. The mid-run sync merge
+        /// only adopts a server lead bigger than 5000 XP (its dead band exists for the race where XP
+        /// earned while a sync was in flight must not be forced down), so a RUNNING desktop could
+        /// never see a smaller cross-device gain until the next restart.
+        ///
+        /// The rule is the CLEAN-LEDGER adopt, mirroring the ccpmobile fix: adopt any positive
+        /// server lead, but only when local is CLEAN — nothing earned here since the last
+        /// server-agreed figure (localTotal &lt;= <see cref="ActiveXpWatermark"/>). A dirty ledger
+        /// means this client holds unsynced progress of its own; reconciling that is the sync
+        /// path's job, not a read-only poll's. No watermark in scope means clean cannot be proven,
+        /// so nothing is adopted — the launch adopt and the sync merge still cover that account.
+        ///
+        /// Never adopts downward, never touches anything but level/XP, and steps aside entirely
+        /// while a Descent migration submit is unacked (same rule as the sync merge: the ceremony's
+        /// ledger is not up for negotiation until the server acks it).
+        /// </summary>
+        /// <param name="serverLevel">`level` off the profile response's user node.</param>
+        /// <param name="serverTotalXp">`xp` (cumulative) off the same node.</param>
+        /// <param name="serverSeason">`current_season` off the same node, when present.</param>
+        public void TryAdoptFromProfilePoll(int serverLevel, double serverTotalXp, string? serverSeason)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                if (settings.OfflineMode) return;
+                if (string.IsNullOrEmpty(settings.UnifiedId)) return;
+                if (serverLevel <= 0 || serverTotalXp <= 0 || double.IsNaN(serverTotalXp)) return;
+
+                // While a migration submit is in flight the server is still quoting the
+                // pre-ceremony total; adopting it would resurrect the level the ceremony retired.
+                if (DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice)) return;
+
+                // Season scope: the watermark is (account, season)-scoped and a total priced under
+                // another season key is another ledger. A rollover is the launch/sync paths' job.
+                if (serverSeason != null &&
+                    !string.Equals(serverSeason, settings.CurrentSeason ?? string.Empty, StringComparison.Ordinal))
+                {
+                    App.Logger?.Debug("Profile-poll adopt: server season {SS} is not the local scope {LS} — skipping",
+                        serverSeason, settings.CurrentSeason ?? "(none)");
+                    return;
+                }
+
+                var preLevel = settings.PlayerLevel;
+                var preLevelXp = settings.PlayerXP;
+                var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
+
+                if (serverTotalXp <= localTotalXp + 0.01) return;   // never adopt downward or sideways
+
+                var pollWatermark = ActiveXpWatermark(settings);
+                if (pollWatermark <= 0) return;                     // clean cannot be proven — stand aside
+                if (localTotalXp > pollWatermark + 0.01)
+                {
+                    App.Logger?.Debug("Profile-poll adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
+                        (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
+                    return;
+                }
+
+                settings.PlayerLevel = serverLevel;
+                settings.PlayerXP = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+
+                var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "profile poll");
+                App.Settings?.Save();
+
+                App.Logger?.Information("Profile-poll adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
+                    preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
+
+                // Same repaint contract as the launch adopt: the header is imperative, not bound,
+                // and this raise marshals itself to the dispatcher (#879).
+                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "profile poll");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Profile-poll adopt failed");
+            }
+        }
+
         public ProfileSyncService()
         {
             _httpClient = new HttpClient
@@ -1778,7 +1860,19 @@ namespace ConditioningControlPanel.Services
                             var serverTotalXp = (double)v2Result.User.Xp;
                             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? 0;
 
-                            if (serverTotalXp > localTotalXp + 5000)
+                            // CLEAN-LEDGER ADOPT (mirror of the ccpmobile fix). The +5000 band
+                            // exists for exactly one race: XP earned locally while this sync was
+                            // in flight must not be forced down by the response. But when local is
+                            // CLEAN — holding nothing beyond the last server-agreed figure — there
+                            // is no local progress to protect, and the band is just a hole where a
+                            // phone's smaller gains vanish until the next restart. So: any positive
+                            // server lead is adopted on a clean ledger; the band stands only when
+                            // local has unsynced progress of its own.
+                            var adoptWatermark = ActiveXpWatermark(settings);
+                            var ledgerClean = adoptWatermark > 0 && localTotalXp <= adoptWatermark + 0.01;
+                            var adoptBand = ledgerClean ? 0 : 5000;
+
+                            if (serverTotalXp > localTotalXp + adoptBand)
                             {
                                 // Server has substantially more — adopt server values (admin boost, other device)
                                 var serverLevel = v2Result.User.Level;

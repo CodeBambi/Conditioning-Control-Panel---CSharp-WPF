@@ -1647,6 +1647,56 @@ namespace ConditioningControlPanel.Models
             set { _dailyGiftLastRevealDate = value ?? ""; OnPropertyChanged(); }
         }
 
+        #region XP economy daily buckets (feat/xp-economy)
+
+        private string _ambientBubbleXpDayKey = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") the ambient-bubble XP bucket was last paid on.
+        /// Lazy rollover: BubbleService compares it on every pop and zeroes
+        /// <see cref="AmbientBubbleXpPaidToday"/> when the day has moved. See
+        /// BubbleService.TakeFromAmbientBubbleBucket for the cap itself.
+        /// </summary>
+        public string AmbientBubbleXpDayKey
+        {
+            get => _ambientBubbleXpDayKey;
+            set { _ambientBubbleXpDayKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _ambientBubbleXpPaidToday;
+        /// <summary>
+        /// Ambient-bubble-pop XP already paid out on <see cref="AmbientBubbleXpDayKey"/>.
+        /// Lucky-roll payouts count against it. Capped at 300 per local calendar day.
+        /// </summary>
+        public int AmbientBubbleXpPaidToday
+        {
+            get => _ambientBubbleXpPaidToday;
+            set { _ambientBubbleXpPaidToday = value; OnPropertyChanged(); }
+        }
+
+        private string _justDropXpDayKey = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") of the last credited Just Drop completion.
+        /// Lazy rollover, same shape as <see cref="AmbientBubbleXpDayKey"/>.
+        /// </summary>
+        public string JustDropXpDayKey
+        {
+            get => _justDropXpDayKey;
+            set { _justDropXpDayKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _justDropCreditedToday;
+        /// <summary>
+        /// Drops credited on <see cref="JustDropXpDayKey"/>. From the 4th of the local day the
+        /// payout quarters — mirror of ccpmobile's daily diminish (dropXp.ts rationale 7).
+        /// </summary>
+        public int JustDropCreditedToday
+        {
+            get => _justDropCreditedToday;
+            set { _justDropCreditedToday = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();
