@@ -1139,6 +1139,17 @@
                          See Controls/SpiralRailHost.cs - especially the airspace note. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
+                    <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
+                         seven days before the migration ceremony, shakes harder the closer it gets,
+                         and is gone for good once this account has taken its ceremony. Clicking it
+                         opens the Spiral Room.
+                         Self-wiring and Collapsed by default, so a build with no cached ceremony
+                         timestamp - i.e. every install today - measures as if it were not here.
+                         Code-built on purpose: it is NOT a door medallion. It has no NavDoorMap
+                         row, ChromeFx never lights it, CacheNavDoorRows never walks it, and it must
+                         not contribute the 40px door Viewbox markup NavRailFlyoutTests counts.
+                         See Controls/DescentFuseRailChip.cs. -->
+                    <controls:DescentFuseRailChip x:Name="FuseRailChip"/>
                     <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
                          launchers) - it opens app.cclabs.app in the default browser, so it has its
                          own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
