@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
@@ -84,6 +85,28 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// borderless fullscreen via the dock button (the DtRH game). Default true.</summary>
         public bool StartFullscreen { get; init; } = true;
 
+        /// <summary>
+        /// true = the WINDOW's fullscreen belongs to the host, not the page. Three things follow,
+        /// and they only make sense together:
+        /// <list type="number">
+        /// <item>a page calling <c>requestFullscreen()</c> fills the WebView2's client area and
+        /// nothing more - it can no longer take the whole window borderless;</item>
+        /// <item>a visible toggle rides in a host-drawn strip above the page, present in BOTH
+        /// modes, because in fullscreen it is the only exit that exists;</item>
+        /// <item>Esc leaves fullscreen from either focus state, and the fullscreen the toggle does
+        /// engage actually covers the taskbar.</item>
+        /// </list>
+        ///
+        /// <para><b>Why it is opt-in.</b> The default (false) is the behaviour the tunnel backdrop
+        /// and the DtRH game were built on: the page drives, Esc is the game's to own, and there is
+        /// no host chrome over the canvas. JUST DROP is the opposite case - a REMOTE page whose
+        /// player calls requestFullscreen when an order opens. That used to strip the title bar off
+        /// the shop window with no affordance left to undo it, while the taskbar kept its z-order
+        /// claim and painted over the page's own bottom-right exit. Windowed by default, escapable
+        /// by construction.</para>
+        /// </summary>
+        public bool HostOwnedFullscreen { get; init; }
+
         /// <summary>Window title (shown on the taskbar/Alt-Tab in windowed mode).</summary>
         public string WindowTitle { get; init; } = "Conditioning Control Panel";
 
@@ -158,6 +181,10 @@ internal sealed class ChaosWebViewHost : IDisposable
     private bool _glueAttached;
     private HwndSource? _glueHwndSource;     // our own window's source, while the cascade veto is hooked
     private HwndSourceHook? _glueWndHook;
+    private Button? _fsToggle;               // host chrome's fullscreen toggle (HostOwnedFullscreen)
+    private bool _hasWindowedFrame;          // true once a real windowed frame has been captured
+    private double _frameLeft, _frameTop, _frameW, _frameH;
+    private bool _frameWasMaximized;
 
     public bool IsReady { get; private set; }
     public Window? Window => _window;
@@ -178,6 +205,18 @@ internal sealed class ChaosWebViewHost : IDisposable
             VerticalAlignment = VerticalAlignment.Stretch,
         };
         var grid = new Grid { Background = Brushes.Black };
+        if (_opts.HostOwnedFullscreen)
+        {
+            // Two rows: the host's strip, then the page. The strip is deliberately NOT hidden in
+            // fullscreen - it is the exit, and an exit that disappears exactly when it is needed is
+            // the bug this whole option exists to close.
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            var chrome = BuildHostChrome();
+            Grid.SetRow(chrome, 0);
+            grid.Children.Add(chrome);
+            Grid.SetRow(_web, 1);
+        }
         grid.Children.Add(_web);
 
         // Default windowed size: 85% of the primary screen, centered.
@@ -198,6 +237,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             WindowStartupLocation = WindowStartupLocation.Manual,
             Content = grid,
         };
+        if (_opts.HostOwnedFullscreen) HookHostFullscreenInput();
         ApplyWindowMode(_opts.StartFullscreen);   // sets style / bounds / resize mode
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
@@ -216,23 +256,27 @@ internal sealed class ChaosWebViewHost : IDisposable
     private void ApplyWindowMode(bool fullscreen)
     {
         if (_window == null) return;
-        double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
+        if (_opts.HostOwnedFullscreen)
+        {
+            if (fullscreen) EnterHostFullscreen(); else LeaveHostFullscreen();
+            _isFullscreen = fullscreen;
+            UpdateChromeToggle();
+            return;
+        }
         if (fullscreen)
         {
             _window.WindowState = WindowState.Normal;   // manual bounds cover the whole screen (taskbar included)
             _window.WindowStyle = WindowStyle.None;
             _window.ResizeMode = ResizeMode.NoResize;
             _window.Left = 0; _window.Top = 0;
-            _window.Width = sw; _window.Height = sh;
+            _window.Width = SystemParameters.PrimaryScreenWidth;
+            _window.Height = SystemParameters.PrimaryScreenHeight;
         }
         else
         {
             _window.WindowStyle = WindowStyle.SingleBorderWindow;   // title bar = free Alt-Tab / minimize / move
             _window.ResizeMode = ResizeMode.CanResize;
-            double w = Math.Min(_windowedW, sw), h = Math.Min(_windowedH, sh);
-            _window.Width = w; _window.Height = h;
-            _window.Left = Math.Max(0, (sw - w) / 2);
-            _window.Top = Math.Max(0, (sh - h) / 2);
+            CenterDefaultWindowedBounds();
             _window.WindowState = WindowState.Normal;
         }
         _isFullscreen = fullscreen;
@@ -241,12 +285,26 @@ internal sealed class ChaosWebViewHost : IDisposable
         RefreshNativeOwner();
     }
 
+    /// <summary>The fallback windowed frame: 85% of the primary screen, centered. Used at launch
+    /// and whenever fullscreen is left without a remembered frame to go back to.</summary>
+    private void CenterDefaultWindowedBounds()
+    {
+        if (_window == null) return;
+        double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
+        double w = Math.Min(_windowedW, sw), h = Math.Min(_windowedH, sh);
+        _window.Width = w; _window.Height = h;
+        _window.Left = Math.Max(0, (sw - w) / 2);
+        _window.Top = Math.Max(0, (sh - h) / 2);
+    }
+
     /// <summary>True while the window is borderless-fullscreen (host-owned, not the browser API).</summary>
     public bool IsFullscreen => _isFullscreen;
 
     /// <summary>Toggle borderless fullscreen. The DtRH page drives this over the bridge
     /// (<c>fullscreen-set</c>) instead of the browser Fullscreen API, so Esc stays the game's
-    /// to own; the passive tunnel backdrop still rides <c>ContainsFullScreenElementChanged</c>.</summary>
+    /// to own; the passive tunnel backdrop still rides <c>ContainsFullScreenElementChanged</c>.
+    /// Under <see cref="Options.HostOwnedFullscreen"/> the only callers are the chrome toggle and
+    /// Esc - the page is not one of them.</summary>
     public void SetFullscreen(bool on)
     {
         if (_window == null || _isFullscreen == on) return;
@@ -259,6 +317,170 @@ internal sealed class ChaosWebViewHost : IDisposable
         }
         ApplyWindowMode(on);
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
+    }
+
+    // ======================= host-owned fullscreen (Options.HostOwnedFullscreen) =======================
+
+    /// <summary>
+    /// The strip the toggle lives in. Deliberately plain: a title on the left so the window still
+    /// says what it is once the OS title bar is gone, and one accent pill on the right. It is host
+    /// chrome, not shop UI - the doctrine that the desktop re-implements nothing about a drop is
+    /// untouched by a window learning how to be a window.
+    /// </summary>
+    private UIElement BuildHostChrome()
+    {
+        var bar = new DockPanel { LastChildFill = true };
+
+        _fsToggle = new Button
+        {
+            Style = TryTheme<Style>("SmallPinkButton"),
+            Margin = new Thickness(8, 5, 10, 5),
+            MinWidth = 120,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _fsToggle.Click += (_, _) => SetFullscreen(!_isFullscreen);
+        DockPanel.SetDock(_fsToggle, Dock.Right);
+        bar.Children.Add(_fsToggle);
+
+        bar.Children.Add(new TextBlock
+        {
+            Text = _opts.WindowTitle,
+            Margin = new Thickness(12, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TryTheme<Brush>("PinkBrush") ?? Brushes.HotPink,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        return new Border
+        {
+            Background = TryTheme<Brush>("PanelBgBrush") ?? Brushes.Black,
+            BorderBrush = TryTheme<Brush>("TransparentPink40Brush")
+                          ?? TryTheme<Brush>("PinkBrush") ?? Brushes.HotPink,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = bar,
+        };
+    }
+
+    /// <summary>App-level theme lookup with a hard fallback. The host builds its chrome in code, so
+    /// a missing key must degrade to a colour rather than throw a window away.</summary>
+    private static T? TryTheme<T>(string key) where T : class
+    {
+        try { return Application.Current?.TryFindResource(key) as T; }
+        catch { return null; }
+    }
+
+    /// <summary>Keep the toggle honest about which way it goes. Called from every window-mode
+    /// change, so the label can never disagree with the window.</summary>
+    private void UpdateChromeToggle()
+    {
+        if (_fsToggle == null) return;
+        try
+        {
+            _fsToggle.Content = Localization.Loc.Get(_isFullscreen ? "btn_exit_fullscreen" : "btn_fullscreen");
+            _fsToggle.ToolTip = Localization.Loc.Get("tooltip_fill_the_screen_esc_brings_the_window_back");
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.UpdateChromeToggle: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>
+    /// Esc, route 1 of 2, plus the topmost rental.
+    ///
+    /// <para>This route only fires while WPF holds the keyboard - the toggle button just after it
+    /// was clicked, or the strip. A focused WebView2 consumes the keystroke inside Chromium and the
+    /// WPF tree never sees it, which is exactly why route 2 (the page-side listener injected in
+    /// <see cref="InitWebAsync"/>) exists. The two cover disjoint focus states; neither is spare.</para>
+    /// </summary>
+    private void HookHostFullscreenInput()
+    {
+        if (_window == null) return;
+        _window.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape || !_isFullscreen) return;
+            SetFullscreen(false);
+            e.Handled = true;
+        };
+        // TOPMOST IS RENTED, NOT OWNED - the #905 lesson from the fullscreen video window. Keeping
+        // the claim after another window took focus is how a modal ends up alive and invisible
+        // BEHIND the page, holding the input queue with no way to reach the button that dismisses
+        // it. Dropped on deactivation, taken back on activation.
+        _window.Deactivated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = false; } catch { } };
+        _window.Activated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = true; } catch { } };
+    }
+
+    /// <summary>
+    /// Borderless fullscreen that actually wins the argument with the taskbar, in the order the app
+    /// already proved out in MainWindow.EnterBrowserFullscreen.
+    ///
+    /// <para><b>The trap.</b> Flipping WindowStyle while the window is already Maximized leaves
+    /// Windows believing it is still a plain maximized window, so the taskbar keeps its z-order
+    /// claim and paints OVER the "fullscreen" page - which is how the shop's own bottom-right exit
+    /// ended up hidden behind it. Drop to Normal FIRST, take the frame off, let the render queue
+    /// drain, then maximize. Topmost lands last: an owner-link re-slot inserts this window after a
+    /// NON-topmost one, and SetWindowPos clears WS_EX_TOPMOST when it does.</para>
+    /// </summary>
+    private void EnterHostFullscreen()
+    {
+        if (_window == null) return;
+        CaptureWindowedFrame();
+        if (_window.WindowState != WindowState.Normal) _window.WindowState = WindowState.Normal;
+        _window.WindowStyle = WindowStyle.None;
+        _window.ResizeMode = ResizeMode.NoResize;
+        RefreshNativeOwner();
+        if (_window.IsVisible)
+        {
+            // Pump the render queue between the frame change and the maximize; skipping it is what
+            // produces the mis-sized first frame on per-monitor-DPI displays.
+            try { _window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render); }
+            catch { }
+        }
+        _window.WindowState = WindowState.Maximized;
+        _window.Topmost = true;
+    }
+
+    /// <summary>Back to the frame the user had. Un-maximize BEFORE the title bar returns, for the
+    /// same reason the entry drops to Normal first: a style change under a maximized window leaves
+    /// the frame and the state disagreeing about how big the window is.</summary>
+    private void LeaveHostFullscreen()
+    {
+        if (_window == null) return;
+        _window.Topmost = false;
+        _window.WindowState = WindowState.Normal;
+        _window.WindowStyle = WindowStyle.SingleBorderWindow;
+        _window.ResizeMode = ResizeMode.CanResize;
+        if (_hasWindowedFrame)
+        {
+            _window.Left = _frameLeft; _window.Top = _frameTop;
+            _window.Width = _frameW; _window.Height = _frameH;
+            if (_frameWasMaximized) _window.WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            // Launched straight into fullscreen (the shelf replay): there is no prior frame to owe
+            // the user, so the default centered one is the honest answer.
+            CenterDefaultWindowedBounds();
+        }
+        RefreshNativeOwner();
+    }
+
+    /// <summary>Remember where the window was before fullscreen takes it. RestoreBounds is the only
+    /// honest reading while maximized - Left/Top/Width/Height report the monitor, not the frame the
+    /// user would expect back.</summary>
+    private void CaptureWindowedFrame()
+    {
+        if (_window == null || !_window.IsVisible || _isFullscreen) return;
+        try
+        {
+            _frameWasMaximized = _window.WindowState == WindowState.Maximized;
+            var r = _frameWasMaximized
+                ? _window.RestoreBounds
+                : new Rect(_window.Left, _window.Top, _window.ActualWidth, _window.ActualHeight);
+            if (r.Width <= 0 || r.Height <= 0 || double.IsNaN(r.Left) || double.IsNaN(r.Top)) return;
+            _frameLeft = r.Left; _frameTop = r.Top; _frameW = r.Width; _frameH = r.Height;
+            _hasWindowedFrame = true;
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.CaptureWindowedFrame: {E}", _opts.LogTag, ex.Message); }
     }
 
     /// <summary>Post a message to the page; queued until the page's 'ready' handshake.</summary>
@@ -421,6 +643,13 @@ internal sealed class ChaosWebViewHost : IDisposable
                 if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;
                 SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                // ...and that insert is precisely what would revoke a topmost claim: SetWindowPos
+                // clears WS_EX_TOPMOST when it places a window after a NON-topmost one, so every
+                // time main changed state a host-owned fullscreen window would quietly drop back
+                // under the taskbar. Re-assert natively rather than through WPF's Topmost property,
+                // which believes it is already true and would no-op.
+                if (_window != null && _window.Topmost)
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
@@ -505,6 +734,19 @@ internal sealed class ChaosWebViewHost : IDisposable
         _glueWndHook = null;
     }
 
+    /// <summary>Envelope the injected Esc listener posts. Namespaced so it can never collide with a
+    /// message the hosted page sends on its own account.</summary>
+    private const string HostEscapeMessageType = "ccp-host-escape";
+
+    /// <summary>Capture-phase so a page that stops propagation on its own Esc handling still lets
+    /// the host hear the key; guarded end to end because a page is free to have removed
+    /// <c>chrome.webview</c> from under us.</summary>
+    private const string EscapeBridgeScript =
+        "(function(){try{window.addEventListener('keydown',function(e){" +
+        "if(e.key!=='Escape'&&e.keyCode!==27)return;" +
+        "try{window.chrome.webview.postMessage({type:'" + HostEscapeMessageType + "'});}catch(_){}" +
+        "},true);}catch(_){}})();";
+
     private async Task InitWebAsync()
     {
         if (_initStarted || _web == null) return;
@@ -572,6 +814,25 @@ internal sealed class ChaosWebViewHost : IDisposable
                 }
             }
 
+            // Esc, route 2 of 2 (see HookHostFullscreenInput). This one runs INSIDE the page, which
+            // is the focus state that matters in practice: the user is looking at the session and
+            // the WebView2 owns the keyboard. It reports the keystroke and nothing else - no
+            // preventDefault, no stopPropagation - because what Esc means to the page is the page's
+            // business, and a host that swallowed it would break the page's own back-out.
+            if (_opts.HostOwnedFullscreen)
+            {
+                try
+                {
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(EscapeBridgeScript).ConfigureAwait(true);
+                    if (_disposed) return;
+                }
+                catch (Exception ex)
+                {
+                    // Not fatal: the WPF route and the visible toggle are both still there.
+                    App.Logger?.Debug("{Tag}: esc bridge inject failed: {E}", _opts.LogTag, ex.Message);
+                }
+            }
+
             core.NavigationStarting += OnNavigationStarting;
             core.WebMessageReceived += OnWebMessageReceived;
             core.ProcessFailed += OnProcessFailed;
@@ -622,6 +883,15 @@ internal sealed class ChaosWebViewHost : IDisposable
             var core = _web?.CoreWebView2;
             if (core == null) return;
             bool fs = core.ContainsFullScreenElement;
+            if (_opts.HostOwnedFullscreen)
+            {
+                // The element still goes fullscreen - inside the WebView2, filling the client area.
+                // What it no longer does is take the WINDOW with it. A page that could strip the
+                // title bar off its own host is a page that can trap the user, and this one is
+                // remote: it takes fullscreen the moment an order opens.
+                App.Logger?.Debug("{Tag}: page fullscreen={FS}; window stays host-owned", _opts.LogTag, fs);
+                return;
+            }
             _window?.Dispatcher.Invoke(() => SetFullscreen(fs));
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.FullScreenChanged: {E}", _opts.LogTag, ex.Message); }
@@ -647,6 +917,12 @@ internal sealed class ChaosWebViewHost : IDisposable
                     IsReady = true;
                     FlushPending();
                     try { _opts.OnReady?.Invoke(); } catch { }
+                    break;
+                case HostEscapeMessageType:
+                    // Host chrome, not page business: consumed here rather than forwarded, so a
+                    // keystroke the host injected the listener for never reaches OnMessage as an
+                    // unknown envelope.
+                    if (_opts.HostOwnedFullscreen && _isFullscreen) SetFullscreen(false);
                     break;
                 case "log":
                     // Information, not Debug: the global logger floor is Information and page
@@ -724,6 +1000,7 @@ internal sealed class ChaosWebViewHost : IDisposable
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);

@@ -1111,6 +1111,8 @@
   "label_beta_2": "[БЕТА]",
   "label_ai_generated_personality_quiz_10_questions_th": "Квиз личности на основе ИИ. 10 вопросов, которые становятся пикантнее в зависимости от твоих ответов. Узнай, кто ты на самом деле.",
   "btn_fullscreen": "Полный экран",
+  "btn_exit_fullscreen": "Выйти из полноэкранного режима",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "Развернуть на весь экран. Esc возвращает окно.",
   "setting_play_drone_in_background": "Фоновый дрон-звук",
   "btn_start_quiz": "Начать квиз",
   "label_past_quizzes": "Прошлые квизы",

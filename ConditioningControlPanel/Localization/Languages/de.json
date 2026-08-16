@@ -1112,6 +1112,8 @@
   "label_beta_2": "[BETA]",
   "label_ai_generated_personality_quiz_10_questions_th": "KI-generiertes Persönlichkeitsquiz. 10 Fragen, die basierend auf deinen Antworten schärfer werden. Finde heraus, wer du wirklich bist.",
   "btn_fullscreen": "Vollbild",
+  "btn_exit_fullscreen": "Vollbild beenden",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "Bildschirm ausfüllen. Esc holt das Fenster zurück.",
   "setting_play_drone_in_background": "Drohne im Hintergrund abspielen",
   "btn_start_quiz": "Quiz starten",
   "label_past_quizzes": "Vergangene Quizze",

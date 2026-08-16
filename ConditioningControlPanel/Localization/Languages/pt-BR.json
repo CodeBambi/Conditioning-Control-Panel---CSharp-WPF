@@ -1111,6 +1111,8 @@
   "label_beta_2": "[BETA]",
   "label_ai_generated_personality_quiz_10_questions_th": "Quiz de personalidade gerado por IA. 10 perguntas que ficam mais picantes baseadas nas suas respostas. Descubra quem você realmente é.",
   "btn_fullscreen": "Tela Cheia",
+  "btn_exit_fullscreen": "Sair da Tela Cheia",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "Preenche a tela. Esc traz a janela de volta.",
   "setting_play_drone_in_background": "Reproduzir drone de fundo",
   "btn_start_quiz": "Iniciar Quiz",
   "label_past_quizzes": "Quizzes Anteriores",

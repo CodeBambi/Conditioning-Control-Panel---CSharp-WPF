@@ -1811,6 +1811,8 @@
   "label_beta_2": "[测试版]",
   "label_ai_generated_personality_quiz_10_questions_th": "AI 生成的个性测验。10个问题随着你的回答越来越刺激。发现真实的自己。",
   "btn_fullscreen": "全屏",
+  "btn_exit_fullscreen": "退出全屏",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "铺满屏幕。按 Esc 返回窗口。",
   "setting_play_drone_in_background": "在后台播放无人机音效",
   "btn_start_quiz": "开始测验",
   "label_past_quizzes": "历史测验",

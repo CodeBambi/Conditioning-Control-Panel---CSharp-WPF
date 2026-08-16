@@ -1111,6 +1111,8 @@
   "label_beta_2": "[ベータ]",
   "label_ai_generated_personality_quiz_10_questions_th": "AI生成パーソナリティクイズ。10問の質問が回答に応じてエスカレート。本当の自分を発見しよう。",
   "btn_fullscreen": "全画面",
+  "btn_exit_fullscreen": "全画面を終了",
+  "tooltip_fill_the_screen_esc_brings_the_window_back": "画面いっぱいに表示します。Esc でウィンドウに戻ります。",
   "setting_play_drone_in_background": "バックグラウンドでドローン再生",
   "btn_start_quiz": "クイズ開始",
   "label_past_quizzes": "過去のクイズ",
