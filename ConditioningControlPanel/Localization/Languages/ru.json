@@ -576,6 +576,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "Лопай пузырьки, чтобы получить XP!",
   "tooltip_bubbles_spawned_per_minute": "Пузырьков в минуту",
   "tooltip_bubble_spawn_rate": "Скорость появления пузырьков",
+  "tooltip_bubble_size": "Размер, с которым рисуются пузырьки. Пузырьки в режиме Хаоса сохраняют свой размер.",
   "setting_volume": "Громкость",
   "tooltip_volume_of_bubble_pop_sounds": "Громкость звуков лопания",
   "tooltip_bubble_pop_sound_volume": "Громкость звука лопания пузырьков",

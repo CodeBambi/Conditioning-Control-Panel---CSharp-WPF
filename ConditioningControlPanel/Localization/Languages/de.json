@@ -577,6 +577,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "Platze Blasen, um XP zu verdienen!",
   "tooltip_bubbles_spawned_per_minute": "Erzeugte Blasen pro Minute",
   "tooltip_bubble_spawn_rate": "Blasen-Erscheinungsrate",
+  "tooltip_bubble_size": "Wie groß die Blasen gezeichnet werden. Blasen im Chaos-Modus behalten ihre eigene Größe.",
   "setting_volume": "Lautstärke",
   "tooltip_volume_of_bubble_pop_sounds": "Lautstärke der Blasen-Platz-Geräusche",
   "tooltip_bubble_pop_sound_volume": "Blasen-Platz-Geräusch-Lautstärke",

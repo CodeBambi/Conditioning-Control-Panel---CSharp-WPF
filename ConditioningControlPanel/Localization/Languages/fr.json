@@ -577,6 +577,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "Éclate des bulles pour gagner des XP !",
   "tooltip_bubbles_spawned_per_minute": "Bulles générées par minute",
   "tooltip_bubble_spawn_rate": "Taux d'apparition des bulles",
+  "tooltip_bubble_size": "La taille à laquelle les bulles sont dessinées. Les bulles du Mode Chaos conservent leur propre taille.",
   "setting_volume": "Volume",
   "tooltip_volume_of_bubble_pop_sounds": "Volume des sons d'éclatement de bulles",
   "tooltip_bubble_pop_sound_volume": "Volume du son d'éclatement des bulles",

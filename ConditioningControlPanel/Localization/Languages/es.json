@@ -576,6 +576,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "¡Revienta burbujas para ganar XP!",
   "tooltip_bubbles_spawned_per_minute": "Burbujas generadas por minuto",
   "tooltip_bubble_spawn_rate": "Tasa de generación de burbujas",
+  "tooltip_bubble_size": "El tamaño con el que se dibujan las burbujas. Las burbujas del Modo Caos conservan su propio tamaño.",
   "setting_volume": "Volumen",
   "tooltip_volume_of_bubble_pop_sounds": "Volumen de los sonidos de reventar burbujas",
   "tooltip_bubble_pop_sound_volume": "Volumen del sonido de reventar burbujas",
