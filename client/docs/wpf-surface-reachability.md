@@ -276,3 +276,113 @@ trusting the offset.**
 5. **DPI behaviour.** All window sizing is expressed in WPF DIPs against
    `SystemParameters.PrimaryScreenWidth/Height` (`ChaosWebViewHost.cs:223,293`); no explicit DPI code
    exists on these paths. Settled by a headed capture on a mixed-DPI multi-monitor rig.
+
+
+---
+
+## 8. Live UI survey of the shipping v6.8.1 app (2026-08-18)
+
+Everything above was read from source. This section was observed by **driving the running app**
+(pid attached over UI Automation, navigation gestures only, captures to PNG). It supersedes source
+inference where the two differ, and it is the design target the owner asked the port to take
+inspiration from: *"since the new ui in wpf has improved a lot you can take insparation from it."*
+
+**Method note, worth keeping:** the app holds a single-instance mutex (`App.xaml.cs:43`), so
+`Process.Start` on a running app hands off and exits, leaving a dead handle and no window. Attach to
+the existing process instead. The survey never invoked anything that launches, purchases, sends,
+deletes or changes a setting; the one exception was dismissing a "Got it" onboarding card that was
+occluding every capture, which is disclosed here rather than left implicit.
+
+### 8.1 The rail is SIX DOORS, each with sub-entries
+
+Verified by `AutomationId`, so these are stable handles rather than guessed labels:
+
+| Door | AutomationId | Tooltip |
+|---|---|---|
+| Home | `DoorHome` | Home |
+| Studio | `DoorStudio` | Studio (carries a NEW badge) |
+| Companion | `DoorCompanion` | Companion |
+| Play | `DoorPlay` | Play |
+| You | `DoorYou` | You |
+| Library | `DoorLibrary` | Library (carries a NEW badge) |
+
+Sub-entries observed, each its own button: `BtnSettings` (Dashboard), `BtnNavStudio` (Effects Rack),
+`BtnPresets` (Presets), `BtnNavHaptics`, `BtnCompanion` (Companion settings), `BtnNavBambiTakeover`
+(Takeover), `BtnNavSheListening` (She's Listening), `BtnLab` (Play), `BtnNavAwareness`, `BtnDeeper`,
+`BtnPatreonExclusives` (Premium), `BtnDiscordTab` (Profile), `BtnNavGradedIntake`, `BtnNavSpiral`
+(The Spiral), `BtnNavLockdown`.
+
+### 8.2 A NAME COLLISION THAT WOULD HAVE SENT THE PORT TO THE WRONG PAGE
+
+**`BtnNavSpiral` — "The Spiral", tooltip "Where your descent is drawn" — is THE DESCENT, not the
+Spiral Overlay effect.** Observed live: a day-by-day tracker page headed `THE SPIRAL` with
+`DAY 1 · NOT BANKED YET`, `THE EDGE`, `NEXT STAGE IN 1 DAY`, a per-day recap strip
+("TAP A DAY ON THE SPIRAL — ITS RECAP PRINTS HERE"), a legend (YOU / EVENT KEEPSAKE / QUESTS DONE /
+YOUR MOMENTS / STAGE / PAUSE SEAM / AHEAD / SEALED) and a `REPLAY YEAR` control.
+
+This is the v6.8.1 shape change the sync flagged as `SpiralMapWindow` deleted and replaced by
+`Views/Tabs/SpiralTabView` — **a window became a tab**, and it took the name "The Spiral" with it.
+The Loom lives on the **Spiral OVERLAY** module inside the Studio rack, which is a different surface
+with a near-identical name. **Any port work that routes "spiral" to one page is wrong for the other.**
+
+### 8.3 The Studio rack — the improvement to take inspiration from
+
+Header: **"Studio / Every effect, one rack. Pick a module on the left."** Its own onboarding card
+states the model, and it is the clearest statement of the v6.8.1 UI direction anywhere in the product:
+
+> The dashboard popups are gone. Flashes, subliminals, bubbles, bouncing text and the rest are all
+> rows in the list down the left. Left-click a row to open its panel. Right-click it to flip that
+> effect on or off without opening anything at all. The dot on each row is live: at a glance you can
+> see everything that is currently running. Dashboard tiles land here too, on the module you clicked.
+> Same dials, one room.
+
+**Rack contents, observed:** grouped rows, each with an icon, a label, and a **live state dot** on the
+right (lit when that effect is running).
+
+| Group | Rows |
+|---|---|
+| EFFECTS | Flash Images, Mandatory Video, Subliminals, Spiral Overlay, Magenta Filter, Visuals |
+| GAMES & CARDS | Bubble Pop, Bubble Count, Lock Card, Bouncing Text |
+| IMMERSION | Mind Wipe, Brain Drain (NEW), Haptics |
+| TIMING | Scheduler, Intensity Ramp |
+
+**This confirms the click grammar in §2 is still current at v6.8.1, and generalises it: it is the
+RACK ROW grammar now, not only the mosaic-tile grammar.** Left-click opens, right-click toggles.
+
+### 8.4 The Loom route, verified live rather than inferred
+
+`DoorStudio` -> rack row **Spiral Overlay** -> module panel containing, in order: a header with the
+module name, its one-line description and an **Enable** toggle; a settings card (Opacity slider,
+Randomize spiral toggle, Display monitor dropdown); then three full-width outlined buttons —
+**`THE LOOM — weave your own spiral`**, `CORNER GIFs — pin a GIF to a screen corner`, `Select GIF`;
+then a **SPIRAL LIBRARY** card with Open folder / Refresh, a thumbnail grid, and the empty-state line
+"No spirals in your folder yet — only the built-in spiral is available."; and a large preview pane.
+
+The Loom button was located at runtime as a real `Button` whose UIA name is
+`THE LOOM — weave your own spiral`, confirming the source reading at
+`Features/SpiralFeatureControl.xaml:128-133` and confirming it is **not gated and not session-locked**
+on a live entitled account.
+
+### 8.5 The Play page, observed
+
+Headed **"Play / Games, modes, and the deep end."** The DTRH hero card carries a **PRIME SUBJECT**
+diamond badge (this is the tier livery's user-facing wording — the port should not render the literal
+string "TIER 2"), the title `THE RABBIT HOLE`, a blurb, and on the right `FALL IN` (pink primary),
+`Quick Drop` (outlined), and two options: **Announcements** and **3D game (recommended)**.
+
+Below it a **TOGETHER** section: **Goon Game** (BETA) with meta chips "free to join / send your own
+media / host a room" and a `Jump In !` button; and **Remote Control** with a **BASIC SUBJECT** badge
+and an `Open` button.
+
+### 8.6 Chrome that persists on every page
+
+A top bar (mod selector "Circe's Lock", MOD MANAGER, profile chip, active mod name, level badge,
+version, a support link, language selector, an update button, help, avatar), an **XP/level strip**,
+and a **bottom action bar** (favourite, a large gradient **START**, a dropdown chevron, **Save**,
+**Exit**). The Home page additionally hosts a **Browser panel** (HypnoTube, Enhance toggle, an audio
+slider with a Duck mode) and, at its foot, the **Companion strip** described in §5 and a
+"Logged in as" identity row.
+
+**Design consequence for the port:** the persistent chrome is a shell concern, not a page concern.
+A port shell that models "rail + page host + persistent top bar + persistent action bar" reproduces
+the observable structure without copying any WPF layout code.
