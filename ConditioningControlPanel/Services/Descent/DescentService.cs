@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
+using Newtonsoft.Json.Linq;
 using Serilog;
 
 namespace ConditioningControlPanel.Services.Descent
@@ -113,6 +115,13 @@ namespace ConditioningControlPanel.Services.Descent
                     return true;
                 }
 
+                // THE POLL'S SECOND READING (feat/xp-economy). The same response carries the
+                // account's level/xp/current_season, which this service used to throw away —
+                // making the 60s cadence blind to XP earned on another device until the next
+                // restart. Hand them to the sync service's clean-ledger adopt; it owns every
+                // rule (watermark, season scope, migration hold) and this stays read-only.
+                TryHandOffProgression(userNode);
+
                 var block = DescentReader.ParseFromUserNode(userNode);
                 bool had = Current is not null;
                 Current = block;
@@ -133,6 +142,73 @@ namespace ConditioningControlPanel.Services.Descent
         }
 
         /// <summary>
+        /// Pull level/xp/current_season off the raw user node and offer them to
+        /// <see cref="ProfileSyncService.TryAdoptFromProfilePoll"/>. Absent or
+        /// malformed fields mean no offer — never a guess.
+        /// </summary>
+        private static void TryHandOffProgression(JObject userNode)
+        {
+            try
+            {
+                var level = userNode["level"]?.Value<int?>() ?? 0;
+                var xp = userNode["xp"]?.Value<double?>();
+                if (level <= 0 || xp is null) return;
+
+                var season = userNode["current_season"]?.Type == JTokenType.String
+                    ? userNode["current_season"]?.Value<string>()
+                    : null;
+
+                App.ProfileSync?.TryAdoptFromProfilePoll(level, xp.Value, season);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Descent] progression hand-off skipped: {Error}", ex.Message);
+            }
+        }
+
+        // ==================== the background profile poll ====================
+
+        /// <summary>
+        /// THE UNGATED 60s POLL (feat/xp-economy). The vat's own poll is triply gated —
+        /// Trainer Card on screen, window presenting, block seen — which was right when the
+        /// response only fed a meter, but the same response now feeds the cross-device XP
+        /// adopt, and that applies to EVERY logged-in account on any tab. So this timer runs
+        /// for the life of the app; <see cref="RefreshAsync"/> itself is the logged-in &amp;&amp;
+        /// !OfflineMode gate (it bails without a request on offline mode, no unified_id, or
+        /// no auth token, so a logged-out install pays nothing but a timer tick).
+        /// </summary>
+        private DispatcherTimer? _backgroundPollTimer;
+
+        /// <summary>
+        /// The double-poll guard: when the vat's timer (or the post-sync hook) fetched within
+        /// this window, the adopt already ran on that fetch's response and this tick has
+        /// nothing to add. Slightly under the 60s cadence so the two timers cannot phase into
+        /// two fetches a minute.
+        /// </summary>
+        private static readonly TimeSpan BackgroundPollFreshEnough = TimeSpan.FromSeconds(55);
+
+        /// <summary>Start the background poll. Idempotent; call once from App startup.</summary>
+        public void StartBackgroundProfilePoll()
+        {
+            if (_backgroundPollTimer != null) return;
+
+            _backgroundPollTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromSeconds(60),
+            };
+            _backgroundPollTimer.Tick += (_, _) =>
+            {
+                try
+                {
+                    if (DateTime.UtcNow - _lastFetchUtc < BackgroundPollFreshEnough) return;
+                    RequestRefresh("background profile poll");
+                }
+                catch (Exception ex) { Log.Debug("[Descent] background poll tick failed: {Error}", ex.Message); }
+            };
+            _backgroundPollTimer.Start();
+        }
+
+        /// <summary>
         /// FORGET THE ACCOUNT. Called on logout (MainWindow.Login.cs, beside
         /// ProfileSyncService.ResetLoadedProfileState).
         ///
@@ -148,6 +224,29 @@ namespace ConditioningControlPanel.Services.Descent
             HasSeenBlock = false;
             _lastFetchUtc = DateTime.MinValue;   // a re-login may ask again at once
             Log.Debug("[Descent] state cleared (logout)");
+            RaiseBlockChanged();
+        }
+
+        /// <summary>
+        /// RE-ASK THE GATES, WITHOUT RE-ASKING THE SERVER. The block has not moved; something
+        /// ELSE that every spiral surface gates on has — today that is the migration withhold
+        /// flipping when a ceremony is offered or a choice is committed
+        /// (<see cref="DescentMigrationService.SpiralWithheld"/>).
+        ///
+        /// <para><b>Why re-raise BlockChanged rather than mint an event.</b> Every spiral surface
+        /// already subscribes to it, and every one of them re-reads its WHOLE gate from scratch
+        /// when it fires — the rail's Arm, the Trainer Card plate, the profile menu row. A second
+        /// event would be a second subscription list to keep in step, and the first surface added
+        /// after it would forget to join. This costs one synchronous handler pass and no network.
+        /// </para>
+        ///
+        /// <para>Deliberately does NOT touch <see cref="Current"/> or <see cref="HasSeenBlock"/>:
+        /// this is a re-evaluation, not a fetch. A caller that wants fresh numbers wants
+        /// <see cref="RequestRefresh"/>.</para>
+        /// </summary>
+        public void NotifySurfaces(string reason)
+        {
+            Log.Debug("[Descent] surfaces re-evaluating ({Reason})", reason);
             RaiseBlockChanged();
         }
 

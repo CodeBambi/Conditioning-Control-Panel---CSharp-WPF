@@ -562,7 +562,14 @@
                                      exactly from the retired LabTabView.xaml:198-217 (deleted in
                                      Phase 6; see git 48a093ebc) - Stretch, Viewbox and the
                                      #FF161622 plate are the reason it reads as a wordmark and not as
-                                     a smear. Art path never renamed. -->
+                                     a smear. Art path never renamed.
+
+                                     This Viewbox is mirrored in ModArtFramingRegistry as the
+                                     SHIPPED rect and is rewritten at runtime by ApplyArtFraming;
+                                     keep the two in step. Because Stretch is Uniform rather than
+                                     UniformToFill, un-framed MOD art here is given the whole image
+                                     to letterbox instead of a card-shaped crop, which is the only
+                                     way a replacement wordmark survives. -->
                                 <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}" Height="168"
                                         Background="#FF161622">
                                     <Grid>

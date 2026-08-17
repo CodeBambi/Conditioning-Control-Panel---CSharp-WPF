@@ -365,13 +365,23 @@
                                             </Border>
                                         </Grid>
 
-                                        <!-- Percent only, deliberately wordless: loc keys for the
-                                             Descent land in ONE batch late (PLAN.md §2), and a
-                                             number needs no translation. -->
+                                        <!-- Banked XP, the total that fills today's jar, and the
+                                             percent. Owner ask 2026-08-16: the cap
+                                             is level scaled, so a percent on its own never says how
+                                             big today's jar actually is. Both halves are written by
+                                             MainWindow.ProfileVat.UpdateVatReadout from the DRAWN
+                                             fill, so the number walks up with the pour instead of
+                                             jumping ahead of it. Deliberately ONE line: the bay's
+                                             height budget (see VatJarHeight) has no room for a
+                                             second, and the tooltip carries the "XP to fill" wording.
+                                             Text is set from code; the Width is set by ArmVat. -->
                                         <TextBlock x:Name="ProfileVatReadout" x:FieldModifier="internal" Grid.Row="1"
                                                    Visibility="Collapsed" HorizontalAlignment="Center"
+                                                   TextAlignment="Center"
                                                    Margin="0,3,0,0" FontFamily="Consolas" FontSize="10"
-                                                   FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                                                   FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                                                   ToolTipService.InitialShowDelay="200"
+                                                   ToolTipService.ShowDuration="20000"/>
                                     </Grid>
 
                                     <!-- ==== identity ==== -->
@@ -517,6 +527,33 @@
                                     <!-- ==== plates + card actions ==== -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right">
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <!-- SHARE PROFILE (owner ask 2026-08-16): the prominent door to
+                                                 the public profile page the web shipped. Theme PinkButton, so
+                                                 it is the one ringed pink CTA in the row and follows the mod
+                                                 accent; FontSize/Padding are pulled down to the row's scale.
+
+                                                 IT OPENS THE DASHBOARD'S SHARING PAGE, NOT /u/&lt;slug&gt;, and that
+                                                 is deliberate: the desktop app holds no slug at all (see
+                                                 MainWindow.TabNavigation.ProfileSharingUrl), so the web page
+                                                 that already owns "here is your link, copy it, open it, rotate
+                                                 it" is the only honest destination. Disabled while signed out,
+                                                 with a tooltip that says why, exactly like the rest of the
+                                                 account gated UI on this tab. -->
+                                            <Button x:Name="BtnProfileShare" x:FieldModifier="internal"
+                                                    Style="{StaticResource PinkButton}"
+                                                    FontSize="11" Padding="14,6" BorderThickness="1"
+                                                    Margin="0,0,8,0" VerticalAlignment="Center"
+                                                    ToolTipService.ShowOnDisabled="True"
+                                                    ToolTip="{loc:Str profile_btn_share_tip}"
+                                                    Click="BtnProfileShare_Click">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Image Width="13" Height="13" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                           Source="{Binding Source='🔗', Converter={StaticResource EmojiToImageSource}}"/>
+                                                    <TextBlock Text="{loc:Str profile_btn_share}" Foreground="White"
+                                                               FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+
                                             <!-- Phase 2: opens the customization kit. Always edits YOUR
                                                  loadout, even while someone else's card is on screen. -->
                                             <Button x:Name="BtnProfileCustomize" x:FieldModifier="internal"

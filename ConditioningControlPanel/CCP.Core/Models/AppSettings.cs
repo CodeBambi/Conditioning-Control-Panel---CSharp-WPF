@@ -118,6 +118,46 @@ namespace ConditioningControlPanel.Models
             set { _userPresets = value ?? new(); OnPropertyChanged(); }
         }
 
+        // ---- Session Rack (the compact session list on the Sessions door) ----
+        //
+        // Only the two settings a user picks ON PURPOSE and expects to find again are here.
+        // The difficulty dots and the search box deliberately do NOT persist: a filter whose
+        // cause is off screen, restored a week later, reads as "my sessions are gone", and the
+        // rack has no other surface that would explain the empty list.
+        //
+        // Whitelisted strings rather than enums, matching MediaSource/FypSource: a value from a
+        // hand-edited or cloud-synced settings.json must degrade to the default, not throw, and
+        // the tokens are the ComboBoxItem/chip Tags in PresetsTabView.xaml - never an index, so
+        // reordering the sort list cannot silently repoint everybody's preference.
+
+        private string _sessionRackSort = "recent";
+        /// <summary>Rack sort order: "recent" (default), "name", "easiest", "hardest",
+        /// "shortest" or "xp".</summary>
+        public string SessionRackSort
+        {
+            get => _sessionRackSort;
+            set
+            {
+                _sessionRackSort = value is "recent" or "name" or "easiest" or "hardest" or "shortest" or "xp"
+                    ? value : "recent";
+                OnPropertyChanged();
+            }
+        }
+
+        private string _sessionRackSourceFilter = "all";
+        /// <summary>Rack provenance filter: "all" (default), "builtin", "yours" (custom) or
+        /// "catalogue" (imported).</summary>
+        public string SessionRackSourceFilter
+        {
+            get => _sessionRackSourceFilter;
+            set
+            {
+                _sessionRackSourceFilter = value is "all" or "builtin" or "yours" or "catalogue"
+                    ? value : "all";
+                OnPropertyChanged();
+            }
+        }
+
         // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
         // pads or truncates to exactly 5 so the UI never has to defend against
         // odd counts. Default set lives in DefaultRemoteEmotePresets() below.
@@ -1647,6 +1687,56 @@ namespace ConditioningControlPanel.Models
             set { _dailyGiftLastRevealDate = value ?? ""; OnPropertyChanged(); }
         }
 
+        #region XP economy daily buckets (feat/xp-economy)
+
+        private string _ambientBubbleXpDayKey = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") the ambient-bubble XP bucket was last paid on.
+        /// Lazy rollover: BubbleService compares it on every pop and zeroes
+        /// <see cref="AmbientBubbleXpPaidToday"/> when the day has moved. See
+        /// BubbleService.TakeFromAmbientBubbleBucket for the cap itself.
+        /// </summary>
+        public string AmbientBubbleXpDayKey
+        {
+            get => _ambientBubbleXpDayKey;
+            set { _ambientBubbleXpDayKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _ambientBubbleXpPaidToday;
+        /// <summary>
+        /// Ambient-bubble-pop XP already paid out on <see cref="AmbientBubbleXpDayKey"/>.
+        /// Lucky-roll payouts count against it. Capped at 300 per local calendar day.
+        /// </summary>
+        public int AmbientBubbleXpPaidToday
+        {
+            get => _ambientBubbleXpPaidToday;
+            set { _ambientBubbleXpPaidToday = value; OnPropertyChanged(); }
+        }
+
+        private string _justDropXpDayKey = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") of the last credited Just Drop completion.
+        /// Lazy rollover, same shape as <see cref="AmbientBubbleXpDayKey"/>.
+        /// </summary>
+        public string JustDropXpDayKey
+        {
+            get => _justDropXpDayKey;
+            set { _justDropXpDayKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _justDropCreditedToday;
+        /// <summary>
+        /// Drops credited on <see cref="JustDropXpDayKey"/>. From the 4th of the local day the
+        /// payout quarters — mirror of ccpmobile's daily diminish (dropXp.ts rationale 7).
+        /// </summary>
+        public int JustDropCreditedToday
+        {
+            get => _justDropCreditedToday;
+            set { _justDropCreditedToday = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();
@@ -2242,6 +2332,27 @@ namespace ConditioningControlPanel.Models
             set { _shareProfilePicture = value; OnPropertyChanged(); }
         }
 
+        private bool _publicShareRealAvatar = false;
+        /// <summary>
+        /// Show your REAL Discord avatar on the PUBLIC web profile card at
+        /// app.cclabs.app/u/&lt;slug&gt; - a page anyone with the link can open, signed in or not,
+        /// and one search engines can reach.
+        ///
+        /// Deliberately a SEPARATE consent from <see cref="ShareProfilePicture"/> (leaderboard /
+        /// profile viewer, i.e. signed-in users of the app) and from
+        /// <see cref="GoonShareAvatar"/> (the one opponent you are duelling). Different audience,
+        /// different threat model - do not conflate them or let one imply another. Default false;
+        /// privacy fails closed, and the public card falls back to the chosen cosmetic avatar.
+        ///
+        /// Rides /v2/user/sync as <c>public_share_avatar</c>.
+        /// </summary>
+        [JsonProperty]
+        public bool PublicShareRealAvatar
+        {
+            get => _publicShareRealAvatar;
+            set { _publicShareRealAvatar = value; OnPropertyChanged(); }
+        }
+
         private ProfileCosmetics _profileCosmetics = new();
         /// <summary>
         /// What this subject has equipped on their Trainer Card: banner, accent, worn title,
@@ -2654,6 +2765,25 @@ namespace ConditioningControlPanel.Models
         {
             get => _bubblesVolume;
             set { _bubblesVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+        private int _bubblesSize = Services.BubbleSizing.UserPercentDefault;
+        /// <summary>
+        /// Size of the ambient Bubble Pop bubbles as a percentage of the shipped 150-250 DIP band.
+        /// 100 reproduces that band exactly. The bounds and the arithmetic live in
+        /// <see cref="Services.BubbleSizing"/>; this only stores the number.
+        ///
+        /// <para>Chaos/variant bubbles are NOT affected - they are balanced against their own scale
+        /// system. Composes with a mod's <c>bubbleScale</c> for full-bleed sprite art.</para>
+        /// </summary>
+        public int BubblesSize
+        {
+            get => _bubblesSize;
+            set
+            {
+                _bubblesSize = Math.Clamp(value, Services.BubbleSizing.UserPercentMin,
+                                                 Services.BubbleSizing.UserPercentMax);
+                OnPropertyChanged();
+            }
         }
         private bool _bubblesLinkRamp = false;
         public bool BubblesLinkRamp
@@ -3140,70 +3270,12 @@ namespace ConditioningControlPanel.Models
             set { _fypOnlineConsented = value; OnPropertyChanged(); }
         }
 
-        // ---- remote-media blocklist (app-wide, not FYP-only) ----
-        //
-        // The user's only content control over remote media, and deliberately the ONLY one:
-        // there is no NSFW filter and no safe-mode toggle (owner decision 2026-08-12). The
-        // niche catalog is entirely adult, so filtering on scrolller's isNsfw would empty the
-        // pool rather than shape it — that field stays fetched-and-unread on purpose.
-        //
-        // RemoteMedia* rather than FypOnline* because every consumer of the remote pool
-        // (feed, flashes, intake, DTRH) shares one blocklist, applied in FypOnlineCoordinator
-        // before entries reach any pool. Both are edited in place by the picker, so callers
-        // must App.Settings.Save() themselves — nothing here auto-persists.
-
-        private List<string> _remoteMediaBlockedSubs = new();
-        /// <summary>Subreddits the user never wants to see again (bare names, no "r/").
-        /// Excluded from every consumer's active channel set.</summary>
-        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public List<string> RemoteMediaBlockedSubs
-        {
-            get => _remoteMediaBlockedSubs;
-            set
-            {
-                var clean = new List<string>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var raw in value ?? new List<string>())
-                {
-                    var sub = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(raw);
-                    if (sub != null && seen.Add(sub)) clean.Add(sub);
-                }
-                // Over the cap the OLDEST entries go: a fresh block is the one the user just
-                // asked for, and silently dropping it would read as the button not working.
-                if (clean.Count > MaxRemoteMediaBlockedSubs)
-                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedSubs);
-                _remoteMediaBlockedSubs = clean;
-                OnPropertyChanged();
-            }
-        }
-
-        private List<string> _remoteMediaBlockedIds = new();
-        /// <summary>Individual remote entries the user blocked, by entry id
-        /// ("scrolller/&lt;sub&gt;/&lt;post&gt;"). Filtered out of every fetched page.</summary>
-        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
-        public List<string> RemoteMediaBlockedIds
-        {
-            get => _remoteMediaBlockedIds;
-            set
-            {
-                var clean = new List<string>();
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var raw in value ?? new List<string>())
-                {
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
-                    var id = raw.Trim();
-                    if (id.Length > 120) continue;   // an id this long isn't one of ours
-                    if (seen.Add(id)) clean.Add(id);
-                }
-                if (clean.Count > MaxRemoteMediaBlockedIds)
-                    clean.RemoveRange(0, clean.Count - MaxRemoteMediaBlockedIds);
-                _remoteMediaBlockedIds = clean;
-                OnPropertyChanged();
-            }
-        }
-
-        private const int MaxRemoteMediaBlockedSubs = 200;
-        private const int MaxRemoteMediaBlockedIds = 1000;
+        // NOTE: a remote-media blocklist (RemoteMediaBlockedSubs / RemoteMediaBlockedIds)
+        // lived here until 2026-08-14. Nothing in the UI could ever add to it, so it was
+        // removed rather than finished: picking the niches/subreddits IS the content control,
+        // and there is still no NSFW filter (owner decision 2026-08-12 — the catalog is
+        // entirely adult, filtering on scrolller's isNsfw would empty the pool). Stale keys
+        // in settings.json are simply ignored on load.
 
         // ---- app-wide media source ----
         //
@@ -5492,6 +5564,35 @@ namespace ConditioningControlPanel.Models
             set { _pendingDescentMigrationChoice = value; OnPropertyChanged(); }
         }
 
+        private bool _descentMigrationOffered = false;
+        /// <summary>
+        /// THE WITHHOLD'S MEMORY. True from the moment this account is first handed a migration
+        /// offer, and cleared the moment a choice is committed (DescentMigrationService.ApplyChoice)
+        /// or the server acks one.
+        ///
+        /// <para><b>Why a persisted flag and not just the live offer.</b> The spiral is withheld
+        /// from an account that is OWED the ceremony (see
+        /// <c>DescentMigrationService.SpiralWithheld</c>), and in-session that question is answered
+        /// by <c>LiveOffer</c> — which is never cleared, so a "Not tonight" deferral keeps the
+        /// spiral hidden for the rest of the session. Across a RELAUNCH there is nothing in memory
+        /// to ask: the descent block can land from the profile poll before the sync that re-delivers
+        /// the offer does, and for those seconds the veteran would watch the plate and the rail
+        /// light up in front of a question they have not answered yet. That flash is exactly what
+        /// the withhold exists to prevent, so the fact that an offer was ever made has to survive
+        /// the process.</para>
+        ///
+        /// <para>It is deliberately NOT "the account is a veteran" — it says only that a ceremony
+        /// was offered and not yet taken, which is why committing clears it. A settings file that
+        /// somehow keeps it set past a completed migration still reads as not-withheld, because
+        /// <c>DescentMigrationCompleted</c> outranks it in the predicate.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool DescentMigrationOffered
+        {
+            get => _descentMigrationOffered;
+            set { _descentMigrationOffered = value; OnPropertyChanged(); }
+        }
+
         private DateTime? _descentAnchorUtc = null;
         /// <summary>
         /// Year One anchor: the ceremony date (§10). For veterans this is the birth of their
@@ -5586,6 +5687,107 @@ namespace ConditioningControlPanel.Models
         {
             get => _descentLastStageDripDate;
             set { _descentLastStageDripDate = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region The Descent — the Fuse (countdown to the ceremony)
+
+        // Written by exactly two places: ProfileSyncService (the cached timestamp, from the sync
+        // response's additive `descent_countdown` block) and DescentCountdownService / the zero
+        // show (the witness flags and the witness ratchet). All of them are inert on every install
+        // today, because the server does not send `descent_countdown` until the owner arms
+        // DESCENT_CEREMONY_AT.
+        //
+        // DescentCeremonyAtUtc IS THE KILL SWITCH. Null = the fuse does not exist: no timer, no
+        // spark, no chrome dimming, no candle. Clearing it at runtime tears every surface down
+        // and restores the chrome, live. Nothing else gates the feature.
+
+        private string? _descentCeremonyAtUtc = null;
+        /// <summary>
+        /// The ceremony instant, ISO-8601 UTC, exactly as the server wrote it — cached so the
+        /// countdown keeps running offline. Null = no fuse (and null is the state of every
+        /// install until the server arms it).
+        ///
+        /// <para><b>Kept as a STRING on purpose.</b> The wire value is an ISO string and this is a
+        /// cache of the wire, not an interpretation of it; storing a DateTime here would bake this
+        /// client's parse (and Newtonsoft's date coercion, see DescentReader.ParseWire) into the
+        /// settings file, so a re-read could disagree with what the server actually said. The one
+        /// place it becomes an instant is <see cref="Services.Descent.DescentCountdownService"/>,
+        /// which parses it round-trip/UTC on every read.</para>
+        /// </summary>
+        [JsonProperty]
+        public string? DescentCeremonyAtUtc
+        {
+            get => _descentCeremonyAtUtc;
+            set { _descentCeremonyAtUtc = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentLastNightWitnessed = false;
+        /// <summary>
+        /// True once the LIVE zero sequence was watched all the way to its bloom. The keepsake
+        /// hook — "you were there the night it happened" — and the flag that tells the catch-up
+        /// path it has nothing to do.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentLastNightWitnessed
+        {
+            get => _descentLastNightWitnessed;
+            set { _descentLastNightWitnessed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCatchUpCrackPlayed = false;
+        /// <summary>
+        /// True once the condensed catch-up crack has played for a subject who was not running the
+        /// app at zero. Once per account: the shortened sequence is an apology for missing the
+        /// night, not a thing to re-watch on every launch.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCatchUpCrackPlayed
+        {
+            get => _descentCatchUpCrackPlayed;
+            set { _descentCatchUpCrackPlayed = value; OnPropertyChanged(); }
+        }
+
+        private int _descentFuseMaxPhaseWitnessed = 0;
+        /// <summary>
+        /// THE KEEPSAKE RATCHET: the highest <see cref="Services.Descent.DescentFusePhase"/> (0..7)
+        /// this subject actually LIVED THROUGH, as an int. 0 on every install today.
+        ///
+        /// <para><b>It only ever goes up.</b> Never reset, never lowered — not by the kill switch
+        /// clearing the timestamp, not by the owner moving the ceremony date backwards, not by
+        /// completing the migration. It is a record of what a person saw, and nothing that happens
+        /// afterwards can un-see it.</para>
+        ///
+        /// <para><b>Zero (7) means they kept the vigil.</b> A launch the morning after gets Zero
+        /// announced at startup like everyone else, and that announcement deliberately does NOT
+        /// ratchet — otherwise the person who watched the crack live and the person who slept
+        /// through it would be stored identically. Someone who watched the Vigil and closed the app
+        /// half an hour early keeps 5. See <c>DescentCountdownService.WitnessRatchet</c>.</para>
+        ///
+        /// <para><b>Nothing reads it yet.</b> It is written this wave so that the easter-egg and
+        /// keepsake surfaces of a later wave have a truthful answer to "were you there", instead of
+        /// having to invent one for a user who joined afterwards.</para>
+        /// </summary>
+        [JsonProperty]
+        public int DescentFuseMaxPhaseWitnessed
+        {
+            get => _descentFuseMaxPhaseWitnessed;
+            set { _descentFuseMaxPhaseWitnessed = value; OnPropertyChanged(); }
+        }
+
+        private bool _descentCountdownAudio = true;
+        /// <summary>
+        /// Gate for the countdown's audio hook (the Terminal-phase heartbeat). Defaults ON and has
+        /// NO settings UI this wave — it is the switch that exists so the hook can be turned off
+        /// without a patch, not a knob anyone is asked about. The hook itself is a no-op unless
+        /// the audio asset ships, so this defaulting true changes nothing today.
+        /// </summary>
+        [JsonProperty]
+        public bool DescentCountdownAudio
+        {
+            get => _descentCountdownAudio;
+            set { _descentCountdownAudio = value; OnPropertyChanged(); }
         }
 
         #endregion

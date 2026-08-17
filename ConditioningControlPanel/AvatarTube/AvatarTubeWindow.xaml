@@ -581,6 +581,59 @@
                 </Border>
             </Border>
 
+            <!-- THE FUSE's candle (CONTRACT-FUSE-0816 2.2). From twelve hours out, a small flame
+                 stands beside the tube. It says nothing and does nothing; it is company.
+
+                 Decorative-element recipe, same as ImgTubeFrame / MistOverlay / TakeoverCountdownBar:
+                 a sibling of the 780x1080 design grid with an explicit ZIndex and
+                 IsHitTestVisible="False", so AvatarBorder's click, right-click and context menu are
+                 untouched. Collapsed here and shown only by AvatarTubeWindow.DescentFuse.cs, which
+                 does nothing without a cached ceremony timestamp.
+
+                 Two layers: a soft radial halo and the flame body. The flicker animates the halo's
+                 opacity and the body's scale; when ambient loops are off, both park at rest and the
+                 candle is a STATIC flame - present, snapped, never missing. -->
+            <Grid x:Name="FuseCandleHost"
+                  Panel.ZIndex="2"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Bottom"
+                  Margin="96,0,0,214"
+                  Width="54" Height="74"
+                  Visibility="Collapsed"
+                  IsHitTestVisible="False">
+                <Ellipse x:Name="FuseCandleHalo" Width="54" Height="54"
+                         VerticalAlignment="Top" Opacity="0.5">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0" Color="#90FFC864"/>
+                            <GradientStop Offset="0.55" Color="#30E0B052"/>
+                            <GradientStop Offset="1" Color="#00E0B052"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <!-- The flame body. Teardrop, origin at its base so the flicker's scale reads as a
+                     flame stretching upward rather than a shape growing in place. -->
+                <Path x:Name="FuseCandleFlame" Width="18" Height="30" Stretch="Fill"
+                      HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0"
+                      RenderTransformOrigin="0.5,1"
+                      Data="M 9,0 C 15,10 18,16 18,21 C 18,26 14,30 9,30 C 4,30 0,26 0,21 C 0,16 3,10 9,0 Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                            <GradientStop Offset="0" Color="#FFFFE9B0"/>
+                            <GradientStop Offset="0.5" Color="#FFE0B052"/>
+                            <GradientStop Offset="1" Color="#FFB4642A"/>
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                    <Path.RenderTransform>
+                        <ScaleTransform x:Name="FuseCandleFlameScale"/>
+                    </Path.RenderTransform>
+                </Path>
+                <!-- The stub it burns on. Static, always. -->
+                <Border Width="14" Height="26" CornerRadius="3,3,1,1"
+                        HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Background="#FF2A2440" BorderBrush="#40E0B052" BorderThickness="1"/>
+            </Grid>
+
             <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
             <Border x:Name="TitleBox"
                     Panel.ZIndex="4"

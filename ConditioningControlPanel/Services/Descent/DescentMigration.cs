@@ -57,11 +57,24 @@ namespace ConditioningControlPanel.Services.Descent
     /// </summary>
     public sealed class DescentMigrationOffer
     {
-        /// <summary>Lifetime XP the SERVER holds for this account. The relevel's only input.</summary>
+        /// <summary>Lifetime XP the SERVER holds for this account. Display; the relevel prices
+        /// <see cref="RestoreBasisXp"/>.</summary>
         public double TotalXpEarned { get; init; }
 
-        /// <summary>Server-side devotion days, already backfilled. Display only.</summary>
+        /// <summary>Server-side devotion days — the backfill ESTIMATE since 2026-08-16, i.e. the
+        /// count that will actually survive the ceremony. Display only.</summary>
         public int DevotionDays { get; init; }
+
+        /// <summary>
+        /// THE NUMBER OPTION A IS DERIVED FROM: <c>total_xp_earned + 300 × devotion estimate</c>,
+        /// computed by the SERVER (the veteran credit, owner ruling 2026-08-16 — recorded XP alone
+        /// priced a historic account at level 17). Sent on the wire as <c>restore_basis_xp</c>
+        /// precisely so this client never duplicates the arithmetic: the server clamps our claimed
+        /// level to ±1 of its own answer, and a locally-recomputed credit with a stale constant
+        /// would fight that clamp forever. 0 = an older server that did not send it, and the
+        /// relevel falls back to <see cref="TotalXpEarned"/> — the exact pre-credit behaviour.
+        /// </summary>
+        public double RestoreBasisXp { get; init; }
     }
 
     /// <summary>
@@ -107,14 +120,19 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>
         /// What a choice does to the ledger, in one place, with no side effects.
         ///
-        /// <para><b>Restore</b> re-derives level from the SERVER's lifetime figure under curve v2.
-        /// The server's number and not the client's on purpose: the server independently derives
-        /// the same value and clamps our claim to within one level of it (CONTRACTS §2.5), so
-        /// deriving from anything else is asking to be clamped.</para>
+        /// <para><b>Restore</b> re-derives level from the SERVER's restore basis (lifetime XP plus
+        /// the veteran credit, <see cref="DescentMigrationOffer.RestoreBasisXp"/>) under curve v2.
+        /// The server's number and not a locally-computed one on purpose: the server independently
+        /// derives the same value and clamps our claim to within one level of it (CONTRACTS §2.5),
+        /// so deriving from anything else is asking to be clamped. The ledger XP written is the
+        /// SAME basis — the next sync's level/XP consistency check re-derives level from xp under
+        /// curve v2, and an xp figure without the credit would demote the account right back to
+        /// the uncredited level one sync later.</para>
         ///
         /// <para><b>Cycle</b> is level 1, XP 0. Lifetime XP is carried through untouched —
         /// total_xp_earned is lifetime and never decreases, not even here (§2.5), and §6 is
-        /// explicit that a Cycle "wipes nothing else".</para>
+        /// explicit that a Cycle "wipes nothing else". The credit does not ride the Cycle door:
+        /// its ledger is a fixed destination with nothing to price.</para>
         ///
         /// <para>Both are IDEMPOTENT, which is what makes the crash-before-ack case survivable:
         /// re-running either against the same server offer produces the same ledger.</para>
@@ -127,9 +145,12 @@ namespace ConditioningControlPanel.Services.Descent
             if (choice == DescentMigrationChoices.Cycle)
                 return new DescentRelevelResult(1, 0, lifetime);
 
+            var basis = offer.RestoreBasisXp;
+            if (double.IsNaN(basis) || basis <= 0) basis = lifetime;
+
             var (level, into) = ProgressionService.DeriveLevelFromLifetimeXp(
-                lifetime, DescentEpochs.AccountDescent);
-            return new DescentRelevelResult(level, into, lifetime);
+                basis, DescentEpochs.AccountDescent);
+            return new DescentRelevelResult(level, into, basis);
         }
     }
 }

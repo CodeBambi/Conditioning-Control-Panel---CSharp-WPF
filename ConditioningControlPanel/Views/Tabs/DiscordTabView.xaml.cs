@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Views.Tabs
         internal CheckBox ChkDiscordTabShareLevelUps => PrivacyPanel.ChkDiscordTabShareLevelUps;
         internal CheckBox ChkDiscordTabAllowDm => PrivacyPanel.ChkDiscordTabAllowDm;
         internal CheckBox ChkDiscordTabSharePfp => PrivacyPanel.ChkDiscordTabSharePfp;
+        internal CheckBox ChkPublicShareRealAvatar => PrivacyPanel.ChkPublicShareRealAvatar;
         internal CheckBox ChkGoonShareAvatar => PrivacyPanel.ChkGoonShareAvatar;
         internal CheckBox ChkGoonShareDiscordDm => PrivacyPanel.ChkGoonShareDiscordDm;
         internal CheckBox ChkGoonRichPresence => PrivacyPanel.ChkGoonRichPresence;
@@ -120,6 +121,13 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OpenProfileCustomizeDialog();
+        }
+        /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
+        /// "Public profile" row - MainWindow owns the URL and the launcher.</summary>
+        private void BtnProfileShare_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OpenPublicProfilePage();
         }
         private void TxtProfileSearch_KeyDown(object sender, KeyEventArgs e)
         {

@@ -94,7 +94,7 @@ namespace ConditioningControlPanel
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
                     BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
-                    BtnDiscordTab, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
+                    BtnDiscordTab, BtnNavSpiral, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
                     BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
                 };
                 return all.Where(b => b != null)!;
@@ -557,6 +557,11 @@ namespace ConditioningControlPanel
             "remotecontrol" => BtnNavRemoteControl,
             "availablesubjects" => BtnAvailableSubjects,
             "discord" => BtnDiscordTab,
+            // The Spiral Room. The row is Collapsed for most accounts and that is fine here: a
+            // collapsed button still takes the indicator, and the only ways to reach the tab while
+            // the row is hidden are the fuse chip and the first-light reveal - both moments where a
+            // "you are here" bar pointing at an invisible row costs nothing.
+            "spiral" => BtnNavSpiral,
             "quests" => BtnQuests,
             "achievements" => BtnAchievements,
             "enhancements" => BtnEnhancements,

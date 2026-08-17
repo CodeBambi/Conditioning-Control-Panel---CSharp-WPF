@@ -512,6 +512,23 @@ namespace ConditioningControlPanel
         /// </summary>
         public static Services.Descent.DescentMigrationService? DescentMigration { get; private set; }
 
+        /// <summary>
+        /// THE FUSE (CONTRACT-FUSE-0816 §2.1) — the countdown to the ceremony, and the one clock
+        /// every tease surface reads. Constructed on every launch and DORMANT on every launch: it
+        /// hangs off a single cached timestamp that only a /v2/user/sync response carrying
+        /// <c>descent_countdown</c> can write, and the server sends that only with
+        /// DESCENT_CEREMONY_AT armed. No timestamp ⇒ no timer, no surface, no request.
+        /// </summary>
+        public static Services.Descent.DescentCountdownService? DescentCountdown { get; private set; }
+
+        /// <summary>
+        /// THE ZERO SHOW's stage manager (CONTRACT-FUSE-0816 §2.3/§2.4) — decides which of the three
+        /// fullscreen shows plays and when, and owns the ordering between the catch-up crack and the
+        /// ceremony offer. Dormant with <see cref="DescentCountdown"/>: no cached timestamp ⇒ no
+        /// ZeroReached, no catch-up, nothing but two event subscriptions.
+        /// </summary>
+        public static Services.Descent.DescentShowDirector? DescentShow { get; private set; }
+
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static AudioSyncService? AudioSync { get; private set; }
@@ -2014,12 +2031,31 @@ namespace ConditioningControlPanel
             // answer lands, instead of leaving a patron looking free until something else refreshes.
             IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
-            // Constructing it costs nothing and issues no request: it fetches only
-            // when a surface asks, and the Trainer Card is the only one that does.
+            // Constructing it costs nothing and issues no request: it fetches only when a
+            // surface asks or its own background poll ticks. The poll started here is the
+            // ungated 60s profile read that feeds the cross-device XP adopt
+            // (ProfileSyncService.TryAdoptFromProfilePoll) — the service itself refuses to
+            // fetch while offline or logged out, and its floor coalesces this timer with the
+            // Trainer Card's own gated poll so the two can never double-fetch.
             Descent = new Services.Descent.DescentService();
+            Descent.StartBackgroundProfilePoll();
             // Costs one allocation and issues nothing. See the property doc: it cannot act until
             // a server offer arrives.
             DescentMigration = new Services.Descent.DescentMigrationService();
+            // THE FUSE. Constructed here (after Settings, beside its siblings) and started
+            // immediately: Start() reads the cached timestamp, finds none on every install today,
+            // and returns without arming a timer or issuing a request. It must exist before
+            // MainWindow so the header spark can subscribe during construction.
+            DescentCountdown = new Services.Descent.DescentCountdownService();
+            DescentCountdown.Start();
+            // THE ZERO SHOW. Armed on the same line as the clock it watches, and SYNCHRONOUSLY:
+            // when a launch owes the catch-up crack, Arm() takes the ceremony's offer hold before
+            // it returns, which is what makes the crack provably win the race against an offer
+            // already in flight on the startup sync (the offer's window-open marshals onto this
+            // same dispatcher, and it cannot pump until OnStartup has returned). See the ordering
+            // note on DescentShowDirector.
+            DescentShow = new Services.Descent.DescentShowDirector();
+            DescentShow.Arm();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
@@ -2891,6 +2927,16 @@ namespace ConditioningControlPanel
                     // Clear the stale "enabled" flag so the UI shows OFF on a fresh launch and a
                     // mid-pulse Stop() from a previous run can't leave anything armed.
                     s.AutonomyModeEnabled = false;
+                    // #930: and countermand anything that already started it. This block is async
+                    // (it awaits the Patreon round-trip), so MainWindow's settings load has usually
+                    // already run by now; clearing the flag alone left the service pulsing behind a
+                    // checkbox that read OFF, which is what "Takeover turns itself back on" was.
+                    if (Autonomy?.IsEnabled == true)
+                    {
+                        Autonomy.Stop();
+                        Logger?.Information("Takeover stopped on startup - it had been started before the resume-on-startup check ran (#930)");
+                    }
+                    Settings?.Save();
                     Logger?.Information("Takeover left OFF on startup (resume-on-startup not opted in)");
                 }
             }
@@ -4350,6 +4396,7 @@ Application State:
             // sentinels so the next launch doesn't false-report an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
+            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This

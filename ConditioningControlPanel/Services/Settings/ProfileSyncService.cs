@@ -371,6 +371,88 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// CROSS-DEVICE ADOPT FROM THE 60s PROFILE POLL (the "restart desktop to see phone XP" fix).
+        ///
+        /// The Descent vat already fetches GET /v2/user/profile on a 60s cadence and used to throw
+        /// the response's level/xp away; DescentService now hands them here. The mid-run sync merge
+        /// only adopts a server lead bigger than 5000 XP (its dead band exists for the race where XP
+        /// earned while a sync was in flight must not be forced down), so a RUNNING desktop could
+        /// never see a smaller cross-device gain until the next restart.
+        ///
+        /// The rule is the CLEAN-LEDGER adopt, mirroring the ccpmobile fix: adopt any positive
+        /// server lead, but only when local is CLEAN — nothing earned here since the last
+        /// server-agreed figure (localTotal &lt;= <see cref="ActiveXpWatermark"/>). A dirty ledger
+        /// means this client holds unsynced progress of its own; reconciling that is the sync
+        /// path's job, not a read-only poll's. No watermark in scope means clean cannot be proven,
+        /// so nothing is adopted — the launch adopt and the sync merge still cover that account.
+        ///
+        /// Never adopts downward, never touches anything but level/XP, and steps aside entirely
+        /// while a Descent migration submit is unacked (same rule as the sync merge: the ceremony's
+        /// ledger is not up for negotiation until the server acks it).
+        /// </summary>
+        /// <param name="serverLevel">`level` off the profile response's user node.</param>
+        /// <param name="serverTotalXp">`xp` (cumulative) off the same node.</param>
+        /// <param name="serverSeason">`current_season` off the same node, when present.</param>
+        public void TryAdoptFromProfilePoll(int serverLevel, double serverTotalXp, string? serverSeason)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                if (settings.OfflineMode) return;
+                if (string.IsNullOrEmpty(settings.UnifiedId)) return;
+                if (serverLevel <= 0 || serverTotalXp <= 0 || double.IsNaN(serverTotalXp)) return;
+
+                // While a migration submit is in flight the server is still quoting the
+                // pre-ceremony total; adopting it would resurrect the level the ceremony retired.
+                if (DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice)) return;
+
+                // Season scope: the watermark is (account, season)-scoped and a total priced under
+                // another season key is another ledger. A rollover is the launch/sync paths' job.
+                if (serverSeason != null &&
+                    !string.Equals(serverSeason, settings.CurrentSeason ?? string.Empty, StringComparison.Ordinal))
+                {
+                    App.Logger?.Debug("Profile-poll adopt: server season {SS} is not the local scope {LS} — skipping",
+                        serverSeason, settings.CurrentSeason ?? "(none)");
+                    return;
+                }
+
+                var preLevel = settings.PlayerLevel;
+                var preLevelXp = settings.PlayerXP;
+                var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
+
+                if (serverTotalXp <= localTotalXp + 0.01) return;   // never adopt downward or sideways
+
+                var pollWatermark = ActiveXpWatermark(settings);
+                if (pollWatermark <= 0) return;                     // clean cannot be proven — stand aside
+                if (localTotalXp > pollWatermark + 0.01)
+                {
+                    App.Logger?.Debug("Profile-poll adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
+                        (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
+                    return;
+                }
+
+                settings.PlayerLevel = serverLevel;
+                settings.PlayerXP = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+
+                var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "profile poll");
+                App.Settings?.Save();
+
+                App.Logger?.Information("Profile-poll adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
+                    preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
+
+                // Same repaint contract as the launch adopt: the header is imperative, not bound,
+                // and this raise marshals itself to the dispatcher (#879).
+                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "profile poll");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Profile-poll adopt failed");
+            }
+        }
+
         public ProfileSyncService()
         {
             _httpClient = new HttpClient
@@ -1245,6 +1327,12 @@ namespace ConditioningControlPanel.Services
                         allow_discord_dm = settings.AllowDiscordDm,
                         show_online_status = settings.ShowOnlineStatus,
                         share_profile_picture = settings.ShareProfilePicture,
+                        // PUBLIC web profile card (app.cclabs.app/u/<slug>) avatar consent. A
+                        // separate, explicit opt-in: share_profile_picture above governs only
+                        // signed-in surfaces, and neither it nor the goon flags below imply
+                        // "anyone with the link". Default false, so an old client that never
+                        // sends this reads as no-consent server side.
+                        public_share_avatar = settings.PublicShareRealAvatar,
                         // Goon Game consent flags (GOON_DISCORD_CONTRACT §2). Sharer-only;
                         // the server snapshots these into the room card at invite/join and
                         // drops the cached avatar bytes when a flag is revoked.
@@ -1468,6 +1556,10 @@ namespace ConditioningControlPanel.Services
                         // the user just finished.
                         HandleDescentMigrationAck(settings, v2Result?.DescentMigration);
                         HandleDescentMigrationOffer(settings, v2Result?.DescentMigration);
+
+                        // THE FUSE's cache (CONTRACT-FUSE-0816 §1.3). Additive, optional, and read
+                        // off the RAW body rather than off v2Result — see the method for why.
+                        HandleDescentCountdown(v2Json);
 
                         // The stage-ceremony drip (§6). A successful sync is the cheapest honest
                         // proxy for "signed in and awake today" that needs no new lifecycle
@@ -1778,7 +1870,19 @@ namespace ConditioningControlPanel.Services
                             var serverTotalXp = (double)v2Result.User.Xp;
                             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? 0;
 
-                            if (serverTotalXp > localTotalXp + 5000)
+                            // CLEAN-LEDGER ADOPT (mirror of the ccpmobile fix). The +5000 band
+                            // exists for exactly one race: XP earned locally while this sync was
+                            // in flight must not be forced down by the response. But when local is
+                            // CLEAN — holding nothing beyond the last server-agreed figure — there
+                            // is no local progress to protect, and the band is just a hole where a
+                            // phone's smaller gains vanish until the next restart. So: any positive
+                            // server lead is adopted on a clean ledger; the band stands only when
+                            // local has unsynced progress of its own.
+                            var adoptWatermark = ActiveXpWatermark(settings);
+                            var ledgerClean = adoptWatermark > 0 && localTotalXp <= adoptWatermark + 0.01;
+                            var adoptBand = ledgerClean ? 0 : 5000;
+
+                            if (serverTotalXp > localTotalXp + adoptBand)
                             {
                                 // Server has substantially more — adopt server values (admin boost, other device)
                                 var serverLevel = v2Result.User.Level;
@@ -3857,6 +3961,12 @@ namespace ConditioningControlPanel.Services
             settings.DescentMigrationCompleted = true;
             settings.DescentMigrationChoice = choice;
             settings.PendingDescentMigrationChoice = null;
+
+            // The withhold's memory is spent here too, and not only in ApplyChoice: an account that
+            // migrated on ANOTHER device never ran ApplyChoice locally, so this is the only place
+            // that clears the marker for it. The predicate does not depend on the clear (Completed
+            // outranks it) — it keeps the settings file from claiming a ceremony is still owed.
+            settings.DescentMigrationOffered = false;
             App.Settings?.Save();
 
             App.Logger?.Information("[Descent] Migration ACKNOWLEDGED by server (choice={Choice}). Curve v2 is now this account's curve, permanently.",
@@ -3886,13 +3996,59 @@ namespace ConditioningControlPanel.Services
             var offer = new DescentMigrationOffer
             {
                 TotalXpEarned = block.TotalXpEarned ?? 0,
-                DevotionDays = block.DevotionDays ?? 0
+                DevotionDays = block.DevotionDays ?? 0,
+                RestoreBasisXp = block.RestoreBasisXp ?? 0
             };
 
-            App.Logger?.Information("[Descent] Server is offering the migration ceremony (lifetime {Xp} XP, {Days} devotion days).",
-                (int)offer.TotalXpEarned, offer.DevotionDays);
+            App.Logger?.Information("[Descent] Server is offering the migration ceremony (lifetime {Xp} XP, {Days} devotion days, restore basis {Basis}).",
+                (int)offer.TotalXpEarned, offer.DevotionDays, (int)offer.RestoreBasisXp);
 
             App.DescentMigration?.OfferReceived(offer);
+        }
+
+        /// <summary>
+        /// THE FUSE's cache line (CONTRACT-FUSE-0816 §1.3). The sync response may carry an additive
+        /// <c>descent_countdown: { "ceremony_at": "&lt;iso&gt;" }</c>; this is the desktop's only
+        /// source for that instant, and therefore the only thing that can light the countdown.
+        ///
+        /// <para><b>ABSENCE IS THE KILL SWITCH.</b> A successful sync with no block clears the
+        /// cached timestamp, which tears every fuse surface down live. That is why this runs on
+        /// EVERY successful sync rather than only when the key is present — "the server stopped
+        /// saying it" has to be as loud as "the server started saying it", or the owner could never
+        /// call the whole thing off without shipping a patch.</para>
+        ///
+        /// <para><b>Parsed off the RAW body, not off the deserialized result, and that is not
+        /// stylistic.</b> <c>JsonConvert.DeserializeObject</c> runs with
+        /// <c>DateParseHandling.DateTime</c>, so Newtonsoft rewrites any ISO-8601-shaped STRING
+        /// into a date token before a <c>string</c> property ever sees it — and what comes back out
+        /// is that DateTime's round-trip, not what the server sent. Reading through
+        /// <see cref="DescentReader.ParseWire"/> (DateParseHandling.None) is the same fix, at the
+        /// same boundary, that the descent block itself needed. See the essay on ParseWire.</para>
+        ///
+        /// <para>An unparseable body is NOT treated as absence: the countdown is left exactly as it
+        /// was. A transport that mangled the payload has told us nothing about the owner's
+        /// intentions, and inferring "call it off" from a truncated response would be the one
+        /// failure mode that silently un-ships the feature.</para>
+        /// </summary>
+        private static void HandleDescentCountdown(string? rawJson)
+        {
+            try
+            {
+                var countdown = App.DescentCountdown;
+                if (countdown is null) return;
+
+                // Tri-state: false = unreadable payload, change nothing. True = the answer below is
+                // authoritative, value or null. See TryReadCeremonyAt for the full reasoning.
+                if (!DescentCountdownService.TryReadCeremonyAt(rawJson, out var ceremonyAt)) return;
+
+                // Present ⇒ cache it. Absent ⇒ clear. ApplyCeremonyAt is a no-op when the value has
+                // not moved, so the 60s heartbeat costs one string compare.
+                countdown.ApplyCeremonyAt(ceremonyAt);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[Fuse] descent_countdown parse failed (the countdown is unchanged): {Error}", ex.Message);
+            }
         }
 
         #endregion
@@ -4155,6 +4311,12 @@ namespace ConditioningControlPanel.Services
             /// <summary>Server-side devotion days, already backfilled. Display only.</summary>
             [JsonProperty("devotion_days")]
             public int? DevotionDays { get; set; }
+
+            /// <summary>The figure Option A derives from: lifetime + the veteran credit
+            /// (server-computed, 2026-08-16). Absent on older servers — the offer falls back to
+            /// <see cref="TotalXpEarned"/>.</summary>
+            [JsonProperty("restore_basis_xp")]
+            public double? RestoreBasisXp { get; set; }
 
             /// <summary>The ack. The ONLY thing that may mark this client migrated (§2.4).</summary>
             [JsonProperty("completed")]

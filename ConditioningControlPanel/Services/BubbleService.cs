@@ -964,13 +964,51 @@ public class BubbleService : IDisposable
         // Don't remove here - let the pop animation play, removal happens in OnDestroy
         OnBubblePopped?.Invoke();
 
-        App.Progression?.AddXP(5 * multiplier, XPSource.Bubble);
+        // XP-economy daily bucket (feat/xp-economy): 5 XP a pop with an uncapped lucky roll was
+        // the one grind loop with no ceiling at all. The bucket caps ambient-pop XP at 300 per
+        // local calendar day — the lucky roll pays out of the same bucket, pops past the cap
+        // still pop, sound, count for achievements and combo haptics; they just pay 0.
+        var earnedXp = 5 * multiplier;
+        var paidXp = TakeFromAmbientBubbleBucket(earnedXp);
+        if (paidXp > 0) App.Progression?.AddXP(paidXp, XPSource.Bubble);
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
 
         // Haptic feedback with combo system
         _ = App.Haptics?.BubblePopAsync();
+    }
+
+    /// <summary>Daily ceiling on ambient-pop XP. Lucky rolls draw from the same bucket.</summary>
+    private const int AmbientBubbleDailyXpCap = 300;
+
+    /// <summary>
+    /// Draw <paramref name="earnedXp"/> from today's ambient-bubble bucket and return what the
+    /// bucket can actually pay (a lucky roll near the ceiling pays the remainder, not nothing).
+    /// The {dayKey, xpPaid} pair persists in AppSettings with LAZY rollover: nothing runs at
+    /// midnight, the first pop of a new local day resets the pair. Deliberately no Save() here —
+    /// a per-pop disk write would be the expensive half of a 5 XP grant; the counter rides out
+    /// with the next regular settings save, same as the XP it meters.
+    /// </summary>
+    private static int TakeFromAmbientBubbleBucket(int earnedXp)
+    {
+        var settings = App.Settings?.Current;
+        if (settings == null) return earnedXp;
+
+        var today = DateTime.Now.ToString("yyyy-MM-dd");
+        if (!string.Equals(settings.AmbientBubbleXpDayKey, today, StringComparison.Ordinal))
+        {
+            settings.AmbientBubbleXpDayKey = today;
+            settings.AmbientBubbleXpPaidToday = 0;
+        }
+
+        var paidSoFar = Math.Max(0, settings.AmbientBubbleXpPaidToday);   // hand-edited negatives read as 0
+        var remaining = AmbientBubbleDailyXpCap - paidSoFar;
+        if (remaining <= 0) return 0;
+
+        var pay = Math.Min(earnedXp, remaining);
+        settings.AmbientBubbleXpPaidToday = paidSoFar + pay;
+        return pay;
     }
 
     // ======================= Trigger Bubbles =======================
@@ -2744,7 +2782,17 @@ internal class Bubble
         if (spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
 
         // Random properties (size/motion overridden for chaos effect bubbles)
-        _size = spec != null ? Math.Max(60, (int)Math.Round(spec.SizePx)) : random.Next(150, 250);
+        //
+        // The spec branch is chaos/variant bubbles: they carry a SizePx that is already balanced
+        // against their own scale system (ChaosBubbleVariants.GLOBAL_SIZE_SCALE and the per-variant
+        // sizeScale), so the user's ambient-size setting deliberately does NOT touch them.
+        // The ambient field is the branch that had no knob at all - see BubbleSizing.
+        _size = spec != null
+            ? Math.Max(60, (int)Math.Round(spec.SizePx))
+            : BubbleSizing.Scale(
+                  random.Next(BubbleSizing.BaseMinDip, BubbleSizing.BaseMaxDip),
+                  App.Settings?.Current?.BubblesSize ?? BubbleSizing.UserPercentDefault,
+                  App.Mods?.ActiveMod?.Manifest?.BubbleScale);
         // Magic Wand boon / Mesmer Reach upgrade: enlarge the click target around the visual.
         // Darters/freeze pickups keep their natural hitbox (precision catches stay precision).
         // Blindfold: effect bubbles render translucent; pickups stay fully visible (they're rewards).

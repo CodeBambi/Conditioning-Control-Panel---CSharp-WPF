@@ -42,13 +42,25 @@ namespace ConditioningControlPanel
             _sessionManager = new Services.SessionManager();
             _sessionManager.SessionAdded += OnSessionAdded;
             _sessionManager.SessionRemoved += OnSessionRemoved;
+            // SessionsReloaded had no subscriber before the rack: the list was rebuilt by hand at
+            // each of the two LoadAllSessions call sites, which is exactly how a third one would
+            // have shipped without a list refresh. One repaint, one event.
+            _sessionManager.SessionsReloaded += OnSessionsReloaded;
             _sessionManager.LoadAllSessions();
 
-            // Populate UI with any custom sessions loaded from disk
-            foreach (var session in _sessionManager.CustomSessions)
+            // ONE list, every source. Built-in, custom and imported rows all come out of the
+            // registry now - see RepaintSessionRack.
+            RepaintSessionRack();
+        }
+
+        private void OnSessionsReloaded()
+        {
+            if (!Dispatcher.CheckAccess())
             {
-                AddCustomSessionCard(session);
+                Dispatcher.BeginInvoke(new Action(OnSessionsReloaded));
+                return;
             }
+            RepaintSessionRack();
         }
 
         /// <summary>
@@ -99,16 +111,22 @@ namespace ConditioningControlPanel
                 // #614 all over again. Reconcile the cards instead of trusting the registry.
                 if (_sessionManager.GetSession(session.Id) != null)
                 {
-                    if (!HasCustomSessionCard(session.Id)) RefreshCustomSessionCards();
+                    if (!HasSessionRackRow(session.Id)) RepaintSessionRack();
                     return true;
                 }
 
                 _sessionManager.AddNewSession(session, filePath);
 
-                // AddNewSession -> SessionAdded -> OnSessionAdded -> AddCustomSessionCard is the
+                // AddNewSession -> SessionAdded -> OnSessionAdded -> RepaintSessionRack is the
                 // only thing between the file and the tab, and the caller swallows anything that
-                // goes wrong in it. Confirm the card landed; rebuild from the manager if not.
-                if (!HasCustomSessionCard(session.Id)) RefreshCustomSessionCards();
+                // goes wrong in it. Confirm the row landed; repaint from the manager if not.
+                //
+                // A row can also be missing because a FILTER is hiding it (a drafted session
+                // while the rack is showing "Built-in", say). That is not the #614 failure and a
+                // repaint would not fix it either - the row is genuinely not meant to be on
+                // screen - but repainting is cheap and idempotent, so this does not try to tell
+                // the two cases apart.
+                if (!HasSessionRackRow(session.Id)) RepaintSessionRack();
                 return true;
             }
             catch (Exception ex)
@@ -123,13 +141,14 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 App.Logger?.Information("Session imported: {Name}", session.Name);
-                AddCustomSessionCard(session);
 
-                // Show "Session loaded!" notification
-                ShowDropZoneStatus($"Session loaded: {session.Name}", isError: false);
-
-                // Auto-select the new session
+                // Selection BEFORE the repaint, not after: the repaint decides which row wears
+                // SdSessionRowSelected and moves the ambient sheen onto it. Selecting afterwards
+                // would leave the new row painted as an ordinary one until the next rebuild.
                 SelectSession(session);
+                RepaintSessionRack();
+
+                ShowDropZoneStatus($"Session loaded: {session.Name}", isError: false);
             });
         }
 
@@ -138,187 +157,799 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 App.Logger?.Information("Session removed: {Name}", session.Name);
-                RemoveCustomSessionCard(session);
+                RepaintSessionRack();
             });
         }
 
-        private void AddCustomSessionCard(Models.Session session)
-        {
-            // Show the "Your Sessions" header
-            PresetsTab.TxtCustomSessionsHeader.Visibility = Visibility.Visible;
+        // ============================== THE SESSION RACK ==============================
+        //
+        // One list for every session the app knows about - built-in, custom, imported - built
+        // here rather than in XAML, 44px per row, sorted/filtered/searched by the toolbar above
+        // it. Replaces the four hard-coded XAML cards plus the separate "Your Sessions" panel
+        // that AddCustomSessionCard used to fill (Session Rack, 2026-08-16).
+        //
+        // The whole surface is ONE repaint. RepaintSessionRack clears SessionRackPanel and
+        // rebuilds it from the registry every time anything changes - a session added, removed,
+        // imported, renamed, a toolbar control touched, a mod switched. ~100 lightweight rows is
+        // well inside a frame, and a single rebuild path is what stops the list and the registry
+        // drifting apart the way the two-panel split did.
+        //
+        // NOT MVVM, deliberately: this page is code-built UI in MainWindow partials and an
+        // ItemsControl here would need a view-model layer that nothing else on the page has.
 
-            // Geometry and colour come from SdSessionRow in PresetsTabView.xaml (Session Door
-            // Overhaul, 2026-08-13) so a custom row is indistinguishable from a built-in one and
-            // re-tints with the active mod. Hover is the style's trigger: do NOT assign BorderBrush
-            // as a local value here, it would outrank the trigger and kill the hover.
-            var border = new Border
+        /// <summary>Source filter token. Matches the chip Tags and AppSettings.SessionRackSourceFilter.</summary>
+        private const string RackSourceAll = "all";
+        private const string RackSourceBuiltIn = "builtin";
+        private const string RackSourceYours = "yours";
+        private const string RackSourceCatalogue = "catalogue";
+
+        private string _rackSourceFilter = RackSourceAll;
+        private string _rackSort = "recent";
+        private string _rackSearch = "";
+        private readonly HashSet<Models.SessionDifficulty> _rackDifficulties = new()
+        {
+            Models.SessionDifficulty.Easy,
+            Models.SessionDifficulty.Medium,
+            Models.SessionDifficulty.Hard,
+            Models.SessionDifficulty.Extreme
+        };
+
+        private readonly List<ToggleButton> _rackSourceChips = new();
+        private readonly List<ToggleButton> _rackDifficultyChips = new();
+        private bool _rackToolbarBuilt;
+
+        /// <summary>Set while code is writing the toolbar controls, so their own change events
+        /// do not read a half-applied state back out and repaint against it.</summary>
+        private bool _rackToolbarSyncing;
+
+        /// <summary>
+        /// Rebuild the whole session list against the current filter + sort + search.
+        ///
+        /// <para>Safe to call from anywhere and as often as you like: it is idempotent, it raises
+        /// no events, and it never throws at the caller - a list that failed to repaint must not
+        /// take down the import/draft/delete that asked for it.</para>
+        /// </summary>
+        internal void RepaintSessionRack()
+        {
+            if (!Dispatcher.CheckAccess())
             {
-                Tag = session.Id
-            };
-            var rowStyle = TryFindTabStyle("SdSessionRow");
+                Dispatcher.BeginInvoke(new Action(RepaintSessionRack));
+                return;
+            }
+
+            try
+            {
+                var panel = PresetsTab?.SessionRackPanel;
+                if (panel == null) return;   // the tab has not been built yet
+
+                EnsureSessionRackToolbar();
+
+                var all = EnumerateRackSessions();
+                var shown = SortRackSessions(all.Where(RackAccepts).ToList(), all);
+
+                panel.Children.Clear();
+                foreach (var session in shown)
+                    panel.Children.Add(BuildSessionRackRow(session));
+
+                if (shown.Count == 0)
+                {
+                    var empty = new TextBlock
+                    {
+                        Text = LocOr("rack_empty", "No sessions match - clear a filter.")
+                    };
+                    var emptyStyle = TryFindTabStyle("SdRackEmpty");
+                    if (emptyStyle != null) empty.Style = emptyStyle;
+                    else
+                    {
+                        empty.Foreground = Application.Current.Resources["TextDimBrush"] as Brush;
+                        empty.FontSize = 12;
+                        empty.HorizontalAlignment = HorizontalAlignment.Center;
+                        empty.Margin = new Thickness(0, 26, 0, 0);
+                    }
+                    // A TextBlock, not a Border: the FX sweep and the selected-card lookup in
+                    // MainWindow.TabFxPresetsQuestsAchievements walk Borders only, so the empty
+                    // line cannot be staggered in as a row or mistaken for one.
+                    panel.Children.Add(empty);
+                }
+
+                UpdateRackToolbarCounts(all, shown.Count);
+
+                // Every row is a NEW object, so the ambient sheen is parked on a Border that is no
+                // longer in the tree.
+                RefreshCardSheen();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "RepaintSessionRack failed"); }
+        }
+
+        /// <summary>The registry, in registry order. Falls back to the hard-coded set for the
+        /// same reason <see cref="GetSessionById"/> does - the manager is created lazily and a
+        /// repaint can beat it.</summary>
+        private List<Models.Session> EnumerateRackSessions()
+        {
+            if (_sessionManager != null && _sessionManager.AllSessions.Count > 0)
+                return _sessionManager.AllSessions.ToList();
+            return Models.Session.GetAllSessions();
+        }
+
+        private bool RackAccepts(Models.Session session)
+        {
+            switch (_rackSourceFilter)
+            {
+                case RackSourceBuiltIn:
+                    if (session.Source != Models.SessionSource.BuiltIn) return false;
+                    break;
+                case RackSourceYours:
+                    if (session.Source != Models.SessionSource.Custom) return false;
+                    break;
+                case RackSourceCatalogue:
+                    if (session.Source != Models.SessionSource.Imported) return false;
+                    break;
+            }
+
+            if (!_rackDifficulties.Contains(session.Difficulty)) return false;
+
+            if (_rackSearch.Length > 0)
+            {
+                // Mode-aware text, because that is what is ON the row: searching "bambi" on a
+                // drone build should find nothing rather than find rows that do not say it.
+                var name = session.GetModeAwareName() ?? "";
+                var desc = session.GetModeAwareDescription() ?? "";
+                if (name.IndexOf(_rackSearch, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    desc.IndexOf(_rackSearch, StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Order the visible rows. <paramref name="registryOrder"/> is the unfiltered list and is
+        /// the tie-breaker for every mode - without it a sort on a field half the sessions share
+        /// (three 45-minute Easy runs) would shuffle on each repaint.
+        /// </summary>
+        private List<Models.Session> SortRackSessions(List<Models.Session> rows, List<Models.Session> registryOrder)
+        {
+            var index = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < registryOrder.Count; i++)
+                index[registryOrder[i].Id ?? ""] = i;
+
+            int Idx(Models.Session s) => index.TryGetValue(s.Id ?? "", out var i) ? i : int.MaxValue;
+
+            switch (_rackSort)
+            {
+                case "name":
+                    return rows.OrderBy(s => s.GetModeAwareName() ?? "", StringComparer.OrdinalIgnoreCase)
+                               .ThenBy(Idx).ToList();
+                case "easiest":
+                    return rows.OrderBy(s => (int)s.Difficulty)
+                               .ThenBy(s => s.DurationMinutes)
+                               .ThenBy(Idx).ToList();
+                case "hardest":
+                    return rows.OrderByDescending(s => (int)s.Difficulty)
+                               .ThenByDescending(s => s.DurationMinutes)
+                               .ThenBy(Idx).ToList();
+                case "shortest":
+                    return rows.OrderBy(s => s.DurationMinutes).ThenBy(Idx).ToList();
+                case "xp":
+                    return rows.OrderByDescending(s => s.BonusXP).ThenBy(Idx).ToList();
+                default:
+                {
+                    // RECENT. Newest file first; anything without a real file on disk (the
+                    // hard-coded built-ins, which only exist when assets/sessions is missing)
+                    // sinks to the bottom in registry order rather than pretending to a date.
+                    // The stamps are read ONCE - a Comparer that hits the filesystem per
+                    // comparison would stat the same file O(n log n) times.
+                    var stamps = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
+                    foreach (var s in rows) stamps[s.Id ?? ""] = RackFileStamp(s);
+
+                    DateTime? Stamp(Models.Session s) => stamps.TryGetValue(s.Id ?? "", out var t) ? t : null;
+
+                    return rows.OrderByDescending(s => Stamp(s).HasValue)
+                               .ThenByDescending(s => Stamp(s) ?? DateTime.MinValue)
+                               .ThenBy(Idx).ToList();
+                }
+            }
+        }
+
+        /// <summary>Last-write time of a session's backing file, or null when it has none (or the
+        /// path is stale/unreadable). Never throws: a locked or vanished file must degrade to
+        /// "undated", not break the sort.</summary>
+        private static DateTime? RackFileStamp(Models.Session session)
+        {
+            try
+            {
+                var path = session.SourceFilePath;
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+                return File.GetLastWriteTime(path);
+            }
+            catch { return null; }
+        }
+
+        // ------------------------------ one row ------------------------------
+
+        /// <summary>
+        /// One 44px rack row.
+        ///
+        /// <para><b>Tag is the session id and that is contractual</b> - SessionCard_Click,
+        /// FindSelectedCard (the ambient sheen), StaggerPresetCards and RevealSessionInLibrary all
+        /// match on it.</para>
+        /// </summary>
+        private Border BuildSessionRackRow(Models.Session session)
+        {
+            var isSelected = _selectedSession?.Id == session.Id;
+
+            var border = new Border { Tag = session.Id };
+            var rowStyle = TryFindTabStyle(isSelected ? "SdSessionRowSelected" : "SdSessionRow");
             if (rowStyle != null) border.Style = rowStyle;
             else
             {
-                border.Background = Application.Current.Resources["SurfaceBgBrush"] as Brush;
-                border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as Brush;
+                // The tab's dictionary is unreachable (the view was never loaded). Theme brushes,
+                // never literals - this page's whole restyle was about not painting itself.
+                border.Height = 44;
+                border.Background = Application.Current.Resources[isSelected ? "TransparentPink20Brush" : "SurfaceBgBrush"] as Brush;
+                border.BorderBrush = Application.Current.Resources[isSelected ? "PinkBrush" : "PanelAccentBrush"] as Brush;
                 border.BorderThickness = new Thickness(1);
-                border.CornerRadius = new CornerRadius(12);
-                border.Padding = new Thickness(13, 11, 13, 11);
-                border.Margin = new Thickness(0, 0, 0, 7);
-                border.Cursor = System.Windows.Input.Cursors.Hand;
+                border.CornerRadius = new CornerRadius(10);
+                border.Padding = new Thickness(0);
+                border.Margin = new Thickness(0, 0, 0, 5);
+                border.Cursor = Cursors.Hand;
             }
 
             border.MouseLeftButtonUp += SessionCard_Click;
             PrepareSessionRowFx(border);
 
             var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // A Border does NOT clip its child to its own CornerRadius (0813 finding), and the
+            // difficulty stripe below runs full-bleed into the row's rounded left edge - so the
+            // content root carries its own clip, the same RectangleGeometry-on-SizeChanged
+            // pattern FeatureCard.OnContentRootSizeChanged uses. Radius 9 = the row's 10 minus
+            // its 1px stroke, so the clip lands INSIDE the border rather than eating it.
+            AttachRoundedClip(grid, 9);
 
-            // Art plate, carrying the session's own glyph - the same 52x38 thumb the four built-in
-            // rows have, so the list does not step where the custom rows start.
-            var thumb = new Border();
-            var thumbStyle = TryFindTabStyle("SdRowThumb");
-            if (thumbStyle != null) thumb.Style = thumbStyle;
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 0 stripe
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 1 icon
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 2 name
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });  // 3 blurb
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 4 difficulty
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 5 duration
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 6 XP
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 7 badges
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // 8 actions
+
+            var (diffSolid, diffWash) = RackDifficultyKeys(session.Difficulty);
+
+            // 0. The stripe. Full height, full bleed, 4px - the one part of the row you can read
+            // at a glance while scrolling.
+            var stripe = new Border { Width = 4, VerticalAlignment = VerticalAlignment.Stretch };
+            stripe.SetResourceReference(Border.BackgroundProperty, diffSolid);
+            Grid.SetColumn(stripe, 0);
+            grid.Children.Add(stripe);
+
+            // 1. The session's own glyph.
+            var icon = new Helpers.EmojiTextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(session.Icon) ? "\U0001F3AC" : session.Icon,
+                Margin = new Thickness(7, 0, 0, 0)
+            };
+            var iconStyle = TryFindTabStyle("SdRackIcon");
+            if (iconStyle != null) icon.Style = iconStyle;
             else
             {
-                thumb.Width = 52; thumb.Height = 38;
-                thumb.CornerRadius = new CornerRadius(8);
-                thumb.Background = Application.Current.Resources["PanelBgBrush"] as Brush;
-                thumb.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as Brush;
-                thumb.BorderThickness = new Thickness(1);
-                thumb.Margin = new Thickness(0, 0, 12, 0);
-                thumb.VerticalAlignment = VerticalAlignment.Center;
+                icon.Width = 28;
+                icon.FontSize = 15;
+                icon.TextAlignment = TextAlignment.Center;
+                icon.VerticalAlignment = VerticalAlignment.Center;
             }
-            thumb.Child = new Helpers.EmojiTextBlock
-            {
-                Text = string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon,
-                FontSize = 17,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(thumb, 0);
-            grid.Children.Add(thumb);
+            Grid.SetColumn(icon, 1);
+            grid.Children.Add(icon);
 
-            // Middle: session info
-            var infoPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(infoPanel, 1);
-
-            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
-
-            // The glyph moved to the thumb, so the title is the name alone.
+            // 2. Name. MaxWidth rather than a star column: a long custom name must not push the
+            // blurb off the row, and an Auto column will not trim without one.
             var nameText = new Helpers.EmojiTextBlock
             {
                 Text = session.GetModeAwareName(),
-                Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? new SolidColorBrush(Colors.White),
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 14.5,
-                VerticalAlignment = VerticalAlignment.Center
+                MaxWidth = 210,
+                Margin = new Thickness(7, 0, 0, 0)
             };
-            headerPanel.Children.Add(nameText);
-
-            // Duration / difficulty / CUSTOM pills, in the shared SdPill shape so a custom row's
-            // pills line up with a built-in row's. The difficulty palette stays LITERAL on purpose:
-            // it encodes difficulty, not brand, and following the mod accent would paint HARD and
-            // EASY the same colour on a drone build.
-            headerPanel.Children.Add(MakeSessionPill(
-                $"{session.DurationMinutes} MIN",
-                Application.Current.Resources["PinkBrush"] as Brush,
-                new SolidColorBrush(Colors.White)));
-
-            var (diffBg, diffFg) = session.Difficulty switch
+            var nameStyle = TryFindTabStyle("SdRowTitle");
+            if (nameStyle != null) nameText.Style = nameStyle;
+            else
             {
-                Models.SessionDifficulty.Easy => ("#2A3A2A", "#90EE90"),
-                Models.SessionDifficulty.Medium => ("#3A3A2A", "#FFD700"),
-                Models.SessionDifficulty.Hard => ("#4A3A2A", "#FFA500"),
-                Models.SessionDifficulty.Extreme => ("#4A2A2A", "#FF6347"),
-                _ => ("#2A3A2A", "#90EE90")
-            };
-            headerPanel.Children.Add(MakeSessionPill(
-                session.GetDifficultyText(),
-                new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffBg)),
-                new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffFg))));
+                nameText.Foreground = Application.Current.Resources["TextLightBrush"] as Brush ?? Brushes.White;
+                nameText.FontWeight = FontWeights.SemiBold;
+                nameText.FontSize = 13;
+                nameText.VerticalAlignment = VerticalAlignment.Center;
+                nameText.TextTrimming = TextTrimming.CharacterEllipsis;
+            }
+            Grid.SetColumn(nameText, 2);
+            grid.Children.Add(nameText);
 
-            headerPanel.Children.Add(MakeSessionPill(
-                "CUSTOM",
-                Application.Current.Resources["NeonPurpleTransparent20Brush"] as Brush,
-                Application.Current.Resources["NeonPurpleBrush"] as Brush));
-
-            // Catalogue share status badge (pending/approved/rejected), if shared.
-            var sessKey = string.IsNullOrEmpty(session.SourceFilePath) ? null : CanonicalCataloguePathKey(session.SourceFilePath);
-            var sessRec = sessKey != null ? GetCatalogueRecord(CatalogueKindSessions, sessKey) : null;
-            var sessStatusBadge = CreateCatalogueStatusBadge(sessRec);
-            if (sessStatusBadge != null) headerPanel.Children.Add(sessStatusBadge);
-
-            infoPanel.Children.Add(headerPanel);
-
-            // Description. Trimming is the TextBlock's job now - the old code hand-cut the string
-            // at 60 chars and appended "...", which cut mid-word and mid-surrogate-pair.
+            // 3. The SPOILER-FREE blurb. First line only, ellipsised, full text on the tooltip -
+            // this is the authored description, never GenerateFeatureDescription, which is what
+            // the Reveal Details gate on the right exists to withhold.
+            var blurb = string.IsNullOrWhiteSpace(session.Description)
+                ? LocOr("label_custom_session", "Custom session")
+                : session.GetModeAwareDescription() ?? "";
             var descText = new TextBlock
             {
-                Text = string.IsNullOrEmpty(session.Description)
-                    ? Loc.Get("label_custom_session")
-                    : session.GetModeAwareDescription().Split('\n')[0],
-                Foreground = Application.Current.Resources["TextMutedBrush"] as Brush,
-                FontSize = 12,
-                Margin = new Thickness(0, 4, 0, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis
+                Text = blurb.Split('\n')[0].Trim(),
+                ToolTip = string.IsNullOrWhiteSpace(blurb) ? null : blurb
             };
-            infoPanel.Children.Add(descText);
+            var descStyle = TryFindTabStyle("SdRowBlurb");
+            if (descStyle != null) descText.Style = descStyle;
+            else
+            {
+                descText.Foreground = Application.Current.Resources["TextMutedBrush"] as Brush;
+                descText.FontSize = 12;
+                descText.Margin = new Thickness(10, 0, 0, 0);
+                descText.VerticalAlignment = VerticalAlignment.Center;
+                descText.TextTrimming = TextTrimming.CharacterEllipsis;
+            }
+            Grid.SetColumn(descText, 3);
+            grid.Children.Add(descText);
 
-            grid.Children.Add(infoPanel);
+            // 4. Difficulty pill.
+            var diffPill = MakeRackPill(session.GetDifficultyText(), diffWash, diffSolid);
+            Grid.SetColumn(diffPill, 4);
+            grid.Children.Add(diffPill);
 
-            // Right side: Action buttons
+            // 5/6. Duration and reward, mono and right-aligned so they form two columns down the
+            // list instead of drifting with each row's name length.
+            var duration = MakeRackMeta(
+                string.Format(LocOr("rack_duration", "{0} min"), session.DurationMinutes), 56);
+            Grid.SetColumn(duration, 5);
+            grid.Children.Add(duration);
+
+            var xp = MakeRackMeta(
+                string.Format(LocOr("rack_xp", "+{0} XP"), session.BonusXP), 66);
+            Grid.SetColumn(xp, 6);
+            grid.Children.Add(xp);
+
+            // 7. Provenance badge, plus the catalogue share status when this session has been
+            // submitted (kept from the old custom rows - RefreshCatalogueShareBadges repaints the
+            // rack specifically to update it).
+            var badges = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var (srcLabel, srcSolid, srcWash) = RackSourceKeys(session.Source);
+            badges.Children.Add(MakeRackPill(srcLabel, srcWash, srcSolid, "SdRackBadgeText"));
+
+            var sessKey = string.IsNullOrEmpty(session.SourceFilePath) ? null : CanonicalCataloguePathKey(session.SourceFilePath);
+            var sessRec = sessKey != null ? GetCatalogueRecord(CatalogueKindSessions, sessKey) : null;
+            var statusBadge = CreateCatalogueStatusBadge(sessRec);
+            if (statusBadge != null) badges.Children.Add(statusBadge);
+
+            Grid.SetColumn(badges, 7);
+            grid.Children.Add(badges);
+
+            // 8. Actions, hidden until the row is hovered (SdRackActions). Exactly the actions the
+            // old cards carried: edit + export on everything, share + delete only where they
+            // could ever succeed - SessionManager.DeleteSession refuses a built-in outright.
             var buttonPanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(buttonPanel, 2);
+            var actionsStyle = TryFindTabStyle("SdRackActions");
+            if (actionsStyle != null) buttonPanel.Style = actionsStyle;
 
-            var editBtn = CreateSessionActionButton("✎", Loc.Get("tooltip_edit_session"), session.Id, SessionBtn_Edit);
-            var exportBtn = CreateSessionActionButton("↗", Loc.Get("tooltip_export_session"), session.Id, SessionBtn_Export);
-            var shareBtn = CreateSessionActionButton("☁", Loc.Get("tooltip_share_to_catalogue"), session.Id, SessionBtn_Share);
-            var deleteBtn = CreateSessionDeleteButton("🗑", Loc.Get("tooltip_delete_session"), session.Id, SessionBtn_Delete);
+            buttonPanel.Children.Add(CreateSessionActionButton("✎", Loc.Get("tooltip_edit_session"), session.Id, SessionBtn_Edit));
+            buttonPanel.Children.Add(CreateSessionActionButton("↗", Loc.Get("tooltip_export_session"), session.Id, SessionBtn_Export));
+            if (session.Source != Models.SessionSource.BuiltIn)
+            {
+                buttonPanel.Children.Add(CreateSessionActionButton("☁", Loc.Get("tooltip_share_to_catalogue"), session.Id, SessionBtn_Share));
+                buttonPanel.Children.Add(CreateSessionDeleteButton("\U0001F5D1", Loc.Get("tooltip_delete_session"), session.Id, SessionBtn_Delete));
+            }
 
-            buttonPanel.Children.Add(editBtn);
-            buttonPanel.Children.Add(exportBtn);
-            buttonPanel.Children.Add(shareBtn);
-            buttonPanel.Children.Add(deleteBtn);
+            // Pad the LEFT margin out to four buttons' worth (SdRowAction is 28px wide with a 3px
+            // margin) so a two-button built-in row reserves the same width as a four-button custom
+            // one. Without it the duration / XP / badge columns would step sideways every time the
+            // list crossed from one kind of row to the other.
+            buttonPanel.Margin = new Thickness(8 + (4 - buttonPanel.Children.Count) * 31, 0, 4, 0);
 
+            Grid.SetColumn(buttonPanel, 8);
             grid.Children.Add(buttonPanel);
-            border.Child = grid;
 
-            PresetsTab.CustomSessionsPanel.Children.Add(border);
+            border.Child = grid;
+            return border;
+        }
+
+        /// <summary>Duration / reward cell. MinWidth is what turns them into columns.</summary>
+        private TextBlock MakeRackMeta(string text, double minWidth)
+        {
+            var block = new TextBlock { Text = text, MinWidth = minWidth };
+            var style = TryFindTabStyle("SdRackMeta");
+            if (style != null) block.Style = style;
+            else
+            {
+                block.Foreground = Application.Current.Resources["TextSecondaryBrush"] as Brush;
+                block.FontFamily = new FontFamily("Consolas");
+                block.FontSize = 11;
+                block.VerticalAlignment = VerticalAlignment.Center;
+                block.TextAlignment = TextAlignment.Right;
+                block.Margin = new Thickness(10, 0, 0, 0);
+            }
+            return block;
+        }
+
+        /// <summary>(solid key, wash key) for a difficulty. See Resources/Theme/Colors.xaml.</summary>
+        private static (string solid, string wash) RackDifficultyKeys(Models.SessionDifficulty difficulty)
+            => difficulty switch
+            {
+                Models.SessionDifficulty.Medium => ("SessionDiffMediumBrush", "SessionDiffMediumWashBrush"),
+                Models.SessionDifficulty.Hard => ("SessionDiffHardBrush", "SessionDiffHardWashBrush"),
+                Models.SessionDifficulty.Extreme => ("SessionDiffExtremeBrush", "SessionDiffExtremeWashBrush"),
+                _ => ("SessionDiffEasyBrush", "SessionDiffEasyWashBrush")
+            };
+
+        /// <summary>(badge text, solid key, wash key) for a provenance.</summary>
+        private static (string label, string solid, string wash) RackSourceKeys(Models.SessionSource source)
+            => source switch
+            {
+                Models.SessionSource.Custom =>
+                    (LocOr("rack_src_yours", "YOURS"), "SessionSrcCustomBrush", "SessionSrcCustomWashBrush"),
+                Models.SessionSource.Imported =>
+                    (LocOr("rack_src_catalogue", "CAT"), "SessionSrcImportedBrush", "SessionSrcImportedWashBrush"),
+                _ =>
+                    (LocOr("rack_src_builtin", "BUILT-IN"), "SessionSrcBuiltInBrush", "SessionSrcBuiltInWashBrush")
+            };
+
+        /// <summary>
+        /// Clip a content root to a rounded rectangle. WPF's Border paints a rounded frame but
+        /// does NOT clip what is inside it, so a full-bleed child (here: the difficulty stripe)
+        /// draws square corners over the row's rounded ones unless the root clips itself.
+        /// </summary>
+        private static void AttachRoundedClip(FrameworkElement element, double radius)
+        {
+            element.SizeChanged += (_, _) =>
+            {
+                try
+                {
+                    double w = element.ActualWidth, h = element.ActualHeight;
+                    if (w <= 0 || h <= 0) { element.Clip = null; return; }
+                    var clip = new RectangleGeometry(new Rect(0, 0, w, h), radius, radius);
+                    clip.Freeze();
+                    element.Clip = clip;
+                }
+                catch (Exception ex) { App.Logger?.Debug("AttachRoundedClip: {E}", ex.Message); }
+            };
+        }
+
+        // ------------------------------ the toolbar ------------------------------
+
+        /// <summary>
+        /// Build the source chips and difficulty dots once, and restore the persisted sort +
+        /// source filter into the controls. Idempotent; the first
+        /// <see cref="RepaintSessionRack"/> after the tab exists does it.
+        /// </summary>
+        private void EnsureSessionRackToolbar()
+        {
+            if (_rackToolbarBuilt) return;
+            var tab = PresetsTab;
+            if (tab?.RackSourceChips == null || tab.RackDifficultyChips == null) return;
+            _rackToolbarBuilt = true;
+
+            // Restore BEFORE building, so the chips come out already in the right state and the
+            // first paint is not a flicker from "All" to whatever was saved.
+            var settings = App.Settings?.Current;
+            _rackSourceFilter = settings?.SessionRackSourceFilter ?? RackSourceAll;
+            _rackSort = settings?.SessionRackSort ?? "recent";
+
+            _rackToolbarSyncing = true;
+            try
+            {
+                var chipStyle = TryFindTabStyle("SdRackChip");
+                void AddSourceChip(string key)
+                {
+                    var chip = new ToggleButton
+                    {
+                        Tag = key,
+                        Content = RackSourceChipLabel(key, 0),
+                        IsChecked = key == _rackSourceFilter
+                    };
+                    if (chipStyle != null) chip.Style = chipStyle;
+                    chip.Checked += RackSourceChip_Changed;
+                    chip.Unchecked += RackSourceChip_Changed;
+                    _rackSourceChips.Add(chip);
+                    tab.RackSourceChips.Children.Add(chip);
+                }
+                AddSourceChip(RackSourceAll);
+                AddSourceChip(RackSourceBuiltIn);
+                AddSourceChip(RackSourceYours);
+                AddSourceChip(RackSourceCatalogue);
+
+                var dotStyle = TryFindTabStyle("SdRackDot");
+                void AddDot(Models.SessionDifficulty difficulty)
+                {
+                    var (solid, _) = RackDifficultyKeys(difficulty);
+                    var dot = new ToggleButton
+                    {
+                        Tag = difficulty,
+                        Content = "●",
+                        IsChecked = true,   // all four on by default, and NOT persisted - see AppSettings
+                        ToolTip = RackDifficultyLabel(difficulty)
+                    };
+                    if (dotStyle != null) dot.Style = dotStyle;
+                    dot.SetResourceReference(Control.ForegroundProperty, solid);
+                    dot.Checked += RackDifficultyChip_Changed;
+                    dot.Unchecked += RackDifficultyChip_Changed;
+                    _rackDifficultyChips.Add(dot);
+                    tab.RackDifficultyChips.Children.Add(dot);
+                }
+                AddDot(Models.SessionDifficulty.Easy);
+                AddDot(Models.SessionDifficulty.Medium);
+                AddDot(Models.SessionDifficulty.Hard);
+                AddDot(Models.SessionDifficulty.Extreme);
+
+                // The sort combo is declared in XAML; only its selection is restored here. Match
+                // on Tag, never on index - see the note beside it in PresetsTabView.xaml.
+                if (tab.CmbRackSort != null)
+                {
+                    foreach (var item in tab.CmbRackSort.Items.OfType<ComboBoxItem>())
+                    {
+                        if ((item.Tag as string) == _rackSort) { item.IsSelected = true; break; }
+                    }
+                    if (tab.CmbRackSort.SelectedItem == null && tab.CmbRackSort.Items.Count > 0)
+                        tab.CmbRackSort.SelectedIndex = 0;
+                }
+
+                if (tab.TxtRackSearchHint != null)
+                    tab.TxtRackSearchHint.Visibility = string.IsNullOrEmpty(tab.TxtRackSearch?.Text)
+                        ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "EnsureSessionRackToolbar failed"); }
+            finally { _rackToolbarSyncing = false; }
+        }
+
+        private static string RackSourceLabel(string key) => key switch
+        {
+            RackSourceBuiltIn => LocOr("rack_source_builtin", "Built-in"),
+            RackSourceYours => LocOr("rack_source_yours", "Yours"),
+            RackSourceCatalogue => LocOr("rack_source_catalogue", "Catalogue"),
+            _ => LocOr("rack_source_all", "All")
+        };
+
+        private static string RackSourceChipLabel(string key, int count)
+            => $"{RackSourceLabel(key)}  {count}";
+
+        private static string RackDifficultyLabel(Models.SessionDifficulty difficulty) => difficulty switch
+        {
+            Models.SessionDifficulty.Medium => LocOr("rack_diff_medium", "Medium"),
+            Models.SessionDifficulty.Hard => LocOr("rack_diff_hard", "Hard"),
+            Models.SessionDifficulty.Extreme => LocOr("rack_diff_extreme", "Extreme"),
+            _ => LocOr("rack_diff_easy", "Easy")
+        };
+
+        /// <summary>Live counts on the source chips + the "n of m" hint in the zone header. Counts
+        /// ignore the difficulty dots and the search box on purpose: a chip that said "Yours 0"
+        /// because a dot was off would read as "my sessions are gone".</summary>
+        private void UpdateRackToolbarCounts(List<Models.Session> all, int shownCount)
+        {
+            foreach (var chip in _rackSourceChips)
+            {
+                var key = chip.Tag as string ?? RackSourceAll;
+                int n = key switch
+                {
+                    RackSourceBuiltIn => all.Count(s => s.Source == Models.SessionSource.BuiltIn),
+                    RackSourceYours => all.Count(s => s.Source == Models.SessionSource.Custom),
+                    RackSourceCatalogue => all.Count(s => s.Source == Models.SessionSource.Imported),
+                    _ => all.Count
+                };
+                chip.Content = RackSourceChipLabel(key, n);
+            }
+
+            if (PresetsTab?.TxtRackCount != null)
+                PresetsTab.TxtRackCount.Text = shownCount == all.Count
+                    ? string.Format(LocOr("rack_count_all", "{0} sessions"), all.Count)
+                    : string.Format(LocOr("rack_count_filtered", "{0} of {1}"), shownCount, all.Count);
+        }
+
+        /// <summary>Source chips behave as a radio group, enforced here rather than with
+        /// RadioButtons so they can share the chip shape (the Assets tab does the same).</summary>
+        private void RackSourceChip_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_rackToolbarSyncing) return;
+            if (sender is not ToggleButton btn) return;
+
+            _rackToolbarSyncing = true;
+            try
+            {
+                // Clicking the active chip again must not clear the filter - there would be no
+                // chip lit and no way to tell what the list is showing.
+                if (btn.IsChecked != true) { btn.IsChecked = true; return; }
+                foreach (var chip in _rackSourceChips) chip.IsChecked = ReferenceEquals(chip, btn);
+            }
+            finally { _rackToolbarSyncing = false; }
+
+            var key = btn.Tag as string ?? RackSourceAll;
+            if (key == _rackSourceFilter) return;
+            _rackSourceFilter = key;
+
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SessionRackSourceFilter = key;
+                App.Settings.Save();
+            }
+            RepaintSessionRack();
+        }
+
+        private void RackDifficultyChip_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_rackToolbarSyncing) return;
+            if (sender is not ToggleButton btn || btn.Tag is not Models.SessionDifficulty difficulty) return;
+
+            if (btn.IsChecked == true) _rackDifficulties.Add(difficulty);
+            else _rackDifficulties.Remove(difficulty);
+
+            RepaintSessionRack();
+        }
+
+        internal void CmbRackSort_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_rackToolbarSyncing) return;
+            var key = (PresetsTab?.CmbRackSort?.SelectedItem as ComboBoxItem)?.Tag as string;
+            if (string.IsNullOrEmpty(key) || key == _rackSort) return;
+            _rackSort = key;
+
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SessionRackSort = key;
+                App.Settings.Save();
+            }
+            RepaintSessionRack();
+        }
+
+        internal void TxtRackSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var text = PresetsTab?.TxtRackSearch?.Text ?? "";
+
+            // The watermark is a plain sibling TextBlock, so hiding it is this handler's job.
+            if (PresetsTab?.TxtRackSearchHint != null)
+                PresetsTab.TxtRackSearchHint.Visibility = text.Length == 0
+                    ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_rackToolbarSyncing) return;
+
+            var trimmed = text.Trim();
+            if (trimmed == _rackSearch) return;   // whitespace-only edits are not a new filter
+            _rackSearch = trimmed;
+            RepaintSessionRack();
         }
 
         /// <summary>
-        /// One badge on a session row, in the tab's shared <c>SdPill</c> shape. Colours are passed
-        /// in rather than looked up: two of the three pills are semantic (difficulty) and must not
-        /// follow the mod accent, and the caller is the only thing that knows which is which.
+        /// Drop every VIEW filter back to "show everything" and repaint - source chips, all four
+        /// difficulty dots, the search box. Touches no session and no file.
+        ///
+        /// <para>The source filter is persisted, so this writes the reset through to settings:
+        /// leaving the chip lit while the list ignores it is worse than forgetting the
+        /// preference.</para>
         /// </summary>
-        private Border MakeSessionPill(string text, Brush? background, Brush? foreground)
+        private void ClearSessionRackFilters()
         {
-            var pill = new Border { Background = background };
-            var pillStyle = TryFindTabStyle("SdPill");
+            try
+            {
+                _rackToolbarSyncing = true;
+                try
+                {
+                    _rackSourceFilter = RackSourceAll;
+                    foreach (var chip in _rackSourceChips)
+                        chip.IsChecked = (chip.Tag as string) == RackSourceAll;
+
+                    // Re-add from the enum, not from the chips: if the toolbar has not been built
+                    // yet the chip list is empty, and clearing off it would leave EVERY
+                    // difficulty filtered out - an empty rack from a method whose whole job is to
+                    // un-empty it.
+                    _rackDifficulties.Clear();
+                    foreach (Models.SessionDifficulty d in Enum.GetValues(typeof(Models.SessionDifficulty)))
+                        _rackDifficulties.Add(d);
+                    foreach (var dot in _rackDifficultyChips) dot.IsChecked = true;
+
+                    _rackSearch = "";
+                    if (PresetsTab?.TxtRackSearch != null) PresetsTab.TxtRackSearch.Text = "";
+                }
+                finally { _rackToolbarSyncing = false; }
+
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.SessionRackSourceFilter = RackSourceAll;
+                    App.Settings.Save();
+                }
+                RepaintSessionRack();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ClearSessionRackFilters: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Move the selected-row styling without rebuilding the list.
+        ///
+        /// <para>Called from SelectSession / SelectPreset, which fire on every click: a full
+        /// RepaintSessionRack there would throw away the hovered row's transform mid-hover and
+        /// restart the entrance stagger. Swapping two Styles is enough - neither carries a local
+        /// value the row sets itself.</para>
+        /// </summary>
+        private void RefreshSessionRackSelection()
+        {
+            try
+            {
+                var panel = PresetsTab?.SessionRackPanel;
+                if (panel == null) return;
+
+                var selectedStyle = TryFindTabStyle("SdSessionRowSelected");
+                var normalStyle = TryFindTabStyle("SdSessionRow");
+                if (selectedStyle == null || normalStyle == null) return;
+
+                foreach (var row in panel.Children.OfType<Border>())
+                {
+                    var want = _selectedSession != null && (row.Tag as string) == _selectedSession.Id
+                        ? selectedStyle : normalStyle;
+                    if (!ReferenceEquals(row.Style, want)) row.Style = want;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshSessionRackSelection: {E}", ex.Message); }
+        }
+
+        /// <summary>True when the rack already shows a row for <paramref name="sessionId"/>. Rows
+        /// carry their session id in Tag - see <see cref="BuildSessionRackRow"/>.</summary>
+        private bool HasSessionRackRow(string sessionId)
+        {
+            try
+            {
+                var panel = PresetsTab?.SessionRackPanel;
+                if (panel == null || string.IsNullOrEmpty(sessionId)) return false;
+                return panel.Children.OfType<Border>().Any(b => (b.Tag as string) == sessionId);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// One tinted chip on a rack row - the difficulty pill and the provenance badge are the
+        /// same object with different keys.
+        ///
+        /// <para>Takes resource KEYS, not brushes, and binds them with
+        /// <see cref="FrameworkElement.SetResourceReference"/> - the code-behind equivalent of a
+        /// DynamicResource. A brush resolved once and assigned would freeze the colour code at
+        /// whatever the dictionary held when the row was built, which is exactly what a mod
+        /// override (or a theme swap mid-session) needs it not to do.</para>
+        ///
+        /// <para>The colours themselves are the static SessionDiff* / SessionSrc* families in
+        /// Resources/Theme: they encode difficulty and provenance, NOT brand, so they must not
+        /// follow the mod accent - a drone-green build would otherwise paint EASY and EXTREME the
+        /// same green.</para>
+        ///
+        /// <para><paramref name="pillStyleKey"/> exists for the preset rail: a 34px chip needs the
+        /// tighter <c>SdChipTag</c> geometry, because <c>SdPill</c>'s padding and 9px lead are
+        /// tuned for a 44px rack row and overflow a pill sitting inside another pill.</para>
+        /// </summary>
+        private Border MakeRackPill(string text, string washKey, string solidKey,
+                                    string? textStyleKey = null, string pillStyleKey = "SdPill")
+        {
+            var pill = new Border();
+            var pillStyle = TryFindTabStyle(pillStyleKey);
             if (pillStyle != null) pill.Style = pillStyle;
             else
             {
                 pill.CornerRadius = new CornerRadius(5);
-                pill.Padding = new Thickness(8, 2.5, 8, 2.5);
+                pill.Padding = new Thickness(7, 1.5, 7, 1.5);
                 pill.Margin = new Thickness(9, 0, 0, 0);
                 pill.VerticalAlignment = VerticalAlignment.Center;
             }
-            // Background is assigned as a LOCAL value above, which is exactly right here: SdPill
-            // deliberately sets no Background, so there is no setter to fight.
-            pill.Child = new TextBlock
+            // Background as a LOCAL value is right here: SdPill deliberately sets none, so there
+            // is no setter to fight.
+            pill.SetResourceReference(Border.BackgroundProperty, washKey);
+
+            var label = new TextBlock { Text = text };
+            var labelStyle = TryFindTabStyle(textStyleKey ?? "SdPillText");
+            if (labelStyle != null) label.Style = labelStyle;
+            else
             {
-                Text = text,
-                Foreground = foreground,
-                FontSize = 9.5,
-                FontWeight = FontWeights.Bold
-            };
+                label.FontSize = 9.5;
+                label.FontWeight = FontWeights.Bold;
+            }
+            label.SetResourceReference(TextBlock.ForegroundProperty, solidKey);
+
+            pill.Child = label;
             return pill;
         }
 
@@ -362,24 +993,6 @@ namespace ConditioningControlPanel
             }
             btn.Click += handler;
             return btn;
-        }
-
-        private void RemoveCustomSessionCard(Models.Session session)
-        {
-            var cardToRemove = PresetsTab.CustomSessionsPanel.Children
-                .OfType<Border>()
-                .FirstOrDefault(b => b.Tag as string == session.Id);
-
-            if (cardToRemove != null)
-            {
-                PresetsTab.CustomSessionsPanel.Children.Remove(cardToRemove);
-            }
-
-            // Hide header if no more custom sessions
-            if (PresetsTab.CustomSessionsPanel.Children.Count == 0)
-            {
-                PresetsTab.TxtCustomSessionsHeader.Visibility = Visibility.Collapsed;
-            }
         }
 
         private void SelectSession(Models.Session session)
@@ -445,6 +1058,11 @@ namespace ConditioningControlPanel
             PresetsTab.BtnStartSession.IsEnabled = session.IsAvailable;
             PresetsTab.BtnStartSession.Content = session.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
             PresetsTab.BtnExportSession.IsEnabled = true;
+
+            // Move the selected livery onto the new row. A style swap, NOT a RepaintSessionRack:
+            // this runs on every click, and rebuilding the list here would drop the hovered row's
+            // transform mid-hover and re-run the entrance stagger.
+            RefreshSessionRackSelection();
 
             // Move the tab's one ambient loop onto the row that is now selected.
             RefreshCardSheen();
@@ -1271,35 +1889,6 @@ namespace ConditioningControlPanel
             await ShareSessionToCatalogueAsync(session);
         }
 
-        // Clears and repopulates the custom session cards (used to refresh share
-        // status badges after a submission resolves or a status poll updates).
-        private void RefreshCustomSessionCards()
-        {
-            if (_sessionManager == null) return;
-            PresetsTab.CustomSessionsPanel.Children.Clear();
-            foreach (var session in _sessionManager.CustomSessions)
-            {
-                AddCustomSessionCard(session);
-            }
-            if (PresetsTab.CustomSessionsPanel.Children.Count == 0)
-            {
-                PresetsTab.TxtCustomSessionsHeader.Visibility = Visibility.Collapsed;
-            }
-        }
-
-        /// <summary>True when the Sessions tab already shows a card for <paramref name="sessionId"/>.
-        /// Cards carry their session id in Tag - see <see cref="AddCustomSessionCard"/>.</summary>
-        private bool HasCustomSessionCard(string sessionId)
-        {
-            try
-            {
-                var panel = PresetsTab?.CustomSessionsPanel;
-                if (panel == null || string.IsNullOrEmpty(sessionId)) return false;
-                return panel.Children.OfType<Border>().Any(b => (b.Tag as string) == sessionId);
-            }
-            catch { return false; }
-        }
-
         /// <summary>
         /// Reconcile the Sessions tab with the CustomSessions folder.
         ///
@@ -1311,7 +1900,7 @@ namespace ConditioningControlPanel
         /// rather than a stricter hop.
         ///
         /// Cheap, idempotent and event-free: it does nothing unless the folder holds a file the
-        /// manager has never seen, it reuses LoadAllSessions + RefreshCustomSessionCards rather
+        /// manager has never seen, it reuses LoadAllSessions + RepaintSessionRack rather
         /// than inventing a second loading path, and it raises NO SessionAdded events - so nothing
         /// downstream (XP, punch card, achievements) can fire twice off a refresh.
         /// </summary>
@@ -1337,13 +1926,15 @@ namespace ConditioningControlPanel
                 // Reload drops and rebuilds every Session instance, so re-point the selection at
                 // the fresh object or Start Session would run a detached copy.
                 var selectedId = _selectedSession?.Id;
-                _sessionManager.LoadAllSessions();
-                RefreshCustomSessionCards();
+                _sessionManager.LoadAllSessions();   // raises SessionsReloaded -> RepaintSessionRack
                 if (!string.IsNullOrEmpty(selectedId))
                 {
                     var again = _sessionManager.GetSession(selectedId);
                     if (again != null) _selectedSession = again;
                 }
+                // Repaint AFTER the selection is re-pointed at the fresh instance, so the row
+                // that comes back wearing SdSessionRowSelected is the one Start Session will run.
+                RepaintSessionRack();
 
                 App.Logger?.Information(
                     "SyncCustomSessionsFromDisk: picked up {N} session file(s) written after startup",
@@ -1425,11 +2016,18 @@ namespace ConditioningControlPanel
                 ShowTab("presets");
                 SelectSession(session);
 
-                // Scroll the matching card into view. Cards carry their session id in Tag; a
+                // "Reveal" has to actually reveal. The rack is filtered and searched, so the row
+                // this call exists to show can legitimately be hidden by a chip the user set an
+                // hour ago - and the Graded Intake's toast promising a drafted session, landing on
+                // a list that does not contain it, is #614 wearing a different hat. Clear the
+                // view (never the data) and repaint before looking for the row.
+                if (!HasSessionRackRow(sessionId)) ClearSessionRackFilters();
+
+                // Scroll the matching row into view. Rows carry their session id in Tag; a
                 // miss here is cosmetic only, so it never fails the call.
                 try
                 {
-                    var panel = PresetsTab?.CustomSessionsPanel;
+                    var panel = PresetsTab?.SessionRackPanel;
                     if (panel != null)
                     {
                         foreach (var child in panel.Children)

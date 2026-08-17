@@ -352,7 +352,8 @@ namespace ConditioningControlPanel
                 }
                 else if (kind == CatalogueKindSessions)
                 {
-                    RefreshCustomSessionCards();
+                    // The share-status badge lives on the rack row, so the whole rack repaints.
+                    RepaintSessionRack();
                 }
                 // CatalogueKindMods: ModManagerDialog rebuilds its badges from
                 // settings every time its list refreshes; nothing to update here.

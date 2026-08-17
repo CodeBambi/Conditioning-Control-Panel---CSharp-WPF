@@ -118,6 +118,10 @@ namespace ConditioningControlPanel
             // Esc closes chat history mode if open.
             PreviewKeyDown += AvatarTubeWindow_PreviewKeyDown;
 
+            // THE FUSE's candle (AvatarTubeWindow.DescentFuse.cs). One subscription to a service
+            // that raises nothing without a cached ceremony timestamp; the flame stays collapsed.
+            InitializeDescentFuseCandle();
+
             _parentWindow = parentWindow;
             // Don't set Owner - it causes black window artifacts during minimize
             // We manage visibility manually via event handlers instead

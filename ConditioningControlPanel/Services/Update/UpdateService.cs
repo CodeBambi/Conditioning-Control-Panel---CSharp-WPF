@@ -20,44 +20,59 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.0";
+        public const string AppVersion = "6.8.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8 - One Account
+        public const string CurrentPatchNotes = @"v6.8.1 - Relapse
+
+🩹 NEW IN 6.8.1
+- Corner GIFs stop bricking the app. Turning one on could hard-freeze the window with nothing in the crash log, and it came back every launch because the slot was replayed from your settings. The app now catches it, starts clean and tells you. Animation is also far cheaper on the render thread, and two slots no longer race each other awake.
+- A session can no longer end behind a fullscreen browser. Esc and F11 always get you out, and the end-of-session dialog comes to the front instead of hiding behind a chrome-less window.
+- The nav rail stops disappearing behind the Spiral Room. Full-bleed web pages now yield while the rail is open.
+- Mandatory videos are audible again if you play through anything other than your default audio device.
+- Short haptics can actually be felt. Bounces, bubble pops and video hits were too brief for a motor to spin up, so every pulse now clears a minimum on-time in all six modes.
+- Takeover no longer re-arms itself on launch while its checkbox reads off.
+- Programs: runs the old day clock wrongly lapsed are audited and forgiven once at load. A run you genuinely missed stays missed.
+- Brain Drain now says when it failed to reach the screen instead of silently doing nothing.
+- The Takeaway strip's Export button reads Export session, which is what it actually does, and the remote mix slider is full width again.
+
+🖼️ MOD ART, FRAMED
+- Mod authors get crop control. Filled UI Art slots grow a Frame button: drag to pan, wheel to zoom, one preview per surface the image feeds, double-click to reset.
+- Mod art no longer inherits crop windows hand-drawn for our art. Un-framed art gets an honest centre crop instead.
+- New manifest fields for authors: artFraming (per resource, per surface) and bubbleScale.
+- Floating bubbles get a Size slider, and mods can set their own bubble scale.
 
 🚪 EVERYTHING MOVED: THE NEW LAYOUT
 - The tab strip is gone. Six doors now live on a rail down the left edge, with Settings pinned at the bottom. Hover the rail and it opens.
-- Home: your dashboard
-- Studio: Presets, Haptics and the effects rack (the settings your dashboard tiles used to pop open)
-- Companion: Her Room, Bambi Takeover, She's Listening, Awareness
-- Play: the Lab lives here now, alongside Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer, Remote Control and Available Subjects
-- You: Profile, Quests, Achievements, Skill Tree, Programs, Leaderboard
-- Library: Assets, Mods, Catalogue, Phrase Manager, Media Log
-- Enhancements is now the Skill Tree, and it lives behind the You door
-- YOUR CLICKS SWAPPED: left-click a dashboard tile or a rail chip to OPEN its page, right-click to toggle that feature on or off. That is the opposite of 6.7.4, so expect a surprise or two on your first evening.
+- Home is your dashboard. Studio holds the effects rack, presets and haptics. Companion is her room. Play holds the Lab, Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer and Remote Control. You holds Profile, Quests, Achievements, Skill Tree, Programs and Leaderboard. Library holds Assets, Mods, Catalogue, Phrase Manager and Media Log.
+- Enhancements is now the Skill Tree, behind the You door.
 - Ctrl+K opens a command palette. Type a few letters of any setting and it takes you straight there.
-- Settings is rebuilt into 8 sections, and Devices is the one home for your webcam, microphone, blink kill switch, gaze restriction, panic key and global hotkeys.
-- The ? box on the dashboard is one premium feature, genuinely free, every single day. It changes at midnight.
-- The bug report button moved out of the header and into the title bar.
-- Lost? The ? button opens a 60-second What moved in 6.8 tour that walks you through all of it.
+- Settings is rebuilt into 8 sections. Devices is the one home for webcam, microphone, blink kill switch, gaze restriction, panic key and hotkeys.
+- Lost? The ? button offers a 60-second What moved in 6.8 tour.
 
-🌐 REMOTE MEDIA, APP-WIDE
-- Scrolller joins as an online media source for the whole app, not just the For You feed
-- Flashes, mandatory videos, subliminals and more can now pull fresh online content
-- Strictly opt-in with its own consent switch - local files stay the default
-- 12 curated categories, streamed straight from the source - videos never touch your disk
+🌐 ONLINE MEDIA, EVERYWHERE
+- The For You feed goes endless: an online feed with niche channels, streamed straight from the source, plus a face-up trade peek before you commit a swap
+- Online media joins the whole app, not just the feed: flashes, mandatory videos and subliminals can pull fresh content too
+- Strictly opt-in behind its own consent switch. Local files stay the default.
 
 🔗 ONE ACCOUNT
-- XP earned on app.cclabs.app now lands in your level here, through the normal sync
-- Desktop, the web dashboard and mobile are becoming windows onto the same account
-- A sealed spiral has quietly appeared on the web dashboard. It is not explained.
+- XP earned on app.cclabs.app and on your phone now lands in your level here through the normal sync, no restart needed
+- Your profile card grew a Share button, and drops get share links. Your real face only rides a public link if you opt in.
+- Just Drop now opens in its own window, signed in as you, wallet live
+- A glass vat has appeared on your Trainer Card, and it fills as you play. A sealed spiral sits on the web dashboard. Neither is explained. Yet.
 
-✨ ALSO NEW
-- Mods can now name their sweeties: petname vocabulary plumbing across the whole app
-- Quest scheduling, event skins and other invisible seams for what comes next
+🎛️ SESSIONS, RETHOUGHT
+- The Session door got rebuilt: a compact color-coded rack with sort, filter and search, a preset chip rail, and a takeaway tray
+- Programs got a full repair-and-glow pass: honest day crediting, feasible tasks, graduation badges, and the new Ignition Curve that heats the tab as you commit
+
+✨ POLISH AND FIXES
+- Mods now repaint the whole app the moment you switch: doors, rack art, vault, plates, palette. Mods can also name their sweeties.
+- Tier livery: gold and diamond borders on tiered features, neon tier badges, and a FREE TODAY stamp on the daily free card. The ? box on the dashboard opens one premium feature, genuinely free, every day.
+- Brain Drain is live. It runs, it drains, it is on the rack.
+- 50+ community-reported bugs fixed across sync, lock cards, remote control, Deeper, haptics, presets and the player. Thank you, reporters.
 
 Season: Spiral September";
 

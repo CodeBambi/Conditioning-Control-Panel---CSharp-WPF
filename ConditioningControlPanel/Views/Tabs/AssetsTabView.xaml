@@ -111,8 +111,7 @@
                 <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
 
                 <!-- Everything below is dead weight while the source is "local", so it only
-                     unfolds once remote media is actually in play (or once there is a
-                     blocklist to review — that has to stay reachable either way). -->
+                     unfolds once remote media is actually in play. -->
                 <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
 
                     <!-- Mix ratio: only meaningful in "Both" -->
@@ -129,7 +128,7 @@
                         <Slider x:Name="SliderRemoteRatio" x:FieldModifier="internal" Grid.Column="1"
                                 Minimum="5" Maximum="95" Value="30" Height="22"
                                 IsSnapToTickEnabled="True" TickFrequency="5"
-                                VerticalAlignment="Center" MaxWidth="320" HorizontalAlignment="Left"
+                                VerticalAlignment="Center" MaxWidth="320"
                                 ToolTip="{loc:Str tooltip_remote_mix}"/>
                         <TextBlock x:Name="TxtRemoteRatio" x:FieldModifier="internal" Grid.Column="2"
                                    Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="11"
@@ -158,22 +157,6 @@
                                 Margin="6,0,0,0"/>
                     </StackPanel>
                     <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
-
-                    <!-- Blocklist. There is deliberately no NSFW filter (owner decision), so this
-                         is the user's only content control — which makes an inspectable list,
-                         not just a "block" button elsewhere, part of the feature. -->
-                    <Grid Margin="0,6,0,4">
-                        <TextBlock Text="{loc:Str label_remote_blocklist}" Style="{StaticResource SettingLabel}"
-                                   FontSize="12" HorizontalAlignment="Left"/>
-                        <Button x:Name="BtnRemoteClearBlocklist" x:FieldModifier="internal"
-                                Content="{loc:Str btn_remote_clear_blocklist}"
-                                Style="{StaticResource OutlineButton}" Padding="10,3" FontSize="11"
-                                HorizontalAlignment="Right"/>
-                    </Grid>
-                    <TextBlock x:Name="TxtRemoteBlocklistSummary" x:FieldModifier="internal"
-                               Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,0,0,6"/>
-                    <WrapPanel x:Name="RemoteBlockedChips" x:FieldModifier="internal"/>
                 </StackPanel>
             </StackPanel>
         </Border>
