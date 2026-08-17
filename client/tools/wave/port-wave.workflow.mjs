@@ -122,6 +122,7 @@ Produce the plan a fresh-context reviewer will judge before any code is written:
 4. Every lock, ordering, or concurrency invariant your change touches — name the actual lock, and check the written invariants near it rather than the one you assumed.
 5. The facts you will add, and the INDEPENDENT revert that reds each one. An assertion that passes with the mechanism reverted is not a fact.
 6. Anything out of File Scope you discovered, to be filed rather than fixed.
+7. REUSE BEFORE YOU WRITE. Name the EXISTING helper, idiom, vocabulary or mechanism in this repository that your change reuses, cited \`File.cs:line\`. If you are introducing a new one, show the search you actually ran (the grep, the symbol you looked for) and say why nothing that exists fits. This repo already has typed-outcome vocabularies, a shared \`TestWait\`, harness/fake patterns, seam factories and skip-conversion patterns; a second one of anything is a cost, not a deliverable. The reviewer's contract already blocks "an abstraction with no concrete consumer" — do not hand it one. When the honest answer is "the mechanism already exists and the right change is to USE it", that is the strongest plan you can return, not a weaker one.
 
 PERSIST IT BEFORE YOU RETURN. Write your plan to
   C:\\Code\\Conditioning-Control-Panel---CSharp-WPF\\.port\\plans\\${packet}\\plan-round-1.md
