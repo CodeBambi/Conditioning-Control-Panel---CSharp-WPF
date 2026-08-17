@@ -775,6 +775,10 @@ namespace ConditioningControlPanel
         /// leave one hidden.</summary>
         private readonly List<(FrameworkElement Element, Visibility Was)> _navRailAirspaceHeld = new();
 
+        /// <summary>One Information line per run, then Debug - see the log call in
+        /// <see cref="ApplyNavRailAirspace"/> for why the first one has to clear Serilog's floor.</summary>
+        private bool _navRailAirspaceLogged;
+
         /// <summary>
         /// The nav rail is <c>Panel.ZIndex=60</c> over a <c>ColumnSpan=2</c> footprint - it does
         /// not push the page aside, it flies over it. WPF z-order means nothing to a WebView2:
@@ -825,9 +829,26 @@ namespace ConditioningControlPanel
 
                 HoldOverlappingBrowsers(this, flyout);
 
-                if (_navRailAirspaceHeld.Count > 0)
+                if (_navRailAirspaceHeld.Count == 0) return;
+
+                // ONCE AT INFORMATION, THEN QUIET. Serilog's floor is Information (App.xaml.cs), so
+                // a Debug line here can never reach a user's bug report - and this is the breadcrumb
+                // that separates "the rail is behind the page" from "the rail did not open at all",
+                // which is precisely the confusion #956 and #962 arrived as. But the rail expands on
+                // every hover, and on a full-bleed page that is dozens of lines a session, so only
+                // the first hold of a run earns the floor. After that the fact is already in the log.
+                if (!_navRailAirspaceLogged)
+                {
+                    _navRailAirspaceLogged = true;
+                    App.Logger?.Information(
+                        "Nav rail flyout: yielded {Count} browser HWND(s) to uncover the rail (#956). " +
+                        "Further holds this run are logged at Debug.", _navRailAirspaceHeld.Count);
+                }
+                else
+                {
                     App.Logger?.Debug("Nav rail flyout: yielded {Count} browser HWND(s) (#956)",
                         _navRailAirspaceHeld.Count);
+                }
             }
             catch (Exception ex)
             {
