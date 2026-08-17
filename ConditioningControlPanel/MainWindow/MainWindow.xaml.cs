@@ -1984,26 +1984,36 @@ namespace ConditioningControlPanel
                 // The DecodePixelWidth values mirror the XAML: the rail only ever shows
                 // these ~170px wide, and re-resolving without a decode cap would pull the
                 // full-size neon PNGs into memory.
-                var railArtMap = new (string key, string resourcePath, int decodeWidth)[]
+                //
+                // The surfaceId on each row is what ApplyArtFraming crops against: the six
+                // ordinary chips are railChip; Blink and Lockdown are the two taller launchers
+                // that carry live controls over their whole face (railCard). The shapes those
+                // ids stand for live in Services/ModArtFraming.cs, not here.
+                var railArtMap = new (string key, string resourcePath, int decodeWidth, string surfaceId)[]
                 {
-                    ("ArtTakeover",  "features/takeover.png",       384),
-                    ("ArtAwareness", "features/awareness.png",      512),
-                    ("ArtHaptics",   "features/vibe.png",           384),
-                    ("ArtIntake",    "features/lab_quiz_hero.png",  512),
-                    ("ArtRemote",    "features/remote_control.png", 768),
-                    ("ArtBlink",     "features/blink_trainer.png",  512),
-                    ("ArtFyp",       "features/fyp.png",           512),
-                    ("ArtLockdown",  "lockdown_icon.png",          1024),
+                    ("ArtTakeover",  "features/takeover.png",       384, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtAwareness", "features/awareness.png",      512, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtHaptics",   "features/vibe.png",           384, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtIntake",    "features/lab_quiz_hero.png",  512, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtRemote",    "features/remote_control.png", 768, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtBlink",     "features/blink_trainer.png",  512, ModArtFramingRegistry.SurfaceRailCard),
+                    ("ArtFyp",       "features/fyp.png",           512, ModArtFramingRegistry.SurfaceRailChip),
+                    ("ArtLockdown",  "lockdown_icon.png",          1024, ModArtFramingRegistry.SurfaceRailCard),
                 };
                 var railResources = SettingsTab.PremiumRail?.Resources;
                 if (railResources != null)
                 {
-                    foreach (var (key, path, decodeWidth) in railArtMap)
+                    foreach (var (key, path, decodeWidth, surfaceId) in railArtMap)
                     {
                         if (railResources[key] is not ImageBrush brush || brush.IsFrozen) continue;
                         var image = LoadModImageDecoded(path, decodeWidth);
                         if (image != null)
                             brush.ImageSource = image;
+                        // Unconditional, and NOT inside the image != null guard: the crop has to
+                        // be re-decided on every pass or a mod that overrides only some slots
+                        // leaves the rest wearing whatever the previous mod was framed by, and
+                        // switching back to built-in art never restores the shipped rect.
+                        ApplyArtFraming(brush, path, surfaceId);
                     }
                 }
 
@@ -2014,6 +2024,8 @@ namespace ConditioningControlPanel
                 // path is the mod compatibility surface and is never renamed to match the room.
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
+                    // Both rows are pageHeader surfaces for framing purposes — a page's own hero
+                    // strip, not a card in a wall.
                     ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
                     // Still a "lab hero" by filename — the art path is the mod compatibility
                     // surface and is never renamed — but the card it paints is the Companion
@@ -2024,10 +2036,11 @@ namespace ConditioningControlPanel
                 };
                 foreach (var (path, brush) in labHeroMap)
                 {
-                    if (brush == null) continue;
+                    if (brush == null || brush.IsFrozen) continue;
                     var image = ModResourceResolver.ResolveImage(path);
                     if (image != null)
                         brush.ImageSource = image;
+                    ApplyArtFraming(brush, path, ModArtFramingRegistry.SurfacePageHeader);
                 }
 
                 // Play door card heroes (UX restructure, Phase 6). The three that came off the Lab
@@ -2042,30 +2055,34 @@ namespace ConditioningControlPanel
                 // the rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps mirror
                 // railArtMap's, and the brush's ImageSource is mutated IN PLACE - the cards bind the
                 // brush itself, so replacing the brush would repaint nothing.
-                var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth)[]
+                var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth, string surfaceId)[]
                 {
-                    ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512),
-                    ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512),
-                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512),
-                    ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512),
-                    ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512),
-                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768),
-                    ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512),
-                    ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024),
+                    ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024, ModArtFramingRegistry.SurfacePlayCard),
                     // The page hero and the Loom strip. Both brushes were named and left mutable
                     // by the 0812 remake but never fed, so a .ccpmod overriding features/dtrh.png
                     // or features/loom.png repainted every OTHER surface that uses those files and
                     // left the two biggest ones on the embedded art. 1024 for the hero because it
                     // is the full-width banner at the top of the wall; 512 for the strip.
-                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024),
-                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512),
+                    // dtrh is the full-width banner at the top of the wall, not a card header, so
+                    // it frames against a much wider box (playHero).
+                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024, ModArtFramingRegistry.SurfacePlayHero),
+                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                 };
-                foreach (var (path, brush, decodeWidth) in playHeroMap)
+                foreach (var (path, brush, decodeWidth, surfaceId) in playHeroMap)
                 {
                     if (brush == null || brush.IsFrozen) continue;
                     var image = LoadModImageDecoded(path, decodeWidth);
                     if (image != null)
                         brush.ImageSource = image;
+                    // Unconditional for the same reason as the rail — see the note there.
+                    ApplyArtFraming(brush, path, surfaceId);
                 }
 
                 // The rail chips do NOT all paint straight from the resources above: the hover
@@ -2092,6 +2109,92 @@ namespace ConditioningControlPanel
         /// </summary>
         private static ImageSource? LoadModImageDecoded(string resourcePath, int decodeWidth)
             => ModResourceResolver.ResolveImageDecoded(resourcePath, decodeWidth);
+
+        /// <summary>
+        /// Crops one art brush to the surface it paints, honouring the active mod's framing.
+        ///
+        /// <para><b>Why this exists.</b> The rail's <c>Art*</c> brushes carry Viewbox rects that
+        /// were hand-tuned to the EMBEDDED art (they frame the illustration and push the wordmark
+        /// burned into those PNGs out of the chip). Mod art used to be swapped in by mutating
+        /// <c>ImageSource</c> and nothing else, so an author's picture was cropped by a window
+        /// chosen for a completely different picture - which is why some slots looked right and
+        /// others were nonsense. The Play cards had the mirror fault: no rect, so a blind centre
+        /// crop, except goon_game.png whose one rect mod art also inherited.</para>
+        ///
+        /// <para>The decision itself lives in <see cref="ModArtFramingRegistry.ResolveViewbox"/>
+        /// (built-in art keeps its shipped rect; mod art with framing uses it; mod art WITHOUT
+        /// framing gets an honest centre crop, never ours). This method only gathers the three
+        /// facts that decision needs and writes the answer.</para>
+        /// </summary>
+        private static void ApplyArtFraming(ImageBrush brush, string resourcePath, string surfaceId)
+        {
+            try
+            {
+                if (brush.IsFrozen) return;
+
+                // Aspect from the resolved bitmap, which is what is actually on screen - a
+                // decode cap shrinks both axes, so the RATIO survives it. Width/Height are DIPs
+                // rather than pixels; for a ratio that is the same number.
+                var src = brush.ImageSource;
+                double aspect = src != null && src.Height > 0 ? src.Width / src.Height : 0;
+
+                // HasModOverride, not "did an image resolve": an event skin or the active mod
+                // having drawn this file is precisely the case where our own rect stops applying.
+                bool isModSupplied = ModResourceResolver.HasModOverride(resourcePath);
+                var framing = isModSupplied ? ActiveModFraming(resourcePath, surfaceId) : null;
+
+                // A Uniform brush letterboxes onto a backdrop plate ON PURPOSE - the Goon card's
+                // square wordmark on #FF161622 is the case - so for un-framed mod art the honest
+                // default is the WHOLE image, not a window of the card's aspect. Cropping a square
+                // wordmark to 2.2:1 would smear it, which is the exact thing that Stretch and that
+                // plate were chosen to avoid. An author who HAS framed it gets what they asked for.
+                if (isModSupplied && framing == null && brush.Stretch == Stretch.Uniform)
+                {
+                    brush.Viewbox = new Rect(0, 0, 1, 1);
+                    return;
+                }
+
+                brush.Viewbox = ModArtFramingRegistry.ResolveViewbox(
+                    resourcePath, surfaceId, isModSupplied, aspect, framing);
+            }
+            catch (Exception ex)
+            {
+                // A brush that keeps its previous crop is a cosmetic miss; one that takes the
+                // window down on a mod switch is not.
+                App.Logger?.Debug("ApplyArtFraming({Path}, {Surface}): {E}", resourcePath, surfaceId, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The active mod's framing for one (resource path, surface) pair, or null when it framed
+        /// nothing for it.
+        ///
+        /// <para>Both keys are matched case-insensitively and path separators are normalised,
+        /// because <c>mod.json</c> is hand-authored as often as it is editor-written: an author on
+        /// Windows may well type <c>features\fyp.png</c>, and the resolver normalises to '/'.
+        /// A path that is framed but not for THIS surface returns null, which
+        /// <see cref="ModArtFramingRegistry.ResolveViewbox"/> reads as "centre-crop it".</para>
+        /// </summary>
+        private static ModArtFraming? ActiveModFraming(string resourcePath, string surfaceId)
+        {
+            var map = App.Mods?.ActiveMod?.Manifest?.ArtFraming;
+            if (map == null || map.Count == 0) return null;
+
+            foreach (var entry in map)
+            {
+                if (entry.Value == null) continue;
+                if (!string.Equals(entry.Key.Replace('\\', '/'), resourcePath,
+                                   StringComparison.OrdinalIgnoreCase)) continue;
+
+                foreach (var surface in entry.Value)
+                {
+                    if (string.Equals(surface.Key, surfaceId, StringComparison.OrdinalIgnoreCase))
+                        return surface.Value;
+                }
+                return null;
+            }
+            return null;
+        }
 
         private void BtnManageMods_Click(object sender, RoutedEventArgs e)
         {

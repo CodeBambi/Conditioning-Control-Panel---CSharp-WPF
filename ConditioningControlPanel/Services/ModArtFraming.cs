@@ -322,8 +322,17 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrWhiteSpace(text)) return false;
             var parts = text.Split(',');
             if (parts.Length != 2) return false;
-            return double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out x)
-                   && double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out y);
+
+            // Parsed into locals and only published on FULL success: TryParse zeroes its out
+            // parameter when it fails, so parsing straight into x/y would hand a caller that
+            // ignores the bool a top-left corner instead of the centre this promises.
+            if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var px)
+                || !double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var py))
+                return false;
+
+            x = px;
+            y = py;
+            return true;
         }
 
         private static bool IsUsable(double aspect) =>

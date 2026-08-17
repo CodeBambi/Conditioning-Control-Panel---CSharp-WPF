@@ -180,6 +180,19 @@
                 <!-- 1489 wide, the root Viewbox scales up to ~2.6x on a 4K window). -->
                 <!-- It is set against the FULL source, so the tighter the Viewbox   -->
                 <!-- crop the larger it has to be.                                   -->
+                <!--                                                                 -->
+                <!-- EVERY Viewbox BELOW IS MIRRORED in ModArtFramingRegistry, which  -->
+                <!-- is the RUNTIME authority: LoadFeatureImages re-decides the crop   -->
+                <!-- on each pass (ApplyArtFraming) and writes it over these values.   -->
+                <!-- Change a rect here and change it there, or the two disagree the   -->
+                <!-- moment the code path runs. They are duplicated on purpose: these  -->
+                <!-- literals are what renders if that code has not run yet, so        -->
+                <!-- deleting them would make built-in framing depend on ctor order.   -->
+                <!--                                                                 -->
+                <!-- The rects apply to OUR art only. Mod art is framed by the        -->
+                <!-- author (manifest artFraming) or centre-cropped, never by these:  -->
+                <!-- a window tuned to dodge OUR wordmark means nothing on someone    -->
+                <!-- else's picture, which is the bug the registry exists to fix.     -->
                 <!-- ============================================================ -->
                 <ImageBrush x:Key="ArtTakeover" Stretch="UniformToFill" Viewbox="0,0.06,1,0.54">
                     <ImageBrush.ImageSource>
