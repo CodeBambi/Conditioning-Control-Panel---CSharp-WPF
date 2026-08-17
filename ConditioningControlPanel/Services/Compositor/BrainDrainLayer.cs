@@ -109,12 +109,100 @@ public sealed class BrainDrainLayer : BaseLayer
         _lastSeenFrames = -1;   // fresh pump: its counter restarts at 0, so never match a stale one
         _dirty = true;
         SetActive(true);
+        ArmFirstFrameWatchdog(intensity, melt);
     }
 
     public void Stop()
     {
+        DisarmFirstFrameWatchdog();
         SetActive(false);
         ReleaseCaptures();
+    }
+
+    // ================================================================================
+    //  #960 - "started" has to mean something
+    // ================================================================================
+
+    /// <summary>How long to give the pump before calling a run dead. At 30 fps the first frame is
+    /// due in ~33 ms; three seconds is slow-machine slack, not a real wait.</summary>
+    private static readonly TimeSpan FirstFrameGrace = TimeSpan.FromSeconds(3);
+    private System.Windows.Threading.DispatcherTimer? _firstFrameWatchdog;
+
+    /// <summary>
+    /// The honest half of #960 ("Brain drain plays the audio file... but nothing visual even with
+    /// every slider at 100%"). Every path between the button and the pixels can fail SILENTLY and
+    /// still log <c>Brain Drain started on compositor layer</c> at Information: the pump builds no
+    /// slot when GDI refuses a DC or a DIB section, <c>GetTargetScreens</c> can hand it an empty
+    /// array during a display transition, and a slot whose bounds do not contain the host's centre
+    /// is simply never taken by Render. All three end in a layer that is Active, dirty, drawing
+    /// nothing, and claiming success in the log - which is why the triage of this report had a
+    /// start line to read and no way to tell which of those it was.
+    ///
+    /// <para>So the claim is now checked. If the pump has published no frame at all by the time
+    /// the grace is up, the log says so with the numbers that separate the three causes, and the
+    /// user is told rather than left staring at an unchanged screen. This does not FIX a
+    /// zero-frame run - it turns one into something a report can be triaged from.</para>
+    /// </summary>
+    private void ArmFirstFrameWatchdog(int intensity, bool melt)
+    {
+        DisarmFirstFrameWatchdog();
+
+        var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+        {
+            Interval = FirstFrameGrace
+        };
+        timer.Tick += (_, _) =>
+        {
+            DisarmFirstFrameWatchdog();
+            try
+            {
+                var pump = _pump;
+                if (pump == null) return;                  // stopped in the meantime - not a failure
+                if (pump.FramesPublished > 0) return;      // it is running; nothing to say
+
+                App.Logger?.Warning(
+                    "Brain Drain produced NO frames in {Grace:F0}s (#960) - intensity {Intensity}, melt {Melt}, " +
+                    "downscale {Downscale}, screens targeted {Screens}, capture slots built {Slots}. " +
+                    "{Cause}",
+                    FirstFrameGrace.TotalSeconds, intensity, melt, _downscale,
+                    _requestedScreens.Length, pump.SlotCount,
+                    _requestedScreens.Length == 0
+                        ? "No screens were targeted - GetTargetScreens came back empty (display transition, or DualMonitorEnabled with no enumerable screens)."
+                        : pump.SlotCount == 0
+                            ? "Screens were targeted but no capture slot could be built - CreateCompatibleDC/CreateDIBSection refused (GDI exhaustion)."
+                            : "Slots exist and the capture is producing nothing - the desktop StretchBlt is failing.");
+
+                NotifyNoFrames();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrainDrain first-frame watchdog failed: {E}", ex.Message);
+            }
+        };
+        timer.Start();
+        _firstFrameWatchdog = timer;
+    }
+
+    private void DisarmFirstFrameWatchdog()
+    {
+        var timer = _firstFrameWatchdog;
+        _firstFrameWatchdog = null;
+        try { timer?.Stop(); } catch { }
+    }
+
+    private static void NotifyNoFrames()
+    {
+        try
+        {
+            App.Notifications?.Show(
+                "Brain Drain could not capture the screen, so there is nothing to blur. The audio half is unaffected - " +
+                "please send a bug report so we can see why.",
+                NotificationType.Warning, TimeSpan.FromSeconds(12));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("BrainDrain no-frames notice failed: {E}", ex.Message);
+        }
     }
 
     // Blur strength per intensity point, SOURCE px per unit. The legacy constant was 0.4 (radius

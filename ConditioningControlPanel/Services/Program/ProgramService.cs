@@ -150,6 +150,11 @@ public class ProgramService : IDisposable
         State = LoadState();
         Library = BuiltInPrograms.All();
 
+        // #959: un-lapse runs the OLD day clock condemned. Must run BEFORE the rollover below,
+        // which returns early on anything that is not Active and would otherwise leave the run
+        // sitting exactly where the bug parked it.
+        RepairSpuriousLapse();
+
         // Startup rollover check, before any UI reads Today.
         EvaluateRollover();
 
@@ -469,6 +474,146 @@ public class ProgramService : IDisposable
         RaiseTodayChanged();
 
         App.Logger?.Information("Program {Program} restarted, attempt {Attempt}", program.Id, enrollment.AttemptNumber);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // #959 - the one-shot lapse audit
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>What the audit decided about one lapsed run.</summary>
+    /// <param name="ShouldRestore">The lapse was manufactured; put the run back.</param>
+    /// <param name="CorrectedMissedDays">Absences that survive the correction.</param>
+    /// <param name="ContradictoryDays">Day indices stamped Missed AND DayCompleted.</param>
+    internal readonly record struct LapseAudit(
+        bool ShouldRestore, int CorrectedMissedDays, IReadOnlyList<int> ContradictoryDays);
+
+    /// <summary>
+    /// Decide whether a lapsed run was lapsed by the user or by the pre-6.8.0 day clock (#959).
+    ///
+    /// <para>THE SIGNATURE IS A CONTRADICTION IN THE LEDGER, not a version stamp. 57adfb174
+    /// describes exactly what the old clamp produced: "the record carried Missed and, once
+    /// finished, DayCompleted - a state that means nothing, breaks PerfectDayCount, and spent a
+    /// day off for a day still in front of the user". A day cannot be both the absence and the
+    /// day that was finished, so a lapsed ledger holding such a row was condemned by arithmetic
+    /// the user never had a say in. Runs whose ledger is self-consistent are left lapsed: they
+    /// really were missed, and quietly forgiving them would make the allowance meaningless.</para>
+    ///
+    /// <para>WHAT THIS DELIBERATELY DOES NOT CATCH. cce784b52's day-boundary bug discarded the
+    /// completion instead of filing it, so those days read as an ordinary miss and are
+    /// indistinguishable from one. Forgiving them would mean forgiving every lapse ever recorded.
+    /// A user in that position still has Restart, which keeps their banked rewards.</para>
+    ///
+    /// Pure and static so the rule can be tested without a service, a file or a clock - same
+    /// idiom as <c>ProgramClock.Evaluate</c> and <c>CornerGifService.ResolveRestoreAction</c>.
+    /// </summary>
+    internal static LapseAudit AuditLapse(ProgramEnrollment enrollment, int daysOffAllowed)
+    {
+        var contradictory = new List<int>();
+        int genuinelyMissed = 0;
+
+        foreach (var record in enrollment.Records.Values)
+        {
+            if (!record.Missed) continue;
+            if (record.DayCompleted) contradictory.Add(record.DayIndex);
+            else genuinelyMissed++;
+        }
+
+        contradictory.Sort();
+
+        // No contradiction, no manufactured lapse - leave the run exactly as the user left it.
+        if (contradictory.Count == 0) return new LapseAudit(false, genuinelyMissed, contradictory);
+
+        // Restore only if the run would have survived on the corrected count. If it would have
+        // lapsed anyway the contradiction was cosmetic, and un-lapsing would be a gift, not a fix.
+        return new LapseAudit(genuinelyMissed <= daysOffAllowed, genuinelyMissed, contradictory);
+    }
+
+    /// <summary>
+    /// Apply <see cref="AuditLapse"/> to the active run, once, at load. See that method for why
+    /// the rule is what it is.
+    /// </summary>
+    private void RepairSpuriousLapse()
+    {
+        try
+        {
+            var enrollment = State.Active;
+            if (enrollment is not { State: ProgramEnrollmentState.Lapsed }) return;
+            if (enrollment.LapseAudited) return;
+
+            var program = ActiveProgram;
+            if (program == null) return;   // unknown program id: no rules to audit against
+
+            int allowed = enrollment.StrictMode && program.Rules.StrictAvailable
+                ? 0
+                : program.Rules.DaysOffAllowed;
+
+            var audit = AuditLapse(enrollment, allowed);
+
+            // Stamped either way: a genuine lapse must never be re-examined on every launch.
+            enrollment.LapseAudited = true;
+            MarkDirty();
+
+            if (!audit.ShouldRestore)
+            {
+                Save();
+                return;
+            }
+
+            foreach (var dayIndex in audit.ContradictoryDays)
+            {
+                var record = enrollment.GetRecord(dayIndex);
+                if (record == null) continue;
+                record.Missed = false;
+                record.DayOffSpent = false;
+            }
+
+            enrollment.State = ProgramEnrollmentState.Active;
+            enrollment.LapsedAt = null;
+            enrollment.DaysOffRemaining = Math.Max(0, allowed - audit.CorrectedMissedDays);
+
+            // Re-anchor to today. The run has been sitting lapsed for however long it took the
+            // user to update, and EvaluateRollover runs immediately after this - without the
+            // re-anchor it would sweep every one of those days as an absence and lapse the run
+            // again on the same launch that just repaired it.
+            enrollment.CurrentDayDate = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
+            var today = enrollment.GetOrCreateRecord(enrollment.CurrentDay, enrollment.CurrentDayDate);
+            today.ProgramDate = enrollment.CurrentDayDate;
+
+            Save();
+            RaiseTodayChanged();
+
+            App.Logger?.Warning(
+                "Program {Program}: lapse on day {Day} reversed - {Bad} ledger row(s) were stamped Missed AND complete " +
+                "(pre-6.8.0 day clock, #959). {Left} day(s) off restored",
+                program.Id, enrollment.CurrentDay, audit.ContradictoryDays.Count, enrollment.DaysOffRemaining);
+
+            NotifyLapseReversed(program);
+        }
+        catch (Exception ex)
+        {
+            // A run that stays lapsed is recoverable by hand (Restart keeps banked rewards); a
+            // throw here would take ProgramService's whole construction down with it.
+            App.Logger?.Error(ex, "Program lapse audit failed - leaving the run as saved");
+        }
+    }
+
+    /// <summary>
+    /// Say so out loud. The reporter of #959 filed it twice precisely because the run silently
+    /// stopped and nothing ever explained it; a silent un-stop is the same failure inverted.
+    /// </summary>
+    private static void NotifyLapseReversed(ProgramDefinition program)
+    {
+        try
+        {
+            App.Notifications?.Show(
+                $"{program.Title} is running again - the run was stopped by a bug in the day counter, not by you. " +
+                "Your days off have been put back.",
+                NotificationType.Success, TimeSpan.FromSeconds(14));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Lapse-reversed notice failed: {E}", ex.Message);
+        }
     }
 
     // ---------------------------------------------------------------------------------------

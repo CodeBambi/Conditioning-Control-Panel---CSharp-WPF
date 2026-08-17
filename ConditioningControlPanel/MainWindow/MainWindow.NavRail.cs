@@ -763,6 +763,107 @@ namespace ConditioningControlPanel
 
             ApplyNavDoorRows(expand, animate);
             ApplyNavRailDoorState(animate);
+            ApplyNavRailAirspace(expand);
+        }
+
+        // ================================================================================
+        //  #956 / #962 - the flyout vs a native browser HWND
+        // ================================================================================
+
+        /// <summary>Browsers this flyout is currently holding down, and what they were before.
+        /// Restored from THIS list rather than re-walked, so a tab switch mid-hover can never
+        /// leave one hidden.</summary>
+        private readonly List<(FrameworkElement Element, Visibility Was)> _navRailAirspaceHeld = new();
+
+        /// <summary>
+        /// The nav rail is <c>Panel.ZIndex=60</c> over a <c>ColumnSpan=2</c> footprint - it does
+        /// not push the page aside, it flies over it. WPF z-order means nothing to a WebView2:
+        /// it is a native child HWND and it paints over every WPF element in the same window
+        /// whatever the z-order says. On the Spiral Room, whose embed is full-bleed, that put the
+        /// entire expanded rail BEHIND the browser - the reports read "the spiral renders on top
+        /// of the side menu" (#956) and "the lateral bar is hidden behind the black background"
+        /// (#962), which is one bug seen from two angles.
+        ///
+        /// <para>So the browser yields for as long as the flyout is out. This is the same
+        /// mitigation <c>Controls/SpiralRailHost.cs</c> already makes for the rail-docked
+        /// mini ("shown ONLY while the rail is wide enough... torn down whenever the rail
+        /// collapses"), applied from the other side. <see cref="Visibility.Hidden"/> rather than
+        /// Collapsed: the browser keeps its layout rectangle, so nothing reflows and no page
+        /// state is lost - only the HWND leaves the screen, uncovering the WPF content behind it
+        /// (for the Spiral Room that is the tab's own <c>#0A0514</c> ground).</para>
+        ///
+        /// <para>Only browsers that actually INTERSECT the flyout are touched, so hovering the
+        /// rail on a page whose browser card is indented past 236px costs nothing and shows
+        /// nothing. The proper fix is to re-host the flyout in its own top-level window - the
+        /// dodge <c>Windows/SettingsPaletteWindow.xaml.cs</c> already takes for exactly this
+        /// fight - which is a much larger change than a hover state should carry.</para>
+        /// </summary>
+        private void ApplyNavRailAirspace(bool expand)
+        {
+            try
+            {
+                if (!expand)
+                {
+                    foreach (var (element, was) in _navRailAirspaceHeld)
+                    {
+                        try { element.Visibility = was; } catch { }
+                    }
+                    _navRailAirspaceHeld.Clear();
+                    return;
+                }
+
+                if (_navRailAirspaceHeld.Count > 0) return;   // already held for this expansion
+                if (NavSidebar == null || !NavSidebar.IsVisible) return;
+
+                // Measured at the FULL expanded width, not the animated one: the width tween is
+                // still running when this is called, and a browser that will be covered a
+                // heartbeat from now has to get out of the way now, not flicker halfway through.
+                var origin = NavSidebar.TranslatePoint(new Point(0, 0), this);
+                var flyout = new Rect(origin.X, origin.Y,
+                                      NavRailExpandedWidth, NavSidebar.ActualHeight);
+                if (flyout.Width <= 0 || flyout.Height <= 0) return;
+
+                HoldOverlappingBrowsers(this, flyout);
+
+                if (_navRailAirspaceHeld.Count > 0)
+                    App.Logger?.Debug("Nav rail flyout: yielded {Count} browser HWND(s) (#956)",
+                        _navRailAirspaceHeld.Count);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ApplyNavRailAirspace: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Walks for visible WebView2s overlapping <paramref name="flyout"/> (window
+        /// coordinates) and hides them, remembering what each one was.</summary>
+        private void HoldOverlappingBrowsers(DependencyObject root, Rect flyout)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+
+                if (child is Microsoft.Web.WebView2.Wpf.WebView2 browser)
+                {
+                    // A hidden browser has no airspace to yield, and it has no descendants worth
+                    // walking either.
+                    if (!browser.IsVisible || browser.ActualWidth <= 0 || browser.ActualHeight <= 0) continue;
+                    try
+                    {
+                        var at = browser.TranslatePoint(new Point(0, 0), this);
+                        var rect = new Rect(at.X, at.Y, browser.ActualWidth, browser.ActualHeight);
+                        if (!rect.IntersectsWith(flyout)) continue;
+
+                        _navRailAirspaceHeld.Add((browser, browser.Visibility));
+                        browser.Visibility = Visibility.Hidden;
+                    }
+                    catch { /* not connected to this window's tree - nothing to hide */ }
+                    continue;
+                }
+
+                HoldOverlappingBrowsers(child, flyout);
+            }
         }
 
         /// <summary>

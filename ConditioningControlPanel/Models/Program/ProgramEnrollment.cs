@@ -227,6 +227,16 @@ public class ProgramEnrollment
     public DateTime? LapsedAt { get; set; }
 
     /// <summary>
+    /// This run's ledger has already been audited against the pre-6.8.0 day-clock bugs (#959).
+    /// One-shot: set whether or not the audit decided to restore anything, so a run whose lapse
+    /// was genuine is never re-examined, and a run that WAS restored cannot be restored twice.
+    ///
+    /// Additive and defaulted, so enrollments saved before it existed round-trip unchanged - and
+    /// reading false on an old save is exactly right, because those are the saves worth auditing.
+    /// </summary>
+    public bool LapseAudited { get; set; }
+
+    /// <summary>
     /// Program-date the daily nudge last fired on. Persisted rather than held in memory so a
     /// restart during the nudge hour cannot fire it a second (and third) time - the reminder is
     /// the one thing in this file the user hears whether or not they open the app.
