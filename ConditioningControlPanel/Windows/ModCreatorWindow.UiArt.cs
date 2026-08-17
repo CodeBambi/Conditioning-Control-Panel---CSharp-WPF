@@ -107,7 +107,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("UI Art"));
-            stack.Children.Add(CreateSectionDescription("The rest of the app's artwork: the nav rail doors, the Play wall heroes, the vault and dashboard tiles, and the session and intake cards. Every slot is a straight file swap -- your image is packed as resources/<the filename under each slot> and the app loads it instead of its own copy. Leave a slot empty and the built-in art stays. The dimmed art behind each slot is what you are replacing."));
+            stack.Children.Add(CreateSectionDescription("The rest of the app's artwork: the nav rail doors, the Play wall heroes, the vault and dashboard tiles, and the session and intake cards. Every slot is a straight file swap -- your image is packed as resources/<the filename under each slot> and the app loads it instead of its own copy. Leave a slot empty and the built-in art stays. The dimmed art behind each slot is what you are replacing.\n\nSlots that get cropped to fit a chip, card or banner show a \"Frame\" button once you have picked an image. It opens a mock of the real surface at its real shape: drag to move, wheel to zoom, double-click for the automatic crop. Frame it there instead of pre-cropping the PNG -- the crop is stored as numbers, so one file can be framed differently for each surface it paints and you keep your original."));
 
             // ── Nav doors ──
             stack.Children.Add(CreateSubHeader("Nav Doors"));
@@ -116,12 +116,12 @@ namespace ConditioningControlPanel
 
             // ── Play wall ──
             stack.Children.Add(CreateSubHeader("Play Wall"));
-            stack.Children.Add(CreateSectionDescription("Hero and card art on the Play door. Wide 16:9 (1376x768) reads best -- the cards crop to a ~135px-tall header, so keep the subject centred. Three of these are SHARED files, one image feeding several crops: features/dtrh.png is also the dashboard's Rabbit Hole tile, features/lab_quiz_hero.png also paints the Graded Intake header and the quick-launch rail chip, and features/lab_aimemory_hero.png also paints the Companion door's permissions grid. The \"lab\" filenames are historical and are never renamed -- the path is the compatibility surface, not the room."));
+            stack.Children.Add(CreateSectionDescription("Hero and card art on the Play door. Wide 16:9 (1376x768) reads best; the cards crop to a short header plate, so use Frame to say which part of the image that plate shows. Three of these are SHARED files, one image feeding several differently-shaped frames: features/dtrh.png is also the dashboard's Rabbit Hole tile, features/lab_quiz_hero.png also paints the Graded Intake header and the quick-launch rail chip, and features/lab_aimemory_hero.png also paints the Companion door's permissions grid. Framing is per surface, so a shared file opens one preview for each and you frame them independently. The \"lab\" filenames are historical and are never renamed -- the path is the compatibility surface, not the room."));
             stack.Children.Add(BuildUiArtSlotWrap(PlayWallSlots, 150, 84));
 
             // ── Vault & dashboard ──
             stack.Children.Add(CreateSubHeader("Vault & Dashboard"));
-            stack.Children.Add(CreateSectionDescription("Dashboard tiles, Velvet Vault faces and the premium quick-launch rail chips. Wide 16:9 (1376x768) unless the slot says otherwise; the two strips (FYP banner, Lockdown) are much wider than tall, so art built for a 16:9 slot will crop hard there. Most of these files feed both a dashboard tile and a rail chip, so one upload repaints both."));
+            stack.Children.Add(CreateSectionDescription("Dashboard tiles, Velvet Vault faces and the premium quick-launch rail chips. Wide 16:9 (1376x768) unless the slot says otherwise. Most of these files feed both a dashboard tile and a rail chip, so one upload repaints both -- and a chip is barely wider than it is tall, so it takes a hard crop out of a 16:9 image. Frame it rather than fight it: each surface gets its own preview and its own crop from the same file."));
             stack.Children.Add(BuildUiArtSlotWrap(VaultDashboardSlots, 150, 84));
 
             // ── Session & intake ──
