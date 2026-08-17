@@ -2781,7 +2781,17 @@ internal class Bubble
         if (spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
 
         // Random properties (size/motion overridden for chaos effect bubbles)
-        _size = spec != null ? Math.Max(60, (int)Math.Round(spec.SizePx)) : random.Next(150, 250);
+        //
+        // The spec branch is chaos/variant bubbles: they carry a SizePx that is already balanced
+        // against their own scale system (ChaosBubbleVariants.GLOBAL_SIZE_SCALE and the per-variant
+        // sizeScale), so the user's ambient-size setting deliberately does NOT touch them.
+        // The ambient field is the branch that had no knob at all - see BubbleSizing.
+        _size = spec != null
+            ? Math.Max(60, (int)Math.Round(spec.SizePx))
+            : BubbleSizing.Scale(
+                  random.Next(BubbleSizing.BaseMinDip, BubbleSizing.BaseMaxDip),
+                  App.Settings?.Current?.BubblesSize ?? BubbleSizing.UserPercentDefault,
+                  App.Mods?.ActiveMod?.Manifest?.BubbleScale);
         // Magic Wand boon / Mesmer Reach upgrade: enlarge the click target around the visual.
         // Darters/freeze pickups keep their natural hitbox (precision catches stay precision).
         // Blindfold: effect bubbles render translucent; pickups stay fully visible (they're rewards).

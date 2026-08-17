@@ -577,6 +577,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "バブルを割ってXPを獲得！",
   "tooltip_bubbles_spawned_per_minute": "1分あたりのバブル出現数",
   "tooltip_bubble_spawn_rate": "バブルの出現頻度",
+  "tooltip_bubble_size": "バブルを描画する大きさ。カオスモードのバブルは独自のサイズを保ちます。",
   "setting_volume": "音量",
   "tooltip_volume_of_bubble_pop_sounds": "バブルポップ効果音の音量",
   "tooltip_bubble_pop_sound_volume": "バブルポップの音量",

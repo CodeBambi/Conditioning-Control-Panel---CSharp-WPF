@@ -577,6 +577,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "버블을 터뜨려 XP를 벌어요!",
   "tooltip_bubbles_spawned_per_minute": "분당 생성되는 버블 수",
   "tooltip_bubble_spawn_rate": "버블 생성 속도",
+  "tooltip_bubble_size": "버블이 그려지는 크기입니다. 카오스 모드 버블은 자체 크기를 유지합니다.",
   "setting_volume": "볼륨",
   "tooltip_volume_of_bubble_pop_sounds": "버블 팝 사운드 볼륨",
   "tooltip_bubble_pop_sound_volume": "버블 팝 사운드 볼륨",

@@ -303,6 +303,27 @@ namespace ConditioningControlPanel.Services
             var eventPath = EventSkinPath(resourcePath);
             if (eventPath != null && File.Exists(eventPath)) return true;
 
+            return HasActiveModOverride(resourcePath);
+        }
+
+        /// <summary>
+        /// Whether the ACTIVE MOD overrides this path, ignoring any event skin —
+        /// <see cref="HasModOverride"/> minus its event branch.
+        ///
+        /// <para>Art framing needs this distinction where nothing else did. A mod is a third party
+        /// whose picture owes nothing to the composition of ours, so our hand-tuned crop rects stop
+        /// applying to it. An event skin is our OWN seasonal art, drawn to the same template as the
+        /// file it replaces (wordmark in the same place and all), and it has no <c>artFraming</c>
+        /// channel to compensate with — so it keeps the shipped rect, which is also exactly what it
+        /// got before framing existed.</para>
+        /// </summary>
+        public static bool HasActiveModOverride(string resourcePath)
+        {
+            if (string.IsNullOrEmpty(resourcePath)) return false;
+            if (resourcePath.Contains("..") || Path.IsPathRooted(resourcePath)) return false;
+
+            resourcePath = resourcePath.Replace('\\', '/');
+
             var modPath = App.Mods?.ActiveMod?.InstalledPath;
             if (modPath == null) return false;
 

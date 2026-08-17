@@ -917,6 +917,12 @@ namespace ConditioningControlPanel
                     if (clone.IsFrozen) continue;
                     if (!ReferenceEquals(clone.ImageSource, source.ImageSource))
                         clone.ImageSource = source.ImageSource;
+                    // The CROP has to travel with the art, for exactly the reason the art does.
+                    // railArtMap now writes Viewbox as well as ImageSource (ApplyArtFraming), and
+                    // a chip paints its clone, not the resource - so a mod's framing written to
+                    // the resource alone would be arithmetically perfect and completely invisible.
+                    if (clone.Viewbox != source.Viewbox)
+                        clone.Viewbox = source.Viewbox;
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshRailArtClones: {E}", ex.Message); }

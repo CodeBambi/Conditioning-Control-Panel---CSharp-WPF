@@ -1353,6 +1353,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "Pop bubbles to earn XP!",
   "tooltip_bubbles_spawned_per_minute": "Bubbles spawned per minute",
   "tooltip_bubble_spawn_rate": "Bubble spawn rate",
+  "tooltip_bubble_size": "How large the bubbles are drawn. Chaos Mode bubbles keep their own size.",
   "setting_volume": "Volume",
   "tooltip_volume_of_bubble_pop_sounds": "Volume of bubble pop sounds",
   "tooltip_bubble_pop_sound_volume": "Bubble pop sound volume",

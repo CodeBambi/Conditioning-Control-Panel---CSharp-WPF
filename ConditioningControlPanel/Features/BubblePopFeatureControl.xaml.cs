@@ -66,6 +66,8 @@ namespace ConditioningControlPanel.Features
                 TxtFreq.Text = s.BubblesFrequency.ToString();
                 SliderVolume.Value = s.BubblesVolume;
                 TxtVolume.Text = $"{s.BubblesVolume}%";
+                SliderSize.Value = s.BubblesSize;
+                TxtSize.Text = $"{s.BubblesSize}%";
                 SliderSpeed.Value = s.BubbleSpeedBoost;
                 TxtSpeed.Text = $"+{s.BubbleSpeedBoost}%";
                 ChkSolidMode.IsChecked = s.BubbleSharedHost;
@@ -102,6 +104,7 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.BubblesEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubblesFrequency) ||
                 e.PropertyName == nameof(Models.AppSettings.BubblesVolume) ||
+                e.PropertyName == nameof(Models.AppSettings.BubblesSize) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleSpeedBoost) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
@@ -152,6 +155,20 @@ namespace ConditioningControlPanel.Features
             TxtVolume.Text = $"{v}%";
             s.BubblesVolume = v;
             App.Settings?.Save();
+        }
+
+        private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtSize.Text = $"{v}%";
+            s.BubblesSize = v;
+            App.Settings?.Save();
+            // No live-apply hook: size is read when each bubble is CONSTRUCTED, so the change
+            // shows on the next spawn without disturbing the ones already drifting. Restarting the
+            // service to resize mid-flight would pop the field out from under the user.
         }
 
         private void SliderSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

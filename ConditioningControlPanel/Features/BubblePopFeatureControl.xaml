@@ -101,6 +101,30 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
+                            <!-- Size. Sits with Per Min / Speed rather than under an advanced
+                                 header because "these are too big" is a first-minute reaction, and
+                                 the row it belongs next to is the one the user is already dragging.
+                                 Reuses the existing label_size key for the label: no new key needed
+                                 in nine files for a word that is already there. The tooltip does
+                                 need one, though - every sibling row in this card is localised, so
+                                 an English literal here reads as a bug in the other 8 languages. -->
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_bubble_size}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_size}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="150" Value="100"
+                                        SmallChange="5" LargeChange="10" TickFrequency="5" IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderSize_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
                             <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_bubble_pop_sound_volume}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="120"/>

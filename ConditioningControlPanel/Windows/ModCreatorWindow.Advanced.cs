@@ -20,6 +20,10 @@ namespace ConditioningControlPanel
         private TextBox? _advAvatarOffsetX, _advAvatarDetachedOffsetX, _advAvatarScale;
         private TextBox? _advAvatarOffsetY, _advAvatarDetachedOffsetY;
 
+        // Bubble Pop sprite scale (blank = the app's own size band; range mirrors
+        // BubbleSizing.ModScaleMin/Max, which is what actually honours the number).
+        private TextBox? _advBubbleScale;
+
         // Enhancement tree label overrides
         private TextBox? _advTreeTitle, _advTreeSubtitle, _advTreeWarning;
         private TextBox? _advPointsLabel, _advStatsTitle, _advTabTooltip;
@@ -65,7 +69,15 @@ namespace ConditioningControlPanel
             _advAvatarDetachedOffsetY = CreateAdvNumberBox();
             stack.Children.Add(_advAvatarDetachedOffsetY);
 
-            // ── Sub-group 2: Skill Tree Overrides ──
+            // ── Sub-group 2: Bubble Size ──
+            stack.Children.Add(CreateSubHeader("Bubble Size"));
+            stack.Children.Add(CreateSectionDescription("Multiplies the on-screen size of the bubble.png you supplied under UI Assets. Worth setting because perceived size comes from how much transparent margin the sprite has, not from the box it is drawn in: the app's own bubble has a soft padded rim, so a full-bleed replacement reads dramatically bigger at the same box size. Correct it once here instead of leaving every user of your mod to find the bubble size slider and compensate by hand. Blank = no change. This multiplies with the user's own setting, and they keep the final say."));
+
+            stack.Children.Add(CreateFieldLabel("Bubble Scale (0.5 to 1.5, e.g. 0.85)"));
+            _advBubbleScale = CreateAdvNumberBox();
+            stack.Children.Add(_advBubbleScale);
+
+            // ── Sub-group 3: Skill Tree Overrides ──
             // (manifest field names stay `treeTitle`/`tabTooltip` etc. — only the wording changed)
             stack.Children.Add(CreateSubHeader("Skill Tree Overrides"));
             stack.Children.Add(CreateSectionDescription("Rename the labels of the skill tree tab. The grey hint text shows the default wording each field replaces. Max 200 characters per label."));
@@ -259,6 +271,14 @@ namespace ConditioningControlPanel
 
             manifest.TubeLayout = anyLayout ? layout : null;
 
+            // ── Bubble scale ──
+            // Parsed through ModBubbleScaleRules rather than read raw so a hand-written value is
+            // corrected on the way out as well as on the way in. Until this line existed the field
+            // was write-only from the editor's point of view: BuildManifestFromForm builds a FRESH
+            // ModManifest, so an author who typed bubbleScale into mod.json by hand lost it silently
+            // the next time they opened their mod here and exported.
+            manifest.BubbleScale = ModBubbleScaleRules.Parse(GetTextBoxValue(_advBubbleScale));
+
             // ── Enhancement overrides: only emit if anything is non-empty ──
             var eo = new Models.ModEnhancementOverrides
             {
@@ -307,6 +327,11 @@ namespace ConditioningControlPanel
                     SetTextBoxValue(_advAvatarDetachedOffsetY, tl.AvatarDetachedOffsetY.ToString(CultureInfo.InvariantCulture));
             }
 
+            // Blank when the manifest said nothing usable, so a mod that never declared a bubble
+            // scale does not gain one on re-export -- and a garbage value is scrubbed rather than
+            // shown, because the box is what the author will trust.
+            SetTextBoxValue(_advBubbleScale, ModBubbleScaleRules.Format(manifest.BubbleScale));
+
             if (manifest.EnhancementOverrides is { } eo)
             {
                 SetTextBoxValue(_advTreeTitle, eo.TreeTitle);
@@ -338,6 +363,7 @@ namespace ConditioningControlPanel
             SetTextBoxValue(_advAvatarScale, null);
             SetTextBoxValue(_advAvatarOffsetY, null);
             SetTextBoxValue(_advAvatarDetachedOffsetY, null);
+            SetTextBoxValue(_advBubbleScale, null);
 
             SetTextBoxValue(_advTreeTitle, null);
             SetTextBoxValue(_advTreeSubtitle, null);
@@ -398,6 +424,71 @@ namespace ConditioningControlPanel
                 dict[key] = value;
             }
             return dict;
+        }
+    }
+
+    /// <summary>
+    /// The editor's half of a manifest's <c>bubbleScale</c>: what the stored number becomes in the
+    /// Advanced box, and what the box becomes on export. Split out of the window for the same
+    /// reason <see cref="ModImageSlotRules"/> and <see cref="ModArtFramingRules"/> were -- these are
+    /// decisions, they need no Dispatcher, and they are the part worth pinning with tests.
+    ///
+    /// <para><b>Why rules at all for one double.</b> The field had no round trip:
+    /// <c>BuildManifestFromForm</c> builds a FRESH <see cref="Models.ModManifest"/>, so a value an
+    /// author typed into <c>mod.json</c> by hand -- the only way to set it before this panel gained a
+    /// box -- vanished the next time they opened the mod in the editor and re-exported. That also
+    /// means the incoming number can be anything a text editor can hold, including NaN, and it has to
+    /// come out as something the runtime would actually honour: <see cref="Services.BubbleSizing"/>
+    /// clamps to 0.5..1.5 and ignores non-finite values, and the editor agrees with it rather than
+    /// showing a figure the app would quietly refuse to use.</para>
+    /// </summary>
+    internal static class ModBubbleScaleRules
+    {
+        /// <summary>
+        /// Decimals kept. An ambient bubble is 150-250 DIP, so a thousandth of a multiplier is a
+        /// quarter of a pixel -- past that it is noise in the box and noise in mod.json.
+        /// </summary>
+        internal const int StoredDecimals = 3;
+
+        /// <summary>
+        /// A manifest value reduced to something worth showing and worth writing back, or null for
+        /// "the mod said nothing". Non-finite is DROPPED rather than clamped: NaN is a typo, not a
+        /// request for the smallest legal bubble, and <c>BubbleSizing</c> already treats it as
+        /// absent -- clamping it to 0.5 here would invent a decision the author never made.
+        /// </summary>
+        internal static double? Sanitize(double? raw)
+        {
+            if (!raw.HasValue) return null;
+
+            var value = raw.Value;
+            if (double.IsNaN(value) || double.IsInfinity(value)) return null;
+
+            return Math.Round(
+                Math.Clamp(value, Services.BubbleSizing.ModScaleMin, Services.BubbleSizing.ModScaleMax),
+                StoredDecimals);
+        }
+
+        /// <summary>
+        /// The box text for a manifest value: invariant culture (the same reason
+        /// <c>ModArtFramingRegistry.TryParsePoint</c> is invariant -- a decimal comma round-trips
+        /// into a different number on a different machine), and blank when there is nothing to show
+        /// so a re-export cannot pin a value the author never chose.
+        /// </summary>
+        internal static string? Format(double? raw) =>
+            Sanitize(raw)?.ToString("0.###", CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// What the box means on export. Blank or unparseable is null, which keeps the key out of
+        /// mod.json entirely. An explicit 1.0 is KEPT: it changes nothing, but "this art is
+        /// deliberately the app's own size" is a statement an author may want on the record.
+        /// </summary>
+        internal static double? Parse(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            if (!double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                return null;
+
+            return Sanitize(value);
         }
     }
 }

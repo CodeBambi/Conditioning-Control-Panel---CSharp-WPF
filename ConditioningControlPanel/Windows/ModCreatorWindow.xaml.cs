@@ -122,8 +122,14 @@ namespace ConditioningControlPanel
             ("features/corner_gif.png", "Corner GIF"),
             ("features/audio_whispers.png", "Audio Whispers"),
             ("features/Mind_Wipers.png", "Mind Wipe"),
-            ("features/bambi takeover.png", "Takeover"),
-            ("features/takeover.png", "Takeover Alt"),
+            // "Alt" was exactly backwards for anyone but BambiSleep, and the Frame button made it
+            // visible: features/takeover.png is the Takeover page art for EVERY other mod AND the
+            // premium rail chip (always, whatever the active mod), while "bambi takeover.png" is
+            // reached only when BambiSleep is active. An author framing their rail chip was being
+            // sent to the slot that reads like the spare one. Display names only - the keys are a
+            // compatibility surface and are never renamed.
+            ("features/bambi takeover.png", "Takeover (BambiSleep only)"),
+            ("features/takeover.png", "Takeover (page + rail chip)"),
             ("features/vibe.png", "Vibe"),
             ("features/4new.png", "New Features"),
         };
@@ -1815,6 +1821,13 @@ namespace ConditioningControlPanel
             clearBtn.Click += (_, _) => ClearImageSlot(resourceKey);
             borderHolder.Children.Add(clearBtn);
 
+            // "Frame" affordance, only for slots whose path actually paints a framed surface. It is
+            // added as a sibling of the clear button rather than folded into border.Tag: that tuple
+            // is pattern-matched by shape in SetImageSlot and ClearImageSlot and widening it would
+            // silently stop both of them from finding anything.
+            if (SlotIsFramable(resourceKey))
+                borderHolder.Children.Add(CreateFrameAffordance(resourceKey));
+
             var border = new Border
             {
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
@@ -1886,6 +1899,15 @@ namespace ConditioningControlPanel
 
             if (validate && !PassesImageSlotChecks(key, filePath)) return;
 
+            // A framing describes ONE picture. An author swapping a different file into the same
+            // slot must not inherit the crop they chose for the old one -- that is invisible in the
+            // editor and only shows up as a mis-framed chip in the app. Programmatic fills are
+            // exempt: the load path reads artFraming out of the manifest and THEN fills the slots,
+            // so dropping here would wipe exactly what it just read.
+            if (validate && _imageSlots.TryGetValue(key, out var previous)
+                && !string.Equals(previous, filePath, StringComparison.OrdinalIgnoreCase))
+                DropArtFraming(key);
+
             try
             {
                 var bitmap = new BitmapImage();
@@ -1911,6 +1933,8 @@ namespace ConditioningControlPanel
                     hintImage.Opacity = 0;
                 }
 
+                SetFrameAffordanceVisible(key, true);
+                UpdateFrameAffordance(key);
                 UpdateStatusBar();
             }
             catch { /* invalid image file */ }
@@ -1958,6 +1982,12 @@ namespace ConditioningControlPanel
             _imageControls[key].Source = null;
             _imageControls[key].Visibility = Visibility.Collapsed;
             _imageSlots[key] = null;
+
+            // Framing goes with the image. Left behind, it would silently re-attach itself to
+            // whatever the author picks next -- and to a manifest that no longer ships the file it
+            // was measured against.
+            DropArtFraming(key);
+            SetFrameAffordanceVisible(key, false);
 
             var parent = VisualTreeHelper.GetParent(_imageControls[key]);
             while (parent != null && parent is not Border b2)
@@ -2188,10 +2218,13 @@ namespace ConditioningControlPanel
                     AddCustomAvatarSet(cs.SetNumber, cs.Label, cs.UnlockLevel);
             }
 
-            // Manifest sections owned by the panel partials.
+            // Manifest sections owned by the panel partials. Art framing is read here, BEFORE the
+            // callers go on to fill the image slots from resources/, which is the order that keeps
+            // it: SetImageSlot only discards framing for an author-picked swap, not a bulk load.
             PopulatePoolsFromManifest(manifest);
             PopulatePersonalitiesFromManifest(manifest);
             PopulateAdvancedFromManifest(manifest);
+            PopulateArtFramingFromManifest(manifest);
 
             UpdateStatusBar();
         }
@@ -2395,6 +2428,7 @@ namespace ConditioningControlPanel
             ApplyPoolsToManifest(manifest);
             ApplyPersonalitiesToManifest(manifest);
             ApplyAdvancedToManifest(manifest);
+            ApplyArtFramingToManifest(manifest);
 
             return manifest;
         }

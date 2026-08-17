@@ -577,6 +577,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "Estoure bolhas para ganhar XP!",
   "tooltip_bubbles_spawned_per_minute": "Bolhas geradas por minuto",
   "tooltip_bubble_spawn_rate": "Taxa de geração de bolhas",
+  "tooltip_bubble_size": "O tamanho com que as bolhas são desenhadas. As bolhas do Modo Caos mantêm o próprio tamanho.",
   "setting_volume": "Volume",
   "tooltip_volume_of_bubble_pop_sounds": "Volume dos sons de estouro de bolhas",
   "tooltip_bubble_pop_sound_volume": "Volume do som de estouro de bolhas",

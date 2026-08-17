@@ -1167,6 +1167,7 @@
   "tooltip_pop_bubbles_to_earn_xp": "戳泡泡获得 XP！",
   "tooltip_bubbles_spawned_per_minute": "每分钟生成的泡泡数",
   "tooltip_bubble_spawn_rate": "泡泡生成速率",
+  "tooltip_bubble_size": "泡泡绘制的大小。混乱模式的泡泡保持自身大小。",
   "setting_volume": "音量",
   "tooltip_volume_of_bubble_pop_sounds": "泡泡爆裂音效的音量",
   "tooltip_bubble_pop_sound_volume": "泡泡爆裂音效音量",
