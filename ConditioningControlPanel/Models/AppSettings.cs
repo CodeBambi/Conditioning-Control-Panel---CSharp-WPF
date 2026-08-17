@@ -2766,6 +2766,25 @@ namespace ConditioningControlPanel.Models
             get => _bubblesVolume;
             set { _bubblesVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
+        private int _bubblesSize = Services.BubbleSizing.UserPercentDefault;
+        /// <summary>
+        /// Size of the ambient Bubble Pop bubbles as a percentage of the shipped 150-250 DIP band.
+        /// 100 reproduces that band exactly. The bounds and the arithmetic live in
+        /// <see cref="Services.BubbleSizing"/>; this only stores the number.
+        ///
+        /// <para>Chaos/variant bubbles are NOT affected - they are balanced against their own scale
+        /// system. Composes with a mod's <c>bubbleScale</c> for full-bleed sprite art.</para>
+        /// </summary>
+        public int BubblesSize
+        {
+            get => _bubblesSize;
+            set
+            {
+                _bubblesSize = Math.Clamp(value, Services.BubbleSizing.UserPercentMin,
+                                                 Services.BubbleSizing.UserPercentMax);
+                OnPropertyChanged();
+            }
+        }
         private bool _bubblesLinkRamp = false;
         public bool BubblesLinkRamp
         {
