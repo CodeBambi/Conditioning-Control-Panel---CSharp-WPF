@@ -41,6 +41,29 @@ namespace CcpClient.Tests;
 /// tokens enumerated below — a new door into the variable is invisible until someone adds its
 /// name here. Membership is proven by an ATTRIBUTE, never by an executed demonstration that two
 /// classes actually serialize; that executed proof is SP-062's probe, not this file.</para>
+///
+/// <para>TWO BLIND SPOTS IN THE CONSTRUCTION HALF, NAMED, because that half is the actual
+/// SP-068 failure shape and no other assertion in the suite backs it up. (1) SPELLING. The
+/// construction detector is <c>\bnew\s+CompositionRoot\b</c>, so a TARGET-TYPED construction —
+/// <c>CompositionRoot root = new() { ... };</c>, <c>=&gt; new() { ... }</c>, <c>return new();</c>
+/// — is a DIRECT construction that reads the variable and is INVISIBLE here. There are zero
+/// target-typed <c>CompositionRoot</c> sites in the tree today, so the guard is not currently
+/// wrong about any site, but target-typed <c>new()</c> is house style in this project (91 uses
+/// across 25 files under client/tests, 24 of them in BarkPipelineTests.cs, including
+/// expression-bodied factories at IntakeDraftTests.cs:27 and IntakeProfilerTests.cs:29). The
+/// trigger this guard exists for — the next class that builds a real root — therefore has a
+/// foreseeable spelling it does not bind. Closing that needs type inference, which SP-086
+/// deliberately did not build. (2) INITIALIZER-TEXT CONTAMINATION. The redirect test asks
+/// whether the brace-matched initializer CONTAINS <see cref="RedirectSeam"/> anywhere, so a
+/// nested construction that assigns it, or an incidental mention of the identifier inside a
+/// lambda, silences the OUTER construction. Neither is reachable on today's tree (every
+/// redirect in the suite is a top-level assignment in the construction's own initializer), and
+/// both are false NEGATIVES. A third, smaller one: attribute membership and BOUND are keyed on
+/// the SIMPLE class name across the project (a partials accommodation, see the comment in fact
+/// 1), so a nested type sharing a name with a bound top-level class would lend it the
+/// attribute. Fix any of the three by making the detector see MORE. Never by narrowing the
+/// rule, and never by a suppression or allow list — that is the convention as text again, which
+/// is the defect this file closes.</para>
 /// </summary>
 public partial class ProcessEnvCollectionGuardTests
 {
