@@ -69,14 +69,30 @@ if (Test-Path $settingsFile) { Remove-Item $settingsFile -Force }
 
 $script:proc = [System.Diagnostics.Process]::Start($exe)
 Write-Output "launched pid=$($script:proc.Id)"
-Start-Sleep -Seconds 4
-$window = Get-Window $script:proc.Id
-if ($null -eq $window) { Fail 'window not found' }
+
+# Poll to a DEADLINE, never a fixed sleep. This was `Start-Sleep -Seconds 4` and it rotted:
+# startup grew a 1542-file DTRH payload probe and a loopback origin bind, the window stopped
+# arriving inside 4s, and the harness reported 'window not found' as though the APP were broken.
+# A fixed sleep encodes today's startup cost as tomorrow's correctness condition. Polling is
+# also strictly faster on a warm run, because it returns the moment the window is really there.
+$deadline = [Diagnostics.Stopwatch]::StartNew()
+$window = $null; $hwnd = [IntPtr]::Zero
+while ($deadline.Elapsed.TotalSeconds -lt 40) {
+    if ($script:proc.HasExited) { Fail "app exited during startup (code $($script:proc.ExitCode)) before a window appeared" }
+    $window = Get-Window $script:proc.Id
+    if ($null -ne $window) {
+        $script:proc.Refresh()
+        $hwnd = $script:proc.MainWindowHandle
+        # Both, or neither: a UIA element with no HWND cannot be raised or captured.
+        if ($hwnd -ne [IntPtr]::Zero) { break }
+    }
+    Start-Sleep -Milliseconds 250
+}
+if ($null -eq $window) { Fail "window not found within $([int]$deadline.Elapsed.TotalSeconds)s" }
+if ($hwnd -eq [IntPtr]::Zero) { Fail "no MainWindowHandle within $([int]$deadline.Elapsed.TotalSeconds)s" }
+Write-Output "window up after $([math]::Round($deadline.Elapsed.TotalSeconds, 1))s"
 
 # Raise: the app opens unactivated behind other windows; pixels belong to whatever is on top.
-$script:proc.Refresh()
-$hwnd = $script:proc.MainWindowHandle
-if ($hwnd -eq [IntPtr]::Zero) { Fail 'no MainWindowHandle' }
 [VerifyNative]::SetWindowPos($hwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
     [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
 Start-Sleep -Milliseconds 500
