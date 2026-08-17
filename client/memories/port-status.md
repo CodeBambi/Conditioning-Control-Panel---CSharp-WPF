@@ -1,3 +1,64 @@
+# Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
+
+## MULTI-LANE IS PROVEN. Floor 1022 -> 1046 in one night, 9 packets landed across 3 waves.
+
+Read this before anything else; it supersedes the wave-31 "STILL UNPROVEN at multi-lane" line below.
+
+- **Waves landed 2026-08-15:** wave 31 (SP-079 + SP-081, 1022->1028), wave 32 (SP-082, the P0, floor
+  unchanged), wave 33 (**six packets SP-083..SP-088 at once, 1028->1046**). All three blind-audited
+  PASS at the exact pushed SHA. Tip `3b31750b`.
+- **THE PLAN GATE WAS THE BOTTLENECK AND IT IS FIXED (T-21).** Wave 31 killed **6 of 8** lanes at
+  "plan still REVISE after 3 rounds" with zero product code. Root cause was NOT calibration: the
+  reviewer contract already listed 8 exhaustive blocking classes and a non-blocking Suggestions
+  channel, and reviewers were returning REVISE for prose while writing "I am not asking for a
+  re-plan". The driver made it worse by labelling the WHOLE feedback blob `--- REVIEW (blocking) ---`,
+  so suggestions were folded into the plan, the plan grew, and the next fresh reviewer had more
+  surface to audit — divergent by construction. Fix: declare the blocking list exhaustive, bound
+  rounds >= 2 to prior-blocking-plus-new-blocking, split blocking from carried conditions, deliver
+  conditions to the code and final seats (which previously received NEITHER the plan nor its
+  feedback), and persist every plan round to gitignored `.port/plans/`. **`MAX_REVISE` stays 2.**
+  Result at wave 33: **6 of 6 lanes cleared the same unraised cap.**
+- **REJECTED, and worth not re-proposing:** a third `APPROVE_WITH_CONDITIONS` verdict (the contract
+  already had APPROVE + Suggestions; a third verdict forks the definition of "blocking"), and
+  raising `MAX_REVISE` ("pay the gate until it passes"). Both killed by the Fable seat.
+- **THE FLOOR-DELTA PIN HELD AT SIX LANES.** Every lane observed exactly `pin + its own declared
+  delta`; no lane touched `floor.json`. Ten lane commits cherry-picked with **zero conflicts**, and
+  the orchestrator verified scope from the diffs rather than from six lane reports: each lane
+  touched exactly 4 files in its own area, none touched the shared pin, the board, the ledger, or
+  another lane's files.
+- **T-20, A HARD LIMIT ON THIS MACHINE: `port-loop.ps1` CANNOT RUN.** Every phase and every blind
+  audit it launches is a separately spawned `claude` that exits on `Not logged in` — the Claude Code
+  host holds the OAuth material and injects it only into its own SDK child. Proven four ways by
+  SP-081, then reproduced by an actual `-Execute` run (preflight passed; phase exited 1 in under a
+  second). **Consequence: there is no unattended mode here, and "a fresh session lands what you ran"
+  has no process-isolated form.** The substitute used all night is a fresh-context SUBAGENT on a
+  DIFFERENT model, given its own detached worktree at the exact SHA. That is real fresh context but
+  NOT process isolation and NOT `--safe-mode`; record it as weaker, never as equivalent. Unblock:
+  a logged-in CLI install with its own credentials, or `ANTHROPIC_API_KEY` in the environment.
+- **A SUSTAINED API 529 OUTAGE COST NOTHING**, because the unit of work is a committed lane branch.
+  Five of six REVISE agents died mid-flight; all six branches sat untouched at recorded SHAs and the
+  shared branch stayed clean. Two agents' UNCOMMITTED edits were preserved as diffs and handed to
+  the retry labelled "unverified, never gated, a draft to check" — and one retry then found a real
+  inexactness in its inherited draft. Retry at 2-4 concurrency, not 6.
+- **THE BEHAVIOUR TO KEEP: four of six lanes refused a reviewer's number and published their own
+  measurement.** SP-083's reviewer predicted a sabotage would leave all ten facts green; the lane RAN
+  it, got five reds for a reason the reviewer had not seen, then built the mutation that does isolate
+  and recorded both. SP-088 refused "9 paths" and measured 13/8 under stated definitions. SP-086
+  re-measured "~25" as 24. SP-084 corrected a draft's claim about `Task.Run(..., token)`.
+- **TWO ORCHESTRATOR AUTHORING FAILURES, same class, one night, both in port-lessons:** SP-077 and
+  then SP-082 each required a file their own prose forbade — a packet whose only possible outcome is
+  an escalation. And the SP-082 diagnosis was wrong first: the machine-checked
+  `fileScopeMustNotChange` ROW never forbade the file, only the prose did. **Where prose and the
+  contract row disagree, the row is what every seat binds.**
+- **Owner-visible gates still undischarged:** SP-082's locked-session leg is SIMULATED (on a real
+  locked desktop both title facts must SKIP, not FAIL); the real foreground-capture path is now
+  guarded by nothing on any machine (own P1 row); the tunnel flake's closure is MECHANISTIC, not
+  proven by green runs. Linux unproven throughout; no headed evidence anywhere in these three waves.
+- **ponytail plugin installed** (v4.9.0, user scope, `SubagentStart` hook) at owner request, so the
+  minimal-code discipline reaches lane agents. Its skills rank BELOW repository instruction files in
+  the constitution's authority order, so the port's evidence discipline wins where they conflict.
+- **Next unused task ID: SP-089.** Machine: DESKTOP this run (not the laptop of exports 18-19).
+
 # Port Status (as of 2026-08-14, nineteenth export — laptop)
 
 ## ENGINE: pi-spine RETIRED, Claude Code lanes LIVE and multi-lane-ENABLED (2026-08-14)
