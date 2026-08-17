@@ -406,9 +406,9 @@ public class AiAwarenessTests
             Assert.SkipWhen(
                 state is CapabilityState.Unavailable noWindow &&
                 noWindow.Reason.Code == AiWindowTitleCapability.NoForegroundWindowCode,
-                "no foreground window (lock screen, secure desktop, or mid-switch): the product's " +
-                "own typed Unavailable(no-foreground-window). This arm requires an INTERACTIVE " +
-                "Windows desktop session — the skip names the session, not a product regression.");
+                "the product reported no foreground window: its typed Unavailable(no-foreground-window), " +
+                "emitted on exactly one condition — the capture returned false. On a machine you believe " +
+                "is INTERACTIVE, treat this as a capture-path regression, not a session fact.");
 
             var available = Assert.IsType<CapabilityState.Available>(state);
             Assert.Contains("length", available.Detail);
@@ -457,7 +457,7 @@ public class AiAwarenessTests
             // (Assert.SkipWhen), never a silent return — pinned by NAME in
             // client/tests/floor/floor.json (allowedSkips; may-skip semantics). The code is
             // reachable two ways: the probe's state handed back verbatim
-            // (AiAwarenessService.cs:573-577) and a capture miss at observation time
+            // (AiAwarenessService.cs:574-576) and a capture miss at observation time
             // (:579-582), so the reason CODE, not the state type, is the discriminator that
             // covers both. The consent arm and the two zero-leak assertions above are
             // session-independent and have already executed. A privacy-filter drop
@@ -466,9 +466,9 @@ public class AiAwarenessTests
             Assert.SkipWhen(
                 observation is AiTitleObservation.Unavailable { State: CapabilityState.Unavailable noWindow } &&
                 noWindow.Reason.Code == AiWindowTitleCapability.NoForegroundWindowCode,
-                "no foreground window (lock screen, secure desktop, or mid-switch): the product's " +
-                "own typed Unavailable(no-foreground-window). This arm requires an INTERACTIVE " +
-                "Windows desktop session — the skip names the session, not a product regression.");
+                "the product reported no foreground window: its typed Unavailable(no-foreground-window), " +
+                "which cannot distinguish a locked session from a capture that returned false. On a " +
+                "machine you believe is INTERACTIVE, treat this as a capture-path regression.");
 
             var observed = Assert.IsType<AiTitleObservation.Observed>(observation);
             // The title leaves ONLY to the caller: zero diagnostic records, zero memory.

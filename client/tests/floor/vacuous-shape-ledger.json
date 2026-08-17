@@ -39,7 +39,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. SP-082 added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (reachable two ways — the probe state handed back verbatim, AiAwarenessService.cs:573-577, or a capture miss at observation time, :579-582); any other code still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. The consent arm and the two zero-leak assertions moved above the gate so they execute on every machine class."
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. SP-082 added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (reachable two ways — the probe state handed back verbatim, AiAwarenessService.cs:574-576, or a capture miss at observation time, :579-582); any other code still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. The consent arm and the two zero-leak assertions moved above the gate so they execute on every machine class."
     },
     {
       "key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",

@@ -39,7 +39,7 @@ The packet's own gate — *on an interactive Windows desktop these two must EXEC
 
 ## 2. Decision
 
-Evidence selects the plan's "does not reproduce" branch. Step 4(a) provable; Step 4(b) **not naturally provable** (with a foreground window the facts pass with or without the predicate) and substituted by the simulated experiments; Step 4(c) provable.
+Evidence selects the plan's "does not reproduce" branch. Step 4(a) provable; Step 4(b) **not naturally provable** (with a foreground window the facts pass with or without the predicate) and substituted by the simulated experiments; Step 4(c) **was NOT executed by this lane** — it was discharged later, at the final-review seat, and is recorded as row S4c in §3 Part C with that attribution. The earlier text here called it "provable", which it was, but the lane never ran it; the run that exists is not the lane's.
 
 ### File Scope amendment — granted, and empirically forced
 
@@ -97,13 +97,37 @@ The locked session cannot be produced on this machine, so the state was injected
 
 **E4b/E4c is the row that matters most.** It shows the vacuity the packet's Step 3 did not enumerate: had the two zero-leak assertions been left at the tail, `Assert.Skip*` would abort the fact before reaching them and a genuine zero-leak regression would report as a green-ish SKIP. R3 alone could not show this, because on an interactive session the skip never fires.
 
+### Part C — Step 4(c), executed at the final-review seat, NOT by this lane
+
+Packet Step 4(c) asks for the unconditional-skip experiment: force both skip predicates true and show the suite is still green, because that is the shape a future defect would take and the pin cannot catch it. **This lane never ran it.** The final reviewer ran it, in a separate detached worktree at this lane's head `5ec113f7`, with both predicates replaced by a literal `true`. The result below is quoted from that seat and is **not** my run:
+
+| # | Setup | Result | Proves |
+|---|---|---|---|
+| S4c | both skip predicates := literal `true` (final-review seat, detached worktree at `5ec113f7`) | build `0 Warning(s) 0 Error(s)`; `check-floor.mjs` → **FLOOR OK**, exit 0 | the suite stays green with both facts unconditionally deleted — the pin cannot tell a conditioned skip from an unconditional one |
+
+Its exact output, as reported by that seat:
+
+```
+FLOOR OK: CcpClient.Tests: 1028/1028 total, 4 skipped
+  [AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged,
+   SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked,
+   ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps,
+   AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable];
+CcpClient.HeadlessTests: 35/35 total, 0 skipped     [exit 0]
+```
+
+Two readings, both load-bearing:
+
+1. **The honest limit Step 4(c) exists to record.** An always-true predicate is green, at the pinned `total` of 1028, with the two facts skipped. Nothing in the tree objects. That is the vacuity the may-skip pin structurally cannot catch, and it is the same hole §6 item 1 and the new §6 item 6 describe from the other side.
+2. **It is also the only direct evidence the packet's own outcome holds.** Forcing both predicates true is the closest reachable simulation of a fully locked session at the whole-gate level (E1a/E4a inject state into one fact at a time; this drives the real gate end to end). It shows both facts SKIP rather than FAIL and the gate stays green at 1028 — the packet's target outcome. **Simulated, not observed:** it still does not prove a real locked Windows session produces exactly `no-foreground-window` at both sites, so the manual gate in §6 item 2 stands undischarged.
+
 ## 4. Narrowness — what the predicate accepts
 
 Equality against one named product constant, so every other typed answer falls through to the assertions and still FAILS: `LinuxUnprobedCode`, `UnsupportedPlatform`, `IncognitoDropCode`, `BlankTitleDropCode`, `CapabilityReasonCodes.NotProbed`, and any `Available`. E2a/E5a demonstrate two of these empirically.
 
 The skip is conditioned on **no** OS check, **no** environment variable, **no** CI flag, and **no** `Debugger.IsAttached`. The surrounding `if (OperatingSystem.IsWindows())` is the pre-existing platform **branch**; the skip sits *inside* it and is not conditioned on it.
 
-Fact two keys on the reason **code** rather than the state type because `NoForegroundWindowCode` is reachable two ways — the probe's state handed back verbatim (`AiAwarenessService.cs:573-577`) and a capture miss at observation time (`:579-582`). The code is the only discriminator covering both.
+Fact two keys on the reason **code** rather than the state type because `NoForegroundWindowCode` is reachable two ways — the probe's state handed back verbatim (`AiAwarenessService.cs:574-576`) and a capture miss at observation time (`:579-582`). The code is the only discriminator covering both.
 
 ## 5. Final verification
 
@@ -134,6 +158,21 @@ Pin 1028 + declared delta 0 = observed 1028. Headless 35 + 0 = 35. Skip set unch
 
 5. **Linux arms unexecuted.** Both facts' `else` arms are Windows-machine-unreachable here; unchanged by this packet and unverified by it.
 
+6. **`no-foreground-window` answers "the capture returned false", NOT "the session is locked" — so SP-082 makes a whole regression class skip green on every machine.** This is the residual the final review named, and it is the one that costs something.
+
+   The mechanism reads the product's typed code, and that code carries less information than the skip needs. `Probe` emits `NoForegroundWindowCode` on **exactly one** condition: `TryCaptureForegroundTitle` returned false (`client/src/CcpClient.Desktop/Ai/AiAwarenessService.cs:315-319`). "Locked desktop" is only one of the ways that happens. A broken P/Invoke, a window-station or desktop change that makes `GetForegroundWindow` return 0 for reasons that are not a lock, a refactor that makes the capture always return false — every one of those produces a **byte-identical** `Unavailable(no-foreground-window)`. After SP-082 the two facts SKIP on it, and the gate is GREEN, on an interactive machine and a locked one alike. The skip is indistinguishable from the honest case by construction.
+
+   What that costs is specific and verified, not hypothetical: `client/tests/CcpClient.Tests/AiAwarenessTests.cs:415` — `Assert.True(AiWindowTitleCapability.TryCaptureForegroundTitle(out var title))` — is the **SOLE** execution of the real capture path anywhere in `client/tests`. Grepped at this revision: the only four hits for `TryCaptureForegroundTitle` in the tree are the product's own definition (`AiAwarenessService.cs:335`) and its two product call sites (`:315`, `:579`), plus that one test line. Nothing else in either test project ever calls it. So before SP-082, a capture-path regression reddened the gate on every interactive run; after SP-082 it is caught by **nothing**:
+   - not `check-floor.mjs` — the pin is **may-skip**, so a skip at either name is accepted, `total` still 1028;
+   - not `VacuousShapeGuardTests` — the shape set is `dynamic-skip` whether the predicate is narrow, wide, or a literal `true` (§3 Part C is the executed proof of exactly that);
+   - not the skip message, which is prose a machine never reads.
+
+   **This is UNAVOIDABLE within the packet's mandated design, not an implementation slip.** The packet's vacuity-trap requirement (PROMPT.md §"THE VACUITY TRAP") forbids conditioning the skip on the OS, an env var, a CI flag, or `Debugger.IsAttached`, and mandates conditioning it on the product's own typed answer. That answer is the only signal available, and it does not carry the distinction. Any mechanism that *could* tell a locked session from a capture-path regression would have to consult something outside the product's typed answer — precisely the thing the packet prohibits. The two requirements cannot both be met; the packet chose, correctly, to keep the anti-vacuity rule.
+
+   So this is **NAMED, NOT FIXED.** SP-082 declared `0/0` and added no test, so nothing was added to close it and nothing here narrows it. It compounds §6 item 1: item 1 is "a future widening of the predicate is caught by nothing", this is "the predicate as written already swallows a regression class that is not a session fact". The mitigation that would actually bite is out of scope here and belongs with the §8.3 follow-up: a standing fact that exercises the capture path under its own explicit precondition, so that the capture path has at least one execution that a skip at these two names cannot silence.
+
+   Both skip messages were rewritten in this revision to stop asserting the opposite (§9).
+
 ## 7. Discharge of inherited obligations
 
 The approved plan carried no `## Carried conditions`. The reviewer's six non-blocking suggestions were obligations:
@@ -150,7 +189,43 @@ The approved plan carried no `## Carried conditions`. The reviewer's six non-blo
 1. Machine-checked `fileScopeMustNotChange` and the prose File Scope disagree (prose says "everything else", the machine list is 8 entries). Reconcile at template level, so a future skip-conversion packet does not ship unsatisfiable again.
 2. **No product defect.** The stop condition was not triggered. `client/src/**` is correct as the packet asserts; the tests were the defect.
 3. **A standing narrowness guard is the obvious follow-up** to §6 item 1 — a fact asserting that the two skip predicates accept `no-foreground-window` and reject the other codes would convert E2b/E5b from a one-time experiment into a permanent tripwire. It is out of scope here because the approved plan declared `0/0` and adding a fact would have contradicted its own floor-delta declaration. Filing rather than doing it silently.
+4. **A standing execution of the capture path**, filed against §6 item 6. After SP-082 the only call to `AiWindowTitleCapability.TryCaptureForegroundTitle` in `client/tests` sits behind a skip that a capture-path regression itself triggers, so that regression class is now unobserved by the suite. Closing it needs a fact whose precondition is *not* the same typed answer it is trying to check — the design of that precondition is the work, and it is why this is a filing and not a line in this packet.
 
 ### Note on the working tree found at start
 
 This worktree contained an **uncommitted prior attempt** at SP-082 that diverged from the approved plan: it hoisted the predicates into private helpers, added standing depth-0 narrowness-control assertions inside both facts, **duplicated** rather than moved the zero-leak assertions, and consequently wrote a ledger that **dropped** `assertions-all-nested` from fact one. R4's detector output above shows that shape set is wrong: the detector still sees `assertions-all-nested` on fact one under the approved mechanism. That work was preserved to scratchpad and reset; this packet implements the approved plan. Its narrowness-control idea is the substance of the §8.3 follow-up.
+
+## 9. REVISE round — documentation-scoped, applied on top of `5ec113f7`
+
+The final review returned REVISE with one blocking item and two accepted non-blocking items. The mechanism was not reopened: **no predicate, no assertion, no ordering, and no shape changed in this round.**
+
+1. **Blocking — §6 item 6 added.** The named residual above: `no-foreground-window` is the product's answer to "capture returned false", not to "the session is locked", so a capture-path regression now skips green everywhere. Verified before writing, not asserted: `TryCaptureForegroundTitle` has exactly four references in the tree, and `AiAwarenessTests.cs:415` is the only one in `client/tests`.
+
+2. **Blocking — both skip messages rewritten (string literals only).** Both previously ended "*the skip names the session, not a product regression*", which is the negation of item 6 and is the one sentence that would stop a reader with a broken capture path from investigating. They now name what the mechanism can actually support:
+   - fact one: "*the product reported no foreground window: its typed Unavailable(no-foreground-window), emitted on exactly one condition — the capture returned false. On a machine you believe is INTERACTIVE, treat this as a capture-path regression, not a session fact.*"
+   - fact two: "*the product reported no foreground window: its typed Unavailable(no-foreground-window), which cannot distinguish a locked session from a capture that returned false. On a machine you believe is INTERACTIVE, treat this as a capture-path regression.*"
+
+   The two messages now differ, so a TRX reader can tell which fact skipped. Both were kept at three physical source lines, so `AiAwarenessTests.cs` is **632 lines before and after** and both fact declarations stay at `:387` and `:428` — the ledger `line` values do not drift. `VacuousShapeDetector.Sanitize` (`VacuousShapeDetector.cs:341-351`) blanks comments and string literals before scanning, so message text provably cannot move a shape; `vacuous-shape-ledger.json` shapes were not touched.
+
+3. **Non-blocking, taken — §3 Part C.** The Step 4(c) row the lane never ran, attributed to the final-review seat that did run it. §2 corrected to say so.
+
+4. **Non-blocking, taken — one loose citation.** `AiAwarenessService.cs:573-577` → `:574-576` (the `state is not Available` return; `:573` is the `GetState` call and is not part of the hand-back). Fixed in all three places it appeared: the in-file comment, the ledger `reason` for fact two, and §4 above. `:579-582`, `:295`, `:315-319` were re-read and are exact.
+
+### Re-verification of this round
+
+Two separate commands through the slot semaphore, build first (the wrapper runs `--no-build`):
+
+```
+node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+  → Build succeeded. 0 Warning(s) 0 Error(s)
+
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+  → FLOOR OK: CcpClient.Tests: 1028/1028 total, 2 skipped
+      [ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps,
+       SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked];
+    CcpClient.HeadlessTests: 35/35 total, 0 skipped
+```
+
+Pin 1028 + declared delta 0 = observed 1028. Headless 35 + 0 = 35. Skip set is the two pre-existing Linux pins; **neither packet fact skipped** — the TRX records both `Passed`, so this machine is still interactive and the interactive arm executed again in this round.
+
+**One unrelated flake observed, reported not hidden.** The first gate attempt of this round failed 1/1028 on `ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery` (`Assert.Contains` for `/vendor/` in the collected log, `ChaosTunnelLoopbackTests.cs:143`) and the immediate re-run was clean with no tree change. The fact issues two `GetAsync` calls and reads the log buffer without waiting for the server to record the second, which is a race in that test and is nowhere near this diff — SP-082 touches only string literals and comments in `AiAwarenessTests.cs`. Not this packet's to fix; recorded so the intermittent is not attributed here later.
