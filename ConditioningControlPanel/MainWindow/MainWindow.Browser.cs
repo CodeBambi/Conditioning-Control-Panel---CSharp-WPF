@@ -2693,6 +2693,96 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- rented Topmost + escape hatch for the fullscreen browser (#952) -------------------
+
+        /// <summary>Handlers armed on whichever window is carrying the fullscreen browser, so
+        /// <see cref="DisarmFullscreenEscapes"/> can take them off the SAME window later - the
+        /// popout branch reuses a window the user owns and must be left exactly as it was found.</summary>
+        private Window? _browserFsEscapeTarget;
+        private EventHandler? _browserFsActivated;
+        private EventHandler? _browserFsDeactivated;
+        private System.Windows.Input.KeyEventHandler? _browserFsKeyDown;
+
+        /// <summary>
+        /// TOPMOST IS RENTED, NOT OWNED (#905), and Esc/F11 always gets out (#952).
+        ///
+        /// A fullscreen browser has to sit over the taskbar and over the app, so the window is
+        /// Topmost - but it kept that claim after another window took focus, which is how a
+        /// session's end-of-run dialog ended up alive and modal BEHIND a fullscreen HypnoTube:
+        /// invisible, holding the input queue, with the browser itself unreachable because the
+        /// page had HTML5 fullscreen and no chrome. The reporter of #952 rebooted the machine.
+        /// Dropping the claim on deactivation lets any dialog surface, and taking it back on
+        /// activation restores the fullscreen look the moment the user comes back.
+        ///
+        /// The key handler is the second half: the window is ShowInTaskbar=false and
+        /// WindowStyle.None, so if the page swallows the double-click that normally exits, there
+        /// was no way out at all. This one is on the WINDOW, not the page, so nothing the site
+        /// does can eat it.
+        /// </summary>
+        private void ArmFullscreenEscapes(Window window)
+        {
+            DisarmFullscreenEscapes();
+
+            _browserFsEscapeTarget = window;
+            _browserFsDeactivated = (_, _) =>
+            {
+                try { if (_browserFsEscapeTarget != null) _browserFsEscapeTarget.Topmost = false; } catch { }
+            };
+            _browserFsActivated = (_, _) =>
+            {
+                // Only re-take the claim while we are still the fullscreen owner - an Activated
+                // that arrives during teardown must not put the claim back on a window we have
+                // just handed to the user.
+                try { if (_isBrowserFullscreen && _browserFsEscapeTarget != null) _browserFsEscapeTarget.Topmost = true; } catch { }
+            };
+            _browserFsKeyDown = (_, args) =>
+            {
+                if (args.Key != System.Windows.Input.Key.Escape && args.Key != System.Windows.Input.Key.F11) return;
+                args.Handled = true;
+                try { ExitBrowserFullscreen(); } catch { }
+            };
+
+            window.Deactivated += _browserFsDeactivated;
+            window.Activated += _browserFsActivated;
+            window.KeyDown += _browserFsKeyDown;
+        }
+
+        private void DisarmFullscreenEscapes()
+        {
+            var window = _browserFsEscapeTarget;
+            _browserFsEscapeTarget = null;
+            if (window == null) return;
+
+            try { if (_browserFsDeactivated != null) window.Deactivated -= _browserFsDeactivated; } catch { }
+            try { if (_browserFsActivated != null) window.Activated -= _browserFsActivated; } catch { }
+            try { if (_browserFsKeyDown != null) window.KeyDown -= _browserFsKeyDown; } catch { }
+
+            _browserFsDeactivated = null;
+            _browserFsActivated = null;
+            _browserFsKeyDown = null;
+        }
+
+        /// <summary>
+        /// Session/panic teardown hook (#952). The session ending while a video is fullscreen is
+        /// the exact shape of the trap: StopEngineCore force-closes lock cards, quizzes and the
+        /// ceremony windows, but the browser tube was not on that list, so the completion dialog
+        /// opened behind it. Safe to call unconditionally - it early-outs unless fullscreen is
+        /// actually up.
+        /// </summary>
+        internal void ExitBrowserFullscreenForTeardown()
+        {
+            if (!_isBrowserFullscreen) return;
+            try
+            {
+                ExitBrowserFullscreen();
+                App.Logger?.Information("Browser fullscreen closed by session teardown (#952)");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ExitBrowserFullscreenForTeardown failed: {Error}", ex.Message);
+            }
+        }
+
         public void EnterBrowserFullscreen()
         {
             if (_browser?.WebView == null || _isBrowserFullscreen) return;
@@ -2729,6 +2819,7 @@ namespace ConditioningControlPanel
                     _browserPopoutWindow.Topmost = true;
                     _browserPopoutWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
                     _browserPopoutWindow.WindowState = WindowState.Maximized;
+                    ArmFullscreenEscapes(_browserPopoutWindow);
                 }
                 else
                 {
@@ -2790,6 +2881,7 @@ namespace ConditioningControlPanel
                     _browserPopoutWindow.Show();
                     _browserPopoutWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
                     _browserPopoutWindow.WindowState = WindowState.Maximized;
+                    ArmFullscreenEscapes(_browserPopoutWindow);
                 }
 
                 // (Removed: ReRequestVideoFullscreenAsync.) That stacked a
@@ -2820,6 +2912,11 @@ namespace ConditioningControlPanel
         private void ExitBrowserFullscreen()
         {
             if (!_isBrowserFullscreen) return;
+
+            // Off FIRST, and off the same window they went on (#952). The popout branch below
+            // hands a window the user owns back to them, and a surviving Activated handler would
+            // keep re-claiming Topmost on it for the rest of the session.
+            DisarmFullscreenEscapes();
 
             try
             {

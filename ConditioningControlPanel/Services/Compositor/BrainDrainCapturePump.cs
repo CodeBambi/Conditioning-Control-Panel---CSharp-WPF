@@ -159,6 +159,12 @@ internal sealed class BrainDrainCapturePump
     /// frame 2-4x more often than the pump could produce one. Any thread.</summary>
     public int FramesPublished => Volatile.Read(ref _framesPublished);
 
+    /// <summary>Capture slots actually built, which is NOT the same as monitors requested: under
+    /// GDI exhaustion <see cref="CreateSlot"/> returns null and the array comes up short. Read by
+    /// the layer's first-frame watchdog to tell "nothing to capture" from "capture is failing"
+    /// (#960). Any thread - the array reference is a volatile publish.</summary>
+    public int SlotCount => _slots.Length;
+
     // Pump-thread-only state (the blur/melt chain, lifted verbatim from the old CapturePass).
     private readonly SKPaint _blurPaint = new();
     private SKImageFilter? _blurFilter;

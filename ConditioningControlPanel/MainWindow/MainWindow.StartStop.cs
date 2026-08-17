@@ -379,6 +379,10 @@ namespace ConditioningControlPanel
             // the bloom starts — so panicking out of it costs a keepsake at worst and never a
             // choice, a level or an XP total.
             DescentFuseWindow.ForceCloseAll();
+            // #952: the built-in browser's forced fullscreen belongs on this list too. It is a
+            // topmost, chrome-less, taskbar-less window, so a session that ends behind one leaves
+            // the completion dialog modal and invisible - the reporter had to reboot the machine.
+            ExitBrowserFullscreenForTeardown();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();
