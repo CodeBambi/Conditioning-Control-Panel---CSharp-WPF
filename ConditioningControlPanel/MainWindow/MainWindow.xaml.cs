@@ -2065,10 +2065,12 @@ namespace ConditioningControlPanel
                 {
                     ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
-                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
+                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCardTall),
                     ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
-                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCard),
+                    // Its art plate overrides PlayCardArtPlate's 138 to 168, so it frames against
+                    // the tall variant - a 138-shaped window would be re-cropped ~18% narrower.
+                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCardTall),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512, ModArtFramingRegistry.SurfacePlayCard),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024, ModArtFramingRegistry.SurfacePlayCard),
                     // The page hero and the Loom strip. Both brushes were named and left mutable
@@ -2079,7 +2081,12 @@ namespace ConditioningControlPanel
                     // dtrh is the full-width banner at the top of the wall, not a card header, so
                     // it frames against a much wider box (playHero).
                     ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024, ModArtFramingRegistry.SurfacePlayHero),
-                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
+                    // The Loom strip is a FIXED 216-wide column, not a card plate. Framed as a
+                    // 2.85:1 plate, an author's 16:9 file was cropped to a 2.85 window and then
+                    // re-cropped by UniformToFill to the column's 1.83 - about 64% x 62% of their
+                    // image, where before framing existed a bare UniformToFill showed nearly all of
+                    // it. Making mod art WORSE was the exact opposite of the point.
+                    ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512, ModArtFramingRegistry.SurfaceLoomStrip),
                     // Named and left mutable by the 0812 remake but never fed, so a .ccpmod
                     // overriding features/justdrop.png repainted the dashboard tile and left this
                     // card on the embedded art. Found by the review, which spotted that the card was

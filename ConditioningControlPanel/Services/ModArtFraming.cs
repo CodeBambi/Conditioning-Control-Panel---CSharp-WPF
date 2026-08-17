@@ -158,8 +158,24 @@ namespace ConditioningControlPanel.Services
         /// Same 69 width, ~62 tall once the stepper row is in.</summary>
         public const string SurfaceRailCard = "railCard";
 
-        /// <summary>Play door card header plate: full card width, ~135 tall.</summary>
+        /// <summary>Play door card header plate: full card width, 138 tall (PlayCardArtPlate).</summary>
         public const string SurfacePlayCard = "playCard";
+
+        /// <summary>
+        /// Same plate with its height overridden to 168 — the Remote Control and Goon cards do this
+        /// inline (<c>Style="{StaticResource PlayCardArtPlate}" Height="168"</c>). Its own surface
+        /// rather than a shared 138 because the 30 DIP difference is ~18% of the frame's width once
+        /// UniformToFill re-crops, which is a visibly worse crop and a preview ~20% too wide.
+        /// </summary>
+        public const string SurfacePlayCardTall = "playCardTall";
+
+        /// <summary>
+        /// The Loom strip's art column: a FIXED 216 wide against a MinHeight 118 card
+        /// (PlayTabView.xaml ~1305), so ~1.83:1 — nothing like a card plate. Its art also fades out
+        /// to the RIGHT under a horizontal scrim so a busy illustration never runs into the title;
+        /// that is cosmetic and costs the framing nothing.
+        /// </summary>
+        public const string SurfaceLoomStrip = "loomStrip";
 
         /// <summary>Play door full-width hero banner at the top of the wall.</summary>
         public const string SurfacePlayHero = "playHero";
@@ -190,12 +206,17 @@ namespace ConditioningControlPanel.Services
             // bottom. Its art also fades out to the left under an OpacityMask, which the preview
             // does not reproduce — the framing consequence is nil, the left edge is simply softer.
             new(SurfaceIntakeStrip, "Intake strip",   240.0 / 68.0,  16, ArtScrim.None),
+            // 216 wide is FIXED, so this one is exact in the width that matters. The card's height is
+            // a MinHeight rather than a Height, so a taller card would make it slightly wider-looking
+            // than 1.83:1 — the opposite direction from an over-crop, and not worth a fluid marker.
+            new(SurfaceLoomStrip,  "Loom strip",      216.0 / 118.0, 15, ArtScrim.None),
 
             // Fluid-width surfaces: height is fixed, width follows the window, so these aspects are
             // REPRESENTATIVE and the runtime centre-crops the remainder. See ArtSurface.FluidWidth.
             // playCard: a 138-tall plate whose negative margin bleeds it ~44 past the card, in a
             // 3-column zone at the design width (~350 card + 44). A 2-column zone is nearer 4.3:1.
             new(SurfacePlayCard,   "Play card header", 394.0 / 138.0, 16, ArtScrim.FootBand, FluidWidth: true),
+            new(SurfacePlayCardTall, "Play card header (tall)", 394.0 / 168.0, 16, ArtScrim.FootBand, FluidWidth: true),
             // playHero: the descent portal spans the wall and has no fixed height at all.
             new(SurfacePlayHero,   "Play hero banner", 1100.0 / 240.0, 16, ArtScrim.FootBand, FluidWidth: true),
             // pageHeader: 138 tall, full card width plus the 40 its negative margin reclaims.
@@ -230,16 +251,21 @@ namespace ConditioningControlPanel.Services
             // Play door cards — PlayTabView.xaml. Only Goon carried a rect; the rest were a bare
             // UniformToFill, which is the full-image window and is what Rect(0,0,1,1) means.
             // Goon keeps its rect for OUR art but is not framable: Stretch=Uniform over a plate.
-            new("features/goon_game.png",           SurfacePlayCard, new Rect(0.03, 0.22, 0.94, 0.68), Framable: false),
+            // Its plate is one of the two overridden to 168, hence playCardTall — the aspect is moot
+            // for a non-framable pair (the shipped rect is used verbatim and mod art gets the whole
+            // image), but a row that lies about its own shape is a trap for whoever reads it next.
+            new("features/goon_game.png",           SurfacePlayCardTall, new Rect(0.03, 0.22, 0.94, 0.68), Framable: false),
             new("features/lab_gaze_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/lab_focusgaze_hero.png",  SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/lab_quiz_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/blink_trainer.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/remote_control.png",      SurfacePlayCard, new Rect(0, 0, 1, 1)),
+            // Remote's plate overrides the style height to 168 (PlayTabView.xaml:645).
+            new("features/remote_control.png",      SurfacePlayCardTall, new Rect(0, 0, 1, 1)),
             new("features/fyp.png",                 SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("lockdown_icon.png",                SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/justdrop.png",            SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/loom.png",                SurfacePlayCard, new Rect(0, 0, 1, 1)),
+            // NOT a card plate at all: a fixed 216-wide column in the Loom strip.
+            new("features/loom.png",                SurfaceLoomStrip, new Rect(0, 0, 1, 1)),
 
             // Play hero banner.
             new("features/dtrh.png", SurfacePlayHero, new Rect(0, 0, 1, 1)),
