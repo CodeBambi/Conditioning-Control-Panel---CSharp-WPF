@@ -137,7 +137,7 @@ that file** (see File Scope), so you write your own, smaller one.
 
 | | |
 |---|---|
-| May change | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs` (new), `spine-tasks/SP-077-process-env-collection-guard/**` |
+| May change | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs` (new), `client/tests/CcpClient.Tests/IntegrationProofTests.cs` (**scope amendment 2026-08-15 — see SCOPE, RESOLVED**), `spine-tasks/SP-077-process-env-collection-guard/**` |
 | Must not change | everything else, and specifically `client/tests/floor/floor.json`, `client/tests/floor/vacuous-shape-ledger.json`, `client/tests/CcpClient.Tests/VacuousShapeDetector.cs`, `client/tests/CcpClient.Tests/DataRootChokePointGuardTests.cs`, and every file named in the contract below |
 
 `client/tests/floor/vacuous-shape-ledger.json` being out of scope is a **design constraint on
@@ -149,7 +149,7 @@ your facts**, not a footnote. See Step 3.
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
 | floorDelta | `spine-tasks/SP-077-process-env-collection-guard/floor-delta.json` |
-| fileScopeMustChange | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs` |
+| fileScopeMustChange | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs`, `client/tests/CcpClient.Tests/IntegrationProofTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
 | artifactsMustExist | `spine-tasks/SP-077-process-env-collection-guard/record.md`, `spine-tasks/SP-077-process-env-collection-guard/floor-delta.json` |
 
@@ -166,32 +166,29 @@ packet's delta and applies one bump.
 `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs:161-242` enforces both halves and will
 red your run if the `floorDelta` row or the `fileScopeMustNotChange` disclaimer is missing.
 
-## SCOPE PROBLEM
+## SCOPE, RESOLVED 2026-08-15 — BRANCH A. Read this before Step 1.
 
-**Read this before Step 1. It is not hypothetical: the orchestrator hit it at authoring.**
+**This section used to present two branches, and its honest Branch-B outcome was BLOCKED. The orchestrator has amended the scope in writing, so Branch A is now the standing instruction and Branch B is withdrawn.**
 
 The guard, written honestly, reds on the current tree with exactly one violation:
 `client/tests/CcpClient.Tests/IntegrationProofTests.cs:14` (the class) for the construction at
-`:67`. The remedy is one line in that file. **That file is not in your
-`fileScopeMustChange`.** The scopes in this wave were pre-assigned to be pairwise disjoint and
-you may not widen yours on your own judgement.
+`:67`. The remedy is one line in that file. **That file is now in your `fileScopeMustChange`.**
 
-**Both branches are pre-authorized. Resolve on what your contract actually says; do not stall.**
+Apply the minimal remedy per Decision 2 below, land the guard green, and record in `record.md`
+both the amendment and the exact one-line diff you applied.
 
-- **Branch A, the scope was amended.** If `client/tests/CcpClient.Tests/IntegrationProofTests.cs`
-  appears in your `fileScopeMustChange` or the orchestrator amended your scope in writing before
-  you started: apply the minimal remedy per Decision 2 below, land the guard green, and record
-  the amendment and the exact diff in `record.md`.
-- **Branch B, the scope is unchanged.** Author the guard, run it, and capture the RED with the
-  offending class and `file:line` as the packet's central evidence. Then **STOP at the commit
-  boundary**: do not commit a guard that leaves the suite red, and do not weaken the rule to
-  make it green. Report BLOCKED naming the exact one-line amendment required. An honest
-  BLOCKED naming a one-line gate is the correct outcome here; a green obtained by narrowing
-  the rule is not.
+**Why this was amended rather than left to you (wave 31 evidence):** this packet was launched
+once with the scope unchanged, and its designed-correct outcome was an escalation — the wave
+spent a lane to be told a one-line fact the orchestrator already knew at authoring. Pre-deciding
+a decision rule is good practice here; shipping a packet whose intended outcome is BLOCKED is
+not. The disjointness that motivated the original split still holds: `IntegrationProofTests.cs`
+is claimed by no other packet in this wave, and `validate-wave.mjs` re-checks that before launch.
 
-**Under neither branch may you:** add a suppression or allow list of class names; grandfather
-`IntegrationProofTests` by an ID rule; narrow the detection rule so the one violation it found
-stops being a violation. Those are all the same move and all of them destroy the packet.
+**Still forbidden, exactly as before, and this is the part that matters:** do not add a
+suppression or allow list of class names; do not grandfather `IntegrationProofTests` by an ID
+rule; do not narrow the detection rule so the one violation it found stops being a violation.
+Those are all the same move and all of them destroy the packet. The amendment gives you the one
+line needed to fix the VIOLATION, never a licence to soften the RULE.
 
 ## Review Level: 2 (Plan, Final)
 
