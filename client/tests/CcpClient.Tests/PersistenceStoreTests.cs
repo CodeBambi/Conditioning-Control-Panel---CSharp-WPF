@@ -57,9 +57,9 @@ public class PersistenceStoreTests
     {
         using var dir = new TempDir();
         var path = dir.Path("settings.json");
-        // Orphan temp with NO main file: the crash-recovery branch (PersistenceStore.cs:294-298)
+        // Orphan temp with NO main file: the crash-recovery branch (PersistenceStore.cs:328-332)
         // logs UNCONDITIONALLY from inside Load(). The "stale temp beside a valid main" branch
-        // (:299-309) logs only when the delete THROWS, which needs a locked file and is
+        // (:333-343) logs only when the delete THROWS (:341), which needs a locked file and is
         // OS-dependent, so it is deliberately not the branch driven here.
         File.WriteAllText(path + ".tmp", """{"greeting":"recovered","schemaVersion":1}""");
 
@@ -81,7 +81,7 @@ public class PersistenceStoreTests
 
     /// <summary>
     /// The stop half, taken against a RUNNING store so the early-out guard
-    /// (PersistenceStore.cs:175-178) is not the path under test. A never-started store would
+    /// (PersistenceStore.cs:209-212) is not the path under test. A never-started store would
     /// satisfy the completed-task and Running assertions with the mechanism deleted.
     /// </summary>
     [Fact]
@@ -97,8 +97,8 @@ public class PersistenceStoreTests
         Assert.True(task.IsCompletedSuccessfully);
         Assert.False(store.Running);
         // The Cancel() half needs its own witness: every assertion above still holds if
-        // _owner.Cancel() (:181) is deleted. A post-stop Save() terminating typed Cancelled is
-        // producible ONLY by the cancelled generation (WriteOnce's token check, :448), and is
+        // _owner.Cancel() (:215) is deleted. A post-stop Save() terminating typed Cancelled is
+        // producible ONLY by the cancelled generation (WriteOnce's token check, :482), and is
         // NOT producible by the !Running guard path, which never begins a generation at all
         // (RunAsync throws there instead, OperationRegistry.cs:204-208).
         var outcome = await store.Save();

@@ -1,7 +1,25 @@
 # SP-087 record: the "five unbounded disk-store waits" row rests on a false premise
 
 **Branch A.** Base `feat/crossplatform` at `cf9f7143`, lane branch `lane/SP-087-disk-store-unbounded-waits`,
-worktree `.claude/worktrees/sp087`. Build 0W/0E. Every line cited below was opened in this tree.
+worktree `.claude/worktrees/sp087`. Build 0W/0E. Every line cited below was opened in the tree at hand.
+
+> **WHICH TREE THE LINE NUMBERS INDEX (read this before following any ref).** Every
+> `PersistenceStore.cs` ref in this record — in every section, including the §5 board row and the
+> comments shipped in `PersistenceStoreTests.cs` — is **POST-COMMIT**: it indexes the tree this lane
+> produces, which is the tree a future reader will check out. That is not how they were first written.
+> The census was executed against the PRE-commit tree, and this lane's own doc-comment insertion then
+> moved everything below it: the `StartAsync` `<remarks>` block adds 21 lines after old `:157`, the
+> `StopAsync` block adds 13 more after old `:172`, so **old `<=157` is unchanged, old `158-172` shifts
+> `+21`, and old `>=173` shifts `+34`** (34 added lines total, matching the commit's `+34`). The
+> renumbering was applied throughout, and each anchor below was re-opened in the landed tree to confirm
+> it rather than computed from that offset. Post-commit anchors, for cross-checking: `StartAsync`
+> **179-191** (`Load()` inline **189**), `StopAsync` **207-217** (guard **209-212**, `_owner.Cancel()`
+> **215**), `Load` **322-436** (recovery log **330**, stale-temp delete catch **341**), `Save`
+> **264-283**, `FlushAsync` **293-320**, `Quarantine` **439-466**, `WriteOnce` **478** (token check
+> **482**). Cross-file refs (`OperationRegistry.cs`, `AiMemoryStore.cs`, `CompanionViewModel.cs`, the
+> five caller files, the two contract documents) are unaffected: this lane touched none of those files.
+> The pre/post split is disclosed rather than hidden because a citation that silently indexes a tree
+> nobody has is the exact defect class this packet exists to correct.
 
 ---
 
@@ -9,17 +27,17 @@ worktree `.claude/worktrees/sp087`. Build 0W/0E. Every line cited below was open
 
 ### 1.1 The two methods the question turns on
 
-- `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:158-170` `StartAsync`: no `async`, no
-  `await`, no `Task.Run`. `Running = true` (`:166`), `_owner.Begin()` (`:167`), `Load()` **inline**
-  (`:168`), `return Task.CompletedTask;` (`:169`).
-- `:173-183` `StopAsync`: guard `if (!Running) return Task.CompletedTask;` (`:175-178`), then
-  `Running = false` (`:180`), `_owner.Cancel()` (`:181`), `return Task.CompletedTask;` (`:182`). No file
+- `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:179-191` `StartAsync`: no `async`, no
+  `await`, no `Task.Run`. `Running = true` (`:187`), `_owner.Begin()` (`:188`), `Load()` **inline**
+  (`:189`), `return Task.CompletedTask;` (`:190`).
+- `:207-217` `StopAsync`: guard `if (!Running) return Task.CompletedTask;` (`:209-212`), then
+  `Running = false` (`:214`), `_owner.Cancel()` (`:215`), `return Task.CompletedTask;` (`:216`). No file
   API is reachable from this method.
-- `:288-402` `Load()`: synchronous disk I/O on the calling thread. `File.Exists` (`:294`), `File.Move`
-  (`:297`), `File.Delete` (`:303`), `File.ReadAllText` (`:318`), `JsonNode.Parse` (`:322`), migrations
-  (`:354-362`), `Deserialize` (`:367`).
-- Contrast, the methods that DO produce a real task: `Save()` `:230-249` returns `_owner.RunAsync(...)`;
-  `SaveImmediate()` `:252` awaits it. That body runs on `Task.Run` with `ConfigureAwait(false)`
+- `:322-436` `Load()`: synchronous disk I/O on the calling thread. `File.Exists` (`:328`), `File.Move`
+  (`:331`), `File.Delete` (`:337`), `File.ReadAllText` (`:352`), `JsonNode.Parse` (`:356`), migrations
+  (`:388-396`), `Deserialize` (`:401`).
+- Contrast, the methods that DO produce a real task: `Save()` `:264-283` returns `_owner.RunAsync(...)`;
+  `SaveImmediate()` `:286` awaits it. That body runs on `Task.Run` with `ConfigureAwait(false)`
   (`Lifecycle/OperationRegistry.cs:216-221`).
 
 **`Begin()`/`Cancel()` cannot block, checked rather than assumed.** A CTS cancel runs registered callbacks
@@ -33,13 +51,13 @@ tree-wide**, so the owner CTS has nothing to run. `AsyncOperationOwner.Cancel` i
 
 | # | Site | Q1: waits on anything? | Q2: caller on the UI thread? | Q3: bounded by | Real cost |
 |---|---|---|---|---|---|
-| 1 | `Features/Dtrh/DtrhHostWindow.axaml.cs:228` | **No** — `Task.CompletedTask` (`:169`) | **Yes** — `InitBarkPipeline` (`:205`) from the `Opened` handler `:113-124`, at `:120` | the operation itself | UI-thread blocking disk I/O |
+| 1 | `Features/Dtrh/DtrhHostWindow.axaml.cs:228` | **No** — `Task.CompletedTask` (`PersistenceStore.cs:190`) | **Yes** — `InitBarkPipeline` (`:205`) from the `Opened` handler `:113-124`, at `:120` | the operation itself | UI-thread blocking disk I/O |
 | 2 | `Persistence/AssetSelectionDocument.cs:61` (`AssetSelectionStore.Start` `:54-68`) | **No** | **Yes, from two hosts** — `DtrhHostWindow.axaml.cs:190` (`Opened`, `:117`) and `Features/Intake/IntakeHostContext.cs:109` | the operation itself | UI-thread blocking disk I/O |
 | 3 | `Features/Intake/IntakeHostContext.cs:84` | **No** | **Yes** — sole product caller `IntakeLaunchCoordinator.cs:56` (`Launch()` `:48`), wired at `App.axaml.cs:283` `dashboard.Opened += (_, _) => intakeCoordinator.Launch();` | the operation itself | UI-thread blocking disk I/O |
 | 4 | `Features/Intake/IntakeHostContext.cs:95` | **No** | **Yes** — same path | the operation itself | UI-thread blocking disk I/O |
-| 5 | `Features/Dtrh/DtrhSaveSlots.cs:467` (`StopAsync`, in `DeleteSlot` `:447`) | **No** — `Task.CompletedTask` (`:182`) | **Yes** — `DtrhSlotPickerWindow.axaml.cs:257` (`ConfirmDelete` `:254`), `ConfirmEraseButton.Click` wired at `:40` | nothing to bound | **nothing at all** |
-| 6 | `Features/Dtrh/DtrhSaveSlots.cs:469` | **No** | **Yes** — same path | the operation itself | disk I/O, cheapest branch (`Missing`, `:311-315`) |
-| 7 | `Ai/AiMemoryStore.cs:272` | **YES** — a real threadpool task chained onto every prior write (`PersistenceStore.cs:240-247`) | **NO** — `Task.Run` at `Features/Companion/CompanionViewModel.cs:312-315`, comment at `:314` | **unbounded by design** | required: quiescence before the delete at `:275-276`, or a queued write resurrects the file |
+| 5 | `Features/Dtrh/DtrhSaveSlots.cs:467` (`StopAsync`, in `DeleteSlot` `:447`) | **No** — `Task.CompletedTask` (`PersistenceStore.cs:216`) | **Yes** — `DtrhSlotPickerWindow.axaml.cs:257` (`ConfirmDelete` `:254`), `ConfirmEraseButton.Click` wired at `:40` | nothing to bound | **nothing at all** |
+| 6 | `Features/Dtrh/DtrhSaveSlots.cs:469` | **No** | **Yes** — same path | the operation itself | disk I/O, cheapest branch (`Missing`, `PersistenceStore.cs:345-349`) |
+| 7 | `Ai/AiMemoryStore.cs:272` | **YES** — a real threadpool task chained onto every prior write (`PersistenceStore.cs:274-281`) | **NO** — `Task.Run` at `Features/Companion/CompanionViewModel.cs:312-315`, comment at `:314` | **unbounded by design** | required: quiescence before the delete at `AiMemoryStore.cs:275-276`, or a queued write resurrects the file |
 
 ### 1.3 The numbers, stated plainly
 
@@ -52,9 +70,13 @@ tree-wide**, so the owner CTS has nothing to run. `AsyncOperationOwner.Cancel` i
   `DtrhSaveSlots` and `IntakeHostContext` hold two sites each, and `AssetSelectionDocument` holds one site
   reached from two hosts. Seven sites, eight UI-reachable entries, five files.
 
-**Full-tree honesty, measured:** `client/src/**` contains **18** real `.GetAwaiter().GetResult()`
-occurrences. The grep returns 20 hits; two are comment lines
-(`Audio/AudioSeams.cs:261`, `Features/Dtrh/SoundFlowDtrhAudio.cs:43`). Breakdown: 6 lifecycle sites above,
+**Full-tree honesty, measured on the LANDED tree:** `client/src/**` contains **18** real
+`.GetAwaiter().GetResult()` occurrences. The grep returns **21** hits; **three** are comment lines
+(`Audio/AudioSeams.cs:261`, `Features/Dtrh/SoundFlowDtrhAudio.cs:43`, and — the third, added by THIS
+commit — `Persistence/PersistenceStore.cs:166`, the doc note's own mention of the shape). `21 - 3 = 18`.
+The pre-commit tree gave 20 hits minus 2 comments and the same 18; the executable count is what is
+load-bearing and this commit does not move it, because the commit adds no executable line at all.
+Breakdown: 6 lifecycle sites above,
 1 site-7 `SaveImmediate`, and 11 classified EXIT-PATH / BOUNDED-OK by `SP-071/record.md:42-49`
 (`Program.cs:157,165,168,263`, `App.axaml.cs:92`, `Persistence/SecretStores.cs:145,158,170`,
 `Audio/AudioSeams.cs:262,268,397`).
@@ -119,10 +141,27 @@ CcpClient.HeadlessTests met its pin of 35.
 | **R1** | `StartAsync` → `async Task`, `await Task.Yield();` before `Load();` | **2** — F1 and F2 | **YES: `CcpClient.HeadlessTests` DEADLOCKS.** 8/35 completed in 3s, then 90s inactivity, `Test Run Aborted` |
 | **R2** | `Load();` → `Task.Run(Load).GetAwaiter().GetResult();` | **0** — prediction MISSED, see below | none |
 | **R2b** | `Load();` → `var t = new Thread(Load); t.Start(); t.Join();` | **1** — F2 only | none |
-| **R3** | `StopAsync` → `async Task`, `await Task.Yield();` AFTER the `!Running` guard (`:175-178`), before `Running = false` | **1** — F3 only | **YES: `CcpClient.HeadlessTests` DEADLOCKS.** 16/35 completed in 9s, then 60s inactivity, aborted |
+| **R3** | `StopAsync` → `async Task`, `await Task.Yield();` AFTER the `!Running` guard (`:209-212`), before `Running = false` | **1** — F3 only | **YES: `CcpClient.HeadlessTests` DEADLOCKS.** 16/35 completed in 9s, then 60s inactivity, aborted |
 | **R4** | `SaveImmediate().GetAwaiter().GetResult();` inserted BEFORE `_owner.Cancel()` | **1** — F4 | **YES, and it is the good kind:** `DtrhSaveSlotsTests.DeleteSlot_RemovesFile_ReloadsFresh_DescendStartsOver` reds at `DtrhSaveSlotsTests.cs:202` |
 
-Every fact bites under an independent revert: **F1 ← R1, F2 ← R2b, F3 ← R3, F4 ← R4.**
+**Every fact bites, but two of the four bite in a weaker sense than "one revert, one red", and the matrix
+above is what says so.** Stated exactly:
+
+- **F3 ← R3** and **F2 ← R2b** are clean isolating reverts: exactly one fact reds, and it is that fact.
+- **F1 has no isolating revert.** R1 reds F1 **and** F2 (and hangs the headless project, §3.2), because
+  the single edit that makes `StartAsync` return an incomplete task necessarily also moves the load off
+  the caller — one shape change, two consequences, and no smaller edit separates them. F1's real
+  signature is therefore **differential**: red under R1, **green under R2b**, where F2 is red under both.
+  That difference is what proves F1 pins the completion shape and not merely thread affinity. The
+  packet's completion criterion "no other pin moves under that revert" is **not** met by R1, and saying
+  otherwise would be the overstatement.
+- **F4 is an absence guard, so no deletion can red it.** It asserts that `StopAsync` writes nothing;
+  removing shipped code cannot cause a write. Only an **insertion** can, which is exactly what R4 is.
+  That is inherent to the claim "Stop is not a flush" and not a weakness of the fact — but it does mean
+  F4 alone cannot distinguish "the invariant holds" from "the invariant is not a real requirement",
+  which is precisely why the independent, pre-existing `DtrhSaveSlotsTests` red in §3.3 is load-bearing
+  rather than decorative: a test this lane did not write, pinning a product consequence of the same
+  invariant, reds under the same insertion.
 
 ### 3.1 R2 was a wrong prediction, and the measurement is the finding
 
@@ -192,7 +231,8 @@ induce.
 ## 4. What landed
 
 **A. `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs` — doc comment only, zero executable
-statements changed.** `<remarks>` blocks on `StartAsync` (`:157`) and `StopAsync` (`:172`) stating that both
+statements changed.** `<remarks>` blocks on `StartAsync` (the block is `:158-178`) and `StopAsync` (`:194-206`)
+stating that both
 complete synchronously on the calling thread, that `Load()`'s blocking disk I/O finishes before the returned
 task exists, that a caller-side timeout on that task therefore bounds nothing, that the real cost is thread
 affinity, and that making `Load()` async or wrapping it in `Task.Run` without reaching the callers is the
@@ -205,7 +245,7 @@ absence let the census be misread.
   awaiting: `IsCompletedSuccessfully`, `LastLoadOutcome` non-null and typed `Missing`.
 - **F2** `Load_RunsOnTheCallingThread_RecordedFromInsideTheOperation` — the SP-072 read-from-inside shape.
   A `ThreadRecordingLogSink` records `Environment.CurrentManagedThreadId` when the product logs mid-`Load`.
-  Drives the orphan-temp crash-recovery branch (`PersistenceStore.cs:294-298`), whose `_log.Log` at `:296`
+  Drives the orphan-temp crash-recovery branch (`PersistenceStore.cs:328-332`), whose `_log.Log` at `:330`
   fires **unconditionally**.
 - **F3** `StopAsync_OnARunningStore_ReturnsACompletedTask_AndCancelsTheGeneration` — awaits `StartAsync`
   first and asserts `Running` **before** the call, so the `!Running` guard is provably not the path under
@@ -215,10 +255,10 @@ absence let the census be misread.
 
 ### 4.1 Two evidence-based corrections to the packet's own test suggestions
 
-1. The packet suggests driving the log via "a stale temp beside a valid main (`:299-309`)". That branch logs
-   **only when `File.Delete` throws** (`:307`), which needs a locked file and is OS-dependent. F2 uses the
-   orphan-temp branch (`:294-298`) instead, which logs unconditionally. The quarantine path (`:405-432`, log
-   at `:423`) was the other deterministic option.
+1. The packet suggests driving the log via "a stale temp beside a valid main" (packet ref `:299-309`,
+   post-commit `:333-343`). That branch logs **only when `File.Delete` throws** (`:341`), which needs a
+   locked file and is OS-dependent. F2 uses the orphan-temp branch (`:328-332`) instead, which logs
+   unconditionally. The quarantine path (`:439-466`, log at `:457`) was the other deterministic option.
 2. **A constraint the plan missed and execution caught.** `VacuousShapeDetector.cs:225-229` flags any fact
    body containing the literal `File.Exists(` or `Directory.Exists(` as an `fs-predicate` SITE, regardless of
    nesting, and an undispositioned site fails `VacuousShapeGuardTests` — whose ledger,
@@ -232,10 +272,10 @@ absence let the census be misread.
 ### 4.2 Locks and ordering
 
 The change adds no lock and no thread, but the facts execute locked code. `_mutationGate` (`:102`) is taken
-by `Mutate` (`:188`), `Replace` (`:204`), `IsDirty` (`:146`), `SetDefaults` (`:437`) and `WriteOnce`
-(`:455,464`); `Load()` does not hold it across file I/O. `_writeGate` (`:103`) is taken by `Save` (`:232`)
-and `FlushAsync` (`:262`). Nesting is `_writeGate` → `_mutationGate` (`FlushAsync` holds `_writeGate` at
-`:262` then calls `IsDirty` at `:264`, which takes `_mutationGate` at `:146`). F4 asserts `StopAsync` writes
+by `Mutate` (`:222`), `Replace` (`:238`), `IsDirty` (`:146`), `SetDefaults` (`:471`) and `WriteOnce`
+(`:489,498`); `Load()` does not hold it across file I/O. `_writeGate` (`:103`) is taken by `Save` (`:266`)
+and `FlushAsync` (`:296`). Nesting is `_writeGate` → `_mutationGate` (`FlushAsync` holds `_writeGate` at
+`:296` then calls `IsDirty` at `:298`, which takes `_mutationGate` at `:146`). F4 asserts `StopAsync` writes
 nothing precisely by never entering `_writeGate`.
 
 ---
@@ -244,7 +284,14 @@ nothing precisely by never entering `_writeGate`.
 
 Replaces the P2 OPEN row at `client/docs/task-board.md:117`.
 
-> \| P3 \| OPEN \| Five UI-thread `PersistenceStore.StartAsync` call sites do their disk load ON the UI thread (thread affinity, NOT an unbounded wait) \| **PREMISE CORRECTED 2026-08-17 by SP-087 (supersedes SP-078), which re-derived the census and pinned the correction with executed facts rather than asserting it in a record.** The previous wording ("Five unbounded in-process disk-store waits sit on UI-reachable paths ... each is a UI-thread block with no bound") was **false in three separate ways**, and the drift is traceable to one word: `SP-071/record.md:50-53` wrote disk-store "**starts**" on "**UI-reachable**" paths and named the **store gate** for site 7; the board rewrote that as "**waits**", "**UI-thread block**", and the UI thread. **The intersection {unbounded wait} INTERSECT {UI thread} is EMPTY — zero, not five.** `PersistenceStore.StartAsync` (`:158-170`) and `StopAsync` (`:173-183`) have no `async`, no `await` and no `Task.Run`; `Load()` runs inline and both return `Task.CompletedTask`, so the `.GetAwaiter().GetResult()` at six of the seven cited sites resolves a task that was already complete before the caller held it, and the two shipped `.Wait(TimeSpan.FromSeconds(2))` pairs are bounding an operation incapable of blocking. The seventh site (`AiMemoryStore.cs:272`) is the one genuine unbounded wait and is deliberately **off** the UI thread (`CompanionViewModel.cs:312-315`, SP-040 consult); bounding it would let the privacy delete run while a write is in flight, so it is **not** an open defect. "Five" was the number of FILES; there are seven sites in five files, eight UI-reachable entries. The **§5 citation was misapplied in both directions**: rule 1 (`:51`) covers *awaits*, rule 6 (`:63`) covers *native or backgrounded* work, and in-process synchronous I/O on a UI-thread path falls between them (wording proposed in the packet record, orchestrator applies). **THE RESIDUAL DEFECT, which is real and is what this row now tracks:** `Load()` performs blocking synchronous disk I/O **on whatever thread calls `StartAsync`**, and five UI-thread paths call it — `DtrhHostWindow.axaml.cs:228` and `:190` (both from the `Opened` handler `:113-124`), `IntakeHostContext.cs:84,95` and `:109` (from `IntakeLaunchCoordinator.cs:56`, wired at `App.axaml.cs:283`), `DtrhSaveSlots.cs:469` (from `DtrhSlotPickerWindow.axaml.cs:257`). **No timeout can bound this** — the I/O has already finished by the time a task exists — so any caller-side bound is theater; only moving the I/O would help, and that is not fixable inside `PersistenceStore` (see the DO-NOT below). **Downgraded P2 → P3** because the cost is a local disk read of a small JSON document on paths that are already doing window construction, and the previously claimed unbounded-block cost does not exist. **Pinned by `client/tests/CcpClient.Tests/PersistenceStoreTests.cs` (4 facts, +4 unit):** `StartAsync` returns an already-completed task with `LastLoadOutcome` already observable; `Load()` runs on the calling thread, **recorded from inside the operation** through an `ILogSink` fake (SP-072 shape) rather than sampled from outside; `StopAsync` on a **running** store completes synchronously and cancels the generation (witnessed by a post-stop `Save()` terminating typed `Cancelled`, a result the never-started guard path provably cannot produce, since `RunAsync` throws at `OperationRegistry.cs:204-208` with no live generation); and `StopAsync` writes nothing even when dirty. `PersistenceStore.cs` carries the doc note that makes the shape unmissable at the two methods. **DO NOT "fix" this by making `Load()` async or wrapping it in `Task.Run` inside `StartAsync`** — the SP-087 revert matrix **executed** that shape and it **deadlocks the headless suite** (R1: 8/35 tests then hang; R3, the same shape in `StopAsync`: 16/35 then hang), because `Task.Yield()` captures the Avalonia dispatcher while a UI-thread caller is blocked in `.GetAwaiter().GetResult()`; it also reorders the load against the SP-055 asset-selection-first ordering at `DtrhHostWindow.axaml.cs:115-117`. The repair would have to reach all five caller files, which is why this row is **not** closable inside `PersistenceStore`. **Acceptance:** either move the load off the UI thread **at the callers** (one row per host, honouring SP-055 ordering), or a measurement of `Load()` on a cold disk and a network-mapped data root showing the UI-thread cost is acceptable, and then close it. **Not measured today** — "bounded in practice" is an argument, and the P3 rests on it. Size S \|
+**Apply verbatim; the refs inside are POST-COMMIT.** Every `PersistenceStore.cs` line number in the row
+below indexes the tree this lane's commit produces (`StartAsync` `:179-191`, `StopAsync` `:207-217`), not
+the pre-commit tree the census was executed against — see the provenance note at the top of this record.
+Every other ref in the row is cross-file and sits in a file this lane did not touch, so it is stable
+either way: `OperationRegistry.cs:204-208`, `AiMemoryStore.cs:272`, `CompanionViewModel.cs:312-315`,
+`async-lifecycle-fault-contract.md:51`/`:63`, and the seven caller refs.
+
+> \| P3 \| OPEN \| Five UI-thread `PersistenceStore.StartAsync` call sites do their disk load ON the UI thread (thread affinity, NOT an unbounded wait) \| **PREMISE CORRECTED 2026-08-17 by SP-087 (supersedes SP-078), which re-derived the census and pinned the correction with executed facts rather than asserting it in a record.** The previous wording ("Five unbounded in-process disk-store waits sit on UI-reachable paths ... each is a UI-thread block with no bound") was **false in three separate ways**, and the drift is traceable to one word: `SP-071/record.md:50-53` wrote disk-store "**starts**" on "**UI-reachable**" paths and named the **store gate** for site 7; the board rewrote that as "**waits**", "**UI-thread block**", and the UI thread. **The intersection {unbounded wait} INTERSECT {UI thread} is EMPTY — zero, not five.** `PersistenceStore.StartAsync` (`:179-191`) and `StopAsync` (`:207-217`) have no `async`, no `await` and no `Task.Run`; `Load()` runs inline and both return `Task.CompletedTask`, so the `.GetAwaiter().GetResult()` at six of the seven cited sites resolves a task that was already complete before the caller held it, and the two shipped `.Wait(TimeSpan.FromSeconds(2))` pairs are bounding an operation incapable of blocking. The seventh site (`AiMemoryStore.cs:272`) is the one genuine unbounded wait and is deliberately **off** the UI thread (`CompanionViewModel.cs:312-315`, SP-040 consult); bounding it would let the privacy delete run while a write is in flight, so it is **not** an open defect. "Five" was the number of FILES; there are seven sites in five files, eight UI-reachable entries. The **§5 citation was misapplied in both directions**: rule 1 (`:51`) covers *awaits*, rule 6 (`:63`) covers *native or backgrounded* work, and in-process synchronous I/O on a UI-thread path falls between them (wording proposed in the packet record, orchestrator applies). **THE RESIDUAL DEFECT, which is real and is what this row now tracks:** `Load()` performs blocking synchronous disk I/O **on whatever thread calls `StartAsync`**, and five UI-thread paths call it — `DtrhHostWindow.axaml.cs:228` and `:190` (both from the `Opened` handler `:113-124`), `IntakeHostContext.cs:84,95` and `:109` (from `IntakeLaunchCoordinator.cs:56`, wired at `App.axaml.cs:283`), `DtrhSaveSlots.cs:469` (from `DtrhSlotPickerWindow.axaml.cs:257`). **No timeout can bound this** — the I/O has already finished by the time a task exists — so any caller-side bound is theater; only moving the I/O would help, and that is not fixable inside `PersistenceStore` (see the DO-NOT below). **Downgraded P2 → P3** because the cost is a local disk read of a small JSON document on paths that are already doing window construction, and the previously claimed unbounded-block cost does not exist. **Pinned by `client/tests/CcpClient.Tests/PersistenceStoreTests.cs` (4 facts, +4 unit):** `StartAsync` returns an already-completed task with `LastLoadOutcome` already observable; `Load()` runs on the calling thread, **recorded from inside the operation** through an `ILogSink` fake (SP-072 shape) rather than sampled from outside; `StopAsync` on a **running** store completes synchronously and cancels the generation (witnessed by a post-stop `Save()` terminating typed `Cancelled`, a result the never-started guard path provably cannot produce, since `RunAsync` throws at `OperationRegistry.cs:204-208` with no live generation); and `StopAsync` writes nothing even when dirty. `PersistenceStore.cs` carries the doc note that makes the shape unmissable at the two methods. **DO NOT "fix" this by making `Load()` async or wrapping it in `Task.Run` inside `StartAsync`** — the SP-087 revert matrix **executed** that shape and it **deadlocks the headless suite** (R1: 8/35 tests then hang; R3, the same shape in `StopAsync`: 16/35 then hang), because `Task.Yield()` captures the Avalonia dispatcher while a UI-thread caller is blocked in `.GetAwaiter().GetResult()`; it also reorders the load against the SP-055 asset-selection-first ordering at `DtrhHostWindow.axaml.cs:115-117`. The repair would have to reach all five caller files, which is why this row is **not** closable inside `PersistenceStore`. **Acceptance:** either move the load off the UI thread **at the callers** (one row per host, honouring SP-055 ordering), or a measurement of `Load()` on a cold disk and a network-mapped data root showing the UI-thread cost is acceptable, and then close it. **Not measured today** — "bounded in practice" is an argument, and the P3 rests on it. Size S \|
 
 ---
 
@@ -254,7 +301,7 @@ Replaces the P2 OPEN row at `client/docs/task-board.md:117`.
    and `IntakeHostContext.cs:128,129,130`, all on `StopAsync`. Exactly five, and the coincidence with the
    row's "five" is named here so nobody conflates the two sets: **these are a different five** from the five
    files the row cites. By contrast `IntakeHostContext.cs:126-127` wraps `PersistenceStore.FlushAsync`, which
-   genuinely can block (`PersistenceStore.cs:275`, `Task.WhenAny` over the write tail), so those two are
+   genuinely can block (`PersistenceStore.cs:309`, `Task.WhenAny` over the write tail), so those two are
    legitimate. **`DtrhHostWindow.axaml.cs:257` is NOT a `PersistenceStore` call at all** — it wraps
    `BarkPipeline.FlushAsync()` (`_bark`, constructed at `:236`). `SP-071/record.md:42-44` called the whole
    group BOUNDED-OK, which is true but obscures that three of them bound nothing.
@@ -264,12 +311,12 @@ Replaces the P2 OPEN row at `client/docs/task-board.md:117`.
    `DtrhHostWindow.axaml.cs:182-187`); becomes last-writer-wins with two independent write chains once the
    Assets-tree write path lands.
 3. **The `_writeGate`/`_mutationGate` ordering is undocumented.** Nesting is `_writeGate` → `_mutationGate`
-   (`FlushAsync:262` → `IsDirty:146`). Acyclicity does **not** rest on `Replace:222` calling `Save()` outside
-   the lock alone: `Replace` invokes `SettingsReplaced` handlers **inside** `_mutationGate` (`:209-219`), so a
+   (`FlushAsync:296` → `IsDirty:146`). Acyclicity does **not** rest on `Replace:256` calling `Save()` outside
+   the lock alone: `Replace` invokes `SettingsReplaced` handlers **inside** `_mutationGate` (`:243-253`), so a
    handler that called `Save()` would nest `_mutationGate` → `_writeGate`, the reverse order. What actually
-   holds the invariant is the handler contract at `:149-154` **plus** `Replace:222`. Proposed doc wording:
+   holds the invariant is the handler contract at `:149-154` **plus** `Replace:256`. Proposed doc wording:
    *"Lock order is `_writeGate` then `_mutationGate`, never the reverse. `Replace` raises `SettingsReplaced`
-   inside `_mutationGate` and enqueues the save only after releasing it (`:222`); a handler that itself calls
+   inside `_mutationGate` and enqueues the save only after releasing it (`:256`); a handler that itself calls
    `Save`/`FlushAsync` would invert the order and deadlock, which is why §8's handler contract forbids it."*
    Not applied: the packet authorizes the `StartAsync`/`StopAsync` doc note only, so a second doc block is
    scope creep.
@@ -305,12 +352,12 @@ Nothing this packet did changes a fact stated in `async-lifecycle-fault-contract
 
 | # | Condition | Disposition |
 |---|---|---|
-| 1 | Plan §1.3's "14 `.GetAwaiter().GetResult()` in `client/src/**`" is wrong; fix before it lands in `record.md` | **DISCHARGED and corrected.** Measured **18** (20 grep hits minus 2 comment lines, `AudioSeams.cs:261` and `SoundFlowDtrhAudio.cs:43`), enumerated in §1.3. The load-bearing counts (6 lifecycle sites, intersection 0) are unaffected. I additionally flag a NEW conflation risk the condition did not name: the board row's own "18 sites" is a different population (all blocking-wait shapes). |
-| 2 | §4's "the reverse is deliberately absent" is not strictly true — `Replace` raises handlers inside `_mutationGate` (`:209-219`) | **DISCHARGED.** Corrected in §4.2 and folded into the durable artifact, the §6 item 3 proposed wording, which now names the handler contract at `:149-154` **plus** `Replace:222` as jointly holding acyclicity. |
+| 1 | Plan §1.3's "14 `.GetAwaiter().GetResult()` in `client/src/**`" is wrong; fix before it lands in `record.md` | **DISCHARGED and corrected, then re-measured on the LANDED tree.** **18** executable occurrences. On the tree that ships: **21** grep hits minus **3** comment lines (`AudioSeams.cs:261`, `SoundFlowDtrhAudio.cs:43`, and this commit's own doc note at `PersistenceStore.cs:166`). On the pre-commit tree the same 18 read as 20 minus 2; the discharge is stated against the shipped tree, because a count that is only true of a tree nobody has is the defect this packet exists to correct. The load-bearing counts (6 lifecycle sites, intersection 0) are unaffected either way. I additionally flag a NEW conflation risk the condition did not name: the board row's own "18 sites" is a different population (all blocking-wait shapes). |
+| 2 | §4's "the reverse is deliberately absent" is not strictly true — `Replace` raises handlers inside `_mutationGate` (plan-review ref `:209-219`, post-commit `:243-253`) | **DISCHARGED.** Corrected in §4.2 and folded into the durable artifact, the §6 item 3 proposed wording, which now names the handler contract at `:149-154` **plus** `Replace:256` as jointly holding acyclicity. |
 | 3 | §6 item 1 mis-attributes one `FlushAsync`: `DtrhHostWindow.axaml.cs:257` wraps `BarkPipeline.FlushAsync` | **DISCHARGED.** Verified by reading (`_bark` constructed at `:236`) and corrected in §6 item 1. The "exactly five `.Wait(TimeSpan.FromSeconds(2))` on `StopAsync`" claim is confirmed correct: `DtrhHostWindow.axaml.cs:259,260`, `IntakeHostContext.cs:128,129,130`. |
 | 4 | R1's determinism is overstated; record as MEASURED, not "by contract, not a race" | **DISCHARGED, and it earned its keep.** R1, R3 and R4 are recorded as measured outcomes. R2's determinism claim was measured **false** (§3.1) and required an unplanned R2b to prove F2 bites. No revert in §3 is described as deterministic-by-contract. |
-| 5 | Two line refs point at the brace: `_writeGate` is taken at `:262` (not `:263`), `WriteOnce`'s first `lock (_mutationGate)` at `:455` (not `:456`) | **DISCHARGED.** Both verified in source and this record uses the corrected refs throughout (§4.2). |
-| 6 | F2 hardening: also assert the first message is the orphan-temp recovery line | **IMPLEMENTED.** `Assert.StartsWith("persistence: recovering settings from interrupted save", sink.FirstMessage)` at `PersistenceStoreTests.cs:78`, so a future edit that logs earlier in `StartAsync` cannot silently redirect the fact onto a different call. |
+| 5 | Two line refs point at the brace: `_writeGate` is taken at `:262` (not `:263`), `WriteOnce`'s first `lock (_mutationGate)` at `:455` (not `:456`) — both refs as the plan review stated them, in pre-commit numbering | **DISCHARGED.** Both verified in source and this record uses the corrected refs throughout (§4.2), renumbered to the landed tree: `_writeGate` in `FlushAsync` at **`:296`** and `WriteOnce`'s first `lock (_mutationGate)` at **`:489`**. The correction the condition asked for is the *statement* (lock line, not brace line), and it holds under either numbering. |
+| 6 | F2 hardening: also assert the first message is the orphan-temp recovery line | **IMPLEMENTED.** `Assert.StartsWith("persistence: recovering settings from interrupted save", sink.FirstMessage)` at `PersistenceStoreTests.cs:77`, so a future edit that logs earlier in `StartAsync` cannot silently redirect the fact onto a different call. |
 | — | Reviewer's note: condition 4 applies to R3's determinism sentence exactly as to R1's | **DISCHARGED.** R3's row and §3.4 report only what was observed, including which channel fired first. |
 
 ---
@@ -339,7 +386,7 @@ Nothing this packet did changes a fact stated in `async-lifecycle-fault-contract
   that introduce a context-capturing `await`, and disappears on restore.
 - **No Linux execution of any kind.** Windows only.
 - **Round-1 plan defect, recorded rather than quietly fixed:** F3 was first specified against a never-started
-  store, where `StopAsync`'s `!Running` guard (`:175-178`) satisfies both of its assertions with the
+  store, where `StopAsync`'s `!Running` guard (`:209-212`) satisfies both of its assertions with the
   mechanism deleted, and R3's yield sat on a path that store never reaches. Caught at the plan gate by
   review, not by execution. Same vacuity class the packet warns about, reached from the opposite direction:
   not a timeout that cannot fire, but an early return that makes the assertions free.
@@ -371,3 +418,48 @@ node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-
   `CCP_DATA_ROOT` was never exported.
 - `spine-tasks/SP-087-disk-store-unbounded-waits/floor-delta.json` declares `{unit: 4, headless: 0}`.
 - The SP-071, SP-072 and SP-073 rows were not touched. The board was not touched. No caller file was edited.
+
+**Re-run after the final-review revision (§11), because that revision edits a source file.** Same two
+commands, same order, build immediately before the gate:
+
+- **Build: 0 Warning(s), 0 Error(s).**
+- **Floor: `CcpClient.Tests` observed 1032, pin 1028, declared delta +4 — `1028 + 4 = 1032`, exact.
+  `CcpClient.HeadlessTests` observed 35 (TRX `Counters total="35" passed="35" failed="0"`), pin 35,
+  declared delta 0.** Gate exit code **1**, on the unit total drift only, which is the designed state for
+  a bound lane. The revision is comment-only, so no count moved and `floor-delta.json` is unchanged
+  at `{unit: 4, headless: 0}`.
+- Skips: the same 2 pinned Linux-gated names. The SP-057 pin did not skip; `CCP_DATA_ROOT` was never
+  exported.
+
+---
+
+## 11. Final-review round: every finding, verified against source before it was accepted
+
+The final review returned REVISE on one blocking finding (B1) with three further required items and two
+recommendations. **Each claimed defect was re-measured in the landed tree before being applied**, not
+taken on the reviewer's word; all six measurements reproduced exactly, so nothing here is a refusal.
+The mechanism was not reopened: no product behaviour, no fact, and no test assertion changed in this
+round. The diff is citations and prose.
+
+| # | Finding | Verified how | Disposition |
+|---|---|---|---|
+| **B1** | §5's board row cites `StartAsync` `:158-170` and `StopAsync` `:173-183`, which on the tree this commit produces are doc prose and a range **containing `StartAsync`'s own signature** | Opened `PersistenceStore.cs` at the landed tree: `:158-178` is the new `<remarks>`, `StartAsync` is `:179-191`, `StopAsync` is `:207-217` | **APPLIED.** §5 renumbered to `:179-191` / `:207-217`, plus a line above the blockquote stating the row's refs are post-commit and naming the cross-file refs as stable. This mattered more than ordinary ref hygiene: the orchestrator applies §5 verbatim into the board, so it is the one place a stale ref cannot self-correct — and a correction row carrying a wrong citation would reproduce the exact defect this packet exists to correct. |
+| **R1** | The opening "every line cited below was opened in this tree" is false of the landed tree for the `PersistenceStore.cs` self-refs | The commit inserts 34 doc lines above almost every anchor | **APPLIED, and the stronger of the two offered options was taken.** The review allowed either a single disclosure line or a full renumbering. **Both** were done: every `PersistenceStore.cs` self-ref in the record is now post-commit, AND the provenance note at the top states the split, gives the exact shift rule, and lists the anchors for cross-checking. A disclosure line alone would have left ~30 refs that a reader must mentally offset by 21 or 34 depending on where they sit — a rule easy to state and easy to misapply — while renumbering alone would have silently contradicted the record's own narrative of a census executed pre-commit. |
+| **R2** | §1.3's grep numbers describe the pre-commit tree | `git grep '.GetAwaiter().GetResult()' -- client/src` on the landed tree: **21** hits; comment lines are `AudioSeams.cs:261`, `SoundFlowDtrhAudio.cs:43`, and **`PersistenceStore.cs:166`**, this commit's own doc note | **APPLIED** in §1.3 and in §8 condition 1. `21 - 3 = 18`; the executable 18 is unchanged, which it must be, since the commit adds no executable line. |
+| **R3** | §8 condition 6 says `PersistenceStoreTests.cs:78` | `Assert.StartsWith(...)` is at **`:77`** | **APPLIED.** |
+| **N1** (non-blocking) | §3's one-line summary "F1 ← R1, F2 ← R2b, F3 ← R3, F4 ← R4" is stronger than the matrix directly above it | R1's own row records **2** reds (F1 and F2) plus a headless hang, so no revert isolates F1; and F4 asserts an **absence**, which no deletion can red | **APPLIED**, replacing the summary with the per-fact signatures, including the plain statement that the packet's "no other pin moves under that revert" criterion is **not** met by R1 and that F4's revert is an insertion by necessity. The data was always honest; only the summary was not. |
+| **N2** (non-blocking) | The new test file's comments carry the same pre-commit refs, and those ship in source and outlive the record | `:294-298`, `:299-309`, `:175-178`, `:181`, `:448` all resolve to the wrong lines post-commit | **TAKEN, not declined.** Renumbered to `:328-332`, `:333-343` (delete-throws log `:341`), `:209-212`, `:215`, `:482`. The review noted this obliges a build-then-gate re-run; that cost is real but small, and the argument for paying it is the review's own: a comment shipped in source is read by more people, and for longer, than a record in a packet folder. The re-run is in §10. |
+
+**One packet-versus-source discrepancy noticed while verifying, resolved in favour of the source.** The
+packet's Context section cites the `AiMemoryStore.Clear()` doc comment as `AiMemoryStore.cs:246-258`; the
+comment actually opens at `:244` (`/// <summary>` at 244, `</summary>` at 258, `public void Clear()` at
+259). This record's §2 already used `:244-258`, which is correct. Nothing depends on it; it is noted so the
+next reader does not "fix" the record toward the packet.
+
+**What this round does NOT change, stated so no reader infers otherwise.** No new fact, no removed fact,
+no assertion edited, no product statement edited: `floor-delta.json` stays `{unit: 4, headless: 0}` and the
+observed totals stay 1032/35. The doc note in `PersistenceStore.cs` is byte-identical to the reviewed
+commit. Everything in §9 still stands unchanged — in particular the deadlock mechanism in §3.2 remains
+**inferred from `--blame-hang` inactivity plus the code path, not from a captured dump**, the thread-affinity
+facts still do not prove "and that thread was the UI thread", and there is still **no Linux execution of
+anything here**. A citation-and-prose revision cannot and does not strengthen any of those.
