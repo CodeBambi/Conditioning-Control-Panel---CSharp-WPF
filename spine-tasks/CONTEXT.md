@@ -6,7 +6,36 @@
 
 ---
 
-### Wave 34 (**AUTHORED 2026-08-15 — single lane, SP-089. Closes the hole wave 32 created.**)
+### Wave 34 (**LANDED 2026-08-15 — single lane, SP-089. Floor 1046 → 1048. THE FIRST PACKET TONIGHT TO PASS THE FULL LADDER WITH NO REVISE ROUND.**)
+
+Lane `sp089-capture-path-regression-guard` @ `8aaac93d`, one commit, four files, cherry-picked onto
+`d8793ee0`. Plan APPROVE, Code APPROVE, **Final PASS** — the first clean run of the ladder in this
+session, after wave 31 (6 of 8 dead at the plan gate) and wave 33 (6 of 6 held at final review).
+Delta +2/+0 declared and observed.
+
+**Branch A was taken and the extraction is genuinely pure — verified from the diff, not the report.**
+`TryCaptureForegroundTitle` now delegates to a new `TryCaptureWindowTitle(IntPtr, out string)` after
+its own zero-handle check; the length-and-text half is lifted verbatim, including the
+`length <= 0 → true` case SP-068 settled deliberately. No path's behaviour changed. A fact drives the
+real `GetWindowTextLengthW` / `GetWindowTextW` marshalling through a window the TEST owns, so it
+executes on a locked, disconnected or secure-desktop session — exactly where `GetForegroundWindow`
+returns zero and those two P/Invokes were previously never reached at all.
+
+**The cheap wrong answer was excluded at authoring and stayed excluded:** a test declaring its own
+`user32` imports does NOT qualify, because it would pass with `NativeMethods` deleted. That
+exclusion is why this packet produced a guard instead of a decoration.
+
+**What this closes and what it does not.** It closes the blindness SP-082 created — a broken P/Invoke,
+a renamed entry point or a CharSet regression now reds something on any machine class. It does NOT
+distinguish an always-zero `GetForegroundWindow` from a genuinely locked session; that remains named,
+not fixed. No headed gate is discharged and Linux is unproven, as throughout.
+
+**The wave-32 → wave-34 arc is the lesson worth keeping:** SP-082 bought a reproducible gate by
+trading away a regression guard, its own final review NAMED the trade rather than letting it pass,
+the residual was filed as a row instead of a comment, and the next wave closed it. **A cost that is
+written down as a row gets paid; a cost written into a code comment does not.**
+
+### Wave 34 authoring (superseded by the land above)
 
 `SP-089-capture-path-regression-guard`. SP-082 bought a reproducible floor gate at a price its own
 final review named: `no-foreground-window` is the product answer to *capture returned false*, not to
