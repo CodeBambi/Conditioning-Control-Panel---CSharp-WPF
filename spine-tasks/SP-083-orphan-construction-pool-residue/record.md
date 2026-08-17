@@ -35,7 +35,9 @@ at **two** (sites 3 and 4). Nothing was missed —
 `SoundFlowAudioBackend.cs:24` is the only `IAudioBackend` implementation.
 
 **All five catch `Exception` broadly**, verified at each site in this tree rather than inherited from
-SP-072. That is why the cap refusal needs no caller change and no second exception type (§3.4).
+SP-072. That is why the cap refusal needs no caller change and no second exception type (authority:
+the `doc` row of the §3 table and the widened `PlayerConstructionTimeoutException` comment at
+`AudioSeams.cs:140-153`, which names both refusals).
 
 ### 1.2 Does anything already bound the outstanding count?
 
@@ -144,7 +146,7 @@ Exactly-once in all four interleavings:
 | interleaving | abandon side | construct-`finally` side | net |
 |---|---|---|---|
 | construction still parked when the caller abandons | CAS `0→1` wins → **+1** | later `Exchange` returns `1` → **−1** | 0 when the thread returns |
-| construction already returned (budget met, `Monitor.TryEnter` failed) | CAS fails (already `Settled`) | `Exchange` already returned `0` | **0 — nothing parked, nothing counted** |
+| construction already returned (budget met, `Monitor.TryEnter` failed) | CAS fails (already `Settled`) | `Exchange` already returned `0` | **0 — nothing parked, nothing counted. OBSERVED by F6, revert row R7** |
 | construction faults after abandonment | **+1** | `finally` still runs → **−1** | 0 |
 | ordinary construction, never abandoned | never called | `Exchange` returns `0` | **counter never touched** |
 
@@ -154,10 +156,14 @@ check, which is the arming dependency
 `Construction_CompletionRacesAbandonment_DisposedExactlyOnce` rendezvous on. That pin is green and
 unmodified.
 
-**The five existing orphan facts are unchanged and green.** None conflicts with this mechanism. The
-harness hook added for SP-083 is invoked unconditionally but armed by no existing test, and it
-enqueues no `Events` entry — so the class's only exact-sequence assertion
-(`Assert.Equal(["construct-returned", "attached"], h.Events.ToArray())`) is untouched.
+**The five existing orphan facts are unchanged and green.** None conflicts with this mechanism.
+`InsideWedgedConstruct` is invoked unconditionally but armed by no existing test and enqueues no
+`Events` entry. The harness's one NEW `Events` entry is `"dispose-entered"`, enqueued by the dispose
+delegate on every disposal including the existing facts' — it cannot disturb them: the class's only
+exact-sequence assertion (`Assert.Equal(["construct-returned", "attached"], h.Events.ToArray())`,
+`SoundArbitrationTests.cs:1357`) sits on a test that never disposes, and every other `Events`
+assertion in the class is an `Assert.Contains`. Precision added at the final-review REVISE; the
+earlier wording said "no `Events` entry" of the hook and read as if it covered both.
 
 ### The three FORBIDDEN overflow behaviours, and why this design cannot reach them
 
@@ -173,7 +179,7 @@ enqueues no `Events` entry — so the class's only exact-sequence assertion
 
 ---
 
-## 4. The five facts
+## 4. The six facts
 
 All in `client/tests/CcpClient.Tests/SoundArbitrationTests.cs`, driving the **existing**
 `OrphanHarness` (extended, not duplicated).
@@ -185,6 +191,19 @@ All in `client/tests/CcpClient.Tests/SoundArbitrationTests.cs`, driving the **ex
 | **F3** | `Construction_Ordinary_NeverTouchesTheOutstandingCount_NoCapLine_NoLogLine` | NEGATIVE CONTROL. `Outstanding == 0` before and after; **`Assert.Equal(0, Assert.Single(OutstandingInsideWedge))` — read from INSIDE the ordinary construction while the caller is still in `task.Wait`**; `AttachCount == 1`; `ConstructCount == 1`; `CapRefusalLines == 0`; `LogLines == 0` (invariant clause 5's "zero new log lines", asserted rather than assumed); same object returned |
 | **F4** | `Construction_AbandonedConstructionReturns_CountDropsAtTheNativeReturn_NotAtOrphanDisposal` | WHERE the release lives. One abandonment (`Outstanding == 1`, `DisposeCount == 0`); release the construct gate; wait for `"dispose-entered"` — the disposer is now parked INSIDE `dispose`, holding `_lifecycle`; assert `Outstanding == 0` **while `DisposeCount` is still 0**. The count tracks the THREAD, not the object |
 | **F5** | `Construction_AbandonedThenFaults_CountStillDrops_CapNeverRefusesForever` | cap 1; one abandonment fills it; a second create is refused (`CapRefusalLines == 1`, `ConstructCount == 1`); release the gate with `ConstructThrows` armed so `_construct` **throws**; `Outstanding == 0`; a further create is **admitted** (`ConstructCount == 2`). Binds the `finally` specifically |
+| **F6** | `Construction_LockUnavailableAtCompletion_AbandonsWithoutCounting_NothingWasParked` | THE OTHER ROUTE TO ABANDONMENT — added at the final-review REVISE (§11). `Create` reaches `slot.Abandoned = true; CountAbandoned(slot);` two ways, and F1–F5 all take the same one (budget expiry, construction genuinely parked). This drives the other: `task.Wait` returns **true** and `Monitor.TryEnter(_lifecycle, budget)` times out (the SP-071 class the bounded `TryEnter` exists for). The construction has already returned, so the slot is `Settled`, the CAS must LOSE, and the count must NOT rise. Cap 2, both gates armed: abandon one by budget expiry (`Outstanding == 1`), release the construct gate, wait for `"dispose-entered"` — a pool thread now holds `_lifecycle` parked inside `dispose` and `Outstanding == 0` — then `Create` again: typed `PlayerConstructionTimeoutException` whose message says `abandoned` and **not** `cap`, `AbandonmentLines == 2`, `CapRefusalLines == 0`, `ConstructCount == 2`, `AttachCount == 0`, `DisposeCount == 0`, and **`Outstanding == 0`**. Plus the discriminating pair read on the CALLER thread at each abandonment decision itself (the product logs immediately after `CountAbandoned`, so the log hook reads the post-count value): **`[1, 0]`** — the same call site counts on route (a) and does not on route (b). Then release the dispose gate and drain on **`DisposeCount == 2`** (the second orphan's disposer re-enters the now-open gate) |
+
+**F6 needed no harness change** — `DisposeGate`, the `"dispose-entered"` event, the `logHook`,
+`CapRefusalLines` and `Outstanding` were all already there for F1–F5. The only assertion surface it
+adds is a local `ConcurrentQueue<int>` in the test body. It deliberately asserts nothing through
+`LastPlayer`, which the second construction overwrites.
+
+**F6's one scheduling assumption, named:** it needs the second (already-ungated, trivial)
+construction to return inside the 200 ms budget so that `task.Wait` reports `true`. If a starved
+pool ever broke that, the create would take route (a) instead, the count would legitimately read 1
+and **the fact REDS** — it cannot pass vacuously in either direction. The product itself offers no
+way to lengthen the completion window without lengthening the `TryEnter` timeout by the same
+literal: `Create` uses one `_budget` for both waits.
 
 Harness extensions (all in `OrphanHarness`): `ConstructCount` (the one-shot `ConstructStarted` latch
 cannot count N — the packet named this blocker), `InsideWedgedConstruct` + `OutstandingInsideWedge`
@@ -206,10 +225,10 @@ a loop body), no early `return`, no `Assert.Skip*`, no platform/env/filesystem p
 ## 5. Revert matrix — EXECUTED, not predicted
 
 Method: each mutation applied to `AudioSeams.cs` **alone**; full solution rebuilt (`0W/0E` every
-time); the ten `SoundArbitrationTests.Construction_*` tests run (5 existing SP-072 orphan facts + the
-5 new SP-083 facts). Between reverts the file was restored from a saved pristine copy and verified
+time); the `SoundArbitrationTests.Construction_*` tests run (5 existing SP-072 orphan facts + the
+SP-083 facts — ten rows R1–R6, eleven from R7 on). Between reverts the file was restored and verified
 **byte-identical by `git hash-object` = `d1494294558c5d934473b3f4709ca10ca4016a3b`** — checked after
-every restore, six times.
+every restore, eight times (six at first landing, two at the final-review REVISE).
 
 | # | mutation of ONE clause | predicted | **MEASURED red** | which |
 |---|---|---|---|---|
@@ -219,11 +238,29 @@ every restore, six times.
 | **R4** | **move** `SettleAccounting` out of the `finally` into `DisposeOrphan`, **pinned position: after `SafeDispose(player)`, inside `lock (_lifecycle)`** | F4, F5 | **2** | F4, F5 |
 | **R5** | replace the `try/finally` with a straight-line `SettleAccounting` after `_construct(...)` returns | F5 | **1** | F5 |
 | **R6** | **move** `CountAbandoned(slot)` to just before `Task.Run` (count EVERY in-flight construction) | F3 | **1** | F3 |
-| — | baseline, no mutation | 0 | **0** | 10/10 pass |
+| **R7** | **drop the CAS's GUARD** in `CountAbandoned`, keeping its state transition: `Interlocked.CompareExchange(ref slot.Accounting, Counted, Uncounted);` then an **unconditional** `Interlocked.Increment(ref _outstandingAbandoned);` | F6 | **1** | F6 |
+| — | baseline, no mutation | 0 | **0** | 11/11 pass |
+
+R7's measured red is `SoundArbitrationTests.cs:1625`,
+`Assert.Equal(0, h.Outstanding)`, `Expected: 0 / Actual: 1`, with the other ten green — so the
+increment guard now has a fact that isolates it, and nothing else moved.
 
 **Every clause C1/C2/C3 reds at least one fact when reverted alone. Every fact reds under at least
 one revert. Every revert row reds at least one fact.** No revert reddened any of the five existing
 SP-072 orphan facts, in any row.
+
+**A correction to the reviewer's proposed R7, measured rather than argued.** The final review asked
+for R7 as *"replace `CountAbandoned`'s body with a bare `Interlocked.Increment(ref
+_outstandingAbandoned);`"* and predicted "all ten facts stay green" under it. **That variant reds
+five, not zero**, and it is therefore not an isolating mutation. Measured: `Failed: 5` — F1, F2, F4,
+F5 **and** F6. The cause is that deleting the whole body also deletes the `Uncounted → Counted`
+transition, so `SettleAccounting`'s `Interlocked.Exchange(ref slot.Accounting, Settled) == Counted`
+is never true and the count never falls again; the four decrement-observing facts then fail on their
+`Outstanding == 0` waits (the run took 62 s against the baseline's 2 s — three full 20 s
+`TestWait` windows). The guard and the transition are two effects of one CAS, and only the guard is
+the unpinned clause, so the row that isolates it must keep the transition. The reviewer's
+*substance* is confirmed exactly — an unconditional increment leaks permanently on the
+lock-unavailable route, and R7 above proves F6 catches it.
 
 **One measured/predicted divergence, recorded as measured (SP-079 precedent — a wrong prediction is
 recorded wrong, not conformed):** R3 was predicted to red 3 facts and reddened **4**. F1 also reds,
@@ -243,9 +280,10 @@ executed run, exactly as the corrected plan said. The root was that F3 had no *d
 so the placement of the count (abandoned-only vs. every in-flight construction) was a load-bearing
 clause with no biting fact. It has one now.
 
-**The one thing with no revert row is the public property `OutstandingAbandonedConstructions`,
-deliberately:** reverting it is a compile error, not a bite, and every one of the five facts exercises
-it.
+**The one mechanism line with no revert row is the public property
+`OutstandingAbandonedConstructions`, deliberately:** reverting it is a compile error, not a bite, and
+every one of the six facts exercises it. The two remaining unpinned CLAUSES — the `Math.Max(1, …)`
+clamp and the literal 4 — are named in §10 items 9 and 6 rather than given rows.
 
 ---
 
@@ -271,6 +309,17 @@ it.
    `DtrhNativeEffects.cs:112-123`. After the cap fires the refusal is immediate, so the gate hold
    drops to ~0 for cues past the cap — recorded as a consequence, not a tested claim. Out of File
    Scope; SP-073 owns `SoundArbitration.cs` this wave.
+   **What follows from that drop, filed rather than fixed (raised at code review, unfiled until
+   now): the refusal LOG RATE stops being budget-throttled.** `OnPacingFire` drains `_voiceQueue` in
+   a `while` loop inside `lock (_gate)` (`SoundArbitration.cs:918-943`), logging one line per failed
+   construction and `continue`-ing (`:935-936`). Before this change each iteration cost the full 2 s
+   budget, which self-throttled both the drain and the log to one line per 2 s; past the cap the
+   refusal returns immediately, so an N-deep queue now drains and logs **N lines in one burst**
+   inside a single gate hold (the same gate hold that just got ~2N seconds shorter — the trade is
+   real in both directions). The same applies per cue at the two under-lock sites
+   (`SoundArbitration.cs:931`, `DtrhNativeEffects.cs:114`, one `_log` per refused cue at `:935` and
+   `:121`): past the cap the log rate becomes caller-driven rather than budget-limited. Neither file
+   is in this lane's File Scope and neither is tested here.
 5. **The Decision B per-session remainder** (§2) — owed as its own board row.
 
 Nothing under `client/docs/`, `client/tests/floor/floor.json`, `client/src/.../SoundArbitration.cs`,
@@ -347,11 +396,14 @@ node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-
 ```
 
 - **Build: `0 Warning(s), 0 Error(s)`.**
-- **Pin, read from `client/tests/floor/floor.json`: `CcpClient.Tests` = 1028, `CcpClient.HeadlessTests` = 35.**
-- **Declared delta (`floor-delta.json`): unit +5, headless 0.**
-- **Observed: `CcpClient.Tests` 1033 (0 failed, 1031 passed, 2 skipped), `CcpClient.HeadlessTests` 35
-  (35 executed, 35 passed, 0 skipped).**
-- **Reconciles: 1028 + 5 = 1033, and 35 + 0 = 35.** The wrapper reports a pin mismatch on the unit
+- **Pin: `CcpClient.Tests` = 1028, `CcpClient.HeadlessTests` = 35.** (1028 is quoted by the wrapper's
+  own violation line; the headless pin is confirmed by the absence of a headless violation. The
+  shared pin file itself is not opened by this lane.)
+- **Declared delta (`floor-delta.json`): unit +6, headless 0** — five facts at first landing plus F6
+  at the final-review REVISE.
+- **Observed at the REVISE (TRX counters): `CcpClient.Tests` total 1034 (0 failed, 1032 passed, 2
+  skipped), `CcpClient.HeadlessTests` total 35 (35 executed, 35 passed, 0 skipped).**
+- **Reconciles: 1028 + 6 = 1034, and 35 + 0 = 35.** The wrapper reports a pin mismatch on the unit
   project; that is the designed multi-lane state — the pin is bumped at land from the summed deltas,
   never by a lane. `client/tests/floor/floor.json` was not edited.
 - The two skips are the OS-gated Linux legs already in `allowedSkips`
@@ -393,9 +445,74 @@ node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-
 7. **The thread-pool injection RATE is deliberately not asserted** (§1.4). Blocked workers are not
    returned; how fast the runtime compensates was not verified against a source.
 8. **The refusal is not distinguishable from the budget expiry by TYPE**, only by message. That is a
-   deliberate reuse decision (§3.4, all five callers catch `Exception` and embed the message). Any
-   future caller that wants to branch on the two would have to match on text, which is a real
-   consequence of this choice.
-9. **Nothing here proves the user-visible outcome** — that a wedged endpoint no longer degrades the
+   deliberate reuse decision (authority: the `doc` row of the §3 table and the widened
+   `PlayerConstructionTimeoutException` comment at `AudioSeams.cs:140-153`; all five callers catch
+   `Exception` and embed the message — §1.1). Any future caller that wants to branch on the two
+   would have to match on text, which is a real consequence of this choice.
+9. **The `Math.Max(1, …)` clamp at `AudioSeams.cs:262` is UNPINNED.** No fact reds if it is removed:
+   every test injects a cap of 1 or 2 or leaves it null, and nothing passes 0 or a negative. It is
+   defensive and it is correct — an injected 0 would mean "refuse all audio forever the first time
+   anything is abandoned" — but it is an argued clause, not an observed one, and it sits alongside
+   item 6's literal 4 as the second piece of this mechanism that no revert row bites. A sixth fact
+   for it would pin a value nothing in the product supplies, so it is named here instead.
+10. **Nothing here proves the user-visible outcome** — that a wedged endpoint no longer degrades the
    rest of the app. That would need a real device and a real wedge. What is proven is the mechanism
    the outcome rests on.
+11. **F6 closes the gap this list carried at first landing, and it is worth naming what that gap
+   was.** Until the final-review REVISE, the lock-unavailable abandonment route was stated as a
+   result in §3's interleaving table and pinned by nothing: **every** abandonment among the ten
+   facts came by budget expiry with the construction genuinely parked, so an unconditional increment
+   would have left them all green while leaking one count per lock-unavailable event permanently —
+   after `cap` such events, permanent silence. It is now observed (F6) and bitten (R7). What F6
+   still does **not** prove is that the real SP-071 wedge (a native device teardown holding
+   `_lifecycle` past the budget) occurs in production; the parked lock holder here is the harness's
+   own dispose delegate, and item 1 above applies to it exactly as to every other fact in this
+   record.
+
+---
+
+## 11. Final-review REVISE — what changed and what did not
+
+The final review returned REVISE on one blocking issue and offered an explicit either/or: add the
+missing fact plus its revert row, or judge the fact not worth its cost and name the gap honestly.
+**The fact was added.** Three reasons, on evidence:
+
+1. The clause is load-bearing and its failure mode is the packet's own named worst outcome. An
+   unconditional increment leaks one count per lock-unavailable abandonment with no path that can
+   ever release it (`SettleAccounting` has exactly one call site, in the construct `finally`, and
+   for that slot it has already run), so after `cap` events the factory refuses every cue for the
+   rest of its lifetime.
+2. The route is reachable in production, not hypothetical: it is the SP-071 class the bounded
+   `Monitor.TryEnter` at `AudioSeams.cs:339` exists for.
+3. The cost was one test body and no harness change — `DisposeGate` and the `"dispose-entered"`
+   event, added for F4, are exactly the lock-unavailable condition.
+
+Verified against source before accepting the review's reading: `Create` does reach
+`CountAbandoned` by two routes (`AudioSeams.cs:333-361` then `:368-373`); on the second the slot is
+already `Settled` because the delegate's `finally` (`:303`) precedes task completion; no test drove
+that route (`Construction_OrphanDisposal_OrderedAgainstDeviceTeardown` abandons before its teardown
+starts, and `Construction_TornDownDuringWait_...` runs a 60 s injected budget so its `TryEnter`
+succeeds); and R2 does not cover it, since deleting the whole `CountAbandoned(slot);` call removes
+the increment along with its guard.
+
+**Where this record disagrees with the review, with a measurement rather than an argument:** the
+proposed R7 mutation ("a bare `Interlocked.Increment`", predicted to leave all ten green) reds five.
+Measured both variants; see §5. The guard-only variant is the one landed as R7 and it reds F6 alone.
+
+Also applied in the same pass, from the review's non-blocking list, all three verified against
+source first:
+
+- The refusal LOG-RATE consequence is now filed (§6 item 4), after re-reading
+  `SoundArbitration.cs:918-943` and `DtrhNativeEffects.cs:112-123` in this tree.
+- The `Math.Max(1, …)` clamp is named as the second unpinned clause (§10 item 9) rather than given a
+  fact that would pin a value no product path supplies.
+- The dangling `§3.4` citation is gone. It resolved to nothing (§3 has no numbered subsections); both
+  occurrences (§1.1, §10 item 8) now cite the §3 table's `doc` row and `AudioSeams.cs:140-153`.
+
+**Unchanged by the REVISE:** every line of product code. `client/src/CcpClient.Desktop/Audio/AudioSeams.cs`
+is byte-identical to its state at code review (`git hash-object` =
+`d1494294558c5d934473b3f4709ca10ca4016a3b`, re-verified after both R7 measurements). The mechanism
+passed plan and code review and was not redesigned. The five SP-072 orphan facts and the five
+first-landing SP-083 facts are untouched; F6 is purely additive, has its own harness-free assertion
+surface, and adds no `Events` entry, so the class's only exact-sequence assertion
+(`SoundArbitrationTests.cs:1357`) is unaffected.
