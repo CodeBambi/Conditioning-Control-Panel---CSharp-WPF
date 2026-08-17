@@ -1,4 +1,6 @@
-# SP-076 — Name and fix the tunnel route-class logging flake at the source
+# SP-085 — Name and fix the tunnel route-class logging flake at the source
+
+**Supersedes SP-076** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0076-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -68,7 +70,7 @@ Verified by the orchestrator at authoring. Every line below was opened in the PO
 
 | | |
 |---|---|
-| May change | `client/src/CcpClient.Desktop/Features/Chaos/ChaosTunnelLoopback.cs`, `client/tests/CcpClient.Tests/ChaosTunnelLoopbackTests.cs`, `spine-tasks/SP-076-tunnel-logging-named-flake/**` |
+| May change | `client/src/CcpClient.Desktop/Features/Chaos/ChaosTunnelLoopback.cs`, `client/tests/CcpClient.Tests/ChaosTunnelLoopbackTests.cs`, `spine-tasks/SP-085-tunnel-logging-named-flake/**` |
 | Must not change | everything else, and specifically the files named in the contract below |
 
 Your scope is exactly those two source files. It was assigned to be disjoint from every other lane in this wave. If your evidence says the fix cannot live inside it, **stop and say so in `record.md` and in your final report**; do not widen it yourself, and do not reach into `LoopbackServer.cs` because the same shape is there.
@@ -78,15 +80,15 @@ Your scope is exactly those two source files. It was assigned to be disjoint fro
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-076-tunnel-logging-named-flake/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-085-tunnel-logging-named-flake/floor-delta.json` |
 | fileScopeMustChange | `client/src/CcpClient.Desktop/Features/Chaos/ChaosTunnelLoopback.cs`, `client/tests/CcpClient.Tests/ChaosTunnelLoopbackTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-076-tunnel-logging-named-flake/record.md`, `spine-tasks/SP-076-tunnel-logging-named-flake/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-085-tunnel-logging-named-flake/record.md`, `spine-tasks/SP-085-tunnel-logging-named-flake/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** It is the shared pin and concurrent lanes collide on it. Declare your count change in your own folder instead:
 
 ```json
-{ "packet": "SP-076-tunnel-logging-named-flake", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-085-tunnel-logging-named-flake", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 Declare `0`/`0` if you add no tests; omitting the file is not the same as declaring zero. The land sums every packet's delta and applies one bump.
@@ -213,7 +215,7 @@ Your floor run will report a total that does NOT match the pin, because the pin 
 
 ## Git Commit Convention
 
-Conventional commits, `feat(SP-076): ...` (or `fix(SP-076): ...` if the slice is purely the ordering repair). One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
+Conventional commits, `feat(SP-085): ...` (or `fix(SP-085): ...` if the slice is purely the ordering repair). One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
 
 ## Documentation Requirements
 

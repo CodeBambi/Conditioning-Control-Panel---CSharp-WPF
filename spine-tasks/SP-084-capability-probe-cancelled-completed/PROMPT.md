@@ -1,4 +1,6 @@
-# SP-075 — A cancelled capability probe can be recorded as a completed probe verdict
+# SP-084 — A cancelled capability probe can be recorded as a completed probe verdict
+
+**Supersedes SP-075** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0075-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -54,7 +56,7 @@ Verified by the orchestrator at authoring — every line below was opened in the
 
 | | |
 |---|---|
-| May change | `client/src/CcpClient.Desktop/Capabilities/CapabilityRegistry.cs`, `client/tests/CcpClient.Tests/CapabilityTests.cs`, `spine-tasks/SP-075-capability-probe-cancelled-completed/**` |
+| May change | `client/src/CcpClient.Desktop/Capabilities/CapabilityRegistry.cs`, `client/tests/CcpClient.Tests/CapabilityTests.cs`, `spine-tasks/SP-084-capability-probe-cancelled-completed/**` |
 | Must not change | everything else, and specifically the files named in the contract below |
 
 The scopes across this wave were assigned pairwise disjoint. **Do not widen this one**, including into `CapabilityState.cs`, `OperationRegistry.cs`, or `Participants.cs` — all three are adjacent and all three are tempting. The fix site and its fixture both sit inside the two files above; that was checked at authoring, not assumed.
@@ -64,15 +66,15 @@ The scopes across this wave were assigned pairwise disjoint. **Do not widen this
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-075-capability-probe-cancelled-completed/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-084-capability-probe-cancelled-completed/floor-delta.json` |
 | fileScopeMustChange | `client/src/CcpClient.Desktop/Capabilities/CapabilityRegistry.cs`, `client/tests/CcpClient.Tests/CapabilityTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-075-capability-probe-cancelled-completed/record.md`, `spine-tasks/SP-075-capability-probe-cancelled-completed/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-084-capability-probe-cancelled-completed/record.md`, `spine-tasks/SP-084-capability-probe-cancelled-completed/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** That file is the shared pin and concurrent lanes collide on it. Write your count change into `floor-delta.json` in your own folder instead:
 
 ```json
-{ "packet": "SP-075-capability-probe-cancelled-completed", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-084-capability-probe-cancelled-completed", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 Declare `0`/`0` if you add no tests; omitting the file is not the same as declaring zero. The land sums every packet's delta and applies one bump. `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs` enforces both halves of this and will fail your run if the row or the disclaimer is missing.
@@ -178,7 +180,7 @@ Your floor run will report a total that does **not** match the pin, because the 
 
 ## Git Commit Convention
 
-Conventional commits, `feat(SP-075): ...`. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
+Conventional commits, `feat(SP-084): ...`. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
 
 ## Documentation Requirements
 

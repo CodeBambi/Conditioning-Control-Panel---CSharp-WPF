@@ -1,4 +1,6 @@
-# SP-077: Make the ProcessEnvCollection convention mechanical
+# SP-086: Make the ProcessEnvCollection convention mechanical
+
+**Supersedes SP-077** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0077-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -137,7 +139,7 @@ that file** (see File Scope), so you write your own, smaller one.
 
 | | |
 |---|---|
-| May change | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs` (new), `client/tests/CcpClient.Tests/IntegrationProofTests.cs` (**scope amendment 2026-08-15 — see SCOPE, RESOLVED**), `spine-tasks/SP-077-process-env-collection-guard/**` |
+| May change | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs` (new), `client/tests/CcpClient.Tests/IntegrationProofTests.cs` (**scope amendment 2026-08-15 — see SCOPE, RESOLVED**), `spine-tasks/SP-086-process-env-collection-guard/**` |
 | Must not change | everything else, and specifically `client/tests/floor/floor.json`, `client/tests/floor/vacuous-shape-ledger.json`, `client/tests/CcpClient.Tests/VacuousShapeDetector.cs`, `client/tests/CcpClient.Tests/DataRootChokePointGuardTests.cs`, and every file named in the contract below |
 
 `client/tests/floor/vacuous-shape-ledger.json` being out of scope is a **design constraint on
@@ -148,16 +150,16 @@ your facts**, not a footnote. See Step 3.
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-077-process-env-collection-guard/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-086-process-env-collection-guard/floor-delta.json` |
 | fileScopeMustChange | `client/tests/CcpClient.Tests/ProcessEnvCollectionGuardTests.cs`, `client/tests/CcpClient.Tests/IntegrationProofTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-077-process-env-collection-guard/record.md`, `spine-tasks/SP-077-process-env-collection-guard/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-086-process-env-collection-guard/record.md`, `spine-tasks/SP-086-process-env-collection-guard/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** That file is the shared pin and concurrent
 lanes collide on it. Write your count change into `floor-delta.json` in your own folder:
 
 ```json
-{ "packet": "SP-077-process-env-collection-guard", "unit": 2, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-086-process-env-collection-guard", "unit": 2, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 Declare your **real** counts, not the illustrative `2` above. Declaring `0`/`0` is required if
@@ -441,7 +443,7 @@ Confirm that `observed == pin + your declared delta`, and state both numbers in 
 
 ## Git Commit Convention
 
-Conventional commits, `test(SP-077): ...`. One coherent slice, no unrelated files. Leave the tree
+Conventional commits, `test(SP-086): ...`. One coherent slice, no unrelated files. Leave the tree
 buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do
 not touch the shared pin.
 

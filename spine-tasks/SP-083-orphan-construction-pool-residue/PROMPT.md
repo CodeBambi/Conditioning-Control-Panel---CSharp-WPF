@@ -1,4 +1,6 @@
-# SP-074: Bound the outstanding abandoned CONSTRUCTIONS a wedged endpoint can accumulate
+# SP-083: Bound the outstanding abandoned CONSTRUCTIONS a wedged endpoint can accumulate
+
+**Supersedes SP-074** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0074-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -49,7 +51,7 @@ Every line below was opened and confirmed by the orchestrator at authoring. It i
 
 | | |
 |---|---|
-| May change | `client/src/CcpClient.Desktop/Audio/AudioSeams.cs`, `client/tests/CcpClient.Tests/SoundArbitrationTests.cs`, `spine-tasks/SP-074-orphan-construction-pool-residue/**` |
+| May change | `client/src/CcpClient.Desktop/Audio/AudioSeams.cs`, `client/tests/CcpClient.Tests/SoundArbitrationTests.cs`, `spine-tasks/SP-083-orphan-construction-pool-residue/**` |
 | Must not change | everything else, and specifically the files named in the contract below. `client/src/CcpClient.Desktop/Audio/SoundArbitration.cs` is called out by name: SP-073 owns it this wave. |
 
 ## Contract
@@ -57,15 +59,15 @@ Every line below was opened and confirmed by the orchestrator at authoring. It i
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-074-orphan-construction-pool-residue/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-083-orphan-construction-pool-residue/floor-delta.json` |
 | fileScopeMustChange | `client/src/CcpClient.Desktop/Audio/AudioSeams.cs`, `client/tests/CcpClient.Tests/SoundArbitrationTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-074-orphan-construction-pool-residue/record.md`, `spine-tasks/SP-074-orphan-construction-pool-residue/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-083-orphan-construction-pool-residue/record.md`, `spine-tasks/SP-083-orphan-construction-pool-residue/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** That file is the shared pin and concurrent lanes collide on it. Write your count change into `floor-delta.json` in your own folder instead:
 
 ```json
-{ "packet": "SP-074-orphan-construction-pool-residue", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-083-orphan-construction-pool-residue", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 Declare `0`/`0` if you add no tests; omitting the file is not the same as declaring zero. The land sums every packet's delta and applies one bump. `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs` parses this PROMPT.md and enforces both halves mechanically: the `floorDelta` row must point at **your own** folder, and `fileScopeMustNotChange` must contain the shared pin. Both are already correct above. Do not reword the contract table.
@@ -186,7 +188,7 @@ Your floor run will report a total that does **not** match the pin, because the 
 
 ## Git Commit Convention
 
-Conventional commits, `feat(SP-074): ...`. One coherent slice, one commit, no unrelated files. Leave the tree buildable at every commit. Commit on your own branch; do not merge, do not land, and do not touch the shared pin.
+Conventional commits, `feat(SP-083): ...`. One coherent slice, one commit, no unrelated files. Leave the tree buildable at every commit. Commit on your own branch; do not merge, do not land, and do not touch the shared pin.
 
 ## Documentation Requirements
 

@@ -1,4 +1,6 @@
-# SP-078 — Correct the "five unbounded disk-store waits" board row, and pin the fact that makes it correctable
+# SP-087 — Correct the "five unbounded disk-store waits" board row, and pin the fact that makes it correctable
+
+**Supersedes SP-078** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0078-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -65,7 +67,7 @@ Verified by the orchestrator at authoring. Every line below was opened in the **
 
 | | |
 |---|---|
-| May change | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs`, `client/tests/CcpClient.Tests/PersistenceStoreTests.cs`, `spine-tasks/SP-078-disk-store-unbounded-waits/**` |
+| May change | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs`, `client/tests/CcpClient.Tests/PersistenceStoreTests.cs`, `spine-tasks/SP-087-disk-store-unbounded-waits/**` |
 | Must not change | everything else, and specifically the files named in the contract below |
 
 **Scope note, read before Step 3.** This scope was pre-assigned across the wave to be pairwise disjoint, and it is correct for the packet you are actually executing: the correction lands in `record.md`, and the fact that carries it lands in the two files above. It would **not** have been sufficient for the remedy the board row implies, because all seven cited call sites live in five other files, none of them yours. That mismatch is itself evidence and belongs in your `record.md`. Do not widen the scope to reach a call site. If you conclude the honest deliverable requires editing a caller, **stop and escalate**; do not edit it.
@@ -75,15 +77,15 @@ Verified by the orchestrator at authoring. Every line below was opened in the **
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-078-disk-store-unbounded-waits/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-087-disk-store-unbounded-waits/floor-delta.json` |
 | fileScopeMustChange | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs`, `client/tests/CcpClient.Tests/PersistenceStoreTests.cs` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-078-disk-store-unbounded-waits/record.md`, `spine-tasks/SP-078-disk-store-unbounded-waits/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-087-disk-store-unbounded-waits/record.md`, `spine-tasks/SP-087-disk-store-unbounded-waits/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** That file is the shared pin and concurrent lanes collide on it. Write your count change into `floor-delta.json` in your own folder instead:
 
 ```json
-{ "packet": "SP-078-disk-store-unbounded-waits", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-087-disk-store-unbounded-waits", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 Declare `0`/`0` if you add no tests; omitting the file is not the same as declaring zero. The land sums every packet's delta and applies one bump. `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs:160-242` enforces both halves and will fail your run if the row or the disclaimer is missing.
@@ -181,7 +183,7 @@ Your floor run will report a total that does **not** match the pin, because the 
 
 ## Git Commit Convention
 
-Conventional commits, `fix(SP-078): ...` under Branch A (the deliverable corrects a false record and pins the truth), `feat(SP-078): ...` under Branch B. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
+Conventional commits, `fix(SP-087): ...` under Branch A (the deliverable corrects a false record and pins the truth), `feat(SP-087): ...` under Branch B. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
 
 ## Documentation Requirements
 

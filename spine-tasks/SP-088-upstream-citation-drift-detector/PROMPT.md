@@ -1,4 +1,6 @@
-# SP-080: Make upstream citation rot mechanically visible
+# SP-088: Make upstream citation rot mechanically visible
+
+**Supersedes SP-080** (wave 31, escalated at the plan gate having written no product code; record: `spine-tasks/CONTEXT.md`, wave-31 section). Same work, new ID: the packet ID is execution state, the durable identity is the board row. Renamed rather than reissued so SP-0080-as-escalated stays exactly what the wave-31 record describes.
 
 ## Mission
 
@@ -33,7 +35,7 @@ Every line below was opened and confirmed by the orchestrator at authoring. Noth
 
 | | |
 |---|---|
-| May change | `client/tools/citations/**`, `spine-tasks/SP-080-upstream-citation-drift-detector/**` |
+| May change | `client/tools/citations/**`, `spine-tasks/SP-088-upstream-citation-drift-detector/**` |
 | Must not change | everything else, and specifically the files named in the contract below |
 
 `client/tools/citations/` does not exist yet. You create it. Every line of detector logic and every one of its facts lives inside it.
@@ -43,15 +45,15 @@ Every line below was opened and confirmed by the orchestrator at authoring. Noth
 | Field | Value |
 |-------|-------|
 | testCommand | `node client/tests/floor/check-floor.mjs` |
-| floorDelta | `spine-tasks/SP-080-upstream-citation-drift-detector/floor-delta.json` |
+| floorDelta | `spine-tasks/SP-088-upstream-citation-drift-detector/floor-delta.json` |
 | fileScopeMustChange | `client/tools/citations/**` |
 | fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/docs/task-board.md`, `ConditioningControlPanel/**`, `client/docs/**`, `docs/constitution.md`, `.spine/**`, `.pi/**`, `.claude/**` |
-| artifactsMustExist | `spine-tasks/SP-080-upstream-citation-drift-detector/record.md`, `spine-tasks/SP-080-upstream-citation-drift-detector/floor-delta.json` |
+| artifactsMustExist | `spine-tasks/SP-088-upstream-citation-drift-detector/record.md`, `spine-tasks/SP-088-upstream-citation-drift-detector/floor-delta.json` |
 
 **You do not edit `client/tests/floor/floor.json`.** That file is the shared pin and concurrent lanes collide on it. Write your count change into `floor-delta.json` in your own folder instead:
 
 ```json
-{ "packet": "SP-080-upstream-citation-drift-detector", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
+{ "packet": "SP-088-upstream-citation-drift-detector", "unit": 0, "headless": 0, "reason": "one line naming the facts you added" }
 ```
 
 **Your scope forbids adding .NET tests, so your declared delta is `0` / `0`.** Declare it anyway. Omitting the file is not the same as declaring zero, and `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs` enforces both halves and will fail your run if the row or the disclaimer is missing.
@@ -196,7 +198,7 @@ Your floor run reports a total against a pin that is bumped at land from the sum
 
 ## Git Commit Convention
 
-Conventional commits, `feat(SP-080): ...`. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
+Conventional commits, `feat(SP-088): ...`. One coherent slice, no unrelated files. Leave the tree buildable at every commit. Commit your own work on your branch; do not merge, do not land, and do not touch the shared pin.
 
 ## Documentation Requirements
 
