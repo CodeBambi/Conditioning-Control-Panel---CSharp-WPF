@@ -122,8 +122,14 @@ namespace ConditioningControlPanel
             ("features/corner_gif.png", "Corner GIF"),
             ("features/audio_whispers.png", "Audio Whispers"),
             ("features/Mind_Wipers.png", "Mind Wipe"),
-            ("features/bambi takeover.png", "Takeover"),
-            ("features/takeover.png", "Takeover Alt"),
+            // "Alt" was exactly backwards for anyone but BambiSleep, and the Frame button made it
+            // visible: features/takeover.png is the Takeover page art for EVERY other mod AND the
+            // premium rail chip (always, whatever the active mod), while "bambi takeover.png" is
+            // reached only when BambiSleep is active. An author framing their rail chip was being
+            // sent to the slot that reads like the spare one. Display names only - the keys are a
+            // compatibility surface and are never renamed.
+            ("features/bambi takeover.png", "Takeover (BambiSleep only)"),
+            ("features/takeover.png", "Takeover (page + rail chip)"),
             ("features/vibe.png", "Vibe"),
             ("features/4new.png", "New Features"),
         };
