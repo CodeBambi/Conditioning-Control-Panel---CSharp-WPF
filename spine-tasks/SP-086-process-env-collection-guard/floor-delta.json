@@ -1,0 +1,6 @@
+{
+  "packet": "SP-086-process-env-collection-guard",
+  "unit": 2,
+  "headless": 0,
+  "reason": "ProcessEnvCollectionGuardTests adds two facts to CcpClient.Tests: EveryDataRootReadingClass_CarriesTheProcessEnvCollectionAttribute (a CcpClient.Tests class that reads the data-root variable must carry [Collection(nameof(ProcessEnvCollection))]) and TheHeadlessAssembly_NeverMutatesTheDataRootVariable (CcpClient.HeadlessTests cannot join a collection defined in another assembly, so it may not mutate the variable at all). No test added or removed in CcpClient.HeadlessTests; the one-line SettingsPathFactory remedy in IntegrationProofTests.cs moves no count."
+}

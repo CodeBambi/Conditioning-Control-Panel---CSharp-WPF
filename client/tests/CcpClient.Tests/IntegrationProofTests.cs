@@ -66,6 +66,8 @@ public class IntegrationProofTests
         HeartbeatParticipant? started = null;
         var root = new CompositionRoot
         {
+            SettingsPathFactory = () => Path.Combine(
+                Path.GetTempPath(), "ccp-integration-fail-" + Guid.NewGuid().ToString("N"), "settings.json"),
             ParticipantsFactory = infra =>
             {
                 started = new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch);
