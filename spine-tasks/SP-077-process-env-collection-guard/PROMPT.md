@@ -388,7 +388,7 @@ containing 1018.
 
 Your floor run will report a total that does **not** match the pin, because the pin is bumped at
 land from the summed deltas and not by you. That is expected and is not a failure of your work.
-The pin at authoring is **1018 unit / 35 headless** (`client/tests/floor/floor.json:4,21`).
+READ THE PIN FROM THE FILE, never from this packet: it has already gone stale twice (it said 1018; wave 30 made it 1022 and wave 31 made it 1028). Open `client/tests/floor/floor.json` and use what is there.
 Confirm that `observed == pin + your declared delta`, and state both numbers in your report.
 
 ## Completion Criteria

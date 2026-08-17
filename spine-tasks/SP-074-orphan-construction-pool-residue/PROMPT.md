@@ -153,7 +153,7 @@ Run them as **separate commands**. The worktree isolation guard refuses compound
 
 **Build immediately before the gate, every time.** The floor wrapper runs `dotnet test --no-build` (`client/tests/floor/check-floor.mjs:253`), so a stale `bin/` is reported as truth. That has already produced an observed 1022 against a tree containing 1018.
 
-Your floor run will report a total that does **not** match the pin, because the pin is bumped at land from the summed deltas and not by you. That is expected and is not a failure of your work. The pin today is **1018 unit / 35 headless**. Confirm that `observed == pin + your declared delta` on both projects, and state all four numbers in your report. If it does not reconcile, that is a real finding: do not adjust the delta to make it match.
+Your floor run will report a total that does **not** match the pin, because the pin is bumped at land from the summed deltas and not by you. That is expected and is not a failure of your work. READ THE PIN FROM `client/tests/floor/floor.json`, never from this packet: it has already gone stale twice (it said 1018; wave 30 made it 1022 and wave 31 made it 1028). Confirm that `observed == pin + your declared delta` on both projects, and state all four numbers in your report. If it does not reconcile, that is a real finding: do not adjust the delta to make it match.
 
 ## Completion Criteria
 

@@ -57,7 +57,7 @@ Verified by the orchestrator at authoring. Every line below was opened in the PO
 **The machinery you run inside**
 
 - `client/tests/floor/check-floor.mjs:253-254` — the wrapper runs `dotnet test --no-build`. It measures the last build, not your working tree.
-- `client/tests/floor/floor.json` — current pin: `CcpClient.Tests` 1018, `CcpClient.HeadlessTests` 35.
+- `client/tests/floor/floor.json` — the shared pin. READ THE PIN FROM THE FILE, never from this packet: it has already gone stale twice (it said 1018; wave 30 made it 1022 and wave 31 made it 1028). Open `client/tests/floor/floor.json` and use what is there.
 - `client/tests/floor/sum-deltas.mjs:18-24` — the fixed delta shape.
 - `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs`, `PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin` — mechanically enforces both halves of the floor-delta rule against this PROMPT.
 - `client/tests/CcpClient.Tests/TestTimingGuardTests.cs:20-41` — the forbidden-token list is wider than it looks. Besides `Thread.Sleep(` and `Task.Delay(` it bans `Stopwatch`, `SpinWait`, `SpinUntil`, `Environment.TickCount`, `CancelAfter(`, `CancellationTokenSource(TimeSpan`, `.WaitAsync(TimeSpan`, `.Wait(TimeSpan` and `.WaitOne(TimeSpan`. A gated test sink that blocks on `ManualResetEventSlim.Wait(TimeSpan...)` trips this guard. Plan around it before you write the test, not after it reddens.

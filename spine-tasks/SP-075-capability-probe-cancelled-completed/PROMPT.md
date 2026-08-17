@@ -148,7 +148,7 @@ Run them as **separate commands**. The worktree isolation guard refuses compound
 
 **Build immediately before the gate, every time.** The wrapper runs `--no-build`; a stale `bin/` once reported 1022 against a tree that contained 1018, which is a green that means nothing.
 
-Your floor run will report a total that does **not** match the pin, because the pin is bumped at land from the summed deltas and not by you. That is expected and is not a failure of your work: confirm the observed total equals `pin + your declared delta`, and state both numbers in your report. The pin at authoring is 1018 unit / 35 headless with 5 named OS-gated skips.
+Your floor run will report a total that does **not** match the pin, because the pin is bumped at land from the summed deltas and not by you. That is expected and is not a failure of your work: confirm the observed total equals `pin + your declared delta`, and state both numbers in your report. READ THE PIN AND THE SKIP LIST FROM `client/tests/floor/floor.json`, never from this packet: both have already gone stale (it said 1018 with 5 named skips; the pin is now higher and the skip list longer).
 
 ## Completion Criteria
 

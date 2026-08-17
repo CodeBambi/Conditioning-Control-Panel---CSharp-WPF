@@ -59,7 +59,7 @@ Verified by the orchestrator at authoring. Every line below was opened in the **
 
 - `client/tests/CcpClient.Tests/PersistenceStoreTests.cs` **does not exist.** You create it. Note that `client/tests/CcpClient.Tests/PersistenceTests.cs` already exists and holds class `PersistenceTests` with `private` helpers (`NewStore` at `:300-307`, `ListLogSink` at `:309`, `TempDir`). Those helpers are not visible to your new file and `PersistenceTests.cs` is **not** in your scope. Declare your own minimal helpers in your new file; duplicating a small `TempDir` per test file is the established pattern here (`AiMemoryStoreTests.cs:332`, `AiMemoryPipelineTests.cs:315`, `AiMemoryPromptAssemblyTests.cs:394`).
 - `client/src/CcpClient.Desktop/Persistence/DemoSettings.cs:28` — `public sealed class DemoSettings`, the product-owned demo document. Use `PersistenceStore<DemoSettings>` so you need no new model type and no scope widening.
-- `client/tests/floor/floor.json` — the pin today is **1018** unit, **35** headless.
+- `client/tests/floor/floor.json` — the shared pin. READ THE PIN FROM THE FILE, never from this packet: it has already gone stale twice (it said 1018; wave 30 made it 1022 and wave 31 made it 1028). Open `client/tests/floor/floor.json` and use what is there.
 
 ## File Scope
 
@@ -137,7 +137,7 @@ Also add, in `PersistenceStore.cs`, a doc note on `StartAsync` and `StopAsync` s
 - **Proposed replacement wording for the board row**, written out in full so the orchestrator can apply it verbatim. It should keep the residual true defect (blocking synchronous disk I/O on the UI thread at the five UI-thread `Load()` sites), drop the false claims, and correct the count. Say whether you believe the replacement is P2 or lower given that a local disk read is bounded in practice.
 - An honesty section naming what is NOT proven. At minimum: you have not measured how long `Load()` actually takes on a cold disk or a network-mapped data root, so "in practice bounded" remains an argument and not a fact; and you have not proven that site 7's off-UI-thread wrapper is the only caller of `AiMemoryStore.Clear()` for all future callers, only for today's tree.
 
-`floor-delta.json` with your real counts. The pin is 1018 unit / 35 headless today.
+`floor-delta.json` with your real counts. READ THE PIN FROM THE FILE, never from this packet: it has already gone stale twice (it said 1018; wave 30 made it 1022 and wave 31 made it 1028). Open `client/tests/floor/floor.json` and use what is there.
 
 ### Step 5: Verification
 
