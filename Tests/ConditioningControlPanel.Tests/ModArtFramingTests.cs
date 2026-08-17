@@ -375,9 +375,65 @@ public class ModArtFramingTests
         Assert.NotNull(literal);
 
         var shipped = ModArtFramingRegistry.ShippedViewbox("features/goon_game.png",
-                                                           ModArtFramingRegistry.SurfacePlayCard);
+                                                           ModArtFramingRegistry.SurfacePlayCardTall);
         Assert.NotNull(shipped);
         AssertRectsMatch(shipped!.Value, literal!.Value, "PlayGoonHeroBrush");
+    }
+
+    // ─── The declared shape has to be the REAL frame's shape ─────────
+    //
+    // A binding pointed at a surface whose aspect does not match its actual frame does not merely
+    // preview wrong: UniformToFill re-crops the stored window down to the real frame, so the author
+    // loses image on BOTH passes. The second review caught two of these, and in the Loom case the
+    // result was mod art cropped harder than before framing existed at all.
+
+    [Theory]
+    // 16:9 is what the editor's own slot labels ask authors to supply (1376x768).
+    [InlineData("features/loom.png", ModArtFramingRegistry.SurfaceLoomStrip, 216.0 / 118.0)]
+    [InlineData("features/remote_control.png", ModArtFramingRegistry.SurfacePlayCardTall, 394.0 / 168.0)]
+    [InlineData("features/fyp.png", ModArtFramingRegistry.SurfacePlayCard, 394.0 / 138.0)]
+    [InlineData("features/lab_quiz_hero.png", ModArtFramingRegistry.SurfaceIntakeStrip, 240.0 / 68.0)]
+    public void ABindingsSurfaceAspectIsTheOneItsRealFrameHas(string path, string surfaceId, double realAspect)
+    {
+        // Guards the binding table against the class of mistake the review found: the surface a path
+        // is bound to must be the shape of the box the art is actually painted into.
+        var surface = ModArtFramingRegistry.FindSurface(surfaceId);
+        Assert.NotNull(surface);
+        Assert.Equal(realAspect, surface!.AspectRatio, 1e-9);
+        Assert.Contains(ModArtFramingRegistry.BindingsFor(path), b => b.SurfaceId == surfaceId);
+    }
+
+    [Fact]
+    public void TheLoomStrip_DoesNotOverCropSixteenNineModArt()
+    {
+        // THE regression this file exists to prevent a second time. The strip is ~1.83:1 and a 16:9
+        // source is 1.78:1, so an un-framed author should keep essentially their whole image - which
+        // is what a bare UniformToFill gave them before framing existed. Bound to the 2.85:1 card
+        // plate it kept about 62% of the height, and then UniformToFill took another bite.
+        const double sixteenNine = 1376.0 / 768.0;
+        var rect = ModArtFramingRegistry.ResolveViewbox(
+            "features/loom.png", ModArtFramingRegistry.SurfaceLoomStrip,
+            isModSupplied: true, sourceAspect: sixteenNine, framing: null);
+
+        Assert.Equal(1.0, rect.Width, 1e-9);
+        Assert.True(rect.Height > 0.95,
+            $"the Loom strip is keeping only {rect.Height:P0} of the height of a 16:9 image; " +
+            "it is a ~1.83:1 frame, so an un-framed author should lose almost nothing");
+    }
+
+    [Fact]
+    public void NoFramableBindingIsPointedAtAFrameShapeItDoesNotHave()
+    {
+        // Every framable pair must resolve to a surface, and no framable pair may sit on the plain
+        // 138 playCard while its plate is one of the two overridden to 168.
+        foreach (var b in ModArtFramingRegistry.Bindings.Where(x => x.Framable))
+        {
+            Assert.NotNull(ModArtFramingRegistry.FindSurface(b.SurfaceId));
+            if (b.ResourcePath is "features/remote_control.png" or "features/goon_game.png")
+                Assert.NotEqual(ModArtFramingRegistry.SurfacePlayCard, b.SurfaceId);
+            if (b.ResourcePath == "features/loom.png")
+                Assert.Equal(ModArtFramingRegistry.SurfaceLoomStrip, b.SurfaceId);
+        }
     }
 
     [Fact]
@@ -387,9 +443,8 @@ public class ModArtFramingTests
         // cropping. A crop preview would be lying about the one surface this registry exists to keep
         // honest, so the editor must never offer it - while the shipped rect above is still needed.
         Assert.False(ModArtFramingRegistry.IsFramable("features/goon_game.png",
-                                                      ModArtFramingRegistry.SurfacePlayCard));
-        Assert.DoesNotContain(ModArtFramingRegistry.FramableBindingsFor("features/goon_game.png"),
-                              b => b.SurfaceId == ModArtFramingRegistry.SurfacePlayCard);
+                                                      ModArtFramingRegistry.SurfacePlayCardTall));
+        Assert.Empty(ModArtFramingRegistry.FramableBindingsFor("features/goon_game.png"));
     }
 
     /// <summary>
