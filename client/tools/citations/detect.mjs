@@ -52,6 +52,19 @@
 //   summary prints the drop counters, split into "resolve only under the first-attempt
 //   tree" (legitimate lessons citations) and "resolve nowhere in the WPF tree at all".
 //
+//   THE OTHER HALF OF THAT CONSEQUENCE, AND IT IS NOT CONSERVATIVE. CITATION_TOKEN reduces
+//   every citation to a bare basename, so a citation whose text explicitly names the
+//   first-attempt tree (`CCP.Core/Services/AIService/IAiService.cs:47-51`) is credited to
+//   the SHIPPING path whenever that basename resolves uniquely there. The text named one
+//   tree; the resolver credits the other, and nothing in the row shape records which. The
+//   drop counters above are blind to exactly this case, because a colliding name is never
+//   dropped. Measured on this checkout: 114 basenames exist in both universes; 13 distinct
+//   names are credited this way; 4 shipping paths have NO other citer at all, so only the
+//   misattribution keeps them out of CITATION-GONE — two of those four are tier 1. That is
+//   why the summary carries a SECOND, SYMMETRIC counter (`summary.firstAttemptCredited`),
+//   which names the sole-citation paths. It is a counter and not a class on purpose: the
+//   detector reports the erasure, it never re-keys a citation. Bound by self-test fact F14.
+//
 // ORDERING INVARIANT — LOAD-BEARING
 //   UNRESOLVED and AMBIGUOUS are computed BEFORE CITATION-GONE, and each suppresses its
 //   own rows from it. Measured on this tree: with the suppressions CITATION-GONE is 0;
@@ -78,6 +91,11 @@
 // WHAT THIS FILE DELIBERATELY DOES NOT DO
 //   - It does not validate citation LINE NUMBERS. The `:NNN` suffix is matched and then
 //     discarded; there is no line-number field in the row shape.
+//   - The first-attempt counter reads the PATH PREFIX immediately before the token, and
+//     nothing else. A bare basename sitting in first-attempt prose
+//     (first-attempt-lessons.md:108 lists `LocalAiService.cs` unqualified beside a
+//     path-qualified CCP.Core citation) is still credited to shipping AND is invisible to
+//     the counter. The counter is a floor on the erasure, never a ceiling.
 //   - It does not write anything except the opt-in `--out <path>` target. A generated
 //     report committed into the tree is the next thing to rot.
 //   - It does not pick a candidate when a basename is ambiguous, and it does not treat a
@@ -171,6 +189,52 @@ function isFirstAttemptPath(relPath) {
 /** Decision A's mandatory label. A row cannot exist without one. */
 export function treeLabel(relPath) {
   return isFirstAttemptPath(relPath) ? TREE_CCP : TREE_SHIPPING;
+}
+
+/** The path prefix a citation token was written with, or "" when it was written bare.
+ *  Walks BACKWARDS from the token's own start index over path characters only, so there is
+ *  no lookback window to truncate a long prefix and no second regex whose token set could
+ *  drift from CITATION_TOKEN's. A prefix that does not end at a separator is not a prefix. */
+export function precedingPathPrefix(text, index) {
+  let i = index;
+  while (i > 0 && /[A-Za-z0-9_.\-/\\]/.test(text[i - 1])) i -= 1;
+  const raw = toPosix(text.slice(i, index));
+  return raw.endsWith("/") ? raw : "";
+}
+
+/** True when the citation's own text named the first-attempt tree.
+ *  Two markers, both case-sensitive and both derived from the same csproj exclusion list
+ *  isFirstAttemptPath() uses:
+ *    - any segment starting with `CCP.` (CCP.Core, CCP.Avalonia, CCP.WindowsOnly, ...);
+ *    - a `tests` segment DIRECTLY under `ConditioningControlPanel`. The anchor is required:
+ *      `client/tests/CcpClient.Tests/...` is the port's own test tree, not the first
+ *      attempt, and `CcpClient.Tests` does not start with `CCP.` (case matters). */
+export function namesFirstAttemptTree(prefix) {
+  if (!prefix) return false;
+  const segments = prefix.split("/").filter(Boolean);
+  if (segments.some((s) => s.startsWith("CCP."))) return true;
+  for (let i = 1; i < segments.length; i++) {
+    if (segments[i] === "tests" && segments[i - 1] === "ConditioningControlPanel") return true;
+  }
+  return false;
+}
+
+/** Every distinct citation token in one source file, with how many of its occurrences were
+ *  written with a first-attempt-qualified path prefix. The token set is produced by
+ *  CITATION_TOKEN and by nothing else, so adding this measurement cannot change WHICH
+ *  citations are credited — only what is known about them. */
+function tokensWithProvenance(text) {
+  const tokens = new Map();
+  for (const match of text.matchAll(CITATION_TOKEN)) {
+    let record = tokens.get(match[0]);
+    if (!record) {
+      record = { total: 0, firstAttempt: 0 };
+      tokens.set(match[0], record);
+    }
+    record.total += 1;
+    if (namesFirstAttemptTree(precedingPathPrefix(text, match.index))) record.firstAttempt += 1;
+  }
+  return tokens;
 }
 
 function walkFiles(dir, keep, out = []) {
@@ -360,6 +424,12 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
   const ambiguousTokens = new Map(); // token -> {candidates[], citers:Set}
   let droppedOccurrences = 0;
   const droppedNames = new Set();
+  // The symmetric counter: citations whose OWN TEXT named CCP.*/tests but whose basename
+  // resolved uniquely in SHIPPING, so the shipping path is what got credited.
+  const firstAttemptOnlyCiters = new Map(); // real -> Set(citer) that named ONLY the first attempt
+  const firstAttemptNames = new Set();
+  const firstAttemptPaths = new Set();
+  let firstAttemptOccurrences = 0;
 
   for (const { file, label } of sources) {
     let text;
@@ -368,7 +438,7 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
     } catch {
       continue; // a file that vanished mid-scan is not a reason to lie about the rest
     }
-    for (const token of new Set(text.match(CITATION_TOKEN) ?? [])) {
+    for (const [token, provenance] of tokensWithProvenance(text)) {
       const candidates = shippingIndex.get(token);
       if (!candidates) {
         droppedOccurrences++;
@@ -384,8 +454,25 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
       const real = candidates[0];
       if (!regenerated.has(real)) regenerated.set(real, new Set());
       regenerated.get(real).add(label);
+      if (provenance.firstAttempt > 0) {
+        firstAttemptOccurrences += provenance.firstAttempt;
+        firstAttemptNames.add(token);
+        firstAttemptPaths.add(real);
+        if (provenance.firstAttempt === provenance.total) {
+          // Every occurrence in THIS file named the first attempt, so this citer is not
+          // evidence for the shipping path at all.
+          if (!firstAttemptOnlyCiters.has(real)) firstAttemptOnlyCiters.set(real, new Set());
+          firstAttemptOnlyCiters.get(real).add(label);
+        }
+      }
     }
   }
+
+  // A shipping path whose EVERY citer named only the first attempt is held out of
+  // CITATION-GONE by the misattribution alone. That is the number worth printing.
+  const firstAttemptSolePaths = [...firstAttemptPaths]
+    .filter((real) => (firstAttemptOnlyCiters.get(real)?.size ?? 0) === regenerated.get(real).size)
+    .sort();
 
   const droppedFirstAttemptOnly = [...droppedNames].filter((n) => fullIndex.has(n));
   const droppedNowhere = [...droppedNames].filter((n) => !fullIndex.has(n));
@@ -571,6 +658,13 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
         firstAttemptOnly: droppedFirstAttemptOnly.length,
         nowhere: droppedNowhere.length,
       },
+      firstAttemptCredited: {
+        occurrences: firstAttemptOccurrences,
+        distinctNames: firstAttemptNames.size,
+        paths: firstAttemptPaths.size,
+        soleCitation: firstAttemptSolePaths.length,
+        solePaths: firstAttemptSolePaths,
+      },
       totalRows: rows.length,
     },
   };
@@ -620,6 +714,17 @@ export function formatReport(outcome) {
       `${summary.dropped.firstAttemptOnly} resolve only under the first-attempt tree (CCP.*/tests), ` +
       `${summary.dropped.nowhere} resolve nowhere in the WPF tree`,
   );
+  const fa = summary.firstAttemptCredited;
+  out.push(
+    `  citations naming CCP.*/tests but CREDITED to a shipping path (basename collision): ` +
+      `${fa.occurrences} occurrence(s), ${fa.distinctNames} distinct name(s), ${fa.paths} shipping path(s)`,
+  );
+  out.push(
+    `    of those, ${fa.soleCitation} shipping path(s) have NO other citer, so only this ` +
+      `misattribution keeps them out of CITATION-GONE:`,
+  );
+  if (fa.solePaths.length === 0) out.push("      (none)");
+  for (const p of fa.solePaths) out.push(`      ${p}`);
   out.push(`  TOTAL ROWS: ${summary.totalRows}`);
   out.push("");
   out.push("This is a REVIEW LIST, not a failure. Exit 0 means the detector ran.");

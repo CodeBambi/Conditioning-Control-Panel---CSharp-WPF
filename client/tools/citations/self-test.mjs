@@ -45,7 +45,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { CLASS, REASON, TREE_CCP, TREE_SHIPPING, runDetector, UNREVIEWED_SENTINEL } from "./detect.mjs";
+import { CLASS, REASON, TREE_CCP, TREE_SHIPPING, formatReport, runDetector, UNREVIEWED_SENTINEL } from "./detect.mjs";
 
 const DETECT = fileURLToPath(new URL("./detect.mjs", import.meta.url));
 
@@ -528,5 +528,88 @@ test("F13: no repo-root anchor above cwd exits non-zero naming client/CcpClient.
       "the failure must name the ANCHOR it looked for; falling back to cwd would fail for a different reason and hide the bug",
     );
     assert.ok(!run.stdout.includes("REVIEW LIST"), "no list without a root");
+  });
+});
+
+// ============================================ F14 the first-attempt-credited counter
+//
+// The resolver reduces every citation to a basename, so a citation whose text names
+// CCP.*/tests is credited to the SHIPPING path when that basename resolves uniquely there.
+// The text named one tree and the tool credits the other. This fact pins the counter that
+// makes the erasure visible, including the sole-citation number: the shipping paths that
+// would be CITATION-GONE if the misattribution were removed.
+
+test("F14: a citation naming CCP.*/tests but credited to a shipping path is counted, and the sole-citation paths are named", () => {
+  withFixtureRepo((fx) => {
+    // Twin: exists in both universes. The doc cites ONLY the first-attempt path.
+    fx.write("ConditioningControlPanel/Services/Twin.cs", "x\n");
+    fx.write("ConditioningControlPanel/CCP.Foo/Twin.cs", "x\n");
+    // Legacy: the `tests` half of the first-attempt boundary, anchored under
+    // ConditioningControlPanel/ (the csproj's own DefaultItemExcludes list).
+    fx.write("ConditioningControlPanel/Services/Legacy.cs", "x\n");
+    fx.write("ConditioningControlPanel/tests/Legacy.cs", "x\n");
+    // Both: cited once qualified and once bare, so it is COUNTED but not SOLE.
+    fx.write("ConditioningControlPanel/Services/Both.cs", "x\n");
+    fx.write("ConditioningControlPanel/CCP.Foo/Both.cs", "x\n");
+    // Plain: negative control — bare, and path-qualified into the SHIPPING tree.
+    fx.write("ConditioningControlPanel/Services/Plain.cs", "x\n");
+    // Ported: negative control for the `tests` marker. client/tests/** is the PORT's own
+    // test tree, not the first attempt, and CcpClient.Tests does not start with `CCP.`.
+    fx.write("ConditioningControlPanel/Services/Ported.cs", "x\n");
+
+    fx.write(
+      "client/docs/notes.md",
+      [
+        "First attempt only: `CCP.Foo/Twin.cs:12`.",
+        "First attempt tests: `ConditioningControlPanel/tests/Legacy.cs:9`.",
+        "Mixed: `CCP.Foo/Both.cs:1` and later just Both.cs:2.",
+        "Shipping, bare and qualified: Plain.cs:4 and ConditioningControlPanel/Services/Plain.cs:7.",
+        "Port test tree: `client/tests/CcpClient.Tests/Ported.cs:3`.",
+        "",
+      ].join("\n"),
+    );
+    fx.sln();
+    const since = fx.commit("base");
+    fx.write("ConditioningControlPanel/Services/Twin.cs", "x\ny\n");
+    const until = fx.commit("head");
+    fx.inventory({
+      schemaVersion: 1,
+      baseline: baseline(since, until),
+      entries: [
+        { path: "ConditioningControlPanel/Services/Twin.cs", tier: 1, citedBy: ["docs:notes.md"], verdict: "ok" },
+        { path: "ConditioningControlPanel/Services/Legacy.cs", tier: 3, citedBy: ["docs:notes.md"], verdict: "ok" },
+        { path: "ConditioningControlPanel/Services/Both.cs", tier: 2, citedBy: ["docs:notes.md"], verdict: "ok" },
+        { path: "ConditioningControlPanel/Services/Plain.cs", tier: 3, citedBy: ["docs:notes.md"], verdict: "ok" },
+        { path: "ConditioningControlPanel/Services/Ported.cs", tier: 3, citedBy: ["docs:notes.md"], verdict: "ok" },
+      ],
+    });
+
+    const outcome = runDetector({ repoRoot: fx.root });
+    const credited = outcome.summary.firstAttemptCredited;
+
+    assert.equal(credited.occurrences, 3, "Twin, Legacy and the qualified half of Both are the three occurrences");
+    assert.equal(credited.distinctNames, 3, "Plain and Ported name the shipping tree and must not be counted");
+    assert.equal(credited.paths, 3, "three shipping paths were credited from first-attempt-qualified text");
+
+    assert.deepEqual(
+      credited.solePaths,
+      ["ConditioningControlPanel/Services/Legacy.cs", "ConditioningControlPanel/Services/Twin.cs"],
+      "a path is SOLE only when EVERY citer named the first attempt — Both.cs is also cited bare",
+    );
+    assert.equal(credited.soleCitation, 2);
+
+    // The point of the number: without the misattribution these entries have no citer at
+    // all, so the class that would have reported them is silent.
+    assert.ok(
+      !pathsOf(outcome, CLASS.CITATION_GONE).includes("ConditioningControlPanel/Services/Twin.cs"),
+      "the misattributed citation is exactly what keeps this entry out of CITATION-GONE",
+    );
+
+    // The counter is not the drop counter: a colliding name is never dropped.
+    assert.equal(outcome.summary.dropped.occurrences, 0, "every token here resolves in the shipping universe");
+
+    const report = formatReport(outcome);
+    assert.match(report, /CREDITED to a shipping path/, "the summary must print the counter, not merely carry it");
+    assert.match(report, /ConditioningControlPanel\/Services\/Twin\.cs/, "the sole-citation paths must be named in the report");
   });
 });
