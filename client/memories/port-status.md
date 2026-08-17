@@ -1,12 +1,15 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
-## MULTI-LANE IS PROVEN. Floor 1022 -> 1046 in one night, 9 packets landed across 3 waves.
+## MULTI-LANE IS PROVEN. Floor 1022 -> 1052 in one night, 11 packets landed across 5 waves.
 
 Read this before anything else; it supersedes the wave-31 "STILL UNPROVEN at multi-lane" line below.
 
 - **Waves landed 2026-08-15:** wave 31 (SP-079 + SP-081, 1022->1028), wave 32 (SP-082, the P0, floor
-  unchanged), wave 33 (**six packets SP-083..SP-088 at once, 1028->1046**). All three blind-audited
-  PASS at the exact pushed SHA. Tip `3b31750b`.
+  unchanged), wave 33 (**six packets SP-083..SP-088 at once, 1028->1046**), wave 34 (SP-089, ->1048),
+  wave 35 (SP-090, ->1052). **All five blind-audited PASS at the exact pushed SHA.** Tip `4ddb1318`.
+  **Waves 34 and 35 each passed the FULL ladder first time** — plan, code and final review clean, no
+  revise round — which is the shape to expect now that T-21 is in and packets exclude their obvious
+  hollow solution by name.
 - **THE PLAN GATE WAS THE BOTTLENECK AND IT IS FIXED (T-21).** Wave 31 killed **6 of 8** lanes at
   "plan still REVISE after 3 rounds" with zero product code. Root cause was NOT calibration: the
   reviewer contract already listed 8 exhaustive blocking classes and a non-blocking Suggestions
@@ -66,7 +69,7 @@ Read this before anything else; it supersedes the wave-31 "STILL UNPROVEN at mul
   never assumed discharged because the session is running on the desktop. **Do not author a
   Linux-gated packet here until a distro exists**; the board row "Linux has no secret store" is
   therefore not claimable on this machine regardless of its priority.
-- **Next unused task ID: SP-090.** Machine: DESKTOP this run (not the laptop of exports 18-19), but
+- **Next unused task ID: SP-091.** Machine: DESKTOP this run (not the laptop of exports 18-19), but
   the desktop-only advantages that actually materialised were disk and cores — NOT Linux, and no
   headed evidence was produced either.
 
