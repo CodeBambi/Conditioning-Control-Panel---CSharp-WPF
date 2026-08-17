@@ -241,3 +241,45 @@ port still resolves to a real file. That was checked, not assumed.
 - **First-attempt residue keeps manufacturing merge conflicts.** `CCP.Core/` (and the `CCP.Avalonia.*`
   projects) hold stale forks of WPF models, so upstream edits to `Models/*.cs` land as
   delete/modify conflicts forever. Resolution rule is in the skill; a cleanup is not port work.
+
+## 2026-08-15 — v6.8.0 → v6.8.1 (merge `1d1f8997`)
+
+**Baseline pair:** `79feea84` (in-tree `<Version>6.8.0</Version>`) → `87035e9a` (`<Version>6.8.1</Version>`). **54 commits, 121 files, ZERO conflicts.** Checkout-free path used (`git fetch origin main:main`); `main` was never checked out.
+
+**Port untouched, proven not assumed:** `git diff c9e7fb91 HEAD -- client/ spine-tasks/ .spine/` is EMPTY. Port health on the merged tree: build **0W/0E**, floor **1052/1052 unit + 35/35 headless**, the two pinned Linux skips, unchanged by the merge.
+
+**FIRST REAL USE OF THE CITATION-DRIFT DETECTOR (SP-088, landed hours earlier the same night).** This is the sync T-19 was filed for, and the tool that closed it ran on its first live delta: `node client/tools/citations/detect.mjs --since 79feea84 --until 87035e9a`, self-test 15/15 green immediately before. Inventory: 297 entries, 294 real paths regenerated, universe 1031 shipping / 1865 full WPF files.
+
+### Bucket 1 — NEW product surfaces
+
+- **THE DESCENT expanded hard.** 10 new files under `Services/Descent/` (`DescentCountdownService`, `DescentFuseChrome`, `DescentFuseCopy`, `DescentFuseHandoff`, `DescentFuseSequence`, `DescentHeartbeat`, `DescentRoomSfx`, `DescentShowDirector`, `SpiralFirstLightTimeline`, `SpiralRoom`) plus a **Descent Fuse UI layer**: `AvatarTube/AvatarTubeWindow.DescentFuse.cs`, `Controls/DescentFuseRailChip.cs`, `Controls/DescentFuseStageVisual.cs`, `MainWindow/MainWindow.DescentFuse.cs`. Upstream also added `feat(descent): the restore preview prices the server's basis, credit and all`.
+- **A window became a tab.** `Windows/SpiralMapWindow.cs` **DELETED**; `Views/Tabs/SpiralTabView.xaml{,.cs}` + `MainWindow/MainWindow.SpiralRoom.cs` + `Controls/SpiralFirstLightVisual.cs` added. A surface the port has not built changed shape before the port reached it.
+- **Mod art framing** — `Services/ModArtFraming.cs` + `feat(mod-art): slot geometry + framing contract for mod-supplied art`, with follow-up fixes for wrong shapes, dead bindings and card-plate misdeclaration. This is a CONTRACT for third-party art, i.e. a modding-surface obligation.
+- **Bubbles**: `Services/BubbleSizing.cs`, a Size slider for the ambient field, and `bubbleScale` for mods.
+
+### Bucket 2 — parity drift on code the port has ALREADY ported (the dangerous bucket)
+
+**9 tier-1 cited files changed and hold NO verdict.** Those cited by port SOURCE (not merely docs) are the sharp ones:
+
+| Upstream file changed | Port source citing it |
+|---|---|
+| `Chaos/ChaosWebViewHost.cs` | `Features/Dtrh/DtrhHostWindow.axaml.cs`, `Features/Intake/IntakeHostWindow.axaml.cs`, `Features/Intake/IntakeProtocol.cs` |
+| `Services/AiService.cs` | `Ai/AiAwarenessService.cs`, `Ai/AiOperationPipeline.cs`, `Ai/AiOperationVocabulary.cs`, `Ai/AiProviderSeam.cs` |
+| `Services/Companion/Brain/CompanionBrain.cs` | `Ai/AiOperationPipeline.cs`, `Ai/AiPrivacyFilters.cs` |
+| `Services/KeywordTriggerService.cs` | `Ai/AiAwarenessService.cs` |
+| `MainWindow/MainWindow.Lab.cs` | `Features/Dtrh/DtrhLaunchCoordinator.cs` |
+| `MainWindow/MainWindow.Settings.cs` | `Features/Intake/IntakeSettingsDocument.cs` |
+
+Docs-only tier-1 changes: `AvatarTube/AvatarTubeWindow.Avatar.cs`, `AvatarTube/AvatarTubeWindow.ChatInput.cs`, `MainWindow/MainWindow.Patreon.cs`.
+
+**`ChaosWebViewHost.cs` read in detail (+284/−7), and the honest verdict is GAP, not defect.** Upstream's `fix(justdrop): the shop window stays a window, and fullscreen has a door` adds an **opt-in** host-owned fullscreen mode: a page's `requestFullscreen()` fills only the WebView client area, a host-drawn toggle strip rides above the page in both modes, and Esc exits from either focus state. **The default is `false` — explicitly the behaviour "the tunnel backdrop and the DtRH game were built on" — so the port's DTRH and tunnel usage matches the unchanged default.** The trap upstream fixed was a REMOTE page (JUST DROP) stripping the shop window's title bar with no affordance to undo it while the taskbar painted over the page's own exit. **This is therefore an obligation of the JUST DROP row, not a silent defect in landed port code.** The OPEN port-side question, filed rather than asserted: whether the port's own WebView hosts can be driven into the same chrome-stripped state by a page, which was NOT determined here.
+
+### Bucket 3 — smaller deltas
+
+Three "triage 0817" fix batches (`the fullscreen trap, the buried nav rail, and three more`; `the corner GIF stops bricking the app, plus four smalls`; `make the #956 breadcrumb reachable`), a JustDrop windowed fix, profile VAT share, a bubbles Size-slider inertness fix, mod-editor Takeover label ordering, 9 localization files, and the v6.8.0 subtitle becoming "Relapse". Itemized here rather than on the board.
+
+### Bucket 4 — gaps this sync exposed in the port's own guards
+
+- **The detector caught three citations added THE SAME NIGHT and absent from the inventory:** `Services/Settings/ProfileSyncService.cs`, `Services/Companion/Brain/CompanionTurn.cs`, `Dialogs/AwarenessPresetDetailDialog.xaml.cs` — all cited by `task-board.md` rows written hours earlier in this session. The tool caught its own author's drift on its first run, which is the strongest evidence it works that this sync could have produced.
+- **4 UNRESOLVED entries are the known basename-collision class**, not new: `Models/AiCommandData.cs` and `Models/AppSettings.cs` recorded at shipping paths that no longer exist, whose basenames resolve into the first-attempt `CCP.Core/` tree. SP-088 documented this shape; it needs a re-key or a retirement, not a fix here.
+- **Reporting ambiguity worth fixing in the tool, not worked around:** the header prints `297 entries (106 changed in window)`, but only ~88 non-test WPF files changed in this window — the 106 is the inventory's recorded `changedAtSync` from the PREVIOUS sync, not this window's count. The number is stale-by-construction and should either be recomputed for the passed window or labelled as the inventory's own field.

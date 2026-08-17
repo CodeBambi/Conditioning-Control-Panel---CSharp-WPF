@@ -1,5 +1,31 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## UPSTREAM BASELINE MOVED: v6.8.0 → v6.8.1 (sync 2026-08-15, merge `1d1f8997`)
+
+- **The WPF reference tree now tracks `main` @ `87035e9a`, in-tree `<Version>6.8.1</Version>`** (was
+  `79feea84` / v6.8.0). **54 commits, 121 files, ZERO conflicts.** Checkout-free path
+  (`git fetch origin main:main`); `main` was never checked out. Port proven untouched
+  (`git diff … -- client/ spine-tasks/ .spine/` EMPTY); merged-tree health build **0W/0E**, floor
+  **1052/35** unchanged. Ledger: `client/docs/upstream-sync.md` §2026-08-15.
+- **T-19'S TOOL PAID FOR ITSELF ON ITS FIRST LIVE DELTA.** The SP-088 citation-drift detector — landed
+  hours earlier the same night — produced the review list this sync was hunted with: 9 tier-1 cited
+  files changed with no verdict, **6 of them cited by port SOURCE** (`ChaosWebViewHost`, `AiService`,
+  `CompanionBrain`, `KeywordTriggerService`, `MainWindow.Lab`, `MainWindow.Settings`). **It also caught
+  three citations added the SAME NIGHT that were missing from the inventory**, i.e. its own author's
+  drift. Run it every sync: `node client/tools/citations/detect.mjs --since <base> --until <tip>`.
+- **The one file read in detail resolved to GAP, not defect, and the distinction is the row-`:118`
+  discipline.** Upstream's JUST DROP fullscreen fix rewrote `ChaosWebViewHost.cs` (+284/−7), but its
+  remedy is **opt-in with default false** — explicitly the behaviour DTRH and the tunnel were built on
+  — so the port's usage matches an unchanged default. **What is genuinely open is a port-side question
+  nobody has answered:** can a page in the port's own WebView hosts strip the window's chrome the same
+  way? Filed as a question, not a defect.
+- **New upstream surfaces, none of which the port has built:** THE DESCENT grew 10 services plus a fuse
+  UI layer; **`SpiralMapWindow` was DELETED and became a TAB** (`Views/Tabs/SpiralTabView`) — a shape
+  change that invalidates any Descent archaeology taken before v6.8.1; mod art framing added a
+  slot-geometry CONTRACT for third-party art; bubbles gained a Size slider and `bubbleScale`.
+- **Rows filed: 6** (tier-1 verdicts owed, the port-side fullscreen question, Descent expansion, mod-art
+  framing, the v6.8.1 backlog, and the inventory drift the detector found). Board is now 112 rows.
+
 ## MULTI-LANE IS PROVEN. Floor 1022 -> 1052 in one night, 11 packets landed across 5 waves.
 
 Read this before anything else; it supersedes the wave-31 "STILL UNPROVEN at multi-lane" line below.
