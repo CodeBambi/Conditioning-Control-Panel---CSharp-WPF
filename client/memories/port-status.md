@@ -57,7 +57,18 @@ Read this before anything else; it supersedes the wave-31 "STILL UNPROVEN at mul
 - **ponytail plugin installed** (v4.9.0, user scope, `SubagentStart` hook) at owner request, so the
   minimal-code discipline reaches lane agents. Its skills rank BELOW repository instruction files in
   the constitution's authority order, so the port's evidence discipline wins where they conflict.
-- **Next unused task ID: SP-089.** Machine: DESKTOP this run (not the laptop of exports 18-19).
+- **LINUX IS STILL UNGATEABLE HERE, AND THIS CORRECTS A PREMISE `client/port.txt` INVITES.** That file
+  lists "the WSL2 install used for Linux gates" under MACHINE-SPECIFIC desktop-only resources, which
+  reads as *the desktop can discharge Linux gates*. **Checked on the desktop 2026-08-15:
+  `wsl.exe --status` reports Default Version 2, and `wsl.exe --list --verbose` reports "Windows
+  Subsystem for Linux has no installed distributions."** WSL2 is present; there is no distro to run.
+  So every Linux claim remains a NAMED LIMIT on this machine exactly as on the laptop — never faked,
+  never assumed discharged because the session is running on the desktop. **Do not author a
+  Linux-gated packet here until a distro exists**; the board row "Linux has no secret store" is
+  therefore not claimable on this machine regardless of its priority.
+- **Next unused task ID: SP-090.** Machine: DESKTOP this run (not the laptop of exports 18-19), but
+  the desktop-only advantages that actually materialised were disk and cores — NOT Linux, and no
+  headed evidence was produced either.
 
 # Port Status (as of 2026-08-14, nineteenth export — laptop)
 
