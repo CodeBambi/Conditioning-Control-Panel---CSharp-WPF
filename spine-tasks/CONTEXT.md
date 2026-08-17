@@ -28,7 +28,48 @@ and SP-086 (was SP-077) had its scope amended so it no longer ships a designed-B
 not miscalibration, and the fresh plans must still answer those findings — a re-run that quietly
 loses them is worse than the escalation was.
 
-### Wave 32 (**AUTHORED 2026-08-15 — single lane, SP-082. The P0 that gates all further landing.**)
+### Wave 32 (**LANDED 2026-08-15 — single lane, SP-082. Floor stays 1028/35; the P0 that gated all further landing is closed.**)
+
+Lane branch `sp-082-interactive-session-title-skips`, commits `5ec113f7` + `b4d06580`, cherry-picked
+onto `ccc8fd07`. Plan **APPROVE round 1**, Code **APPROVE**, Final **REVISE** (one blocking item,
+documentation-scoped) → applied on the lane branch → landed. Delta 0/0, so the pin does not move:
+a skipped test keeps its TRX row, which is what `check-floor.mjs` counts.
+
+**THE T-21 FIX HAS ITS FIRST LIVE EVIDENCE, and it is one data point, not a proof.** The plan gate
+returned APPROVE on round 1 — against six of eight lanes dying after three rounds in wave 31. The
+reviewer stated it re-derived every load-bearing claim from source rather than accepting it, so this
+was not a lax pass. n=1 on a deliberately small packet; wave 33 at six lanes is the real test.
+
+**THE FINAL SEAT EARNED THE WHOLE LADDER, and this is the transferable lesson.** Packet Step 4(c)
+required forcing the skip predicate true and showing the suite still green. The lane asserted it was
+"provable" and never ran it. The final reviewer ran it itself, in a detached worktree with both
+predicates replaced by literal `true`: **FLOOR OK 1028/1028, 4 skipped, exit 0.** That is the ONLY
+direct evidence the packet's outcome holds, because both earlier seats gated green while the skips
+were **not firing** — which says nothing about a locked session. **A green gate obtained in the state
+the packet exists to fix proves nothing; check WHICH state the evidence was collected in.**
+
+**Its blocking finding is real and is now its own P1 row:** `no-foreground-window` is the product's
+answer to "capture returned false", not "the session is locked", and `AiAwarenessTests.cs:415` is the
+sole execution of the real capture path in the whole test tree — so a capture regression now skips
+green everywhere, where it used to red the gate on every interactive run. Unavoidable inside SP-082
+(conditioning on the product's typed answer IS the anti-vacuity requirement), so it is NAMED and filed.
+The shipped skip messages had asserted the opposite and were corrected.
+
+**TWO AUTHORING FAILURES OF MINE, recorded because they are the same class and both happened in one
+night.** (1) SP-082 required editing `vacuous-shape-ledger.json` while its own prose forbade it — the
+identical designed-BLOCKED shape I had criticised in SP-077 hours earlier. (2) I then misdiagnosed
+that as a lane overstepping; the machine-checked `fileScopeMustNotChange` row never listed the ledger,
+only the prose did, so the lane was inside its contract and the discrepancy was mine. **Where prose and
+the contract row disagree, the contract row is what every seat actually binds.** The wave-31 packets
+had already got this right (SP-085/086/088 each name the ledger as shared and forbid it), so wave 33
+carries no ledger collision.
+
+**Named limits carried, not dissolved:** the landing session was INTERACTIVE, so my own three gate runs
+show the two pinned Linux skips and **not** the four-skip locked-session state — the locked leg is
+simulated, never observed, and the manual gate stays undischarged. No Linux. The real capture path is
+now unguarded (its own P1 row).
+
+### Wave 32 authoring (superseded by the land above)
 
 `SP-082-interactive-session-title-skips`: the two `AiAwarenessTests` window-title facts must SKIP on the product's own typed `no-foreground-window` answer instead of asserting through it, so `check-floor.mjs` means the same thing whether or not a human is at the desk. **The product is explicitly out of scope — it is already correct**, returning a documented typed `Unavailable(NoForegroundWindowCode)` for a locked/secure/mid-switch desktop.
 
