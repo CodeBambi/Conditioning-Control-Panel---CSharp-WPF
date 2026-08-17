@@ -6,6 +6,38 @@
 
 ---
 
+### Wave 35 (**LANDED 2026-08-15 — single lane, SP-090. Floor 1048 → 1052. Second consecutive clean ladder pass.**)
+
+Lane `lane/SP-090-allowedskips-ban-machinery` @ `ebe12892`, one commit, three files, cherry-picked onto
+`7413edaf`. Plan APPROVE, Code APPROVE, **Final PASS**. Delta +4/+0 declared and observed.
+
+**What it closes:** the floor pin is the port's one mechanical pre-land gate and its integrity rests
+entirely on `allowedSkips` being honest — yet both permanent bans were prose in a JSON string, and the
+only other place they appeared was an error MESSAGE inside `check-floor.mjs:237`. Nothing stopped a
+banned name entering the list and blinding the gate permanently.
+
+**THE TRAP WAS NAMED AT AUTHORING AND THE CODE HONOURS IT.** A guard that reads the banned names out
+of `admissionRule` is defeated by one edit: delete the name from the rule, add it to `allowedSkips`,
+and it passes with nothing left to compare. Both names are therefore `const` literals in the test, and
+`admissionRule` is parsed only to ask whether it still CONTAINS each — so drift reds in BOTH
+directions, and **the redundancy is the mechanism, not duplication to be factored away.**
+
+**THE LANE CLOSED A DOOR THE PACKET DID NOT SEE, and it is the better half of the work.** F3 asserts
+both banned names still resolve to a real `[Fact]` in the assembly. **A ban naming a renamed or
+deleted test protects nothing while looking perfectly healthy**, and nothing else in the suite would
+have caught it. The lane also spells both names verbatim a second time, independent of the constants,
+so a typo reds; and F4 seeds three drifts — membership, declaration, and an UNREADABLE pin — requiring
+the unmutated control to pass, which is what makes F1/F2 non-vacuous on a clean tree. A pin that
+cannot be parsed reds F1 and F2 rather than neither: **it fails closed.**
+
+**Named limit, carried on the row:** the guard binds the two names it hard-codes and nothing else. A
+THIRD ban added to `admissionRule` later is not automatically enforced and must be added here too, and
+F2 does not detect that omission.
+
+**Scope verified from the diff, not the lane report:** one new test file, and
+`client/tests/floor/floor.json` untouched — the lane guarded the pin without editing it, which is
+exactly the discipline the multi-lane mechanism depends on.
+
 ### Wave 34 (**LANDED 2026-08-15 — single lane, SP-089. Floor 1046 → 1048. THE FIRST PACKET TONIGHT TO PASS THE FULL LADDER WITH NO REVISE ROUND.**)
 
 Lane `sp089-capture-path-regression-guard` @ `8aaac93d`, one commit, four files, cherry-picked onto

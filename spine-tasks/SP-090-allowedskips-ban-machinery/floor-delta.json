@@ -1,6 +1,0 @@
-{
-  "packet": "SP-090-allowedskips-ban-machinery",
-  "unit": 4,
-  "headless": 0,
-  "reason": "AllowedSkipsBanGuardTests adds four facts to CcpClient.Tests, making the two floor.json permanent bans mechanical: F1 neither banned name appears in any project's allowedSkips, F2 admissionRule still declares both bans, F3 both banned names still resolve to a real [Fact] in this assembly (the rename door the packet's delete/add trap leaves open), F4 the same checker and the same two filter predicates refuse a seeded membership drift, a seeded declaration drift and a seeded UNREADABLE pin (structural refusals are routed into both live filters, so a pin that cannot be parsed reds F1 and F2 rather than neither) and pass the unmutated control, which is what makes F1/F2 non-vacuous on a clean tree. No test added or removed in CcpClient.HeadlessTests."
-}
