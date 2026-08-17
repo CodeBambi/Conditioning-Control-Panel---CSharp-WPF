@@ -8,21 +8,21 @@
 
 ### Wave 34 (**AUTHORED 2026-08-15 — single lane, SP-089. Closes the hole wave 32 created.**)
 
-. SP-082 bought a reproducible floor gate at a price its own
-final review named:  is the product answer to *capture returned false*, not to
-*the session is locked*.  is the ONLY execution of the real capture path in
-, and it now sits inside a fact that skips — so a broken P/Invoke, a renamed entry
-point or a CharSet regression is caught by nothing, on any machine.
+`SP-089-capture-path-regression-guard`. SP-082 bought a reproducible floor gate at a price its own
+final review named: `no-foreground-window` is the product answer to *capture returned false*, not to
+*the session is locked*. `client/tests/CcpClient.Tests/AiAwarenessTests.cs:415` is the ONLY execution
+of the real capture path in `client/tests`, and it now sits inside a fact that skips — so a broken
+P/Invoke, a renamed entry point or a CharSet regression is caught by nothing, on any machine.
 
-**The structural fact the design turns on, verified at authoring:**  and
- are reached only PAST the zero-handle check, so on a locked session two of the three
+**The structural fact the design turns on, verified at authoring:** `GetWindowTextLengthW` and
+`GetWindowTextW` are reached only PAST the zero-handle check, so on a locked session two of the three
 P/Invokes never execute at all — unexercised precisely in the state unattended runs happen in.
 
 **Decision pre-authorized both ways.** Branch A: extract a handle-taking seam as a PURE extraction so a
-test can drive it with , valid on a locked session. Branch B: red a broken
+test can drive it with `GetDesktopWindow()`, valid on a locked session. Branch B: red a broken
 declaration from the test assembly alone — explicitly NOT satisfied by the test declaring its own
- imports, which would pass with  deleted. Both reachability constraints were
-verified: no  in , no  anywhere in .
+`user32` imports, which would pass with `NativeMethods` deleted. Both reachability constraints were
+verified: no `InternalsVisibleTo` in `client/src`, no `DllImport` anywhere in `client/tests`.
 
 **Vacuity trap named:** the fact must red under a mutated declaration (CharSet revert, entry-point
 rename) and must NOT require a foreground window. A fact that only runs on an interactive desktop
