@@ -86,6 +86,49 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("customAvatarSets")]
         public List<CustomAvatarSet>? CustomAvatarSets { get; set; }
+
+        /// <summary>
+        /// How the mod's own art is framed inside each UI surface that shows it, keyed
+        /// <b>resource path → surface id → framing</b>:
+        ///
+        /// <code>
+        /// "artFraming": {
+        ///   "features/fyp.png": {
+        ///     "railChip": { "centerX": 0.45, "centerY": 0.66, "zoom": 2.0 },
+        ///     "playCard": { "centerX": 0.5,  "centerY": 0.42, "zoom": 1.2 }
+        ///   }
+        /// }
+        /// </code>
+        ///
+        /// <para><b>Per surface, not per file</b> — that is the whole reason this is data and not
+        /// a pre-cropped PNG. One file feeds several differently-shaped frames
+        /// (<c>features/fyp.png</c> is a rail chip and a Play card; <c>features/lab_quiz_hero.png</c>
+        /// is a rail chip, a Play card and a page header), so baking one crop into the image
+        /// silently decides the others wrong, and destroys the author's original inside the pack
+        /// so they can never re-frame it.</para>
+        ///
+        /// <para>Written by the mod editor's UI Art panel, which drags a live preview rather than
+        /// making anyone type decimals. Absent, or a surface left out, means "centre-crop it" —
+        /// see <see cref="Services.ModArtFramingRegistry.ResolveViewbox"/>. Surface ids are a
+        /// compatibility surface exactly like slot keys: never rename one. An unknown id is
+        /// ignored, so a mod framed on a later build still loads here.</para>
+        /// </summary>
+        [JsonProperty("artFraming")]
+        public Dictionary<string, Dictionary<string, Services.ModArtFraming>>? ArtFraming { get; set; }
+
+        /// <summary>
+        /// Multiplies the on-screen size of this mod's floating bubbles (<c>bubble.png</c>).
+        /// 1.0 = the app's own size band, 0.5 = half.
+        ///
+        /// <para>Exists because perceived bubble size is driven by how much transparent margin the
+        /// sprite has, not by the box it is drawn in: the embedded <c>bubble.png</c> has a soft
+        /// padded rim, so a full-bleed replacement (a pill, a capsule) reads dramatically larger
+        /// at an identical box size. This lets art that fills its canvas correct itself instead of
+        /// making every user drag the size slider down to compensate. Composes with the user's own
+        /// setting — the two multiply, and the user always keeps the final say.</para>
+        /// </summary>
+        [JsonProperty("bubbleScale")]
+        public double? BubbleScale { get; set; }
     }
 
     public class CustomAvatarSet
