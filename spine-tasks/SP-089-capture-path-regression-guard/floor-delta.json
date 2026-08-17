@@ -1,0 +1,6 @@
+{
+  "packet": "SP-089-capture-path-regression-guard",
+  "unit": 2,
+  "headless": 0,
+  "reason": "two AiAwarenessTests facts that cannot skip on any platform: F2 drives the product's real text-reading P/Invokes (GetWindowTextLengthW then GetWindowTextW, through the product's own declarations) against a message-only window the test creates and owns, so it executes with no foreground window and guards the path SP-082 left guarded by nothing on a locked session; F1 pins the three shipped user32 declarations read from source text — module, entry point and CharSet on both text imports — catching the one regression F2 provably cannot see, a behaviourally inert CharSet change on GetWindowTextLengthW"
+}

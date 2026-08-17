@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using CcpClient.Desktop.Ai;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
@@ -490,6 +492,257 @@ public class AiAwarenessTests
         var unavailable = Assert.IsType<AiTitleObservation.Unavailable>(observation);
         var state = Assert.IsType<CapabilityState.Unavailable>(unavailable.State);
         Assert.Equal(CapabilityReasonCodes.UnknownCapability, state.Reason.Code);
+    }
+
+    // ---- SP-089: the real capture path, guarded on every machine class ----
+    //
+    // SP-082 conditioned the two facts above on the product's own typed
+    // no-foreground-window answer. That is right, and it is not touched here. Its price:
+    // AiAwarenessTests.cs:415 was the ONLY execution of the capture path in client/tests,
+    // so once it may skip, a broken P/Invoke, a renamed export, a CharSet regression or an
+    // always-false return is caught by nothing on a locked or disconnected session.
+    //
+    // The two facts below never look at the foreground window. F2 drives the product's own
+    // text-reading half with a handle THIS TEST creates and owns; F1 pins the shipped
+    // declaration text. Neither can skip, on any platform. They are two facts and not one
+    // written twice because each has a mutation that reds it ALONE: dropping CharSet from
+    // GetWindowTextLengthW is behaviourally inert (that export takes no string and its name
+    // already ends in W) and reds only F1; stubbing the text half to return an empty title
+    // leaves every declaration intact and reds only F2.
+
+    /// <summary>
+    /// SP-089: one capture attempt as a VALUE, so a single Assert.Equal carries the whole
+    /// outcome. Deliberately a test-local record rather than
+    /// <c>CapabilityState.Available(title)</c>: that type's documented discipline is a
+    /// content-free detail (title LENGTH only, AiAwarenessService.cs:277-285). Nothing leaks
+    /// either way here — the value is a test-authored literal that reaches no sink — but
+    /// borrowing a vocabulary whose contract says the opposite would teach the wrong rule.
+    /// </summary>
+    private sealed record Sp089Capture(bool Captured, string Title);
+
+    /// <summary>
+    /// SP-089 fixture. EVERY platform decision lives here, in a non-<c>[Fact]</c> body, so
+    /// both facts below carry zero detected vacuous shapes and the orchestrator-owned
+    /// vacuous-shape-ledger.json stays untouched (VacuousShapeDetector.Scan analyses
+    /// [Fact]/[Theory] bodies only — VacuousShapeDetector.cs:84-107). Honest cost, recorded
+    /// rather than hidden: a real platform branch exists here that a lexical detector cannot
+    /// see, and zero detected shapes is a statement about shape, never about runtime.
+    /// </summary>
+    private static class Sp089CaptureProbe
+    {
+        /// <summary>
+        /// The title the fixture window carries. Two properties are load-bearing and neither
+        /// is decoration. NON-ASCII: it is what a lost CharSet.Unicode corrupts. MANY
+        /// characters: with CharSet dropped, GetWindowTextW still writes wide bytes while the
+        /// ANSI marshaller reads them back narrow, so a ONE-character title would survive
+        /// unchanged and the mutation would stay green.
+        /// </summary>
+        internal const string ProbeTitle = "SP-089 éüß 中文テスト Живот";
+
+        /// <summary>Parent that makes the window MESSAGE-ONLY: never visible, never in the
+        /// z-order, never activatable, never enumerated, and excluded from HWND_BROADCAST.
+        /// It therefore cannot become the foreground window, so it cannot flip either SP-082
+        /// skip predicate in either direction.</summary>
+        private static readonly IntPtr HwndMessage = new(-3);
+
+        private static readonly string ServicePath =
+            Path.Combine(FindRepoRoot(), "client", "src", "CcpClient.Desktop", "Ai", "AiAwarenessService.cs");
+
+        /// <summary>What <see cref="Run"/> must produce on this machine class.</summary>
+        internal static Sp089Capture Expected => OperatingSystem.IsWindows()
+            ? new Sp089Capture(true, ProbeTitle)
+            : new Sp089Capture(false, string.Empty);
+
+        /// <summary>
+        /// The three shipped user32 declarations, exactly as F1 requires them to read.
+        /// Module, entry point (no EntryPoint= is given, so the method name IS the export
+        /// looked up) and CharSet on both text imports.
+        /// </summary>
+        internal static IReadOnlyList<string> ExpectedDeclarations =>
+        [
+            "[DllImport(\"user32.dll\")] => internal static extern IntPtr GetForegroundWindow()",
+            "[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] => internal static extern int GetWindowTextLengthW(IntPtr hWnd)",
+            "[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] => internal static extern int GetWindowTextW(IntPtr hWnd, StringBuilder lpString, int nMaxCount)",
+        ];
+
+        /// <summary>
+        /// Drives the product's own text half against a window this test owns.
+        ///
+        /// WIN32 THREAD AFFINITY — the one invariant this fixture introduces. CreateWindowExW
+        /// binds the HWND to the CALLING thread's message queue, and GetWindowTextLengthW /
+        /// GetWindowTextW against a window owned by this process are WM_GETTEXTLENGTH /
+        /// WM_GETTEXT sends: on the owning thread they go straight into DefWindowProc and no
+        /// pump is needed; from another thread SendMessage blocks until the owner pumps — an
+        /// unbounded hang that no timing guard can see, because the timing guard scans for
+        /// managed sleep, delay and elapsed-clock TOKENS, not a blocking native send. So the
+        /// caller is a SYNCHRONOUS `public void` fact. Do NOT convert it to `async Task`, and
+        /// do NOT hand this handle to another thread: either one reintroduces the hang.
+        /// </summary>
+        internal static Sp089Capture Run()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                // Non-Windows leg. It still EXECUTES product code and compares what the
+                // product actually answered; it does not restate a constant. The documented
+                // non-Windows answer is false with an empty title, and anything else reds.
+                var offWindows = AiWindowTitleCapability.TryCaptureForegroundTitle(out var offTitle);
+                return new Sp089Capture(offWindows, offTitle);
+            }
+
+            var hwnd = CreateWindowExW(0, "STATIC", ProbeTitle, 0, 0, 0, 0, 0, HwndMessage, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            if (hwnd == IntPtr.Zero)
+            {
+                // NEVER a skip and never a silent pass: a fixture that cannot be built is a
+                // loud failure naming the OS error. SetLastError = true on the import below
+                // is what makes that number mean anything — without it the value is stale
+                // state from some unrelated call and the diagnostic lies at exactly the
+                // moment someone needs it (measured: a SUCCESSFUL create can leave a
+                // non-zero last-error behind).
+                throw new InvalidOperationException(
+                    "SP-089 fixture: CreateWindowExW returned NULL for a message-only STATIC window " +
+                    $"(Win32 error {Marshal.GetLastWin32Error()}). The capture path was NOT exercised. " +
+                    "This is a hostile window station, not a product regression — but it is still a red, " +
+                    "because a guard that quietly stands down is the hole SP-089 exists to close.");
+            }
+
+            try
+            {
+                var captured = AiWindowTitleCapability.TryCaptureWindowTitle(hwnd, out var title);
+                return new Sp089Capture(captured, title);
+            }
+            finally
+            {
+                _ = DestroyWindow(hwnd);
+            }
+        }
+
+        /// <summary>
+        /// The shipped NativeMethods declarations, read from SOURCE TEXT and whitespace-
+        /// normalised. Not reflection over NativeMethods (forbidden by the packet) and not a
+        /// test-side re-declaration of user32 (which would pass with the product's own
+        /// declarations deleted): the shipped text is the subject. File.ReadAllText throws on
+        /// a missing file, so a moved or deleted source reds rather than skipping — which is
+        /// also why this body carries no File.Exists( token.
+        /// </summary>
+        internal static IReadOnlyList<string> ReadShippedNativeMethodDeclarations()
+        {
+            var source = File.ReadAllText(ServicePath);
+            var block = ExtractNativeMethodsBlock(source);
+            var declarations = new List<string>();
+            foreach (Match m in Regex.Matches(block, @"\[DllImport\(([^)]*)\)\]\s*(internal static extern [^;]*);"))
+            {
+                declarations.Add($"[DllImport({Squash(m.Groups[1].Value)})] => {Squash(m.Groups[2].Value)}");
+            }
+
+            if (declarations.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"SP-089: no [DllImport] declaration parsed out of NativeMethods in {ServicePath} — " +
+                    "the capture path's declarations are the subject of this fact, so an unparseable " +
+                    "or emptied holder is a failure, never a pass.");
+            }
+
+            return declarations;
+        }
+
+        private static string ExtractNativeMethodsBlock(string source)
+        {
+            const string Marker = "private static class NativeMethods";
+            var at = source.IndexOf(Marker, StringComparison.Ordinal);
+            if (at < 0)
+            {
+                throw new InvalidOperationException(
+                    $"SP-089: `{Marker}` not found in {ServicePath} — the holder this fact pins is gone or renamed.");
+            }
+
+            var open = source.IndexOf('{', at + Marker.Length);
+            if (open < 0)
+            {
+                throw new InvalidOperationException($"SP-089: NativeMethods in {ServicePath} has no body brace.");
+            }
+
+            var depth = 0;
+            for (var i = open; i < source.Length; i++)
+            {
+                if (source[i] == '{')
+                {
+                    depth++;
+                }
+                else if (source[i] == '}' && --depth == 0)
+                {
+                    return source[open..(i + 1)];
+                }
+            }
+
+            throw new InvalidOperationException($"SP-089: NativeMethods body in {ServicePath} is unbalanced.");
+        }
+
+        private static string Squash(string text) => Regex.Replace(text.Trim(), @"\s+", " ");
+
+        /// <summary>The ninth deliberate copy of the house walk-up idiom (TestTimingGuardTests,
+        /// VacuousShapeDetector, and seven more). There is no shared helper on purpose: these
+        /// guards keep their checks in their own bodies because the shape detector is lexical
+        /// (vacuous-shape-ledger.json records that decision).</summary>
+        private static string FindRepoRoot()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir is not null)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "client", "CcpClient.sln")))
+                {
+                    return dir.FullName;
+                }
+
+                dir = dir.Parent;
+            }
+
+            throw new InvalidOperationException(
+                $"SP-089: repo root not found walking up from {AppContext.BaseDirectory} " +
+                "(anchor client/CcpClient.sln) — this fact refuses to skip.");
+        }
+
+        // Fixture CONSTRUCTION only. These two imports build and tear down a window; they
+        // re-declare nothing that is under test. The READ goes through the product: delete
+        // NativeMethods.GetWindowTextW and F2 stops compiling, break it and F2 reds.
+        // CharSet.Unicode here is not decoration either — without it the non-ASCII ProbeTitle
+        // would marshal ANSI into a W export and F2 would red for a FIXTURE reason wearing a
+        // product reason's clothes.
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateWindowExW(
+            int dwExStyle, string lpClassName, string lpWindowName, int dwStyle,
+            int x, int y, int nWidth, int nHeight,
+            IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyWindow(IntPtr hWnd);
+    }
+
+    /// <summary>
+    /// SP-089 F2. Exercises the product's REAL text-reading P/Invokes — GetWindowTextLengthW
+    /// then GetWindowTextW, through the product's own declarations — against a handle the
+    /// test created, and requires every character back. GetForegroundWindow is never called,
+    /// so no foreground window is required and this cannot skip: it is the guard that still
+    /// stands on a locked or disconnected session.
+    /// </summary>
+    [Fact]
+    public void CapturePath_OnAWindowTheTestOwns_ReadsBackEveryCharacter_ThroughTheProductsOwnDeclarations()
+    {
+        Assert.Equal(Sp089CaptureProbe.Expected, Sp089CaptureProbe.Run());
+    }
+
+    /// <summary>
+    /// SP-089 F1. Pins the shipped declaration TEXT: module, entry point, and CharSet on both
+    /// text imports. It executes nothing, which is the point — it catches the one regression
+    /// F2 provably cannot see (a CharSet change on GetWindowTextLengthW is behaviourally
+    /// inert), and it reds cleanly naming the line where F2's own named mutation reds by
+    /// killing the host. It is a supplement to F2, never a substitute: source text proves a
+    /// declaration LOOKS right, never that it BINDS.
+    /// </summary>
+    [Fact]
+    public void CapturePathDeclarations_PinModuleEntryPointAndCharSet_WithoutExecutingAnything()
+    {
+        Assert.Equal(Sp089CaptureProbe.ExpectedDeclarations, Sp089CaptureProbe.ReadShippedNativeMethodDeclarations());
     }
 
     // ---- SP-068 F1: incognito hard-drop at the packaging seam (audit row A6) ----

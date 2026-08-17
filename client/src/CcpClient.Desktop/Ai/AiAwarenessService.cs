@@ -346,6 +346,23 @@ public static class AiWindowTitleCapability
             return false;
         }
 
+        return TryCaptureWindowTitle(hwnd, out title);
+    }
+
+    /// <summary>
+    /// SP-089 seam: the length-and-text half of the capture, against a handle the CALLER
+    /// owns. Lifted verbatim out of <see cref="TryCaptureForegroundTitle"/> — a PURE
+    /// extraction, no path's behaviour changed, the <c>length &lt;= 0 → true</c> case
+    /// (SP-068: an empty title is a successful capture) included. It exists because
+    /// GetWindowTextLengthW and GetWindowTextW are reachable only PAST the zero-handle
+    /// check, so on a locked, disconnected or secure-desktop session their marshalling is
+    /// unexercised precisely when unattended runs happen. The title leaves ONLY to the
+    /// caller — never diagnostics, never logs, never memory.
+    /// </summary>
+    public static bool TryCaptureWindowTitle(IntPtr hwnd, out string title)
+    {
+        title = string.Empty;
+
         var length = NativeMethods.GetWindowTextLengthW(hwnd);
         if (length <= 0)
         {
