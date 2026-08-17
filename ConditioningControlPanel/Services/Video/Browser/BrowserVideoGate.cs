@@ -48,6 +48,16 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 if (string.IsNullOrEmpty(path)) return false;
                 if (App.Settings?.Current?.BrowserVideoEngineEnabled != true) return false;
                 if (!IsBrowserExtension(path)) return false;
+                // #938: the browser engine cannot honour a chosen audio output device. WebView2
+                // exposes no setSinkId (deferred in BROWSER_VIDEO_ENGINE_PLAN.md par.9), so it always
+                // plays out of the Windows default - a user who routed the app to headphones got a
+                // silent mandatory video instead. LibVLC can target the device, so route there until
+                // the browser engine grows a sink selector.
+                if (!string.IsNullOrEmpty(App.Settings?.Current?.AudioOutputDeviceId))
+                {
+                    App.Logger?.Debug("BrowserVideoGate: a specific audio output device is selected - routing to LibVLC, which can target it (#938)");
+                    return false;
+                }
                 // Touching Instance also kicks off the shared environment build on first use, so a
                 // later video finds IsAvailable already settled.
                 if (!BrowserVideoEngine.Instance.IsAvailable) return false;
