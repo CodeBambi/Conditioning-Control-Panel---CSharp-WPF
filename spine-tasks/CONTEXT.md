@@ -6,7 +6,55 @@
 
 ---
 
-### Wave 33 (**RAN 2026-08-15 — six lanes, all six produced committed work, ALL SIX HELD at final review. NOTHING LANDED.**)
+### Wave 33 (**LANDED 2026-08-15 — six lanes, all six landed. Floor 1028 → 1046, the largest single land in the port's history.**)
+
+**THE LAND.** Ten lane commits cherry-picked onto `d1e5e111` in scratch worktree `.worktrees/land-w33`
+with **zero conflicts** — six concurrent lanes merging clean, which is what the disjoint-scope rule
+was built to deliver. `sum-deltas --apply` over all six declared +6/+3/+3/+2/+4/+0 = **+18**, so the
+pin moved 1028 → **1046**; all six `floor-delta.json` files consumed and deleted.
+
+| Packet | Final head | Delta | What landed |
+|---|---|---|---|
+| SP-083-orphan-construction-pool-residue | `5e69a68c` | +6 | pool-thread residue bounded per factory instance |
+| SP-084-capability-probe-cancelled-completed | `b0892d28` | +3 | a probe answering under a cancelled token records no verdict |
+| SP-085-tunnel-logging-named-flake | `73214450` | +3 | the named privacy flake, fixed at source |
+| SP-086-process-env-collection-guard | `62d4dbf7` | +2 | the collection convention made mechanical |
+| SP-087-disk-store-unbounded-waits | `c88fae8a` | +4 | premise corrected, lifecycle shape pinned |
+| SP-088-upstream-citation-drift-detector | `fbbc8e1a` | +0 | T-19 citation-drift detector (node facts) |
+
+**I VERIFIED EVERY LANE'S SCOPE MYSELF RATHER THAN TRUSTING SIX REPORTS.** Each lane's diff against
+`cf9f7143` is exactly four files, all inside its own declared scope. **No lane touched
+`client/tests/floor/floor.json`, `client/docs/task-board.md`, or `client/tests/floor/vacuous-shape-ledger.json`,
+and no lane touched another lane's files.** The scopes were disjoint in practice, not merely in
+declaration — that is the property that makes six-lane landing safe, and it now has evidence.
+
+**FOUR LANES REFUSED A REVIEWER'S NUMBER AND PUBLISHED THEIR OWN MEASUREMENT. That is the single
+most valuable behaviour this wave produced.** SP-083's is the sharpest: its reviewer proposed an
+isolating mutation (a bare `Interlocked.Increment` for the accounting CAS) and predicted all ten
+facts would stay green; the lane RAN it and got **five reds**, because deleting the body also
+deletes the `Uncounted → Counted` transition so the counter never falls again. It then built the
+mutation that does isolate — which reds the new fact alone, with exactly the signature predicted —
+and recorded both measurements. SP-088 refused "9 affected paths", published its definitions and
+measured 13 touched / 8 sole-citation, and reproduced the load-bearing four exactly. SP-086
+re-measured "~25" as 24 and caught that its salvaged draft's line citations assumed a 19-line
+insertion when its own was 23. SP-084 corrected a salvaged draft's claim that six probes "never
+throw as a consequence of cancellation": `Task.Run(..., token)` does throw, but a
+`TaskCanceledException`, which IS an OCE — so the load-bearing claim survives for a different reason
+than the draft gave. **Verdicts are evidence about a claim, never the claim itself.**
+
+**THE REVISE ROUND SURVIVED A SUSTAINED API OUTAGE WITHOUT LOSING WORK.** Five of six fix agents
+died on `529 Overloaded`. Nothing was lost because every lane's work was already committed on its
+own branch: the branches sat untouched at their recorded SHAs, the shared branch stayed clean, and
+the two agents that had made uncommitted edits had their diffs preserved (~13 KB each) rather than
+committed half-finished or discarded. The retry ran at 2–4 concurrency instead of 6 and all six
+completed. **A dead agent costs nothing when the unit of work is a committed branch.**
+
+**A REF-MOVE HAZARD WORTH KEEPING.** SP-084's branch was checked out in two other worktrees, so its
+agent moved the ref with `git update-ref`; those worktrees then had NEW HEADs with OLD file content,
+and landing from one would have shipped a reverse-diff. The land takes commits from the REF, and the
+eleven stale worktrees were removed before verification (disk 427 → 500 GB).
+
+### Wave 33 pre-land record (superseded by the land above)
 
 **THE T-21 PLAN-GATE FIX WORKED, and this wave is the evidence wave 32 could not be.** Wave 31 put
 **six of eight** lanes in the ground at the plan gate with no product code. Wave 33 cleared **six of

@@ -1,6 +1,0 @@
-{
-  "packet": "SP-083-orphan-construction-pool-residue",
-  "unit": 6,
-  "headless": 0,
-  "reason": "six SoundArbitrationTests orphan-construction facts bounding the outstanding ABANDONED constructions: the cap refuses a further create without starting a pool thread (driven one past the cap), the count returns to zero when the parked constructions return and a construction is admitted again, the ordinary-path negative control reads the count from INSIDE the construction, the count falls at the native return rather than at orphan disposal, a FAULTED construction still releases its count so the cap never refuses forever, and the lock-unavailable abandonment (task.Wait met, Monitor.TryEnter timed out) counts NOTHING because nothing is parked"
-}

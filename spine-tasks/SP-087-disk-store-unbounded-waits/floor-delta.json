@@ -1,6 +1,0 @@
-{
-  "packet": "SP-087-disk-store-unbounded-waits",
-  "unit": 4,
-  "headless": 0,
-  "reason": "four PersistenceStore lifecycle facts: StartAsync returns an already-completed task with LastLoadOutcome observable, Load runs on the calling thread recorded from inside the operation, StopAsync on a running store returns an already-completed task and cancels the generation (witnessed by a post-stop Save terminating typed Cancelled), and StopAsync writes nothing even when dirty"
-}
