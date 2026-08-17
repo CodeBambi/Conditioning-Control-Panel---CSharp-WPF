@@ -138,12 +138,18 @@ public sealed class SystemSoundClock : ISoundClock
 }
 
 /// <summary>
-/// SP-072 typed no-player outcome: the caller's wait on a player construction expired (or the
-/// lifecycle lock was unavailable within the budget because a wedged native teardown holds it),
-/// so the construction was ABANDONED. The abandoned player never reaches the mixer, never plays,
-/// and is disposed exactly once by <see cref="OrphanSafePlayerFactory{TPlayer}"/>. Callers map
-/// this to their existing refusal vocabulary (SoundArbitration: SoundOutcome.Failed via the
-/// existing catches; DTRH effects: the logged silent no-op). Never a null or placeholder player.
+/// SP-072 typed no-player outcome. TWO refusals now carry it, distinguished by MESSAGE, not by
+/// type (every one of the five call sites catches Exception broadly and embeds the message, so a
+/// second type would buy no caller behaviour and cost every caller a second concept):
+///   (a) the caller's wait on a player construction EXPIRED (or the lifecycle lock stayed
+///       unavailable within the budget because a wedged native teardown holds it), so the
+///       construction was ABANDONED; and
+///   (b) SP-083: the factory REFUSED at its outstanding-abandoned cap — no construction was
+///       started at all, so no pool thread was taken.
+/// The abandoned player never reaches the mixer, never plays, and is disposed exactly once by
+/// <see cref="OrphanSafePlayerFactory{TPlayer}"/>. Callers map this to their existing refusal
+/// vocabulary (SoundArbitration: SoundOutcome.Failed via the existing catches; DTRH effects: the
+/// logged silent no-op). Never a null or placeholder player.
 /// </summary>
 public sealed class PlayerConstructionTimeoutException : Exception
 {
@@ -172,6 +178,18 @@ public sealed class PlayerConstructionTimeoutException : Exception
 ///      native teardown can never block a caller — the SP-071 class, pre-approach consult.
 ///   5. The ordinary path is observably unchanged — same object, same volume, attach before
 ///      return, same unwrapped exception surface, zero new log lines.
+///   6. SP-083: the OUTSTANDING abandoned constructions are BOUNDED. An abandoned construction
+///      keeps an OS pool thread that nothing in .NET can interrupt (no token cancels a blocked
+///      native ctor), so the count of abandoned-and-still-running constructions is itself the
+///      resource. At the cap this factory refuses a further construction with the same typed
+///      no-player outcome BEFORE any thread is taken — never by making the caller wait again
+///      (that is SP-072 reverted) and never by skipping the orphan's disposal (that trades a
+///      bounded residue for an unbounded leak). The count is released the instant the native
+///      call RETURNS, whatever the outcome — never at disposal, or one faulted construction
+///      would refuse for the rest of the session. Only ABANDONED constructions are counted: an
+///      ordinary in-flight construction must never consume the bound, or a burst of healthy
+///      cues would silence a working device. The bound is PER FACTORY INSTANCE (these are
+///      per-window-open, not singletons), which is a named limit, not a session bound.
 ///
 /// SP-025 (dump-proven): construction ALWAYS runs on a Task.Run pool thread, which never
 /// carries a SynchronizationContext — the AssetDataProvider sync-over-async ctor would
@@ -186,14 +204,32 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     /// <summary>Default caller-wait budget: 2 s, the SP-071 TeardownBudget precedent (the local bounded-wait shape, DtrhHostWindow.axaml.cs:257-260). Healthy construction is milliseconds; this only bounds the wedged-endpoint case.</summary>
     public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// SP-083 default cap on outstanding ABANDONED constructions per factory instance. Chosen
+    /// literal, not a proof: the healthy path never counts at all, so any non-zero count already
+    /// means constructions are blowing the 2 s budget — reaching 4 on one factory costs at least
+    /// 8 caller-seconds of blown budgets, which no working endpoint produces. Deliberately &gt; 1,
+    /// so a single transient slow file load cannot refuse the next cue.
+    /// </summary>
+    public const int DefaultMaxOutstandingAbandoned = 4;
+
     private const int Pending = 0;
     private const int Attached = 1;
     private const int Disposed = 2;
+
+    // SP-083 accounting states — a SECOND, independent latch on the slot. Deliberately not
+    // overloaded onto State: the pool THREAD is released when _construct returns, the PLAYER is
+    // disposed later (possibly much later, behind _lifecycle) — two lifetimes that end at
+    // different moments must not share one latch.
+    private const int Uncounted = 0;
+    private const int Counted = 1;
+    private const int Settled = 2;
 
     private sealed class ConstructionSlot
     {
         public volatile bool Abandoned;
         public int State; // Pending / Attached / Disposed — orphan-disposal transitions by CAS (the latch)
+        public int Accounting; // Uncounted / Counted / Settled — SP-083, exactly-once on BOTH sides
     }
 
     private readonly object _lifecycle = new();
@@ -203,7 +239,9 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     private readonly Action<string> _log;
     private readonly string _tag;
     private readonly TimeSpan _budget;
+    private readonly int _maxOutstandingAbandoned;
     private volatile bool _tornDown;
+    private int _outstandingAbandoned;
 
     public OrphanSafePlayerFactory(
         Func<string, float, TPlayer> construct,
@@ -211,7 +249,8 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         Action<TPlayer> dispose,
         Action<string> log,
         string tag,
-        TimeSpan? budget = null)
+        TimeSpan? budget = null,
+        int? maxOutstandingAbandoned = null)
     {
         _construct = construct;
         _attach = attach;
@@ -219,7 +258,16 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         _log = log;
         _tag = tag;
         _budget = budget ?? DefaultBudget;
+        // Clamped: 0 would mean "refuse all audio forever" the first time anything is abandoned.
+        _maxOutstandingAbandoned = Math.Max(1, maxOutstandingAbandoned ?? DefaultMaxOutstandingAbandoned);
     }
+
+    /// <summary>
+    /// SP-083: abandoned constructions whose native call has NOT returned — ONE parked pool
+    /// thread each. Rises only at abandonment and falls the instant the native call returns
+    /// (success or fault). Zero on the ordinary path, always.
+    /// </summary>
+    public int OutstandingAbandonedConstructions => Volatile.Read(ref _outstandingAbandoned);
 
     /// <summary>
     /// Construct, attach, and return a player — or abandon the construction with a typed
@@ -233,8 +281,27 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
             throw new InvalidOperationException($"{_tag}: backend torn down — player construction refused");
         }
 
+        // SP-083 C1: refuse at the cap BEFORE any Task.Run — the refusal must not take the very
+        // resource it exists to bound. Read-compare-throw only: no wait, no lock, no token. The
+        // cap is SOFT by construction (K callers concurrently past the read can all construct),
+        // so the real bound is cap + concurrently-in-flight callers per factory — still a bound,
+        // and still the removal of the one-per-cue growth this exists for.
+        var outstanding = Volatile.Read(ref _outstandingAbandoned);
+        if (outstanding >= _maxOutstandingAbandoned)
+        {
+            _log($"{_tag}: player construction refused — {outstanding} abandoned construction(s) still parked (cap {_maxOutstandingAbandoned}); no pool thread started");
+            throw new PlayerConstructionTimeoutException(
+                $"{_tag}: player construction refused at the outstanding-parked cap ({_maxOutstandingAbandoned}) — typed no-player outcome, no construction started");
+        }
+
         var slot = new ConstructionSlot();
-        var task = Task.Run(() => _construct(path, volume)); // SP-025: pool thread — never a SynchronizationContext
+        // SP-025: pool thread — never a SynchronizationContext. SP-083: the finally is where the
+        // parked thread is RELEASED, so the count falls at the native return, whatever the outcome.
+        var task = Task.Run(() =>
+        {
+            try { return _construct(path, volume); }
+            finally { SettleAccounting(slot); }
+        });
         // P4: the late-completion disposer — fires inline on the completing thread, exactly
         // once per task, gated by the abandonment check + the latch.
         _ = task.ContinueWith(
@@ -299,6 +366,11 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         // completion after it is seen by P4 (Abandoned visible via the volatile + task
         // completion barriers). If both fire, the latch decides.
         slot.Abandoned = true;
+        // SP-083 C2: this construction is now abandoned-and-still-running — one parked pool
+        // thread. Counted HERE, at the abandonment, and never for an ordinary construction.
+        // Placed between the volatile write and the log so the LOAD-BEARING order below is
+        // unmoved relative to the completed-check.
+        CountAbandoned(slot);
         // LOAD-BEARING ORDER (pre-completion consult, SP-072): the log line must precede the
         // completed-check below. This is the only window in which BOTH orphan disposers can
         // be armed for one slot (P4 fires at completion, P3 at the check) —
@@ -346,6 +418,33 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
                 DisposeOrphan(task.Result, slot);
             }
         });
+    }
+
+    /// <summary>
+    /// SP-083: claim the slot for the outstanding count, exactly once. Runs on the CALLER thread
+    /// at the abandonment decision. The CAS loses to a construction that already returned and
+    /// settled (Settled), which is correct: nothing is parked, so nothing is counted.
+    /// </summary>
+    private void CountAbandoned(ConstructionSlot slot)
+    {
+        if (Interlocked.CompareExchange(ref slot.Accounting, Counted, Uncounted) == Uncounted)
+        {
+            Interlocked.Increment(ref _outstandingAbandoned);
+        }
+    }
+
+    /// <summary>
+    /// SP-083: the native call returned, so the pool thread is released — release its count too,
+    /// exactly once, and only if this slot was ever counted. Runs on the CONSTRUCTION thread, in
+    /// the Task.Run finally, so it fires on success AND on fault. Takes no lock: it must never be
+    /// able to block behind a wedged teardown holding <see cref="_lifecycle"/>.
+    /// </summary>
+    private void SettleAccounting(ConstructionSlot slot)
+    {
+        if (Interlocked.Exchange(ref slot.Accounting, Settled) == Counted)
+        {
+            Interlocked.Decrement(ref _outstandingAbandoned);
+        }
     }
 
     private void DisposeOrphan(TPlayer player, ConstructionSlot slot)

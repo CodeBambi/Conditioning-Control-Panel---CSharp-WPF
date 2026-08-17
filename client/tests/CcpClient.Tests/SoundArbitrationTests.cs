@@ -1130,25 +1130,56 @@ public sealed class SoundArbitrationTests
         public volatile OrphanPlayer? LastPlayer;
         public int AttachCount;
         public int DisposeCount;
+        public int ConstructCount; // SP-083: ConstructStarted is a one-shot latch and cannot count N
         public readonly OrphanSafePlayerFactory<OrphanPlayer> Factory;
 
-        public OrphanHarness(TimeSpan budget, Action<string>? logHook = null)
+        // SP-083 instrumentation, in SP-073's InsideWedgedInit/InsideWedgedEnumerate shape
+        // (FakeBackend below): InsideWedgedConstruct runs ON the construction thread, INSIDE the
+        // native stand-in, after any gate is released and BEFORE construct returns — i.e. before
+        // the product's settling finally can run. That is the only window in which "how many
+        // constructions does the factory consider outstanding RIGHT NOW" can be read from the
+        // parked side. With no gate armed it still runs, while the caller sits in task.Wait.
+        public volatile Action? InsideWedgedConstruct;
+        public readonly ConcurrentQueue<int> OutstandingInsideWedge = new();
+        // Parks the orphan disposer INSIDE the dispose delegate, which the product runs while
+        // holding _lifecycle — the window that separates "the pool thread was released" from
+        // "the player was disposed".
+        public volatile ManualResetEventSlim? DisposeGate;
+        // The faulted-construction leg: a native call that returns by THROWING still returns.
+        public volatile Exception? ConstructThrows;
+
+        public OrphanHarness(TimeSpan budget, Action<string>? logHook = null, int? maxOutstandingAbandoned = null)
         {
             Factory = new OrphanSafePlayerFactory<OrphanPlayer>(
                 construct: (path, volume) =>
                 {
+                    Interlocked.Increment(ref ConstructCount);
                     ConstructStarted?.Set();
                     ConstructGate?.Wait(); // the wedge — released by the test, never by timing
+                    InsideWedgedConstruct?.Invoke(); // still INSIDE the native call, before it returns
+                    if (ConstructThrows is { } failure)
+                    {
+                        throw failure;
+                    }
+
                     Events.Enqueue("construct-returned");
                     var p = new OrphanPlayer(path, volume);
                     LastPlayer = p;
                     return p;
                 },
                 attach: p => { Interlocked.Increment(ref AttachCount); Events.Enqueue("attached"); },
-                dispose: p => { p.Dispose(); Interlocked.Increment(ref DisposeCount); Events.Enqueue("orphan-disposed"); },
+                dispose: p =>
+                {
+                    Events.Enqueue("dispose-entered"); // inside the product's _lifecycle lock
+                    DisposeGate?.Wait();
+                    p.Dispose();
+                    Interlocked.Increment(ref DisposeCount);
+                    Events.Enqueue("orphan-disposed");
+                },
                 log: line => { lock (Log) Log.Add(line); logHook?.Invoke(line); },
                 tag: "test",
-                budget: budget);
+                budget: budget,
+                maxOutstandingAbandoned: maxOutstandingAbandoned);
         }
 
         public int AbandonmentLines
@@ -1156,8 +1187,24 @@ public sealed class SoundArbitrationTests
             get { lock (Log) return Log.Count(l => l.Contains("construction abandoned")); }
         }
 
+        /// <summary>SP-083 cap refusals — disjoint from <see cref="AbandonmentLines"/> by wording.</summary>
+        public int CapRefusalLines
+        {
+            get { lock (Log) return Log.Count(l => l.Contains("abandoned construction(s) still parked")); }
+        }
+
+        /// <summary>Every log line, so the healthy path can assert ZERO new lines rather than zero of one kind.</summary>
+        public int LogLines
+        {
+            get { lock (Log) return Log.Count; }
+        }
+
+        public int Outstanding => Factory.OutstandingAbandonedConstructions;
+
         public string State() =>
-            $"attach={AttachCount} dispose={DisposeCount} abandonmentLines={AbandonmentLines} events=[{string.Join(",", Events)}]";
+            $"attach={AttachCount} dispose={DisposeCount} abandonmentLines={AbandonmentLines} " +
+            $"capRefusalLines={CapRefusalLines} outstanding={Outstanding} constructs={Volatile.Read(ref ConstructCount)} " +
+            $"events=[{string.Join(",", Events)}]";
     }
 
     private static (Thread Thread, ManualResetEventSlim Done, Func<Exception?> Thrown) StartCreate(
@@ -1340,6 +1387,191 @@ public sealed class SoundArbitrationTests
         var refusal = Assert.Throws<InvalidOperationException>(() => h.Factory.Create("late.mp3", 1f));
         Assert.Contains("torn down", refusal.Message);
         Assert.Equal(1, h.DisposeCount); // the refused construction never ran
+    }
+
+    // ---------- SP-083: the outstanding ABANDONED constructions are bounded ----------
+
+    [Fact]
+    public void Construction_AtTheOutstandingCap_FurtherCreatesRefusedWithoutStartingAConstruction()
+    {
+        // THE BOUND. With the cap's worth of abandoned constructions still parked — one pool
+        // thread each, none of them interruptible — the next create is refused typed BEFORE any
+        // Task.Run: the refusal must never take the very resource it exists to bound. Driven ONE
+        // PAST the cap (3 creates against cap 2), because a loop that stops at the cap cannot
+        // distinguish "bounded" from "bounded by one".
+        var h = new OrphanHarness(ConstructionBudget, maxOutstandingAbandoned: 2)
+        {
+            ConstructGate = new ManualResetEventSlim(false),
+        };
+
+        var thrown = new List<Exception?>();
+        for (var i = 0; i < 3; i++)
+        {
+            // SEQUENTIAL BY CONSTRUCTION: each caller's typed outcome is observed before the next
+            // Create begins. Started concurrently, the third could reach the cap check a whole
+            // budget before the first two abandoned and all three would construct — a flake, not
+            // a bound.
+            var (thread, done, threadThrown) = StartCreate(h.Factory);
+            thread.Start();
+            TestWait.UntilSync(() => done.IsSet, $"caller {i} reached its typed outcome", () => h.State());
+            thread.Join();
+            thrown.Add(threadThrown());
+        }
+
+        // The third create STARTED NO CONSTRUCTION — the fake's own record, never the absence of
+        // an exception.
+        Assert.Equal(2, Volatile.Read(ref h.ConstructCount));
+        Assert.Equal(2, h.Outstanding);      // both still parked, both still counted
+        Assert.Equal(2, h.AbandonmentLines); // the first two abandoned
+        Assert.Equal(1, h.CapRefusalLines);  // the third was refused, exactly once
+        Assert.Equal(0, h.AttachCount);      // nothing ever reached the mixer
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown[0]); // budget expiry
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown[2]); // the SAME typed vocabulary at the cap
+        Assert.Contains("cap", thrown[2]!.Message);                   // distinguishable by message, not by type
+
+        h.ConstructGate!.Set(); // retire the parked stand-ins rather than leaking them past the test
+        TestWait.UntilSync(() => h.Outstanding == 0, "the parked constructions returned", () => h.State());
+    }
+
+    [Fact]
+    public void Construction_ParkedConstructionsReturn_OutstandingDropsToZero_AndConstructionIsAdmittedAgain()
+    {
+        // THE DECREMENT, which a cap-only test cannot see: a cap that only counts up is a
+        // refuse-forever bug — permanent silence on a live user path after one transient slow
+        // patch. Plus the count observed from INSIDE the still-parked constructions.
+        var h = new OrphanHarness(ConstructionBudget, maxOutstandingAbandoned: 2)
+        {
+            ConstructGate = new ManualResetEventSlim(false),
+        };
+        h.InsideWedgedConstruct = () => h.OutstandingInsideWedge.Enqueue(h.Outstanding);
+
+        for (var i = 0; i < 2; i++)
+        {
+            var (thread, done, _) = StartCreate(h.Factory); // sequential, as above
+            thread.Start();
+            TestWait.UntilSync(() => done.IsSet, $"caller {i} abandoned its construction", () => h.State());
+            thread.Join();
+        }
+
+        Assert.Equal(2, h.Outstanding); // AT the cap, with both constructions demonstrably parked
+
+        h.ConstructGate!.Set(); // the wedged endpoint finally returns
+        TestWait.UntilSync(() => h.Outstanding == 0, "the parked pool threads were released", () => h.State());
+        var insideReadings = h.OutstandingInsideWedge.ToArray(); // snapshot BEFORE the readmission
+
+        var (readmit, readmitDone, _) = StartCreate(h.Factory);
+        readmit.Start();
+        TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == 3, "the post-recovery create was ADMITTED", () => h.State());
+        TestWait.UntilSync(() => readmitDone.IsSet, "the post-recovery caller completed", () => h.State());
+        readmit.Join();
+
+        Assert.Equal(3, Volatile.Read(ref h.ConstructCount)); // admitted — C1 did not refuse it
+        Assert.Equal(0, h.CapRefusalLines);
+        Assert.Equal(0, h.Outstanding);
+        // Read on the construction thread, inside the native stand-in, before it returned: the
+        // first hook to run globally precedes every settling finally, so it must see the full
+        // cap. The count is real WHILE parked, not an artifact of reading it after the unwind.
+        Assert.Equal(2, insideReadings.Length);
+        Assert.Contains(2, insideReadings);
+    }
+
+    [Fact]
+    public void Construction_Ordinary_NeverTouchesTheOutstandingCount_NoCapLine_NoLogLine()
+    {
+        // NEGATIVE CONTROL, and the one that guards the live user-visible path: an ordinary
+        // in-flight construction must never consume the bound. If it did, a burst of concurrent
+        // HEALTHY cues could reach the cap and refuse a live audio cue — silence on a working
+        // device. The reading is taken from INSIDE the construction, while the caller is still in
+        // its task.Wait: counting every in-flight construction rather than only abandoned ones
+        // reads 1 here where the bound reads 0.
+        var h = new OrphanHarness(TestWait.InjectedBudget);
+        h.InsideWedgedConstruct = () => h.OutstandingInsideWedge.Enqueue(h.Outstanding);
+        Assert.Equal(0, h.Outstanding);
+
+        var player = h.Factory.Create("ok.mp3", 0.7f);
+
+        Assert.Equal(0, Assert.Single(h.OutstandingInsideWedge)); // DURING — the discriminator
+        Assert.Equal(0, h.Outstanding);                           // and after
+        Assert.Same(h.LastPlayer, player);
+        Assert.Equal(1, h.AttachCount);
+        Assert.Equal(1, Volatile.Read(ref h.ConstructCount));
+        Assert.Equal(0, h.CapRefusalLines);
+        Assert.Equal(0, h.LogLines); // invariant clause 5's "zero new log lines", asserted not assumed
+    }
+
+    [Fact]
+    public void Construction_AbandonedConstructionReturns_CountDropsAtTheNativeReturn_NotAtOrphanDisposal()
+    {
+        // WHERE the release lives. The count tracks the parked THREAD, not the orphan OBJECT, so
+        // it must fall when the native call returns — not when the orphan is finally disposed,
+        // which happens later and behind the lifecycle lock. Observed in the one window that
+        // separates the two: the disposer is parked INSIDE the dispose delegate, which the
+        // product runs while holding _lifecycle.
+        var h = new OrphanHarness(ConstructionBudget, maxOutstandingAbandoned: 2)
+        {
+            ConstructGate = new ManualResetEventSlim(false),
+            DisposeGate = new ManualResetEventSlim(false),
+        };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+        TestWait.UntilSync(() => done.IsSet, "the caller abandoned its construction", () => h.State());
+        thread.Join();
+
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown());
+        Assert.Equal(1, h.Outstanding);  // parked and counted
+        Assert.Equal(0, h.DisposeCount); // and not yet disposed
+
+        h.ConstructGate!.Set(); // the native call returns — the pool thread is free HERE
+        TestWait.UntilSync(() => h.Events.Contains("dispose-entered"), "the orphan disposer holds the lifecycle lock", () => h.State());
+
+        // THE assertion, in one line: released at the native return, with the orphan
+        // demonstrably NOT yet disposed. Deterministic — the settling finally strictly precedes
+        // task completion, which strictly precedes the continuation now parked inside dispose.
+        Assert.Equal(0, h.Outstanding);
+        Assert.Equal(0, h.DisposeCount);
+
+        h.DisposeGate!.Set();
+        TestWait.UntilSync(() => h.DisposeCount == 1, "the orphan is disposed exactly once", () => h.State());
+        Assert.Equal(0, h.AttachCount);
+        Assert.Equal(0, h.LastPlayer!.PlayCount);
+        Assert.Equal(0, h.Outstanding); // disposal did not double-release it either
+    }
+
+    [Fact]
+    public void Construction_AbandonedThenFaults_CountStillDrops_CapNeverRefusesForever()
+    {
+        // THE FINALLY, specifically. A native call that returns by THROWING has still returned
+        // its thread. If the count fell only on the success path, one transient bad file would
+        // refuse every later cue on this factory for the rest of the session.
+        var h = new OrphanHarness(ConstructionBudget, maxOutstandingAbandoned: 1)
+        {
+            ConstructGate = new ManualResetEventSlim(false),
+        };
+        var (thread, done, thrown) = StartCreate(h.Factory);
+        thread.Start();
+        TestWait.UntilSync(() => done.IsSet, "the caller abandoned its construction", () => h.State());
+        thread.Join();
+        Assert.IsType<PlayerConstructionTimeoutException>(thrown());
+        Assert.Equal(1, h.Outstanding); // the cap of 1 is now full
+
+        var refused = Assert.Throws<PlayerConstructionTimeoutException>(() => h.Factory.Create("second.mp3", 1f));
+        Assert.Contains("cap", refused.Message);
+        Assert.Equal(1, h.CapRefusalLines);
+        Assert.Equal(1, Volatile.Read(ref h.ConstructCount)); // the refusal started no pool thread
+
+        h.ConstructThrows = new InvalidOperationException("native decoder threw on the way out");
+        h.ConstructGate!.Set(); // the parked construction returns — by FAULTING
+        TestWait.UntilSync(() => h.Outstanding == 0, "a FAULTED construction released its count", () => h.State());
+
+        var (readmit, readmitDone, _) = StartCreate(h.Factory);
+        readmit.Start();
+        TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == 2, "the post-fault create was ADMITTED", () => h.State());
+        TestWait.UntilSync(() => readmitDone.IsSet, "the post-fault caller completed", () => h.State());
+        readmit.Join();
+
+        Assert.Equal(2, Volatile.Read(ref h.ConstructCount)); // admitted — the cap did not refuse forever
+        Assert.Equal(1, h.CapRefusalLines);                   // still exactly the one refusal
+        Assert.Equal(0, h.AttachCount);
     }
 
     [Fact]
