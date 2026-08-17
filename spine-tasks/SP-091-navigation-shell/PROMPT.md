@@ -62,7 +62,7 @@ The second cheap answer is **testing the navigation model and not the navigation
 
 | | |
 |---|---|
-| May change | `client/src/CcpClient.Desktop/Navigation/**` (new), `client/src/CcpClient.Desktop/Views/**`, `client/src/CcpClient.Desktop/App.axaml.cs`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/Navigation*`, `client/docs/wpf-surface-reachability.md` (divergences ONLY), and `spine-tasks/SP-091-navigation-shell/**` |
+| May change | `client/src/CcpClient.Desktop/Navigation/**` (new), `client/src/CcpClient.Desktop/Views/**`, `client/src/CcpClient.Desktop/App.axaml.cs`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/Navigation*`, `client/tools/verify/**` (**added by amendment 1**), `client/docs/wpf-surface-reachability.md` (divergences ONLY), and `spine-tasks/SP-091-navigation-shell/**` |
 | Must not change | everything else, and specifically `client/tests/floor/floor.json`, `client/docs/task-board.md`, `client/src/CcpClient.Desktop/Entitlement/**`, `client/src/CcpClient.Desktop/Tray/**`, `client/src/CcpClient.Desktop/Features/**`, `client/src/CcpClient.Desktop/Program.cs`, `ConditioningControlPanel/**`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
 
 `client/src/CcpClient.Desktop/Features/**` is **read-only for you**: the Loom host already works and you are calling it, not changing it. If you believe you must change it, that is a stop condition — report it instead.
@@ -78,6 +78,38 @@ The second cheap answer is **testing the navigation model and not the navigation
 | artifactsMustExist | `spine-tasks/SP-091-navigation-shell/record.md`, `spine-tasks/SP-091-navigation-shell/floor-delta.json` |
 
 **READ THE PIN FROM `client/tests/floor/floor.json`**, never from this packet. Your gate reports `observed == pin + your declared delta` and exits non-zero on that drift; that is the designed state for a bound lane.
+
+## AMENDMENTS (orchestrator, at the plan checkpoint)
+
+### Amendment 1 — the verify harness comes WITH you. Option (a), not (b).
+
+You found that retiring the demo card breaks `client/tools/verify/**` and proposed to proceed on (b), leave it broken and record it. **Overruled: take option (a).** `client/tools/verify/**` is added to your File Scope and re-anchoring it is now a completion criterion.
+
+**Why (b) is not survivable, in this packet's own terms.** That harness is the port's tier-2/tier-3 verification: it is what turns a `presentation-verified` claim from an assertion into evidence, and it is the only way anything you build gets looked at rather than merely tested. Leaving it broken means a `FAIL` from `capture.ps1` would no longer distinguish a broken app from a broken harness — **which is precisely the failure this harness suffered hours ago** (a rotted fixed sleep made it report `window not found` on a perfectly healthy app, and the honest reading of that output was "the shell is broken"). Knowingly re-introducing that ambiguity to stay inside a scope line is the wrong trade, and a scope line is the cheaper thing to move.
+
+Re-anchor in the SAME commit as the retirement, so the tree is never in a state where the harness is broken:
+- `capture.ps1:11` `ValidateSet` and `:101` UIA needles, `:131` surface branch — move off `Demo: Status Ticker` / `layout-probe: card` onto the shell's own anchors. `dashboard-card` -> `rail-door`, `lit` -> `selected` is the right rename; keep `dashboard` as the whole-window surface.
+- `self-test.ps1:15,34,37,40,54,57` and the CcpVerify manifest's named check `dashboard-card-lit-border` follow the same rename.
+- **`self-test.ps1` must still PASS at the end** — its seeded regression must red the specific named check and the restore must go green. That is your proof the re-anchor is real and not merely renamed strings. Run it and report its output.
+- Keep the polled-window wait at `capture.ps1` as it is now. Do not reintroduce a fixed sleep.
+
+### Amendment 2 — your dot/toggle omissions are RIGHT, your reason for them is WRONG
+
+You cited `StudioTabView.xaml.cs:494-496` ("A dot that cannot be wired honestly is omitted") and `:657-660` (toggle-less rows' right-clicks "fall through unhandled") as WPF parity for a rack row with no live dot and no right-click toggle. **I verified both citations: they are exact. But both describe `Visuals`, the ONE row that has no master toggle.** Every other row passes a state lambda — `Add("spiral", ..., () => App.Settings?.Current?.SpiralEnabled)` at `:490-491` — so **in WPF the Spiral Overlay row DOES carry a live dot and DOES toggle on right-click.** The live capture in `client/docs/evidence/wpf-ui-v681/studio-rack-spiral-overlay.jpg` shows lit dots on running rows.
+
+**Keep the omissions** — the port has no spiral-overlay effect whose state could be reported, and inventing a dot that always reads "off" is the fake-available shape. **But record them as DIVERGENCES in `wpf-surface-reachability.md`, not as parity**, and say the true reason: *the port has nothing to wire yet*, not *WPF omits it here*. Generalising a rule written for the one exceptional row into a general parity claim is how a gap gets recorded as a feature.
+
+### Amendment 3 — approvals, so you are not blocked on them
+
+- **The `Present` seam: approved.** Constructing the real `DtrhLoomWindow` and handing it to an injectable presenter is honest, the `FeaturePopupManager` factory seam at `MainWindow.axaml.cs:58-63` is the right precedent, and avoiding real audio init and WebView2 navigation in a headless test is correct. **Condition: the test must assert the concrete `DtrhLoomWindow` type is what reaches the seam**, so the seam can never be satisfied by a stand-in.
+- **The `LoomLaunch` single-launcher lift: approved, and it is the best part of your plan.** One construction site, both callers routed through it, the four diagnostic log strings byte-identical. That is reuse rather than a second path, which is exactly what was wanted.
+- **`MainWindowViewModel` surviving as an A-014 residue: accepted.** Nine call sites in test files outside your scope. Retire the card, keep the class, name it in `record.md`.
+- **Three doors with real destinations, and Home/Play/You/Library/The Spiral honestly absent: approved.** That is the packet's trap answered correctly.
+- **Taking the live UIA name (no emoji) over the XAML `Content` string: correct.** Observation wins over source where they disagree.
+
+### Amendment 4 — declared delta
+
+Your declared **unit +3, headless +2** stands. Retiring 8 headless facts while adding 10 nets +2; retargeting their mechanism proofs onto product controls rather than dropping them is the right call and must be visible in `record.md`.
 
 ## Review Level: 3 (Plan, Code, Final)
 
