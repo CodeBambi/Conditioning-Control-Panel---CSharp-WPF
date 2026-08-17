@@ -179,6 +179,12 @@ Its \`### Suggestions (non-blocking)\` section MUST NOT change your plan's mecha
 
 Verify each defect against source before accepting it, and say plainly if you believe one is wrong. If two defects share a root, say so and fix the root.
 
+PERSIST THIS ROUND BEFORE YOU RETURN, exactly as round 1 did. Write your revised plan to
+  C:\\Code\\Conditioning-Control-Panel---CSharp-WPF\\.port\\plans\\${packet}\\plan-round-${round + 2}.md
+and write the review you are answering to
+  C:\\Code\\Conditioning-Control-Panel---CSharp-WPF\\.port\\plans\\${packet}\\review-round-${round + 1}.md
+creating directories as needed. Both paths are gitignored. This matters precisely because a later round may THROW: the pipeline keeps only the last feedback string, in memory, so without these files an escalation destroys every round after the first. Wave 31 lost six plans exactly that way.
+
 ${RULES}`,
         { label: `plan-revise:${packet}`, phase: 'Review plan' }
       )
