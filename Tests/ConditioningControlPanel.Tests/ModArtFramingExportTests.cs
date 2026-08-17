@@ -16,6 +16,10 @@ namespace ConditioningControlPanel.Tests;
 /// slot holding <b>no image</b> describes a crop of a file the package does not ship, which means the
 /// app is showing its own built-in art -- and built-in art deliberately ignores artFraming and keeps
 /// its shipped rect, so the entry is a claim about a picture that does not exist.</para>
+///
+/// <para>The mod editor's OTHER silently-lossy manifest field is pinned here too:
+/// <c>bubbleScale</c> had no round trip at all, because <c>BuildManifestFromForm</c> builds a fresh
+/// <c>ModManifest</c> and nothing carried the old value across. Same class of bug, same file.</para>
 /// </summary>
 public class ModArtFramingExportTests
 {
@@ -153,10 +157,13 @@ public class ModArtFramingExportTests
     [Fact]
     public void ManifestRoundTripsThroughTheEditor()
     {
+        // lab_quiz_hero.png is a rail chip, a Play card AND the Intake strip -- NOT the wide page
+        // header, which is lab_aimemory_hero.png's. The two shared one surface id until the review
+        // caught that one preview cannot be right for a 3.5:1 tile and a 5:1 plate at once.
         var written = ModArtFramingRules.BuildManifestSection(
             Framings(
                 ("features/lab_quiz_hero.png", ModArtFramingRegistry.SurfaceRailChip, 0.25, 0.4, 2.2),
-                ("features/lab_quiz_hero.png", ModArtFramingRegistry.SurfacePageHeader, 0.5, 0.15, 1.4)),
+                ("features/lab_quiz_hero.png", ModArtFramingRegistry.SurfaceIntakeStrip, 0.5, 0.15, 1.4)),
             Slots(("features/lab_quiz_hero.png", @"C:\art\quiz.png")));
 
         var read = ModArtFramingRules.ReadManifestSection(written);
@@ -165,8 +172,8 @@ public class ModArtFramingExportTests
         Assert.Equal(2, perSurface.Count);
         Assert.Equal(0.25, perSurface[ModArtFramingRegistry.SurfaceRailChip].CenterX, Tol);
         Assert.Equal(2.2, perSurface[ModArtFramingRegistry.SurfaceRailChip].Zoom, Tol);
-        Assert.Equal(0.15, perSurface[ModArtFramingRegistry.SurfacePageHeader].CenterY, Tol);
-        Assert.Equal(1.4, perSurface[ModArtFramingRegistry.SurfacePageHeader].Zoom, Tol);
+        Assert.Equal(0.15, perSurface[ModArtFramingRegistry.SurfaceIntakeStrip].CenterY, Tol);
+        Assert.Equal(1.4, perSurface[ModArtFramingRegistry.SurfaceIntakeStrip].Zoom, Tol);
     }
 
     [Fact]
@@ -285,6 +292,107 @@ public class ModArtFramingExportTests
             Slots(("features/fyp.png", @"C:\art\fyp.png")));
 
         Assert.Null(section);
+    }
+
+    // ── the non-framable pair ────────────────────────────────────
+
+    [Fact]
+    public void TheGoonCardIsNeverOfferedForFraming()
+    {
+        // Its brush is Stretch=Uniform over a solid plate, so the art letterboxes INSIDE the card
+        // instead of filling it, and an edge-to-edge crop preview would be lying about the one
+        // surface this registry exists to keep honest. The binding still has to exist -- our own
+        // square wordmark needs its shipped rect -- so "is there a binding" is the wrong question
+        // for the editor to ask, and that is the whole point of FramableBindingsFor.
+        Assert.NotEmpty(ModArtFramingRegistry.BindingsFor("features/goon_game.png"));
+        Assert.Empty(ModArtFramingRegistry.FramableBindingsFor("features/goon_game.png"));
+        Assert.False(ModArtFramingRegistry.IsFramable("features/goon_game.png", ModArtFramingRegistry.SurfacePlayCard));
+    }
+
+    [Fact]
+    public void FramingHandEditedOntoANonFramablePair_IsNeitherReadNorWritten()
+    {
+        // The editor cannot produce this, so it can only arrive from a text editor. The runtime
+        // ignores it (ResolveViewbox hands a non-framable pair the whole image), and there is no
+        // Frame button to fix it with, so it is dropped in both directions rather than echoed on.
+        var handEdited = Framings(("features/goon_game.png", ModArtFramingRegistry.SurfacePlayCard, 0.2, 0.8, 2.5));
+
+        Assert.Empty(ModArtFramingRules.ReadManifestSection(handEdited));
+        Assert.Null(ModArtFramingRules.BuildManifestSection(
+            handEdited, Slots(("features/goon_game.png", @"C:\art\goon.png"))));
+    }
+
+    [Fact]
+    public void APathNothingFrames_IsNotWritten()
+    {
+        // features/vault.png is a real editor slot and a real resource, but no surface crops it --
+        // the vault face is drawn whole. Numbers for it would describe a crop that never happens.
+        var section = ModArtFramingRules.BuildManifestSection(
+            Framings(("features/vault.png", ModArtFramingRegistry.SurfaceRailChip, 0.2, 0.8, 2.0)),
+            Slots(("features/vault.png", @"C:\art\vault.png")));
+
+        Assert.Null(section);
+    }
+
+    [Fact]
+    public void ThereIsNoDashboardTileSurface()
+    {
+        // Pinned because the UI Art panel's prose promises authors a preview per surface, and the
+        // dashboard mosaic paints through MainWindow.Presets.cs, which never calls the framing code.
+        // A dashTile surface would put a Frame button in front of authors and write numbers nothing
+        // reads. If this ever needs to come back, wire the mosaic FIRST.
+        Assert.Null(ModArtFramingRegistry.FindSurface("dashTile"));
+    }
+
+    // ── bubbleScale, the editor's other lossy field ───────────────
+
+    [Fact]
+    public void BubbleScaleSurvivesTheRoundTrip()
+    {
+        // The finding: BuildManifestFromForm builds a FRESH ModManifest, so until the Advanced panel
+        // gained a box, an author who hand-edited bubbleScale lost it the moment they reopened their
+        // mod here and exported. Format -> box -> Parse is that whole trip.
+        var inBox = ModBubbleScaleRules.Format(0.85);
+
+        Assert.Equal("0.85", inBox);
+        Assert.Equal(0.85, ModBubbleScaleRules.Parse(inBox)!.Value, Tol);
+    }
+
+    [Fact]
+    public void NoBubbleScale_StaysAbsentRatherThanBecomingOne()
+    {
+        // A mod that never declared one must not gain one on re-export: the key's absence is what
+        // "use the app's own size band" means, and a written 1.0 makes it look like a decision.
+        Assert.Null(ModBubbleScaleRules.Sanitize(null));
+        Assert.Null(ModBubbleScaleRules.Format(null));
+        Assert.Null(ModBubbleScaleRules.Parse(null));
+        Assert.Null(ModBubbleScaleRules.Parse("   "));
+    }
+
+    [Fact]
+    public void GarbageBubbleScale_IsDroppedAndOutOfRangeIsClamped()
+    {
+        // Non-finite is a typo, not a request for the smallest legal bubble, and BubbleSizing
+        // already treats it as absent -- so it is dropped rather than clamped to 0.5.
+        Assert.Null(ModBubbleScaleRules.Sanitize(double.NaN));
+        Assert.Null(ModBubbleScaleRules.Sanitize(double.PositiveInfinity));
+        Assert.Null(ModBubbleScaleRules.Format(double.NaN));
+        Assert.Null(ModBubbleScaleRules.Parse("banana"));
+
+        // A finite but absurd number IS a decision, only an out-of-range one, so it clamps to the
+        // band the runtime would have clamped it into anyway instead of vanishing on the author.
+        Assert.Equal(BubbleSizing.ModScaleMax, ModBubbleScaleRules.Sanitize(42)!.Value, Tol);
+        Assert.Equal(BubbleSizing.ModScaleMin, ModBubbleScaleRules.Sanitize(-3)!.Value, Tol);
+        Assert.Equal(BubbleSizing.ModScaleMax, ModBubbleScaleRules.Parse("42")!.Value, Tol);
+    }
+
+    [Fact]
+    public void BubbleScaleIsInvariantSoItCannotChangeMeaningOnAnotherMachine()
+    {
+        // Same reason TryParsePoint is invariant: a decimal comma would round-trip into a different
+        // number under a European locale, and "1,25" must not become 125.
+        Assert.Equal("1.25", ModBubbleScaleRules.Format(1.25));
+        Assert.Null(ModBubbleScaleRules.Parse("1,25"));
     }
 
     // ── helpers ──────────────────────────────────────────────────
