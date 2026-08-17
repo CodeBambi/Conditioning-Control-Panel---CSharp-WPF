@@ -155,6 +155,27 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     public event Action? SettingsReplaced;
 
     /// <summary>Phase-3 start: begin the operation generation, then load (contract §5).</summary>
+    /// <remarks>
+    /// COMPLETES SYNCHRONOUSLY ON THE CALLING THREAD. There is no <c>async</c>, no
+    /// <c>await</c> and no <c>Task.Run</c> in this method: <see cref="Load"/> runs INLINE,
+    /// so its blocking synchronous disk I/O (exists/move/delete/read, JSON parse,
+    /// migrations, bind) has already FINISHED and <see cref="LastLoadOutcome"/> is already
+    /// set by the time the returned task exists. The returned task is therefore never
+    /// incomplete when the caller receives it, and a caller-side timeout on it bounds
+    /// NOTHING: a bounded wait can only ever observe an already-completed task, so it is
+    /// theater. Callers that block on this task with <c>.GetAwaiter().GetResult()</c> are
+    /// performing a no-op wait, not a sync-over-async block.
+    ///
+    /// The real and only cost here is THREAD AFFINITY: whatever thread calls this does the
+    /// disk I/O, so a UI-thread caller loads on the UI thread. That is not fixable with a
+    /// caller-side bound; it would require moving the I/O off the caller, which would turn
+    /// every one of those call sites into a genuine sync-over-async block and would reorder
+    /// the load against DtrhHostWindow's SP-055 asset-selection-first ordering. Do not
+    /// "fix" this by making <see cref="Load"/> asynchronous or wrapping it in
+    /// <c>Task.Run</c> without reaching the callers. Pinned by
+    /// <c>PersistenceStoreTests</c> (SP-087); this note is the sentence whose absence let
+    /// the SP-071 census be read as describing unbounded waits.
+    /// </remarks>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -170,6 +191,19 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     }
 
     /// <summary>Idempotent stop: cancels the operation generation (SP-003 §5.3).</summary>
+    /// <remarks>
+    /// COMPLETES SYNCHRONOUSLY ON THE CALLING THREAD and touches no file at all: it flips
+    /// <see cref="Running"/> and cancels the generation token source under a short lock
+    /// (<c>AsyncOperationOwner.Cancel</c>, OperationRegistry.cs:161-167, which registers no
+    /// cancellation callbacks anywhere in this tree). The returned task is already complete
+    /// when the caller receives it, so, exactly as in <see cref="StartAsync"/>, a
+    /// caller-side timeout on it bounds NOTHING.
+    ///
+    /// This is NOT a flush. A dirty store is not persisted here; callers that need the
+    /// final write call <see cref="FlushAsync"/> BEFORE this (contract §11), which is why
+    /// IntakeHostContext.cs:126-127 does and DtrhSaveSlots.DeleteSlot deliberately does not
+    /// (it is erasing the file). Pinned by <c>PersistenceStoreTests</c> (SP-087).
+    /// </remarks>
     public Task StopAsync()
     {
         if (!Running)
