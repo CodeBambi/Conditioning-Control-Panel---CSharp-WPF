@@ -1,0 +1,6 @@
+{
+  "packet": "SP-085-tunnel-logging-named-flake",
+  "unit": 3,
+  "headless": 0,
+  "reason": "three facts in ChaosTunnelLoopbackTests: the behavioural ordering discriminator (route-class line already in the sink when an undrained response becomes observable), the structural guard that every response-emitting path records its route class before it writes (covers /health, which no round trip can park), and the privacy-sink guard that no exception message is interpolated into the route-class sink"
+}

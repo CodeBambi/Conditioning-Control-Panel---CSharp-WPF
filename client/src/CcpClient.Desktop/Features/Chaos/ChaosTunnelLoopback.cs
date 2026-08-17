@@ -102,7 +102,15 @@ public sealed class ChaosTunnelLoopback : IDisposable
                 {
                     // Client went away mid-response (renderer stall/teardown race) — never a fault.
                 }
-                catch (Exception ex) { _log($"chaos-tunnel-loopback: handler fault {ex.GetType().Name}: {ex.Message}"); }
+                // SP-085 Step 3: TYPE ONLY, never ex.Message. This is the SAME sink the
+                // route-class discipline governs, and exception messages carry filesystem
+                // paths. Verified, not recalled: UnauthorizedAccessException is NOT an
+                // IOException (chain: UnauthorizedAccessException -> SystemException ->
+                // Exception), so the filter above does not catch it, and File.ReadAllBytesAsync
+                // on an ACL-denied payload file raises it with "Access to the path '<full
+                // path>' is denied." — a payload path in a sink that is forbidden even a bare
+                // filename. Same shape as the accept-fault line at the top of this loop.
+                catch (Exception ex) { _log($"chaos-tunnel-loopback: handler fault {ex.GetType().Name}"); }
                 finally { try { ctx.Response.OutputStream.Close(); } catch { /* best effort */ } }
             });
         }
@@ -120,8 +128,11 @@ public sealed class ChaosTunnelLoopback : IDisposable
 
         if (path == "/health")
         {
-            await WriteText(ctx, 200, "ok", "text/plain");
+            // SP-085 ordering invariant (see the payload path below for the full reasoning):
+            // the route-class line is emitted BEFORE any byte of the response can leave the
+            // process, exactly as Refuse has always done.
             _log("chaos-tunnel-loopback: GET /health -> 200");
+            await WriteText(ctx, 200, "ok", "text/plain");
             return;
         }
 
@@ -169,8 +180,28 @@ public sealed class ChaosTunnelLoopback : IDisposable
         res.ContentType = contentType;
         res.Headers["X-Content-Type-Options"] = "nosniff";
         res.ContentLength64 = bytes.Length;
-        await res.OutputStream.WriteAsync(bytes, _cts.Token).ConfigureAwait(false);
+        // SP-085 ORDERING INVARIANT: every route-class line is emitted before any byte of the
+        // corresponding response can leave the process. Logging AFTER the write made the line
+        // observable strictly later than the response itself, so a client that had already read
+        // a body could snapshot a sink the line had not reached yet — reproduced at 1 red in
+        // 382 round trips, failing on the SECOND request's route class. Refuse has always
+        // logged first; the two success paths now agree with it, and the property belongs to
+        // the server instead of to the scheduler.
+        //
+        // The line stays an AUDIT RECORD OF WHAT THE SERVER DECIDED TO SERVE, which is what
+        // Refuse already treats it as and what a privacy boundary wants: record the decision,
+        // then act. Two consequences are ACCEPTED here, not denied (SP-085 record §2, §6, §9):
+        //   1. A write that faults afterwards because the CLIENT WENT AWAY is swallowed in
+        //      silence — the client-went-away filter at the top of the accept loop has an
+        //      empty body and emits no line — so this line can stand alone for a response
+        //      that never left the process. Only faults OUTSIDE that filter reach the
+        //      handler-fault line. Closing that silence is an owed row, not this change.
+        //   2. This sink is synchronous on the live path (ChaosTunnelService.cs:179-180 ->
+        //      ApplicationHost.LogDiagnostic:78 -> DebugLogSink: Console.Error.WriteLine plus
+        //      Debug.WriteLine), so a blocked or redirected stderr now delays the FIRST byte
+        //      of a 200 rather than following its last.
         _log($"chaos-tunnel-loopback: GET {RouteClass(path)} -> 200");
+        await res.OutputStream.WriteAsync(bytes, _cts.Token).ConfigureAwait(false);
     }
 
     /// <summary>Decode, reject traversal/absolute weirdness, resolve under root
