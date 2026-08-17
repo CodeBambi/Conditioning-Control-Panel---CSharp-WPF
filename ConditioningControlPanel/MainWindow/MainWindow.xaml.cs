@@ -2013,7 +2013,8 @@ namespace ConditioningControlPanel
                         // be re-decided on every pass or a mod that overrides only some slots
                         // leaves the rest wearing whatever the previous mod was framed by, and
                         // switching back to built-in art never restores the shipped rect.
-                        ApplyArtFraming(brush, path, surfaceId);
+                        ApplyArtFraming(brush, path, surfaceId,
+                                        image != null && ModResourceResolver.HasActiveModOverride(path));
                     }
                 }
 
@@ -2022,25 +2023,30 @@ namespace ConditioningControlPanel
                 // Only two rows left - the Lab tab's own three moved to playHeroMap below with the
                 // cards they paint (Phase 6). The NAME is historical, like the filenames: the art
                 // path is the mod compatibility surface and is never renamed to match the room.
-                var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
+                var labHeroMap = new (string resourcePath, ImageBrush? brush, string surfaceId)[]
                 {
-                    // Both rows are pageHeader surfaces for framing purposes — a page's own hero
-                    // strip, not a card in a wall.
-                    ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
+                    // Two DIFFERENT shapes, not one: the Intake header's art is a fixed 240x68 strip
+                    // anchored right, while the permissions plate below is a wide 138-tall header.
+                    // They shared a surface id until the review pointed out that one preview cannot
+                    // be right for both.
+                    ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush,
+                     ModArtFramingRegistry.SurfaceIntakeStrip),
                     // Still a "lab hero" by filename — the art path is the mod compatibility
                     // surface and is never renamed — but the card it paints is the Companion
                     // door's permissions grid since Phase 5. The row travels with the brush: a
                     // dropped row does not fail the build, it just silently stops repainting on a
                     // mod switch.
-                    ("features/lab_aimemory_hero.png", CompanionTab.LabAiMemoryHeroBrush),
+                    ("features/lab_aimemory_hero.png", CompanionTab.LabAiMemoryHeroBrush,
+                     ModArtFramingRegistry.SurfacePageHeader),
                 };
-                foreach (var (path, brush) in labHeroMap)
+                foreach (var (path, brush, surfaceId) in labHeroMap)
                 {
                     if (brush == null || brush.IsFrozen) continue;
                     var image = ModResourceResolver.ResolveImage(path);
                     if (image != null)
                         brush.ImageSource = image;
-                    ApplyArtFraming(brush, path, ModArtFramingRegistry.SurfacePageHeader);
+                    ApplyArtFraming(brush, path, surfaceId,
+                                    image != null && ModResourceResolver.HasActiveModOverride(path));
                 }
 
                 // Play door card heroes (UX restructure, Phase 6). The three that came off the Lab
@@ -2074,6 +2080,11 @@ namespace ConditioningControlPanel
                     // it frames against a much wider box (playHero).
                     ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024, ModArtFramingRegistry.SurfacePlayHero),
                     ("features/loom.png",               PlayTab?.PlayLoomHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
+                    // Named and left mutable by the 0812 remake but never fed, so a .ccpmod
+                    // overriding features/justdrop.png repainted the dashboard tile and left this
+                    // card on the embedded art. Found by the review, which spotted that the card was
+                    // offering authors a Frame button over a brush nothing wrote to.
+                    ("features/justdrop.png",           PlayTab?.PlayJustDropHeroBrush, 512, ModArtFramingRegistry.SurfacePlayCard),
                 };
                 foreach (var (path, brush, decodeWidth, surfaceId) in playHeroMap)
                 {
@@ -2082,7 +2093,8 @@ namespace ConditioningControlPanel
                     if (image != null)
                         brush.ImageSource = image;
                     // Unconditional for the same reason as the rail — see the note there.
-                    ApplyArtFraming(brush, path, surfaceId);
+                    ApplyArtFraming(brush, path, surfaceId,
+                                    image != null && ModResourceResolver.HasActiveModOverride(path));
                 }
 
                 // The rail chips do NOT all paint straight from the resources above: the hover
@@ -2126,7 +2138,19 @@ namespace ConditioningControlPanel
         /// framing gets an honest centre crop, never ours). This method only gathers the three
         /// facts that decision needs and writes the answer.</para>
         /// </summary>
-        private static void ApplyArtFraming(ImageBrush brush, string resourcePath, string surfaceId)
+        /// <param name="modImageApplied">
+        /// Whether the ACTIVE MOD's file is what actually landed on this brush. Two ways it is false
+        /// while a naive "does an override exist" check would say true, and both would hand OUR art
+        /// a centre crop it was never drawn for:
+        /// <list type="bullet">
+        /// <item>an event skin supplied the art — our own seasonal reskin of the same template, with
+        /// no artFraming channel, so it keeps the shipped rect;</item>
+        /// <item>the mod's file exists but failed to decode, in which case the resolver returns null
+        /// and the brush is still showing the embedded bitmap.</item>
+        /// </list>
+        /// </param>
+        private static void ApplyArtFraming(ImageBrush brush, string resourcePath, string surfaceId,
+                                            bool modImageApplied)
         {
             try
             {
@@ -2138,9 +2162,7 @@ namespace ConditioningControlPanel
                 var src = brush.ImageSource;
                 double aspect = src != null && src.Height > 0 ? src.Width / src.Height : 0;
 
-                // HasModOverride, not "did an image resolve": an event skin or the active mod
-                // having drawn this file is precisely the case where our own rect stops applying.
-                bool isModSupplied = ModResourceResolver.HasModOverride(resourcePath);
+                bool isModSupplied = modImageApplied;
                 var framing = isModSupplied ? ActiveModFraming(resourcePath, surfaceId) : null;
 
                 // A Uniform brush letterboxes onto a backdrop plate ON PURPOSE - the Goon card's

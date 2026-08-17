@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using ConditioningControlPanel.Services;
 using Xunit;
@@ -315,5 +317,116 @@ public class ModArtFramingTests
         Assert.False(ModArtFramingRegistry.TryParsePoint(text, out var px, out var py));
         Assert.Equal(0.5, px, Tol);
         Assert.Equal(0.5, py, Tol);
+    }
+
+    // ─── XAML ↔ registry parity ──────────────────────────────────────
+    //
+    // The rail rects live in BOTH SettingsTabView.xaml and the registry, deliberately: the XAML
+    // literal is what renders before LoadFeatureImages runs in the ctor, so deleting it would make
+    // built-in framing depend on ctor ordering, while the registry is what the runtime re-decides
+    // from. Comments in both files ask for manual sync, but a comment is not a guard: retune a rect
+    // in the XAML only and the chip renders the new crop until the ctor snaps it back to the old
+    // one — a visible flicker no other test would catch. This repo already answers that hazard with
+    // source-scraping tests (PlayDoorRenderTests.PlayHeroMapFeedsEveryHeroBrush), so this does too.
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
+            dir = dir.Parent;
+        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
+        return dir!.FullName;
+    }
+
+    private static string ReadSource(params string[] parts) =>
+        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+
+    /// <summary>The x:Key of each rail brush, the file it paints and the surface it is bound to.</summary>
+    public static TheoryData<string, string, string> RailBrushKeys() => new()
+    {
+        { "ArtTakeover",  "features/takeover.png",       ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtAwareness", "features/awareness.png",      ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtHaptics",   "features/vibe.png",           ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtIntake",    "features/lab_quiz_hero.png",  ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtRemote",    "features/remote_control.png", ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtFyp",       "features/fyp.png",            ModArtFramingRegistry.SurfaceRailChip },
+        { "ArtBlink",     "features/blink_trainer.png",  ModArtFramingRegistry.SurfaceRailCard },
+        { "ArtLockdown",  "lockdown_icon.png",           ModArtFramingRegistry.SurfaceRailCard },
+    };
+
+    [Theory]
+    [MemberData(nameof(RailBrushKeys))]
+    public void RailChipViewboxInXaml_MatchesTheRegistrysShippedRect(string xamlKey, string resourcePath, string surfaceId)
+    {
+        var xaml = ReadSource("Views", "Tabs", "SettingsTabView.xaml");
+        var literal = ExtractViewbox(xaml, $"x:Key=\"{xamlKey}\"");
+        Assert.NotNull(literal);
+
+        var shipped = ModArtFramingRegistry.ShippedViewbox(resourcePath, surfaceId);
+        Assert.NotNull(shipped);
+        AssertRectsMatch(shipped!.Value, literal!.Value, $"{xamlKey} / {resourcePath}");
+    }
+
+    [Fact]
+    public void GoonViewboxInXaml_MatchesTheRegistrysShippedRect()
+    {
+        var xaml = ReadSource("Views", "Tabs", "PlayTabView.xaml");
+        var literal = ExtractViewbox(xaml, "x:Name=\"PlayGoonHeroBrush\"");
+        Assert.NotNull(literal);
+
+        var shipped = ModArtFramingRegistry.ShippedViewbox("features/goon_game.png",
+                                                           ModArtFramingRegistry.SurfacePlayCard);
+        Assert.NotNull(shipped);
+        AssertRectsMatch(shipped!.Value, literal!.Value, "PlayGoonHeroBrush");
+    }
+
+    [Fact]
+    public void TheGoonCardIsNotOfferedForFraming()
+    {
+        // Stretch=Uniform over a #FF161622 plate, so its square wordmark letterboxes rather than
+        // cropping. A crop preview would be lying about the one surface this registry exists to keep
+        // honest, so the editor must never offer it - while the shipped rect above is still needed.
+        Assert.False(ModArtFramingRegistry.IsFramable("features/goon_game.png",
+                                                      ModArtFramingRegistry.SurfacePlayCard));
+        Assert.DoesNotContain(ModArtFramingRegistry.FramableBindingsFor("features/goon_game.png"),
+                              b => b.SurfaceId == ModArtFramingRegistry.SurfacePlayCard);
+    }
+
+    /// <summary>
+    /// Pulls the <c>Viewbox="x,y,w,h"</c> off the element that carries <paramref name="anchor"/>.
+    /// Scoped to the 400 characters after the anchor so it cannot wander into a sibling brush, and
+    /// returns null when the element has no Viewbox at all (a bare UniformToFill, which means the
+    /// whole image and is not something the registry mirrors).
+    /// </summary>
+    private static Rect? ExtractViewbox(string xaml, string anchor)
+    {
+        var at = xaml.IndexOf(anchor, StringComparison.Ordinal);
+        if (at < 0) return null;
+
+        var window = xaml.Substring(at, Math.Min(400, xaml.Length - at));
+        var end = window.IndexOf('>');
+        if (end > 0) window = window.Substring(0, end);
+
+        var m = Regex.Match(window, @"Viewbox\s*=\s*""\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*""");
+        if (!m.Success) return null;
+
+        return new Rect(
+            double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(m.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static void AssertRectsMatch(Rect registry, Rect xaml, string what)
+    {
+        Assert.True(Math.Abs(registry.X - xaml.X) < 1e-9
+                    && Math.Abs(registry.Y - xaml.Y) < 1e-9
+                    && Math.Abs(registry.Width - xaml.Width) < 1e-9
+                    && Math.Abs(registry.Height - xaml.Height) < 1e-9,
+            $"{what}: the XAML Viewbox and ModArtFramingRegistry have drifted apart. " +
+            $"XAML says {xaml.X},{xaml.Y},{xaml.Width},{xaml.Height} and the registry says " +
+            $"{registry.X},{registry.Y},{registry.Width},{registry.Height}. Both are load-bearing " +
+            "(the XAML literal renders before the ctor runs, the registry is what it is then " +
+            "overwritten with), so change them together.");
     }
 }

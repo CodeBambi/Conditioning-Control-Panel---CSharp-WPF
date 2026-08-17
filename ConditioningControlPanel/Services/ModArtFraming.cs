@@ -69,15 +69,35 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     /// <param name="Id">Stable key stored in mod.json. NEVER rename one — same rule as a slot key.</param>
     /// <param name="DisplayName">Shown in the editor above the preview.</param>
-    /// <param name="AspectRatio">Width ÷ height of the on-screen frame.</param>
+    /// <param name="AspectRatio">
+    /// Width ÷ height of the on-screen frame. Exact for a fixed-size surface; a REPRESENTATIVE
+    /// value when <paramref name="FluidWidth"/> is set — see that parameter.
+    /// </param>
     /// <param name="CornerRadius">Frame corner radius in DIPs, for the editor's mock.</param>
     /// <param name="Scrim">Which darkening the real surface lays over the art.</param>
+    /// <param name="FluidWidth">
+    /// True when the real frame's width follows the window rather than a fixed number: the Play
+    /// cards sit in 2- and 3-column <c>UniformGrid</c>s over a resizable window, and the hero and
+    /// page headers span whatever their container gives them. Their height IS fixed (138 for a card
+    /// plate), so the ASPECT moves with the window — a 2-column card is about 4.3:1 where a
+    /// 3-column one is about 2.9:1.
+    ///
+    /// <para>Consequence, and it is a real limitation rather than a rounding error: the stored
+    /// window is cut to <see cref="AspectRatio"/>, and at runtime <c>UniformToFill</c> centre-crops
+    /// whatever difference remains between that and the live frame. A subject framed hard against
+    /// the top or bottom of the preview can therefore lose some of that edge in the app, by an
+    /// amount that changes with window width. The editor marks these surfaces so an author is told
+    /// rather than surprised. The proper fix is to recompute the Viewbox from the live control on
+    /// layout — which the focal-point-plus-zoom storage format was chosen to make possible — and is
+    /// deliberately left as follow-up rather than smuggled into this change.</para>
+    /// </param>
     public sealed record ArtSurface(
         string Id,
         string DisplayName,
         double AspectRatio,
         double CornerRadius,
-        ArtScrim Scrim);
+        ArtScrim Scrim,
+        bool FluidWidth = false);
 
     /// <summary>
     /// One (resource path, surface) pair the app frames, plus the crop the SHIPPED art uses.
@@ -93,10 +113,19 @@ namespace ConditioningControlPanel.Services
     /// that used to hold it. Applies to BUILT-IN art only — see
     /// <see cref="ModArtFramingRegistry.ResolveViewbox"/> for why mod art must never inherit it.
     /// </param>
+    /// <param name="Framable">
+    /// False when this pair must NOT be offered to an author to frame, even though it still needs a
+    /// shipped rect. The Goon card is the case: its brush is <c>Stretch="Uniform"</c> over a solid
+    /// plate on purpose, so its square wordmark letterboxes instead of cropping. A crop window is
+    /// meaningless there — the region would be shrunk inside the plate rather than filling it, so a
+    /// preview showing edge-to-edge art would be lying about the one surface this registry exists to
+    /// keep honest. Un-framed mod art on such a brush is given the whole image instead.
+    /// </param>
     public sealed record ArtSlotBinding(
         string ResourcePath,
         string SurfaceId,
-        Rect ShippedViewbox);
+        Rect ShippedViewbox,
+        bool Framable = true);
 
     /// <summary>
     /// The slot geometry table, and the arithmetic that turns a stored framing into an
@@ -135,20 +164,42 @@ namespace ConditioningControlPanel.Services
         /// <summary>Play door full-width hero banner at the top of the wall.</summary>
         public const string SurfacePlayHero = "playHero";
 
-        /// <summary>Dashboard mosaic tile.</summary>
-        public const string SurfaceDashTile = "dashTile";
-
-        /// <summary>A page's own hero strip (Graded Intake header, Companion permissions grid).</summary>
+        /// <summary>The Companion door's permissions-grid header plate (AiPermissionsGrid.xaml,
+        /// Height=138 with the card's padding cancelled).</summary>
         public const string SurfacePageHeader = "pageHeader";
 
+        /// <summary>
+        /// The Graded Intake header's art strip — a FIXED 240x68 box anchored to the right of a
+        /// 72-tall border (GradedIntakeTabView.xaml). Split out of <see cref="SurfacePageHeader"/>
+        /// because sharing one id made a single preview stand for two genuinely different shapes:
+        /// this is a narrow 3.5:1 tile, the permissions header is a wide ~5:1 plate, and an author
+        /// framing for one was silently framing wrong for the other.
+        /// </summary>
+        public const string SurfaceIntakeStrip = "intakeStrip";
+
+        // NOTE: there is deliberately NO dashTile surface. The dashboard mosaic paints its tiles
+        // through MainWindow.Presets.cs, which never calls ApplyArtFraming, so declaring one would
+        // have put a Frame button in front of authors and written numbers nothing reads. Wire the
+        // mosaic first if that surface is ever wanted.
         private static readonly ArtSurface[] _surfaces =
         {
-            new(SurfaceRailChip,   "Rail chip",        69.0 / 42.0,  8,  ArtScrim.FootBand),
-            new(SurfaceRailCard,   "Rail launcher",    69.0 / 62.0,  8,  ArtScrim.FullFace),
-            new(SurfacePlayCard,   "Play card header", 300.0 / 135.0, 16, ArtScrim.FootBand),
-            new(SurfacePlayHero,   "Play hero banner", 1376.0 / 420.0, 16, ArtScrim.FootBand),
-            new(SurfaceDashTile,   "Dashboard tile",   16.0 / 9.0,   12, ArtScrim.FootBand),
-            new(SurfacePageHeader, "Page header",      1376.0 / 300.0, 12, ArtScrim.FootBand),
+            // Fixed-size surfaces: the preview is exact.
+            new(SurfaceRailChip,   "Rail chip",       69.0 / 42.0,   8,  ArtScrim.FootBand),
+            new(SurfaceRailCard,   "Rail launcher",   69.0 / 62.0,   8,  ArtScrim.FullFace),
+            // 240x68: the 240-wide host inside a 72-tall border, less its 2px border top and
+            // bottom. Its art also fades out to the left under an OpacityMask, which the preview
+            // does not reproduce — the framing consequence is nil, the left edge is simply softer.
+            new(SurfaceIntakeStrip, "Intake strip",   240.0 / 68.0,  16, ArtScrim.None),
+
+            // Fluid-width surfaces: height is fixed, width follows the window, so these aspects are
+            // REPRESENTATIVE and the runtime centre-crops the remainder. See ArtSurface.FluidWidth.
+            // playCard: a 138-tall plate whose negative margin bleeds it ~44 past the card, in a
+            // 3-column zone at the design width (~350 card + 44). A 2-column zone is nearer 4.3:1.
+            new(SurfacePlayCard,   "Play card header", 394.0 / 138.0, 16, ArtScrim.FootBand, FluidWidth: true),
+            // playHero: the descent portal spans the wall and has no fixed height at all.
+            new(SurfacePlayHero,   "Play hero banner", 1100.0 / 240.0, 16, ArtScrim.FootBand, FluidWidth: true),
+            // pageHeader: 138 tall, full card width plus the 40 its negative margin reclaims.
+            new(SurfacePageHeader, "Page header",      680.0 / 138.0, 14, ArtScrim.FootBand, FluidWidth: true),
         };
 
         /// <summary>Every framed surface, in the order the editor should present them.</summary>
@@ -178,7 +229,8 @@ namespace ConditioningControlPanel.Services
 
             // Play door cards — PlayTabView.xaml. Only Goon carried a rect; the rest were a bare
             // UniformToFill, which is the full-image window and is what Rect(0,0,1,1) means.
-            new("features/goon_game.png",           SurfacePlayCard, new Rect(0.03, 0.22, 0.94, 0.68)),
+            // Goon keeps its rect for OUR art but is not framable: Stretch=Uniform over a plate.
+            new("features/goon_game.png",           SurfacePlayCard, new Rect(0.03, 0.22, 0.94, 0.68), Framable: false),
             new("features/lab_gaze_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/lab_focusgaze_hero.png",  SurfacePlayCard, new Rect(0, 0, 1, 1)),
             new("features/lab_quiz_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
@@ -192,9 +244,11 @@ namespace ConditioningControlPanel.Services
             // Play hero banner.
             new("features/dtrh.png", SurfacePlayHero, new Rect(0, 0, 1, 1)),
 
-            // Page headers.
-            new("features/lab_quiz_hero.png",    SurfacePageHeader, new Rect(0, 0, 1, 1)),
-            new("features/lab_aimemory_hero.png", SurfacePageHeader, new Rect(0, 0, 1, 1)),
+            // Page headers. lab_quiz_hero paints the narrow Intake strip, NOT the wide permissions
+            // plate — the two were one id until the review caught that a single preview cannot be
+            // right for a 3.5:1 tile and a 5:1 plate at once.
+            new("features/lab_quiz_hero.png",     SurfaceIntakeStrip, new Rect(0, 0, 1, 1)),
+            new("features/lab_aimemory_hero.png", SurfacePageHeader,  new Rect(0, 0, 1, 1)),
         };
 
         /// <summary>Every (path, surface) pair the app frames.</summary>
@@ -207,6 +261,19 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static IEnumerable<ArtSlotBinding> BindingsFor(string resourcePath) =>
             _bindings.Where(b => string.Equals(b.ResourcePath, resourcePath, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// The bindings an AUTHOR may frame — what the editor should offer. Excludes pairs whose
+        /// surface cannot honestly show a crop (<see cref="ArtSlotBinding.Framable"/>), so no Frame
+        /// button appears for a slot where the preview would have to lie.
+        /// </summary>
+        public static IEnumerable<ArtSlotBinding> FramableBindingsFor(string resourcePath) =>
+            BindingsFor(resourcePath).Where(b => b.Framable);
+
+        /// <summary>Whether this pair may be framed by an author. Unknown pairs are not framable.</summary>
+        public static bool IsFramable(string resourcePath, string surfaceId) =>
+            _bindings.Any(b => string.Equals(b.ResourcePath, resourcePath, StringComparison.OrdinalIgnoreCase)
+                               && b.SurfaceId == surfaceId && b.Framable);
 
         /// <summary>The shipped rect for a pair, or null when the pair is not in the table.</summary>
         public static Rect? ShippedViewbox(string resourcePath, string surfaceId) =>
@@ -303,6 +370,13 @@ namespace ConditioningControlPanel.Services
 
             var surface = FindSurface(surfaceId);
             if (surface == null)
+                return new Rect(0, 0, 1, 1);
+
+            // A non-framable pair takes the whole image rather than a crop window, whatever a
+            // hand-edited mod.json claims: the surface letterboxes onto a plate, so a window would
+            // be shrunk inside it instead of filling it. The editor never offers one, so this is
+            // purely the guard for a manifest written by hand.
+            if (framing != null && !IsFramable(resourcePath, surfaceId))
                 return new Rect(0, 0, 1, 1);
 
             return ToViewbox(framing, sourceAspect, surface.AspectRatio);
