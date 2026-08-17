@@ -61,10 +61,16 @@ public class HeaderBannerTests
         // Three partials used to reach for TxtBannerTertiary by name (mod accent, lockdown
         // crimson, the rotation itself). The loc key is deliberately left in the nine language
         // files - it is inert once nothing binds it - so only the code is asserted here.
+        // .claude/worktrees/* holds OTHER BRANCHES' checkouts of this same repo. Scanning them
+        // means asserting against whatever anyone happened to leave lying around, so this test
+        // failed on a clean tree for anyone with an agent worktree still on disk. The same
+        // exclusion is already in PlayDoorRenderTests, YouLibraryDoorTests, AwarenessConsentTests
+        // and Phase8RedirectContractTests - this one was the straggler.
         var stragglers = Directory
             .EnumerateFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                        && !f.Contains($"{Path.DirectorySeparatorChar}.claude{Path.DirectorySeparatorChar}"))
             .Where(f => File.ReadAllText(f).Contains("TxtBannerTertiary", StringComparison.Ordinal))
             .ToArray();
 
