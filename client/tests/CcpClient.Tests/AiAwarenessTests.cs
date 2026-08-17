@@ -396,6 +396,20 @@ public class AiAwarenessTests
             // GetForegroundWindow returns 0 and the probe honestly reports Unavailable
             // (no-foreground-window). A failure here on CI means the session precondition
             // was lost, not a product regression.
+            // SP-082: that precondition is now ENFORCED by the product's own typed answer
+            // instead of being stated in prose and then asserted away. The gate REPORTS
+            // (Assert.SkipWhen), never a silent return — pinned by NAME in
+            // client/tests/floor/floor.json (allowedSkips; may-skip semantics — green when a
+            // foreground window exists, allowed-skipped when none does). Conditioned on the
+            // product's OWN typed code (AiAwarenessService.cs:295, produced at :315-319) and
+            // on NOTHING else: an Unavailable carrying any other code still FAILS below.
+            Assert.SkipWhen(
+                state is CapabilityState.Unavailable noWindow &&
+                noWindow.Reason.Code == AiWindowTitleCapability.NoForegroundWindowCode,
+                "no foreground window (lock screen, secure desktop, or mid-switch): the product's " +
+                "own typed Unavailable(no-foreground-window). This arm requires an INTERACTIVE " +
+                "Windows desktop session — the skip names the session, not a product regression.");
+
             var available = Assert.IsType<CapabilityState.Available>(state);
             Assert.Contains("length", available.Detail);
             Assert.True(AiWindowTitleCapability.TryCaptureForegroundTitle(out var title));
@@ -423,8 +437,39 @@ public class AiAwarenessTests
 
         h.Service.Consent = AiAwarenessConsent.Given;
         var observation = h.Service.ObserveForegroundTitle();
+
+        // SP-082: the zero-leak assertions MOVED up from the tail of this body. They are
+        // session-INDEPENDENT, so they must execute even when the platform arm below skips;
+        // left at the tail an Assert.Skip* would abort the fact and silently delete them.
+        // Their truth value is identical at both positions: ObserveForegroundTitle has
+        // already run and is synchronous, no provider is registered so the pipeline never
+        // runs, and the only side effect between here and the old position is the read-only
+        // h.AllDiagnosticText() (CollectingAiDiagnosticsSink.Records snapshots under its own
+        // lock, AiDiagnostics.cs:19-25). Nothing between the two positions emits a record or
+        // appends memory.
+        Assert.Empty(h.Diagnostics.Records);
+        Assert.Equal(0, h.Memory.Appends);
+
         if (OperatingSystem.IsWindows())
         {
+            // SP-082: same session precondition as TitleProbe above, inherited indirectly —
+            // this fact runs the real capability probe before observing. The gate REPORTS
+            // (Assert.SkipWhen), never a silent return — pinned by NAME in
+            // client/tests/floor/floor.json (allowedSkips; may-skip semantics). The code is
+            // reachable two ways: the probe's state handed back verbatim
+            // (AiAwarenessService.cs:573-577) and a capture miss at observation time
+            // (:579-582), so the reason CODE, not the state type, is the discriminator that
+            // covers both. The consent arm and the two zero-leak assertions above are
+            // session-independent and have already executed. A privacy-filter drop
+            // (title-dropped-private-window / title-dropped-blank) is NOT this code and
+            // still FAILS below.
+            Assert.SkipWhen(
+                observation is AiTitleObservation.Unavailable { State: CapabilityState.Unavailable noWindow } &&
+                noWindow.Reason.Code == AiWindowTitleCapability.NoForegroundWindowCode,
+                "no foreground window (lock screen, secure desktop, or mid-switch): the product's " +
+                "own typed Unavailable(no-foreground-window). This arm requires an INTERACTIVE " +
+                "Windows desktop session — the skip names the session, not a product regression.");
+
             var observed = Assert.IsType<AiTitleObservation.Observed>(observation);
             // The title leaves ONLY to the caller: zero diagnostic records, zero memory.
             Assert.DoesNotContain(observed.Title.Length > 0 ? observed.Title : "\u0001impossible", h.AllDiagnosticText());
@@ -433,9 +478,6 @@ public class AiAwarenessTests
         {
             Assert.IsType<AiTitleObservation.Unavailable>(observation);
         }
-
-        Assert.Empty(h.Diagnostics.Records);
-        Assert.Equal(0, h.Memory.Appends);
     }
 
     [Fact]

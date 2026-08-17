@@ -1,0 +1,6 @@
+{
+  "packet": "SP-082-interactive-session-title-skips",
+  "unit": 0,
+  "headless": 0,
+  "reason": "No test added or removed. Two existing facts gain an Assert.SkipWhen conditioned on the product's typed no-foreground-window reason code, and two session-independent assertions move above that gate within one of them. A skipped test keeps its row in the TRX result list, which is what check-floor.mjs counts, so CcpClient.Tests stays 1028 and CcpClient.HeadlessTests stays 35 whether the session is interactive or locked."
+}
