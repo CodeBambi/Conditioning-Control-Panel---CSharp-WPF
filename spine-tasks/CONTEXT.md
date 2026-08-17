@@ -6,7 +6,49 @@
 
 ---
 
-### Wave 33 (**AUTHORED 2026-08-15 — six lanes, SP-083..SP-088. NOT LAUNCHED, and BLOCKED on wave 32 landing, deliberately.**)
+### Wave 33 (**RAN 2026-08-15 — six lanes, all six produced committed work, ALL SIX HELD at final review. NOTHING LANDED.**)
+
+**THE T-21 PLAN-GATE FIX WORKED, and this wave is the evidence wave 32 could not be.** Wave 31 put
+**six of eight** lanes in the ground at the plan gate with no product code. Wave 33 cleared **six of
+six** inside the SAME `MAX_REVISE = 2` cap — SP-084/085/088 APPROVE on round 1, SP-083/086/087
+REVISE→APPROVE on round 2. The cap was never raised; what changed is that the reviewers stopped
+blocking on findings their own contract routes to non-blocking. 39 agents, 0 errors, 5.41M tokens.
+
+**THE FLOOR-DELTA PIN HELD AT SIX LANES — its first real multi-lane test.** Every lane observed
+exactly `pin + its own declared delta`, and no lane touched `client/tests/floor/floor.json`:
+
+| Packet | Lane branch | Head | Declared | Observed |
+|---|---|---|---|---|
+| SP-083-orphan-construction-pool-residue | `lane/SP-083-orphan-construction-pool-residue` | `4ac2e039` | +5/+0 | 1033/35 |
+| SP-084-capability-probe-cancelled-completed | `lane/SP-084-capability-probe-cancelled-completed` | `58a6191b` | +3/+0 | 1031/35 |
+| SP-085-tunnel-logging-named-flake | `lane/SP-085-tunnel-logging-named-flake` | `3d0cac62` | +3/+0 | 1031/35 |
+| SP-086-process-env-collection-guard | `lane/SP-086-process-env-collection-guard` | `b246054d` | +2/+0 | 1030/35 |
+| SP-087-disk-store-unbounded-waits | `lane/SP-087-disk-store-unbounded-waits` | `e34c2eb7` | +4/+0 | 1032/35 |
+| SP-088-upstream-citation-drift-detector | `lane/SP-088-upstream-citation-drift-detector` | `e412c3eb` | +0/+0 | 1028/35 |
+
+Summed, a land would move the pin **1028 → 1045 unit**, headless unchanged at 35. **Do not sum
+these until the REVISE round below is resolved — three of the reviews can move a delta.**
+
+**THE ISOLATION GUARD CAUGHT A LIVE EVENT, which is the wave-30 class recurring and being stopped.**
+`implement:SP-085` lost its worktree and reported `feat/crossplatform` instead of claiming success —
+exactly what the post-wave-30 instruction requires. Its code-fix round recovered onto the lane
+branch, and the shared branch was verified independently afterwards: HEAD `cf9f7143`, clean tree,
+zero commits. **The guard added after wave 30 has now paid for itself.**
+
+**ALL SIX HELD AT FINAL REVIEW.** That is the seat working, not a regression — the bottleneck moved
+from "plans never converge" to "shipped work is judged against its own contract". The sharpest is
+SP-083: replacing its accounting CAS with a bare `Interlocked.Increment` leaves **all ten facts
+green** while leaking a counter that, after `cap` events, refuses every cue for the factory's
+lifetime — the packet's own named worst outcome, unpinned by any test.
+
+**STATE AS OF THIS RECORD — a follow-up REVISE round was launched and MOSTLY DIED ON API 529s.**
+Five of six fix agents terminated early on `529 Overloaded` (server-side, sustained, not a defect).
+**Nothing was lost:** all six lane branches remain at the SHAs above, and the shared branch is clean.
+Two dead agents had made uncommitted edits; their diffs are preserved (~13 KB each) under the
+session scratchpad `partial-w33/` rather than committed half-finished or discarded. The retry
+should start from the lane heads above, not from those worktrees.
+
+### Wave 33 authoring (superseded by the run above)
 
 The six packets wave 31 escalated, renamed off their old IDs (see the wave-31 section for why).
 `validate-wave.mjs` on the renamed set: **WAVE OK, 6 packets, scopes pairwise disjoint, exit 0.**
