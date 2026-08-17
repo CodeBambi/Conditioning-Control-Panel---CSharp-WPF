@@ -25,8 +25,36 @@ namespace ConditioningControlPanel.Services
         /// <summary>Diagonal inset (DIPs) applied per slot that lands in an already-claimed corner.</summary>
         private const double SameCornerNudge = 40;
 
+        /// <summary>Real-time gap between two slots' realizations (#958). A dispatcher pass alone was
+        /// not enough: both slots still drained in the same pump, so the second layered surface was
+        /// created while the first GIF's animator had already started driving the render thread -
+        /// which is precisely the "enabled corner gif 2 and it froze" report.</summary>
+        private const int StaggerMs = 400;
+
+        /// <summary>How many times a slot may be pushed back because a display change is in flight
+        /// before it is realized anyway. 8 x <see cref="SpawnRetryMs"/> covers a monitor drag.</summary>
+        private const int SpawnDeferMaxAttempts = 8;
+        private const int SpawnRetryMs = 250;
+
+        /// <summary>Source GIFs beyond this many pixels are logged as a hazard: XamlAnimatedGif builds a
+        /// WriteableBitmap at the source's NATIVE size and the render thread resamples it down to the
+        /// overlay's size on every frame. On a WS_EX_LAYERED window that per-frame cost is what starves
+        /// the UI thread's WriteableBitmap.Lock (the CWGXBitmapLockState::LockRead wedge named in
+        /// UiHangWatchdog's dump notes).</summary>
+        private const long OversizeSourcePixels = 4_000_000;   // ~2000x2000
+
         // Keyed by slot index so a single slot can be rebuilt without touching the others.
         private readonly Dictionary<int, Window> _windows = new();
+
+        // Slots with a realization still pending (queued or waiting out a display change). Kept
+        // separate from _windows so the sentinel knows an overlay is *about* to exist.
+        private readonly HashSet<int> _pending = new();
+
+        // Mirrors the on-disk sentinel so a burst of refreshes does not hammer the file.
+        private bool _sentinelArmed;
+
+        // Monotonic tick the next slot may realize at, so two slots never realize back-to-back.
+        private long _nextRealizeTick;
 
         // Per-slot generation counter. Realization is deferred (see QueueShow), so a teardown or a
         // newer refresh has to be able to cancel a Show that is still sitting in the dispatcher
@@ -48,15 +76,13 @@ namespace ConditioningControlPanel.Services
         /// each re-show is deferred one dispatcher pass (see QueueShow). Call after any config
         /// change; startup restore goes through <see cref="RestoreOnStartup"/> instead.
         /// </summary>
-        public void RefreshOverlays() => RefreshOverlays(null);
-
-        private void RefreshOverlays(Action? onComplete)
+        public void RefreshOverlays()
         {
             var disp = Application.Current?.Dispatcher;
             if (disp == null) return;
             if (!disp.CheckAccess())
             {
-                disp.BeginInvoke(new Action(() => RefreshOverlays(onComplete)));
+                disp.BeginInvoke(new Action(RefreshOverlays));
                 return;
             }
 
@@ -64,11 +90,7 @@ namespace ConditioningControlPanel.Services
             TrySubscribeMainWindowClosing();
 
             var overlays = App.Settings?.Current?.CornerGifOverlays;
-            if (overlays == null)
-            {
-                onComplete?.Invoke();
-                return;
-            }
+            if (overlays == null) return;
 
             int queued = 0;
             for (int i = 0; i < overlays.Count; i++)
@@ -83,9 +105,6 @@ namespace ConditioningControlPanel.Services
                 queued++;
                 QueueShow(disp, i, o);
             }
-
-            // Same priority as the queued shows, so FIFO puts this after the last one.
-            if (onComplete != null) disp.BeginInvoke(onComplete, DispatcherPriority.Background);
         }
 
         /// <summary>
@@ -117,10 +136,12 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Startup restore path (#709). Guarded by a flag file: if the previous launch armed the
-        /// restore and never finished it, the persisted slots are what wedged that launch, so they
-        /// are force-disabled rather than replayed into the same wedge on every subsequent start
-        /// (the reported workaround was reinstalling to wipe settings).
+        /// Startup restore path (#709/#954/#958). Guarded by a flag file that is armed for as long as
+        /// an overlay is on screen: a surviving flag means the previous run ended - wedged, killed or
+        /// crashed - while a corner GIF was live, so the persisted slots are force-disabled instead of
+        /// being replayed into the same wedge on every subsequent start. Both reporters had to end the
+        /// process and hand-edit settings.json (a reinstall keeps settings, so it did not help); after
+        /// this, the next launch starts clean and says why.
         /// </summary>
         public void RestoreOnStartup()
         {
@@ -140,22 +161,78 @@ namespace ConditioningControlPanel.Services
                     if (o != null && o.Enabled) { anyEnabled = true; break; }
             }
 
-            if (ConsumeRestoreSentinel())
+            switch (ResolveRestoreAction(ConsumeRestoreSentinel(), anyEnabled))
             {
-                if (anyEnabled && overlays != null)
-                {
-                    foreach (var o in overlays)
-                        if (o != null) o.Enabled = false;
-                    App.Settings?.Save();
-                }
-                App.Logger?.Warning("CornerGifService: the previous launch died while restoring corner-GIF overlays - all slots force-disabled so this launch can start. Re-enable them from the Spiral card.");
-                return;
+                case RestoreAction.ForceDisable:
+                    if (overlays != null)
+                    {
+                        foreach (var o in overlays)
+                            if (o != null) o.Enabled = false;
+                        App.Settings?.Save();
+                    }
+                    App.Logger?.Warning("CornerGifService: the previous run ended with a corner-GIF overlay on screen - all slots force-disabled so this launch can start. Re-enable them from the Spiral card.");
+                    NotifyForceDisabled();
+                    return;
+
+                case RestoreAction.Restore:
+                    RefreshOverlays();
+                    return;
+
+                default:
+                    return;
             }
+        }
 
-            if (!anyEnabled) return;
+        /// <summary>What <see cref="RestoreOnStartup"/> does with the slots it found.</summary>
+        internal enum RestoreAction { Nothing, Restore, ForceDisable }
 
-            ArmRestoreSentinel();
-            RefreshOverlays(ClearRestoreSentinel);
+        /// <summary>
+        /// The startup rule for #954/#958, extracted so it can be unit-tested without a dispatcher.
+        ///
+        /// <para>A surviving sentinel means the previous run ended - wedged, killed or crashed - while
+        /// a corner GIF was on screen. Those slots are what wedged it, so they are turned OFF rather
+        /// than replayed; both reporters were otherwise stuck in a launch-freeze-kill loop that a
+        /// reinstall could not break (it keeps settings.json) and had to hand-edit the file.</para>
+        ///
+        /// <para>A sentinel with nothing enabled is stale bookkeeping, not a hazard: the user already
+        /// turned the slots off, so there is nothing to disable and nothing to warn about.</para>
+        /// </summary>
+        internal static RestoreAction ResolveRestoreAction(bool sentinelSurvived, bool anyEnabled)
+        {
+            if (!anyEnabled) return RestoreAction.Nothing;
+            return sentinelSurvived ? RestoreAction.ForceDisable : RestoreAction.Restore;
+        }
+
+        /// <summary>
+        /// Tell the user their corner GIFs were turned off, and why. The log line alone left both
+        /// reporters believing the app had eaten their settings.
+        /// </summary>
+        private static void NotifyForceDisabled()
+        {
+            try
+            {
+                App.Notifications?.Show(
+                    "Corner GIFs were turned off - the last session ended while one was on screen. Re-enable them from the Spiral card.",
+                    NotificationType.Warning, TimeSpan.FromSeconds(12));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CornerGifService: force-disable notice failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Arms the sentinel if it is not already armed, and disarms it once no overlay is live or
+        /// pending. The whole point of the rewrite: the old code cleared the flag one dispatcher pass
+        /// after Show() returned, but the GIF load is asynchronous, so the render thread wedged AFTER
+        /// the all-clear and every later launch replayed it (#954/#958).
+        /// </summary>
+        private void SyncSentinel()
+        {
+            bool wanted = _windows.Count > 0 || _pending.Count > 0;
+            if (wanted == _sentinelArmed) return;
+            _sentinelArmed = wanted;
+            if (wanted) ArmRestoreSentinel(); else ClearRestoreSentinel();
         }
 
         /// <summary>Closes every active corner-GIF overlay window.</summary>
@@ -178,17 +255,24 @@ namespace ConditioningControlPanel.Services
             // Cancel every deferred realization still in the queue, or a teardown that races one
             // leaves an untracked overlay the user has no way to close.
             foreach (var index in new List<int>(_slotSeq.Keys)) BumpSlot(index);
+            _pending.Clear();
+            // Nothing left to space the next realization against, and leaving the cursor in the
+            // future would delay the rebuild that a RefreshOverlays teardown is about to queue.
+            _nextRealizeTick = 0;
+            SyncSentinel();
         }
 
         private void CloseSlot(int index)
         {
             BumpSlot(index); // cancels a pending realization for this slot
+            _pending.Remove(index);
             if (_windows.TryGetValue(index, out var w))
             {
                 _windows.Remove(index);
                 try { w.Close(); }
                 catch { /* already gone */ }
             }
+            SyncSentinel();
         }
 
         private int BumpSlot(int index)
@@ -206,23 +290,69 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Defers one overlay's realization by a dispatcher pass. Show() on a WS_EX_LAYERED
-        /// (AllowsTransparency) window runs a synchronous HwndTarget.OnResize ->
-        /// MediaContext.CompleteRender on FIRST realization; doing Close,Close,Show,Show in a
-        /// single synchronous burst - two slots - fires that while the previous pair's render
-        /// targets are still tearing down and the first GIF animator is driving the render thread.
-        /// That is the freeze #494 shape, and the crash reported in #709. Background priority also
-        /// lets the StopAll() closes above finish before the first Show.
+        /// Defers one overlay's realization. Show() on a WS_EX_LAYERED (AllowsTransparency) window
+        /// runs a synchronous HwndTarget.OnResize -> MediaContext.CompleteRender on FIRST
+        /// realization; doing Close,Close,Show,Show in a single synchronous burst - two slots -
+        /// fires that while the previous pair's render targets are still tearing down and the first
+        /// GIF animator is driving the render thread. That is the freeze #494 shape, the crash in
+        /// #709, and the "turned on corner gif 2 and it froze" hang in #958.
+        ///
+        /// <para>Background priority alone was not enough, because it only orders the work inside
+        /// one dispatcher drain. Each slot now also waits out a real <see cref="StaggerMs"/> gap
+        /// after the previous one, and no slot realizes while a display change is in flight
+        /// (<see cref="Services.UI.DisplayChangeCoordinator.SpawnsSuppressed"/>) - #954 is a
+        /// dual-monitor report, and layered-surface creation during a DPI/topology change is the
+        /// exact hazard that coordinator exists for. Every other layered-spawn path in the app
+        /// already honours it; this one did not.</para>
         /// </summary>
         private void QueueShow(Dispatcher disp, int index, CornerGifOverlaySetting setting)
         {
             var seq = BumpSlot(index);
-            disp.BeginInvoke(new Action(() =>
+            _pending.Add(index);
+            SyncSentinel();
+
+            long now = Environment.TickCount64;
+            long at = Math.Max(now, _nextRealizeTick);
+            _nextRealizeTick = at + StaggerMs;
+
+            ScheduleRealize(disp, index, setting, seq, Math.Max(0, at - now), 0);
+        }
+
+        private void ScheduleRealize(Dispatcher disp, int index, CornerGifOverlaySetting setting,
+            int seq, long delayMs, int deferAttempts)
+        {
+            void Realize()
             {
                 if (CurrentSeq(index) != seq) return; // superseded or torn down while queued
+
+                if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed && deferAttempts < SpawnDeferMaxAttempts)
+                {
+                    ScheduleRealize(disp, index, setting, seq, SpawnRetryMs, deferAttempts + 1);
+                    return;
+                }
+
+                _pending.Remove(index);
                 try { ShowOne(index, setting); }
                 catch (Exception ex) { App.Logger?.Error(ex, "CornerGifService: ShowOne failed"); }
-            }), DispatcherPriority.Background);
+                SyncSentinel();
+            }
+
+            if (delayMs <= 0)
+            {
+                disp.BeginInvoke(new Action(Realize), DispatcherPriority.Background);
+                return;
+            }
+
+            var timer = new DispatcherTimer(DispatcherPriority.Background, disp)
+            {
+                Interval = TimeSpan.FromMilliseconds(delayMs)
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                Realize();
+            };
+            timer.Start();
         }
 
         private void TrySubscribeMainWindowClosing()
@@ -418,6 +548,26 @@ namespace ConditioningControlPanel.Services
                 Stretch = System.Windows.Media.Stretch.Uniform
             };
 
+            // Per-frame downscale quality (#954/#958). XamlAnimatedGif hands the render thread a
+            // WriteableBitmap at the GIF's NATIVE size and WPF resamples it to the overlay's size on
+            // EVERY frame; the default for a downscale is the expensive Fant filter. On a layered
+            // window - whose composition is a full UpdateLayeredWindow blit rather than a GPU
+            // surface flip - that resample is what saturates the render thread, and a saturated
+            // render thread is what blocks the UI thread inside WriteableBitmap.Lock (the
+            // CWGXBitmapLockState::LockRead wedge in UiHangWatchdog's dump notes). Bilinear costs a
+            // fraction of it and is indistinguishable on a spiral at 300px.
+            System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                imageElement, System.Windows.Media.BitmapScalingMode.LowQuality);
+
+            long sourcePixels = (long)gifWidth * (long)gifHeight;
+            if (sourcePixels > OversizeSourcePixels)
+            {
+                App.Logger?.Warning(
+                    "CornerGifService: source GIF is {W}x{H} ({MP:F1}MP) but the overlay draws it at {TW}x{TH} - every frame is resampled at full size, which is the shape of the #954/#958 freeze. Consider a smaller GIF.",
+                    (int)gifWidth, (int)gifHeight, sourcePixels / 1_000_000.0,
+                    (int)windowWidth, (int)windowHeight);
+            }
+
             // Error handler FIRST: SetSourceUri kicks off an async load, so a fault raised before
             // the handler is attached has no subscriber.
             AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
@@ -483,6 +633,12 @@ namespace ConditioningControlPanel.Services
             }
             catch { /* a guard that throws is worse than no guard */ }
         }
+
+        /// <summary>Clean-shutdown hook, called from App.OnExit alongside the engine/chaos sentinels.
+        /// The flag now lives for as long as an overlay is on screen, so an orderly exit that never
+        /// raised MainWindow.Closing (update restart, tray quit) would otherwise look like the wedge
+        /// it is meant to catch and disable the user's slots for no reason.</summary>
+        public static void ClearSentinelOnCleanExit() => ClearRestoreSentinel();
 
         private static void ClearRestoreSentinel()
         {

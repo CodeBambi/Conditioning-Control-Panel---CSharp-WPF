@@ -932,9 +932,15 @@
                                  with its handler and its enable-on-select contract intact
                                  (MainWindow.SessionIO.SelectSession flips IsEnabled). It sits on
                                  this strip rather than in the header band because it acts on the
-                                 rack's selection, not on the page. -->
+                                 rack's selection, not on the page.
+
+                                 #961: it says "Export session", not "Export". Sharing a strip with
+                                 the Takeaway chips made a bare "Export" read as "export this
+                                 takeaway" - which it can never do, because a takeaway is a JustDrop
+                                 order code (replayed on click, shared with the link chip), not a
+                                 session file. Naming the object is the whole fix. -->
                             <Button DockPanel.Dock="Right" x:Name="BtnExportSession" x:FieldModifier="internal"
-                                    Content="{loc:Str btn_export}" Click="BtnExportSession_Click"
+                                    Content="{loc:Str btn_export_session}" Click="BtnExportSession_Click"
                                     IsEnabled="False" Style="{StaticResource OutlineButton}"
                                     Padding="12,5" FontSize="11" Margin="0,0,7,0" VerticalAlignment="Center"
                                     ToolTip="{loc:Str tooltip_export_session}"/>

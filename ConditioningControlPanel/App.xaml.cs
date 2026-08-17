@@ -2927,6 +2927,16 @@ namespace ConditioningControlPanel
                     // Clear the stale "enabled" flag so the UI shows OFF on a fresh launch and a
                     // mid-pulse Stop() from a previous run can't leave anything armed.
                     s.AutonomyModeEnabled = false;
+                    // #930: and countermand anything that already started it. This block is async
+                    // (it awaits the Patreon round-trip), so MainWindow's settings load has usually
+                    // already run by now; clearing the flag alone left the service pulsing behind a
+                    // checkbox that read OFF, which is what "Takeover turns itself back on" was.
+                    if (Autonomy?.IsEnabled == true)
+                    {
+                        Autonomy.Stop();
+                        Logger?.Information("Takeover stopped on startup - it had been started before the resume-on-startup check ran (#930)");
+                    }
+                    Settings?.Save();
                     Logger?.Information("Takeover left OFF on startup (resume-on-startup not opted in)");
                 }
             }
@@ -4386,6 +4396,7 @@ Application State:
             // sentinels so the next launch doesn't false-report an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
+            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This

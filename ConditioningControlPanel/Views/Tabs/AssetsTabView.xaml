@@ -128,7 +128,7 @@
                         <Slider x:Name="SliderRemoteRatio" x:FieldModifier="internal" Grid.Column="1"
                                 Minimum="5" Maximum="95" Value="30" Height="22"
                                 IsSnapToTickEnabled="True" TickFrequency="5"
-                                VerticalAlignment="Center" MaxWidth="320" HorizontalAlignment="Left"
+                                VerticalAlignment="Center" MaxWidth="320"
                                 ToolTip="{loc:Str tooltip_remote_mix}"/>
                         <TextBlock x:Name="TxtRemoteRatio" x:FieldModifier="internal" Grid.Column="2"
                                    Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="11"

@@ -242,12 +242,17 @@ namespace ConditioningControlPanel
             // Update all slider text displays
             UpdateSliderTexts();
 
-            // Start autonomy service if it was enabled (works independently of engine)
+            // Start autonomy service if it was enabled (works independently of engine).
+            // #930: AutonomyResumeOnStartup is part of the condition, not optional. This runs while
+            // MainWindow is being built, which is long before the async InitializePatreonAndSyncAsync
+            // block that owns the same decision — so without the flag here, Takeover re-armed itself
+            // on every launch and the later block only cleared AutonomyModeEnabled, leaving the
+            // service running behind a checkbox that read OFF.
             var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
-            if (hasPatreonAccess && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
+            if (hasPatreonAccess && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
-                App.Logger?.Debug("MainWindow: Started autonomy service on settings load");
+                App.Logger?.Debug("MainWindow: Started autonomy service on settings load (resume-on-startup opt-in)");
             }
         }
 
