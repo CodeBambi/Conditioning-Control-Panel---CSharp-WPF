@@ -1,0 +1,6 @@
+{
+  "packet": "SP-088-upstream-citation-drift-detector",
+  "unit": 0,
+  "headless": 0,
+  "reason": "no .NET test added or removed - the detector's 14 facts live in client/tools/citations/self-test.mjs, which no standing gate in this repository runs (see the SCOPE PROBLEM section of record.md)"
+}
