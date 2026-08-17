@@ -7,9 +7,13 @@
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
         "CcpClient.Tests.SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext",
         "CcpClient.Tests.SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked",
-        "CcpClient.Tests.SecretStoreTests.SettingsDocument_CarriesSecretNames_NeverValues"
+        "CcpClient.Tests.SecretStoreTests.SettingsDocument_CarriesSecretNames_NeverValues",
+        "CcpClient.Tests.AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",
+        "CcpClient.Tests.AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged"
       ],
       "allowedSkipsMachineClasses": {
+        "CcpClient.Tests.AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable": "executes on an INTERACTIVE Windows desktop session, where GetForegroundWindow returns a real window; allowed-skipped on a locked/disconnected/secure-desktop session (the product then honestly returns Unavailable(no-foreground-window)) and on Linux",
+        "CcpClient.Tests.AiAwarenessTests.TitleObservation_GatedByConsentAndCapability_TitleNeverLogged": "executes on an INTERACTIVE Windows desktop session (same precondition — it runs the real capability probe before observing); allowed-skipped on a locked/disconnected session and on Linux",
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh": "executes on Windows (OS-gated delegation branch); allowed-skipped on Linux",
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps": "executes on Linux (the WSL gate / any Linux CI); allowed-skipped on Windows",
         "CcpClient.Tests.SecretStoreTests.WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext": "executes on Windows (DPAPI is the Windows leg); allowed-skipped on Linux",
