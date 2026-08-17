@@ -20,13 +20,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.0";
+        public const string AppVersion = "6.8.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8 - Relapse
+        public const string CurrentPatchNotes = @"v6.8.1 - Relapse
+
+🩹 NEW IN 6.8.1
+- Corner GIFs stop bricking the app. Turning one on could hard-freeze the window with nothing in the crash log, and it came back every launch because the slot was replayed from your settings. The app now catches it, starts clean and tells you. Animation is also far cheaper on the render thread, and two slots no longer race each other awake.
+- A session can no longer end behind a fullscreen browser. Esc and F11 always get you out, and the end-of-session dialog comes to the front instead of hiding behind a chrome-less window.
+- The nav rail stops disappearing behind the Spiral Room. Full-bleed web pages now yield while the rail is open.
+- Mandatory videos are audible again if you play through anything other than your default audio device.
+- Short haptics can actually be felt. Bounces, bubble pops and video hits were too brief for a motor to spin up, so every pulse now clears a minimum on-time in all six modes.
+- Takeover no longer re-arms itself on launch while its checkbox reads off.
+- Programs: runs the old day clock wrongly lapsed are audited and forgiven once at load. A run you genuinely missed stays missed.
+- Brain Drain now says when it failed to reach the screen instead of silently doing nothing.
+- The Takeaway strip's Export button reads Export session, which is what it actually does, and the remote mix slider is full width again.
+
+🖼️ MOD ART, FRAMED
+- Mod authors get crop control. Filled UI Art slots grow a Frame button: drag to pan, wheel to zoom, one preview per surface the image feeds, double-click to reset.
+- Mod art no longer inherits crop windows hand-drawn for our art. Un-framed art gets an honest centre crop instead.
+- New manifest fields for authors: artFraming (per resource, per surface) and bubbleScale.
+- Floating bubbles get a Size slider, and mods can set their own bubble scale.
 
 🚪 EVERYTHING MOVED: THE NEW LAYOUT
 - The tab strip is gone. Six doors now live on a rail down the left edge, with Settings pinned at the bottom. Hover the rail and it opens.
