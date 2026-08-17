@@ -134,6 +134,107 @@ public class CapabilityTests
         Assert.Equal(CapabilityReasonCodes.NotProbed, unavailable.Reason.Code);
     }
 
+    // SP-084: a probe that returns a state while its generation token is already cancelled
+    // must not have that state recorded as a probe verdict. Two arrivals, both of which walk
+    // straight past the OperationCanceledException mapping the mid-flight test above covers.
+
+    [Fact]
+    public async Task ProbeSwallowsCancellation_ReturnsStateAnyway_NoVerdictIsRecorded()
+    {
+        var registry = new CapabilityRegistry();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var never = new TaskCompletionSource(); // never completed: only the token ends this wait
+        registry.Register("cap", async token =>
+        {
+            started.SetResult();
+            try
+            {
+                await never.Task.WaitAsync(token);
+            }
+            catch (OperationCanceledException)
+            {
+                // The defect's shape: the probe swallows its own cancellation and answers anyway.
+            }
+
+            return new CapabilityState.Available("fabricated after the token was cancelled");
+        });
+        var operations = new OperationRegistry();
+        var owner = operations.OwnerFor("test-probes");
+        var runner = new CapabilityProbeRunner(owner, registry);
+
+        var run = runner.RunAllAsync(CancellationToken.None); // the STARTUP token is never cancelled
+        await started.Task;
+        owner.Cancel(); // teardown shape: the GENERATION token, exactly as CancelAndDrainAsync does
+        await run;
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(registry.GetState("cap"));
+        Assert.Equal(CapabilityReasonCodes.NotProbed, unavailable.Reason.Code);
+    }
+
+    [Fact]
+    public async Task TeardownMidSweep_RemainingProbeRecordsNoVerdict_ThoughItNeverObservesTheToken()
+    {
+        var registry = new CapabilityRegistry();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var never = new TaskCompletionSource(); // never completed: only the token ends this wait
+        registry.Register("first", async token =>
+        {
+            started.SetResult();
+            await never.Task.WaitAsync(token);
+            return new CapabilityState.Available("unreachable");
+        });
+        // The SHIPPED probe shape (CompositionRoot.cs:252-269, AiOperationPipeline.cs:114-115):
+        // Task.FromResult, the token never read at all. The sweep does not re-check the
+        // generation token between probes, so this one still RUNS after teardown began.
+        registry.Register("second", _ =>
+            Task.FromResult<CapabilityState>(new CapabilityState.Available("never observed the token")));
+        var operations = new OperationRegistry();
+        var owner = operations.OwnerFor("test-probes");
+        var runner = new CapabilityProbeRunner(owner, registry);
+
+        var run = runner.RunAllAsync(CancellationToken.None);
+        await started.Task;
+        owner.Cancel();
+        await run;
+
+        // SP-066 framing (c): the loop carries the per-name assertions — pin the registry
+        // non-empty so a probe-registry regression turns RED, not vacuous.
+        Assert.NotEmpty(registry.Names);
+        foreach (var name in registry.Names)
+        {
+            var unavailable = Assert.IsType<CapabilityState.Unavailable>(registry.GetState(name));
+            Assert.Equal(CapabilityReasonCodes.NotProbed, unavailable.Reason.Code);
+        }
+    }
+
+    [Fact]
+    public async Task ProbeCompletesWhileOwnerStaysLive_ItsVerdictIsRecorded()
+    {
+        // Negative control for the two facts above: the Completed arm must stay REACHABLE.
+        // Same fixture, one difference — the owner is never cancelled, so the token-typed
+        // return must still say Completed and the real verdict must still be applied.
+        var registry = new CapabilityRegistry();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource();
+        registry.Register("cap", async token =>
+        {
+            started.SetResult();
+            await release.Task.WaitAsync(token);
+            return new CapabilityState.Available("real verdict");
+        });
+        var operations = new OperationRegistry();
+        var owner = operations.OwnerFor("test-probes");
+        var runner = new CapabilityProbeRunner(owner, registry);
+
+        var run = runner.RunAllAsync(CancellationToken.None);
+        await started.Task;
+        release.SetResult(); // released instead of cancelled: the probe finishes honestly
+        await run;
+
+        var available = Assert.IsType<CapabilityState.Available>(registry.GetState("cap"));
+        Assert.Equal("real verdict", available.Detail);
+    }
+
     // --- Demonstrator 1: session probe (contract §8.1) ---
 
     private sealed class FakeSessionEnvironment(bool windows, bool linux, string? wayland, string? x11)

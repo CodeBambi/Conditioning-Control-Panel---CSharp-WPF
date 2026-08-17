@@ -100,7 +100,20 @@ public sealed class CapabilityProbeRunner(AsyncOperationOwner owner, CapabilityR
             var outcome = await owner.RunAsync($"probe:{name}", async token =>
             {
                 probed = await probe(token).ConfigureAwait(false);
-                return OperationOutcome.Completed.Instance;
+                // A probe that returns a state under a cancelled generation token must not be
+                // recorded as a probe verdict that never happened. Three routes reach that
+                // arrival: the probe swallowed its OperationCanceledException, it never observed
+                // the token at all, or it observed the token and returned a state anyway. All
+                // three are indistinguishable here by construction, because this site reads only
+                // "a state was produced" and "the token is now cancelled", never how the probe
+                // decided. Observing the token at the return types it Cancelled — identical
+                // semantics to the OCE path RunAsync maps (async contract §2) — and contract §3
+                // rule 3 then leaves the capability honestly not-probed. The runner cannot
+                // distinguish a fabricated answer from a genuinely-finished one, so it prefers
+                // honest absence to a verdict that may never have happened.
+                return token.IsCancellationRequested
+                    ? OperationOutcome.Cancelled.Instance
+                    : OperationOutcome.Completed.Instance;
             }).ConfigureAwait(false);
 
             switch (outcome)

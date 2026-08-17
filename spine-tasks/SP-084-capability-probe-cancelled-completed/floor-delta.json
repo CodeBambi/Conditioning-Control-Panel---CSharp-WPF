@@ -1,0 +1,6 @@
+{
+  "packet": "SP-084-capability-probe-cancelled-completed",
+  "unit": 3,
+  "headless": 0,
+  "reason": "a swallowed-cancellation probe records no verdict; a shipped-shape probe that never observes the token records no verdict after teardown mid-sweep; and the uncancelled negative control still records its real verdict"
+}
