@@ -23,7 +23,7 @@ today is *"the port could not verify your entitlement"*, never *"you are not a p
 | `Entitlement/HostLoginEntitlement.cs` | Amendment 2: `Enum.IsDefined` in the `Entitled` arm |
 | `Lifecycle/CompositionRoot.cs`, `Lifecycle/ApplicationHost.cs` | Amendment 4: the entitlement capability is composed once and **registered with a probe**, so the object the gate consults is the object the System page reports |
 | `App.axaml.cs` | `--dtrh-demo` uses the shell's one coordinator, with the reason for stepping past the gate written at the call site (amendment 5) |
-| `client/docs/wpf-surface-reachability.md` | §8.5 corrected (amendment 3) and a new §10 with nine divergence rows |
+| `client/docs/wpf-surface-reachability.md` | §8.5 corrected (amendment 3) and a new §10 with eleven divergence rows (D14-D24) |
 | tests | `DtrhGateTests` (+10 results), `PlayPageHeadlessTests` (+9), and three existing tests updated for the fourth door and the new capability |
 
 ## 2. The three branches, and what proves each
@@ -142,7 +142,7 @@ capture that matters is the orchestrator's.
 
 ## 6. Divergences recorded
 
-Ten rows, `client/docs/wpf-surface-reachability.md` §10: **D14** four doors, **D15** D12 closed,
+Eleven rows, `client/docs/wpf-surface-reachability.md` §10: **D14** four doors, **D15** D12 closed,
 **D16** the band appears at refusal rather than before the click, **D17** no toast and no
 App Info & Data, **D18** the two checkboxes absent rather than disabled, **D19** no NEW pill,
 **D20** the tray decision, **D21** `Unavailable` as a deliberate improvement on WPF (which fails
