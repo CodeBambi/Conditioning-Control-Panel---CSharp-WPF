@@ -109,6 +109,17 @@ x86/
 # Build & Release Artifacts
 release/
 publish/
+# ...except the port's publish HARNESS, which is source, not output.
+#
+# SAME DEFECT AS THE `tools/` RULE BELOW, found 2026-08-18 and fixed the same way.
+# Bare `publish/` matches at ANY depth, so it silently swallows `client/tools/publish/`.
+# Its four scripts survive only because they predate the rule — exactly the escape the
+# `tools/` comment describes — but every NEW file added there was being ignored, and a
+# lane that added a publish script would have watched it vanish with a clean build and
+# no error. `git check-ignore` hides this for tracked paths; `--no-index` shows it.
+# The negation is on the DIRECTORY because git cannot re-include a file whose parent
+# directory is excluded.
+!client/tools/publish/
 bin/
 obj/
 .vs/
