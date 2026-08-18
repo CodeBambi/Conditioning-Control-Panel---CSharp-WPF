@@ -22,7 +22,9 @@ namespace ConditioningControlPanel
         // Slider drags apply live (no rebuild); debounce the settings save so a drag
         // doesn't hammer the disk.
         private readonly DispatcherTimer _saveDebounce;
-        private bool _loading;
+        // Starts true: BAML raises SliderMaster's ValueChanged (Value="70") while TxtMaster is
+        // still null, so the handlers must stay inert until LoadMasterControls owns the flag.
+        private bool _loading = true;
 
         public LayeredAudioWindow()
         {
