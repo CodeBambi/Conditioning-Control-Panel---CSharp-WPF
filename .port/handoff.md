@@ -113,7 +113,7 @@ clean, packet complete on disk). It was NOT pushed: the standing authorization c
    the integrated tip, and the LAST action verifies the tree actually being pushed. Then clear
    `.port/WAVE-LOCK`, write the board row, the digest and the memories.
 
-## Review attempt also 529'd — five in a row, two different agent types
+## Review attempt also 529d — SIX in a row, two different agent types
 
 `port-code-reviewer` was launched against `252b8509..b9fca7f9` and died the same way.
 That is five consecutive 529s spanning a lane and a reviewer, so **subagent capacity was
@@ -128,3 +128,13 @@ records; spend the reviewer on judgment.
 Nothing here should be read as the port nearing completion. Wave 45 is effect THREE of
 fifteen, and the P0 row stands unchanged: no video, no webcam, four undecomposed v6.7
 surfaces, and a shell that looks finished enough to mislead.
+
+**Count corrected at exit: SIX consecutive 529s** (four lane resumes, two reviewer attempts,
+the second of those a transcript resume). The section above originally said five; the reviewer
+died once more after it was written. No further retries were made — relaunching into a wall
+is churn, not progress, and the record should not imply the attempts were exhaustive when the
+real limit was external capacity.
+
+Do NOT let the orchestrating context that authored and ran wave 45 perform its code or final
+review, however tempting that becomes while the API is down. That context is disqualified by
+rule: the context that ran a wave never certifies it. Review belongs to a fresh reviewer.
