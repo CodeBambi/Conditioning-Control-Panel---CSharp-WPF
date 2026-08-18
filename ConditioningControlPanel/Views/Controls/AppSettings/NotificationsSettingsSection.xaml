@@ -22,13 +22,21 @@
          by MainWindow.Settings.cs:LoadSettings and written by SaveSettings,
          both re-pointed from SettingsTab to AppSettingsTab.
 
-         Deliberately NOT added: toast/marquee suppression switches. No such
-         property exists and Phase 2 does not invent settings.
-
-         VELVET KIT / UI POLISH 2 (Lane B): the row is now label-left /
+         VELVET KIT / UI POLISH 2 (Lane B): rows are label-left /
          toggle-right on one line, and the card wears the Notifications hue.
-         The hint stays VISIBLE at 11px: this section is a single row, so the
-         hint is the whole body of the card rather than a per-row repeat.
+         The hints stay VISIBLE at 11px rather than collapsing into the
+         tooltips: this card is two rows, so each hint is short enough to
+         read as part of its own row.
+
+         SECOND ROW (meadow, 2026-08-18): ChkSuppressPerkNotifications. The
+         reporter had stopped TAKING skill-tree perks purely to avoid their
+         popups and pings, so the announcement had to become optional
+         without the perk following it out. Unlike ChkIntakeNudge above
+         this one is live-edited: it has a Changed handler that writes
+         App.Settings.Current and Saves, because the raise sites read the
+         setting at the moment they fire, not at launch. See
+         Models/AppSettings.SuppressPerkNotifications for exactly what it
+         silences and what it deliberately leaves alone.
          ================================================================ -->
 
     <StackPanel>
@@ -56,6 +64,26 @@
                                   VerticalAlignment="Center"/>
                     </Grid>
                     <TextBlock Text="{loc:Str set2_intake_nudge_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <Grid MinHeight="34" Margin="0,10,0,0"
+                          ToolTip="{loc:Str tooltip_suppress_perk_notifications}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueNotificationsBrush}"
+                                   Text="{loc:Str label_suppress_perk_notifications}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkSuppressPerkNotifications" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" IsChecked="False"
+                                  VerticalAlignment="Center"
+                                  Checked="ChkSuppressPerkNotifications_Changed"
+                                  Unchecked="ChkSuppressPerkNotifications_Changed"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_suppress_perk_notifications_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>

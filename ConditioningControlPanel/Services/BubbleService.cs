@@ -1971,8 +1971,13 @@ public class BubbleService : IDisposable
     {
         try
         {
-            // If lucky bubble, play a random chime sound
-            if (isLucky)
+            // If lucky bubble, play a random chime sound.
+            //
+            // Perk-announcement opt-out (meadow, 2026-08-18): the chime REPLACES the pop sound
+            // rather than layering over it, so suppressing it has to fall through to the normal
+            // pop below - returning early here would make lucky pops silent, which is a louder
+            // tell than the chime was. The 20x and the bubble's sparkle burst are untouched.
+            if (isLucky && !App.PerkNotificationsSuppressed)
             {
                 var chimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
                 var chimePath = ModResourceResolver.ResolveAudioPath(chimeFiles[_random.Next(chimeFiles.Length)]);
