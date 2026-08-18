@@ -57,6 +57,21 @@ internal static class FlashEndToEndObservations
     /// failed" and from "the flash was not on the screen". Diagnostic only.
     /// </param>
     /// <param name="DesktopFirstPixelDuring">…and what that first pixel was. Diagnostic only.</param>
+    /// <param name="PlacementScreen">
+    /// SP-107 (review finding). <see cref="OverlayWindowProbe.PrimarySize"/> as read ONCE at the top
+    /// of <see cref="Measure"/>, which is what every rectangle in this run is derived from.
+    /// </param>
+    /// <param name="PlacementHorizontal">The virtual/physical horizontal pair at that same moment.</param>
+    /// <param name="PlacementVertical">The virtual/physical vertical pair at that same moment.</param>
+    /// <param name="CaptureHorizontalDuring">
+    /// …and the pair <see cref="FlashPixelProbe.CaptureDesktop"/> re-read on its OWN call, which is
+    /// what it maps the requested rectangle through. If these disagree with the placement pair, the
+    /// desktop's scale or resolution changed in between and the capture sampled the wrong region —
+    /// a full desktop comes back carrying none of the flash's colour, which is exactly the residual
+    /// signature and is NOT distinguishable by the returned pixel COUNT, because that count is
+    /// physical and therefore scale-invariant.
+    /// </param>
+    /// <param name="CaptureVerticalDuring">Ditto, vertically.</param>
     /// <param name="TransparentHalfIsBlack">A transparent PNG half composes over black, as WPF's window does.</param>
     /// <param name="OpaqueHalfIsTheImage">…and the opaque half is the image.</param>
     /// <param name="MissingFileDecodes">A path that does not exist must produce no frame and no exception.</param>
@@ -74,10 +89,26 @@ internal static class FlashEndToEndObservations
         int DesktopPixelsSampledDuring,
         int DesktopUniformPixelsDuring,
         uint DesktopFirstPixelDuring,
+        (int Width, int Height) PlacementScreen,
+        (int Virtual, int Physical) PlacementHorizontal,
+        (int Virtual, int Physical) PlacementVertical,
+        (int Virtual, int Physical) CaptureHorizontalDuring,
+        (int Virtual, int Physical) CaptureVerticalDuring,
         bool TransparentHalfIsBlack,
         bool OpaqueHalfIsTheImage,
         bool MissingFileDecodes,
-        bool CorruptFileDecodes);
+        bool CorruptFileDecodes)
+    {
+        /// <summary>
+        /// SP-107 (review finding): whether the display metrics the flash was PLACED through are
+        /// still the ones the screen was READ through. False means the desktop was rescaled or
+        /// re-resolved in between, so the capture mapped the requested rectangle by a different
+        /// ratio than the placement used and sampled a region the flash was never in. Diagnostic
+        /// only — no assertion is conditioned on it.
+        /// </summary>
+        internal bool DisplayMetricsHeldStill =>
+            PlacementHorizontal == CaptureHorizontalDuring && PlacementVertical == CaptureVerticalDuring;
+    }
 
     private static Run Measure()
     {
@@ -94,7 +125,13 @@ internal static class FlashEndToEndObservations
 
         try
         {
+            // SP-107 (review finding): the display is read ONCE here and every rectangle below is
+            // derived from it, while CaptureDesktop re-reads the resolutions on every call. Both
+            // readings are recorded so a change between them names itself instead of arriving as an
+            // unexplained "the flash was not on the desktop".
             var (screenWidth, screenHeight) = OverlayWindowProbe.PrimarySize;
+            var placementHorizontal = FlashPixelProbe.HorizontalResolutions;
+            var placementVertical = FlashPixelProbe.VerticalResolutions;
             var display = new OverlayBounds(0, 0, Math.Max(1, screenWidth), Math.Max(1, screenHeight));
             var frames = new GdiPlusFlashFrameSource();
 
@@ -114,8 +151,8 @@ internal static class FlashEndToEndObservations
 
             var before = CountDesktop(display);
             presenter.Show([imagePath]);
-            var (during, sampledDuring, uniformDuring, firstDuring) = CountDesktopWithSampleSize(
-                display, evidence: "desktop-with-a-real-flash.bmp", display);
+            var (during, sampledDuring, uniformDuring, firstDuring, captureHorizontal, captureVertical) =
+                CountDesktopWithSampleSize(display, evidence: "desktop-with-a-real-flash.bmp", display);
             var shown = presenter.SurfacesShown;
 
             presenter.HideAll();
@@ -134,6 +171,11 @@ internal static class FlashEndToEndObservations
                 DesktopPixelsSampledDuring: sampledDuring,
                 DesktopUniformPixelsDuring: uniformDuring,
                 DesktopFirstPixelDuring: firstDuring,
+                PlacementScreen: (screenWidth, screenHeight),
+                PlacementHorizontal: placementHorizontal,
+                PlacementVertical: placementVertical,
+                CaptureHorizontalDuring: captureHorizontal,
+                CaptureVerticalDuring: captureVertical,
                 TransparentHalfIsBlack: transparentIsBlack,
                 OpaqueHalfIsTheImage: opaqueIsImage,
                 MissingFileDecodes: frames.Render(
@@ -184,10 +226,15 @@ internal static class FlashEndToEndObservations
         return (same, first);
     }
 
-    private static (int Count, int Sampled, int Uniform, uint First) CountDesktopWithSampleSize(
+    private static (int Count, int Sampled, int Uniform, uint First,
+        (int Virtual, int Physical) Horizontal, (int Virtual, int Physical) Vertical) CountDesktopWithSampleSize(
         OverlayBounds display, string? evidence = null, OverlayBounds? area = null)
     {
         var rect = area ?? display;
+        // Read on THIS call, exactly as CaptureDesktop reads them on its own call, so the pair the
+        // capture actually mapped through is what gets recorded.
+        var captureHorizontal = FlashPixelProbe.HorizontalResolutions;
+        var captureVertical = FlashPixelProbe.VerticalResolutions;
         var pixels = FlashPixelProbe.CaptureDesktop(rect.X, rect.Y, rect.Width, rect.Height);
         if (evidence is not null && pixels.Length > 0)
         {
@@ -200,7 +247,8 @@ internal static class FlashEndToEndObservations
         }
 
         var (uniform, first) = Uniformity(pixels);
-        return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length, uniform, first);
+        return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length, uniform, first,
+            captureHorizontal, captureVertical);
     }
 
     /// <summary>The smallest clock that satisfies the presenter: this run shows one image, so

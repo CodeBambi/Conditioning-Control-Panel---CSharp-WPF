@@ -13,18 +13,41 @@ Grepped `client/tests/**` for `CreateWindowExW|Shell_NotifyIcon|TrackPopupMenu|G
 BitBlt|WindowFromPoint|SetWindowPos`. Three fixtures put windows on the user's screen or read the
 user's screen; one more match is a false positive.
 
-| Fixture | What it puts on the real desktop | Where (virtual px, this 1920x1200 host) |
+**CORRECTED AFTER REVIEW.** The first draft of this table assumed a 1920x1200 virtual desktop
+(2880x1800 at 150 %) and derived every rectangle from it. That was wrong, and the tree says so
+exactly: the residual failure prints `expected area of at least 112614`, which is
+`expectedArea / 2` from `FlashGeometry.Size(800, 600, W, H, 100)` and therefore a **548x411** frame.
+Solving `(int)(800r) = 548`, `(int)(600r) = 411` with `r = min(W/2000, H/1500)` gives `H` in
+{1028, 1029} — i.e. a virtual desktop of about **1646x1029**, which is the 2880x1800 physical panel
+(read straight out of the evidence bitmap's own header) at **175 %**. On a 1920x1200 desktop that
+same code prints 153600, which was never observed. The physical/virtual ratio is 1.75, not 1.5.
+
+The evidence bitmap's bounding box does NOT discriminate between the two (548x411 at 1.75 is 959x719
+physical; 640x480 at 1.5 is 960x720, and the measured 951x711 is within edge blending of both). The
+printed expected area does, decisively, because it comes from the product's own geometry function.
+
+| Fixture | What it puts on the real desktop | Where (virtual px, 1646x1029 host) |
 |---|---|---|
-| `OverlayCapabilityTests` -> `OverlayObservations.Lifecycle` | one layered topmost 240x180 surface, alpha 153, plus a hit test at its centre | rect 840..1080 x 510..690, point **(960, 600)** |
-| `OverlayCapabilityTests` -> `OverlayWindowProbe.RunNegativeControl` | three scratch top-level windows (catcher / click-through / ghost) and a hit test | rect 590..810 x 520..680, point **(700, 600)** |
-| `FlashDrawTests` -> `FlashDrawObservations.Run` | one painted layered topmost 240x180 subject + one painted control window, and a `GetDC(0)` CAPTUREBLT screen read | subject 720..960 x 640..820; control 1020..1260 x 300..480 |
-| `FlashDrawTests` -> `FlashEndToEndObservations.Measured` | a REAL 640x480 flash image (colour `0x1E7FD2`) at a seeded-random point, and three **whole-display** CAPTUREBLT screen reads that count pixels of that colour | measured from the run's own evidence bitmap: physical bbox (356,305)-(1306,1015) => **virtual 237..877 x 203..683** |
+| `OverlayCapabilityTests` -> `OverlayObservations.Lifecycle` | one layered topmost 240x180 surface, alpha 153, plus a hit test at its centre | rect 703..943 x 424..604, point **(823, 514)** |
+| `OverlayCapabilityTests` -> `OverlayWindowProbe.RunNegativeControl` | three scratch top-level windows (catcher / click-through / ghost) and a hit test | rect 453..673 x 434..594, point **(563, 514)** |
+| `FlashDrawTests` -> `FlashDrawObservations.Run` | one painted layered topmost 240x180 subject + one painted control window, and a `GetDC(0)` CAPTUREBLT screen read | subject 583..823 x 554..734; control 883..1123 x 257..437 |
+| `FlashDrawTests` -> `FlashEndToEndObservations.Measured` | a REAL **548x411** flash image (colour `0x1E7FD2`) at a seeded-random point, and three **whole-display** CAPTUREBLT screen reads that count pixels of that colour | evidence bitmap physical bbox (356,305)-(1306,1015) at ratio 1.75 => **virtual 203..746 x 174..580** |
 | `TrayCapabilityTests` -> `TrayObservations` | a hidden owner window + a real notification-area icon; `TrackPopupMenu`'s modal loop is a SEAM and is not entered | notification area only |
 | `AiAwarenessTests` | `CreateWindowExW` with `HWND_MESSAGE` parent — message-only, never visible, never hit-tested | not on the desktop |
 
-**Note the collision that is already in the tree:** the flash image's rectangle
-(237..877 x 203..683) **contains the negative control's hit-test point (700, 600)**. Inside one
+**The collision that is already in the tree survives the correction:** the flash image's rectangle
+(203..746 x 174..580) **contains the negative control's hit-test point (563, 514)**. Inside one
 process that is harmless only because the two fixtures happen not to overlap in time.
+
+**And the correction hands the residual a candidate the first draft never considered.** `display` is
+read ONCE from `OverlayWindowProbe.PrimarySize` at the top of `Measure()` and every rectangle comes
+from it, while `FlashPixelProbe.CaptureDesktop` re-reads `HorizontalResolutions`/`VerticalResolutions`
+through `GetDC(0)`/`GetDeviceCaps` on EVERY call. A scale or resolution change between those two
+reads desynchronises them, so the capture maps the requested rectangle through a different ratio
+than the placement used and samples a region the flash was never in — a full desktop returned,
+carrying none of the colour. That is precisely the residual's signature, it is bursty in the way
+§4 of the record reports, and the returned pixel count cannot see it: 5184000 is physical and
+therefore scale-invariant.
 
 ## 2. Measured fact #1 — the three real-desktop fixtures are xunit-parallel, and whether they
 overlap in wall-clock time varies run to run
@@ -102,13 +125,17 @@ Exclusive use is complete where disjointness is only probable.
 1. **`RealDesktopCollection`** — the three real-desktop classes join one xunit collection, so
    intra-collection sequentiality closes channel A by construction. Same mechanism as
    `ProcessEnvCollection` (SP-062/SP-086). Zero waits, zero retries.
-2. **`RealDesktopLease`** — the collection's fixture holds an exclusive `FileShare.None` handle on
+2. **`RealDesktopLease`** — the collection's fixture holds an exclusive `FileShare.Read` handle on
    `%TEMP%/ccp-real-desktop.lease` for the life of the collection, closing channel B. A file handle
    rather than a `Mutex` (thread affinity) and rather than a lock-file-existence scheme (the OS
    releases a handle when a process dies, so no reaper is needed). The wait is `TestWait.UntilSync`,
-   the suite's one approved bounded wait; on expiry the collection FAILS and names the holder.
+   the suite's one approved bounded wait; on expiry the collection FAILS loudly. The holder writes
+   `pid=N` into the lease and grants read sharing, so a contender can REPORT who has the desktop
+   rather than assert that somebody must — see `record.md` §2, which records that the first draft
+   claimed this and could not do it.
 3. **`RealDesktopCollectionGuardTests`** — membership made mechanical, so the next probe file cannot
-   rejoin the racy default collection silently.
+   rejoin the racy default collection silently, and `CcpClient.HeadlessTests` is bound by the
+   stronger no-probe-at-all rule because collections do not span assemblies.
 4. **`check-floor.mjs` NAMES failures from the TRX on red.** No retry. Nothing else changed.
 5. The residue no in-process mechanism can cover (a FOREIGN topmost window) is **admitted** in
    `client/docs/verification-harness.md` rather than hidden.

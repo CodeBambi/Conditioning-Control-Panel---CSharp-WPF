@@ -17,11 +17,16 @@ public class RealDesktopLeaseTests(RealDesktopLease lease)
         // That is the whole cross-process claim, taken at the moment it has to be true.
         using var whileTheFactsRun = RealDesktopLease.TryTake(RealDesktopLease.MachineWidePath);
 
+        // And the holder is READABLE while held, which is the difference between a failure message
+        // that names the process with the desktop and one that asserts a peer exists on no evidence.
+        var holder = RealDesktopLease.HolderProcessId(RealDesktopLease.MachineWidePath);
+
         Assert.True(lease.IsHeld,
             "the real-desktop collection is running without holding the machine-wide desktop lease — every OS-level "
             + "fact in this collection is then racing any other CcpClient.Tests process on this machine, which is "
             + "the exact defect SP-107 measured (8 red in 12 concurrent floor runs)");
         Assert.Null(whileTheFactsRun);
+        Assert.Equal(Environment.ProcessId, holder);
     }
 }
 
@@ -38,6 +43,7 @@ public class RealDesktopLeasePrimitiveTests
 
         var first = RealDesktopLease.TryTake(path);
         var contendedWhileHeld = RealDesktopLease.TryTake(path);
+        var holderSeenByTheContender = RealDesktopLease.HolderProcessId(path);
         first?.Dispose();
         var afterRelease = RealDesktopLease.TryTake(path);
         afterRelease?.Dispose();
@@ -52,5 +58,6 @@ public class RealDesktopLeasePrimitiveTests
         Assert.NotNull(first);
         Assert.Null(contendedWhileHeld);
         Assert.NotNull(afterRelease);
+        Assert.Equal(Environment.ProcessId, holderSeenByTheContender);
     }
 }

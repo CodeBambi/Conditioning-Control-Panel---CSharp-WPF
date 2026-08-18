@@ -19,18 +19,29 @@ namespace CcpClient.Tests;
 /// <c>TestTimingGuardTests</c>: repo-root walk, never skips, fails closed, file:line
 /// violations.</para>
 ///
+/// <para><b>THE ASSEMBLY BOUNDARY.</b> xunit collections do not span assemblies and
+/// <see cref="RealDesktopCollection"/> is defined in <c>CcpClient.Tests</c>, so a class in
+/// <c>CcpClient.HeadlessTests</c> CANNOT join it. Membership is therefore not an available remedy
+/// over there and the only meaningful rule for that project is the stronger one — no real-desktop
+/// probe at all — which fact 3 binds. Same asymmetry, and the same reason for it, as
+/// <see cref="ProcessEnvCollectionGuardTests"/>.</para>
+///
 /// <para><b>HONESTY.</b> This is LEXICAL and binds at FILE granularity. Named blind spots:
-/// (1) a file declaring two classes where only one is bound lends the attribute to both — there
-/// are no such files today; (2) a class that reaches the desktop transitively through a helper
-/// this guard does not name is invisible, so the helper census (fact 2) exists to make a NEW probe
-/// file fail loudly rather than join silently; (3) tokens inside string literals count, which is
-/// why this file is exempt from its own scan (the same self-exemption
-/// <c>TestTimingGuardTests</c> takes).</para>
+/// (1) a file declaring two classes lends the attribute to both, and there IS one such file —
+/// <c>RealDesktopLeaseTests.cs</c> declares <c>RealDesktopLeaseTests</c> (in the collection) beside
+/// <c>RealDesktopLeasePrimitiveTests</c> (deliberately outside it, since it touches only a private
+/// temp path). Neither reaches the desktop, so nothing is currently mis-bound, but a real-desktop
+/// class added to a file that already carries the attribute would be accepted without ever joining
+/// anything; (2) a class that reaches the desktop transitively through a helper this guard does not
+/// name is invisible, so the helper census (fact 2) exists to make a NEW probe file fail loudly
+/// rather than join silently; (3) tokens inside string literals count, which is why this file is
+/// exempt from its own scan (the same self-exemption <c>TestTimingGuardTests</c> takes).</para>
 /// </summary>
 public class RealDesktopCollectionGuardTests
 {
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] UnitProjectParts = ["client", "tests", "CcpClient.Tests"];
+    private static readonly string[] HeadlessProjectParts = ["client", "tests", "CcpClient.HeadlessTests"];
 
     private const string CollectionName = "RealDesktopCollection";
     private const string MembershipAttribute = "[Collection(nameof(RealDesktopCollection))]";
@@ -185,11 +196,46 @@ public class RealDesktopCollectionGuardTests
         Assert.NotEmpty(files); // an empty walk is a broken detector, not a clean tree
     }
 
-    private static IReadOnlyList<(string Name, string Text)> UnitProjectSources()
+    [Fact]
+    public void TheHeadlessProject_CarriesNoRealDesktopProbeAtAll_BecauseItCannotJoinTheCollection()
     {
-        var root = Path.Combine([FindRepoRoot(), .. UnitProjectParts]);
+        // The asymmetry, and why it is the STRONGER rule over there: xunit collections do not span
+        // assemblies, so nothing in CcpClient.HeadlessTests can hold the machine-wide lease. A real
+        // window opened from that project would be on the user's desktop with nothing serializing it
+        // against the unit project's fixtures OR against another process — the exact defect SP-107
+        // measured, with no remedy available short of moving the fact.
+        var files = ProjectSources(HeadlessProjectParts);
+        var strays = new List<string>();
+
+        foreach (var (name, raw) in files)
+        {
+            var code = StripComments(raw);
+            var calls = RealDesktopCalls.Where(c => code.Contains(c, StringComparison.Ordinal)).ToArray();
+            var helpers = RealDesktopHelpers.Where(h => code.Contains(h, StringComparison.Ordinal)).ToArray();
+            var messageOnly = code.Contains(MessageOnlyToken, StringComparison.Ordinal);
+            if (calls.Length + helpers.Length > 0 && !messageOnly)
+            {
+                strays.Add($"CcpClient.HeadlessTests/{name}: reaches the real desktop "
+                    + $"[{string.Join("; ", calls.Concat(helpers))}]. Collections do not span assemblies, so this "
+                    + $"class cannot join {CollectionName} and NOTHING can serialize it — not against the unit "
+                    + "project's real-desktop fixtures and not against another CcpClient.Tests process. Move the "
+                    + "fact into CcpClient.Tests and give it the attribute, or make it a headless fact that opens "
+                    + "no window. Never leave it here unguarded.");
+            }
+        }
+
+        Assert.True(strays.Count == 0, string.Join(Environment.NewLine, strays));
+        Assert.NotEmpty(files); // an empty walk is a broken detector, not a clean tree
+    }
+
+    private static IReadOnlyList<(string Name, string Text)> UnitProjectSources() =>
+        ProjectSources(UnitProjectParts);
+
+    private static IReadOnlyList<(string Name, string Text)> ProjectSources(string[] projectParts)
+    {
+        var root = Path.Combine([FindRepoRoot(), .. projectParts]);
         Assert.True(Directory.Exists(root),
-            $"{string.Join('/', UnitProjectParts)} not found at {root} — the real-desktop membership guard "
+            $"{string.Join('/', projectParts)} not found at {root} — the real-desktop membership guard "
             + "refuses to skip");
 
         return [.. Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)

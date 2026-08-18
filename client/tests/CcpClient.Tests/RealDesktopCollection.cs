@@ -53,27 +53,34 @@ public sealed class RealDesktopCollection : ICollectionFixture<RealDesktopLease>
 ///
 /// <para><b>Why a file handle and not a named <c>Mutex</c>.</b> A <c>Mutex</c> has thread
 /// affinity — it must be released by the thread that took it — and xunit is free to construct a
-/// collection fixture on one thread and dispose it on another. A <c>FileStream</c> opened with
-/// <see cref="FileShare.None"/> is owned by the PROCESS, not by a thread, and the operating system
-/// closes it if the process dies, so a crashed run cannot wedge the lease for the next one. That
-/// is strictly better than the lock-file-existence scheme in <c>with-slot.mjs</c>, which needs a
-/// reaper for exactly that case.</para>
+/// collection fixture on one thread and dispose it on another. A <c>FileStream</c> is owned by the
+/// PROCESS, not by a thread, and the operating system closes it if the process dies, so a crashed
+/// run cannot wedge the lease for the next one. That is strictly better than the
+/// lock-file-existence scheme in <c>with-slot.mjs</c>, which needs a reaper for exactly that
+/// case.</para>
+///
+/// <para><b>The share mode is <see cref="FileShare.Read"/>, not <see cref="FileShare.None"/>, and
+/// that is the whole difference between CLAIMING to name the holder and naming it.</b> The holder
+/// opens for WRITE and writes its own process id into the file; a contender's write-open is refused
+/// because write sharing is not granted, and a contender's READ-open still succeeds, so it can say
+/// WHO has the desktop instead of asserting that somebody must. Under <c>FileShare.None</c> the
+/// file is unreadable while held and the failure message could only ever have been a guess — which
+/// is what the first draft of this class shipped, interpolating the CONTENDER's own pid next to a
+/// sentence asserting a peer existed.</para>
 /// </summary>
 public sealed class RealDesktopLease : IDisposable
 {
     private FileStream? _held;
+    private string? _lastRefusal;
 
-    /// <summary>Takes the lease, or fails loudly naming what holds it.</summary>
+    /// <summary>Takes the lease, or fails loudly reporting exactly why it could not.</summary>
     public RealDesktopLease()
     {
         var path = MachineWidePath;
         TestWait.UntilSync(
             () => TakeOnce(path),
             $"exclusive use of this machine's interactive desktop (lease file {path})",
-            () => $"this process is {Environment.ProcessId}; another CcpClient.Tests process is inside its own "
-                + "real-desktop collection right now. That is not a flake and must NOT be retried away: the "
-                + "desktop is a singleton, and SP-107 measured what happens when two runs share it (8 red in 12 "
-                + "concurrent runs). If this message is the failure, the other run took longer than the window.",
+            () => DescribeRefusal(path),
             TestWait.InjectedBudget);
     }
 
@@ -84,14 +91,60 @@ public sealed class RealDesktopLease : IDisposable
     public bool IsHeld => _held is not null;
 
     /// <summary>
-    /// One attempt, with no wait of any kind: the exclusive open either wins or it does not.
-    /// Returns the handle on success and null when someone else holds it.
+    /// One attempt, with no wait of any kind: the write-open either wins or it does not. On success
+    /// the holder's process id is in the file, so a contender can read it.
     /// </summary>
-    public static FileStream? TryTake(string path)
+    public static FileStream? TryTake(string path) => TryTake(path, out _);
+
+    /// <summary>
+    /// As <see cref="TryTake(string)"/>, and says WHY on refusal. The distinction is load-bearing:
+    /// an <see cref="UnauthorizedAccessException"/> is an ACL, a read-only volume or a file-locking
+    /// scanner, and reporting that as "another test process holds the desktop" sends the reader
+    /// after a process that does not exist.
+    /// </summary>
+    internal static FileStream? TryTake(string path, out string? refusal)
+    {
+        FileStream? stream = null;
+        try
+        {
+            stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+            var identity = System.Text.Encoding.UTF8.GetBytes($"pid={Environment.ProcessId}");
+            stream.Write(identity, 0, identity.Length);
+            stream.Flush();
+            refusal = null;
+            return stream;
+        }
+        catch (IOException error)
+        {
+            stream?.Dispose();
+            refusal = $"the lease is open for writing elsewhere ({error.GetType().Name}: {error.Message})";
+            return null;
+        }
+        catch (UnauthorizedAccessException error)
+        {
+            stream?.Dispose();
+            refusal = $"the lease file could not be opened AT ALL ({error.GetType().Name}: {error.Message}). "
+                + "That is an ACL, a read-only volume, or a file-locking scanner — NOT another test process "
+                + "holding the desktop, and no peer should be hunted for it";
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The holder's process id, read out of the lease file, or null when nothing readable is there.
+    /// It works WHILE the lease is held precisely because the holder grants read sharing.
+    /// </summary>
+    public static int? HolderProcessId(string path)
     {
         try
         {
-            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            using var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var buffer = new byte[64];
+            var read = reader.Read(buffer, 0, buffer.Length);
+            var text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+            return text.StartsWith("pid=", StringComparison.Ordinal) && int.TryParse(text.AsSpan(4), out var pid)
+                ? pid
+                : null;
         }
         catch (IOException)
         {
@@ -99,7 +152,6 @@ public sealed class RealDesktopLease : IDisposable
         }
         catch (UnauthorizedAccessException)
         {
-            // Windows reports a delete-pending handle this way; it means held, same as IOException.
             return null;
         }
     }
@@ -112,9 +164,37 @@ public sealed class RealDesktopLease : IDisposable
 
     /// <summary>
     /// Idempotent by construction: <see cref="TestWait.UntilSync"/> evaluates its condition again
-    /// after the loop, and a second exclusive open from THIS process would fail exactly as a
-    /// foreign one does. Re-checking <see cref="_held"/> first is what stops that second call from
-    /// throwing the lease away.
+    /// after the loop, and a second write-open from THIS process would fail exactly as a foreign one
+    /// does. Re-checking <see cref="_held"/> first is what stops that second call from throwing the
+    /// lease away.
     /// </summary>
-    private bool TakeOnce(string path) => _held is not null || (_held = TryTake(path)) is not null;
+    private bool TakeOnce(string path)
+    {
+        if (_held is not null)
+        {
+            return true;
+        }
+
+        _held = TryTake(path, out _lastRefusal);
+        return _held is not null;
+    }
+
+    /// <summary>
+    /// What the failure says. It reports the holder's pid when the file names one, and says plainly
+    /// that it does not know when it cannot read one — never "another process has it" on no evidence.
+    /// </summary>
+    private string DescribeRefusal(string path)
+    {
+        var holder = HolderProcessId(path);
+        var who = holder is { } pid
+            ? (pid == Environment.ProcessId
+                ? $"the lease file names THIS process ({pid}), so an earlier lease of ours was left behind rather "
+                    + "than a peer holding it"
+                : $"the lease file names process {pid} as the holder")
+            : "the lease file names no readable holder, so WHO has the desktop is unknown";
+
+        return $"this process is {Environment.ProcessId}; {who}. Refusal: {_lastRefusal ?? "none recorded"}. "
+            + "A contended desktop is not a flake and must NOT be retried away: the desktop is a singleton, and "
+            + "SP-107 measured what happens when two runs share it (8 red in 12 concurrent runs).";
+    }
 }

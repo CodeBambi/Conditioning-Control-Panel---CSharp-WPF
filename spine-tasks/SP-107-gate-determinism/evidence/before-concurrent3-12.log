@@ -1,0 +1,178 @@
+### BEFORE-PAR - 4 waves x 3 concurrent, started 2026-08-18T21:36:51.470Z
+BEFORE-PAR w1r1: GREEN
+BEFORE-PAR w1r2: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-3X0jCL
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-3X0jCL
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  | 
+  | Failed!  - Failed:     4, Passed:  1466, Skipped:     2, Total:  1472, Duration: 40 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:05.77]     CcpClient.Tests.FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes [FAIL]
+  | [xUnit.net 00:00:06.01]     CcpClient.Tests.FlashDrawTests.AFileThatIsNotAnImage_ProducesNoFrameAndNoException [FAIL]
+  | [xUnit.net 00:00:06.02]     CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry [FAIL]
+  | [xUnit.net 00:00:06.02]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-3X0jCL
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.AFileThatIsNotAnImage_ProducesNoFrameAndNoException
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+BEFORE-PAR w1r3: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-054obH
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-054obH
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  |    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+  |    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  | Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-054obH\CcpClient.Tests\results.trx
+  | 
+  | Failed!  - Failed:     1, Passed:  1469, Skipped:     2, Total:  1472, Duration: 39 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:09.69]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-054obH
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: 0
+    Actual:   676161
+BEFORE-PAR w2r1: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-pQt53T
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-pQt53T
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  | [xUnit.net 00:00:10.07]     CcpClient.Tests.FlashDrawTests.AFileThatIsNotAnImage_ProducesNoFrameAndNoException [FAIL]
+  | [xUnit.net 00:00:10.07]     CcpClient.Tests.FlashDrawTests.TheCompositedDesktopHoldsTheFlashWhereTheSurfaceIs_BothHalvesTheRightWayUp [FAIL]
+  | [xUnit.net 00:00:10.14]     CcpClient.Tests.FlashDrawTests.PaintingCostsNothingTheGhostCheckNeeds_TheOsStillHoldsTheAlpha_AndAPlacementStillEarnsAvailable [FAIL]
+  | [xUnit.net 00:00:10.14]     CcpClient.Tests.FlashDrawTests.WithdrawingTheSurface_TakesTheFlashOffTheCompositedDesktopToo [FAIL]
+  | [xUnit.net 00:00:10.15]     CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry [FAIL]
+  | [xUnit.net 00:00:10.15]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-pQt53T
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.WithdrawingTheSurface_TakesTheFlashOffTheCompositedDesktopToo
+  MESSAGE: the differential did not close: capture live = True, the desktop showed the flash = False, and after Withdraw it reads 0x10070B. Where the screen can be read, the flash must be on it BEFORE and gone AFTER; a withdraw that only clears the code's books leaves pixels on the user's screen
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.AFileThatIsNotAnImage_ProducesNoFrameAndNoException
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.PaintingCostsNothingTheGhostCheckNeeds_TheOsStillHoldsTheAlpha_AndAPlacementStillEarnsAvailable
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: 43200
+    Actual:   0
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheCompositedDesktopHoldsTheFlashWhereTheSurfaceIs_BothHalvesTheRightWayUp
+  MESSAGE: a desktop capture can see a painted layered window on this machine = True, and the composited desktop at the top half of the flash reads 0x10070B against the frame's 0x30C0F0. Those two must agree: where the screen can be read the flash must be ON it, and where it cannot, nothing may be claimed. Backend said: Unavailable(overlay-nothing-presented: no surface is presented by this presence, so there is nothing on screen to paint and nothing succeeded. Present first: painting a window the OS has not confirmed is on screen is exactly the claim this capability refuses to make)
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheOperatingSystemRendersTheSurfaceAsExactlyTheFrameThatWasPainted
+  MESSAGE: the OS rendered 0 of 43200 pixels as the frame (interactive desktop = True). Backend said: Unavailable(overlay-nothing-presented: no surface is presented by this presence, so there is nothing on screen to paint and nothing succeeded. Present first: painting a window the OS has not confirmed is on screen is exactly the claim this capability refuses to make)
+BEFORE-PAR w2r2: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-EKWzP5
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-EKWzP5
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  | [xUnit.net 00:00:09.85]     CcpClient.Tests.FlashDrawTests.TheCompositedDesktopHoldsTheFlashWhereTheSurfaceIs_BothHalvesTheRightWayUp [FAIL]
+  | [xUnit.net 00:00:09.85]     CcpClient.Tests.FlashDrawTests.PaintingCostsNothingTheGhostCheckNeeds_TheOsStillHoldsTheAlpha_AndAPlacementStillEarnsAvailable [FAIL]
+  | [xUnit.net 00:00:09.86]     CcpClient.Tests.FlashDrawTests.WithdrawingTheSurface_TakesTheFlashOffTheCompositedDesktopToo [FAIL]
+  | [xUnit.net 00:00:09.86]     CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry [FAIL]
+  | [xUnit.net 00:00:09.86]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | [xUnit.net 00:00:09.90]     CcpClient.Tests.FlashDrawTests.AFrameThatIsNotTheSurfacesSize_IsRefusedRatherThanStretched [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-EKWzP5
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.WithdrawingTheSurface_TakesTheFlashOffTheCompositedDesktopToo
+  MESSAGE: the differential did not close: capture live = True, the desktop showed the flash = False, and after Withdraw it reads 0x10070B. Where the screen can be read, the flash must be on it BEFORE and gone AFTER; a withdraw that only clears the code's books leaves pixels on the user's screen
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheCompositedDesktopHoldsTheFlashWhereTheSurfaceIs_BothHalvesTheRightWayUp
+  MESSAGE: a desktop capture can see a painted layered window on this machine = True, and the composited desktop at the top half of the flash reads 0x10070B against the frame's 0x30C0F0. Those two must agree: where the screen can be read the flash must be ON it, and where it cannot, nothing may be claimed. Backend said: Unavailable(overlay-nothing-presented: no surface is presented by this presence, so there is nothing on screen to paint and nothing succeeded. Present first: painting a window the OS has not confirmed is on screen is exactly the claim this capability refuses to make)
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.AFrameThatIsNotTheSurfacesSize_IsRefusedRatherThanStretched
+  MESSAGE: Assert.Equal() Failure: Strings differ
+                       ↓ (pos 8)
+    Expected: "overlay-frame-size-mismatch"
+    Actual:   "overlay-nothing-presented"
+                       ↑ (pos 8)
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.TheOperatingSystemRendersTheSurfaceAsExactlyTheFrameThatWasPainted
+  MESSAGE: the OS rendered 0 of 43200 pixels as the frame (interactive desktop = True). Backend said: Unavailable(overlay-nothing-presented: no surface is presented by this presence, so there is nothing on screen to paint and nothing succeeded. Present first: painting a window the OS has not confirmed is on screen is exactly the claim this capability refuses to make)
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.AFileThatIsNotAnImage_ProducesNoFrameAndNoException
+  MESSAGE: System.IO.IOException : The process cannot access the file 'C:\Users\Micha\AppData\Local\Temp\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.PaintingCostsNothingTheGhostCheckNeeds_TheOsStillHoldsTheAlpha_AndAPlacementStillEarnsAvailable
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: True
+    Actual:   False
+BEFORE-PAR w2r3: GREEN
+BEFORE-PAR w3r1: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-p3ZBcc
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-p3ZBcc
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  |    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+  |    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  | Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-p3ZBcc\CcpClient.Tests\results.trx
+  | 
+  | Failed!  - Failed:     1, Passed:  1469, Skipped:     2, Total:  1472, Duration: 41 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:10.19]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-p3ZBcc
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: 0
+    Actual:   676161
+BEFORE-PAR w3r2: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-rVQ7Kh
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-rVQ7Kh
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  | [xUnit.net 00:00:09.42]     CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps [SKIP]
+  |   Skipped CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps [1 ms]
+  | Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-rVQ7Kh\CcpClient.Tests\results.trx
+  | 
+  | Failed!  - Failed:     1, Passed:  1469, Skipped:     2, Total:  1472, Duration: 41 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:09.15]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-rVQ7Kh
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: after the flash was hidden the desktop still carries 676161 pixels of the image's colour — the picture outlived the effect that put it there
+BEFORE-PAR w3r3: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-7Kj6wn
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-7Kj6wn
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  |    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+  |    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  | Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-7Kj6wn\CcpClient.Tests\results.trx
+  | 
+  | Failed!  - Failed:     1, Passed:  1469, Skipped:     2, Total:  1472, Duration: 39 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:11.43]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-7Kj6wn
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: 0
+    Actual:   662959
+BEFORE-PAR w4r1: GREEN
+BEFORE-PAR w4r2: RED exit=1
+  resultsDir: C:\Users\Micha\AppData\Local\Temp\ccp-floor-sXZqYz
+  | floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-sXZqYz
+  | FLOOR CHECK FAILED (SP-065):
+  |   dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  |   --- CcpClient.Tests dotnet output tail ---
+  |    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+  |    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  | Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-sXZqYz\CcpClient.Tests\results.trx
+  | 
+  | Failed!  - Failed:     1, Passed:  1469, Skipped:     2, Total:  1472, Duration: 40 s - CcpClient.Tests.dll (net10.0)
+  | [xUnit.net 00:00:11.38]     CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+  | results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-sXZqYz
+  FAILED [CcpClient.Tests] CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: Assert.Equal() Failure: Values differ
+    Expected: 0
+    Actual:   676161
+BEFORE-PAR w4r3: GREEN
+### BEFORE-PAR DONE: 8 red / 12 runs (67%) finished 2026-08-18T21:42:02.600Z

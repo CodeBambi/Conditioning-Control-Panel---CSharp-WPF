@@ -258,10 +258,17 @@ public class FlashDrawTests
             + "where the screen can be read, the user's own image must really be on it. "
             + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels (SP-107), of which "
             + $"{run.DesktopUniformPixelsDuring} were the same colour as the first one "
-            + $"(0x{run.DesktopFirstPixelDuring:X6}). Three different verdicts hide behind a count of zero and "
-            + "those two numbers separate them: returned=0 is a failed CAPTUREBLT allocation and this fact "
-            + "measured nothing; returned=all-uniform is a blank or asleep display; returned=a real desktop is "
-            + "the only one that means the flash was genuinely not composited where the user would see it");
+            + $"(0x{run.DesktopFirstPixelDuring:X6}). The display metrics were {run.PlacementScreen.Width}x"
+            + $"{run.PlacementScreen.Height} virtual / H{run.PlacementHorizontal} V{run.PlacementVertical} when "
+            + $"the flash was PLACED and H{run.CaptureHorizontalDuring} V{run.CaptureVerticalDuring} when the "
+            + $"screen was READ — they agree = {run.DisplayMetricsHeldStill}. FOUR different verdicts hide "
+            + "behind a count of zero and those numbers separate them: returned=0 is a failed CAPTUREBLT "
+            + "allocation and this fact measured nothing; returned=all-uniform is a blank or asleep display; "
+            + "metrics that MOVED mean the desktop was rescaled between the placement and the read, so the "
+            + "capture mapped the rectangle through the wrong ratio and sampled somewhere the flash never was "
+            + "(the pixel count cannot show this, being physical and so scale-invariant); and only a real "
+            + "desktop read at unchanged metrics means the flash was genuinely not composited where a user "
+            + "would see it");
         Assert.True(run.DesktopPixelsAfterHide == 0,
             $"after the flash was hidden the desktop still carries {run.DesktopPixelsAfterHide} pixels of the "
             + "image's colour — the picture outlived the effect that put it there");

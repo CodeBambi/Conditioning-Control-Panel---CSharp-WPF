@@ -1,0 +1,26 @@
+### AFTER-PAR - 6 waves x 3 concurrent, started 2026-08-18T21:56:15.120Z
+AFTER-PAR w1r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w1r2: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w1r3: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w2r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w2r2: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w2r3: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w3r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w3r2: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w3r3: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w4r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w4r2: RED exit=1 failedTests=1 dir=C:\Users\Micha\AppData\Local\Temp\ccp-floor-qILnNQ
+  FAILED CcpClient.Tests: CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: a desktop capture can see a painted layered window on this machine = True, and while the flash was up the composited desktop carried 0 pixels of the image's colour against an expected area of at least 112614. Those two must agree: where the screen can be read, the user's own image must really be on it
+  COMPLAINT: dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+AFTER-PAR w4r3: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w5r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w5r2: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w5r3: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w6r1: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w6r2: GREEN (0 failed tests; only complaint = declared delta)
+AFTER-PAR w6r3: RED exit=1 failedTests=1 dir=C:\Users\Micha\AppData\Local\Temp\ccp-floor-inI0vG
+  FAILED CcpClient.Tests: CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+  MESSAGE: a desktop capture can see a painted layered window on this machine = True, and while the flash was up the composited desktop carried 0 pixels of the image's colour against an expected area of at least 112614. Those two must agree: where the screen can be read, the user's own image must really be on it
+  COMPLAINT: dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+### AFTER-PAR DONE: 2 red / 18 runs (11%) finished 2026-08-18T22:04:13.178Z

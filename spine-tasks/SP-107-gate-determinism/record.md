@@ -1,8 +1,8 @@
 # SP-107 — record
 
 Branch `lane/SP-107-gate-determinism`, base `3c1572b4`.
-Floor: pin **1472 unit / 90 headless**; observed **1476 unit / 90 headless**; declared delta
-**+4 unit / +0 headless** (`floor-delta.json`). 1476 = 1472 + 4 and 90 = 90 + 0, confirmed by
+Floor: pin **1472 unit / 90 headless**; observed **1477 unit / 90 headless**; declared delta
+**+5 unit / +0 headless** (`floor-delta.json`). 1477 = 1472 + 5 and 90 = 90 + 0, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-107-gate-determinism`.
 Two skips, both pre-existing (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); **none added, and
@@ -97,13 +97,26 @@ being a non-relied-upon hint) that `ProcessEnvCollection` has used since SP-062
 (`DataRootOverrideTests.cs:116-122`).
 
 **`RealDesktopLease`** — the collection's `ICollectionFixture`, so it is taken before the
-collection's first test and released after its last. It is an exclusive `FileShare.None` handle on
+collection's first test and released after its last. It is an exclusive `FileShare.Read` handle on
 `%TEMP%/ccp-real-desktop.lease`. A file handle and not a named `Mutex` because a `Mutex` has thread
 affinity and xunit may construct and dispose a fixture on different threads; and because the OS
 closes a handle when a process dies, so a crashed run cannot wedge the lease the way `with-slot.mjs`'s
 lock-file-existence scheme needs a reaper for. The wait is `TestWait.UntilSync` with
 `TestWait.InjectedBudget` — the suite's ONE approved bounded wait — and when it expires the
-collection FAILS, loudly, naming the other process. It never skips and never retries.
+collection FAILS, loudly. It never skips and never retries.
+
+**The share mode is `FileShare.Read` and NOT `FileShare.None`, and that was a review finding.** The
+first draft used `FileShare.None`, wrote nothing into the file, and then had three prose sites and a
+failure message claiming the failure "names the holder" — while the message actually interpolated
+`Environment.ProcessId`, which is the CONTENDER's own pid, beside an assertion that a peer process
+existed. Under `FileShare.None` the file is unreadable while held, so that claim was not merely
+unsupported, it was unsupportable. It is now true: the holder opens for WRITE and writes `pid=N`,
+a contender's write-open is refused because write sharing is not granted, and a contender's
+read-open still succeeds, so `RealDesktopLease.HolderProcessId` returns the real holder. Two facts
+assert it (`RealDesktopLeaseTests`), one from inside the collection and one on a private temp path.
+The same draft mapped `UnauthorizedAccessException` to "held", so an ACL, a read-only volume or a
+file-locking scanner would have produced a 60-second wait and then blamed a peer that did not exist;
+that branch now reports itself as what it is and says explicitly that no peer should be hunted.
 
 **`RealDesktopCollectionGuardTests`** makes the convention mechanical rather than textual: a test
 class that mentions a real-desktop helper, or calls `CreateWindowExW`/`Shell_NotifyIconW`/
@@ -141,6 +154,10 @@ both projects AND the drift is check-floor's only complaint.
 | **AFTER** | sequential, round 2 | 22:42–23:09 | 20 | 0 | 0 % |
 | **AFTER, all** | both | 21:56–23:09 | **76** | **4** | **5.3 %** |
 | **AFTER, 3 concurrent only** | | | **36** | **2** | **5.6 %** |
+
+**The per-run verdict list for every one of these runs is committed** under
+`spine-tasks/SP-107-gate-determinism/evidence/`, one line per launched run, so the table above is
+checkable rather than merely asserted. Nothing was re-run and no run is missing from those files.
 
 **The flake this packet was written about is gone.** At the concurrency that produced it, 8 red in
 12 became 2 red in 36, and not one of the 36 concurrent AFTER runs produced an `IOException` on the
@@ -182,11 +199,36 @@ The screen read RETURNED 5184000 pixels (SP-107)
 5,184,000 is exactly 2880 x 1800: **a complete desktop came back, and none of it was the flash's
 colour.** The allocation hypothesis is dead.
 
-**What is left, and is NOT established.** The remaining candidate is that DWM had not composited the
-layered window when the screen was read. SP-100 measured that an immediate CAPTUREBLT already
-carries the painted pixel (SP-100 record §1) — on an idle machine — and nothing contracts that. A
-third possibility, a blank or asleep display, is now separated by a second diagnostic (how many
-returned pixels are one colour), which had not fired again by the time this lane finished.
+**A SECOND candidate, found in review, and it is the stronger one.** Reconciling the printed
+`expected area of at least 112614` against this host's geometry (see `plan.md` §1, corrected) shows
+the frame is **548x411**, so the virtual desktop is about **1646x1029** — the 2880x1800 panel at
+**175 %**, not the 150 % this lane first assumed. That correction exposes a desynchronisation the
+first diagnosis never considered:
+
+> `display` is read ONCE from `OverlayWindowProbe.PrimarySize` at the top of `Measure()`, and every
+> rectangle in the run is derived from it. `FlashPixelProbe.CaptureDesktop` re-reads
+> `HorizontalResolutions`/`VerticalResolutions` through `GetDC(0)`/`GetDeviceCaps` on EVERY call. If
+> the desktop's scale or resolution changes between those two reads, the capture maps the requested
+> rectangle through a different ratio than the placement used and samples a region the flash was
+> never in.
+
+That produces exactly the observed signature — a complete desktop returned, none of it the flash's
+colour — and it is bursty in the way the rate table is. Critically, **the 5184000 figure cannot
+discriminate here**: it is a count of physical pixels and is therefore scale-invariant.
+
+**What is left, and is NOT established.** Three live candidates now, not one: the scale/resolution
+desynchronisation above; DWM not having composited the layered window when the screen was read (SP-100
+measured that an immediate CAPTUREBLT already carries the painted pixel, SP-100 record §1 — on an
+idle machine, and nothing contracts it); and a blank or asleep display, which a second diagnostic
+already separates by reporting how many returned pixels are one colour.
+
+**So the instrument now records the display metrics at BOTH reads** — `PlacementScreen`,
+`PlacementHorizontal`, `PlacementVertical` taken with the placement, and `CaptureHorizontalDuring`,
+`CaptureVerticalDuring` taken by the capture itself — and the failure text states whether they
+agree. The next occurrence discriminates between four verdicts instead of speculating between two.
+This matters beyond bookkeeping: the board options below were, in the first draft of this record,
+both predicated on the DWM hypothesis, and one of them would have bought a bounded wait against
+SP-100's measured no-wait fact **to fix what may be a geometry desynchronisation instead**.
 
 **Two facts about the rate that a reviewer must weigh, because they point opposite ways.**
 
@@ -204,9 +246,12 @@ was relaxed. Polling until the desktop shows the flash would make the fact "with
 flash arrived" instead of SP-100's measured "immediately", and waiting until an assertion passes is
 retry-until-green wearing a different hat. Both are barred by this packet and both would have made
 the numbers above look better. The honest state is a named open question with an instrument pointed
-at it, and a decision for the board: either SP-100's no-wait composited read earns a bounded wait
-through `TestWait` as a deliberate, recorded divergence, or the composited-pixel fact moves behind
-the tier-2 headed gate. This lane had no mandate to choose between those.
+at it, and a decision for the board **that should not be taken until the next occurrence reports
+which of the four verdicts fired**: if the metrics moved, the fix is to read the display once and
+map every capture through THAT reading (a geometry fix, no wait, no divergence); only if the metrics
+held still does the question of SP-100's no-wait fact arise at all, and then the choice is a bounded
+`TestWait` as a deliberate recorded divergence or moving the composited-pixel fact behind the tier-2
+headed gate. This lane had no mandate to choose, and now has a reason not to guess.
 
 ## 5. WHAT THE FLOOR NOW CLAIMS, AND WHAT IT ADMITS
 
@@ -240,7 +285,8 @@ records.
   correct for any number, but only 3 were measured, because 3 is what `with-slot.mjs` permits.
 - **It proves nothing on Linux.** The lease's exclusivity was exercised on Windows only. Every
   fixture it guards is Windows-only by construction (they assert refusals on Linux), so the lease is
-  inert there, but `FileShare.None` semantics under .NET on Unix were not measured by this lane.
+  inert there, but `FileShare.Read` write-exclusion semantics under .NET on Unix were not measured
+  by this lane.
 - **No rendering, interaction, focus, animation or headed claim is discharged here.** Nothing in
   this packet is a `presentation-verified` result; the tier-2 headed capture is untouched and
   undischarged by anything above.
@@ -261,7 +307,9 @@ records.
 | `client/tests/CcpClient.Tests/FlashEndToEndObservations.cs` | Records how many pixels the screen read returned and how many were one colour — the three verdicts behind a count of zero. |
 | `client/tests/floor/check-floor.mjs` | Names the failing tests from the TRX on red. No retry, ever. |
 | `client/docs/verification-harness.md` | What tier 1 now covers on the real desktop, and what it admits it does not. |
-| `spine-tasks/SP-107-gate-determinism/floor-delta.json` | +4 unit / +0 headless. |
+| `client/tests/CcpClient.Tests/RealDesktopCollectionGuardTests.cs` | Also binds `CcpClient.HeadlessTests` by the stronger no-probe rule (collections do not span assemblies). |
+| `spine-tasks/SP-107-gate-determinism/evidence/*.log` | The per-run verdict list behind every number in §3. |
+| `spine-tasks/SP-107-gate-determinism/floor-delta.json` | +5 unit / +0 headless. |
 | `spine-tasks/SP-107-gate-determinism/plan.md` | The plan checkpoint, written before the first test edit. |
 
 ## 8. Three things a reviewer should check first
