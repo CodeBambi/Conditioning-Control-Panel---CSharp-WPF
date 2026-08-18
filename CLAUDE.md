@@ -83,10 +83,10 @@ Bump `total` in the same commit as the test change that moves it. `allowedSkips`
 
 Headed verification (tier 2 capture, tier 3 deterministic check, seeded-regression self-test):
 ```bash
-pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State lit
+pwsh client/tools/verify/capture.ps1 -Surface rail-door -State selected
 ```
 ```bash
-dotnet run --project client/tools/verify/CcpVerify/CcpVerify.csproj -- --capture <png|bmp> --surface dashboard-card --state lit
+dotnet run --project client/tools/verify/CcpVerify/CcpVerify.csproj -- --capture <png|bmp> --surface rail-door --state selected
 ```
 ```bash
 pwsh client/tools/verify/self-test.ps1

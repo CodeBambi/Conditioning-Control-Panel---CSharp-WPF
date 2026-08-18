@@ -20,12 +20,12 @@ Build + unit tests + headless tests. Runs on every iteration; the only tier that
 Thin scripts under `client/tools/verify/` formalizing the SP-007 headed-smoke patterns. Launch the real app, raise it (`SetWindowPos(HWND_TOPMOST)` on Windows — the app opens unactivated behind existing windows and pixel captures read the occluder, SP-007 surprise #2), read UIA/layout-probe facts, drive real input, capture ONE surface+state by name:
 
 ```
-pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State lit
-pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State unlit
-pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unlit
+pwsh client/tools/verify/capture.ps1 -Surface rail-door -State selected
+pwsh client/tools/verify/capture.ps1 -Surface rail-door -State unselected
+pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unselected
 ```
 
-Surfaces are NAMED capture scopes, not app screens: `dashboard-card` = the card rect from the app's layout probe (Avalonia exposes no UIA peers for Border/Grid/StackPanel — SP-007 surprise #1); `dashboard` = the whole window. State drives differ per platform, honestly: **Windows** drives `lit` through REAL input (right-click quick-toggle, tick-advance verified by UIA before capture — the same user path a regression would break); **WSLg** drives `lit` through the restart-restore path (pre-seeded `{"statusTickerEnabled": true}` — a real user path, but NOT an input path: WSLg has no input automation, SP-007 named gate). Interaction evidence stays Windows-headed; WSLg captures are render/scale/session-facts only.
+Surfaces are NAMED capture scopes, not app screens: `rail-door` = a navigation rail door rect taken from the app's own layout probe (Avalonia exposes no UIA peers for Border/Grid/StackPanel — SP-007 surprise #1); `dashboard` = the whole window. **Re-anchored at SP-091** from `dashboard-card`/`lit`/`unlit`, which named the retired `demo.status-ticker` demonstrator card. State drives differ per platform, honestly: **Windows** drives `selected` through REAL input (a left-click on a rail door, the route confirmed by a UIA read before any pixel is captured — the same user path a regression would break); **WSLg** needs no drive at all now, because on cold start the Studio door is already `:checked` and the Companion door is not, so both states are capturable with zero input. That is strictly better than the old WSLg path, which pre-seeded a settings file: WSLg has no input automation (SP-007 named gate), and the new anchor removes the need for one rather than working around it. Interaction evidence stays Windows-headed; WSLg captures are render/scale/session-facts only.
 
 - Windows: real window + `CopyFromScreen` crop to the layout-probe rect → PNG. (System.Drawing appears here ONLY as capture transport; scripts never read a pixel — SP-008 consult.)
 - WSLg (Linux/X11): `XGetImage` via python3 ctypes against the app's X window (`capture-wslg.sh` + `xgetimage.py`) → BMP. WSLg RAIL windows are invisible to Windows-side GDI capture (SP-007 surprise #3).
@@ -60,9 +60,9 @@ Every check in the manifest declares an evidence class:
   "version": 1,
   "checks": [
     {
-      "name": "dashboard-card-lit-border",
-      "surface": "dashboard-card",
-      "state": "lit",
+      "name": "rail-door-selected-border",
+      "surface": "rail-door",
+      "state": "selected",
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
@@ -91,7 +91,7 @@ Re-runnable proof that the targeted gate catches real regressions (throwaway-edi
 pwsh client/tools/verify/self-test.ps1
 ```
 
-Sequence: (1) edit the REAL `MainWindow.axaml` — break the lit border brush (`#E066FF` → wrong value); (2) build; (3) capture `dashboard`/`lit`; (4) assert the SPECIFIC named check `dashboard-card-lit-border` fails with its name in the output; (5) restore the AXAML (git checkout); (6) re-capture, assert green. A self-test pass requires BOTH the seeded failure AND the restored green.
+Sequence: (1) edit the REAL `MainWindow.axaml` — break the selected-door border brush (`#E066FF` → wrong value); (2) build; (3) capture `dashboard`/`selected`; (4) assert the SPECIFIC named check `rail-door-selected-border` fails with its name in the output; (5) restore the AXAML (git checkout); (6) re-capture, assert green. A self-test pass requires BOTH the seeded failure AND the restored green.
 
 ## Runtime budgets (measured, never invented)
 

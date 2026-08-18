@@ -1,6 +1,0 @@
-{
-  "packet": "SP-091-navigation-shell",
-  "unit": 3,
-  "headless": 4,
-  "reason": "unit +3: NavigationRouteTableTests (stable ids + the mechanical no-DTRH-door boundary, unknown/null/current Navigate changes nothing, and the door-with-no-page / page-with-no-door refusal). headless +4: NavigationShellHeadlessTests adds 11 real-input facts on the new shell (cold-start door->row->button reaching the concrete DtrhLoomWindow at the launch seam, idempotent refocus, the companion two-hop, the System door's live trace, the rail-equals-declared-routes pin, the :checked brush, the page swap, keyboard activation, label-mutation routing, the unhandled right-click, and the ElementName mirror), while DashboardCardHeadlessTests (3) and QuickToggleDispatchHeadlessTests (4) are retired with the demonstrator card they drove — their mechanism proofs retargeted onto product controls rather than dropped. FeaturePopupHeadlessTests keeps all 8: only its retired card gesture was removed, the W-04 chrome assertions stayed."
-}
