@@ -121,10 +121,34 @@ Write-Output "window up after $([math]::Round($deadline.Elapsed.TotalSeconds, 1)
 Start-Sleep -Milliseconds 500
 
 $all = (Get-Texts $window) -join "`n"
-foreach ($needle in @('route: studio', 'layout-probe: door studio', 'layout-probe: door companion', 'layout-probe: door system')) {
-    if ($all -notlike "*$needle*") { Fail "missing '$needle'" }
+if ($all -notlike '*route: studio*') { Fail "missing 'route: studio'" }
+
+# DERIVE THE DOOR SET, NEVER HARD-CODE IT (SP-094 audit, 2026-08-18).
+# This was a literal list of three door needles, written at SP-091 when three was the whole
+# rail. SP-094 added a fourth door and did not widen it, so the harness stopped checking the
+# only door that wave added -- while still printing "every rail door published a layout probe".
+# A hard-coded list turns "every" into "the ones someone remembered", and it fails silently in
+# the one direction that matters: a NEW door can go missing and this still passes.
+#
+# Both sides are now read from the running app: the rail's door buttons come from UIA, the
+# probe lines come from the shell's own diagnostics, and they must agree. Add a door and this
+# widens itself; break a door's probe and it fails naming that door.
+$railDoors = @()
+$btn = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::RadioButton)
+foreach ($d in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btn)) {
+    $n = $d.Current.Name
+    if ($n -match '^(?<id>[a-z]+) door$') { $railDoors += $Matches['id'] }
 }
-Write-Output 'shell mounted its default page; every rail door published a layout probe (UIA reads)'
+if ($railDoors.Count -lt 1) { Fail 'no rail doors found in the UIA tree' }
+
+$probed = [regex]::Matches($all, 'layout-probe: door (?<id>[a-z]+)') |
+          ForEach-Object { $_.Groups['id'].Value } | Sort-Object -Unique
+foreach ($door in $railDoors) {
+    if ($probed -notcontains $door) { Fail "rail door '$door' published no layout probe (probed: $($probed -join ', '))" }
+}
+Write-Output "shell mounted its default page; all $($railDoors.Count) rail doors published a layout probe ($($railDoors -join ', '))"
 
 # The startup trace and the typed capability states live on the System page now (SP-091), so
 # reaching them is itself a real navigation. Drive it, then read them.
