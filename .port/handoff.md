@@ -139,3 +139,47 @@ do not read the attempt count as evidence about SP-105.
 Do NOT let the orchestrating context that authored and ran wave 45 perform its code or final
 review, however tempting that becomes while the API is down. That context is disqualified by
 rule: the context that ran a wave never certifies it. Review belongs to a fresh reviewer.
+
+## CODE REVIEW: APPROVE (both load-bearing claims hold)
+
+Ran on the eighth attempt after seven 529s. Verdict **APPROVE** on `252b8509..b9fca7f9`.
+
+**Claim 1 — the spine/scheduler split is real, not a rename.** `Session/SessionEffect.cs` is
+ABSENT from the diff, so "`ISessionEffect` fits unchanged" is literal. `OwnedSessionEffect.cs`
+carries no clock, interval or tick and exposes only `Engage(int)`/`ReleaseWork()`;
+`PacedSessionEffect.cs:63-72` still requires `ISessionClock` while `PinkFilterEffect.cs:57-67`
+takes none. The dot's third input became abstract `WorkIsRunning` (`OwnedSessionEffect.cs:132`),
+sealed to `ScheduleArmed` (`PacedSessionEffect.cs:98`) and to `_surface is { Showing: true }`
+(`PinkFilterEffect.cs:99`). Corroborated at `OverlaySurfaceSet.Place`, now `TimeSpan?` where
+null schedules NOTHING rather than a very large span. WPF ground truth exact at
+`MainWindow.Presets.cs:1254-1255`, `StudioTabView.xaml.cs:493`,
+`MainWindow.StartStop.cs:178/186/192-193`.
+
+**Claim 2 — the guard bites, BUT NOT THE ONE NAMED. Record this; it is a maintenance trap.**
+The load-bearing assertion is `ContinuousEffectSpineTests.cs:41` — `Clock.PendingCount == 2`
+with all three modules armed, so a fake timer at any interval reads 3, with a positive control
+at `:54-65` (20 advances, `FlashCount >= 20`) proving the clock really drove work; repeated one
+layer down at `PinkFilterSurfacePresenterTests.cs:79-95`. **The test literally headed "the
+anti-fake-timer guard" (`PinkFilterEffectTests.cs:365-382`) is reflection over public
+constructors and `BaseType`, and is defeatable in isolation — a tripwire, not the guard.**
+A future reader who deletes `:41` and keeps the named test loses the packet's central
+protection silently. Fix the naming or the test.
+
+**Also confirmed:** the delta was verified by COUNTING the diff, not by trusting `reason`
+(10 + 17 + 3 theories/11 InlineData + 10 = 48 unit; exactly 6 `[AvaloniaFact]` headless).
+`FlashImagesEffect.cs`, `SubliminalsEffect.cs`, `SessionEngine.cs`, `SessionEffect.cs`,
+`ScheduledFire.cs` byte-identical; the one touched existing assertion
+(`SecondEffectSpineTests.cs:137-144`) was WIDENED for the third module, not relaxed. D72 rows:
+left-click opens only its own panel (`StudioPage.axaml.cs:143-154`), right-click toggles both
+directions via `Engine.QuickToggle` (`:161-171`). File Scope exact; no wall-clock waits; the
+stale `<summary>` at `Views/MainWindow.axaml.cs:207-211` deleted; no TODOs; unported subsystems
+recorded as D73-D82.
+
+**Four non-blocking items for the final reviewer to triage:** two off-by-one WPF citations
+(`AppSettings.cs:751` vs `752`, `:1234` vs `1235`); `ContinuousEffectSpineTests.cs:79-81` claims
+a synchronous withdraw that `EffectSignal.cs:57-65` only delivers inline under the rig's
+`InlineDispatch`; `StudioPage.axaml.cs:483-486` renders "until the session starts" in the
+surface-refused-MID-SESSION branch, which is a user-visible string wrong for its branch.
+
+Final review (`port-final-reviewer`) is RUNNING. Land only after it returns PASS, and land from
+a FRESH context — never this one.
