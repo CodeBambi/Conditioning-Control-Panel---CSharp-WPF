@@ -659,3 +659,63 @@ composited-pixel claim — the action bar's real placement, the dot's legibility
 button's colours as a human sees them — belongs to a headed capture. **And, said once more because
 it is the shape of the packet: no flash has been shown on a screen, and nothing here should be read
 as saying one was.**
+
+## SP-099 — the overlay surface (the capability, wired to nothing)
+
+D47 said the drawing half of a flash "is a compositor, and `docs/constitution.md` classes the
+previous port attempt as failure evidence largely because of overlay work. It is a platform
+capability with its own packet and its own headed evidence." This is that packet. It lands the
+surface and **wires it to no effect at all** — nothing draws, and D47 stays open until a later
+packet consumes this.
+
+**What the first attempt did here, since it is the reason this packet exists.** Its overlay seam is
+`void Show(); void Hide(); void SetClickThrough(bool); void SetBounds(PixelRect)`
+(`ConditioningControlPanel/CCP.Core/Platform/IOverlaySurface.cs`) — not one member can report a
+refusal, so an overlay that never appeared and an overlay that covered the screen were the same
+call. Its cross-platform click-through is a method body containing only a comment
+(`CCP.Avalonia/Platform/AvaloniaOverlaySurface.cs:31-35`). Its Windows override sets
+`WS_EX_LAYERED` and never calls `SetLayeredWindowAttributes`
+(`CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45`), which — measured on this machine
+during SP-099 — produces a window the OS reports `IsWindowVisible = TRUE` for while
+`GetLayeredWindowAttributes` returns FALSE: present, on top, and composited from nothing. Its Linux
+surface is a documented "never-throw seam" where "overlay operations degrade to logged no-ops"
+(`CCP.Avalonia.Desktop.Linux/Platform/LinuxOverlaySurface.cs:9-78`) behind a selector "guaranteed
+never to throw and never to return null" (`LinuxOverlayBackendSelector.cs:41-88`). And its
+availability is `SupportsOverlays = IsDesktop;`
+(`CCP.Avalonia/Platform/AvaloniaPlatformCapabilities.cs:29-30`), with a single verification harness
+that prints "Tell me what you saw" and ends `Environment.ExitCode = 0; // human-judged; never fail
+the process` (`tests/CCP.Avalonia.Desktop.Windows.Smoke/VisibleOverlayVerification.cs`).
+
+| # | v6.8.1 fact | Port at SP-099 | Reason |
+|---|---|---|---|
+| **D52** | A flash window is a layered always-on-top click-through window **with an `Image` in it** and an opacity animation on it (`Services/Flash/FlashService.cs:3611-3625`, and the whole spawn path around `:494`/`:688`) | The surface is **empty**: a uniform `LWA_ALPHA` tint, no content, no renderer, and **no effect, session, view or capability registry is wired to it**. `Present` says so in its own success string ("nothing is drawn on this surface"), and a test pins that sentence | Capability first, consumed later — the SP-093 pattern. Wiring it to Flash Images would entangle this packet's evidence with the effect's, and a headed gate that cannot be discharged here would then block a capability that is otherwise sound. **This narrows D47 rather than closing it**: the surface now exists and is proven from the OS; nothing has yet been drawn on it, and no flash has been shown on a screen |
+| **D53** | Topmost is **contested and re-asserted on a cadence**: `RaiseAllToFront` re-raises every live flash window roughly once a second, driven by the chaos layer, "so an already-showing flash is never briefly buried under a re-raised bubble" (`FlashService.cs:206-243`) | The port re-asserts `HWND_TOPMOST` **on demand only** — inside `Present`, `SetClickThrough` and each hit-test query, bounded by a 32-iteration count with no wall-clock wait | There is no chaos layer, no bubble host and no second overlay to fight, so a background cadence would be a timer with no contender. The contention is real and was measured (the window that won the point under a click-through surface on this machine was the shipping WPF app, topmost and re-raising), which is why the re-assertion exists at all — just not on a clock. **Consequence to state plainly: sustained topmost over minutes of contention is NOT proven.** A later consumer that needs it adds the cadence and owns its own evidence |
+| **D54** | Flash windows are **pooled and recycled**, and clickability is flipped per spawn on the live hwnd (`:3584-3607`, `:3654-3673`). The reason is specific: resizing a *realized* layered WPF window deadlocks the UI thread on `MediaContext.CompleteRender` (dump-confirmed, `:3576-3583`), so a size mismatch gets a fresh window sized before its first `Show()` | One window per presence, **not pooled**. The click-through flag is flipped on the same live hwnd exactly as WPF does it, and re-placement is a `SetWindowPos` | WPF's pooling exists to avoid a WPF render-thread hazard the port cannot have: there is no `MediaContext` in this path, and the window is never resized after realization — it is re-placed. Pooling without that hazard would be a cache with no defect to prevent. WPF's *symmetry* bug is not copied either: the first attempt's disable path dropped only `WS_EX_TRANSPARENT` and left `WS_EX_LAYERED` behind, so this re-asserts `WS_EX_LAYERED \| WS_EX_TOOLWINDOW \| WS_EX_NOACTIVATE` on every flip, which is what WPF's `:3666` does |
+| **D55** | Monitor geometry is in **device-independent pixels** with a per-screen DPI scale, and the scale is carried on `MonitorInfo.DpiScale` because the conversion has to be undone later (`:2204-2245`, `:4130-4141`) | `OverlayBounds` is **physical pixels**, and `OverlayDisplays.Enumerate()` reports each display's physical rect, work area and primary flag with **no DPI at all** | A Win32 top-level window's coordinates are physical pixels and there is no WPF layout system above this surface, so there is nothing to convert. DPI becomes a real concern the moment content is drawn on the surface, and nothing is drawn (D52). Recorded because it **will** matter: the packet that draws must decide its own scaling, and inheriting WPF's DIP convention by accident would be worse than choosing it |
+| **D56** | The overlay is a Windows mechanism and the shipping product is Windows-only, so the question never arises | **Linux gets no overlay**: `OverlayPresenceFactory.CreateFor(Linux)` returns a typed `Unavailable(overlay-mechanism-absent)` whose detail names the route (X11 override-redirect + `_NET_WM_STATE_ABOVE` + an empty XFixes `ShapeInput` region), names why Wayland is a refusal rather than a harder Linux (no protocol an ordinary client may use; `wlr-layer-shell` is wlroots-only and Mutter does not implement it; the pinned Avalonia 12.1.1 graph ships `Avalonia.X11` + `Avalonia.FreeDesktop` and no Wayland package), and carries the **exact four-step manual gate** that would settle it | `ISecretStore` and `ITrayPresence` set the precedent and the constitution sets the rule: a stub, a no-op fallback or a Windows-only test never proves cross-platform support. The refusal covers `Withdraw` and `SetClickThrough` as well as `Present`, and never reports `IsPresenting` — there is no path through it a caller can mistake for a surface on screen. This machine cannot discharge the gate: the port's Linux environment is WSLg, whose XWayland root has no `_NET_CLIENT_LIST` (`port-lessons.md:52`), so z-order cannot be trusted there at all. Board row: **BLOCKED**, not WIP |
+
+**Citation correction (SP-099).** The SP-099 packet cited `Topmost = true` at `FlashService.cs:3612`,
+`WS_EX_TRANSPARENT` at `:3666` and `SetWindowPos ... HWND_TOPMOST` at `:3862`. In the tree at this
+SHA they are `:3615`, `:3667-3668` and `:3867` — a drift of about three lines. D47 above already
+carried the correct trio, so the document was right and the packet's copy had drifted. The tree
+wins; every SP-099 citation is against the tree.
+
+**What SP-099 proves, and where it stops.** Proven from the operating system, in the pure-logic test
+project, with an independent second copy of every P/Invoke and a negative control that re-runs on
+every suite execution: the surface exists and is visible; the OS holds exactly the rectangle that was
+asked for; the OS holds the requested non-zero `LWA_ALPHA`, so there is something for the compositor
+to draw (and the instrument proves it can say "the OS holds none" by building the CCP ghost on
+purpose and reading -1 back from it); the OS's own z-order walk puts the surface above every ordinary
+window; the window manager's hit test routes the surface's centre **away** from it while
+click-through is on and **to** it while click-through is off, both at the same point in the same run;
+showing it never takes the foreground; withdrawing it really removes it from both the visible set and
+the hit test; and disposing leaves no top-level window behind. **Undischarged, and named:** that
+anything is drawn (nothing is); that a human sees the surface above another application's window —
+DWM composition, exclusive-fullscreen and DirectX applications, Magnifier, RDP and mirror drivers can
+all defeat it with every query above still answering yes, and `presentation-verified` is a headed
+capture this packet does not claim; that a **real pointer** passes through, since `WindowFromPoint` is
+the window manager's routing question asked, not delivered input (`SendInput` would move the user's
+cursor mid-suite and fails silently on a locked workstation, so it is a headed gate); multi-monitor
+and cross-DPI placement, because this machine reports one display; sustained topmost under contention
+(D53); and every part of Linux (D56). **Said once, plainly: nothing has been drawn on this surface,
+and nothing here should be read as saying a flash was shown.**
