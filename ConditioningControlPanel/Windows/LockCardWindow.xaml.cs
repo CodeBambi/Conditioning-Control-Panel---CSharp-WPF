@@ -110,6 +110,17 @@ namespace ConditioningControlPanel
         private static System.Threading.Thread? _watchdogThread;
         private static IntPtr[] _watchdogHwnds = Array.Empty<IntPtr>();
         private static volatile int _watchdogOpenCount;
+        // Cards whose Show() has been entered but has not returned yet. THE bug this closes (#984,
+        // "froze on the day-2 lock card"): the snapshot only counts windows that already have an
+        // hwnd, so on a POOL MISS - a freshly constructed window, i.e. the very first card of a run,
+        // which for a program is day 2 - the pre-Show snapshot counted zero, the watchdog thread
+        // never started, and the switch was disarmed across the one Show() that can actually wedge
+        // (#494's synchronous CompleteRender on a fresh WS_EX_LAYERED realization). Every LATER card
+        // is pooled, so its hwnd is already valid and the switch armed - which is exactly why the
+        // field reports single out the first card and not "any lock card". Counting shows in flight
+        // arms the switch for the fresh case too, so a wedge there gets the emergency drop and the
+        // fail-fast rung instead of leaving the user to task-kill.
+        private static volatile int _watchdogShowsInFlight;
         private static volatile bool _watchdogPongPending;
         private static volatile bool _watchdogDropped;
         // Hwnds hit by EmergencyDrop. SLWA permanently breaks WPF's layered rendering on them, so any
@@ -550,6 +561,10 @@ namespace ConditioningControlPanel
         {
             base.OnSourceInitialized(e);
             _hwnd = new WindowInteropHelper(this).Handle;
+            // Hand the hwnd to the dead-man's switch NOW: we are inside the fresh Show() and ahead of
+            // the CompleteRender that can wedge, so this is the only moment at which a pool-miss card
+            // can make itself droppable before it might stop responding.
+            PublishWatchdogHwnd(_hwnd);
 
             // Swallow WM_DPICHANGED: this window's geometry is computed manually per-monitor
             // (PositionOnScreen uses the target monitor's DPI), so WPF's automatic DPI rescale is
@@ -1228,15 +1243,63 @@ namespace ConditioningControlPanel
                     if (w._hwnd != IntPtr.Zero) hwnds.Add(w._hwnd);
                 _watchdogHwnds = hwnds.ToArray();
                 _watchdogOpenCount = hwnds.Count;
-                if (_watchdogOpenCount > 0 && (_watchdogThread == null || !_watchdogThread.IsAlive))
-                {
-                    _watchdogThread = new System.Threading.Thread(WatchdogLoop)
-                    {
-                        IsBackground = true,
-                        Name = "LockCardDeadManSwitch"
-                    };
-                    _watchdogThread.Start();
-                }
+                EnsureWatchdogThread();
+            }
+        }
+
+        /// <summary>Start the switch thread if anything is (or is about to be) covering the screen.
+        /// Caller must hold <see cref="_watchdogLock"/>.</summary>
+        private static void EnsureWatchdogThread()
+        {
+            if (_watchdogOpenCount == 0 && _watchdogShowsInFlight == 0) return;
+            if (_watchdogThread != null && _watchdogThread.IsAlive) return;
+            _watchdogThread = new System.Threading.Thread(WatchdogLoop)
+            {
+                IsBackground = true,
+                Name = "LockCardDeadManSwitch"
+            };
+            _watchdogThread.Start();
+        }
+
+        /// <summary>
+        /// Arm the switch across one <c>Show()</c> - see <see cref="_watchdogShowsInFlight"/> for why
+        /// the snapshot alone is not enough on a pool miss. Always paired with
+        /// <see cref="EndWatchdogShow"/> in a finally.
+        /// </summary>
+        private static void BeginWatchdogShow()
+        {
+            lock (_watchdogLock)
+            {
+                _watchdogShowsInFlight++;
+                EnsureWatchdogThread();
+            }
+        }
+
+        private static void EndWatchdogShow()
+        {
+            lock (_watchdogLock)
+            {
+                if (_watchdogShowsInFlight > 0) _watchdogShowsInFlight--;
+            }
+        }
+
+        /// <summary>
+        /// Publish a just-created hwnd to the watchdog's view. Called from OnSourceInitialized, which
+        /// runs synchronously INSIDE Show() and BEFORE the CompleteRender that can wedge - so the
+        /// emergency drop can still reach a window whose Show() never returned. Without this the
+        /// in-flight arming would reach the fail-fast rung with an empty hwnd array and could only
+        /// kill the process, never free the screen the gentle way.
+        /// </summary>
+        private static void PublishWatchdogHwnd(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return;
+            lock (_watchdogLock)
+            {
+                foreach (var h in _watchdogHwnds) if (h == hwnd) return;
+                var grown = new IntPtr[_watchdogHwnds.Length + 1];
+                Array.Copy(_watchdogHwnds, grown, _watchdogHwnds.Length);
+                grown[^1] = hwnd;
+                _watchdogHwnds = grown;
             }
         }
 
@@ -1247,7 +1310,7 @@ namespace ConditioningControlPanel
             {
                 System.Threading.Thread.Sleep(1000);
 
-                if (_watchdogOpenCount == 0)
+                if (_watchdogOpenCount == 0 && _watchdogShowsInFlight == 0)
                 {
                     // No card up: idle. Reset so a stale ping from a previous card can't count as a wedge.
                     _watchdogPongPending = false;
@@ -1299,7 +1362,7 @@ namespace ConditioningControlPanel
                     try { dispatcher.BeginInvoke(new Action(EmergencyRecoveryCleanup), DispatcherPriority.Send); }
                     catch { }
                 }
-                else if (stalled >= WATCHDOG_FAILFAST_MS && _watchdogOpenCount > 0)
+                else if (stalled >= WATCHDOG_FAILFAST_MS && (_watchdogOpenCount > 0 || _watchdogShowsInFlight > 0))
                 {
                     App.Logger?.Fatal(
                         "[WATCHDOG] LockCardWindow: UI thread still wedged {Ms}ms after the emergency drop - terminating so the screen is freed",
@@ -1577,11 +1640,24 @@ namespace ConditioningControlPanel
                 // wedge site is the show sequence itself (#494's synchronous CompleteRender on a fresh
                 // realization), and by iteration N the earlier monitors' cards are already fullscreen
                 // topmost. Pre-Show covers pooled reuse (hwnd already valid); post-Show covers a fresh
-                // window whose hwnd materialized inside Show(). Windows without an hwnd yet are skipped
-                // by the snapshot, so the pre-Show call is safe on a pool miss.
+                // window whose hwnd materialized inside Show(). A pool MISS has no hwnd yet, so the
+                // snapshot alone counts zero and would leave the switch disarmed across precisely the
+                // Show() that can wedge - BeginWatchdogShow closes that hole (see _watchdogShowsInFlight).
                 UpdateWatchdogSnapshot();
-                window.Show();
-                window.OnShown();   // per-show foreground/focus/voice (Loaded no longer re-fires on reuse)
+                BeginWatchdogShow();
+                try
+                {
+                    using (VideoDiag.UiScope("LockCardWindow.Show(fullscreen layered)"))
+                    using (HangContext.Scope("lockCard.show"))
+                    {
+                        window.Show();
+                        window.OnShown();   // per-show foreground/focus/voice (Loaded no longer re-fires on reuse)
+                    }
+                }
+                finally
+                {
+                    EndWatchdogShow();
+                }
                 UpdateWatchdogSnapshot();
             }
 
