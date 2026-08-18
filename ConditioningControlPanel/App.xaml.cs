@@ -1211,6 +1211,41 @@ namespace ConditioningControlPanel
         }
         private System.Windows.Threading.DispatcherTimer? _hangStressTimer;
 
+        // Hang-watchdog self-test — see the `--test-ui-hang` call site in OnStartup. Blocks the UI
+        // thread outright, which is indistinguishable from a render-thread deadlock as far as the
+        // watchdog's heartbeat is concerned: no posted callback runs, so the silence grows exactly as
+        // it does in a real freeze. Default 30s (the watchdog fires at 10s + a 3s grace re-check, so
+        // this leaves ample room to observe the report landing and to task-kill mid-wedge in order to
+        // exercise the cross-session sentinel).
+        private void StartUiHangSelfTest(string[] args)
+        {
+            int seconds = 30;
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == "--test-ui-hang" && int.TryParse(args[i + 1], out int parsed) && parsed > 0)
+                    seconds = Math.Min(parsed, 300);
+
+            int wedgeFor = seconds;
+            Logger?.Warning("[HANGTEST] UI-hang self-test armed - the UI thread will block for {Sec}s in 8s", wedgeFor);
+
+            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
+            {
+                Interval = TimeSpan.FromSeconds(8)
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                // Leave a breadcrumb first so the report has something to show beyond "(none)".
+                Services.HangContext.Enter("hangtest.deliberate-wedge");
+                Services.HangContext.Note("about to block the UI thread for " + wedgeFor + "s");
+                Logger?.Warning("[HANGTEST] blocking the UI thread NOW for {Sec}s", wedgeFor);
+                System.Threading.Thread.Sleep(wedgeFor * 1000);
+                Logger?.Warning("[HANGTEST] UI thread released");
+                Services.HangContext.Leave("hangtest.deliberate-wedge");
+            };
+            timer.Start();
+            _hangStressTimer = timer;   // root it so it isn't collected
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
@@ -1497,6 +1532,12 @@ namespace ConditioningControlPanel
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
             Services.EngineCrashSentinel.ConsumeAndReport(Logger);
+
+            // Same idea for a UI FREEZE rather than a crash: if the last session wedged and the
+            // user task-killed it (the only way out of a hard freeze), the watchdog's findings are
+            // sitting in a sentinel file that nothing has read yet. Replay them here so the freeze
+            // shows up in THIS session's log tail — which is what the bug reporter attaches.
+            Services.UiHangWatchdog.ConsumeAndReportPreviousHang(Logger);
 
             // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
             // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
@@ -2367,6 +2408,14 @@ namespace ConditioningControlPanel
             // via env vars so the harness can dial it without a rebuild.
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
+
+            // `--test-ui-hang [seconds]`: deliberately wedge the UI thread so the hang watchdog can be
+            // verified end to end (report file, sentinel, minidump, and - if the process is killed
+            // while wedged - the "PREVIOUS SESSION HUNG" replay on the next launch). There is no other
+            // way to exercise it: a real wedge is a render-thread deadlock we cannot summon on demand.
+            // Dead code in every normal launch.
+            if (e.Args.Contains("--test-ui-hang"))
+                StartUiHangSelfTest(e.Args);
 
             // `--goon-test`: dev play-test cockpit for the Goon Game 1v1 duel — two independent
             // player panels in this one process (each with its OWN GoonGameService, never the
@@ -4411,6 +4460,10 @@ Application State:
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
             try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
+            // A shutdown that takes >13s (video teardown, haptics stop, WebView2 dispose) can trip
+            // the watchdog on the way out. That is not the freeze we are hunting — disarm it so the
+            // next launch doesn't cry hang over a clean, if slow, exit.
+            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch { }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This

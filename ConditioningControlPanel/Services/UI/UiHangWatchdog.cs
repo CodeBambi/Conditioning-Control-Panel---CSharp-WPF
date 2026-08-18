@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows.Threading;
 using Microsoft.Win32.SafeHandles;
@@ -79,6 +80,23 @@ public static class UiHangWatchdog
         _thread.Start();
     }
 
+    /// <summary>
+    /// Which silence budget applies: the ordinary one once the dispatcher has pumped at least one
+    /// heartbeat, or the much longer startup budget before that (OnStartup runs the whole service
+    /// init synchronously on the UI thread, so pre-first-beat silence is by design — see the type
+    /// remarks and the v6.2.x "stuck on splash" wave that firing early caused).
+    /// </summary>
+    internal static long ThresholdFor(bool hasPumpedOnce)
+        => hasPumpedOnce ? HANG_THRESHOLD_MS : STARTUP_HANG_THRESHOLD_MS;
+
+    /// <summary>
+    /// The whole hang verdict, as a pure function of "how long has the dispatcher been silent" and
+    /// "has it ever pumped". Extracted so the decision is testable headlessly — the loop it came
+    /// from can only be exercised by actually wedging a real dispatcher.
+    /// </summary>
+    internal static bool IsHung(long silenceMs, bool hasPumpedOnce)
+        => silenceMs > ThresholdFor(hasPumpedOnce);
+
     private static void Loop(Dispatcher dispatcher)
     {
         CleanupOldDumps();
@@ -102,16 +120,16 @@ public static class UiHangWatchdog
                 }
 
                 bool started = Volatile.Read(ref _firstBeatSeen) == 1;
-                long threshold = started ? HANG_THRESHOLD_MS : STARTUP_HANG_THRESHOLD_MS;
+                long threshold = ThresholdFor(started);
                 long silence = Environment.TickCount64 - Volatile.Read(ref _lastBeatTick);
-                if (silence > threshold)
+                if (IsHung(silence, started))
                 {
                     // Re-check once after a short grace period: a sleep/resume gap or a debugger
                     // break also stalls the heartbeat, but those recover within one beat.
                     Thread.Sleep(3000);
                     if (dispatcher.HasShutdownStarted) return;
                     silence = Environment.TickCount64 - Volatile.Read(ref _lastBeatTick);
-                    if (silence <= threshold) continue;
+                    if (!IsHung(silence, started)) continue;
 
                     if (!_hangLogged)
                     {
@@ -121,16 +139,24 @@ public static class UiHangWatchdog
                         // "(idle)" when the wedge is somewhere uninstrumented, which is itself a
                         // useful negative — see the breadcrumb contract in VideoDiag.
                         string mark = VideoDiag.UiMarkDescription;
-                        App.Logger?.Error("[WATCHDOG] UI thread unresponsive for {Sec:F0}s{Phase} — likely render-thread deadlock; last UI mark: {Mark}",
-                            silence / 1000.0, started ? "" : " (never pumped — wedged during startup)", mark);
+                        // ...and HangContext names WHICH FEATURE was live when it happened, which the
+                        // stack alone does not (the program-freeze wave all reported mark="(idle)").
+                        string state = HangContext.DescribeCompact();
+                        App.Logger?.Error("[WATCHDOG] UI thread unresponsive for {Sec:F0}s{Phase} — likely render-thread deadlock; last UI mark: {Mark}; {State}",
+                            silence / 1000.0, started ? "" : " (never pumped — wedged during startup)", mark, state);
                         // Mirror into the video trace. These lines only ever went to the ROLLING
                         // Serilog file, which a post-freeze relaunch scrolls straight out of the
                         // 100-line tail a bug report attaches — the exact evidence loss VideoDiag
                         // exists to prevent (#750-#753). Log() is a no-op until VideoDiag.Start ran.
                         VideoDiag.Log("WATCHDOG", string.Format(
                             System.Globalization.CultureInfo.InvariantCulture,
-                            "UI thread unresponsive for {0:F0}s{1} - last UI mark: {2}",
-                            silence / 1000.0, started ? "" : " (never pumped - wedged during startup)", mark));
+                            "UI thread unresponsive for {0:F0}s{1} - last UI mark: {2}; {3}",
+                            silence / 1000.0, started ? "" : " (never pumped - wedged during startup)", mark, state));
+
+                        // Durable, human-readable report + the cross-session sentinel. Written
+                        // BEFORE the minidump because the dump can take up to 60s (or never finish)
+                        // and a task-kill during it must still leave evidence behind.
+                        WriteHangReport(silence, started, mark);
                     }
                     if (!_dumpWritten)
                     {
@@ -143,6 +169,10 @@ public static class UiHangWatchdog
                     _hangLogged = false;
                     App.Logger?.Warning("[WATCHDOG] UI thread recovered");
                     VideoDiag.Log("WATCHDOG", "UI thread recovered");
+                    // The app came back, so this session will log its own story and exit cleanly.
+                    // Disarm the sentinel: it exists ONLY to speak for a session that was
+                    // task-killed while wedged and therefore never got to say anything.
+                    ClearSentinel();
                 }
             }
             catch { }
@@ -245,6 +275,164 @@ public static class UiHangWatchdog
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetCurrentProcess();
+
+    // ── DURABLE HANG REPORT + CROSS-SESSION SENTINEL ─────────────────────────────────────────
+    //
+    // WHY (program-freeze wave, v6.8.2 — day-14 corner GIF, day-2 lock card, #984): every one of
+    // those reports is a HARD freeze, i.e. the user task-kills the app. That kill costs us
+    // everything the watchdog just learned unless it is already on the platter:
+    //   * The Serilog line above goes to the ROLLING app log, and the relaunch the user needs in
+    //     order to FILE the report writes hundreds of startup lines over it — the freeze scrolls
+    //     out of the 100-line tail the bug reporter attaches. (Same evidence loss VideoDiag was
+    //     built for; we mirror there too, but that file rolls at 1MB.)
+    //   * The minidump is the best evidence and the least likely to arrive: it is tens of MB, the
+    //     user is never told it exists, and the bug reporter cannot attach it.
+    // So: one small, self-contained, immediately-flushed text file per hang episode, plus a
+    // sentinel that the NEXT launch consumes and re-logs loudly. After a task-kill the very first
+    // lines of the fresh session's log then say "you froze, here is what was running" — which is
+    // in the tail, so it reaches us through the ordinary bug-report path with no user effort.
+    private const int MaxReportsPerSession = 5;
+    private static int _reportsWritten;
+
+    private static string SentinelPath => Path.Combine(App.UserDataPath, "logs", "ui_hang.pending");
+
+    private static void WriteHangReport(long silenceMs, bool startedPumping, string mark)
+    {
+        try
+        {
+            if (_reportsWritten >= MaxReportsPerSession) return;
+            _reportsWritten++;
+
+            string dir = Path.Combine(App.UserDataPath, "logs");
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, $"hang_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+
+            var body = new StringBuilder(2048);
+            body.AppendLine("CCP UI-hang report");
+            body.Append("when       : ").AppendLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            body.Append("version    : ").AppendLine(Safe(() => UpdateService.AppVersion));
+            body.Append("pid        : ").AppendLine(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            body.Append("silence    : ").Append((silenceMs / 1000.0).ToString("F0", System.Globalization.CultureInfo.InvariantCulture)).AppendLine("s");
+            body.Append("phase      : ").AppendLine(startedPumping ? "running" : "STARTUP (dispatcher never pumped)");
+            body.Append("lastUiMark : ").AppendLine(mark);
+            body.AppendLine();
+            body.AppendLine(HangContext.Describe());
+
+            string text = body.ToString();
+
+            // WriteThrough: a hard power-off (several of these reports end that way) must not be
+            // able to take the file back with it.
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
+                       FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough))
+            using (var sw = new StreamWriter(fs, Encoding.UTF8))
+            {
+                sw.Write(text);
+                sw.Flush();
+                fs.Flush(true);
+            }
+
+            ArmSentinel(text);
+            CleanupOldReports();
+
+            App.Logger?.Error("[WATCHDOG] hang report written: {Path}", path);
+            VideoDiag.Log("WATCHDOG", "hang report written: " + path);
+        }
+        catch (Exception ex)
+        {
+            // Last resort: if the file could not be written, at least get the state into the log.
+            try
+            {
+                App.Logger?.Error("[WATCHDOG] hang report file failed ({E}); state inline:{NL}{State}",
+                    ex.Message, Environment.NewLine, HangContext.Describe());
+            }
+            catch { }
+        }
+    }
+
+    private static void ArmSentinel(string reportText)
+    {
+        try
+        {
+            string path = SentinelPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
+                FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
+            using var sw = new StreamWriter(fs, Encoding.UTF8);
+            sw.Write(reportText);
+            sw.Flush();
+            fs.Flush(true);
+        }
+        catch { }
+    }
+
+    private static void ClearSentinel()
+    {
+        try
+        {
+            string path = SentinelPath;
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Clean shutdown — even a slow one — is not a hang. Called from App.OnExit next to the other
+    /// dirty-shutdown sentinels so the next launch does not false-report a freeze the user
+    /// actually sat through and then quit normally.
+    /// </summary>
+    public static void ClearSentinelOnCleanExit() => ClearSentinel();
+
+    /// <summary>
+    /// Called once at startup. If a sentinel survived, the previous session was wedged when the
+    /// process died (task-kill / hard reset) and never got to log anything more. Re-log the whole
+    /// captured state at Error level — the production Serilog floor is Information, so a Debug
+    /// line here would be invisible in the field — and consume the file so it reports once.
+    /// </summary>
+    public static void ConsumeAndReportPreviousHang(Serilog.ILogger? logger)
+    {
+        try
+        {
+            string path = SentinelPath;
+            if (!File.Exists(path)) return;
+
+            string body = "";
+            DateTime armed = DateTime.MinValue;
+            try { body = File.ReadAllText(path).Trim(); } catch { }
+            try { armed = File.GetLastWriteTime(path); } catch { }
+
+            logger?.Error(
+                "[WATCHDOG] PREVIOUS SESSION HUNG: the UI thread was unresponsive at {Armed} and the process " +
+                "died without recovering (task-kill / hard reset), so nothing else was logged. " +
+                "Captured state follows; a matching hang_*.dmp/.txt may be next to this log.{NL}{Body}",
+                armed == DateTime.MinValue ? "(unknown)" : armed.ToString("yyyy-MM-dd HH:mm:ss"),
+                Environment.NewLine,
+                string.IsNullOrWhiteSpace(body) ? "(state unavailable)" : body);
+
+            ClearSentinel();
+        }
+        catch { }
+    }
+
+    /// <summary>Keep the four newest text reports; they are tiny but should not accumulate forever.</summary>
+    private static void CleanupOldReports()
+    {
+        try
+        {
+            string dir = Path.Combine(App.UserDataPath, "logs");
+            foreach (var f in new DirectoryInfo(dir).GetFiles("hang_*.txt")
+                         .OrderByDescending(f => f.LastWriteTimeUtc).Skip(4))
+            {
+                try { f.Delete(); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    private static string Safe(Func<string> probe)
+    {
+        try { return probe() ?? "(null)"; }
+        catch { return "(unavailable)"; }
+    }
 
     private static void WriteDump(long silenceMs)
     {
