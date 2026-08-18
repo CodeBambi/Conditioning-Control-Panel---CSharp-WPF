@@ -1,6 +1,0 @@
-{
-  "packet": "SP-099-overlay-surface",
-  "unit": 16,
-  "headless": 0,
-  "reason": "OverlayCapabilityTests: OS-earned facts for the Win32 overlay surface (hit-test and layered-alpha oracle controls, presence, geometry, alpha, z-order, both-polarity input routing, no focus steal, withdraw, dispose, idle/disposed refusals, Linux and macOS refusals, invisible-request refusal, display enumeration cross-check, and the no-draw contract string)"
-}

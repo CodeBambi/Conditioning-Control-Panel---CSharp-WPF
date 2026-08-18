@@ -26,7 +26,8 @@ public readonly record struct OverlayNativeHandles(nint Window);
 /// a point inside it the way the request asked, proven in BOTH polarities in the same breath; and
 /// the surface did not take the foreground. Any "no" is a typed
 /// <see cref="CapabilityState.Unavailable"/> carrying the failing check and the Win32 last-error.
-/// There are exactly two places in this file that construct <c>Available</c> and both sit
+/// There are exactly THREE places in this file that construct <c>Available</c> - Present,
+/// SetClickThrough and Withdraw - and all three sit
 /// downstream of that whole sequence.</para>
 ///
 /// <para><b>Why the hit test is asked twice.</b> "The point does not route to this window" is

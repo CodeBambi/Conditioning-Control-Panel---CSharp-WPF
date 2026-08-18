@@ -75,7 +75,7 @@ go red because an overlay did not appear.
 
 | first attempt | here |
 |---|---|
-| `void` everywhere | every operation returns `CapabilityState`; `Available` is constructed at exactly two places in the backend and both are downstream of an OS read-back |
+| `void` everywhere | every operation returns `CapabilityState`; `Available` is constructed at exactly three places in the backend and both are downstream of an OS read-back |
 | click-through = empty method | click-through is claimed only after the OS's own hit test (`WindowFromPoint`) stops returning our window, and the same run proves the same window DOES get returned with the flag cleared |
 | `WS_EX_LAYERED`, no alpha | `SetLayeredWindowAttributes` is mandatory and `GetLayeredWindowAttributes` must read back alpha > 0, or the presence refuses. The refusal names the CCP shape |
 | Linux never-throw no-op | `UnsupportedOverlayPresence` — a typed `Unavailable` with a named manual gate, the `TrayPresenceFactory.LinuxManualGate` shape (`TrayPresenceFactory.cs:33-42`) |
