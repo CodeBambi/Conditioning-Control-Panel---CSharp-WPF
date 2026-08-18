@@ -112,6 +112,16 @@ public sealed class BrainDrainLayer : BaseLayer
         ArmFirstFrameWatchdog(intensity, melt);
     }
 
+    /// <summary>True once <see cref="Start"/> has built a capture pump and it has not been torn
+    /// down. Read by <c>OverlayService.StartBrainDrainBlur</c> so "started on compositor layer" is
+    /// only logged when the layer really armed, and by its liveness check so a layer that is
+    /// <see cref="BaseLayer.IsActive"/> but pump-less cannot suppress restarts forever (#975).</summary>
+    internal bool PumpArmed => _pump != null;
+
+    /// <summary>Frames the current pump has published, or -1 when there is no pump. Purely for the
+    /// diagnostic lines - a report can now say "active, armed, 0 frames" instead of just "started".</summary>
+    internal int FramesPublished => _pump?.FramesPublished ?? -1;
+
     public void Stop()
     {
         DisarmFirstFrameWatchdog();
@@ -190,7 +200,12 @@ public sealed class BrainDrainLayer : BaseLayer
         try { timer?.Stop(); } catch { }
     }
 
-    private static void NotifyNoFrames()
+    /// <summary>The user-facing half of the zero-render report. Internal rather than private
+    /// because the LEGACY per-screen-window route now has the same watchdog
+    /// (<c>OverlayService.ArmLegacyFirstFrameWatchdog</c>) and a user on that route must be told
+    /// the same thing in the same words - #975 was triaged blind partly because only one of the
+    /// two render paths said anything at all when it produced no pixels.</summary>
+    internal static void NotifyNoFrames()
     {
         try
         {
