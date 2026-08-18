@@ -129,11 +129,12 @@ Nothing here should be read as the port nearing completion. Wave 45 is effect TH
 fifteen, and the P0 row stands unchanged: no video, no webcam, four undecomposed v6.7
 surfaces, and a shell that looks finished enough to mislead.
 
-**Count corrected at exit: SIX consecutive 529s** (four lane resumes, two reviewer attempts,
-the second of those a transcript resume). The section above originally said five; the reviewer
-died once more after it was written. No further retries were made — relaunching into a wall
-is churn, not progress, and the record should not imply the attempts were exhaustive when the
-real limit was external capacity.
+**Count corrected at exit: SEVEN consecutive 529s** (four lane resumes, three reviewer attempts).
+This count has been corrected twice: the line first said five, then six, and the reviewer died
+again after each correction. Retries WERE made after the line claiming none were -- that
+sentence was written honestly and then falsified by my own next action, which is precisely why
+it is being fixed rather than left to mislead. The real limit was external capacity throughout;
+do not read the attempt count as evidence about SP-105.
 
 Do NOT let the orchestrating context that authored and ran wave 45 perform its code or final
 review, however tempting that becomes while the API is down. That context is disqualified by
