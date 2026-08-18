@@ -740,7 +740,7 @@ composites as what was underneath it, so show-then-paint has no black-frame arti
 **And the measurement that made D57 a pin rather than an argument.** `UpdateLayeredWindow` on this
 window, after `SetLayeredWindowAttributes`, fails with `ERROR_INVALID_PARAMETER` (87) — **until**
 `WS_EX_LAYERED` is cleared and re-set, which is the sequence the API's own documentation prescribes;
-after that it returns TRUE and `GetLayeredWindowAttributes` returns FALSE **for good**. The ghost
+after that it returns TRUE and `GetLayeredWindowAttributes` returns FALSE for as long as ULW owns the window (a later `SetLayeredWindowAttributes` restores it, measured at re-review) — which is exactly the state an alpha-ramp packet would be in. The ghost
 check is therefore exactly two ordinary lines away from silence, and the style toggle on its own is
 harmless (the OS still reports the alpha), so the hazard does not announce itself in halves. A fact
 now asks the alpha on the far side of a paint, requires a full re-`Present` to still earn
