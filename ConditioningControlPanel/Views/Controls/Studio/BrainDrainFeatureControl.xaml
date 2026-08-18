@@ -222,10 +222,58 @@
                     </Grid>
                 </Border>
 
+                <!-- CLIP LIBRARY. The audio half reads Resources/sounds/braindrain under the
+                     INSTALL directory - NOT the user assets folder every other droppable asset
+                     lives in - and it ships containing only a .gitkeep. Nobody found it: four
+                     users asked where it was inside 24 hours and the community moderator did not
+                     know either. So the folder gets a front door here, plus the Refresh that makes
+                     a dropped-in clip work without an app restart (BrainDrainService.
+                     ReloadAudioFiles existed for that the whole time and nothing ever called it).
+                     Same shape as the Spiral card's library header. -->
+                <Border Style="{StaticResource SettingCardStyle}" Margin="0,10,0,0">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,10,16,12">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str st4_braindrain_clip_library}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}"/>
+                                    <TextBlock x:Name="TxtClipCount" x:FieldModifier="internal"
+                                               FontSize="11" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" x:Name="BtnOpenAudioFolder"
+                                        Content="{loc:Str btn_open_folder}"
+                                        Style="{DynamicResource OutlineButton}"
+                                        Padding="10,5" Margin="0,0,6,0" FontSize="11"
+                                        ToolTip="{loc:Str st4_braindrain_open_folder_tt}"
+                                        Click="BtnOpenAudioFolder_Click"/>
+                                <Button Grid.Column="2" x:Name="BtnRefreshAudio"
+                                        Content="{loc:Str btn_refresh_2}"
+                                        Style="{DynamicResource OutlineButton}"
+                                        Padding="10,5" FontSize="11"
+                                        ToolTip="{loc:Str st4_braindrain_refresh_clips_tt}"
+                                        Click="BtnRefreshAudio_Click"/>
+                            </Grid>
+                            <TextBlock Text="{loc:Str st4_braindrain_folder_hint}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
                      feature is a completely silent no-op with no way to tell why: the
                      service logs a warning and returns, and the UI would look armed. -->
                 <Border x:Name="NoAudioHint" x:FieldModifier="internal"
+                        Margin="0,10,0,0"
                         Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
                         CornerRadius="10" Padding="16,12" Visibility="Collapsed">
                     <TextBlock Text="{loc:Str st4_braindrain_no_audio_hint}"
