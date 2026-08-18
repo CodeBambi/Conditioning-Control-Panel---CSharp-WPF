@@ -217,8 +217,17 @@ public class ContinuousEffectSpineTests
         // StartEngine's order: flash (:178), subliminal (:186), then the overlay service that owns
         // the continuous pair (:192-193). It is also StudioTabView's rack order (:484-493) with the
         // unported rows removed. The list IS the order, so this pins it where a reader will look.
+        //
+        // SP-106 added the fourth member. The fact is unchanged and the assertion is STRONGER: the
+        // rack's order is upstream's for four modules now, and Spiral Overlay sits where the rack
+        // puts it (fourth, between Subliminals and Pink Filter) rather than where OverlayService's
+        // own body starts it (second of the pair). Those two orders disagree upstream and D90
+        // records which one the port took and why.
         Assert.Equal(
-            [FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, PinkFilterEffect.EffectId],
+            [
+                FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
+                PinkFilterEffect.EffectId,
+            ],
             rig.Engine.Effects.Select(e => e.Id));
     }
 

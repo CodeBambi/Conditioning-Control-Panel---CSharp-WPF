@@ -296,7 +296,12 @@ public class SessionSpineTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData("spiral")]
+    // "spiral" USED to sit in this list, as the rack row with no effect behind it. SP-106 gave it
+    // one, so it moved out of this theory and into ContinuousEffectSpineTests' rack-order fact and
+    // MovingEffectSpineTests' own quick-toggle facts. The FACT here is unchanged and is still the
+    // one WPF's `default: return` describes; what changed is which ids are unknown, and after
+    // SP-106 there is no ported row left that a gesture falls through.
+    [InlineData("visuals")]
     [InlineData("Flash")]
     public async Task QuickToggle_ForARowWithNoEffect_IsASilentNoOp(string? id)
     {
@@ -304,7 +309,10 @@ public class SessionSpineTests
         var before = rig.Session.Preset.Current.FlashEnabled;
 
         // WPF's `default: return` (MainWindow.Presets.cs:1259) and its unhandled rack rows
-        // (StudioTabView.xaml.cs:659). The id is case-SENSITIVE on purpose: it is a dispatch
+        // (StudioTabView.xaml.cs:659). "visuals" is a REAL WPF rack key with no master toggle
+        // (StudioTabView.xaml.cs:496 — "A dot that cannot be wired honestly is omitted", and
+        // MainWindow.Presets.cs:1241-1266 has no case for it), so it is upstream's own fall-through
+        // rather than an invented string. The id is case-SENSITIVE on purpose: it is a dispatch
         // identity, not display text, so "Flash" is a different row from "flash".
         Assert.False(rig.Engine.QuickToggle(id));
         Assert.Equal(before, rig.Session.Preset.Current.FlashEnabled);

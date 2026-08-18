@@ -327,10 +327,17 @@ public class NavigationShellHeadlessTests
     [AvaloniaFact]
     public async Task RightClickOnTheRackRow_OpensNoMenu_AndSelectsNothing()
     {
-        // WPF quick-toggles the effect on a rack row's right-click (StudioTabView.xaml.cs:657-660).
-        // The port has no spiral-overlay effect flag to flip, so the gesture is unhandled — the
-        // one thing it must never be is swallowed by a fake toggle or a context menu.
-        // Recorded as divergence §9 D6, NOT as parity.
+        // WPF quick-toggles the effect on a rack row's right-click (StudioTabView.xaml.cs:657-660)
+        // and, critically, sets Handled so the gesture does NOT also select the row
+        // (StudioTabView.xaml.cs:1115) — a toggle that opened the panel too would make the two
+        // gestures indistinguishable.
+        //
+        // The comment here used to say the port had no spiral effect to flip and that the gesture
+        // was therefore unhandled (§9 D6). SP-106 gave this row an effect, so the gesture IS
+        // handled now — and every assertion below still holds unchanged, because none of them was
+        // ever about the row being unported: a right-click must open no menu, select nothing and
+        // navigate nowhere whether or not there is a dial behind it. What the gesture does to the
+        // module is asserted where it belongs, in StudioRackHeadlessTests.
         var (host, window) = await BootAsync();
 
         var row = Descendant<RadioButton>(window, "RowSpiralOverlay");

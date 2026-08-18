@@ -426,31 +426,124 @@ public class StudioRackHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task TheSpiralRow_StillHasNoDotAndNoToggle_AndThatIsTheHonestState()
+    public async Task TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack()
     {
         var boot = await BootAsync();
         var window = boot.Window;
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
 
-        // §9 D5/D6 close for the Flash Images row and stay OPEN for this one. WPF's own rule
-        // for a row it cannot wire honestly is to omit the dot (StudioTabView.xaml.cs:494-496)
-        // and to leave the gesture unhandled (:659) — never to paint a dot that always reads
-        // off, which is the fake-available shape the capability contract bans.
+        // THIS FACT USED TO ASSERT THE OPPOSITE, and the assertion was right at the time: WPF's
+        // rule for a row it cannot wire honestly is to omit the dot (StudioTabView.xaml.cs:494-496)
+        // and leave the gesture unhandled (:659), and until SP-106 there was no spiral effect to
+        // report or to flip. There is now, so §9 D5/D6 CLOSE for the last row that had them open.
+        // Nothing was weakened to get here: the rule is unchanged and the row simply stopped
+        // qualifying for it.
         var spiral = Descendant<RadioButton>(window, "RowSpiralOverlay");
-        Assert.DoesNotContain(
+        Assert.Contains(
             spiral.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>(),
             e => e.Classes.Contains("dot"));
 
+        // Every rack row, without exception — which is the claim that was not available before.
+        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter" })
+        {
+            Assert.Contains(
+                Descendant<RadioButton>(window, name).GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+                e => e.Classes.Contains("dot"));
+        }
+
+        // And the gesture still opens nothing and selects nothing — the half of the old fact that
+        // was never about the row being unported.
         Click(window, spiral, MouseButton.Right);
         Assert.Null(spiral.ContextMenu);
         Assert.Empty(window.GetVisualDescendants().OfType<ContextMenu>());
         Assert.False(spiral.IsChecked);
 
-        // The one row that DOES carry the grammar has both, so the rack is not uniformly
-        // missing them — it is honest per row.
-        Assert.Contains(
-            Descendant<RadioButton>(window, "RowFlashImages").GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>(),
-            e => e.Classes.Contains("dot"));
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnTheSpiralRow_ReallyFlipsTheMovingModule_AndTheDotFollowsBothWays()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowSpiralOverlay");
+        var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
+
+        // Spiral Overlay is the ONE ported module that ships ON (AppSettings.cs:2644 —
+        // _spiralEnabled = true), so this row starts lit where the other three start dark, and the
+        // first gesture turns it OFF. That asymmetry is upstream's and is asserted rather than
+        // normalised away.
+        Assert.True(window.Session.Spiral.Enabled);
+        Assert.Equal(EffectDotState.Armed, page.RenderedSpiralDot);
+
+        Click(window, row, MouseButton.Right);
+
+        Assert.False(window.Session.Spiral.Enabled);
+        Assert.False(window.Session.SpiralPreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedSpiralDot);
+
+        // Both ways: a row whose toggle only goes one way is a row whose toggle does not toggle.
+        Click(window, row, MouseButton.Right);
+        Assert.True(window.Session.Spiral.Enabled);
+        Assert.Equal(EffectDotState.Armed, page.RenderedSpiralDot);
+
+        // Never Live from a gesture alone: no session owns the rack here and nothing is on screen,
+        // and for a MOVING module Live additionally requires the frames to be advancing.
+        Assert.NotEqual(EffectDotState.Live, page.RenderedSpiralDot);
+        Assert.False(window.Session.SpiralSurface.Showing);
+        Assert.False(row.IsChecked);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheSpiralPanelsCheckbox_AndItsRowsRightClick_AreTheSameOnePath()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowSpiralOverlay"));
+        var check = Descendant<CheckBox>(window, "SpiralEnableToggle");
+
+        // The panel opened on the module's real persisted dials.
+        Assert.True(check.IsChecked);
+        Assert.Equal(
+            window.Session.SpiralPreset.Current.OpacityPercent,
+            (int)Math.Round(Descendant<Slider>(window, "SpiralOpacitySlider").Value));
+
+        Click(window, Descendant<RadioButton>(window, "RowSpiralOverlay"), MouseButton.Right);
+        Assert.False(check.IsChecked);          // the row's gesture repainted the panel's dial
+        Assert.False(window.Session.Spiral.Enabled);
+
+        check.IsChecked = true;                 // and the panel's dial drives the same one path
+        window.UpdateLayout();
+        Assert.True(window.Session.Spiral.Enabled);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheSpiralPanelNamesTheLibraryFolder_WhenThereIsNoSpiralToDraw()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowSpiralOverlay"));
+
+        // A fresh data directory has no spirals folder at all, which is the ordinary first-run
+        // state — WPF's third fallback is a spiral compiled into the app and this port bundles no
+        // art (D86). The panel must therefore answer "where do I put one", which is the same dead
+        // end WPF names for the flash pool (FlashService.cs:589-597).
+        var library = Descendant<TextBlock>(window, "SpiralLibraryState");
+        Assert.Contains(window.Session.SpiralsFolder, library.Text!, StringComparison.Ordinal);
+
+        // And the live line says the module is armed with nothing to draw, without telling a user
+        // who has not started a session to stop one, or vice versa.
+        var live = Descendant<TextBlock>(window, "SpiralLiveState");
+        Assert.Contains("no spiral", live.Text!, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Running", live.Text!, StringComparison.Ordinal);
 
         await boot.Host.ShutdownAsync();
     }
@@ -476,9 +569,10 @@ public class StudioRackHeadlessTests
             .ToList();
         Assert.Equal(["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter"], rows);
 
-        // Three of the four have an effect whose state can be reported. The fourth does not, and
-        // still has no dot — D5/D6 stay open for exactly one row now instead of one of two.
-        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowPinkFilter" })
+        // SP-105: three of the four had an effect whose state could be reported, and D5/D6 stayed
+        // open for exactly one row. SP-106 gave that row an effect, so the loop below is now every
+        // row on the page — see TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack.
+        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter" })
         {
             Assert.Contains(
                 Descendant<RadioButton>(window, name).GetVisualDescendants()

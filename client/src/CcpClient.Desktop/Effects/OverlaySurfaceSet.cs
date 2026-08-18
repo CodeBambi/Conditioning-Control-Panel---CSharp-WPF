@@ -197,6 +197,51 @@ public sealed class OverlaySurfaceSet : IDisposable
     }
 
     /// <summary>
+    /// Put a NEW frame on a slot that is already up, without re-presenting it.
+    ///
+    /// <para><b>This is the one thing a MOVING module needed that neither a paced nor a static one
+    /// did (SP-106), and it is the frame path the overlay capability already documented and nobody
+    /// had used.</b> <see cref="IOverlayPresence.Present"/> walks the OS's whole top-level z-order
+    /// and asks the window manager's hit test in both polarities — with click-through momentarily
+    /// cleared (<c>Overlay/Win32OverlayPresence.cs:547-576</c>) — which is right once per placement
+    /// and, twenty times a second, would be a full-screen window catching the user's clicks twenty
+    /// times a second. <see cref="IOverlayPresence.Paint"/> touches no style, walks no z-order and
+    /// asks no hit test (<c>Overlay/IOverlayPresence.cs:80-85</c>: "A caller shows a surface once
+    /// and paints it"). So a frame advance is a paint, and only a paint.</para>
+    ///
+    /// <para>The failure rule is <see cref="Place"/>'s, deliberately identical: a surface the OS
+    /// confirms is on screen and does NOT hold the frame is worse than no surface, so it comes down
+    /// rather than being left holding whatever it last held. <b>A moving module's dot is derived
+    /// from this</b> — a repaint that failed took the surface with it, so the module reads "not
+    /// running" rather than "running, frozen".</para>
+    ///
+    /// <para><b>It never touches the lifetime and never re-arms the cadence.</b> A repaint changes
+    /// what is on a surface, not how long it is there for; a continuous module has no lifetime to
+    /// extend and a paced one's must not be extended by content.</para>
+    /// </summary>
+    /// <returns>False when the slot was not up, or when the paint did not hold.</returns>
+    public bool Repaint(Slot slot, OverlayFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(slot);
+        ArgumentNullException.ThrowIfNull(frame);
+
+        if (!slot.Live)
+        {
+            return false;
+        }
+
+        var paint = slot.Presence.Paint(frame);
+        LastPaint = paint;
+        if (paint is CapabilityState.Available)
+        {
+            return true;
+        }
+
+        Retire(slot);
+        return false;
+    }
+
+    /// <summary>
     /// Record that there is nowhere a surface could legally go, and return what was recorded.
     ///
     /// <para>No display is not a failure of this code and not something to guess around: WPF

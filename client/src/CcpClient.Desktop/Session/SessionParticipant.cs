@@ -30,12 +30,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly PersistenceStore<SubliminalPresetDocument> _subliminalPreset;
     private readonly PersistenceStore<PinkFilterPresetDocument> _pinkFilterPreset;
+    private readonly PersistenceStore<SpiralPresetDocument> _spiralPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
     private readonly ISubliminalSurface _subliminalSurface;
     private readonly IPinkFilterSurface _pinkFilterSurface;
+    private readonly ISpiralSurface _spiralSurface;
     private readonly UiDispatchBoundary _uiDispatch;
+    private readonly string _dataDirectory;
 
     public SessionParticipant(
         ParticipantInfrastructure infra,
@@ -45,12 +48,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IFlashSurface? surface = null,
         ISubliminalSurface? subliminalSurface = null,
         Func<bool>? onSignalThread = null,
-        IPinkFilterSurface? pinkFilterSurface = null)
+        IPinkFilterSurface? pinkFilterSurface = null,
+        ISpiralSurface? spiralSurface = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
         _log = infra.Log;
         _uiDispatch = infra.UiDispatch;
+        _dataDirectory = dataDirectory;
         ImagesFolder = DtrhUserMedia.ImagesFolder(AssetsRootFor(dataDirectory));
 
         _preset = new PersistenceStore<SessionPresetDocument>(
@@ -71,6 +76,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("PinkFilterPreset"), infra.Log,
             Path.Combine(dataDirectory, PinkFilterPresetDocument.FileName),
             PinkFilterPresetDocument.CurrentSchemaVersion);
+
+        // SP-106: the moving module's own document, on the same per-module precedent (D71/D80).
+        _spiralPreset = new PersistenceStore<SpiralPresetDocument>(
+            infra.OwnerFor("SpiralPreset"), infra.Log,
+            Path.Combine(dataDirectory, SpiralPresetDocument.FileName),
+            SpiralPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -118,6 +129,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // session (OverlayService.cs:666-671). The module itself has no clock at all.
         _pinkFilterSurface = pinkFilterSurface ?? PinkFilterSurfacePresenter.Product(sessionClock, Dispatch);
 
+        // SP-106: the moving module's surface. It takes the same clock for TWO cadences — the
+        // topmost kick every continuous layer needs, and the GIF's own frame advance — and the
+        // module itself still has no clock at all. That split is this packet's whole finding: see
+        // SpiralSurfacePresenter's remarks.
+        _spiralSurface = spiralSurface ?? SpiralSurfacePresenter.Product(sessionClock, Dispatch);
+
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
             signal,
@@ -138,6 +155,16 @@ public sealed class SessionParticipant : IBackgroundParticipant
             random: null,
             surface: _subliminalSurface);
 
+        Spiral = new SpiralOverlayEffect(
+            infra.OwnerFor("SpiralOverlay"),
+            signal,
+            _spiralPreset,
+            // Re-resolved on every engage, as WPF re-resolves inside its own reconcile
+            // (OverlayService.cs:437): a spiral dropped into the folder mid-session is picked up at
+            // the next gesture rather than at the next launch.
+            () => SpiralLibrary.Resolve(AssetsRootFor(dataDirectory), _spiralPreset.Current.Path),
+            _spiralSurface);
+
         PinkFilter = new PinkFilterEffect(
             infra.OwnerFor("PinkFilter"),
             signal,
@@ -146,10 +173,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
-        // overlay service that owns the continuous pair (:192-193). Mandatory Video and Spiral
-        // Overlay sit between them upstream and are not ported, so the three ported modules are
-        // adjacent here; the ORDER between them is upstream's and is what this list encodes.
-        Engine = new SessionEngine([Flash, Subliminals, PinkFilter], _preset, signal);
+        // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
+        // them upstream and is not ported, so the four ported modules are adjacent here; the ORDER
+        // between them is upstream's and is what this list encodes.
+        //
+        // Spiral Overlay and Pink Filter are ONE service upstream and are armed by one call
+        // (MainWindow.StartStop.cs:192-193 -> OverlayService.Start). Inside it the tint is started
+        // first and the spiral second (OverlayService.cs:371-381), which is the OPPOSITE of the
+        // rack's order — so there is no single upstream order to copy and the RACK's is taken, on
+        // the ground that the rack is the order the user has learned and the two are independent
+        // full-screen layers whose start order nothing observable depends on. Recorded as D90.
+        Engine = new SessionEngine([Flash, Subliminals, Spiral, PinkFilter], _preset, signal);
     }
 
     public string Name => "Session";
@@ -168,6 +202,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Pink Filter, the first CONTINUOUS module (SP-105). Public for the same reason.</summary>
     public PinkFilterEffect PinkFilter { get; }
 
+    /// <summary>Spiral Overlay, the first MOVING module (SP-106). Public for the same reason.</summary>
+    public SpiralOverlayEffect Spiral { get; }
+
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
     public IFlashSurface Surface => _surface;
@@ -178,6 +215,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Where its tint is drawn.</summary>
     public IPinkFilterSurface PinkFilterSurface => _pinkFilterSurface;
 
+    /// <summary>Where its spiral is drawn.</summary>
+    public ISpiralSurface SpiralSurface => _spiralSurface;
+
     /// <summary>The persisted preset store (public so a surface can save a dial it moved).</summary>
     public PersistenceStore<SessionPresetDocument> Preset => _preset;
 
@@ -186,6 +226,13 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>The Pink Filter module's persisted store, same reason.</summary>
     public PersistenceStore<PinkFilterPresetDocument> PinkFilterPreset => _pinkFilterPreset;
+
+    /// <summary>The Spiral Overlay module's persisted store, same reason.</summary>
+    public PersistenceStore<SpiralPresetDocument> SpiralPreset => _spiralPreset;
+
+    /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
+    /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
+    public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
 
     /// <summary>Where the flash pool reads the user's images from. The module panel shows this
     /// so an empty pool has an answer to "where do I put them", which WPF's own comment calls
@@ -199,6 +246,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _preset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _subliminalPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _pinkFilterPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _spiralPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -208,6 +256,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("session-preset", _preset.LastLoadOutcome);
         LogIfDegraded("subliminal-preset", _subliminalPreset.LastLoadOutcome);
         LogIfDegraded("pinkfilter-preset", _pinkFilterPreset.LastLoadOutcome);
+        LogIfDegraded("spiral-preset", _spiralPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -236,10 +285,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
         DisposeSurface(_surface);
         DisposeSurface(_subliminalSurface);
         DisposeSurface(_pinkFilterSurface);
+        DisposeSurface(_spiralSurface);
 
         return Task.WhenAll(
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
-            _assetSelection.StopAsync());
+            _spiralPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -248,7 +298,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Task.WhenAll(
             _preset.FlushAsync(boundedWait),
             _subliminalPreset.FlushAsync(boundedWait),
-            _pinkFilterPreset.FlushAsync(boundedWait));
+            _pinkFilterPreset.FlushAsync(boundedWait),
+            _spiralPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

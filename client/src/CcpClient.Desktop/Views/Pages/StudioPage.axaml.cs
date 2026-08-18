@@ -46,6 +46,7 @@ public partial class StudioPage : UserControl
     private readonly FlashImagesEffect _flash;
     private readonly SubliminalsEffect _subliminals;
     private readonly PinkFilterEffect _pinkFilter;
+    private readonly SpiralOverlayEffect _spiral;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -58,6 +59,7 @@ public partial class StudioPage : UserControl
         _flash = session.Flash;
         _subliminals = session.Subliminals;
         _pinkFilter = session.PinkFilter;
+        _spiral = session.Spiral;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -75,6 +77,7 @@ public partial class StudioPage : UserControl
         // unhandled"), and a fake toggle there would be worse than no gesture.
         AddQuickToggle(RowFlashImages, FlashImagesEffect.EffectId);
         AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId);
+        AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId);
         AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
@@ -83,11 +86,14 @@ public partial class StudioPage : UserControl
             OnEnableToggled(SubliminalEnableToggle, _subliminals, SubliminalsEffect.EffectId);
         PinkFilterEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(PinkFilterEnableToggle, _pinkFilter, PinkFilterEffect.EffectId);
+        SpiralEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(SpiralEnableToggle, _spiral, SpiralOverlayEffect.EffectId);
 
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
         OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
         OnSliderMoved(SubliminalFrequencySlider, OnSubliminalFrequencyMoved);
         OnSliderMoved(PinkFilterOpacitySlider, OnPinkFilterOpacityMoved);
+        OnSliderMoved(SpiralOpacitySlider, OnSpiralOpacityMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -109,6 +115,11 @@ public partial class StudioPage : UserControl
     /// <summary>The Pink Filter row's dot, same reason. This is the one that had to be earned:
     /// a continuous module is <c>Live</c> only while its surface is really up (SP-105).</summary>
     public EffectDotState RenderedPinkFilterDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Spiral Overlay row's dot, same reason — and the one with the strictest rule
+    /// behind it: a MOVING module is <c>Live</c> only while its surface is up AND still changing
+    /// (SP-106, <see cref="SpiralSurfacePresenter.Running"/>).</summary>
+    public EffectDotState RenderedSpiralDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -139,6 +150,26 @@ public partial class StudioPage : UserControl
             PointerReleasedEvent,
             (_, e) => OnRowPointerReleased(e, effectId),
             RoutingStrategies.Tunnel);
+
+    /// <summary>
+    /// The Spiral Overlay opacity slider writes the setting, re-applies it to whatever is already on
+    /// screen and saves — the same order the pink slider above it uses, and WPF's own for this
+    /// module (write, then <c>RefreshOverlays()</c>, reconciled at <c>OverlayService.cs:446</c>
+    /// -&gt; <c>UpdateSpiralOpacity</c>). The re-apply goes through the module rather than the
+    /// surface so the arm state and the dot move with it.
+    /// </summary>
+    private void OnSpiralOpacityMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(SpiralOpacitySlider.Value);
+        _spiral.SetOpacityPercent(value);
+        _ = _session.SpiralPreset.Save();
+        Refresh();
+    }
 
     private void ApplySelection()
     {
@@ -307,6 +338,10 @@ public partial class StudioPage : UserControl
             var pink = _session.PinkFilterPreset.Current;
             PinkFilterEnableToggle.IsChecked = pink.Enabled;
             PinkFilterOpacitySlider.Value = pink.OpacityPercent;
+
+            var spiral = _session.SpiralPreset.Current;
+            SpiralEnableToggle.IsChecked = spiral.Enabled;
+            SpiralOpacitySlider.Value = spiral.OpacityPercent;
         }
         finally
         {
@@ -348,6 +383,15 @@ public partial class StudioPage : UserControl
         PinkFilterLiveState.Text = DescribePinkFilterState(
             RenderedPinkFilterDot, tint, _session.Engine.Running, _pinkFilter.LastPlacement);
         PinkFilterSurfaceState.Text = DescribePinkFilterSurface(_pinkFilter.LastPlacement);
+
+        var spiral = _session.SpiralPreset.Current;
+        SpiralOpacityValue.Text = $"{spiral.OpacityPercent}%";
+        RenderedSpiralDot = PaintDot(SpiralRowDot, _spiral);
+        SpiralLiveState.Text = DescribeSpiralState(
+            RenderedSpiralDot, _spiral.Presentation, _spiral.SpiralPath is not null, _spiral.Showing,
+            _spiral.FrameCount, _session.Engine.Running, _spiral.LastPlacement);
+        SpiralLibraryState.Text = DescribeSpiralLibrary(_spiral.SpiralPath, _session.SpiralsFolder);
+        SpiralSurfaceState.Text = DescribeSpiralSurface(_spiral.LastPlacement);
     }
 
     private static EffectDotState PaintDot(Shape dot, ISessionEffect effect)
@@ -518,6 +562,104 @@ public partial class StudioPage : UserControl
 
         EffectDotState.Armed when tint.IsInvisible =>
             "Armed, but the opacity is at 0%, so there is nothing to draw. Move the slider up.",
+        EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
+        _ => "Switched off. Nothing will happen, session or no session.",
+    };
+
+    /// <summary>
+    /// The same rule again for the spiral. Its tense is the tint's — the layer stays, so the line is
+    /// about what is on screen NOW rather than about the last one.
+    /// </summary>
+    public static string DescribeSpiralSurface(CapabilityState? placement) => placement switch
+    {
+        null => "The spiral is drawn on an always-on-top, click-through overlay above your other "
+            + "windows. Nothing has been drawn yet.",
+        CapabilityState.Available => "The spiral is on an always-on-top overlay surface above your "
+            + "other windows.",
+        CapabilityState.Unavailable u => $"Nothing is drawn on screen: {u.Reason.Detail}",
+        CapabilityState.Degraded d => $"Partly drawn: {d.SurvivingSemantics}. {d.Reason.Detail}",
+        CapabilityState.PermissionRequired p => $"Nothing is drawn on screen: {p.Reason.Detail}",
+        CapabilityState.DependencyMissing m => $"Nothing is drawn on screen: {m.Reason.Detail}",
+        CapabilityState.Faulted f => $"Nothing is drawn on screen: {f.Reason.Detail}",
+        _ => placement.ToString() ?? string.Empty,
+    };
+
+    /// <summary>
+    /// Which spiral this module would draw, and where to put one when there is none — the same job
+    /// the flash panel's pool line does, and for the same reason WPF gives: an empty library with no
+    /// folder named is the most common first-run dead end (<c>FlashService.cs:589-597</c>).
+    ///
+    /// <para>The FILE NAME only, never the full path: the media-logging rule the DTRH manifest holds
+    /// applies to what a panel prints as much as to what a log writes.</para>
+    /// </summary>
+    internal static string DescribeSpiralLibrary(string? spiralPath, string spiralsFolder) =>
+        spiralPath is null
+            ? $"No spiral to draw. Put a .gif, .png or .jpg in {spiralsFolder} and this module will find it."
+            : $"Drawing {System.IO.Path.GetFileName(spiralPath)}.";
+
+    /// <summary>
+    /// The words for the MOVING module, and the place where the dot's third meaning becomes a
+    /// sentence.
+    ///
+    /// <para>The other three modules each have one shape of "on but doing nothing". This one has
+    /// <b>two</b>, and telling them apart is the whole point of the state: a spiral that is
+    /// <i>up and turning</i> is running; a spiral that is <i>up and has stopped turning</i> is a
+    /// frozen picture the user is entitled to be told about, because everything about the screen
+    /// looks right. And a <b>still</b> spiral — a one-frame file — is up, not turning, and
+    /// perfectly healthy, because WPF starts no frame timer for one either
+    /// (<c>OverlayService.cs:1369</c>). Three outcomes that a boolean cannot carry.</para>
+    ///
+    /// <para><b>No arm may tell a running session to start a session.</b> That was SP-105's
+    /// final-review blocker one module earlier (its record §9.1), and it is prevented here the same
+    /// way: every arm branches on <paramref name="sessionRunning"/>, read from the engine and never
+    /// inferred from the dot.</para>
+    /// </summary>
+    /// <param name="dot">The module's own derived state — the same value the row's dot paints.</param>
+    /// <param name="presentation">The dials' current presentation, for the zero-opacity case.</param>
+    /// <param name="hasSpiral">Whether the library resolved a file at all.</param>
+    /// <param name="showing">Whether a surface is up, regardless of whether it is still moving.</param>
+    /// <param name="frameCount">Frames in the open clip; 1 means a still image.</param>
+    /// <param name="sessionRunning">Whether a session owns the rack right now.</param>
+    /// <param name="placement">The surface's last verbatim outcome, for naming a refusal by code.</param>
+    public static string DescribeSpiralState(
+        EffectDotState dot,
+        SpiralPresentation presentation,
+        bool hasSpiral,
+        bool showing,
+        int frameCount,
+        bool sessionRunning,
+        CapabilityState? placement) => dot switch
+    {
+        // Live and still: the file is a single frame, so nothing was ever going to move. Said out
+        // loud, because a user looking at a motionless spiral under a green dot would otherwise be
+        // reading a contradiction.
+        EffectDotState.Live when frameCount <= 1 =>
+            "Running: your spiral is a single still frame, so it sits on your screen without turning. "
+            + "That is the file, not a fault.",
+        EffectDotState.Live =>
+            $"Running: the spiral is turning on your screen, {frameCount} frames on a loop, for as long "
+            + "as the session lasts.",
+
+        // THE STATE THIS MODULE ADDED. On screen, and stopped. Neither of the other continuous
+        // modules can be in it, and no dot before this one could report it.
+        EffectDotState.Armed when sessionRunning && showing =>
+            "Running, and the spiral is on your screen — but it has STOPPED TURNING, so what you are "
+            + "looking at is a frozen frame.",
+
+        EffectDotState.Armed when sessionRunning && presentation.IsInvisible =>
+            "Running, but nothing is on your screen: the opacity is at 0%. Move the slider up.",
+        EffectDotState.Armed when sessionRunning && !hasSpiral =>
+            "Running, but nothing is on your screen: there is no spiral for this module to draw.",
+        EffectDotState.Armed when sessionRunning =>
+            RefusalCode(placement) is { } code
+                ? "Running, but nothing is on your screen: this build could not put the spiral's "
+                    + $"overlay surface up ({code})."
+                : "Running, but nothing is on your screen: the spiral's overlay surface is not up.",
+
+        EffectDotState.Armed when presentation.IsInvisible =>
+            "Armed, but the opacity is at 0%, so there is nothing to draw. Move the slider up.",
+        EffectDotState.Armed when !hasSpiral =>
+            "Armed, but there is no spiral for this module to draw yet.",
         EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
         _ => "Switched off. Nothing will happen, session or no session.",
     };
