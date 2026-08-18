@@ -2652,32 +2652,56 @@ namespace ConditioningControlPanel
 
         private void CenterOnPrimaryScreen()
         {
-            // Get the primary screen
-            var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
-            if (primaryScreen == null) return;
-            
-            // Get DPI scaling
-            var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-            if (dpiScale == 0) dpiScale = 1;
-            
-            // Calculate center position on primary screen
-            var screenWidth = primaryScreen.WorkingArea.Width / dpiScale;
-            var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
-            var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
-            var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
+            try
+            {
+                // Get the primary screen. Null (and an empty Screen.AllScreens) is a real state
+                // during display-topology churn — skip the centring, but still run the per-monitor
+                // fit below, which does its own guarding.
+                var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (primaryScreen != null)
+                {
+                    // Get DPI scaling
+                    var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                    if (dpiScale <= 0) dpiScale = 1;
 
-            // Clamp SIZE to the work area before centring. Phase 1 grew the default window to
-            // 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling (1536x816 logical)
-            // — an unclamped centre put Left at -60 and the title-bar buttons past the right edge.
-            // The root Viewbox (MainWindow.xaml:139) is Stretch="Fill" over a fixed design canvas,
-            // so shrinking the window scales the content instead of clipping it. Width/Height are
-            // still floored by MinWidth/MinHeight; the Max() below keeps the top-left corner
-            // on-screen in that case, so the window is always grabbable.
-            if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
-            if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+                    // Calculate center position on primary screen
+                    var screenWidth = primaryScreen.WorkingArea.Width / dpiScale;
+                    var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
+                    var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
+                    var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
 
-            Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
-            Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
+                    // Clamp SIZE to the work area before centring. Phase 1 grew the default window
+                    // to 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling
+                    // (1536x816 logical) — an unclamped centre put Left at -60 and the title-bar
+                    // buttons past the right edge. The root Viewbox (MainWindow.xaml, wrapping
+                    // x:Name="DesignCanvas") is Stretch="Fill" over a fixed design canvas, so
+                    // shrinking the window scales the content instead of clipping it.
+                    //
+                    // The floors have to come down FIRST or the clamp is a no-op: WPF enforces
+                    // MinWidth/MinHeight over whatever we assign, and at 300% scaling the work area
+                    // is smaller than both (see MainWindow.WorkAreaFit.cs). The Max() below still
+                    // keeps the top-left corner on-screen in the residual case, so the window
+                    // stays grabbable.
+                    RelaxSizeFloorsTo(screenWidth, screenHeight);
+
+                    if (SizeToContent != SizeToContent.Manual) SizeToContent = SizeToContent.Manual;
+                    if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
+                    if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+
+                    Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
+                    Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "CenterOnPrimaryScreen failed");
+            }
+
+            // Primary is only a starting guess — the window may well be opening on a second monitor
+            // with a different scale and a different work area. Once there is an HWND, hand off to
+            // the per-monitor fit, which measures the screen we are ACTUALLY on. No-op before the
+            // handle exists (the constructor call), which the SourceInitialized hook then covers.
+            FitToCurrentMonitorWorkArea("center-on-primary");
         }
 
 
