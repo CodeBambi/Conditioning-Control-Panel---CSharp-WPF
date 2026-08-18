@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
 
 namespace CcpClient.Desktop.Session;
@@ -67,7 +68,16 @@ public interface ISessionEffect
     /// </summary>
     Task<OperationOutcome>? Completion { get; }
 
-    /// <summary>Raised when the dot, the counters or the dial move. Fired on whatever thread moved them.</summary>
+    /// <summary>
+    /// Raised when the dot, the counters or the dial move.
+    ///
+    /// <para><b>Delivered on the UI thread whenever one exists</b> (SP-101). It used to be raised on
+    /// whatever thread moved the state, which pushed the marshalling onto every consumer; two
+    /// consumers carried the same hand-written <c>CheckAccess</c>-or-<c>Post</c> body and agreed,
+    /// and the fifteenth would not have. The producer now owns it — see
+    /// <see cref="EffectSignal"/>. Before phase 4 binds a UI thread there is nothing to marshal to
+    /// and the event is raised inline.</para>
+    /// </summary>
     event Action? Changed;
 
     /// <summary>
@@ -80,8 +90,20 @@ public interface ISessionEffect
     /// <summary>
     /// Take ownership of a live generation and schedule the work. Called by the session on
     /// START, and by the quick-toggle when a module is switched on mid-session.
+    ///
+    /// <para><b>It returns a typed outcome (SP-101), and that is not decoration.</b> This method
+    /// returned <c>void</c> through SP-098 and SP-100, which meant "this module took the session and
+    /// is paced" and "this module did nothing at all" were literally the same observation. Two
+    /// modules whose only precondition is a persisted flag survive that; the modules still queued —
+    /// the ones that need an audio device, a webcam, a display server — cannot, because a module
+    /// that must refuse has nowhere to say so and the session would report itself running with a
+    /// silent hole in it. Both ported modules already produce two different states here (an armed
+    /// schedule, and a dial that is off), and Subliminals produces a third
+    /// (<see cref="CapabilityState.Degraded"/>: paced, but with no phrase to show).</para>
     /// </summary>
-    void Arm();
+    /// <returns>What the module can honestly say about the session it was just handed. Never null,
+    /// and never a bare boolean: the reason code is what a caller reports and a bug report quotes.</returns>
+    CapabilityState Arm();
 
     /// <summary>
     /// Stop the work. Called by the session on STOP, and by the quick-toggle when a module is

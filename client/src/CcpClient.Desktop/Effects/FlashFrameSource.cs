@@ -51,7 +51,7 @@ public interface IFlashFrameSource
 public sealed class GdiPlusFlashFrameSource : IFlashFrameSource
 {
     /// <summary>GDI+ <c>Status.Ok</c>.</summary>
-    private const int Ok = 0;
+    private const int Ok = GdiPlusRuntime.Ok;
 
     /// <summary>32bpp, no alpha channel in the target: the frame is opaque over black.</summary>
     private const int PixelFormat32bppRgb = 0x00022009;
@@ -61,11 +61,11 @@ public sealed class GdiPlusFlashFrameSource : IFlashFrameSource
     /// quality end once rather than inventing a policy.</summary>
     private const int HighQualityBicubic = 7;
 
-    private static readonly Lazy<bool> Started = new(Start, LazyThreadSafetyMode.ExecutionAndPublication);
-
-    /// <summary>True when GDI+ initialised in this process. False means every render returns
+    /// <summary>True when GDI+ initialised in this process. The startup itself is
+    /// <see cref="GdiPlusRuntime"/>'s (SP-101: the text rasteriser needs the same library up and
+    /// <c>GdiplusStartup</c> is per process, not per caller). False means every render returns
     /// null — no frames, no exception, and nothing pretending.</summary>
-    public static bool Available => OperatingSystem.IsWindows() && Started.Value;
+    public static bool Available => GdiPlusRuntime.Available;
 
     /// <inheritdoc/>
     public OverlayFrame? Render(string path, Func<int, int, (int Width, int Height)> targetSize)
@@ -164,41 +164,8 @@ public sealed class GdiPlusFlashFrameSource : IFlashFrameSource
         return new OverlayFrame(width, height, pixels);
     }
 
-    private static bool Start()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
-        var input = new GdiPlus.StartupInput { GdiplusVersion = 1 };
-        // The token is deliberately dropped: GdiplusShutdown at process exit would race every
-        // still-live frame, and a process that is ending does not need its imaging library
-        // unloaded politely. One startup, for the life of the process.
-        return GdiPlus.GdiplusStartup(out _, ref input, out _) == Ok;
-    }
-
     private static class GdiPlus
     {
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct StartupInput
-        {
-            public uint GdiplusVersion;
-            public nint DebugEventCallback;
-            public int SuppressBackgroundThread;
-            public int SuppressExternalCodecs;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct StartupOutput
-        {
-            public nint NotificationHook;
-            public nint NotificationUnhook;
-        }
-
-        [DllImport("gdiplus.dll")]
-        internal static extern int GdiplusStartup(out nint token, ref StartupInput input, out StartupOutput output);
-
         [DllImport("gdiplus.dll", CharSet = CharSet.Unicode)]
         internal static extern int GdipCreateBitmapFromFile(
             [MarshalAs(UnmanagedType.LPWStr)] string filename, out nint bitmap);

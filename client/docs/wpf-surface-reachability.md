@@ -781,4 +781,57 @@ images over your other windows is not ported yet: that needs an always-on-top cl
 this build does not have. The schedule above is real and runs - it just has nowhere to draw."* On
 Windows that sentence is now **false**, and on Linux it is still exactly right. `Views/**` is outside
 SP-100's File Scope, so the text is untouched here; the follow-up is one string that has to say both
-halves — drawn where the overlay is available, absent and named where it refuses.
+halves — drawn where the overlay is available, absent and named where it refuses. **Closed at SP-101,
+below.**
+
+## SP-101 — the second effect, and what the first one's template cost
+
+SP-098 built a session spine and one effect; SP-100 made it draw. Thirteen more rack modules follow
+that shape and **none had ever been copied**. This packet built the second — **Subliminals**, WPF's
+third EFFECTS row (`Views/Tabs/StudioTabView.xaml.cs:488-489`) — for the sake of finding out whether
+the shape was a template or an accident. The verdict, the shared machinery and the three defects the
+second module surfaced are in `spine-tasks/SP-101-second-effect/record.md`; what belongs here is what
+a user of the shipping app would notice.
+
+**Subliminals is not a near-copy of Flash Images, and that is why it was the right second.** Five
+things differ, and each is a place a copied implementation would have been silently wrong: the dial
+counts per **minute** and the floor is **one second**, against per hour and three
+(`Services/Subliminal/SubliminalService.cs:172-187` vs `Services/Flash/FlashService.cs:538-563`); the
+module ships **off** where flash ships **on** (`CCP.Core/Models/AppSettings.cs:1234` vs `:751`), which
+is why `StartEngine` calls the flash service unconditionally (`MainWindow/MainWindow.StartStop.cs:178`)
+and reaches this one only behind its flag (`:186-187`); an empty pool **counts nothing** here and
+counts a flash there (`SubliminalService.cs:207-212` returns before the counter at `:611-612`); the
+pool is words in settings, not files in a folder; and the card is one full-screen surface for a fifth
+of a second, not a burst of placed rectangles for six.
+
+| # | v6.8.1 fact | Port at SP-101 | Reason |
+|---|---|---|---|
+| **D65** | A subliminal's card **fades**: 50 ms in, hold, 50 ms out, as a storyboard over the window's opacity (`SubliminalService.cs:1253-1281`) | The card appears at its target opacity, stays for **exactly WPF's whole envelope** (`50 + max(100, frames×17) + 50` ms) and leaves. **No ramp at either end** | The same decision SP-100 recorded for the flash fade (D60), taken again because the reason is unchanged: an alpha ramp is a per-frame animation over a layered window, `Present` is not a frame path (SP-099's own residual), and this packet builds no frame loop. The DURATION — the part a user's attention actually measures — is kept exact; what is lost is ~100 ms of ramp on a 200 ms card |
+| **D66** | Subliminal cards go to **every monitor** when `DualMonitorEnabled` (default **true**, `AppSettings.cs:1917`) — one keep-alive window per screen (`SubliminalService.cs:629-631`) | **Primary display only**, one card | Not a subliminal decision: `OverlayDisplays.Enumerate()` reports one display on this machine and the port places on the primary for flashes too (SP-100's own undischarged list). It closes for both modules at once, in whatever packet takes multi-monitor placement |
+| **D67** | The card's colours, transparency, solid mode, focus-steal and the compositor layer are **dials** (`AppSettings.cs:1326-1378`) | WPF's shipped **defaults as constants**: background `#000000` opaque (`:1326`, and `:1333` — `SubBackgroundTransparent` ships false), text magenta `#FF00FF` (`:1340`), outline white `#FFFFFF` (`:1354`), Arial Bold 120 px (`SubliminalService.cs:1237-1248`), the eight outline offsets verbatim (`:992-996`). Solid mode, focus-steal and the compositor layer are **not ported at all** | The SP-098 D49 rule: a dial nobody can move is worse than a constant nobody can move. Solid mode and the compositor host exist upstream to relieve a **WPF render-thread hazard** (`#461`, named in the service's own comments) that a raw Win32 surface does not have, and focus-steal is an anti-feature on a click-through card. What a user sees is what an untouched shipping install shows them |
+| **D68** | A subliminal can carry **linked whisper audio** with ducking (`SubliminalService.cs:216-240`), a **haptic** anticipation pattern (`:577-600`), **XP** (`:243`, `:255`), a "Bambi Freeze" → "Bambi Reset" follow-up (`:276-404`), and remote-control / Deeper one-shots (`:258-275`) | **None of it.** The module schedules, draws and stops | Each is a subsystem this port does not have (audio device routing, haptics, progression, remote control). Recorded rather than stubbed: a silent no-op would make the module look complete. The pacing, the pool, the card and the stop are the whole of what is claimed |
+| **D69** | `SubliminalDuration` is in **frames**, converted with `Math.Max(100, value × 17)` ms (`SubliminalService.cs:615-617`) | **Identical, including the oddity**: the shipped default of 2 frames yields 34 ms, the floor wins, and the dial does nothing at all until it passes 6 | The unit is strange and the floor makes most of the range inert, but a user's persisted number has to keep meaning what it meant. Normalising it to milliseconds would silently re-time every existing install |
+| **D70** | WPF merges newly shipped default phrases back into the pool on launch, minus a `RemovedDefaultSubliminals` set that exists so a phrase the user deleted cannot resurrect (`AppSettings.cs:1292-1302`, `#892`) | The user's pool **replaces** the shipped one outright; no merge, no removed-set | The merge is a settings-migration feature, not part of the effect, and half of it (a resurrection guard for a merge that does not happen) would be dead weight. The shipped 21 phrases are the default for a pool that has never been written |
+| **D71** | One `AppSettings` holds every module's dials | Subliminals persists to its **own document**, `session_subliminal.json`, beside `session_preset.json` | Half procedural, half substantive, and both halves are stated. `Persistence/**` was outside SP-101's File Scope, so the shared session preset was not edited. It was also the better shape: fifteen modules editing one document is a chokepoint, and the store's Degraded path takes the WHOLE document to defaults — so a hand-broken phrase list would today reset the user's flash frequency too. One file per module quarantines that. **Fold it into `session_preset.json` if the owner prefers one file; nothing behavioural depends on which way it goes** |
+| **D72** | The Studio rack has a Subliminals row with a dot and a right-click toggle | The port's rack has **no Subliminals row yet**: the module runs under the session and draws, but nothing on screen switches it on | `Views/**` was open in SP-101 for exactly one reason — the false sentence above — and adding a rack row is not it. The module is reachable through the engine's quick-toggle by its rack key and through its persisted dial; the row is one panel, and it lands with whatever packet takes the rack's second row |
+
+**D47's Studio sentence is closed.** `StudioPage.axaml:152` no longer says the drawing half is not
+ported. The line is derived from the surface presenter's own last `CapabilityState`, verbatim — so it
+names the mechanism before anything has been attempted, reports a real placement when the OS confirms
+one, and repeats the **backend's own refusal**, reason code and manual gate included, on a build where
+the overlay is absent. It asserts nothing about the platform, which is how the previous sentence came
+to be false the day SP-100 landed.
+
+**What SP-101 proves, and where it stops.** Proven with no screen involved: two modules arm, pace,
+count, draw and stop under one engine, one clock and one operation registry, with two independent
+generations and two terminal outcomes; the second module's dial period, floor, default, pool rule and
+counting rule are each its own; a card reaches the surface full-screen, at the module's opacity,
+click-through, present-before-paint, withdrawn if the paint fails, for exactly WPF's envelope, and
+replaced rather than stacked by the next one; stop takes it off at once and leaves no timer. Proven on
+Windows only, in the pure-logic project: the GDI+ text raster produces an opaque card carrying WPF's
+magenta phrase over its white outline — on Linux the same fact asserts that it rasters nothing and
+throws nothing. **Undischarged, and named:** that a human sees a subliminal — no headed capture is
+taken here and `presentation-verified` remains the orchestrator's; the fade (D65); multi-monitor
+(D66); every part of Linux, where the overlay refuses by design and the module runs, counts and stops
+with nothing on screen; and the rack row (D72), so today only a test or a persisted file switches this
+module on.

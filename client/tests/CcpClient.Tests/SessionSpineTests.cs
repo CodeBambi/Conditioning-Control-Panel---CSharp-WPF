@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
@@ -535,7 +536,11 @@ public class SessionSpineTests
         {
         }
 
-        public void Arm() => RunningWhenArmed = Engine?.Running ?? false;
+        public CapabilityState Arm()
+        {
+            RunningWhenArmed = Engine?.Running ?? false;
+            return new CapabilityState.Available("the order probe took the session");
+        }
 
         public void Disarm() => RunningWhenDisarmed = Engine?.Running ?? false;
     }

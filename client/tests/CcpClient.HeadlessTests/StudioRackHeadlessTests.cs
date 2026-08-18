@@ -386,18 +386,21 @@ public class StudioRackHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task TheModulePanelNamesTheOverlayGapAndTheEmptyPool_AndNeverClaimsAFlashWasShown()
+    public async Task TheModulePanelNamesTheSurfaceAndTheEmptyPool_AndNeverClaimsAFlashWasShown()
     {
         var boot = await BootAsync(imageCount: 0);
         var window = boot.Window;
         OpenStudioAndFlashModule(window);
 
-        // The gap is stated before anything is pressed. A user must not have to press START and
-        // watch nothing happen to discover that the drawing half is not ported.
-        var gap = window.GetVisualDescendants().OfType<TextBlock>()
-            .First(t => t.GetValue(Avalonia.Automation.AutomationProperties.AutomationIdProperty) == "FlashOverlayGapNotice");
-        Assert.Contains("not ported yet", gap.Text!, StringComparison.Ordinal);
-        Assert.Contains("always-on-top", gap.Text!, StringComparison.Ordinal);
+        // SP-101: this line used to say the drawing half was "not ported yet", which SP-100 made
+        // false on Windows and left true on Linux. It now reads the presenter's own state, so it
+        // still says something BEFORE anything is pressed — a user must not have to press START and
+        // watch to find out how this effect reaches the screen — without asserting a platform.
+        var surfaceLine = window.GetVisualDescendants().OfType<TextBlock>()
+            .First(t => t.GetValue(Avalonia.Automation.AutomationProperties.AutomationIdProperty) == "FlashSurfaceState");
+        Assert.Contains("always-on-top", surfaceLine.Text!, StringComparison.Ordinal);
+        Assert.Contains("Nothing has been drawn yet", surfaceLine.Text!, StringComparison.Ordinal);
+        Assert.DoesNotContain("not ported", surfaceLine.Text!, StringComparison.Ordinal);
 
         var poolLine = Descendant<TextBlock>(window, "FlashPoolState");
         // Nothing has looked in the folder yet, so nothing is claimed about it.

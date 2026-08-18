@@ -28,9 +28,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
     public static string AssetsRootFor(string dataDirectory) => Path.Combine(dataDirectory, "assets");
 
     private readonly PersistenceStore<SessionPresetDocument> _preset;
+    private readonly PersistenceStore<SubliminalPresetDocument> _subliminalPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
+    private readonly ISubliminalSurface _subliminalSurface;
     private readonly UiDispatchBoundary _uiDispatch;
 
     public SessionParticipant(
@@ -38,7 +40,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
         string dataDirectory,
         ISessionClock? clock = null,
         IFlashImagePool? pool = null,
-        IFlashSurface? surface = null)
+        IFlashSurface? surface = null,
+        ISubliminalSurface? subliminalSurface = null,
+        Func<bool>? onSignalThread = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -51,6 +55,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, SessionPresetDocument.FileName),
             SessionPresetDocument.CurrentSchemaVersion);
 
+        // SP-101: the Subliminals module's own document. One per module rather than more members on
+        // the shared preset — see SubliminalPresetDocument for why, and for the File Scope fact that
+        // is the other half of the reason.
+        _subliminalPreset = new PersistenceStore<SubliminalPresetDocument>(
+            infra.OwnerFor("SubliminalPreset"), infra.Log,
+            Path.Combine(dataDirectory, SubliminalPresetDocument.FileName),
+            SubliminalPresetDocument.CurrentSchemaVersion);
+
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
@@ -60,7 +72,26 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, AssetSelectionStore.FileName),
             AssetSelectionDocument.CurrentSchemaVersion);
 
-        var sessionClock = clock ?? new SystemSessionClock();
+        // The real clock reports a faulting scheduled callback to the host log instead of letting
+        // it kill the process from a pool thread (SP-101 — see SystemSessionClock).
+        var sessionClock = clock ?? new SystemSessionClock(ex => infra.Log.Log(
+            $"session-clock: a scheduled module callback faulted and was contained — "
+            + $"{ex.GetType().Name}: {ex.Message}"));
+
+        // SP-101: every module's Changed goes through ONE signal, so the marshalling is the
+        // producer's duty and not fifteen consumers'. See EffectSignal. The thread test is a
+        // parameter because the pure-logic test project has no Avalonia runtime to ask.
+        var signal = new EffectSignal(infra.UiDispatch, onSignalThread);
+
+        // The one surface-thread dispatch both presenters share. Skip-until-bound is applied here,
+        // once, rather than inside each presenter.
+        void Dispatch(Action action)
+        {
+            if (infra.UiDispatch.IsBound)
+            {
+                infra.UiDispatch.Post(action);
+            }
+        }
 
         // SP-100: where a flash goes. The presenter is built here rather than in the composition
         // root because it needs the SAME clock the effect paces on (the stagger, the per-surface
@@ -70,19 +101,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // draws: the factory inside it runs on the first surface, so a session that never flashes
         // — and every headless or unit run, where the boundary is unbound and the projection is
         // skipped — creates no window at all.
-        _surface = surface ?? FlashSurfacePresenter.Product(
-            sessionClock,
-            action =>
-            {
-                if (infra.UiDispatch.IsBound)
-                {
-                    infra.UiDispatch.Post(action);
-                }
-            });
+        _surface = surface ?? FlashSurfacePresenter.Product(sessionClock, Dispatch);
+        _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
 
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
-            infra.UiDispatch,
+            signal,
             sessionClock,
             pool ?? new FlashImagePool(
                 AssetsRootFor(dataDirectory),
@@ -91,10 +115,21 @@ public sealed class SessionParticipant : IBackgroundParticipant
             random: null,
             surface: _surface);
 
-        // Rack order is WPF's (StudioTabView.xaml.cs:482-497), and it is also the order
-        // StartEngine arms and StopEngineCore disarms in — flash first on both
-        // (MainWindow.StartStop.cs:178, :305).
-        Engine = new SessionEngine([Flash], _preset);
+        Subliminals = new SubliminalsEffect(
+            infra.OwnerFor("Subliminals"),
+            signal,
+            sessionClock,
+            new SubliminalPhrasePool(_subliminalPreset),
+            _subliminalPreset,
+            random: null,
+            surface: _subliminalSurface);
+
+        // Rack order is WPF's (StudioTabView.xaml.cs:484-487), and it is also the order
+        // StartEngine arms in — flash first, then the modules after it
+        // (MainWindow.StartStop.cs:178, :186). Mandatory Video sits between them upstream and is
+        // not ported, so the two ported modules are adjacent here; the ORDER between them is
+        // upstream's and is what this list encodes.
+        Engine = new SessionEngine([Flash, Subliminals], _preset, signal);
     }
 
     public string Name => "Session";
@@ -104,15 +139,24 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The session itself. The shell drives this; nothing else may.</summary>
     public SessionEngine Engine { get; }
 
-    /// <summary>The one ported effect (public so the Studio module panel and the tests reach the real object).</summary>
+    /// <summary>Flash Images (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }
+
+    /// <summary>Subliminals, the second ported module (SP-101). Public for the same reason.</summary>
+    public SubliminalsEffect Subliminals { get; }
 
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
     public IFlashSurface Surface => _surface;
 
+    /// <summary>Where its subliminals are drawn.</summary>
+    public ISubliminalSurface SubliminalSurface => _subliminalSurface;
+
     /// <summary>The persisted preset store (public so a surface can save a dial it moved).</summary>
     public PersistenceStore<SessionPresetDocument> Preset => _preset;
+
+    /// <summary>The Subliminals module's persisted store, same reason.</summary>
+    public PersistenceStore<SubliminalPresetDocument> SubliminalPreset => _subliminalPreset;
 
     /// <summary>Where the flash pool reads the user's images from. The module panel shows this
     /// so an empty pool has an answer to "where do I put them", which WPF's own comment calls
@@ -124,20 +168,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _preset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _subliminalPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
-        if (_preset.LastLoadOutcome is { IsDegraded: true })
-        {
-            // Typed Degraded, never silent: a quarantined or newer-schema preset means the
-            // session runs on defaults, and the user is entitled to know that before they
-            // press START.
-            _log.Log($"session-preset: load → {_preset.LastLoadOutcome.GetType().Name} (typed Degraded — the session will run on default dials)");
-        }
+        // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
+        // on defaults, and the user is entitled to know that before they press START. Per document,
+        // because per document is the blast radius — one module's broken file no longer takes every
+        // other module's dials to defaults.
+        LogIfDegraded("session-preset", _preset.LastLoadOutcome);
+        LogIfDegraded("subliminal-preset", _subliminalPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para><b>The surface's teardown goes through the dispatch boundary, not down this thread.</b>
+    /// <para><b>The surfaces' teardown goes through the dispatch boundary, not down this thread.</b>
     /// A native window belongs to the thread that created it — the UI thread — and only that thread
     /// may destroy it. This method does NOT run there: <c>ShutdownAsync</c> resumes on a thread-pool
     /// thread, so a synchronous <c>Dispose</c> here would take the wrong-thread branch inside
@@ -148,33 +192,51 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// the dispatcher is still running. On the ordinary teardown path it is not, so the posted
     /// teardown does not run and the surfaces are reclaimed by the OPERATING SYSTEM at process exit.
     /// That is acceptable here and only here, because what the user can see has already been dealt
-    /// with one line above: <c>Engine.Stop()</c> disarms the effect, and disarm posts
+    /// with one line above: <c>Engine.Stop()</c> disarms every module, and disarm posts
     /// <c>HideAll</c> from the UI thread the user pressed STOP on. The visible-stop guarantee rests
     /// on that, never on process death.</para>
     /// </remarks>
     public Task StopAsync()
     {
-        // Stop the session first: its disarm is what takes any live flash off the user's screen
-        // (WPF closes every flash window on stop, Services/Flash/FlashService.cs:3878-3884).
+        // Stop the session first: its disarm is what takes any live surface off the user's screen
+        // (WPF closes every flash window on stop, Services/Flash/FlashService.cs:3878-3884, and
+        // blanks every subliminal card, Services/Subliminal/SubliminalService.cs:116-127).
         Engine.Stop();
-        if (_surface is IDisposable disposable)
-        {
-            if (_uiDispatch.IsBound)
-            {
-                _uiDispatch.Post(disposable.Dispose);
-            }
-            else
-            {
-                // Never bound means the projection was always skipped, so no surface was ever
-                // created and there is no window whose thread could be wrong.
-                disposable.Dispose();
-            }
-        }
+        DisposeSurface(_surface);
+        DisposeSurface(_subliminalSurface);
 
-        return Task.WhenAll(_preset.StopAsync(), _assetSelection.StopAsync());
+        return Task.WhenAll(_preset.StopAsync(), _subliminalPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
     /// asset selection has no writer, so it has nothing to flush.</summary>
-    public Task FlushAsync(TimeSpan boundedWait) => _preset.FlushAsync(boundedWait);
+    public Task FlushAsync(TimeSpan boundedWait) =>
+        Task.WhenAll(_preset.FlushAsync(boundedWait), _subliminalPreset.FlushAsync(boundedWait));
+
+    private void LogIfDegraded(string label, LoadOutcome? outcome)
+    {
+        if (outcome is { IsDegraded: true })
+        {
+            _log.Log($"{label}: load → {outcome.GetType().Name} (typed Degraded — the module will run on default dials)");
+        }
+    }
+
+    private void DisposeSurface(object surface)
+    {
+        if (surface is not IDisposable disposable)
+        {
+            return;
+        }
+
+        if (_uiDispatch.IsBound)
+        {
+            _uiDispatch.Post(disposable.Dispose);
+        }
+        else
+        {
+            // Never bound means the projection was always skipped, so no surface was ever
+            // created and there is no window whose thread could be wrong.
+            disposable.Dispose();
+        }
+    }
 }

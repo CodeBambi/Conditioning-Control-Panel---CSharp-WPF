@@ -751,6 +751,10 @@ public class FlashSurfacePresenterTests
         /// against the effect's own Fired event.</summary>
         public Action? OnShow { get; set; }
 
+        /// <summary>What this double last "placed" (SP-101). Settable, so a fact can drive the
+        /// module panel's surface line through every state a real presenter can report.</summary>
+        public CapabilityState? LastPlacement { get; set; }
+
         public void Show(IReadOnlyList<string> paths)
         {
             OnShow?.Invoke();

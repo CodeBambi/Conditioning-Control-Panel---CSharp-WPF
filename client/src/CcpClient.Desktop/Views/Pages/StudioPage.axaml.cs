@@ -2,7 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Threading;
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Persistence;
@@ -175,24 +175,17 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
-    /// The session's state can move on a thread that is not this one — teardown stops the
-    /// engine from the shutdown path. Marshalling here rather than assuming is what keeps a
-    /// closing window from touching controls off-thread.
+    /// The session's state can move on a thread that is not this one — teardown stops the engine
+    /// from the shutdown path. This handler nonetheless touches controls directly, because since
+    /// SP-101 the marshalling is the PRODUCER's: every module raises <c>Changed</c> through
+    /// <see cref="EffectSignal"/>, which delivers on the UI thread whenever one exists. This page
+    /// used to carry its own <c>CheckAccess</c>-or-<c>Post</c> copy, and so did the shell; two
+    /// copies agreed and the fifteenth module's panel would not have.
     /// </summary>
     private void OnSessionChanged()
     {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            LoadDialsFromPreset();
-            Refresh();
-            return;
-        }
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            LoadDialsFromPreset();
-            Refresh();
-        });
+        LoadDialsFromPreset();
+        Refresh();
     }
 
     private void LoadDialsFromPreset()
@@ -229,7 +222,39 @@ public partial class StudioPage : UserControl
 
         FlashLiveState.Text = DescribeState(dot, _flash.FlashCount, _flash.Last);
         FlashPoolState.Text = DescribePool(_flash.Last);
+        FlashSurfaceState.Text = DescribeSurface(_session.Surface.LastPlacement);
     }
+
+    /// <summary>
+    /// Where the images went, according to the SURFACE.
+    ///
+    /// <para>This line used to be a fixed sentence saying the drawing half was not ported. SP-100
+    /// made that false on Windows and left it true on Linux, and no fixed sentence can be both. The
+    /// replacement asserts nothing about the platform — it reports the presenter's own last typed
+    /// outcome, so a build where the overlay refuses shows the refusal's own reason and manual gate,
+    /// and a build where it works says so only because the OS confirmed it.</para>
+    ///
+    /// <para>Before anything has been attempted it names the mechanism and says nothing has been
+    /// drawn yet. That is deliberate: a user must not have to press START and watch to find out how
+    /// this effect reaches the screen, and "nothing has been drawn yet" is a fact about this session
+    /// rather than a claim about a surface nobody has asked.</para>
+    /// </summary>
+    public static string DescribeSurface(CapabilityState? placement) => placement switch
+    {
+        null => "Flashes are drawn on an always-on-top, click-through overlay above your other "
+            + "windows. Nothing has been drawn yet.",
+        CapabilityState.Available => "The last flash was placed on an always-on-top overlay surface "
+            + "above your other windows.",
+        CapabilityState.Unavailable u => $"Nothing was drawn on screen: {u.Reason.Detail}",
+        CapabilityState.Degraded d => $"Partly drawn: {d.SurvivingSemantics}. {d.Reason.Detail}",
+        CapabilityState.PermissionRequired p => $"Nothing was drawn on screen: {p.Reason.Detail}",
+        CapabilityState.DependencyMissing m => $"Nothing was drawn on screen: {m.Reason.Detail}",
+        CapabilityState.Faulted f => $"Nothing was drawn on screen: {f.Reason.Detail}",
+        // The hierarchy is closed (CapabilityState's constructor is private), so this arm is
+        // unreachable today; it is the codebase's own convention for these switches
+        // (ChaosTunnelService.Describe) and it prints the state rather than inventing a sentence.
+        _ => placement.ToString() ?? string.Empty,
+    };
 
     /// <summary>
     /// The row's dot has three states and so does this line, because the line is what a screen

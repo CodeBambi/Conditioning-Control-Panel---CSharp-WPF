@@ -16,6 +16,13 @@ public sealed record FlashEvent(int Ordinal, int ImagesDrawn, DateTimeOffset At)
 }
 
 /// <summary>
+/// One flash's two halves: the content-free record subscribers get, and the paths only the surface
+/// is ever handed. They travel together inside the effect and separate at the projection, which is
+/// the mechanism behind "a flash is a COUNT everywhere a log or a UI can see it".
+/// </summary>
+public sealed record FlashFiring(FlashEvent Event, IReadOnlyList<string> Drawn);
+
+/// <summary>
 /// <b>Flash Images</b> — WPF's first EFFECTS rack row
 /// (<c>Views/Tabs/StudioTabView.xaml.cs:484</c>), the first service <c>StartEngine</c> starts
 /// (<c>MainWindow/MainWindow.StartStop.cs:178</c>) and the first one <c>StopEngineCore</c> stops
@@ -38,16 +45,14 @@ public sealed record FlashEvent(int Ordinal, int ImagesDrawn, DateTimeOffset At)
 /// neither a crash nor a refusal to run. Nothing in this class pretends the difference away: the
 /// presenter keeps the surface's typed <c>CapabilityState</c> verbatim.</para>
 ///
-/// <para><b>Threading.</b> The schedule is a one-shot on an injected
-/// <see cref="ISessionClock"/>, re-armed at the tail of every firing — WPF's shape
-/// (<c>FlashService.cs:566-573</c>), and the reason no test here needs a wall-clock wait. The
-/// firing runs on the clock's thread; the UI projection goes through the one dispatch boundary
-/// with the liveness check inside the delegate (async-lifecycle-fault-contract §5.3/§5.5). The
-/// pending-handle field is manipulated with <see cref="Interlocked"/> and never under
-/// <see cref="_gate"/>, so the cancellation callback can run while another thread holds the
-/// gate without a lock cycle.</para>
+/// <para><b>SP-101: what is left in this file.</b> The arm, the disarm, the one-shot, the
+/// generation, the counter, the dot and the projection moved to
+/// <see cref="PacedSessionEffect{TFiring}"/> when Subliminals was built and turned out to need
+/// exactly the same body. Nothing here changed behaviour — every SP-098 and SP-100 fact passes
+/// unaltered — and what remains is what is genuinely Flash Images': its rack key, its dial, its
+/// pacing law, its pool, and the one ordering rule below.</para>
 /// </summary>
-public sealed class FlashImagesEffect : ISessionEffect
+public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
 {
     /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:484</c>), and the same
     /// key its quick-toggle switches on (<c>MainWindow.Presets.cs:1250</c>).</summary>
@@ -57,38 +62,23 @@ public sealed class FlashImagesEffect : ISessionEffect
     /// confirmed in the live v6.8.1 rack survey — <c>wpf-surface-reachability.md</c> §8.3).</summary>
     public const string DisplayTitle = "Flash Images";
 
-    private readonly AsyncOperationOwner _owner;
-    private readonly UiDispatchBoundary _ui;
-    private readonly ISessionClock _clock;
     private readonly IFlashImagePool _pool;
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly IFlashSurface? _surface;
     private readonly Random _random;
-    private readonly object _gate = new();
-
-    private IDisposable? _pending;
-    private int _generation = -1;
-    private bool _armed;
-    private int _flashCount;
-    private FlashEvent? _last;
 
     public FlashImagesEffect(
         AsyncOperationOwner owner,
-        UiDispatchBoundary ui,
+        EffectSignal signal,
         ISessionClock clock,
         IFlashImagePool pool,
         PersistenceStore<SessionPresetDocument> preset,
         Random? random = null,
         IFlashSurface? surface = null)
+        : base(owner, signal, clock, "flash-schedule")
     {
-        ArgumentNullException.ThrowIfNull(owner);
-        ArgumentNullException.ThrowIfNull(ui);
-        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(preset);
-        _owner = owner;
-        _ui = ui;
-        _clock = clock;
         _pool = pool;
         _preset = preset;
         _random = random ?? new Random();
@@ -96,67 +86,28 @@ public sealed class FlashImagesEffect : ISessionEffect
     }
 
     /// <inheritdoc/>
-    public string Id => EffectId;
+    public override string Id => EffectId;
 
     /// <inheritdoc/>
-    public string Title => DisplayTitle;
+    public override string Title => DisplayTitle;
 
     /// <inheritdoc/>
-    public bool Enabled => _preset.Current.FlashEnabled;
-
-    /// <inheritdoc/>
-    public Task<OperationOutcome>? Completion { get; private set; }
-
-    /// <inheritdoc/>
-    public event Action? Changed;
+    public override bool Enabled => _preset.Current.FlashEnabled;
 
     /// <summary>Flashes that have come due since this effect was first armed.</summary>
-    public int FlashCount
-    {
-        get { lock (_gate) { return _flashCount; } }
-    }
+    public int FlashCount => FireCount;
 
     /// <summary>The most recent firing, or null if none has happened yet.</summary>
-    public FlashEvent? Last
-    {
-        get { lock (_gate) { return _last; } }
-    }
+    public FlashEvent? Last => LastFiring?.Event;
 
     /// <summary>
-    /// True while a next flash is actually on the clock. This — not a stored bool, and not the
-    /// persisted dial — is what the row's dot is entitled to call "running": it is false the
-    /// instant the schedule is torn down, whatever any flag still says.
+    /// Raised on the UI thread, inside the dispatch boundary, once per flash that really came
+    /// due. The surface binds this; nothing else may.
     /// </summary>
-    public bool ScheduleArmed => Volatile.Read(ref _pending) is not null;
+    public event Action<FlashEvent>? Fired;
 
     /// <inheritdoc/>
-    public EffectDotState Dot
-    {
-        get
-        {
-            // Off beats everything: a module whose own dial is off will do nothing whether or
-            // not a session is running, and saying "armed" there would be a lie about the
-            // NEXT minute, which is what a dot is for.
-            if (!Enabled)
-            {
-                return EffectDotState.Off;
-            }
-
-            lock (_gate)
-            {
-                // Live derives from the OPERATION authority (the StatusTickerParticipant
-                // IsOperationLive precedent) and from the schedule really being on the clock.
-                // A generation that has been cancelled reads dead here even if _armed has not
-                // been cleared yet, which is the case teardown produces.
-                return _armed && _owner.IsLive(_generation) && ScheduleArmed
-                    ? EffectDotState.Live
-                    : EffectDotState.Armed;
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SetEnabled(bool enabled)
+    public override void SetEnabled(bool enabled)
     {
         if (Enabled == enabled)
         {
@@ -164,79 +115,49 @@ public sealed class FlashImagesEffect : ISessionEffect
         }
 
         _preset.Mutate(p => p.FlashEnabled = enabled);
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
+    /// <inheritdoc/>
+    protected override TimeSpan NextInterval() =>
+        FlashSchedule.NextInterval(_preset.Current.FlashesPerHour, _random);
+
     /// <summary>
-    /// Arm the schedule. WPF's <c>FlashService.Start()</c> is idempotent about its own running
-    /// flag and schedules the first tick SYNCHRONOUSLY (<c>FlashService.cs:345-352</c>) — kept,
-    /// and load-bearing: the caller's next observation of the clock must already see the
-    /// pending flash, or a stop/advance ordering becomes a race.
+    /// The draw. WPF takes <c>SimultaneousImages</c> independent picks per firing, read at the
+    /// moment the flash fires rather than when it was scheduled (<c>FlashService.cs:586</c>).
     ///
-    /// <para><b>One deliberate divergence.</b> WPF's <c>Start()</c> returns at
-    /// <c>if (_isRunning) return;</c> (<c>:347</c>), so a module that was OFF when the engine
-    /// started can never be armed by turning it on mid-session: the service is already
-    /// "running", nothing schedules, and the quick-toggle silently does nothing
-    /// (<c>MainWindow.Presets.cs:1250</c>, <c>Features/FlashFeatureControl.xaml.cs:168-175</c>).
-    /// Here the GENERATION is idempotent — arming twice starts no second generation, which is
-    /// the re-entrant double-toggle guard — but the SCHEDULE is always re-evaluated, so
-    /// switching a module on during a session does what the app's own onboarding text promises
-    /// it does.</para>
+    /// <para>Never null: an empty pool is still a flash. WPF's own empty outcome returns an empty
+    /// list and the flash shows nothing (<c>FlashService.cs:2589-2593</c>, <c>:585-597</c>) — it is
+    /// counted, it is reported, and the schedule keeps running. Subliminals is the module where
+    /// that is NOT true, which is why <see cref="PacedSessionEffect{TFiring}.Compose"/> is
+    /// nullable at all.</para>
     /// </summary>
-    public void Arm()
+    protected override FlashFiring Compose()
     {
-        bool firstArm;
-        lock (_gate)
-        {
-            firstArm = !_armed;
-            _armed = true;
-        }
-
-        if (firstArm)
-        {
-            // Begin() cancels the previous generation, which runs that generation's
-            // cancellation callback; it is called OUTSIDE _gate so the callback can never wait
-            // on a lock this thread is holding.
-            var generation = _owner.Begin();
-            lock (_gate)
-            {
-                _generation = generation;
-            }
-
-            Completion = _owner.RunAsync("flash-schedule", ParkUntilCancelledAsync);
-        }
-
-        ScheduleNext();
-        Changed?.Invoke();
+        var drawn = _pool.Draw(_preset.Current.ImagesPerFlash);
+        return new FlashFiring(new FlashEvent(0, drawn.Count, default), drawn);
     }
 
+    /// <inheritdoc/>
+    protected override FlashFiring Stamp(FlashFiring firing, int ordinal, DateTimeOffset at) =>
+        firing with { Event = firing.Event with { Ordinal = ordinal, At = at } };
+
     /// <summary>
-    /// Disarm. WPF's <c>FlashService.Stop()</c> clears its flag, cancels its token and stops
-    /// the scheduler timer (<c>FlashService.cs:367-380</c>), then drops the cached images
-    /// (<c>:378</c>).
+    /// The surface is drawn FIRST and <see cref="Fired"/> raised second: the visible half of a flash
+    /// is the user's outcome, and it must not be hostage to whatever a UI subscriber does. The order
+    /// is a property a fact holds (<c>FlashSurfacePresenterTests</c>), not a comment — swapping these
+    /// two lines reds the suite.
     ///
-    /// <para>The pending one-shot is disposed HERE, synchronously, rather than being left to
-    /// the cancellation callback: after this returns, advancing the clock by any amount must
-    /// fire nothing, and "the callback will get there" is not that guarantee.</para>
+    /// <para><b>Why the drawn paths ride on the firing and not on <see cref="FlashEvent"/>.</b> The
+    /// event is content-free by construction — a COUNT, never a file name, which is the
+    /// media-logging rule the whole port holds. The surface needs the paths themselves, so they are
+    /// handed straight to it, on the one thread that may touch a native window, and they are never
+    /// carried by anything a log or a UI can subscribe to.</para>
     /// </summary>
-    public void Disarm()
+    protected override void Deliver(FlashFiring firing)
     {
-        bool wasArmed;
-        lock (_gate)
-        {
-            wasArmed = _armed;
-            _armed = false;
-        }
-
-        CancelPendingSchedule();
-        HideSurfaces();
-        if (!wasArmed)
-        {
-            return;
-        }
-
-        _owner.Cancel();
-        Changed?.Invoke();
+        _surface?.Show(firing.Drawn);
+        Fired?.Invoke(firing.Event);
     }
 
     /// <summary>
@@ -248,195 +169,14 @@ public sealed class FlashImagesEffect : ISessionEffect
     /// belongs to the thread that made it, and disarm is reached from the UI thread (the button,
     /// the rack toggle) AND from a teardown thread. Skip-until-bound applies: with no UI there is
     /// no surface, because the draw could never have happened either.</para>
-    ///
-    /// <para><b>Called from <see cref="Disarm"/> and from nowhere else</b>, deliberately: teardown
-    /// reaches disarm too (<c>SessionParticipant.StopAsync</c> -> <c>SessionEngine.Stop</c> ->
-    /// <c>Disarm</c>), so hiding from the cancellation callback as well would take every surface
-    /// down twice per stop. Once is the fact the surface facts assert.</para>
     /// </summary>
-    private void HideSurfaces()
+    protected override void OnDisarmed()
     {
-        if (_surface is null || !_ui.IsBound)
+        if (_surface is null)
         {
             return;
         }
 
-        _ui.Post(_surface.HideAll);
+        Signal.Post(_surface.HideAll);
     }
-
-    /// <summary>
-    /// The owned operation behind an armed schedule. It does no work: it exists so the
-    /// schedule is a REGISTERED operation with a generation and a typed terminal outcome
-    /// (async-lifecycle-fault-contract §1), so the host's one teardown entry point cancels and
-    /// drains it like everything else, and so "the effect is still running" is a question the
-    /// registry can answer rather than this class.
-    /// </summary>
-    private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token)
-    {
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Lock-free callback on purpose: it may run on a teardown thread while another thread
-        // holds _gate, so it must not need _gate.
-        using var registration = token.Register(() =>
-        {
-            CancelPendingSchedule();
-            stopped.TrySetResult();
-        });
-
-        await stopped.Task.ConfigureAwait(false);
-        CancelPendingSchedule();
-        return OperationOutcome.Cancelled.Instance;
-    }
-
-    private void CancelPendingSchedule() => Interlocked.Exchange(ref _pending, null)?.Dispose();
-
-    /// <summary>
-    /// WPF <c>ScheduleNextFlash</c> (<c>FlashService.cs:538-563</c>): nothing is scheduled while
-    /// the service is stopped (<c>:539</c>) or while the module's own dial is off (<c>:541-546</c>)
-    /// — in WPF the service still reports itself running in that state, and nothing ever fires.
-    /// A previous pending one-shot is dropped first, exactly as WPF stops its timer before
-    /// restarting it (<c>:557</c>).
-    /// </summary>
-    private void ScheduleNext()
-    {
-        int generation;
-        int perHour;
-        lock (_gate)
-        {
-            if (!_armed || !Enabled)
-            {
-                CancelPendingSchedule();
-                return;
-            }
-
-            generation = _generation;
-            perHour = _preset.Current.FlashesPerHour;
-        }
-
-        if (!_owner.IsLive(generation))
-        {
-            CancelPendingSchedule();
-            return;
-        }
-
-        var due = FlashSchedule.NextInterval(perHour, _random);
-        var handle = _clock.Schedule(due, () => Fire(generation));
-        Interlocked.Exchange(ref _pending, handle)?.Dispose();
-
-        // The generation may have been cancelled between the liveness check and the schedule.
-        // Re-check and tear the handle straight back down: a stop must never leave a live
-        // one-shot behind, and this is the only window in which one could exist.
-        if (!_owner.IsLive(generation))
-        {
-            CancelPendingSchedule();
-        }
-    }
-
-    /// <summary>
-    /// One flash comes due. WPF's tick stops its own timer, fires only if the service is still
-    /// running, and re-schedules at the tail (<c>FlashService.cs:566-573</c>).
-    /// </summary>
-    private void Fire(int generation)
-    {
-        // The one-shot has fired and is spent; drop the handle before anything else so
-        // ScheduleArmed cannot report a timer that no longer exists.
-        Interlocked.Exchange(ref _pending, null);
-
-        // Stale-generation check first (contract §5.5): a callback that survives a cancel does
-        // nothing and re-schedules nothing.
-        if (!_owner.IsLive(generation))
-        {
-            return;
-        }
-
-        int perFlash;
-        lock (_gate)
-        {
-            if (!_armed || _generation != generation || !Enabled)
-            {
-                return;
-            }
-
-            perFlash = _preset.Current.ImagesPerFlash;
-        }
-
-        // The draw is outside the gate: the product pool touches a filesystem, and a session
-        // must never be able to wedge its own state behind a slow directory.
-        var drawn = _pool.Draw(perFlash);
-
-        FlashEvent fired;
-        lock (_gate)
-        {
-            // Re-check after the draw. A stop that landed mid-draw wins: the flash is not
-            // counted and nothing is re-scheduled.
-            if (!_armed || _generation != generation)
-            {
-                return;
-            }
-
-            _flashCount++;
-            fired = new FlashEvent(_flashCount, drawn.Count, _clock.UtcNow);
-            _last = fired;
-        }
-
-        ScheduleNext();
-        // The per-flash signal is Fired, and Fired ALONE, because Fired goes through the
-        // dispatch boundary and Changed does not. Raising Changed from this thread would hand
-        // a clock-thread callback to whatever UI subscribed to it.
-        Project(generation, fired, drawn);
-    }
-
-    /// <summary>
-    /// Re-pace the pending flash against the current dial — WPF <c>RefreshSchedule</c>
-    /// (<c>FlashService.cs:527-531</c>), which its frequency slider calls so a change takes
-    /// effect now instead of after the old interval expires
-    /// (<c>Features/FlashFeatureControl.xaml.cs:186</c>). A no-op when nothing is armed, which
-    /// is WPF's <c>if (!_isRunning) return;</c> (<c>:529</c>).
-    /// </summary>
-    public void RefreshSchedule()
-    {
-        ScheduleNext();
-        Changed?.Invoke();
-    }
-
-    /// <summary>
-    /// The UI projection, and — since SP-100 — the DRAW. Skip-until-bound (contract §5.3): the
-    /// effect can be armed before the window exists, and a projection is skipped then, never
-    /// faulted. The liveness re-check lives INSIDE the posted delegate (§5.5) so a post that lands
-    /// during teardown is inert.
-    ///
-    /// <para><b>Why the drawn paths ride here and not on <see cref="FlashEvent"/>.</b> The event is
-    /// content-free by construction — a COUNT, never a file name, which is the media-logging rule
-    /// the whole port holds. The surface needs the paths themselves, so they are handed straight to
-    /// it, on the one thread that may touch a native window, and they are never carried by anything
-    /// a log or a UI can subscribe to.</para>
-    ///
-    /// <para>The surface is drawn FIRST and <see cref="Fired"/> raised second: the visible half of a
-    /// flash is the user's outcome, and it must not be hostage to whatever a UI subscriber does. The
-    /// order is a property a fact holds (<c>FlashSurfacePresenterTests</c>), not a comment — swapping
-    /// these two lines reds the suite.</para>
-    /// </summary>
-    private void Project(int generation, FlashEvent fired, IReadOnlyList<string> drawn)
-    {
-        if (!_ui.IsBound || !_owner.IsLive(generation))
-        {
-            return;
-        }
-
-        _ui.Post(() =>
-        {
-            if (!_owner.IsLive(generation))
-            {
-                return;
-            }
-
-            _surface?.Show(drawn);
-            Fired?.Invoke(fired);
-        });
-    }
-
-    /// <summary>
-    /// Raised on the UI thread, inside the dispatch boundary, once per flash that really came
-    /// due. The surface binds this; nothing else may.
-    /// </summary>
-    public event Action<FlashEvent>? Fired;
 }

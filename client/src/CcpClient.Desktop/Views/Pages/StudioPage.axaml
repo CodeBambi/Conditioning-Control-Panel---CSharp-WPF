@@ -137,19 +137,20 @@
             </StackPanel>
           </Border>
 
-          <!-- THE NAMED GAP. Half of this effect is a scheduler over the user's image pool and
-               that half is ported exactly. The other half puts those images on screen above
-               every other application - one layered, always-on-top, WS_EX_TRANSPARENT
-               click-through window per flash, re-asserted to HWND_TOPMOST as other layers fight
-               it (Services/Flash/FlashService.cs:3615,3667-3668,3862-3868). That is a
-               compositor, docs/constitution.md classes the previous port attempt as failure
-               evidence largely because of it, and it is a platform packet of its own. Said in
-               plain words rather than left for the user to discover by pressing START and
-               watching nothing happen. -->
+          <!-- WHERE THE IMAGES GO, read from the surface rather than asserted about the platform.
+               Until SP-100 this line said the drawing half was not ported; on Windows that became
+               false the day the overlay landed, and on Linux it is still exactly right. A hard-coded
+               sentence cannot be both, and a platform check here would be a second opinion about a
+               capability that already answers for itself - so the text is derived from the
+               presenter's own last CapabilityState, verbatim, reason code and all. Before a flash has
+               been attempted it names the MECHANISM and says nothing has been drawn yet - which is
+               a claim about this session, not about the screen, and it is still there before the
+               user presses anything. -->
           <Border Classes="notice">
             <TextBlock TextWrapping="Wrap"
-                       AutomationProperties.AutomationId="FlashOverlayGapNotice"
-                       Text="Showing the images over your other windows is not ported yet: that needs an always-on-top click-through surface this build does not have. The schedule above is real and runs - it just has nowhere to draw." />
+                       x:Name="FlashSurfaceState"
+                       AutomationProperties.AutomationId="FlashSurfaceState"
+                       Text="" />
           </Border>
         </StackPanel>
 

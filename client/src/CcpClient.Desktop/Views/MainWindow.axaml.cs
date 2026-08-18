@@ -209,16 +209,13 @@ public partial class MainWindow : Window
     /// stops it on the shutdown path. Marshalling here is what stops a closing window from
     /// touching its own controls off-thread.
     /// </summary>
-    private void OnSessionEngineChanged()
-    {
-        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-        {
-            RenderSessionState();
-            return;
-        }
-
-        Avalonia.Threading.Dispatcher.UIThread.Post(RenderSessionState);
-    }
+    /// <summary>
+    /// Repaint the START/STOP control. Called directly, off no dispatcher check of its own: since
+    /// SP-101 the session's <c>Changed</c> is raised through <see cref="Session.EffectSignal"/> and
+    /// arrives on the UI thread whenever one exists, so the marshalling this method used to carry
+    /// now lives once, in the producer, for every module and every panel that will ever subscribe.
+    /// </summary>
+    private void OnSessionEngineChanged() => RenderSessionState();
 
     /// <summary>The page currently mounted in the host, by route id.</summary>
     public Control PageFor(string routeId) => _pages[routeId];

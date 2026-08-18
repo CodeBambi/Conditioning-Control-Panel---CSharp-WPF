@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Persistence;
 
 namespace CcpClient.Desktop.Session;
@@ -32,22 +33,66 @@ public sealed class SessionEngine
 {
     private readonly IReadOnlyList<ISessionEffect> _effects;
     private readonly PersistenceStore<SessionPresetDocument> _preset;
+    private readonly Dictionary<string, CapabilityState> _armOutcomes = [];
+    private readonly EffectSignal? _signal;
     private bool _stopInProgress;
 
-    public SessionEngine(IReadOnlyList<ISessionEffect> effects, PersistenceStore<SessionPresetDocument> preset)
+    /// <param name="effects">The rack's modules, in WPF's rack order.</param>
+    /// <param name="preset">The persisted preset the session saves before it starts anything.</param>
+    /// <param name="signal">Where <see cref="Changed"/> is delivered (SP-101). The engine raises its
+    /// OWN notifications on START, STOP and quick-toggle, and those are raised from the caller's
+    /// thread — teardown's, on the stop path — so they need the same marshalling the modules' do.
+    /// Omitting it raises inline, which is what a caller with no UI at all wants.</param>
+    public SessionEngine(
+        IReadOnlyList<ISessionEffect> effects,
+        PersistenceStore<SessionPresetDocument> preset,
+        EffectSignal? signal = null)
     {
         ArgumentNullException.ThrowIfNull(effects);
         ArgumentNullException.ThrowIfNull(preset);
         _effects = effects;
         _preset = preset;
+        _signal = signal;
         foreach (var effect in _effects)
         {
+            // Forwarded INLINE on purpose: a module's Changed has already been through the signal,
+            // so this runs on the signal thread already and a second hop would only defer it.
             effect.Changed += () => Changed?.Invoke();
         }
     }
 
     /// <summary>The rack's modules, in WPF's rack order (<c>StudioTabView.xaml.cs:482-497</c>).</summary>
     public IReadOnlyList<ISessionEffect> Effects => _effects;
+
+    private void RaiseChanged()
+    {
+        if (_signal is null)
+        {
+            Changed?.Invoke();
+            return;
+        }
+
+        _signal.Raise(() => Changed?.Invoke());
+    }
+
+    /// <summary>
+    /// What each module said the last time it was armed, by module id (SP-101). Empty before the
+    /// first START.
+    ///
+    /// <para>This is the reason <see cref="ISessionEffect.Arm"/> stopped returning <c>void</c>: a
+    /// session that arms fifteen modules of which three are switched off and one has no audio device
+    /// is a session with a hole in it, and until now nothing in the port could name which hole. The
+    /// states are kept VERBATIM — a reason code and its detail, never summarised into a boolean —
+    /// because the detail is what a user reads and a bug report quotes.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, CapabilityState> ArmOutcomes => _armOutcomes;
+
+    /// <summary>The modules that did not take the last START — the dial-off ones, and any that could
+    /// not run here. Order is the rack's.</summary>
+    public IReadOnlyList<(string Id, CapabilityReason Reason)> ArmRefusals =>
+        [.. _effects
+            .Where(e => _armOutcomes.TryGetValue(e.Id, out var state) && state is CapabilityState.Unavailable)
+            .Select(e => (e.Id, ((CapabilityState.Unavailable)_armOutcomes[e.Id]).Reason))];
 
     /// <summary>WPF's <c>_isRunning</c>/<c>App.IsEngineRunning</c> (<c>MainWindow.StartStop.cs:268-269</c>).</summary>
     public bool Running { get; private set; }
@@ -98,11 +143,14 @@ public sealed class SessionEngine
 
         foreach (var effect in _effects)
         {
-            effect.Arm();
+            // The outcome is RECORDED rather than discarded: a module that armed nothing is a fact
+            // about this session, and dropping it here would put the typed refusal back where it
+            // was before SP-101 — expressible and unobserved.
+            _armOutcomes[effect.Id] = effect.Arm();
         }
 
         Running = true;
-        Changed?.Invoke();
+        RaiseChanged();
         return true;
     }
 
@@ -138,7 +186,7 @@ public sealed class SessionEngine
             }
 
             Running = false;
-            Changed?.Invoke();
+            RaiseChanged();
             return true;
         }
         finally
@@ -173,16 +221,19 @@ public sealed class SessionEngine
         {
             if (on)
             {
-                effect.Arm();
+                _armOutcomes[effect.Id] = effect.Arm();
             }
             else
             {
                 effect.Disarm();
+                _armOutcomes[effect.Id] = new CapabilityState.Unavailable(new CapabilityReason(
+                    EffectReasonCodes.EffectDialOff,
+                    $"the '{effect.Id}' module was switched off mid-session by the rack's quick-toggle"));
             }
         }
 
         _ = _preset.Save();
-        Changed?.Invoke();
+        RaiseChanged();
         return true;
     }
 }

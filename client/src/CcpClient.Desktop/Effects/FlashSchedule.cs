@@ -5,6 +5,13 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>Services/Flash/FlashService.cs:538-563</c>). It is separated from the effect for one
 /// reason: it is the whole behaviour-visible part of the schedule, and a formula in a pure
 /// function can be pinned exactly, at its boundaries, without a clock or a session.
+///
+/// <para><b>SP-101.</b> The ARITHMETIC now lives in <see cref="EffectSchedule"/>, because
+/// Subliminals runs the identical five lines with different numbers and thirteen more modules
+/// follow. What stays here is what is actually Flash Images': the three numbers, each with its own
+/// citation, and the public surface every caller and every SP-098 fact already uses. This file is
+/// deliberately still a NAMED law rather than a call site passing a tuple around — a module's pacing
+/// constants are its behaviour, and they are entitled to a place with a citation on them.</para>
 /// </summary>
 public static class FlashSchedule
 {
@@ -17,6 +24,9 @@ public static class FlashSchedule
     /// <summary>Seconds in the hour the frequency dial is expressed in (<c>FlashService.cs:550</c>).</summary>
     public const double SecondsPerHour = 3600.0;
 
+    /// <summary>Flash Images' three numbers, as the shared arithmetic consumes them.</summary>
+    public static readonly IntervalLaw Law = new(SecondsPerHour, VarianceFraction, MinimumIntervalSeconds);
+
     /// <summary>
     /// The unvaried spacing implied by the dial: <c>3600.0 / max(1, flashesPerHour)</c>
     /// (<c>FlashService.cs:549-550</c>). The <c>max(1, …)</c> is WPF's and is kept even though
@@ -24,20 +34,18 @@ public static class FlashSchedule
     /// dividing, and removing it makes the function depend on its caller's clamp.
     /// </summary>
     public static double BaseIntervalSeconds(int flashesPerHour) =>
-        SecondsPerHour / Math.Max(1, flashesPerHour);
+        EffectSchedule.BaseIntervalSeconds(Law, flashesPerHour);
 
     /// <summary>The earliest the next flash can be scheduled for this dial (the floor applies).</summary>
     public static TimeSpan MinimumInterval(int flashesPerHour) =>
-        TimeSpan.FromSeconds(Math.Max(MinimumIntervalSeconds,
-            BaseIntervalSeconds(flashesPerHour) * (1.0 - VarianceFraction)));
+        EffectSchedule.MinimumInterval(Law, flashesPerHour);
 
     /// <summary>
     /// The latest the next flash can be scheduled for this dial. Advancing a test clock by
     /// this is what makes "a flash is due" deterministic without pinning the random draw.
     /// </summary>
     public static TimeSpan MaximumInterval(int flashesPerHour) =>
-        TimeSpan.FromSeconds(Math.Max(MinimumIntervalSeconds,
-            BaseIntervalSeconds(flashesPerHour) * (1.0 + VarianceFraction)));
+        EffectSchedule.MaximumInterval(Law, flashesPerHour);
 
     /// <summary>
     /// One interval, WPF's arithmetic in WPF's order (<c>FlashService.cs:549-555</c>):
@@ -45,13 +53,6 @@ public static class FlashSchedule
     /// so at high frequencies it truncates the bottom of the variance band rather than
     /// shifting the whole band up.
     /// </summary>
-    public static TimeSpan NextInterval(int flashesPerHour, Random random)
-    {
-        ArgumentNullException.ThrowIfNull(random);
-        var baseInterval = BaseIntervalSeconds(flashesPerHour);
-        var variance = baseInterval * VarianceFraction;
-        var interval = baseInterval + ((random.NextDouble() * variance * 2) - variance);
-        interval = Math.Max(MinimumIntervalSeconds, interval);
-        return TimeSpan.FromSeconds(interval);
-    }
+    public static TimeSpan NextInterval(int flashesPerHour, Random random) =>
+        EffectSchedule.NextInterval(Law, flashesPerHour, random);
 }

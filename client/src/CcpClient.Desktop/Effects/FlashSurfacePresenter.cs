@@ -23,6 +23,19 @@ public interface IFlashSurface
     /// can actually see.
     /// </summary>
     void HideAll();
+
+    /// <summary>
+    /// The last thing the OS said when this surface tried to place something, verbatim, or null
+    /// before anything has been attempted (SP-101).
+    ///
+    /// <para>It is on the INTERFACE because the Studio module panel has to tell the user where their
+    /// flashes are going, and the only honest answer is the one the surface itself last got: an
+    /// <see cref="CapabilityState.Available"/> on a Windows build with an overlay, and a typed
+    /// refusal carrying its reason code and manual gate everywhere the overlay is absent. The panel
+    /// used to assert the platform instead, and asserting a platform is exactly how it came to be
+    /// telling Windows users something false (SP-100's own closing note).</para>
+    /// </summary>
+    CapabilityState? LastPlacement { get; }
 }
 
 /// <summary>
@@ -35,25 +48,17 @@ public interface IFlashSurface
 /// reused across flashes; the cap is WPF's <c>MAX_CONCURRENT_FLASH</c> of ten (<c>:50</c>), which
 /// exists upstream for the per-flash layered-window path — the exact path this uses.</para>
 ///
-/// <para><b>Present is not a frame path.</b> <see cref="IOverlayPresence.Present"/> walks the OS's
-/// whole top-level z-order and asks the window manager's hit test twice; it is called ONCE per
-/// surface per flash, at a cadence bounded below by the schedule's own three-second floor. Content
-/// goes through <see cref="IOverlayPresence.Paint"/>, which does none of that. There is no render
-/// loop here and no animation: a flash is one frame that lives for its lifetime.</para>
-///
-/// <para><b><see cref="IOverlayPresence.IsPresenting"/> is never consulted.</b> It is a latch over
-/// the last operation's outcome, not a live fact about the screen. Every show re-presents its
-/// surface, including a recycled one, and the presenter tracks its own slots.</para>
-///
 /// <para><b>Topmost is re-asserted on a cadence</b>, because the band is contested and the port
 /// measured a contender on the developer's own desktop (SP-100 record §1: the window that owned the
 /// point was the shipping WPF product). WPF re-raises every live flash window about once a second
 /// (<c>:206-243</c>); so does this, through the injected clock, for exactly as long as a surface is
 /// up — never on a wall clock, and never when nothing is showing.</para>
 ///
-/// <para><b>Threading.</b> A native window belongs to the thread that created it. Every touch of a
-/// presence happens on the thread that first showed one; clock callbacks are marshalled back to it
-/// through the injected dispatch. Nothing here blocks that thread on anything.</para>
+/// <para><b>SP-101: what moved out.</b> The slot pool, the present-then-paint sequence, the
+/// withdraw-on-failed-paint rule, the verbatim outcome bookkeeping, the no-display refusal and the
+/// cadence are now <see cref="OverlaySurfaceSet"/>, shared with the Subliminals card. What stays
+/// here is what is genuinely a FLASH: the stagger, the placement roll, the geometry and the
+/// constants. Not one call to the overlay changed order.</para>
 /// </summary>
 public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
 {
@@ -87,15 +92,11 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
 
     private readonly ISessionClock _clock;
     private readonly Action<Action> _dispatch;
-    private readonly Func<IOverlayPresence> _presenceFactory;
+    private readonly OverlaySurfaceSet _surfaces;
     private readonly IFlashFrameSource _frames;
     private readonly Func<OverlayBounds?> _display;
     private readonly Random _random;
-    private readonly List<Slot> _slots = [];
     private readonly List<IDisposable> _pending = [];
-
-    private IDisposable? _cadence;
-    private bool _disposed;
 
     /// <param name="clock">The session clock: the stagger, the lifetime and the topmost cadence all
     /// ride it, so a test drives every one of them without a wall-clock wait.</param>
@@ -121,10 +122,10 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         ArgumentNullException.ThrowIfNull(display);
         _clock = clock;
         _dispatch = dispatch;
-        _presenceFactory = presenceFactory;
         _frames = frames;
         _display = display;
         _random = random ?? new Random();
+        _surfaces = new OverlaySurfaceSet(clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform, the GDI+
@@ -136,25 +137,10 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
 
     /// <summary>How many surfaces this presenter believes are on screen right now. Its OWN
     /// bookkeeping, never <see cref="IOverlayPresence.IsPresenting"/>.</summary>
-    public int LiveSurfaces
-    {
-        get
-        {
-            var live = 0;
-            for (var i = 0; i < _slots.Count; i++)
-            {
-                if (_slots[i].Live)
-                {
-                    live++;
-                }
-            }
-
-            return live;
-        }
-    }
+    public int LiveSurfaces => _surfaces.LiveSurfaces;
 
     /// <summary>Surfaces this presenter has ever placed. Diagnostics and facts; never a claim.</summary>
-    public int SurfacesShown { get; private set; }
+    public int SurfacesShown => _surfaces.SurfacesShown;
 
     /// <summary>Images a flash drew that produced no pixels — missing, corrupt, or a format this
     /// build cannot decode. WPF's own normal case (<c>LoadImagesUntilAsync</c>).</summary>
@@ -163,19 +149,22 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <summary>The last placement outcome, verbatim. This is where "there is no overlay on this
     /// platform" is visible to a caller: it is a typed <see cref="CapabilityState.Unavailable"/>
     /// carrying the reason code and the manual gate, not a silence.</summary>
-    public CapabilityState? LastPresent { get; private set; }
+    public CapabilityState? LastPresent => _surfaces.LastPresent;
 
     /// <summary>The last content outcome, verbatim.</summary>
-    public CapabilityState? LastPaint { get; private set; }
+    public CapabilityState? LastPaint => _surfaces.LastPaint;
 
     /// <summary>The last withdrawal outcome, verbatim.</summary>
-    public CapabilityState? LastWithdraw { get; private set; }
+    public CapabilityState? LastWithdraw => _surfaces.LastWithdraw;
+
+    /// <inheritdoc/>
+    public CapabilityState? LastPlacement => _surfaces.LastPresent;
 
     /// <inheritdoc/>
     public void Show(IReadOnlyList<string> paths)
     {
         ArgumentNullException.ThrowIfNull(paths);
-        if (_disposed || paths.Count == 0)
+        if (_surfaces.Disposed || paths.Count == 0)
         {
             return;
         }
@@ -215,36 +204,23 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         }
 
         _pending.Clear();
-
-        for (var i = 0; i < _slots.Count; i++)
-        {
-            Retire(_slots[i]);
-        }
-
-        _cadence?.Dispose();
-        _cadence = null;
+        _surfaces.HideAll();
     }
 
     public void Dispose()
     {
-        if (_disposed)
+        if (_surfaces.Disposed)
         {
             return;
         }
 
-        _disposed = true;
         HideAll();
-        for (var i = 0; i < _slots.Count; i++)
-        {
-            _slots[i].Presence.Dispose();
-        }
-
-        _slots.Clear();
+        _surfaces.Dispose();
     }
 
     private void ShowOne(string path)
     {
-        if (_disposed)
+        if (_surfaces.Disposed)
         {
             return;
         }
@@ -252,25 +228,11 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         var display = _display();
         if (display is null)
         {
-            // No display is not a failure of this code and not something to guess around: WPF
-            // enumerates monitors and places per monitor (FlashService.cs:2204-2245); with none
-            // enumerated there is nowhere a surface could legally go. It must not be SILENT
-            // either, so the reason is recorded — and on a platform whose backend refuses
-            // outright, the backend's own refusal (which names the route and the manual gate) is
-            // the better answer, so it is asked for. Withdrawing a presence that has presented
-            // nothing costs nothing, changes nothing, and is the one query that returns it.
-            LastPresent = AcquireSlot() is { } probe
-                && probe.Presence.Withdraw() is CapabilityState.Unavailable refusal
-                && refusal.Reason.Code == OverlayReasonCodes.OverlayMechanismAbsent
-                ? refusal
-                : new CapabilityState.Unavailable(new CapabilityReason(
-                    OverlayReasonCodes.OverlayNoDisplay,
-                    "the operating system enumerated no display, so there is no rectangle a flash could legally "
-                    + "be placed on and nothing was attempted"));
+            _surfaces.RecordNoDisplay();
             return;
         }
 
-        if (LiveSurfaces >= MaxConcurrentSurfaces)
+        if (_surfaces.LiveSurfaces >= MaxConcurrentSurfaces)
         {
             return;
         }
@@ -287,136 +249,20 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
             return;
         }
 
-        var slot = AcquireSlot();
+        var slot = _surfaces.Acquire();
         if (slot is null)
         {
             return;
         }
 
-        var placement = FlashGeometry.Place(monitor, frame.Width, frame.Height, LiveRects(), _random);
+        var placement = FlashGeometry.Place(monitor, frame.Width, frame.Height, _surfaces.LiveRects(), _random);
 
         // Click-through, which is WPF's WS_EX_TRANSPARENT arm (:3668). WPF's other arm exists to
         // serve pop / hydra / XP mechanics this port does not have, and a surface that catches
         // clicks it does nothing with would swallow the user's input — the exact desktop-breaking
         // failure OverlayInputNotPassingThrough exists to refuse (SP-100 divergence).
         var request = new OverlaySurfaceRequest(placement, OpacityPercent / 100.0, ClickThrough: true);
-
-        // ONCE per surface per flash. Never per frame, and never as a way to change content.
-        var present = slot.Presence.Present(request);
-        LastPresent = present;
-        if (present is not CapabilityState.Available)
-        {
-            return;
-        }
-
-        var paint = slot.Presence.Paint(frame);
-        LastPaint = paint;
-        if (paint is not CapabilityState.Available)
-        {
-            // A surface the OS confirms is on screen and does NOT hold the frame is worse than no
-            // surface: it is a rectangle of nothing over the user's work. Take it back off.
-            LastWithdraw = slot.Presence.Withdraw();
-            return;
-        }
-
-        slot.Live = true;
-        slot.Bounds = placement;
-        SurfacesShown++;
-
-        slot.Lifetime?.Dispose();
-        slot.Lifetime = _clock.Schedule(SurfaceLifetime, () => _dispatch(() => Retire(slot)));
-        EnsureCadence();
-    }
-
-    /// <summary>
-    /// A free slot, or a new one up to the cap. Presences are REUSED across flashes: each carries a
-    /// registered window class and a top-level window, and creating a pair per image per flash
-    /// would churn both for the life of a session. WPF pools its windows too, for a different
-    /// reason it names (<c>:3576-3607</c>, a WPF render-thread hazard this path cannot have —
-    /// SP-099 divergence D54).
-    /// </summary>
-    private Slot? AcquireSlot()
-    {
-        for (var i = 0; i < _slots.Count; i++)
-        {
-            if (!_slots[i].Live)
-            {
-                return _slots[i];
-            }
-        }
-
-        if (_slots.Count >= MaxConcurrentSurfaces)
-        {
-            return null;
-        }
-
-        // Lazily, on the surface thread: the window belongs to whoever creates it, and a session
-        // that never flashes must never create one.
-        var slot = new Slot(_presenceFactory());
-        _slots.Add(slot);
-        return slot;
-    }
-
-    private void Retire(Slot slot)
-    {
-        slot.Lifetime?.Dispose();
-        slot.Lifetime = null;
-        if (!slot.Live)
-        {
-            return;
-        }
-
-        slot.Live = false;
-        LastWithdraw = slot.Presence.Withdraw();
-    }
-
-    private List<OverlayBounds> LiveRects()
-    {
-        var rects = new List<OverlayBounds>(_slots.Count);
-        for (var i = 0; i < _slots.Count; i++)
-        {
-            if (_slots[i].Live)
-            {
-                rects.Add(_slots[i].Bounds);
-            }
-        }
-
-        return rects;
-    }
-
-    /// <summary>
-    /// One re-assertion of the topmost band per live surface, once a second, for as long as
-    /// anything is up — WPF's <c>RaiseAllToFront</c> (<c>:206-243</c>). It re-arms itself only
-    /// while a surface is showing, so a stopped session leaves no timer behind, which is the
-    /// property SP-098's stop facts are built on.
-    /// </summary>
-    private void EnsureCadence()
-    {
-        if (_cadence is not null || _disposed)
-        {
-            return;
-        }
-
-        _cadence = _clock.Schedule(TopmostCadence, () => _dispatch(OnCadence));
-    }
-
-    private void OnCadence()
-    {
-        _cadence = null;
-        var anyLive = false;
-        for (var i = 0; i < _slots.Count; i++)
-        {
-            if (_slots[i].Live)
-            {
-                anyLive = true;
-                _slots[i].Presence.Reassert();
-            }
-        }
-
-        if (anyLive)
-        {
-            EnsureCadence();
-        }
+        _surfaces.Place(slot, request, frame, SurfaceLifetime);
     }
 
     private sealed class PendingShow : IDisposable
@@ -424,16 +270,5 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         public IDisposable? Handle { get; set; }
 
         public void Dispose() => Handle?.Dispose();
-    }
-
-    private sealed class Slot(IOverlayPresence presence)
-    {
-        public IOverlayPresence Presence { get; } = presence;
-
-        public bool Live { get; set; }
-
-        public OverlayBounds Bounds { get; set; }
-
-        public IDisposable? Lifetime { get; set; }
     }
 }
