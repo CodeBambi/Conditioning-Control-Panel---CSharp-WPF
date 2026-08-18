@@ -1,0 +1,6 @@
+WAVE: 47
+PACKETS: SP-107-gate-determinism
+LANES: 1
+BASE: 917f3dcf
+GATE: validate-wave.mjs WAVE OK; floor 1472/90
+OPENED: 2026-08-18T21:05:32Z
