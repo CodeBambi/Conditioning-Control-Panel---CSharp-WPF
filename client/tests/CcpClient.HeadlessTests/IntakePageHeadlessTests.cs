@@ -234,7 +234,7 @@ public class IntakePageHeadlessTests
     public async Task ThePage_CarriesWpfsOwnWords_AndNoneOfTheControlsItDoesNotHave()
     {
         // The page's strings are WPF's, not invented copy: title GradedIntakeTabView.xaml:60,
-        // sub-line :67-68, section head :126, blurb :128-129, button :154 emoji-stripped (§9 D8).
+        // sub-line :67-68, section head :125, blurb :127, button :152 emoji-stripped (§9 D8).
         var (host, window, _) = await BootAsync();
         Click(window, Door(window, "DoorIntake"));
 
@@ -249,7 +249,7 @@ public class IntakePageHeadlessTests
         Assert.Contains(strings, s => s.StartsWith("Each intake runs in its own window.", StringComparison.Ordinal));
         Assert.Equal("Begin Intake", Descendant<Button>(page, "BeginIntakeButton").Content as string);
 
-        // The emoji really is stripped — WPF's XAML content is "✨ Begin Intake" (:154).
+        // The emoji really is stripped — WPF's XAML content is "✨ Begin Intake" (:152).
         Assert.DoesNotContain(strings, s => s.Contains('✨', StringComparison.Ordinal));
 
         // None of WPF's absent controls was rendered dead (the §9 D7 rule): no pass banner, no

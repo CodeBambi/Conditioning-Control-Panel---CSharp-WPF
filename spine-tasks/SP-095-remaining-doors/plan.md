@@ -30,7 +30,7 @@ base `fbf61b17`.
 - The destination page: `Views/Tabs/GradedIntakeTabView.xaml`. Title literal **"Graded Intake"**
   (`:60`, deliberately not localized), sub-line `:67-68`
   *"A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."*,
-  section head **"Begin a run"** `:126`, blurb `:128-129`, and the page's **one** launch button
+  section head **"Begin a run"** `:125`, blurb `:127`, and the page's **one** launch button
   `BtnStartIntake`, content `✨ Begin Intake` (`:154-158`).
 - The launcher: `MainWindow/MainWindow.Lab.cs:108-167` → `Services.Quiz.IntakeHostService.Launch(...)`.
 

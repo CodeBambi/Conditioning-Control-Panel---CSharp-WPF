@@ -29,7 +29,7 @@ public class IntakePassGateTests
     [Fact]
     public void PatronsProceed_AndSoDoesAReadFreeAccountWithAnUnspentWeek()
     {
-        // WPF :139-146 — CanStartIntake = Premium || Available. Both grants, and ONLY these two.
+        // WPF :140-146 — CanStartIntake = Premium || Available. Both grants, and ONLY these two.
         var premium = Assert.IsType<IntakePassDecision.Proceed>(
             IntakePassGate.Decide(State.Premium, Reason.PremiumEntitled, AnyDays));
         Assert.Equal(State.Premium, premium.State);
@@ -104,7 +104,7 @@ public class IntakePassGateTests
     [Fact]
     public void AThrownEvaluation_IsUndeterminable_NotSpent_WhichIsAnImprovementOnWpf()
     {
-        // WPF fails CLOSED to Spent when State throws (:122-130) and then paints the spent copy,
+        // WPF fails CLOSED to Spent when State throws (:123-130) and then paints the spent copy,
         // telling a user their week is gone when in fact nothing was determined. The port refuses
         // just as hard — the over-grant stays closed — and says the true thing. §11 D33.
         var decision = IntakePassGate.Decide(State.Spent, Reason.SpentFailClosed, AnyDays);

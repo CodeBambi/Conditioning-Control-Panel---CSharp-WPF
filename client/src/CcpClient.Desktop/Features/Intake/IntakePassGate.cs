@@ -93,7 +93,7 @@ public static class IntakePassGate
     /// </summary>
     public static IntakePassDecision Decide(State state, Reason reason, int daysUntilNextPass)
     {
-        // WPF :139-146 — CanStartIntake is Premium || Available. Premium is the patron's
+        // WPF :140-146 — CanStartIntake is Premium || Available. Premium is the patron's
         // "unlimited runs, no week, no door" (:13); Available is a free account whose week is
         // unspent AND whose account was actually READ (AvailableThisWeek).
         if (state == State.Premium && reason == Reason.PremiumEntitled)

@@ -36,7 +36,7 @@ WPF exposes this surface twice, and **both signposts navigate**:
   -> `Views/Tabs/PlayTabView.Cards.cs:83`.
 
 The destination page carries **exactly one** launcher — `BtnStartIntake`, WPF's own comment calls it
-"the page's primary (and only visible) action" (`Views/Tabs/GradedIntakeTabView.xaml:152-158`) ->
+"the page's primary (and only visible) action" (`Views/Tabs/GradedIntakeTabView.xaml:151`) ->
 `MainWindow/MainWindow.Lab.cs:108-167` -> `Services/Quiz/IntakeHostService.Launch`.
 
 So it is a two-hop surface with a real destination page and one launcher on it — the same shape the
@@ -46,7 +46,7 @@ port already reproduces for the Loom and DTRH. **Why a door and not a card on th
 card a launcher — the rule WPF states verbatim at `MainWindow/MainWindow.Presets.cs:1036`.
 
 The page's strings are WPF's own, not invented: title `GradedIntakeTabView.xaml:60` (a deliberate
-literal upstream), sub-line `:67-68`, section head `:126`, blurb `:128-129`, button `:154`
+literal upstream), sub-line `:67-68`, section head `:125`, blurb `:127`, button `:152`
 emoji-stripped per §9 D8, tooltip `:155`.
 
 ## 2. The Chaos tunnel — no door, and the port's comment was wrong

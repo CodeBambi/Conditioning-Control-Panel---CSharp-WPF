@@ -10,13 +10,13 @@
     THE WORDS ARE WPF'S OWN. The title is the literal at GradedIntakeTabView.xaml:60 (deliberately
     not localized upstream: "the intake's own page content is English-only, and the launch button
     beside it has always been a literal too"), the sub-line is :67-68 verbatim, the section head is
-    :126, its blurb is :128-129, and the button is :154's content emoji-stripped (the §9 D8 rule —
-    the app strips emoji mod-aware, MainWindow/MainWindow.UiUpdates.cs:101,124) carrying :157's
+    :125, its blurb is :127, and the button is :152's content emoji-stripped (the §9 D8 rule —
+    the app strips emoji mod-aware, MainWindow/MainWindow.UiUpdates.cs:101,124) carrying :155's
     tooltip verbatim.
 
     THE WEEKLY-PASS GATE IS REAL AND IT REFUSES (§11 D26). Unlimited retakes are the patron
     privilege upstream — Premium is "unlimited runs, no week, no door"
-    (Services/Progression/IntakePassService.cs:13) and "retakes stay a reason to subscribe" (:25-29)
+    (Services/Progression/IntakePassService.cs:13) and "retakes stay a reason to subscribe" (:26-29)
     — so an ungated button would hand every user paid content. The band below carries the refusal.
     Two divergences from WPF's gate, both deliberate:
       * WPF PAINTS its gate at navigation, from a pass state it already knows
