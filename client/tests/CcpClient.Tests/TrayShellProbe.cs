@@ -34,6 +34,9 @@ internal static class TrayShellProbe
     private const uint WsExToolwindow = 0x00000080;
     private const uint PmRemove = 0x0001;
     private const int IdiApplication = 32512;
+    private const uint MfByposition = 0x00000400;
+    private const uint MiimFtype = 0x00000100;
+    private const uint MftSeparator = 0x00000800;
 
     /// <summary>An id this probe never adds anywhere — the oracle's negative control.</summary>
     internal const uint NeverAddedIconId = 4242;
@@ -66,6 +69,78 @@ internal static class TrayShellProbe
     }
 
     internal static bool WindowStillExists(nint window) => WindowsHost && window != 0 && IsWindow(window);
+
+    // ---------- SP-096: the menu oracle ----------
+
+    /// <summary>
+    /// What USER32 says a popup menu contains, read through this file's OWN declarations — a second
+    /// independent copy, exactly like the NIM_MODIFY oracle above and for the same reason. The
+    /// product builds its menu and verifies it with <c>GetMenuItemCount</c>/<c>GetMenuItemID</c>/
+    /// <c>GetMenuString</c>; this asks additionally with <c>GetMenuItemInfo</c>, so "the product
+    /// says it built a separator" and "the OS reports MFT_SEPARATOR" are two different facts from
+    /// two different call paths.
+    /// </summary>
+    /// <param name="EntryCount">-1 when the handle is not a menu at all, which is how this oracle says "no".</param>
+    internal sealed record MenuReadBack(int EntryCount, IReadOnlyList<MenuEntry> Entries);
+
+    /// <param name="Id">The command id USER32 holds for the entry. 0 for a separator.</param>
+    /// <param name="Label">The string USER32 holds. Empty for a separator.</param>
+    /// <param name="IsSeparator">MFT_SEPARATOR as USER32 reports it in MENUITEMINFO.fType.</param>
+    internal sealed record MenuEntry(uint Id, string Label, bool IsSeparator);
+
+    /// <summary>Asks USER32 to describe a menu. An <see cref="MenuReadBack.EntryCount"/> of -1 means
+    /// the handle is not a live menu — the oracle's way of saying no.</summary>
+    internal static MenuReadBack ReadMenu(nint menu)
+    {
+        if (!WindowsHost || menu == 0)
+        {
+            return new MenuReadBack(-1, []);
+        }
+
+        var count = GetMenuItemCount(menu);
+        if (count < 0)
+        {
+            return new MenuReadBack(count, []);
+        }
+
+        var entries = new List<MenuEntry>(count);
+        var buffer = new System.Text.StringBuilder(512);
+        for (var index = 0; index < count; index++)
+        {
+            buffer.Clear();
+            var copied = GetMenuStringW(menu, (uint)index, buffer, buffer.Capacity, MfByposition);
+            var info = new MenuItemInfoW
+            {
+                cbSize = (uint)Marshal.SizeOf<MenuItemInfoW>(),
+                fMask = MiimFtype,
+            };
+            var described = GetMenuItemInfoW(menu, (uint)index, true, ref info);
+            entries.Add(new MenuEntry(
+                GetMenuItemID(menu, index),
+                copied > 0 ? buffer.ToString() : string.Empty,
+                described && (info.fType & MftSeparator) != 0));
+        }
+
+        return new MenuReadBack(count, entries);
+    }
+
+    /// <summary>
+    /// Posts the exact notification the shell posts when the user RIGHT-clicks the icon, then drains
+    /// the owner window's queue so its WndProc runs on this thread. Proves the routing of the
+    /// context-menu gesture; it does not prove <c>TrackPopupMenu</c>'s modal loop or a human's hand,
+    /// which is why the product keeps that one call behind a seam.
+    /// </summary>
+    internal static void PostSyntheticRightClick(nint ownerWindow, uint callbackMessage, uint iconId)
+    {
+        if (!WindowsHost || ownerWindow == 0)
+        {
+            return;
+        }
+
+        const uint wmRbuttonup = 0x0205;
+        PostMessageW(ownerWindow, callbackMessage, (nint)iconId, (nint)wmRbuttonup);
+        DrainQueue(ownerWindow);
+    }
 
     /// <summary>
     /// Posts the exact notification the shell posts when the user left-clicks the icon, then
@@ -303,4 +378,33 @@ internal static class TrayShellProbe
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern nint GetModuleHandleW(string? name);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MenuItemInfoW
+    {
+        public uint cbSize;
+        public uint fMask;
+        public uint fType;
+        public uint fState;
+        public uint wID;
+        public nint hSubMenu;
+        public nint hbmpChecked;
+        public nint hbmpUnchecked;
+        public nint dwItemData;
+        public nint dwTypeData;
+        public uint cch;
+        public nint hbmpItem;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetMenuItemCount(nint menu);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetMenuItemID(nint menu, int position);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetMenuStringW(nint menu, uint item, System.Text.StringBuilder? buffer, int max, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetMenuItemInfoW(nint menu, uint item, bool byPosition, ref MenuItemInfoW info);
 }

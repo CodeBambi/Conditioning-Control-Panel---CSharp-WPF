@@ -45,4 +45,19 @@ public static class TrayReasonCodes
     /// <summary>The presence was disposed; its owner window and icon are gone and it will never
     /// place another. Truthful terminal state, never a silent no-op.</summary>
     public const string TrayPresenceDisposed = "tray-presence-disposed";
+
+    /// <summary>
+    /// The platform's menu mechanism was invoked for real and the menu did not come out right:
+    /// <c>CreatePopupMenu</c> returned NULL, an <c>AppendMenu</c> failed, or — the case that
+    /// matters — the menu was built and the read-back from the OS did not match what was asked
+    /// for. Distinct from <see cref="TrayMechanismAbsent"/>: something was attempted. A caller
+    /// that sees this must not place an icon whose right-click leads nowhere.
+    /// </summary>
+    public const string TrayMenuBuildFailed = "tray-menu-build-failed";
+
+    /// <summary>
+    /// A balloon was asked for while no icon is placed. There is nothing for the shell to attach
+    /// it to, so nothing was attempted and nothing succeeded.
+    /// </summary>
+    public const string TrayNotificationWithoutIcon = "tray-notification-without-icon";
 }

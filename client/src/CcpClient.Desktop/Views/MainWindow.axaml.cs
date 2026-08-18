@@ -1,9 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using CcpClient.Desktop.Features;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Navigation;
+using CcpClient.Desktop.Tray;
 using CcpClient.Desktop.Views.Pages;
 
 namespace CcpClient.Desktop.Views;
@@ -43,6 +45,14 @@ public partial class MainWindow : Window
 
         _host = host;
         Loom = new LoomLaunch(host, this);
+        // SP-096: the shell's duck/restore and the ONE tray owner. Built here because the two
+        // non-restore menu entries are shell verbs — WPF wires the same two on the same object
+        // (MainWindow/MainWindow.xaml.cs:323-351). It is handed to DtrhLaunch rather than built
+        // inside it so there is exactly one tray presence per window, whatever ends up ducking.
+        ShellTray = new ShellTray(this, host.LogDiagnostic, ShowCompanion, RequestApplicationExit);
+        // The backend owns a native window created on this thread; Dispose is thread-affine and
+        // Closed is the last moment this thread is still the UI thread.
+        Closed += (_, _) => ShellTray.Dispose();
         // The entitlement capability comes from the composition root, which is also where its
         // probe is registered — so the state the gate consumes is the SAME state the System
         // page reports. A shell-local instance would let the two drift, and the one place the
@@ -53,6 +63,7 @@ public partial class MainWindow : Window
             host.Entitlement ?? throw new InvalidOperationException(
                 "the shell needs the entitlement capability and this host has none — an ungated DTRH "
                 + "launcher would hand out paid content, so composition refuses rather than degrading"),
+            ShellTray,
             dtrhHarness);
         // The ONE intake construction site (Features/Intake/IntakeLaunch.cs). The --intake-demo
         // flag reaches this same object's coordinator rather than building a second one, which is
@@ -146,6 +157,10 @@ public partial class MainWindow : Window
     /// <summary>The open companion window (SP-046), if any; public so tests assert the real open path.</summary>
     public Features.Companion.CompanionWindow? Companion => _companion;
 
+    /// <summary>The shell's ONE duck/restore and tray owner (SP-096); public so tests drive the
+    /// real menu and the real window transitions.</summary>
+    public ShellTray ShellTray { get; }
+
     /// <summary>The page currently mounted in the host, by route id.</summary>
     public Control PageFor(string routeId) => _pages[routeId];
 
@@ -183,5 +198,33 @@ public partial class MainWindow : Window
         _companion = new Features.Companion.CompanionWindow(_host);
         _companion.Closed += (_, _) => _companion = null;
         _companion.Show(this);
+    }
+
+    /// <summary>
+    /// The tray menu's "Exit" (WPF <c>TrayIconService.cs:109-111</c> -> <c>OnExitRequested</c> ->
+    /// <c>MainWindow/MainWindow.xaml.cs:323-343</c>, which ends in <c>Application.Current.Shutdown()</c>).
+    ///
+    /// <para>The port's counterpart of that final call is the classic desktop lifetime's
+    /// <c>Shutdown()</c>, which raises <c>desktop.Exit</c> and reaches the ONE guarded teardown
+    /// entry point — the settings flush, the operation drain and the reverse-order participant stop
+    /// (<c>App.axaml.cs:88-95</c>). The port deliberately does not reproduce WPF's preamble
+    /// (lockdown check, engine stop, audio kill, overlay dispose): none of those subsystems exists
+    /// here, and its settings save is what <c>ShutdownAsync</c> already does first.</para>
+    ///
+    /// <para>A host with no classic lifetime (the headless test application) gets a logged no-op
+    /// rather than a throw: exiting is not something to half-do, and a menu entry that killed a
+    /// test runner would be worse than one that says it could not.</para>
+    /// </summary>
+    private void RequestApplicationExit()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            _host.LogDiagnostic("tray: Exit chosen — requesting application shutdown");
+            desktop.Shutdown();
+            return;
+        }
+
+        _host.LogDiagnostic(
+            "tray: Exit chosen, but this process has no classic desktop lifetime; nothing was shut down");
     }
 }

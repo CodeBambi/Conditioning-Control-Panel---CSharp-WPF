@@ -44,6 +44,38 @@ public interface ITrayPresence : IDisposable
     /// </summary>
     CapabilityState Remove();
 
+    /// <summary>
+    /// Installs the menu a right-click on the icon opens (SP-096; WPF builds its equivalent once at
+    /// <c>Services/Notifications/TrayIconService.cs:95-110</c>).
+    /// <see cref="CapabilityState.Available"/> means the platform really holds a menu with these
+    /// entries — a backend must ask the platform BACK for the menu it just built and compare, the
+    /// same discipline <see cref="Place"/> obeys with its <c>NIM_MODIFY</c> round trip. It never
+    /// means "the append calls returned".
+    ///
+    /// <para><b>What it still cannot mean.</b> That the menu is drawn, or that a human's
+    /// right-click reaches it: on Windows that needs <c>TrackPopupMenu</c>'s modal loop and a real
+    /// pointer, which is a headed claim no headless run discharges.</para>
+    ///
+    /// <para>Independent of <see cref="Place"/> and orderable either way: a menu on no icon is
+    /// unreachable but harmless, and an icon with no menu is exactly the SP-093 shape SP-094
+    /// refused to tuck onto.</para>
+    /// </summary>
+    CapabilityState SetMenu(TrayMenu menu);
+
+    /// <summary>
+    /// Asks the platform to show a balloon on this presence's icon (WPF
+    /// <c>TrayIconService.cs:156</c> / <c>:225</c>). Requires a confirmed-placed icon; without one
+    /// there is nothing to attach a balloon to and the answer is
+    /// <see cref="CapabilityState.Unavailable"/>.
+    ///
+    /// <para><b>The honest ceiling on Available here.</b> A backend can confirm that the platform
+    /// ACCEPTED the request for an icon it confirms holding. It cannot confirm a balloon was drawn
+    /// — Windows suppresses notifications under Focus Assist, quiet hours, a full-screen app and
+    /// the user's own per-app notification switch, and reports none of that back. So the detail
+    /// says what was confirmed, and visible display stays a headed claim.</para>
+    /// </summary>
+    CapabilityState ShowNotification(TrayNotification notification);
+
     /// <summary>True only while an icon this presence placed is confirmed present.</summary>
     bool IsPlaced { get; }
 

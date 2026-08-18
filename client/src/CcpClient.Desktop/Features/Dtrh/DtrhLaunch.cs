@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using CcpClient.Desktop.Entitlement;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Tray;
 
 namespace CcpClient.Desktop.Features.Dtrh;
 
@@ -58,32 +59,41 @@ public sealed record DtrhHarnessOptions(
 /// into the tray when the hole opens and restores it on close
 /// (<c>Services/Chaos/DtrhHostService.cs:156</c> -> <c>MainWindow/MainWindow.RemoteControl.cs:1517</c>
 /// -> <c>Services/Notifications/TrayIconService.cs:145-148</c>; restore at
-/// <c>DtrhHostService.cs:998</c>). The port does NOT tuck — see
-/// wpf-surface-reachability.md §10 D20 for the decision and what a user sees differently. It
-/// plain-minimizes and restores instead, reusing the port's own landed shape for exactly this
-/// situation (<c>Features/Intake/IntakeHostWindow.axaml.cs:120-162</c>), so the taskbar button
-/// is the way back at every instant and no icon has to exist for the window to return.</para>
+/// <c>DtrhHostService.cs:998</c>). <b>SP-096 gives the port the tray icon and the four-entry menu
+/// WPF has, on the same interval, and still does not hide the window</b> — for a measured reason
+/// that has nothing to do with the menu: Avalonia 12.1.1's <c>Window.Hide()</c> hides every window
+/// OWNED by the hidden one, and this coordinator owns the descent
+/// (<c>DtrhLaunchCoordinator.cs:167</c>). Hiding the shell would hide the game. See
+/// <see cref="Tray.ShellTray"/> and wpf-surface-reachability.md §12 D35. What a user gets is a
+/// minimized shell with its taskbar button, plus a real tray icon whose menu restores it — three
+/// ways back where WPF has two.</para>
 /// </summary>
 public sealed class DtrhLaunch
 {
     private readonly ApplicationHost _host;
     private readonly Window _owner;
     private readonly HostLoginEntitlement _entitlement;
+    private readonly ShellTray _tray;
     private readonly DtrhHarnessOptions _options;
     private DtrhLaunchCoordinator? _coordinator;
-    private WindowState? _ownerStateBeforeDuck;
 
-    public DtrhLaunch(ApplicationHost host, Window owner, HostLoginEntitlement entitlement,
+    public DtrhLaunch(ApplicationHost host, Window owner, HostLoginEntitlement entitlement, ShellTray tray,
         DtrhHarnessOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(entitlement);
+        ArgumentNullException.ThrowIfNull(tray);
         _host = host;
         _owner = owner;
         _entitlement = entitlement;
+        _tray = tray;
         _options = options ?? new DtrhHarnessOptions();
     }
+
+    /// <summary>The shell's duck/restore and tray owner. Public so tests drive the real one and so
+    /// the shell can hand the same instance to anything else that needs it.</summary>
+    public ShellTray Tray => _tray;
 
     /// <summary>
     /// The DESCENT seam. Product default: the real coordinator, the real picker, the real
@@ -179,37 +189,22 @@ public sealed class DtrhLaunch
     }
 
     /// <summary>
-    /// Plain minimize, recording the prior state so a maximized shell comes back maximized.
-    /// Explicitly NOT a tray tuck: <c>Hide()</c> without a tray icon strands the user, and the
-    /// port's tray capability has no menu to bring the window back with (§10 D20).
+    /// The shell gets out of the way and the tray icon goes up, for the interval WPF's does
+    /// (<c>DtrhHostService.cs:156</c>). Delegated whole to <see cref="ShellTray"/>, which owns the
+    /// window decision, the icon, the menu and the first-minimize balloon — one place where WPF has
+    /// two, and the place the "never hide" rule is enforced.
     /// </summary>
     private void DuckOwner()
     {
-        if (_owner.WindowState == WindowState.Minimized)
-        {
-            return;
-        }
-
-        _ownerStateBeforeDuck = _owner.WindowState;
-        _owner.WindowState = WindowState.Minimized;
-        _host.LogDiagnostic("dtrh: shell minimized while the hole is open (prior state recorded; NOT a tray tuck)");
+        _tray.Duck();
+        _host.LogDiagnostic("dtrh: shell ducked for the hole — " + (_tray.IsIconPlaced
+            ? "minimized with a tray icon and menu up"
+            : "minimized, no tray icon (the taskbar button is the way back)"));
     }
 
     /// <summary>The single restore funnel. Fires on every real flow end — host window closed,
-    /// picker cancelled, descend failed — and no-ops when nothing was ducked.</summary>
-    private void RestoreOwner()
-    {
-        if (_ownerStateBeforeDuck is not { } prior)
-        {
-            return;
-        }
-
-        _ownerStateBeforeDuck = null;
-        if (_owner.WindowState == WindowState.Minimized)
-        {
-            _owner.WindowState = prior == WindowState.Maximized ? WindowState.Maximized : WindowState.Normal;
-            _owner.Activate();
-            _host.LogDiagnostic($"dtrh: shell restored ({_owner.WindowState})");
-        }
-    }
+    /// picker cancelled, descend failed — and no-ops when nothing was ducked. The tray's own
+    /// left-click and "Show Dashboard" entry land in the same funnel
+    /// (<c>DtrhHostService.cs:995-998</c> restores the same way WPF's tray does).</summary>
+    private void RestoreOwner() => _tray.Restore();
 }

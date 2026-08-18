@@ -47,6 +47,23 @@ public sealed class UnsupportedTrayPresence : ITrayPresence
 
     public CapabilityState Remove() => new CapabilityState.Unavailable(_reason);
 
+    /// <summary>
+    /// Refuses, and this refusal is load-bearing. A caller places the icon only after the menu is
+    /// confirmed, so this refusal is what stops a Linux run from ever reaching a placement — and
+    /// therefore what stops it from hiding a window behind an icon that cannot exist.
+    /// </summary>
+    public CapabilityState SetMenu(TrayMenu menu)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+        return new CapabilityState.Unavailable(_reason);
+    }
+
+    public CapabilityState ShowNotification(TrayNotification notification)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+        return new CapabilityState.Unavailable(_reason);
+    }
+
     public void Dispose()
     {
         // Nothing was ever acquired. Deliberately empty, and deliberately not reporting success

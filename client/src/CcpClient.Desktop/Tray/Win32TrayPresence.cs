@@ -12,7 +12,11 @@ namespace CcpClient.Desktop.Tray;
 /// <param name="OwnerWindow">The hidden top-level window the notification area sends callbacks to.</param>
 /// <param name="IconId">The icon's id within <paramref name="OwnerWindow"/>.</param>
 /// <param name="CallbackMessage">The private window message the shell posts on user interaction.</param>
-public readonly record struct TrayNativeHandles(nint OwnerWindow, uint IconId, uint CallbackMessage);
+/// <param name="Menu">The <c>HMENU</c> the context menu lives in, or zero before one is set. Exposed
+/// for the same reason as the rest: a menu that can only be interrogated through the object that
+/// built it is a menu nobody can verify. With this handle a test asks USER32 directly what entries
+/// exist.</param>
+public readonly record struct TrayNativeHandles(nint OwnerWindow, uint IconId, uint CallbackMessage, nint Menu);
 
 /// <summary>
 /// The Windows tray backend: a real icon in the notification area, via <c>Shell_NotifyIconW</c>.
@@ -45,6 +49,8 @@ public sealed class Win32TrayPresence : ITrayPresence
     private readonly string _windowClassName = "CcpClientTrayOwner." + Guid.NewGuid().ToString("N");
     private readonly Win32TrayInterop.WndProc _windowProc;
 
+    private readonly Dictionary<uint, TrayMenuItem> _menuCommands = new();
+
     private nint _ownerWindow;
     private nint _moduleHandle;
     private ushort _classAtom;
@@ -56,6 +62,7 @@ public sealed class Win32TrayPresence : ITrayPresence
     private bool _placed;
     private bool _disposed;
     private int _ownerThreadId;
+    private nint _menu;
 
     public Win32TrayPresence()
     {
@@ -70,7 +77,29 @@ public sealed class Win32TrayPresence : ITrayPresence
 
     /// <summary>Zero until an owner window exists. The handles an out-of-band prober needs.</summary>
     public TrayNativeHandles NativeHandles =>
-        new(_ownerWindow, Win32TrayInterop.TrayIconId, Win32TrayInterop.TrayCallbackMessage);
+        new(_ownerWindow, Win32TrayInterop.TrayIconId, Win32TrayInterop.TrayCallbackMessage, _menu);
+
+    /// <summary>
+    /// THE ONE UNINSTRUMENTABLE CALL, behind a seam so it is the only thing a test has to stand in
+    /// for. The product default is the real <c>TrackPopupMenu</c>: it runs a modal message loop
+    /// until the user picks an entry (returning its command id) or dismisses the menu (returning 0),
+    /// and no headless run can drive a pointer into it.
+    ///
+    /// <para>Everything on both sides of this seam is exercised for real by the suite: the shell's
+    /// own right-click notification arriving at the real window proc, the real OS-held
+    /// <c>HMENU</c> this is handed, and <see cref="InvokeMenuCommand"/> turning the returned id
+    /// into the entry's action. What the seam isolates — and what stays a headed claim — is the
+    /// modal loop itself and a human's hand on the mouse.</para>
+    ///
+    /// <para>Arguments: the menu handle, the screen x and y, and the owner window.</para>
+    /// </summary>
+    public Func<nint, int, int, nint, uint> MenuTracker { get; set; } = static (menu, x, y, owner) =>
+        Win32TrayInterop.TrackPopupMenu(
+            menu, Win32TrayInterop.TpmReturncmd | Win32TrayInterop.TpmRightbutton, x, y, 0, owner, 0);
+
+    /// <summary>How many times a right-click reached the tracker. Counts the GESTURE arriving, not
+    /// a menu being seen; a test reads it to prove the shell's notification really got that far.</summary>
+    public int MenuTrackerInvocations { get; private set; }
 
     /// <summary>
     /// Set only when teardown could not complete (wrong thread, or <c>DestroyWindow</c> refused).
@@ -184,6 +213,152 @@ public sealed class Win32TrayPresence : ITrayPresence
             + $"longer holds icon uID={Win32TrayInterop.TrayIconId}");
     }
 
+    public CapabilityState SetMenu(TrayMenu menu)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+
+        if (_disposed)
+        {
+            return Unavailable(TrayReasonCodes.TrayPresenceDisposed,
+                "this tray presence was disposed; its menu was destroyed by teardown and it will never build another");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return Unavailable(TrayReasonCodes.TrayMechanismAbsent,
+                "Win32TrayPresence builds an HMENU through USER32, which is a Windows mechanism; this process is on "
+                + $"{RuntimeInformation.OSDescription} and nothing was attempted");
+        }
+
+        var handle = Win32TrayInterop.CreatePopupMenu();
+        if (handle == 0)
+        {
+            return Unavailable(TrayReasonCodes.TrayMenuBuildFailed,
+                $"CreatePopupMenu returned NULL (last-error {Marshal.GetLastWin32Error()}); no menu exists, so a "
+                + "right-click on the icon would lead nowhere");
+        }
+
+        // Command ids start at 1: TrackPopupMenu(TPM_RETURNCMD) reports a DISMISSED menu as 0, so
+        // an entry with id 0 would be indistinguishable from the user pressing Escape.
+        var commands = new Dictionary<uint, TrayMenuItem>();
+        uint nextId = 1;
+        foreach (var item in menu.Items)
+        {
+            bool appended;
+            if (item.IsSeparator)
+            {
+                appended = Win32TrayInterop.AppendMenuW(handle, Win32TrayInterop.MfSeparator, 0, null);
+            }
+            else
+            {
+                var id = nextId++;
+                appended = Win32TrayInterop.AppendMenuW(handle, Win32TrayInterop.MfString, id, item.Label);
+                if (appended)
+                {
+                    commands[id] = item;
+                }
+            }
+
+            if (!appended)
+            {
+                var error = Marshal.GetLastWin32Error();
+                Win32TrayInterop.DestroyMenu(handle);
+                return Unavailable(TrayReasonCodes.TrayMenuBuildFailed,
+                    $"AppendMenu failed for entry '{(item.IsSeparator ? "<separator>" : item.Id)}' (last-error "
+                    + $"{error}); the partial menu was destroyed rather than installed, because a menu missing an "
+                    + "entry is worse than no menu — the user cannot see which one is gone");
+            }
+        }
+
+        // The claim is not that the appends returned. Ask USER32 back for the menu it now holds and
+        // compare it to what was asked for, exactly as Place re-asks the shell about its icon.
+        var mismatch = DescribeMenuMismatch(handle, menu, commands);
+        if (mismatch is not null)
+        {
+            Win32TrayInterop.DestroyMenu(handle);
+            return Unavailable(TrayReasonCodes.TrayMenuBuildFailed, mismatch);
+        }
+
+        if (_menu != 0)
+        {
+            Win32TrayInterop.DestroyMenu(_menu);
+        }
+
+        _menu = handle;
+        _menuCommands.Clear();
+        foreach (var (id, item) in commands)
+        {
+            _menuCommands[id] = item;
+        }
+
+        return new CapabilityState.Available(
+            $"CreatePopupMenu built {menu.Items.Count} entries on HMENU 0x{handle:X} and a "
+            + "GetMenuItemCount/GetMenuItemID/GetMenuString read-back confirms USER32 holds exactly those entries, in "
+            + $"that order, with the restore entry '{menu.RestoreItem.Label}' among them. Confirms the MENU EXISTS; "
+            + "that a user sees it needs TrackPopupMenu's modal loop and a real right-click, which is a headed claim");
+    }
+
+    public CapabilityState ShowNotification(TrayNotification notification)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        if (_disposed)
+        {
+            return Unavailable(TrayReasonCodes.TrayPresenceDisposed,
+                "this tray presence was disposed; there is no icon left to put a balloon on");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return Unavailable(TrayReasonCodes.TrayMechanismAbsent,
+                "Shell_NotifyIcon balloons are a Windows mechanism; nothing was ever placed and nothing was attempted");
+        }
+
+        if (!_placed || _current is null)
+        {
+            return Unavailable(TrayReasonCodes.TrayNotificationWithoutIcon,
+                "no icon is placed by this presence, so there is nothing for the shell to attach a balloon to");
+        }
+
+        var data = BuildData(_current);
+        data.uFlags |= Win32TrayInterop.NifInfo;
+        data.szInfo = notification.Message;
+        data.szInfoTitle = notification.Title;
+        data.dwInfoFlags = Win32TrayInterop.NiifInfo;
+        data.uTimeoutOrVersion = (uint)Math.Clamp(notification.Timeout.TotalMilliseconds, 0, uint.MaxValue);
+
+        if (!Win32TrayInterop.Shell_NotifyIconW(Win32TrayInterop.NimModify, ref data))
+        {
+            return Unavailable(TrayReasonCodes.TrayMechanismRefused,
+                $"Shell_NotifyIcon(NIM_MODIFY|NIF_INFO) returned FALSE for icon uID={Win32TrayInterop.TrayIconId} "
+                + $"(last-error {Marshal.GetLastWin32Error()}); no balloon was queued");
+        }
+
+        return new CapabilityState.Available(
+            $"the shell accepted a balloon request (title \"{notification.Title}\", "
+            + $"{notification.Timeout.TotalMilliseconds:0} ms requested) for icon uID={Win32TrayInterop.TrayIconId}, "
+            + "which it confirms holding. Confirms ACCEPTANCE only: Windows suppresses notifications under Focus "
+            + "Assist, quiet hours, a full-screen app and the per-app switch, and reports none of that back, so a "
+            + "balloon actually appearing is a headed claim");
+    }
+
+    /// <summary>
+    /// Turns a menu command id into the entry's action — the SAME method
+    /// <see cref="MenuTracker"/>'s return value feeds. Public so the dispatch half can be exercised
+    /// without a modal loop. Returns false for an id this menu does not carry (0 is the tracker's
+    /// "the user dismissed it" answer and is never a command).
+    /// </summary>
+    public bool InvokeMenuCommand(uint commandId)
+    {
+        if (commandId == 0 || !_menuCommands.TryGetValue(commandId, out var item))
+        {
+            return false;
+        }
+
+        item.Invoke();
+        return true;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -195,6 +370,13 @@ public sealed class Win32TrayPresence : ITrayPresence
         if (!OperatingSystem.IsWindows())
         {
             return;
+        }
+
+        if (_menu != 0)
+        {
+            Win32TrayInterop.DestroyMenu(_menu);
+            _menu = 0;
+            _menuCommands.Clear();
         }
 
         if (_placed && _current is not null)
@@ -348,6 +530,88 @@ public sealed class Win32TrayPresence : ITrayPresence
         return Win32TrayInterop.Shell_NotifyIconW(Win32TrayInterop.NimModify, ref probe);
     }
 
+    /// <summary>
+    /// Asks USER32 what it actually holds and compares it, entry by entry, to what was asked for.
+    /// Null when they match; otherwise the difference, in words, for the refusal's detail.
+    ///
+    /// <para>Three independent questions per entry — the count, the id, the label — because a menu
+    /// can go wrong in three separable ways and a single "did it work" answer would conflate them.
+    /// The separator is checked by its OS-reported id of 0 and empty string, which is how a
+    /// separator differs from a command entry in USER32's own bookkeeping.</para>
+    /// </summary>
+    private static string? DescribeMenuMismatch(nint handle, TrayMenu menu, Dictionary<uint, TrayMenuItem> commands)
+    {
+        var count = Win32TrayInterop.GetMenuItemCount(handle);
+        if (count != menu.Items.Count)
+        {
+            return $"the menu was built with {menu.Items.Count} entries but GetMenuItemCount reports {count} "
+                + $"(last-error {Marshal.GetLastWin32Error()}); the OS does not hold the menu that was asked for";
+        }
+
+        var buffer = new System.Text.StringBuilder(512);
+        for (var index = 0; index < count; index++)
+        {
+            var expected = menu.Items[index];
+            var id = Win32TrayInterop.GetMenuItemID(handle, index);
+            buffer.Clear();
+            var copied = Win32TrayInterop.GetMenuStringW(
+                handle, (uint)index, buffer, buffer.Capacity, Win32TrayInterop.MfByposition);
+            var label = copied > 0 ? buffer.ToString() : string.Empty;
+
+            if (expected.IsSeparator)
+            {
+                if (id != 0 || label.Length != 0)
+                {
+                    return $"entry {index} was appended as a separator but the OS reports id {id} and label "
+                        + $"\"{label}\"";
+                }
+
+                continue;
+            }
+
+            if (id == 0 || !commands.TryGetValue(id, out var mapped) || !ReferenceEquals(mapped, expected))
+            {
+                return $"entry {index} ('{expected.Id}') was appended as a command but the OS reports id {id}, which "
+                    + "is not the id this menu's command map holds for it — a click on it would run the wrong action "
+                    + "or none";
+            }
+
+            if (!string.Equals(label, expected.Label, StringComparison.Ordinal))
+            {
+                return $"entry {index} ('{expected.Id}') was appended with label \"{expected.Label}\" but the OS "
+                    + $"reports \"{label}\"";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The right-click gesture. Foreground first, then the modal tracker, then the documented
+    /// WM_NULL that lets a dismissed menu notice it lost the foreground (KB135788) — the same
+    /// sequence WinForms' NotifyIcon performs internally, done here because this backend owns its
+    /// own window proc.
+    /// </summary>
+    private void ShowContextMenu()
+    {
+        if (_menu == 0 || _menuCommands.Count == 0)
+        {
+            // No menu installed. Doing nothing is right: an empty popup at the cursor tells the
+            // user less than no popup, and there is no state here worth throwing over.
+            return;
+        }
+
+        Win32TrayInterop.SetForegroundWindow(_ownerWindow);
+        var point = Win32TrayInterop.GetCursorPos(out var cursor) ? cursor : default;
+
+        MenuTrackerInvocations++;
+        var command = MenuTracker(_menu, point.X, point.Y, _ownerWindow);
+        Win32TrayInterop.PostMessageW(_ownerWindow, Win32TrayInterop.WmNull, 0, 0);
+
+        // 0 means the user dismissed the menu without choosing, which is not a failure.
+        InvokeMenuCommand(command);
+    }
+
     private nint WindowProc(nint hWnd, uint msg, nint wParam, nint lParam)
     {
         if (msg == Win32TrayInterop.TrayCallbackMessage)
@@ -360,6 +624,12 @@ public sealed class Win32TrayPresence : ITrayPresence
             if (mouse is Win32TrayInterop.WmLbuttonup or Win32TrayInterop.WmLbuttondblclk)
             {
                 Activated?.Invoke(this, EventArgs.Empty);
+            }
+            else if (mouse == Win32TrayInterop.WmRbuttonup)
+            {
+                // WPF gets this for free from ContextMenuStrip (TrayIconService.cs:110); a backend
+                // that owns its own window has to route it.
+                ShowContextMenu();
             }
         }
         else if (_taskbarCreatedMessage != 0 && msg == _taskbarCreatedMessage && _placed && _current is not null)

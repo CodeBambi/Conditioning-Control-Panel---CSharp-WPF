@@ -83,6 +83,139 @@ internal static class TrayObservations
             ActivationsRaised: Volatile.Read(ref raised));
     }
 
+    // ---------- SP-096: the menu ----------
+
+    /// <summary>WPF's four entries in WPF's order (<c>TrayIconService.cs:96-110</c>), with the
+    /// actions replaced by counters so a run can say WHICH one fired.</summary>
+    internal sealed class MenuFixture
+    {
+        internal int RestoreInvocations;
+        internal int WakeInvocations;
+        internal int ExitInvocations;
+
+        internal TrayMenu Menu { get; }
+
+        internal MenuFixture()
+        {
+            Menu = new TrayMenu(
+            [
+                TrayMenuItem.Restore("show", "Show Dashboard", () => Interlocked.Increment(ref RestoreInvocations)),
+                TrayMenuItem.Command("wake", "Wake Up!", () => Interlocked.Increment(ref WakeInvocations)),
+                TrayMenuItem.Separator(),
+                TrayMenuItem.Command("exit", "Exit", () => Interlocked.Increment(ref ExitInvocations)),
+            ]);
+        }
+    }
+
+    /// <summary>
+    /// Install the menu, then ask the OPERATING SYSTEM what it holds — never the presence.
+    /// </summary>
+    internal static MenuRun SetMenuThenReadItBack()
+    {
+        using var presence = TrayPresenceFactory.Create();
+        var fixture = new MenuFixture();
+
+        var state = presence.SetMenu(fixture.Menu);
+        var handles = HandlesOf(presence);
+
+        return new MenuRun(
+            WindowsHost: TrayShellProbe.WindowsHost,
+            ClaimedAvailable: state is CapabilityState.Available,
+            MenuHandleIsReal: handles.Menu != 0,
+            ReadBack: TrayShellProbe.ReadMenu(handles.Menu),
+            State: state);
+    }
+
+    /// <summary>
+    /// Place the icon with the menu on it, post the shell's OWN right-click notification, pump the
+    /// owner window's queue so the real WndProc runs, and let the seam stand in for the one call no
+    /// test can drive: <c>TrackPopupMenu</c>'s modal loop. The seam is handed the real OS-held
+    /// menu handle, and it answers with the command id the OS itself reports for the restore entry
+    /// — so the id that travels back into the product is the OS's id, not the test's guess.
+    /// </summary>
+    internal static RightClickRun PlaceThenSyntheticRightClick()
+    {
+        using var presence = TrayPresenceFactory.Create();
+        var fixture = new MenuFixture();
+
+        var menuState = presence.SetMenu(fixture.Menu);
+        var place = presence.Place(Request);
+        var handles = HandlesOf(presence);
+        var shellSawIcon = TrayShellProbe.ShellHoldsIcon(handles.OwnerWindow, handles.IconId);
+
+        var trackedMenu = (nint)0;
+        var trackedOwner = (nint)0;
+        if (presence is Win32TrayPresence win32)
+        {
+            win32.MenuTracker = (menu, _, _, owner) =>
+            {
+                trackedMenu = menu;
+                trackedOwner = owner;
+                // The OS's own id for entry 0 — "Show Dashboard". Reading it back rather than
+                // assuming 1 is what makes this a route through the real menu.
+                var readBack = TrayShellProbe.ReadMenu(menu);
+                return readBack.Entries.Count > 0 ? readBack.Entries[0].Id : 0u;
+            };
+        }
+
+        TrayShellProbe.PostSyntheticRightClick(handles.OwnerWindow, handles.CallbackMessage, handles.IconId);
+
+        return new RightClickRun(
+            WindowsHost: TrayShellProbe.WindowsHost,
+            MachineHasNotificationArea: TrayShellProbe.MachineHasNotificationArea,
+            ClaimedAvailableOnSetMenu: menuState is CapabilityState.Available,
+            ClaimedAvailableOnPlace: place is CapabilityState.Available,
+            ShellSawIcon: shellSawIcon,
+            TrackerInvocations: (presence as Win32TrayPresence)?.MenuTrackerInvocations ?? 0,
+            TrackerSawTheRealMenu: trackedMenu != 0 && trackedMenu == handles.Menu,
+            TrackerSawTheOwnerWindow: trackedOwner != 0 && trackedOwner == handles.OwnerWindow,
+            RestoreInvocations: Volatile.Read(ref fixture.RestoreInvocations),
+            WakeInvocations: Volatile.Read(ref fixture.WakeInvocations),
+            ExitInvocations: Volatile.Read(ref fixture.ExitInvocations),
+            MenuState: menuState,
+            PlaceState: place);
+    }
+
+    /// <summary>Ask for a balloon with no icon placed, then place one and ask again.</summary>
+    internal static BalloonRun BalloonWithoutThenWithAnIcon()
+    {
+        using var presence = TrayPresenceFactory.Create();
+
+        var withoutIcon = presence.ShowNotification(TrayNotification.FirstMinimize);
+        presence.Place(Request);
+        var handles = HandlesOf(presence);
+        var shellSawIcon = TrayShellProbe.ShellHoldsIcon(handles.OwnerWindow, handles.IconId);
+        var withIcon = presence.ShowNotification(TrayNotification.FirstMinimize);
+
+        return new BalloonRun(
+            MachineHasNotificationArea: TrayShellProbe.MachineHasNotificationArea,
+            ShellSawIcon: shellSawIcon,
+            ClaimedAvailableWithoutIcon: withoutIcon is CapabilityState.Available,
+            ClaimedAvailableWithIcon: withIcon is CapabilityState.Available,
+            WithoutIconState: withoutIcon,
+            WithIconState: withIcon);
+    }
+
+    /// <summary>Install a menu, dispose the presence, and ask the OS about the menu handle after.</summary>
+    internal static MenuTeardownRun SetMenuThenDispose()
+    {
+        var presence = TrayPresenceFactory.Create();
+        var fixture = new MenuFixture();
+
+        var state = presence.SetMenu(fixture.Menu);
+        var handles = HandlesOf(presence);
+        var whileAlive = TrayShellProbe.ReadMenu(handles.Menu);
+
+        presence.Dispose();
+
+        return new MenuTeardownRun(
+            WindowsHost: TrayShellProbe.WindowsHost,
+            ClaimedAvailable: state is CapabilityState.Available,
+            EntryCountWhileAlive: whileAlive.EntryCount,
+            EntryCountAfterDispose: TrayShellProbe.ReadMenu(handles.Menu).EntryCount,
+            EntryCountForAHandleThatWasNeverAMenu: TrayShellProbe.ReadMenu(0).EntryCount);
+    }
+
     /// <summary>Flattens a state into one diagnostic line, so a failing assertion prints the
     /// backend's own reason instead of leaving the reader to guess why the shell said no.</summary>
     internal static string Describe(CapabilityState state) => state switch
@@ -122,4 +255,41 @@ internal static class TrayObservations
         bool ClaimedAvailableOnPlace,
         bool ShellSawIcon,
         int ActivationsRaised);
+
+    internal sealed record MenuRun(
+        bool WindowsHost,
+        bool ClaimedAvailable,
+        bool MenuHandleIsReal,
+        TrayShellProbe.MenuReadBack ReadBack,
+        CapabilityState State);
+
+    internal sealed record RightClickRun(
+        bool WindowsHost,
+        bool MachineHasNotificationArea,
+        bool ClaimedAvailableOnSetMenu,
+        bool ClaimedAvailableOnPlace,
+        bool ShellSawIcon,
+        int TrackerInvocations,
+        bool TrackerSawTheRealMenu,
+        bool TrackerSawTheOwnerWindow,
+        int RestoreInvocations,
+        int WakeInvocations,
+        int ExitInvocations,
+        CapabilityState MenuState,
+        CapabilityState PlaceState);
+
+    internal sealed record BalloonRun(
+        bool MachineHasNotificationArea,
+        bool ShellSawIcon,
+        bool ClaimedAvailableWithoutIcon,
+        bool ClaimedAvailableWithIcon,
+        CapabilityState WithoutIconState,
+        CapabilityState WithIconState);
+
+    internal sealed record MenuTeardownRun(
+        bool WindowsHost,
+        bool ClaimedAvailable,
+        int EntryCountWhileAlive,
+        int EntryCountAfterDispose,
+        int EntryCountForAHandleThatWasNeverAMenu);
 }

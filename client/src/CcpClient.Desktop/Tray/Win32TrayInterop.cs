@@ -26,6 +26,12 @@ internal static class Win32TrayInterop
     public const uint NifIcon = 0x00000002;
     public const uint NifTip = 0x00000004;
 
+    /// <summary>Carries szInfo/szInfoTitle: the balloon (WPF's ShowBalloonTip, TrayIconService.cs:156).</summary>
+    public const uint NifInfo = 0x00000010;
+
+    /// <summary>NIIF_INFO — the info glyph. WPF passes ToolTipIcon.Info (TrayIconService.cs:157).</summary>
+    public const uint NiifInfo = 0x00000001;
+
     // Window styles for the hidden owner: a real TOP-LEVEL popup that is never shown.
     // Deliberately NOT an HWND_MESSAGE child — a message-only window cannot receive the
     // "TaskbarCreated" broadcast, which is the only signal that an Explorer restart wiped
@@ -39,6 +45,35 @@ internal static class Win32TrayInterop
 
     public const uint WmLbuttonup = 0x0202;
     public const uint WmLbuttondblclk = 0x0203;
+
+    /// <summary>Right-button release over the icon: the gesture that opens the context menu. With
+    /// no NIM_SETVERSION issued the shell uses the original convention and posts this in lParam's
+    /// low word, exactly as it does the left-button messages above.</summary>
+    public const uint WmRbuttonup = 0x0205;
+
+    /// <summary>Posted to the owner window after TrackPopupMenu returns. The documented fix for the
+    /// menu that will not dismiss when the user clicks elsewhere (KB135788): the menu's modal loop
+    /// needs one more message to notice it lost the foreground.</summary>
+    public const uint WmNull = 0x0000;
+
+    // Popup-menu construction and tracking.
+    public const uint MfString = 0x00000000;
+    public const uint MfSeparator = 0x00000800;
+    public const uint MfByposition = 0x00000400;
+
+    /// <summary>TPM_RETURNCMD: TrackPopupMenu returns the chosen command id instead of posting
+    /// WM_COMMAND. Returns 0 when the user dismissed the menu without choosing.</summary>
+    public const uint TpmReturncmd = 0x0100;
+
+    /// <summary>TPM_RIGHTBUTTON: the user may also pick with the right button, which is the button
+    /// they opened the menu with.</summary>
+    public const uint TpmRightbutton = 0x0002;
+
+    /// <summary>MIIM_FTYPE — enough to ask the OS whether an entry is a separator.</summary>
+    public const uint MiimFtype = 0x00000100;
+
+    /// <summary>MFT_SEPARATOR, as the OS reports it back in MENUITEMINFO.fType.</summary>
+    public const uint MftSeparator = 0x00000800;
 
     public const int IdiApplication = 32512;
 
@@ -90,6 +125,33 @@ internal static class Win32TrayInterop
         public nint hBalloonIcon;
     }
 
+    /// <summary>What the OS hands back when asked to describe a menu entry. Only MIIM_FTYPE is
+    /// ever requested, so <c>dwTypeData</c> is ignored by the call and never marshalled as a
+    /// string.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MenuItemInfoW
+    {
+        public uint cbSize;
+        public uint fMask;
+        public uint fType;
+        public uint fState;
+        public uint wID;
+        public nint hSubMenu;
+        public nint hbmpChecked;
+        public nint hbmpUnchecked;
+        public nint dwItemData;
+        public nint dwTypeData;
+        public uint cch;
+        public nint hbmpItem;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PointW
+    {
+        public int X;
+        public int Y;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern ushort RegisterClassExW(ref WndClassExW cls);
 
@@ -127,4 +189,45 @@ internal static class Win32TrayInterop
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern nint GetModuleHandleW(string? name);
+
+    // ---------- the context menu (SP-096) ----------
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern nint CreatePopupMenu();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool DestroyMenu(nint menu);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool AppendMenuW(nint menu, uint flags, nuint idNewItem, string? newItem);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int GetMenuItemCount(nint menu);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetMenuItemID(nint menu, int position);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetMenuStringW(nint menu, uint item, System.Text.StringBuilder? buffer, int max, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool GetMenuItemInfoW(nint menu, uint item, bool byPosition, ref MenuItemInfoW info);
+
+    /// <summary>
+    /// The ONE call in this file that cannot be exercised from a test: it runs a MODAL message loop
+    /// until the user picks or dismisses. With TPM_RETURNCMD it returns the chosen command id, or 0.
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint TrackPopupMenu(nint menu, uint flags, int x, int y, int reserved, nint owner, nint rect);
+
+    /// <summary>Required before TrackPopupMenu, or the menu does not dismiss when the user clicks
+    /// away from it (KB135788, the same reason WinForms' NotifyIcon does it internally).</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetForegroundWindow(nint window);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetCursorPos(out PointW point);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool PostMessageW(nint window, uint msg, nint wParam, nint lParam);
 }
