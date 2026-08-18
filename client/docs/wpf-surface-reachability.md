@@ -555,3 +555,14 @@ and restore behave on a real desktop. **Linux is unchanged and still refused**, 
 `TrayPresenceFactory.LinuxManualGate` naming the exact three-part gate that would settle it — and
 the branch it produces is now covered by a test: minimize, no icon, no balloon, taskbar button kept,
 and a typed reason code in the diagnostic line.
+
+### D40 — `Duck()` places no icon when the shell is already minimized; WPF's `MinimizeToTray()` always does
+
+**Recorded at the wave-39 land 2026-08-18, found by the SP-096 final review and NOT by the lane.**
+
+WPF's `MinimizeToTray()` (`Services/Notifications/TrayIconService.cs:145-158`) has no already-minimized guard: it hides, places the icon and fires the first-minimize balloon unconditionally. The port's `ShellTray.Duck()` early-returns when the shell is already minimized, so in that state **WPF gives the user an icon, a menu and a balloon where the port gives none** — and WPF's flow-end `ShowWindow()` un-minimizes where the port's `Restore()` no-ops, leaving the shell minimized after a descent WPF would have restored from.
+
+**Reachability was checked before this was weighed, and it is currently zero:** every port launch gesture requires an interactive visible shell, and the SP-027 relaunch path is caught one branch earlier by `_ducked`. So no user route reaches it today.
+
+**Why it is recorded anyway.** The guard is inherited from SP-094's plain-minimize shape rather than invented by SP-096, it is the kind of branch a later packet makes reachable without noticing (any non-gesture launch — a scheduler, a resume, a remote trigger — walks straight into it), and an unrecorded divergence is indistinguishable from a bug. **Close condition: when any launch path can start a descent while the shell is minimized, either drop the guard to match WPF or record why the port keeps it.**
+
