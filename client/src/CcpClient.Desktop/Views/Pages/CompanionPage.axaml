@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CcpClient.Desktop.Views.Pages.CompanionPage">
+  <!--
+    wpf-surface-reachability.md §5 recorded the port's front-surface "Open companion" button as
+    a DIVERGENCE, because WPF's dashboard companion element NAVIGATES to a page
+    (Views/Tabs/SettingsTabView.xaml:1864-1887) and the explicit control lives on that page's
+    hero card (CompanionHeroCard.xaml:606-616). Moving the button behind this door restores the
+    two-hop grammar. What remains divergent (§9 D11): WPF's companion window ALSO appears
+    automatically at startup whenever AvatarEnabled is true, which defaults true
+    (MainWindow.xaml.cs:2912 -> MainWindow.Companion.cs:145). The port opens it only on request.
+  -->
+  <StackPanel Margin="20" Spacing="4">
+    <TextBlock Classes="page-title" Text="Companion" />
+    <TextBlock Classes="page-blurb" Text="Chat, takeover, awareness and permissions" />
+
+    <Border Classes="module" Margin="0,12,0,0">
+      <StackPanel Spacing="10">
+        <TextBlock Classes="module-title" Text="Show her" />
+        <TextBlock Classes="page-blurb" TextWrapping="Wrap"
+                   Text="Opens the companion surface as an owned, modeless window. It is not entitlement-gated: the gates on WPF's companion page are for AI chat, not for showing her." />
+        <Button x:Name="CompanionButton"
+                Classes="module-action"
+                AutomationProperties.AutomationId="CompanionButton"
+                AutomationProperties.Name="open companion button"
+                HorizontalAlignment="Left"
+                Content="Show companion" />
+      </StackPanel>
+    </Border>
+  </StackPanel>
+</UserControl>

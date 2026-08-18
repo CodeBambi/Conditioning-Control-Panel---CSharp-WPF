@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CcpClient.Desktop.Views.Pages.StudioPage">
+  <!--
+    The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
+    down the left, one panel on the right, left-click a row to open its panel. WPF has four
+    groups and fifteen rows; the port has ONE ported module, so it declares one group and one
+    row. A rack of rows that open blank panels is the same dead decor as a rail of dead doors.
+
+    Two omissions from WPF's row, both DIVERGENCES and neither of them parity (§9 D5, D6):
+    the live state dot and the right-click quick-toggle. WPF's spiral row has both
+    (StudioTabView.xaml.cs:490-491 passes () => App.Settings?.Current?.SpiralEnabled). The port
+    has no spiral-overlay effect whose state could be reported or flipped, and a dot that always
+    reads "off" is the fake-available shape the capability contract bans.
+  -->
+  <Grid ColumnDefinitions="248,*" Margin="20">
+    <StackPanel Grid.Column="0" Spacing="4">
+      <TextBlock Classes="page-title" Text="Studio" />
+      <TextBlock Classes="page-blurb" Text="Every effect, one rack. Pick a module on the left." />
+
+      <Border Classes="rack" Margin="0,12,0,0">
+        <StackPanel Spacing="2">
+          <TextBlock Classes="rack-group" Text="EFFECTS" />
+          <!-- The rack row is a RadioButton, as WPF's is (StudioTabView.xaml.cs:645-651) —
+               single-selection, and its keyboard activation is the control's own, not a
+               bespoke key handler. -->
+          <RadioButton x:Name="RowSpiralOverlay"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowSpiralOverlay"
+                       AutomationProperties.Name="Spiral Overlay rack row"
+                       Content="Spiral Overlay" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <Border Grid.Column="1" Classes="module" Margin="20,0,0,0">
+      <Panel>
+        <TextBlock x:Name="RackHint"
+                   Classes="page-blurb"
+                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                   Text="Pick a module on the left." />
+
+        <StackPanel x:Name="SpiralModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Spiral Overlay" />
+          <TextBlock Classes="page-blurb" Text="Show hypnotic spiral overlay" />
+
+          <!-- WPF's module panel also carries an Enable toggle, an Opacity slider, a Randomize
+               toggle, a Display-monitor dropdown, the SPIRAL LIBRARY card and a preview pane
+               (§8.4). None of them is ported, and rendering them dead is exactly the greyed
+               control that swallows the gesture. One honest line instead. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       Text="The spiral overlay effect itself is not ported yet, so this module has no dials and no on/off state. The Loom studio below is real." />
+          </Border>
+
+          <!-- The one working destination on this page. Literal, not localized
+               (Features/SpiralFeatureControl.xaml:128-133); the text is the emoji-stripped form
+               observed live as the button's UIA name (§8.4). Ungated and not session-locked on
+               the WPF path (LoomHostService.cs:30-77; §4). -->
+          <Button x:Name="LoomButton"
+                  Classes="module-action"
+                  AutomationProperties.AutomationId="LoomButton"
+                  AutomationProperties.Name="THE LOOM — weave your own spiral"
+                  Content="THE LOOM — weave your own spiral" />
+        </StackPanel>
+      </Panel>
+    </Border>
+  </Grid>
+</UserControl>

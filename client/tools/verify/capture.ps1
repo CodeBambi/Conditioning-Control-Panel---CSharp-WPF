@@ -1,15 +1,20 @@
 # CCP greenfield verification harness — tier 2 Windows capture (SP-008).
 # Captures ONE named surface+state to a PNG for the CcpVerify named-check tool and K3 review.
 # Formalizes the SP-007 headed-smoke patterns: SetWindowPos(HWND_TOPMOST) raise (the app
-# opens unactivated and pixels belong to the occluder), UIA text reads, layout-probe card
+# opens unactivated and pixels belong to the occluder), UIA text reads, layout-probe door
 # rect (Avalonia exposes no UIA peers for Border/Grid/StackPanel), real-input state driving.
 # System.Drawing appears ONLY as capture transport (CopyFromScreen -> PNG file); this script
 # never reads a pixel — all pixel logic lives in CcpVerify.
-# Usage: pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State lit
-#        pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unlit
+# SP-091 re-anchor: the demonstrator card this harness used to drive is retired, and the
+# navigation shell replaced it. Same three techniques, new anchors — surface dashboard-card ->
+# rail-door, state lit -> selected; 'dashboard' still means the whole window. The state is still
+# driven through REAL input (a left-click on a rail door), and the drive is still confirmed by a
+# UIA read before any pixel is captured.
+# Usage: pwsh client/tools/verify/capture.ps1 -Surface rail-door -State selected
+#        pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unselected
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'dashboard-card')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unlit', 'lit')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -30,6 +35,7 @@ public class VerifyNative {
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, IntPtr extra);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
     public const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040;
     public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
@@ -53,15 +59,32 @@ function Get-Texts($window) {
     return $lines
 }
 
-function Get-CardRect($window) {
-    $probe = (Get-Texts $window) | Where-Object { $_ -like 'layout-probe:*' }
-    if ($probe -notmatch 'card ([\d.]+)x([\d.]+) DIP @ scale ([\d.]+) @ screen (-?\d+),(-?\d+)') { Fail "layout probe unreadable: $probe" }
+# The shell publishes one probe line per rail door (MainWindow.axaml.cs ProbeLine); a UIA Text
+# element carries them all in one Name, so match the requested door out of the joined text.
+function Get-DoorRect($window, [string]$door) {
+    $probe = (Get-Texts $window) -join "`n"
+    $pattern = "door $door ([\d.]+)x([\d.]+) DIP @ scale ([\d.]+) @ screen (-?\d+),(-?\d+)"
+    if ($probe -notmatch $pattern) { Fail "layout probe for door '$door' unreadable: $probe" }
     $scale = [double]$Matches[3]
     return @{
         X = [int]$Matches[4]; Y = [int]$Matches[5]
         W = [int]([double]$Matches[1] * $scale); H = [int]([double]$Matches[2] * $scale)
-        Scale = $scale; Raw = $probe
+        Scale = $scale; Raw = $Matches[0]
     }
+}
+
+function Click-Rect($rect) {
+    $cx = [int]($rect.X + $rect.W / 2); $cy = [int]($rect.Y + $rect.H / 2)
+    [VerifyNative]::SetCursorPos($cx, $cy) | Out-Null
+    Start-Sleep -Milliseconds 200
+    [VerifyNative]::mouse_event([VerifyNative]::LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
+    [VerifyNative]::mouse_event([VerifyNative]::LEFTUP, 0, 0, 0, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 500
+}
+
+function Assert-Route($window, [string]$route) {
+    $texts = (Get-Texts $window) -join "`n"
+    if ($texts -notmatch "route: $route") { Fail "the shell did not navigate to '$route' (state drive failed)" }
 }
 
 # Deterministic start: remove the demonstrator settings file (demo store only).
@@ -98,37 +121,42 @@ Write-Output "window up after $([math]::Round($deadline.Elapsed.TotalSeconds, 1)
 Start-Sleep -Milliseconds 500
 
 $all = (Get-Texts $window) -join "`n"
-foreach ($needle in @('CapabilityProbes: ok', 'capability display-session: Available', 'Demo: Status Ticker', 'layout-probe: card')) {
+foreach ($needle in @('route: studio', 'layout-probe: door studio', 'layout-probe: door companion', 'layout-probe: door system')) {
     if ($all -notlike "*$needle*") { Fail "missing '$needle'" }
 }
-Write-Output 'capability surface + card + layout probe render (UIA reads)'
+Write-Output 'shell mounted its default page; every rail door published a layout probe (UIA reads)'
 
-$rect = Get-CardRect $window
+# The startup trace and the typed capability states live on the System page now (SP-091), so
+# reaching them is itself a real navigation. Drive it, then read them.
+Click-Rect (Get-DoorRect $window 'system')
+Assert-Route $window 'system'
+$all = (Get-Texts $window) -join "`n"
+foreach ($needle in @('CapabilityProbes: ok', 'capability display-session: Available')) {
+    if ($all -notlike "*$needle*") { Fail "missing '$needle'" }
+}
+Write-Output 'System door reached by real input; capability surface renders (UIA reads)'
+
+# The captured door is Companion: it is unselected while System is showing, and selecting it is
+# one real click. Same door, two states, one gesture between them.
+$rect = Get-DoorRect $window 'companion'
 Write-Output "probe: $($rect.Raw)"
 
-if ($State -eq 'lit') {
-    # Drive the state through REAL input: right-click quick-toggle (the user path a
-    # regression would break), then confirm the operation actually started (tick advances).
-    $cx = [int]($rect.X + $rect.W / 2); $cy = [int]($rect.Y + $rect.H / 2)
-    [VerifyNative]::SetCursorPos($cx, $cy) | Out-Null
-    Start-Sleep -Milliseconds 200
-    [VerifyNative]::mouse_event([VerifyNative]::RIGHTDOWN, 0, 0, 0, [IntPtr]::Zero)
-    [VerifyNative]::mouse_event([VerifyNative]::RIGHTUP, 0, 0, 0, [IntPtr]::Zero)
-    Start-Sleep -Milliseconds 700
-    $tick1 = ((Get-Texts $window) | Where-Object { $_ -match '^demo\.status-ticker: tick (\d+)$' })
-    if ($null -eq $tick1) { Fail 'tick text did not appear after right-click (state drive failed)' }
-    Start-Sleep -Seconds 2
-    $tick2 = ((Get-Texts $window) | Where-Object { $_ -match '^demo\.status-ticker: tick (\d+)$' })
-    if ($tick1 -eq $tick2) { Fail "tick did not advance ($tick1)" }
-    Write-Output "state drive: tick $tick1 -> $tick2"
-    $rect = Get-CardRect $window
+if ($State -eq 'selected') {
+    # Drive the state through REAL input (the user path a regression would break), then confirm
+    # the shell actually navigated before any pixel is read.
+    Click-Rect $rect
+    Assert-Route $window 'companion'
+    Write-Output 'state drive: left-click on the Companion door -> route: companion'
+    $rect = Get-DoorRect $window 'companion'
+} else {
+    Assert-Route $window 'system'   # the captured door is genuinely NOT the selected one
 }
 
-# Park the mouse off the card so :pointerover never leaks into a capture.
+# Park the mouse off the door so :pointerover never leaks into a capture.
 [VerifyNative]::SetCursorPos($rect.X + $rect.W + 200, $rect.Y + $rect.H + 200) | Out-Null
 Start-Sleep -Milliseconds 400
 
-if ($Surface -eq 'dashboard-card') {
+if ($Surface -eq 'rail-door') {
     $capX = $rect.X; $capY = $rect.Y; $capW = $rect.W; $capH = $rect.H
 } else {
     $bounds = $window.Current.BoundingRectangle

@@ -386,3 +386,35 @@ slider with a Duck mode) and, at its foot, the **Companion strip** described in 
 **Design consequence for the port:** the persistent chrome is a shell concern, not a page concern.
 A port shell that models "rail + page host + persistent top bar + persistent action bar" reproduces
 the observable structure without copying any WPF layout code.
+
+---
+
+## 9. Port divergences, recorded at SP-091 (the navigation shell)
+
+The owner settled the design freedom on 2026-08-18 ("Neither, improve on both"), so the port's
+layout is not held to WPF's page topology — but **every divergence is written here, in the commit
+that creates it**, because an unrecorded divergence is indistinguishable from a bug.
+
+Each row names the v6.8.1 fact it diverges from, what the port does, and **why**. Where the reason
+is "the port has nothing to wire yet", it says so: a gap recorded as a feature is never revisited.
+
+| # | v6.8.1 fact | Port at SP-091 | Reason |
+|---|---|---|---|
+| **D1** | The rail is **six doors** — `DoorHome`, `DoorStudio`, `DoorCompanion`, `DoorPlay`, `DoorYou`, `DoorLibrary` (§8.1) | **Three doors**: Studio, Companion, System. Home, Play, You, Library and The Spiral are **absent** | Each absent door has no ported destination. A door that opens an empty room is the same unreachability the shell exists to end. WPF's own doctrine for a door that is not open is **collapse, not lock** (`MainWindow/MainWindow.PlayTab.cs:117-125`) — a lock band advertises something buyable, and these are not for sale, they do not exist yet |
+| **D2** | WPF has **no System door**; diagnostics live on the Home page's bottom button row ("System", "App Info & Data", §8.6) | The port's rail carries a **System** door | The SP-003/SP-006 startup-trace and capability-state proofs are a standing rule on the port's shell markup and must stay reachable by a gesture. The port has no Home page to hang them off |
+| **D3** | WPF opens on **Home** (§8.1) | The port opens on **Studio** | There is no Home surface to open on |
+| **D4** | The Studio rack is **four groups, fifteen rows** (§8.3) | **One group (EFFECTS), one row (Spiral Overlay)** | The other fourteen modules are not ported. A rack of rows that open blank panels is the trap at row granularity |
+| **D5** | The Spiral Overlay row carries a **live state dot**: `Add("spiral", …, () => App.Settings?.Current?.SpiralEnabled)` (`Views/Tabs/StudioTabView.xaml.cs:490-491`), and the live capture shows lit dots on running rows (`client/docs/evidence/wpf-ui-v681/studio-rack-spiral-overlay.jpg`) | **No dot on the row** | **The port has no spiral-overlay effect whose state could be reported.** This is a GAP, not parity: a dot that always reads "off" would assert that the effect exists and is currently stopped, which is the fake-available shape the truthful-capability contract bans. (WPF *does* omit the dot on one row — `Visuals`, `:494-496`, "A dot that cannot be wired honestly is omitted" — but that rule was written for the single row with no master toggle and does not generalise to this one.) **Closes when a spiral-overlay effect lands** |
+| **D6** | Right-click on a rack row **quick-toggles the effect** (`StudioTabView.xaml.cs:657-660`), the same second gesture the dashboard tiles carry (§2, §8.3) | **Right-click on the row does nothing** — no toggle, and no context menu either | **The port has no effect flag to flip.** Again a GAP, not parity: WPF's toggle-less rows do fall through unhandled (`:659`, "Rows with no Toggle fall through unhandled (Visuals)"), but WPF's *spiral* row is not one of them. The gesture is left genuinely unhandled rather than swallowed by a fake toggle. **Closes with D5** |
+| **D7** | The Spiral Overlay module panel carries an Enable toggle, an Opacity slider, a Randomize toggle, a Display-monitor dropdown, three action buttons, a SPIRAL LIBRARY card and a preview pane (§8.4) | The panel carries **one honest line** saying the overlay effect is not ported, and the Loom button | Rendering dead dials is the greyed control that swallows the gesture. `CORNER GIFs` and `Select GIF` are likewise absent, not disabled |
+| **D8** | The Loom button's XAML content is `🌀 THE LOOM — weave your own spiral` (`Features/SpiralFeatureControl.xaml:128-133`) | The port's button reads **`THE LOOM — weave your own spiral`** | The emoji-stripped form is the button's live UIA name (§8.4); the app strips emoji mod-aware (`MainWindow/MainWindow.UiUpdates.cs:101,124`). Observation beats source where they disagree |
+| **D9** | A **second signpost** to the Loom exists in the Play page's MORE zone ("Open in Studio", `Views/Tabs/PlayTabView.xaml:1300,1340-1348`), which navigates and explicitly refuses to launch (§4) | No analogue | The port has no Play page (D1). The one-entry rule (`MainWindow.Presets.cs:1007`) is still held: exactly one control in the port opens the Loom |
+| **D10** | Persistent chrome on every page: top bar, XP/level strip, bottom action bar with START / Save / Exit (§8.6) | **None of it.** The shell is rail + page host + a diagnostic footer | No mod, level, session engine, favourite, Save or Exit semantics are ported. The footer carries the SP-007 layout probe and the current route, which the headed harness drives against |
+| **D11** | The companion window's PRIMARY appearance is not a gesture at all: it is created at startup whenever `AvatarEnabled` is true, and that defaults true (`MainWindow/MainWindow.xaml.cs:2912` -> `MainWindow.Companion.cs:145`, §5) | The port opens it only on request, from a control on the Companion page | §5 recorded the port's front-surface "Open companion" button as a divergence because WPF's dashboard element **navigates**. That half is now **closed**: the button moved behind the Companion door, so the port is two hops like WPF. The **startup-appearance** half remains divergent and is unclosed |
+| **D12** | DTRH is reached from `DoorPlay` -> the Play hero card's `FALL IN` (§3), gated Tier 2 (`MainWindow.Lab.cs:228,313`) | **No DTRH door and no DTRH launcher anywhere in the shell** | The port has no entitlement service. An ungated DTRH button would hand out paid content and a stubbed always-allowed gate is the banned fake-available shape. **Closes at SP-092**, which lands the gate; `NavigationRouteTableTests` fails if a DTRH door appears before then |
+| **D13** | — (port-internal) | The Loom's launch is idempotent-refocus, ungated, with no setup step | This is PARITY, listed for completeness: `Services/Chaos/LoomHostService.cs:29-31` (refocus if open), `:30-77` (no tier check), §4 (no picker). §7 ambiguity 3 asked whether the missing tier gate is intentional; the port reproduces **the code**, as §7 directs, and this row is the record of that choice |
+
+**Not yet closed by this row, and named so it is not mistaken for done:** the port's shell reaches
+three destinations. DTRH, Graded Intake, the AvatarTube demonstrator and the Chaos tunnel backdrop
+are still reachable only by a CLI flag. Their doors are absent rather than dead, which is the honest
+state, not the finished one.

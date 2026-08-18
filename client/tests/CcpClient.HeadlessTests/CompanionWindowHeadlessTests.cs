@@ -31,20 +31,35 @@ public class CompanionWindowHeadlessTests
         Assert.IsType<StartupOutcome.Success>(outcome);
         var window = new MainWindow(host!);
         window.Show();
+        window.UpdateLayout();
         return (host!, window);
     }
 
+    /// <summary>
+    /// SP-091: the companion is now TWO hops, as it is in WPF (a rail door navigates to the
+    /// page, a control on the page opens the window — wpf-surface-reachability.md §5). Both
+    /// hops are real pointer input.
+    /// </summary>
     private static CompanionWindow OpenViaRealClick(MainWindow window)
     {
-        var button = window.FindControl<Button>("CompanionButton")!;
-        var center = button.TranslatePoint(
-            new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
-        window.MouseDown(center, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(center, MouseButton.Left, RawInputModifiers.None);
+        ClickCenter(window, window.FindControl<RadioButton>("DoorCompanion")!);
+        window.UpdateLayout();
+
+        var button = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "CompanionButton");
+        ClickCenter(window, button);
+
         var companion = window.Companion;
         Assert.NotNull(companion);
         companion!.UpdateLayout();
         return companion;
+    }
+
+    private static void ClickCenter(MainWindow window, Control control)
+    {
+        var center = control.TranslatePoint(
+            new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(center, MouseButton.Left, RawInputModifiers.None);
     }
 
     [AvaloniaFact]

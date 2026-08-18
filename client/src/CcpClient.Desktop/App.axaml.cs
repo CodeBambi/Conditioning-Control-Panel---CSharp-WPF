@@ -208,27 +208,33 @@ public partial class App : Application
 
             // SP-049 THE LOOM studio DEMONSTRATOR (--loom-demo): the v6.6.3 standalone
             // studio window (WPF LoomHostService parity — a plain titled window; closing
-            // it ends the demonstrator, the --dtrh-demo flow-ended class). The greenfield
-            // dashboard has no Spiral Overlay card yet — typed named limit, record.md.
+            // it ends the demonstrator, the --dtrh-demo flow-ended class).
+            // SP-091: this path no longer constructs the studio window itself. It calls the
+            // SAME launcher the shell's Studio -> Spiral Overlay -> THE LOOM button calls
+            // (Navigation/LoomLaunch.cs), so there is exactly ONE construction site for
+            // DtrhLoomWindow in the tree. The demonstrator now opens the studio ON TOP of a
+            // shell that can also reach it by gesture — the "no Spiral Overlay card yet"
+            // named limit is discharged.
             if (_loomDemo)
             {
                 var loomEndedOnce = 0;
+                dashboard.Loom.HarnessDrive = _loomDrive;
+                dashboard.Loom.Closed += _ =>
+                {
+                    // One-shot (the SP-023 ping-pong class): Shutdown() closes owned
+                    // windows again, which re-fires Closed — never a teardown loop.
+                    if (Interlocked.Exchange(ref loomEndedOnce, 1) != 0)
+                    {
+                        return;
+                    }
+
+                    _host.LogDiagnostic("loom: studio window closed — shutting down the lifetime");
+                    desktop.Shutdown();
+                };
                 dashboard.Opened += (_, _) =>
                 {
-                    var loomWindow = new Features.Dtrh.DtrhLoomWindow(_host, _loomDrive);
-                    loomWindow.Closed += (_, _) =>
-                    {
-                        // One-shot (the SP-023 ping-pong class): Shutdown() closes owned
-                        // windows again, which re-fires Closed — never a teardown loop.
-                        if (Interlocked.Exchange(ref loomEndedOnce, 1) != 0)
-                        {
-                            return;
-                        }
-
-                        _host.LogDiagnostic("loom: studio window closed — shutting down the lifetime");
-                        desktop.Shutdown();
-                    };
-                    loomWindow.Show(dashboard);
+                    dashboard.Loom.Launch();
+                    var loomWindow = dashboard.Loom.Current!;
                     _host.LogDiagnostic("loom: studio demonstrator opened (--loom-demo)");
                     if (_loomAutoCloseSeconds > 0)
                     {

@@ -49,17 +49,15 @@ public class FeaturePopupHeadlessTests
         control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
 
     [AvaloniaFact]
-    public async Task LeftClick_OpensOwnedModelessPopup_WithContractChrome()
+    public async Task OwnedModelessPopup_CarriesTheContractChrome()
     {
+        // SP-091: the demonstrator CARD that used to open this popup by left-click is retired,
+        // so the manager has no user path and is infrastructure only (A-014 integration rule).
+        // The W-04 chrome contract it enforces is still worth pinning, so this fact keeps the
+        // assertions and drops only the retired gesture. --popup-demo remains its WSLg driver.
         var (host, window) = await BootAsync();
-        var card = window.FindControl<Border>("TickerCard")!;
 
-        // The demonstrator card's LEFT-click path (real pointer routing).
-        var center = card.Bounds.Center;
-        window.MouseDown(center, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(center, MouseButton.Left, RawInputModifiers.None);
-
-        var popup = Assert.IsType<FeaturePopupWindow>(window.Popups.Active);
+        var popup = Assert.IsType<FeaturePopupWindow>(window.Popups.Show());
         Assert.True(popup.IsVisible);
         Assert.Same(window, popup.Owner); // owned modeless (W-04)
         Assert.False(popup.ShowInTaskbar);

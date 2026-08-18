@@ -1,93 +1,216 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:CcpClient.Desktop.Views"
         x:Class="CcpClient.Desktop.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
-        Width="520" Height="680"
+        Width="1100" Height="760"
         Title="CCP Client"
         Background="#FF141018">
+  <!--
+    SP-091: the navigation shell. Rail + page host + a diagnostic footer, modelled on the
+    v6.8.1 Studio rack the owner pointed at (wpf-surface-reachability.md §8.3) rather than on
+    any WPF layout code. The demonstrator card that used to live here is retired: its own text
+    said "the first real feature card supersedes it", and the Spiral Overlay module is that
+    supersession. The SP-003/SP-006 startup-trace and capability proofs moved to the System
+    page; they are never deleted.
+
+    THREE doors, and every one of them has a working destination (§9 D1): Studio reaches THE
+    LOOM, Companion reaches the companion window, System reaches the live trace. WPF's other
+    doors are absent rather than dead.
+  -->
   <Window.Styles>
     <!-- A-012/cheat sheet §Styling: selectors + pseudo-classes, never WPF triggers. -->
-    <Style Selector="Border.feature-card">
+
+    <!-- Rail door. A RadioButton, so selection state is the control's own :checked
+         pseudo-class and keyboard activation is the control's own (WPF's rack row is a
+         RadioButton too — Views/Tabs/StudioTabView.xaml.cs:645-651). -->
+    <Style Selector="RadioButton.door">
+      <Setter Property="Background" Value="#FF1E1822" />
       <Setter Property="BorderBrush" Value="#FF3A2F3E" />
       <Setter Property="BorderThickness" Value="2" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Background" Value="#FF1E1822" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Padding" Value="12,0,12,0" />
+      <Setter Property="Height" Value="44" />
+      <!-- Stretch, so every door is the same width: the headed harness captures a door's top
+           border band, and ragged widths would make the band's pixel fraction depend on how
+           long that door's label happens to be. -->
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="4"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
     </Style>
-    <Style Selector="Border.feature-card:pointerover">
+    <Style Selector="RadioButton.door:pointerover">
       <Setter Property="BorderBrush" Value="#FF6B5B73" />
     </Style>
-    <!-- The lit ring: driven by the conditional class bound to the OPERATION state. -->
-    <Style Selector="Border.feature-card.lit">
+    <!-- The selected door. #FFE066FF is the tier-2/tier-3 harness anchor
+         (client/tools/verify/self-test.ps1 seeds its regression by replacing it, and
+         checks.json's rail-door-selected-border reads this band back off real pixels). -->
+    <Style Selector="RadioButton.door:checked">
+      <Setter Property="Background" Value="#FF2A2130" />
       <Setter Property="BorderBrush" Value="#FFE066FF" />
-      <Setter Property="BoxShadow" Value="0 0 12 0 #80E066FF" />
     </Style>
-    <Style Selector="Border.feature-card.lit:pointerover">
-      <Setter Property="BorderBrush" Value="#FFF0A0FF" />
+
+    <!-- Rack row: the same mechanism at module granularity. -->
+    <Style Selector="RadioButton.rack-row">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0,0,0,0" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Padding" Value="10,0,10,0" />
+      <Setter Property="Height" Value="36" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="4"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.rack-row:pointerover">
+      <Setter Property="Background" Value="#FF241E2A" />
+    </Style>
+    <Style Selector="RadioButton.rack-row:checked">
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
+
+    <Style Selector="Border.rail">
+      <Setter Property="Background" Value="#FF19141F" />
+      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="BorderThickness" Value="0,0,1,0" />
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="Width" Value="200" />
+    </Style>
+    <Style Selector="Border.rack">
+      <Setter Property="Background" Value="#FF19141F" />
+      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="8" />
+    </Style>
+    <Style Selector="Border.module">
+      <Setter Property="Background" Value="#FF1B1622" />
+      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="16" />
+    </Style>
+    <Style Selector="Border.notice">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Border.footer">
+      <Setter Property="Background" Value="#FF19141F" />
+      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="12,6" />
+    </Style>
+
+    <Style Selector="Button.module-action">
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="TextBlock.rail-brand">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="4,0,0,10" />
+    </Style>
+    <Style Selector="TextBlock.page-title">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.page-blurb">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="12" />
+      <!-- The Studio blurb sits in a fixed-width rack column; unwrapped it overruns into the
+           module panel (seen in the headed capture, not in any headless frame). -->
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.rack-group">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.5" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Margin" Value="10,6,0,4" />
+    </Style>
+    <Style Selector="TextBlock.module-title">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.diagnostic">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="FontSize" Value="10" />
     </Style>
   </Window.Styles>
 
-  <StackPanel Margin="16">
-    <TextBlock Text="CCP greenfield client — dashboard (first visible slice)"
-               FontWeight="Bold" Foreground="#FFE8E0EE" />
-
-    <!-- demo.status-ticker demonstrator card: right-click quick-toggles, Enter (focused) toggles.
-         SP-014: BOTH gestures dispatch through ONE command path keyed on the card's STABLE ID
-         (CardId = demo.status-ticker); the title below is display text (CardTitle binding) and
-         never participates in dispatch. -->
-    <Border x:Name="TickerCard"
-            Classes="feature-card"
-            Classes.lit="{Binding TickerLit}"
-            AutomationProperties.Name="demo.status-ticker card"
-            Focusable="True"
-            Padding="12" Margin="0,12,0,0">
-      <Border.KeyBindings>
-        <KeyBinding Gesture="Enter" Command="{Binding ToggleCommand}" CommandParameter="{Binding CardId}" />
-      </Border.KeyBindings>
-      <StackPanel>
-        <Grid ColumnDefinitions="Auto,*">
-          <Image Source="avares://CcpClient.Desktop/Assets/demo-status-ticker.png"
-                 Width="32" Height="32" VerticalAlignment="Top" />
-          <StackPanel Grid.Column="1" Margin="10,0,0,0">
-            <TextBlock x:Name="CardTitleText" Text="{Binding CardTitle}" FontWeight="SemiBold" Foreground="#FFE8E0EE" />
-            <TextBlock Text="Demonstrator feature (demo.status-ticker) — not a product feature; the first real feature card supersedes it. Right-click or Enter toggles."
-                       Opacity="0.6" FontSize="11" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
-          </StackPanel>
-        </Grid>
-        <!-- Load-bearing IsVisible: this row leaves layout when the operation is off. -->
-        <TextBlock x:Name="TickText"
-                   IsVisible="{Binding TickerVisible}"
-                   Text="{Binding TickText}"
-                   Margin="0,8,0,0" Foreground="#FFB8F0B8" FontFamily="Consolas" />
+  <DockPanel>
+    <!-- Diagnostic footer: the SP-007 layout probe (now measuring the rail's doors, which is
+         what the headed harness drives) and the current route. Content-free, UIA-readable on
+         Windows, logged once on first layout so it is stderr-readable on Linux. -->
+    <Border DockPanel.Dock="Bottom" Classes="footer">
+      <StackPanel Spacing="2">
+        <TextBlock x:Name="RouteProbeText" Classes="diagnostic" Text="route: pending" />
+        <TextBlock x:Name="LayoutProbeText" Classes="diagnostic" Text="layout-probe: pending" />
       </StackPanel>
     </Border>
 
-    <!-- SP-046 AI companion slice c7: opens the owned modeless companion surface (the
-         real chat/badge/status/clear-control surface wired to the product AI chain). -->
-    <Button x:Name="CompanionButton"
-            Content="Open companion"
-            AutomationProperties.Name="open companion button"
-            HorizontalAlignment="Left"
-            Padding="12,6" Margin="0,10,0,0"
-            Background="#FF2A2130" Foreground="#FFE8E0EE"
-            BorderBrush="#FFE066FF" BorderThickness="1" CornerRadius="4" />
+    <!-- The rail. Declared HERE, in markup, and cross-checked against ShellRoutes.Declared by
+         NavigationShellHeadlessTests: markup and route table can drift, and the test catches
+         it, which a rail generated from the table could never do. -->
+    <Border DockPanel.Dock="Left" Classes="rail">
+      <StackPanel Spacing="6">
+        <TextBlock Classes="rail-brand" Text="CCP" />
+        <RadioButton x:Name="DoorStudio" Classes="door" GroupName="rail"
+                     AutomationProperties.AutomationId="DoorStudio"
+                     AutomationProperties.Name="Studio door"
+                     ToolTip.Tip="Every effect, one rack"
+                     Content="Studio" />
+        <RadioButton x:Name="DoorCompanion" Classes="door" GroupName="rail"
+                     AutomationProperties.AutomationId="DoorCompanion"
+                     AutomationProperties.Name="Companion door"
+                     ToolTip.Tip="Chat, takeover, awareness and permissions"
+                     Content="Companion" />
+        <RadioButton x:Name="DoorSystem" Classes="door" GroupName="rail"
+                     AutomationProperties.AutomationId="DoorSystem"
+                     AutomationProperties.Name="System door"
+                     ToolTip.Tip="Startup trace and capability states"
+                     Content="System" />
+      </StackPanel>
+    </Border>
 
-    <!-- Compiled-binding named-element case: this text FOLLOWS the live tick text — a delta
-         proves #TickText resolves (a constant could be a hardcoded literal). -->
-    <TextBlock Text="{Binding #TickText.Text, StringFormat='ElementName mirror: {0}'}"
-               FontSize="10" Opacity="0.5" Foreground="#FFE8E0EE" Margin="0,4,0,0" />
-
-    <!-- SP-007 layout probe: the card's measured DIP bounds and the window's RenderScaling,
-         rendered in the window (UIA-readable on Windows) and logged once on first layout
-         (stderr-readable on Linux). Demonstrator-slice diagnostic; content-free. -->
-    <TextBlock x:Name="LayoutProbeText" FontSize="10" Opacity="0.5" Foreground="#FFE8E0EE"
-               Text="layout-probe: pending" />
-
-    <!-- SP-003/SP-004/SP-006 integration proofs retained (may shrink, never deleted). -->
-    <TextBlock Text="Startup trace + capability states (SP-003/SP-006 proofs)"
-               FontWeight="SemiBold" FontSize="11" Foreground="#FFE8E0EE" Margin="0,14,0,4" />
-    <TextBlock x:Name="TraceText" TextWrapping="Wrap" FontSize="10" Opacity="0.75" Foreground="#FFE8E0EE" />
-    <TextBlock x:Name="HeartbeatText" FontSize="10" Opacity="0.75" Margin="0,6,0,0"
-               Text="Heartbeat: waiting" Foreground="#FFE8E0EE" />
-  </StackPanel>
+    <ContentControl x:Name="PageHost" />
+  </DockPanel>
 </Window>
