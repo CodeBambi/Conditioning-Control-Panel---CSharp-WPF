@@ -113,6 +113,51 @@ would be missed.** `MainWindowViewModel` and `FeaturePopupManager` survive as na
 residues, undeletable in-lane because nine call sites live in out-of-scope test files.
 
 
+### LAND INSTRUCTIONS for wave 36 (written 2026-08-18 at the review gates, binding on the landing session)
+
+**REVIEW STATE: SP-091 `f2c218fc` code APPROVE (after one REVISE) + final PASS; SP-093 `8ca24761` code
+APPROVE + final PASS; SP-092 `faa8454f` code APPROVE, final review in flight at the time of writing.**
+
+**1. SQUASH SP-091. DO NOT MERGE ITS HISTORY.** Its own final reviewer found this and it is the one
+instruction that changes the mechanics of the land. Amendments 1 and 5 required their harness fixes
+"in the same commit as the retirement"; they arrived as follow-up commits instead. So `3f02eab2`,
+`45d114f9`, `bcd3c8b6` and `c5652852` each carry a **broken Linux harness leg** — `capture-wslg.sh`
+anchored on a probe token the same commit retired. The HEAD is coherent; the intermediates are not.
+A squash land makes that moot. A merge land publishes four commits at which the Linux harness accuses
+a healthy app, which is exactly the ambiguity the amendment existed to prevent, preserved in history.
+
+**2. FLOOR ARITHMETIC: SP-091 declares headless +4, not the +2 ratified in Amendment 4.** The lane is
+right and said so: the +2 assumed `FeaturePopupHeadlessTests` fact 1 would die with the demo card, but
+its W-04 chrome assertions have no other home, so it kept the fact and retired only the gesture —
+7 retirements, not 8. **`sum-deltas --apply` will move the headless pin by +4.** Expected post-land
+floor: unit **1052 + 3 + 26 + 9 = 1090**, headless **35 + 4 = 39**. If `--check` and `check-floor`
+disagree, HALT: that is a lane declaring something it did not do, not a pin to adjust.
+
+**3. THREE DOC DEBTS, none of which will go red to remind you.** `client/docs/verification-harness.md`
+(`:23-24,63-65,94`) and root `CLAUDE.md` (`:86,89`) still document `-Surface dashboard-card -State lit`,
+which now trips `capture.ps1`'s `ValidateSet`. **Do these AT the land, not before** — the rename lives on
+the lane branch, so editing them earlier describes surfaces `feat/crossplatform` does not yet have.
+Every lane reported them rather than silently widening scope; that is why they are here and not lost.
+
+**4. ROWS TO WRITE AT LAND.** The dashboard-entry-point row closes only PARTIALLY: the Loom is reachable,
+but DTRH, Graded Intake, the AvatarTube demonstrator and the Chaos tunnel remain CLI-only. Record the
+partial closure and the named WSLg gate rather than flipping the row. All three lanes are WIP pending
+owner ratification, never DONE.
+
+**5. WHAT IS ARGUED RATHER THAN DEMONSTRATED, and must not be written up as proven.** SP-091's
+`capture-wslg.sh` was rewritten and **never executed** — no Linux session exists on this machine; its
+correctness is argued from a `bash -n` parse and an isolated regex exercise, and the lane itself says
+those "do not add up to a run". The publish-matrix fix was demonstrated needle-only; the matrix was
+never run. SP-093's Linux path is a **text pin, not a behaviour pin** — its test runs on Windows and
+proves the refusal string. SP-092 has **never observed a server answer**, so every `Entitled` claim is
+a claim about the mapping, driven by a stub.
+
+**6. THE ONE THING PRESENTATION-VERIFIED IN THIS WAVE:** the orchestrator drove SP-091's gesture headed
+with no CLI arguments and observed a real 2124x1464 window titled "The Loom" open with its spiral
+rendering and both saved spirals in its rack, plus the port shell's own Studio and System pages. That is
+the only claim in wave 36 backed by composited pixels. Everything else is draw-verified or unit-level.
+
+
 ### Wave 35 (**LANDED 2026-08-15 — single lane, SP-090. Floor 1048 → 1052. Second consecutive clean ladder pass.**)
 
 Lane `lane/SP-090-allowedskips-ban-machinery` @ `ebe12892`, one commit, three files, cherry-picked onto
