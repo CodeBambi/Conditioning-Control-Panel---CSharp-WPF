@@ -46,6 +46,7 @@ JUST DROP UNFREEZES
 - With Windows animation effects switched off, drops arrived as still images. The window now keeps the page moving regardless. In-app Motion: Off is still respected.
 
 SPEECH THAT TELLS THE TRUTH
+- Recent installers had quietly shipped without the bundled voice model - that is why some could not find the vosk folder at all. It is back in the package.
 - The app claimed speech was not available while the bundled voice model sat right there, and a bigger community-downloaded model silently won and broke recognition. The shipped model now wins, and the status says exactly what is wrong when something is.
 
 AND THE REST
