@@ -84,32 +84,54 @@
              it is the load-bearing attribute of the whole surface (PlayTabView.xaml:257): a band
              that took the click would swallow the gesture and tell the user nothing.
 
-             DIVERGENCE §9 D16: WPF paints its band from the tier it already knows, BEFORE any
+             DIVERGENCE §10 D16: WPF paints its band from the tier it already knows, BEFORE any
              click, and the band reads "Lab only". The port cannot know a tier without an async
              read, and a band painted from a cached read would advertise a state nobody
              re-checked — so this band appears when a press is refused and carries the refusal
-             itself. §9 D17: WPF's refusal is additionally an 8-second Warning toast with a
+             itself. §10 D17: WPF's refusal is additionally an 8-second Warning toast with a
              "See tiers" action (Services/TierGate.cs:133); the port has neither a toast system
-             nor an App Info & Data page. -->
+             nor an App Info & Data page.
+
+             TWO LAYERS, AND THE SECOND ONE IS LOAD-BEARING (§10 D23, found by a headed
+             capture). WPF's scrim carries only a glyph and ONE short no-wrap line, and its own
+             comment says why: "The pitch is the toast the click raises, which carries the
+             'See tiers' button - not this" (PlayTabView.xaml:270-273). The prose lives on the
+             toast, which is an opaque surface with its own ground. The port has no toast, so
+             the prose lands here — and prose on a 66%-alpha scrim composites straight through
+             onto the card's own title and blurb, which is illegible however correct the words
+             are. So the message gets a PLATE: its own opaque panel inside the band. The scrim
+             stays at WPF's ~66% ("so the card art still reads through it. Seeing what you are
+             missing is the entire job", :247-248) and still shows the badge, the buttons and
+             the card's edges around the plate. Making the scrim itself opaque would have
+             bought legibility by destroying exactly the quality that alpha value exists for. -->
         <Border x:Name="GateBand"
                 Classes="lock-band"
                 IsHitTestVisible="False"
                 IsVisible="False">
-          <StackPanel VerticalAlignment="Center" Spacing="8" Margin="24">
-            <TextBlock x:Name="GateBandTitle"
-                       Classes="lock-title"
-                       AutomationProperties.AutomationId="GateBandTitle"
-                       HorizontalAlignment="Center"
-                       Text="" />
-            <TextBlock x:Name="GateBandText"
-                       Classes="lock-text"
-                       AutomationProperties.AutomationId="GateBandText"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"
-                       MaxWidth="620"
-                       Text="" />
-          </StackPanel>
+          <Border x:Name="GateBandPlate"
+                  Classes="lock-plate"
+                  AutomationProperties.AutomationId="GateBandPlate"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="16"
+                  MaxWidth="600">
+            <StackPanel Spacing="8">
+              <TextBlock x:Name="GateBandTitle"
+                         Classes="lock-title"
+                         AutomationProperties.AutomationId="GateBandTitle"
+                         HorizontalAlignment="Center"
+                         Text="" />
+              <!-- Left-aligned, not centred: WPF centres ONE short line, and this is three
+                   sentences. Centred prose is harder to scan, and the message is the most
+                   load-bearing text on the surface. -->
+              <TextBlock x:Name="GateBandText"
+                         Classes="lock-text"
+                         AutomationProperties.AutomationId="GateBandText"
+                         TextAlignment="Left"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
         </Border>
       </Panel>
     </Border>

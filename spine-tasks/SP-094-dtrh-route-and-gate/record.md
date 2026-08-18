@@ -94,21 +94,69 @@ first-ever invocation (`Services/Notifications/TrayIconService.cs:152-157`). The
 **neither**, because it does not tuck; D20 records both facts so a future tuck packet builds
 against the code rather than the comment.
 
+## 5a. THE REFUSAL WAS UNREADABLE, AND A HEADED CAPTURE FOUND IT
+
+**This packet shipped a presentation defect, it was caught by a headed capture I could not
+take, and it is fixed.** Saying so plainly because it was on my own undischarged list in §8 —
+"that a user can read the refusal through a 66%-alpha scrim is a rendering claim" — and it
+turned out to be a real defect rather than a theoretical one. Every test I had written passed
+while the surface was broken.
+
+**What was wrong.** The band is a translucent scrim (`#A8120A1E`, ~66%) laid over the card, and
+the three-sentence refusal was placed **directly on it**. Composited, the card's own title and
+blurb showed *through* the message: `DOWN THE RABBIT HOLE` ran across the middle of the second
+line, the blurb ran between the message lines, and the wrapped lines had no leading so they
+crowded each other. The words were correct and unreadable — which, for a surface whose entire
+job is to say something honest and specific, is a failure of the same order as saying the wrong
+thing. Evidence: `client/tools/verify/artifacts/port-dtrh-refusal.png`.
+
+**Why I reasoned wrong.** I read `IsHitTestVisible="False"` as the band's contract and
+reproduced it exactly, and I read the ~66% alpha as the band's look and reproduced that exactly
+too — but I never asked what WPF puts ON the scrim. It puts a glyph and **one short no-wrap
+line**, and the file says why in a comment I had already read: *"The pitch is the toast the
+click raises, which carries the 'See tiers' button - not this"*
+(`Views/Tabs/PlayTabView.xaml:270-273`). WPF's prose lives on a **toast**, an opaque surface
+with its own ground. I ported the scrim and silently dropped the second layer, because the port
+has no toast — and then put the prose on the layer that was never meant to hold it.
+
+**The fix, and the two fixes I did not take.** The message gets a **plate**: its own opaque
+panel (`#FF1B1424`, 1px `#FFB47BFF` rim, corner 10, inset 16, max 600 DIP) inside the band, plus
+`LineHeight="18"` on the message and left-aligned prose. The scrim is untouched at WPF's alpha
+and still shows the badge, the title's edge, the blurb and both buttons around the plate. I did
+**not** make the scrim opaque — that buys legibility by destroying the quality the alpha exists
+for (`:247-248`, "so the card art still reads through it. Seeing what you are missing is the
+entire job") — and I did **not** shorten the message.
+
+**How it is now guarded.** `TheRefusalMessage_SitsOnItsOwnOpaquePlate_AndTheScrimKeepsWpfsAlpha`
+pins **both** alphas — scrim `0xA8`, plate `0xFF` — that the message is a visual descendant of
+the plate, that the plate is narrower than the band, that the band still refuses hit-testing,
+and that the wording is unchanged. Either half alone can be "fixed" in a way that loses the
+other, so both are pinned. That is a structural guard, not a legibility proof: no headless
+assertion can read a screen.
+
+**Re-checked headed.** I drove the same route with a throwaway UIA script in my scratchpad
+(never added to `client/tools/**`): cold start, no arguments, real click on `DoorPlay`, real
+click on `FallInButton`, window captured. The message reads cleanly and the card reads around
+it. **This does not discharge a headed gate** — it is my own eyeball check of a fix, and the
+capture that matters is the orchestrator's.
+
 ## 6. Divergences recorded
 
-Nine rows, `client/docs/wpf-surface-reachability.md` §10: **D14** four doors, **D15** D12 closed,
+Ten rows, `client/docs/wpf-surface-reachability.md` §10: **D14** four doors, **D15** D12 closed,
 **D16** the band appears at refusal rather than before the click, **D17** no toast and no
 App Info & Data, **D18** the two checkboxes absent rather than disabled, **D19** no NEW pill,
 **D20** the tray decision, **D21** `Unavailable` as a deliberate improvement on WPF (which fails
-closed and renders "could not tell" as "no"), **D22** `--dtrh-demo` past the gate.
+closed and renders "could not tell" as "no"), **D22** `--dtrh-demo` past the gate, **D23** the
+message plate under WPF's still-translucent scrim (§5a).
 
 §8.5 is corrected in place per amendment 3, with a short note on why the error happened.
 
 ## 7. Floor
 
 Pin read from `client/tests/floor/floor.json`: **1090 unit / 39 headless**.
-Declared in `floor-delta.json`: **+10 unit / +8 headless**.
-Observed by `node client/tests/floor/check-floor.mjs`: **1100 / 47** — exactly `pin + delta` in
+Declared in `floor-delta.json`: **+10 unit / +9 headless** (the ninth headless fact is the
+layering guard from §5a).
+Observed by `node client/tests/floor/check-floor.mjs`: **1100 / 48** — exactly `pin + delta` in
 both projects, which is the designed state for a bound lane. The reported FLOOR VIOLATION is
 that arithmetic and nothing else; `floor.json` was never opened. Skips were exactly the two
 pinned Linux-gated names, and the SP-057 data-root pin executed (it did not skip), so the floor
@@ -126,8 +174,11 @@ activation, z-order, focus, animation or audio. Specifically undischarged:
 - **The DTRH host window itself.** No test here opens one: the entitled FALL IN stops at the
   picker and the entitled Quick Drop uses the descent seam, because `QuickStartAsync` builds a
   real WebView2 host a headless frame cannot present.
-- **The band's appearance.** That a user can read the refusal through a 66%-alpha scrim is a
-  rendering claim; the tests assert the tree, the visibility, the hit-test flag and the text.
+- **The band's appearance.** That a user can read the refusal is a rendering claim; the tests
+  assert the tree, the visibility, the hit-test flag, both layers' alphas and the text. **This
+  item was on the list at the first submission and turned out to be a REAL defect, not a
+  theoretical one — see §5a.** It is fixed, re-checked headed by hand, and still not discharged
+  by anything in this suite: the guard is structural, and only a headed capture reads a screen.
 - **The tray.** Untouched. Both its Windows and Linux halves remain undischarged.
 - **A real entitled user.** No machine in this lane has an entitlement authority, so `Proceed`
   is proved through the capability's own authority seam, never end-to-end against a live
@@ -135,10 +186,16 @@ activation, z-order, focus, animation or audio. Specifically undischarged:
 
 ## 9. Notes for the next packet
 
-- **Run `client/tools/verify/self-test.ps1` only on a committed tree.** Its phase-2 restore is
-  `git checkout -- src/CcpClient.Desktop/Views/MainWindow.axaml`, which discards *any*
-  uncommitted edit to that file — including the packet's own. It cost this lane one
-  reconstruction of the rail markup. The harness is correct; the hazard is undocumented.
+- **`self-test.ps1` used to destroy uncommitted work** — its phase-2 restore was
+  `git checkout -- src/CcpClient.Desktop/Views/MainWindow.axaml`, which discarded any
+  uncommitted edit to that file, including this packet's own rail markup. Reported at the first
+  submission and **fixed on `feat/crossplatform` at `09c93d6b`**, which this lane is rebased
+  onto: the harness now restores from bytes captured before its mutation and proves the restore
+  byte-for-byte. No lane needs to work around it again.
+- **A headless suite cannot see a composition defect, and this packet is the proof.** Every test
+  passed while the refusal was unreadable (§5a). When a packet's outcome is "the user can read
+  X", a headed capture is not optional polish — it is the only instrument that measures the
+  claim.
 - The entitlement capability now has a registered probe but **no System-page-specific wording**;
   it renders through the generic capability list. A future packet may want a friendlier row.
 - `DtrhLaunch.Descend` is a seam with exactly one substituting test. If a second appears, check

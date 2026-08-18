@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using CcpClient.Desktop;
 using CcpClient.Desktop.Entitlement;
@@ -333,6 +334,57 @@ public class PlayPageHeadlessTests
         Assert.DoesNotContain(everyString, s => s.Contains("TIER 2", StringComparison.Ordinal));
         // The blurb is carried verbatim from PlayTabView.xaml:435.
         Assert.Contains(everyString, s => s.StartsWith("it's right there.", StringComparison.Ordinal));
+
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheRefusalMessage_SitsOnItsOwnOpaquePlate_AndTheScrimKeepsWpfsAlpha()
+    {
+        // REGRESSION GUARD for a defect a headed capture found and no headless frame could
+        // (§10 D23): the message used to sit directly on the 66%-alpha scrim, so the card's own
+        // title and blurb composited THROUGH it and the refusal was unreadable. The words were
+        // right; the layering was not.
+        //
+        // WPF never has this problem because its scrim carries a glyph plus ONE short no-wrap
+        // line and sends the prose to a toast with its own surface (PlayTabView.xaml:270-273).
+        // The port has no toast, so the prose gets a plate. Both halves are pinned here,
+        // because either one alone can be "fixed" in a way that loses the other:
+        // an opaque scrim would be legible and would destroy the "seeing what you are missing"
+        // quality that WPF's alpha exists for (:247-248).
+        var (host, window, dtrh) = await BootAsync(authorityAnswer: null);
+
+        PressCardButton(window, "FallInButton");
+        await WaitForDecisionAsync(dtrh);
+
+        var band = Descendant<Border>(window, "GateBand");
+        var plate = Descendant<Border>(window, "GateBandPlate");
+        var text = Descendant<TextBlock>(window, "GateBandText");
+
+        // The scrim is still WPF's scrim, alpha and all — the fix did not go through it.
+        Assert.Equal(Color.Parse("#A8120A1E"), ((ISolidColorBrush)band.Background!).Color);
+        Assert.Equal(0xA8, ((ISolidColorBrush)band.Background!).Color.A);
+
+        // The message's own ground is OPAQUE, which is what makes the words readable.
+        Assert.Equal(0xFF, ((ISolidColorBrush)plate.Background!).Color.A);
+
+        // …and the message really is ON it, not merely near it in the tree.
+        Assert.Contains(text, plate.GetVisualDescendants());
+        Assert.Contains(plate, band.GetVisualDescendants());
+        Assert.True(plate.Bounds.Width > 0 && plate.Bounds.Height > 0); // arranged for real
+
+        // The plate is narrower than the band, so the card still reads around it — the whole
+        // point of keeping the scrim translucent.
+        Assert.True(plate.Bounds.Width < band.Bounds.Width,
+            $"plate {plate.Bounds.Width} must be narrower than band {band.Bounds.Width}");
+
+        // And none of this made the band take input: the press must still arrive (trap 2).
+        Assert.False(band.IsHitTestVisible);
+        Assert.True(Descendant<Button>(window, "FallInButton").IsEnabled);
+
+        // The wording is unchanged — the fix was layering, not shortening.
+        Assert.Contains("That is a gap in the port, not a finding about your account",
+            text.Text ?? "", StringComparison.Ordinal);
 
         await host.ShutdownAsync();
     }

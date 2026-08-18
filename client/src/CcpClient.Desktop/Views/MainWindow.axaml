@@ -199,6 +199,19 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="15" />
     </Style>
+    <!-- The refusal message's own ground, and it must be OPAQUE (alpha FF). WPF's scrim carries
+         a glyph plus one short line and sends the prose to a toast, which has its own surface
+         (PlayTabView.xaml:270-273). The port has no toast, so the prose sits here — and on a
+         66%-alpha scrim it composites through onto the card's title and blurb and cannot be
+         read (headed capture, §10 D23). The plate is the fix; the scrim above keeps WPF's alpha
+         so the card still reads around it. PlayPageHeadlessTests pins both alphas. -->
+    <Style Selector="Border.lock-plate">
+      <Setter Property="Background" Value="#FF1B1424" />
+      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="20,16" />
+    </Style>
     <Style Selector="TextBlock.lock-title">
       <Setter Property="Foreground" Value="#FFB47BFF" />
       <Setter Property="FontSize" Value="13" />
@@ -207,6 +220,9 @@
     <Style Selector="TextBlock.lock-text">
       <Setter Property="Foreground" Value="#FFE8E0EE" />
       <Setter Property="FontSize" Value="12" />
+      <!-- Three wrapped sentences need leading, or the descenders of one line sit on the
+           ascenders of the next — the second half of what the headed capture caught. -->
+      <Setter Property="LineHeight" Value="18" />
     </Style>
 
     <Style Selector="TextBlock.rail-brand">
