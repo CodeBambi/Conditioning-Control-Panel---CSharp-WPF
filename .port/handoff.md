@@ -112,3 +112,19 @@ clean, packet complete on disk). It was NOT pushed: the standing authorization c
    `check-floor.mjs` runs in a scratch worktree, `git diff` EMPTY between the verified tree and
    the integrated tip, and the LAST action verifies the tree actually being pushed. Then clear
    `.port/WAVE-LOCK`, write the board row, the digest and the memories.
+
+## Review attempt also 529'd — five in a row, two different agent types
+
+`port-code-reviewer` was launched against `252b8509..b9fca7f9` and died the same way.
+That is five consecutive 529s spanning a lane and a reviewer, so **subagent capacity was
+unavailable for the whole window** — not a property of this packet.
+
+Standing at exit: the packet is complete, green and committed at `b9fca7f9`; Review Level 3
+is entirely UNRUN (code + final); the land is owed and belongs to a fresh context regardless.
+Resume by launching `port-code-reviewer` on `252b8509..b9fca7f9`, pointed at the two claims
+named above. Do not re-run the green suites to re-establish what the UPDATE section already
+records; spend the reviewer on judgment.
+
+Nothing here should be read as the port nearing completion. Wave 45 is effect THREE of
+fifteen, and the P0 row stands unchanged: no video, no webcam, four undecomposed v6.7
+surfaces, and a shell that looks finished enough to mislead.
