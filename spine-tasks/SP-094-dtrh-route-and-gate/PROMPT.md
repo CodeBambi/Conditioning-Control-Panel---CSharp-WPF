@@ -70,6 +70,40 @@ WPF minimizes the main window to the tray when DTRH opens and restores it on clo
 
 **READ THE PIN FROM `client/tests/floor/floor.json`** (it is 1090 unit / 39 headless as of wave 36), never from this packet. Your gate reports `observed == pin + your declared delta`.
 
+## AMENDMENTS (orchestrator, at the plan checkpoint)
+
+### Amendment 1 — tray option (b) APPROVED, and reason 3 is the one that decides it
+
+Do not tuck. Plain minimize and restore, `ITrayPresence` left unwired and stated.
+
+All four of your reasons hold, but **reason 3 is the one I would have overruled you on if you had picked (a)**: option (a) ships a hide-the-window path whose only way back you cannot exercise, because `TrackPopupMenu` needs a real click on a real icon and "left the taskbar and came back" is composited-window evidence. **You would be shipping the stranding the packet disqualifies, and calling it parity on the strength of a test that cannot reach it.** Reason 2 is the honest killer of (a) as a parity claim: WPF's tuck fires a balloon on first use and its menu has four items, so menu-only (a) buys a bigger partial, not a smaller gap.
+
+Reusing `IntakeHostWindow.axaml.cs:120-162` — the port's own landed precedent for exactly this situation, which shipped through six headed runs — is better than inventing a second minimize path. Record it as a divergence naming what a user sees differently.
+
+### Amendment 2 — close the over-grant hole. Board-authorised, and you were right to ask.
+
+Take it. `Enum.IsDefined` plus tests feeding `(EntitlementTier)0` and `(EntitlementTier)99`.
+
+The board row's acceptance already names the wiring packet as the place this closes, `Entitlement/**` is in your File Scope, and **it is the only hole in that capability that leans toward GRANTING paid content rather than refusing** — every other one was closed toward refusal. Asking rather than doing it silently was correct; the answer is yes.
+
+### Amendment 3 — §8.5 IS WRONG AND THE ERROR IS MINE. Fix it, and fix it as a correction, not a divergence.
+
+You are right and I am not. `client/docs/wpf-surface-reachability.md` §8.5 records the title as `THE RABBIT HOLE`; the source says `🐇 DOWN THE RABBIT HOLE` (`Views/Tabs/PlayTabView.xaml:426`) and §3 already agreed. **I wrote §8.5 from a screen capture in which the onboarding card and the tier badge occluded the left of the title, and I transcribed what was visible as though it were what was there.**
+
+That is a real failure of the rule I set myself. I wrote "observation beats source where they disagree" and then applied it to an observation that was **partially hidden**. **An occluded observation is not an observation; it is a guess with a photograph attached.** Your resolution — source wins, emoji stripped per D8 — is correct.
+
+**You are authorised to edit §8.5 directly to fix this**, beyond the divergences-only limit, and to add a one-line note in that section recording why the error happened, so the next reader knows the survey's captures can be occluded and must be cross-checked against source. Keep it short.
+
+### Amendment 4 — scope widened to `Lifecycle/**`: register the capability properly
+
+Your plan constructs `HostLoginEntitlement` in the shell because `Lifecycle/CompositionRoot.cs` was outside scope. **This is a single-lane wave, so there is no sibling to collide with — take the scope.** `client/src/CcpClient.Desktop/Lifecycle/**` is added to your File Scope.
+
+Register the entitlement capability the way the other five are registered, **and give it a capability probe**, so its state appears on the System page alongside `display-session`, `atomic-filesystem` and the DTRH/tunnel probes. That matters for a reason bigger than tidiness: today the honest answer for every user is `Unavailable(tier-authority-absent)`, and **the System page is where this port tells the truth about what it cannot do.** A capability that refuses everyone while being invisible in the one place that reports capability states is the shape the truthful-capability contract exists to prevent.
+
+### Amendment 5 — `--dtrh-demo` reaching past the gate: APPROVED, and say so in the code
+
+Your reasoning is right: gating the headed-evidence path would make DTRH evidence depend on the developer's Patreon tier, which would make the demonstrator useless on exactly the machines that need it. Put that sentence in a comment at the call site so the next reader does not "fix" it.
+
 ## Review Level: 3 (Plan, Code, Final)
 
 ## Steps
