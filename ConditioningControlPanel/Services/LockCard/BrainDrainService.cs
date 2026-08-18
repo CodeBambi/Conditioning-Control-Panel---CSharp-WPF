@@ -219,6 +219,16 @@ namespace ConditioningControlPanel.Services
         {
             if (_audioFiles == null || _audioFiles.Length == 0) return;
 
+            // #983: a winning roll used to DISPLACE the pair still playing - a long track
+            // audibly "rebooted" partway through, and a single-file folder restarted itself.
+            // A clip now always plays to its end; a roll that lands mid-clip is skipped, not
+            // queued. (Triggers inside the ~0.5s off-thread build window can still displace -
+            // _waveOut is only published after arbitration - which is harmless at clip scale.)
+            lock (_audioLock)
+            {
+                if (_waveOut != null) return;
+            }
+
             try
             {
                 var audioFile = _audioFiles[_random.Next(_audioFiles.Length)];
