@@ -473,3 +473,10 @@ and the recurring procedure is the project skill `wpf-upstream-sync`.
 - **SP-056 (§D guard) LANDED**: `client/docs/upstream-payload-inventory.json` (7 trees, honest dispositions) + a guard that FAILS on an unlisted/stale tree (RED demo proves it bites on `goon`). **Every future sync must update the inventory — the suite stays red until it does.**
 - **Enumeration finding:** `tunnel` + `vendor` (upstream's opaque WebView2 three.js backdrop below every Topmost window, `Chaos/ChaosTunnelService.cs`) were never covered by the DTRH host row's completed b1–b5 slice cut → own P1 row + a **ratification qualifier** on the DTRH row (it cannot be ratified DONE until that resolves or the tunnel is decreed out of scope).
 - Next: wave 16 candidates — Graded Intake v6.7.x delta (accents provisioning + ai.js rework + TopMarksPercent), profile-isolation seam (APPDATA trap), tunnel backdrop surface, or the big v6.7 surfaces (Goon/FYP/Her Room/Trainer Card/Haptics v2) which need decomposition first.
+
+## 2026-08-19 - wave 45 landed
+Branch `feat/crossplatform`. Floor pin **1372 unit / 87 headless**. Next task ID **SP-106**.
+Three effects run under the spine: Flash Images, Subliminals, Pink Filter (the first continuous one). Studio rack rows exist for Subliminals and Pink Filter, closing D72.
+Key structural fact for future effect work: `ISessionEffect` is a genuine spine and needed no change; the impostor was `PacedSessionEffect<TFiring>`, which demanded a clock and a next-firing from every module. `Session/OwnedSessionEffect.cs` is the new seam - three abstracts (`WorkIsRunning`, `Engage(generation)`, `ReleaseWork()`), no clock. Paced `Live` is a claim about the clock; continuous `Live` can only be a claim about the screen.
+Still unproven and must not be implied: no headed capture in this wave, every overlay in its tests is a recording double, no test anywhere proves the tint reaches a real screen, Linux is asserted only as a refusal, multi-monitor untested.
+Owner decisions still open: (1) may the port transmit the borrowed bearer to resolve entitlement (DTRH and Graded Intake refuse everyone until answered); (2) Subliminals' separate persistence file.
