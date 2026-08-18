@@ -39,6 +39,26 @@ namespace ConditioningControlPanel.Services
         public int AudioFileCount => _audioFiles?.Length ?? 0;
 
         /// <summary>
+        /// THE brain-drain clip folder, and the single source of truth for it. It lives under the
+        /// INSTALL directory (<c>%LOCALAPPDATA%\Programs\Conditioning Control Panel\Resources\
+        /// sounds\braindrain</c>), NOT under the user assets folder where every other droppable
+        /// asset lives, and it ships containing only a .gitkeep - so nobody finds it by accident.
+        /// The feature card's "Open folder" button exists purely because of that (four separate
+        /// users asked where it was in 24 hours, the community moderator included).
+        /// </summary>
+        public static string AudioFolderPath =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "braindrain");
+
+        /// <summary>Create the clip folder if it does not exist yet and hand back its path. Used by
+        /// the feature card's "Open folder" button so Explorer never opens onto nothing.</summary>
+        public static string EnsureAudioFolder()
+        {
+            try { Directory.CreateDirectory(AudioFolderPath); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BrainDrain: could not create the audio folder"); }
+            return AudioFolderPath;
+        }
+
+        /// <summary>
         /// Fires when a brain drain audio effect is triggered
         /// </summary>
         public event EventHandler? BrainDrainTriggered;
@@ -72,8 +92,8 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "braindrain");
-                
+                var audioFolderPath = AudioFolderPath;
+
                 App.Logger?.Information("BrainDrain: Looking for audio files in {Path}", audioFolderPath);
                 
                 if (!Directory.Exists(audioFolderPath))
@@ -126,6 +146,13 @@ namespace ConditioningControlPanel.Services
             }
 
             if (_isRunning) return;
+
+            // Re-scan the clip folder on every session start. The folder is a plain drop target
+            // that lives outside the app (see AudioFolderPath) and NOTHING used to call
+            // ReloadAudioFiles at all, so a clip added after launch only ever worked following a
+            // full restart - several users hit that in one evening. One Directory.GetFiles per
+            // Start is free next to what Start already does.
+            ReloadAudioFiles();
 
             UpdateSettings();
             UpdateTimerInterval();
