@@ -264,3 +264,36 @@ OS finally holds is asserted nowhere (D79).
 
 **Code re-review of `b9fca7f9..4bca542f` is RUNNING.** Then final review, then land from a
 FRESH context at **1372/87**.
+
+## CODE RE-REVIEW: APPROVE on `b9fca7f9..4bca542f`
+
+Verified rather than accepted, which is why it is worth trusting:
+- **Traced the collapse itself** — reverting to the old two-arm switch reds exactly 7
+  (`ArmedIdle`, `ArmedIdleTransparent`, `RunningTransparent`, `RunningRefused`,
+  `RunningUnexplained`, plus `:95` and `:123`), matching the lane's claim.
+- **Checked the mutation revert independently** by md5 (`79f0460dbbd5633f5005586564ce8139`,
+  `65a2982b2dcccd138f899e969f400cff`) against the values `record.md` quotes;
+  `PinkFilterEffect.cs` carries no clock token at HEAD.
+- **Counted the delta out of the diff**, not the reason string: `StudioSurfaceNoticeTests`
+  5 facts -> 8 facts + 1 theory x 7 `InlineData` = 15 cases (+10); other two test files
+  unchanged in case count; 48 + 10 = **58**. 1314+58 = **1372**, 81+6 = **87**.
+
+Blocker holds structurally: `StudioPage.axaml.cs:502-524` orders the two `sessionRunning` arms
+BEFORE the two idle arms, so `:521` ("...until the session starts.") is unreachable while a
+session runs, and `sessionRunning` is real state from `SessionEngine.cs:98` (set `:152`, cleared
+`:188`), never inferred from the dot. Public exposure is minimal — no `InternalsVisibleTo`
+anywhere in `client/`, and the three sibling describers this test file already exercises are
+already `public static`. `SecondEffectSpineTests` confirmed a WIDENING (one hunk, ordered
+`Assert.Equal` both sides, arity forced by a third module shipping off at `AppSettings.cs:3726`).
+
+Non-blocking, carried to final review: (a) `PinkFilterEffectTests.cs:371-373` says a smuggled
+timer "from anywhere" is counted — one word broader than `record.md` §8.1's own stated bound;
+(b) `StudioSurfaceNoticeTests.cs:110-121` survives a collapse alone, carried by the
+`RunningTransparent` row; (c) `:160-162` maps `Live` through a `_ =>` default arm, so a future
+enum member would silently test as `Live`; (d) untracked `.DONE` in the packet folder;
+(e) the two inherited off-by-one `AppSettings.cs` cites.
+
+**Final re-review RUNNING.** On PASS: land from a FRESH context, `sum-deltas --apply --packets
+SP-105-continuous-effect`, pin **1314/81 -> 1372/87**, three consecutive `check-floor.mjs` runs,
+`git diff` EMPTY between verified tree and integrated tip, then clear `.port/WAVE-LOCK`, write
+the board row, the digest and the memories.
