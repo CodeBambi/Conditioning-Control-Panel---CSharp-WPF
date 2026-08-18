@@ -67,3 +67,11 @@ a reviewer must not take on trust.
 
 Also assigned to this packet and unconfirmed: the Subliminals rack row (D72, a module the
 user still cannot switch on) and the stale `<summary>` at `Views/MainWindow.axaml.cs:207-211`.
+
+## Retry log (read this before diagnosing a lane defect)
+
+Three consecutive resume attempts, three `API Error: 529 Overloaded`, zero progress between
+them — commit and dirty set byte-identical each time. **The lane is not broken and its packet
+is not at fault**; the API was saturated across the whole window. Expect to WAIT rather than
+to debug: resume when 529s clear, do not spawn a parallel lane on this packet, and do not
+conclude anything about `SP-105` from these failures.
