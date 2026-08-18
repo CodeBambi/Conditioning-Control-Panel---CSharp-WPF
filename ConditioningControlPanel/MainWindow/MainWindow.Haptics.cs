@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -36,6 +36,9 @@ namespace ConditioningControlPanel
         private readonly ObservableCollection<HapticProviderChipVm> _hapticProviderChips = new();
         private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups = new();
         private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards = new();
+        /// <summary>Shape of the device list the current cards were built from — see
+        /// <see cref="BuildHapticToyShapeSignature"/>. Guards the #977 mid-drag container teardown.</summary>
+        private string _hapticToyCardsShape = "";
         /// <summary>One open routing row at a time, across every group.</summary>
         private readonly HapticRowExpansionScope _hapticRowScope = new();
         private DispatcherTimer? _hapticSliderDebounce;
@@ -153,7 +156,7 @@ namespace ConditioningControlPanel
         }
 
         private void OnHapticDevicesChanged(object? sender, EventArgs e)
-            => HapticsRunOnUi(RefreshHapticToys);
+            => HapticsRunOnUi(() => RefreshHapticToys());
 
         private void OnHapticConnectionChanged(object? sender, bool connected)
             => HapticsRunOnUi(RefreshHapticConnectionUi);
@@ -189,17 +192,50 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("Haptics UI refresh failed: {E}", ex.Message); }
         }
 
-        /// <summary>Rebuild the toy cards from the merged device registry.</summary>
-        internal void RefreshHapticToys()
+        /// <summary>
+        /// Refresh the toy cards from the merged device registry.
+        ///
+        /// #977 — this used to Clear() and refill the bound collection unconditionally, and every
+        /// per-toy config write lands here: HapticToyCardVm's setters call
+        /// HapticDeviceManager.SetTrim/SetRole/SetEnabled/SetNickname, all of which run
+        /// UpdateConfig -> Rebuild() -> DevicesChanged -> this method. A Slider's TwoWay binding
+        /// fires on EVERY pixel of a drag, so dragging the trim slider destroyed the ItemsControl
+        /// container the slider itself lived in, mid-drag: the Slider was unloaded, lost mouse
+        /// capture, and its detached value collapsed to the 0 default — "the slider shot off to 0,
+        /// against the mouse movement". (Nothing about it was specific to the third toy; it
+        /// reproduced on any card, and more cards just made the regeneration more violent.)
+        ///
+        /// The cards are now only rebuilt when the device SHAPE changes (which toys, their names,
+        /// their actuator layout). Provider-owned live state (battery) is pushed into the existing
+        /// cards in place, and the user-owned fields already raise their own PropertyChanged from
+        /// the VM setters, so nothing is lost by not recreating them.
+        /// </summary>
+        /// <param name="force">Rebuild even when the shape signature is unchanged. For callers that
+        /// may have mutated the persisted per-toy config behind the VMs' backs (the setup wizard,
+        /// a settings reload) rather than through a card.</param>
+        internal void RefreshHapticToys(bool force = false)
         {
             if (HapticsTab?.ToyCardsList == null) return;
 
             var manager = App.Haptics?.DeviceManager;
-            _hapticToyCards.Clear();
-            if (manager != null)
+            var devices = manager?.Devices ?? (IReadOnlyList<HapticDevice>)Array.Empty<HapticDevice>();
+
+            var signature = BuildHapticToyShapeSignature(devices);
+            if (force || !string.Equals(signature, _hapticToyCardsShape, StringComparison.Ordinal))
             {
-                foreach (var device in manager.Devices)
-                    _hapticToyCards.Add(new HapticToyCardVm(manager, device));
+                _hapticToyCardsShape = signature;
+                _hapticToyCards.Clear();
+                if (manager != null)
+                {
+                    foreach (var device in devices)
+                        _hapticToyCards.Add(new HapticToyCardVm(manager, device));
+                }
+            }
+            else
+            {
+                // Same toys in the same order — refresh live state without touching containers.
+                for (int i = 0; i < _hapticToyCards.Count && i < devices.Count; i++)
+                    _hapticToyCards[i].SyncLiveState(devices[i]);
             }
 
             HapticsTab.ToysEmptyState.Visibility = _hapticToyCards.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -209,6 +245,32 @@ namespace ConditioningControlPanel
 
             RefreshPatternToyPicker();
             RefreshHapticConnectionUi();
+        }
+
+        /// <summary>
+        /// Identity + layout of the current device list: which toys, in which order, under which
+        /// names, with which actuators. Deliberately EXCLUDES everything the user edits from a
+        /// card (trim / role / enabled / nickname) — those are what made this refresh fire mid-drag
+        /// (#977) — and also excludes the battery reading, which is pushed in place instead so a
+        /// routine battery poll can never tear a card down under the mouse.
+        /// </summary>
+        private static string BuildHapticToyShapeSignature(IReadOnlyList<HapticDevice> devices)
+        {
+            if (devices == null || devices.Count == 0) return "";
+            const string Sep = "|~|";        // separators, not data: a toy name can contain anything
+            const string EndOfDevice = "|;|";
+            var sb = new System.Text.StringBuilder();
+            foreach (var d in devices)
+            {
+                if (d == null) continue;
+                sb.Append(d.DeviceKey).Append(Sep)
+                  .Append(d.Name).Append(Sep)
+                  .Append(d.IsConnected ? '1' : '0').Append(Sep);
+                foreach (var a in d.Actuators)
+                    sb.Append((int)a.Type).Append(':').Append(a.Index).Append(':').Append(a.Steps).Append(',');
+                sb.Append(EndOfDevice);
+            }
+            return sb.ToString();
         }
 
         /// <summary>Status dot, status text, device summary, connect button and provider chips.</summary>
@@ -380,7 +442,7 @@ namespace ConditioningControlPanel
 
             RefreshAudioSyncCardVisibility();
             RefreshHapticRoutingRows();
-            RefreshHapticToys();
+            RefreshHapticToys(force: true);   // settings/wizard may have rewritten per-toy config behind the cards
             RefreshHapticLiveStatus();
             UpdateHapticPatternPreview();
         }
@@ -673,7 +735,7 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try { LoadHapticsSettingsToUi(); }
             finally { _isLoading = false; }
-            RefreshHapticToys();
+            RefreshHapticToys(force: true);   // settings/wizard may have rewritten per-toy config behind the cards
         }
 
         #endregion
