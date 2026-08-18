@@ -297,3 +297,51 @@ enum member would silently test as `Live`; (d) untracked `.DONE` in the packet f
 SP-105-continuous-effect`, pin **1314/81 -> 1372/87**, three consecutive `check-floor.mjs` runs,
 `git diff` EMPTY between verified tree and integrated tip, then clear `.port/WAVE-LOCK`, write
 the board row, the digest and the memories.
+
+## FINAL RE-REVIEW: PASS — wave 45 is LANDABLE. Lock cleared; land from a FRESH context.
+
+Final reviewer re-ran the contract itself on `4bca542f`: `CcpClient.Tests` 1370 passed / 0
+failed / 2 skipped / **1372**; `CcpClient.HeadlessTests` 87 passed / 0 failed / **87**. Exactly
+1314+58 and 81+6, matching `floor-delta.json`. Gate exit non-zero is by design. `git status`
+shows only the untracked `.DONE`, corroborating that all five mutations were reverted.
+
+**Blocker discharged for real, and checked at the chain rather than the string:**
+`OverlayReasonCodes.cs:23` -> `OverlayPresenceFactory.cs:76,84,89` -> `LastPresent` ->
+`Showing` false -> `WorkIsRunning` false -> dot `Armed` -> `LastPlacement` into `RefusalCode`.
+`sessionRunning` is passed from `_session.Engine.Running` (`:348-349`), never inferred from the
+dot. A Linux user mid-session now reads "Running, but nothing is on your screen: this build
+could not put the tint's overlay surface up (`overlay-mechanism-absent`)", with the verbatim
+manual gate printed once beneath.
+
+**Worth carrying into every future packet:** the reviewer noted that the sentence it blocked on
+is one ONLY A LINUX USER would ever have seen, which no test on this machine could have caught
+by execution. It was caught by READING. Headless green does not cover the platform you are not
+running on.
+
+**Template verdict judged honest and usable** (`record.md:14-58`): separates interface from
+implementation, names the forcing mechanism (`Arm()` *was* `ScheduleNext()`), gives a per-kind
+dependency table at `:44-52` a fourth module's author can act on, bounds itself at `:54-57`,
+keeps the wrong prediction at §1.4, and — new — §9.1 records that the lane introduced the
+blocker INSIDE the very finding that predicted it.
+
+Residuals `record.md:253-276` byte-unchanged; the revision ADDS one (§8.1's session-clock bound)
+rather than removing any. Item (c) from code review was retired on inspection: the `_ =>` arm at
+`StudioSurfaceNoticeTests.cs:160-162` is self-detecting, since the distinctness loop iterates
+`Enum.GetValues<PinkLine>()` and a new member collides rather than passes. The untracked `.DONE`
+is compliance with `PROMPT.md:76`, not a defect.
+
+### LAND INSTRUCTIONS (phase A, fresh context)
+
+- Lane branch **`lane/SP-105-continuous-effect`** (also reachable as
+  `worktree-agent-a01e12274d69597f3`), head **`4bca542f`**, three commits on `252b8509`.
+- `node client/tests/floor/sum-deltas.mjs --check --packets SP-105-continuous-effect`, then
+  `--apply --packets SP-105-continuous-effect`. Pin **1314/81 -> 1372/87** in the LANDING commit.
+- Three consecutive `check-floor.mjs` runs on the merged tree, output to files; `git diff` EMPTY
+  between the verified tree and the integrated tip; the LAST action verifies the pushed tree.
+- Then: board row (WIP, not DONE — owner ratifies), `client/docs/port-digest.md` three lines,
+  `client/memories/port-status.md`, `spine-tasks/CONTEXT.md` wave 45, and remove the worktree.
+- **Follow-ups to file, none blocking:** `PinkFilterEffectTests.cs:371-373` "from anywhere" ->
+  "onto the session clock"; `StudioSurfaceNoticeTests.cs:110-121` locality; inherited off-by-one
+  cites `AppSettings.cs:751`/`:1234` and D79's `OverlayService.cs:1180-1181`.
+
+**`.port/WAVE-LOCK` cleared to `.wave45.reviewed` — phase A may now land.**
