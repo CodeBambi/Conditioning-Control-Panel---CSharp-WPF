@@ -242,7 +242,54 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   return { passed: counters.passed, skipped, skippedNames, total: counters.total, trxPath };
 }
 
+// THE GATE MUST NOT MEASURE A STALE BUILD (added 2026-08-18 after it did, three times).
+// runProject uses --no-build for speed, which is right: the caller is expected to have built.
+// But when it has not -- most often right after a merge, when only some projects were rebuilt --
+// dotnet happily runs YESTERDAY's assemblies and this gate reports yesterday's counts as though
+// they were today's. That reads exactly like a regression the wave caused, and the operator then
+// hunts a defect that does not exist. It cost real time at two lands and once more the same day.
+//
+// So: before running anything, compare the newest source file against the assembly under test.
+// If a source is newer, FAIL LOUDLY and name the file, rather than producing a confident number
+// about the wrong binaries. A gate that reports the wrong answer is worse than one that refuses.
+function newestSourceMs(dir) {
+  let newest = 0;
+  const walk = (d) => {
+    let entries;
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name === "bin" || e.name === "obj" || e.name === ".git") continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) { walk(full); continue; }
+      if (!/\.(cs|axaml|xaml|csproj|json)$/i.test(e.name)) continue;
+      const m = fs.statSync(full).mtimeMs;
+      if (m > newest) newest = m;
+    }
+  };
+  walk(dir);
+  return newest;
+}
+
+function assertBuildIsFresh(project) {
+  const projDir = path.dirname(project.csproj);
+  const dll = path.join(projDir, "bin", "Debug", "net10.0", `${project.name}.dll`);
+  if (!fs.existsSync(dll)) {
+    fail(`${project.name}: no built assembly at ${dll} — build the solution before running the floor`);
+  }
+  const dllMs = fs.statSync(dll).mtimeMs;
+  const srcRoots = [projDir, path.join(CLIENT, "src")];
+  for (const root of srcRoots) {
+    const newest = newestSourceMs(root);
+    if (newest > dllMs) {
+      fail(`${project.name}: STALE BUILD — source under ${root} is newer than ${path.basename(dll)}. ` +
+        `The gate runs --no-build, so it would have measured the PREVIOUS build's counts and reported them ` +
+        `as this tree's. Run: dotnet build client/CcpClient.sln -c Debug --nologo`);
+    }
+  }
+}
+
 function runProject(project, runDir) {
+  assertBuildIsFresh(project);
   const resultsDir = path.join(runDir, project.name);
   fs.mkdirSync(resultsDir, { recursive: true });
   let exitCode = 0;
