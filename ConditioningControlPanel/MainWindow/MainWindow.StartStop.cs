@@ -243,8 +243,9 @@ namespace ConditioningControlPanel
                 App.BrainDrain.Start();
             }
 
-            // Start autonomy service (requires Patreon)
-            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
+            // Start autonomy service (requires Patreon, or the ? box's takeover free day)
+            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true
+                                   || App.DailyFree?.IsFreeToday("takeover") == true;
             if (hasPatreonAccess && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
@@ -348,7 +349,8 @@ namespace ConditioningControlPanel
             // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
-            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                             || App.DailyFree?.IsFreeToday("takeover") == true;
             if (!(hasPatreon && s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven))
             {
                 App.Autonomy?.Stop();

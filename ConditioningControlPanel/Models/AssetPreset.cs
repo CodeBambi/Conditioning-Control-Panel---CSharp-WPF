@@ -98,6 +98,21 @@ public class AssetPreset : INotifyPropertyChanged
     public string DisplayText => $"{Name} ({EnabledImageCount} img, {EnabledVideoCount} vid)";
 
     /// <summary>
+    /// The CLOSED ComboBox reads this, not <c>DisplayMemberPath</c> (#976: the Asset Browser's
+    /// preset picker showed "ConditioningControlPanel.M" - a clipped type name - once a preset
+    /// was chosen and the dropdown shut).
+    ///
+    /// <para>WPF only wires <c>DisplayMemberPath</c> into a ComboBox's selection box from its
+    /// THEME template; <c>ComboBox.SelectionBoxItemTemplate</c> is null unless an explicit
+    /// <c>ItemTemplate</c> is set, so every replacement ControlTemplate in this app (the Velvet
+    /// Kit implicit style in Resources/Theme/Inputs.xaml, DarkComboBoxStyle, the Deeper editor's)
+    /// falls back to ToString() for the closed box while the open dropdown still renders the
+    /// path correctly. <see cref="PhrasePreset"/> and AudioService.AudioOutputDevice already
+    /// carry the same one-liner for the same reason - this model was the one that missed it.</para>
+    /// </summary>
+    public override string ToString() => DisplayText;
+
+    /// <summary>
     /// Whether this is the default "All Assets" preset
     /// </summary>
     [JsonIgnore]

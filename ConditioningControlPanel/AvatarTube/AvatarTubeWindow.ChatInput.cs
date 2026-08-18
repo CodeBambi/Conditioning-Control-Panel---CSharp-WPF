@@ -1111,8 +1111,10 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            // Check Patreon requirement
-            if (App.Patreon?.HasPremiumAccess != true)
+            // Check Patreon requirement - or the ? box's free day, which is genuinely free
+            // (#978: this menu refused Takeover as "Patreon only" on its own free-today day).
+            if (App.Patreon?.HasPremiumAccess != true
+                && App.DailyFree?.IsFreeToday("takeover") != true)
             {
                 Giggle("This is Patreon only~");
                 return;
@@ -1440,8 +1442,9 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Header = triggerOn ? Loc.Get("menu_trigger_mode_on") : Loc.Get("menu_trigger_mode_off");
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
-            // Takeover (Patreon only) - mode-aware name
-            var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
+            // Takeover (Patreon, or the ? box's free day - same OR every other gate applies)
+            var takeoverAvailable = App.Patreon?.HasPremiumAccess == true
+                                    || App.DailyFree?.IsFreeToday("takeover") == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
             var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_takeover");
             MenuItemBambiTakeover.Header = takeoverOn ? Loc.GetF("menu_takeover_on_format", takeoverName) : Loc.GetF("menu_takeover_off_format", takeoverName);

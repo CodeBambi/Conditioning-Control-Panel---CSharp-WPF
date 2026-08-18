@@ -248,7 +248,8 @@ namespace ConditioningControlPanel
             // block that owns the same decision — so without the flag here, Takeover re-armed itself
             // on every launch and the later block only cleared AutonomyModeEnabled, leaving the
             // service running behind a checkbox that read OFF.
-            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
+            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true
+                                   || App.DailyFree?.IsFreeToday("takeover") == true;
             if (hasPatreonAccess && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();

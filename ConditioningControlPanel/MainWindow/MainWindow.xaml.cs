@@ -466,6 +466,11 @@ namespace ConditioningControlPanel
                         // cards on the wheel (For You, Remote Control) would otherwise go on
                         // wearing yesterday's answer until the user re-entered the door.
                         RefreshPlayCards();
+                        // #978: and the DOORS themselves. Six feature pages carry their own
+                        // translucent padlock veil, painted only by UpdatePatreonUI, which no
+                        // rotation event ever reached - so a free day lifted every band on the
+                        // rail and the wall and still left the destination page bolted shut.
+                        RefreshEntitlementVeils();
                     }));
             }
 
@@ -726,7 +731,8 @@ namespace ConditioningControlPanel
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven
                     && App.Autonomy?.IsEnabled != true)
                 {
-                    var hasAccess = App.Patreon?.HasPremiumAccess == true;
+                    var hasAccess = App.Patreon?.HasPremiumAccess == true
+                                    || App.DailyFree?.IsFreeToday("takeover") == true;
                     if (hasAccess)
                     {
                         App.Autonomy?.Start();

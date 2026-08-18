@@ -84,7 +84,10 @@ namespace ConditioningControlPanel
             // Start/stop autonomy service (works independently of engine!)
             // Requires Patreon + Consent. Canonical gate: Settings.PatreonTier is only written
             // at login and goes stale for live-validated subscribers (#465).
-            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+            // ...or the ? box's free day for "takeover" - AutonomyService.CanStart already ORs
+            // it in, so without it here the toggle refused a service that would have started.
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                             || App.DailyFree?.IsFreeToday("takeover") == true;
 
             if (isEnabled)
             {
