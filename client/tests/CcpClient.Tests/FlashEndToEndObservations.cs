@@ -51,6 +51,12 @@ internal static class FlashEndToEndObservations
     /// allocation is most likely to fail. This field is diagnostic only; nothing is asserted about
     /// it and nothing is silenced by it.
     /// </param>
+    /// <param name="DesktopUniformPixelsDuring">
+    /// SP-107: how many of those returned pixels equal the first one. A read that came back UNIFORM
+    /// is a blank or asleep display, which is a third verdict again — different from "the allocation
+    /// failed" and from "the flash was not on the screen". Diagnostic only.
+    /// </param>
+    /// <param name="DesktopFirstPixelDuring">…and what that first pixel was. Diagnostic only.</param>
     /// <param name="TransparentHalfIsBlack">A transparent PNG half composes over black, as WPF's window does.</param>
     /// <param name="OpaqueHalfIsTheImage">…and the opaque half is the image.</param>
     /// <param name="MissingFileDecodes">A path that does not exist must produce no frame and no exception.</param>
@@ -66,6 +72,8 @@ internal static class FlashEndToEndObservations
         int DesktopPixelsDuring,
         int DesktopPixelsAfterHide,
         int DesktopPixelsSampledDuring,
+        int DesktopUniformPixelsDuring,
+        uint DesktopFirstPixelDuring,
         bool TransparentHalfIsBlack,
         bool OpaqueHalfIsTheImage,
         bool MissingFileDecodes,
@@ -106,7 +114,7 @@ internal static class FlashEndToEndObservations
 
             var before = CountDesktop(display);
             presenter.Show([imagePath]);
-            var (during, sampledDuring) = CountDesktopWithSampleSize(
+            var (during, sampledDuring, uniformDuring, firstDuring) = CountDesktopWithSampleSize(
                 display, evidence: "desktop-with-a-real-flash.bmp", display);
             var shown = presenter.SurfacesShown;
 
@@ -124,6 +132,8 @@ internal static class FlashEndToEndObservations
                 DesktopPixelsDuring: during,
                 DesktopPixelsAfterHide: after,
                 DesktopPixelsSampledDuring: sampledDuring,
+                DesktopUniformPixelsDuring: uniformDuring,
+                DesktopFirstPixelDuring: firstDuring,
                 TransparentHalfIsBlack: transparentIsBlack,
                 OpaqueHalfIsTheImage: opaqueIsImage,
                 MissingFileDecodes: frames.Render(
@@ -148,7 +158,33 @@ internal static class FlashEndToEndObservations
     private static int CountDesktop(OverlayBounds display, string? evidence = null, OverlayBounds? area = null) =>
         CountDesktopWithSampleSize(display, evidence, area).Count;
 
-    private static (int Count, int Sampled) CountDesktopWithSampleSize(
+    /// <summary>
+    /// SP-107 diagnostic. A screen read that came back UNIFORM is a blank or asleep display, not a
+    /// desktop missing a flash. Returns how many of the sampled pixels equal the first one, and what
+    /// that first one is, so the failure text can tell those two verdicts apart. Nothing is asserted
+    /// about either value.
+    /// </summary>
+    private static (int Uniform, uint First) Uniformity(uint[] pixels)
+    {
+        if (pixels.Length == 0)
+        {
+            return (0, 0);
+        }
+
+        var first = pixels[0];
+        var same = 0;
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            if (pixels[i] == first)
+            {
+                same++;
+            }
+        }
+
+        return (same, first);
+    }
+
+    private static (int Count, int Sampled, int Uniform, uint First) CountDesktopWithSampleSize(
         OverlayBounds display, string? evidence = null, OverlayBounds? area = null)
     {
         var rect = area ?? display;
@@ -163,7 +199,8 @@ internal static class FlashEndToEndObservations
                 Path.Combine(FlashDrawObservations.EvidenceFolder, evidence), width, height, pixels);
         }
 
-        return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length);
+        var (uniform, first) = Uniformity(pixels);
+        return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length, uniform, first);
     }
 
     /// <summary>The smallest clock that satisfies the presenter: this run shows one image, so

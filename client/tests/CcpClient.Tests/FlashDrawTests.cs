@@ -256,9 +256,12 @@ public class FlashDrawTests
             + $"and while the flash was up the composited desktop carried {run.DesktopPixelsDuring} pixels of the "
             + $"image's colour against an expected area of at least {expectedArea / 2}. Those two must agree: "
             + "where the screen can be read, the user's own image must really be on it. "
-            + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels (SP-107): zero there means the "
-            + "full-screen CAPTUREBLT allocation itself failed and this fact measured nothing, which is a "
-            + "different verdict from a flash that was not on the screen");
+            + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels (SP-107), of which "
+            + $"{run.DesktopUniformPixelsDuring} were the same colour as the first one "
+            + $"(0x{run.DesktopFirstPixelDuring:X6}). Three different verdicts hide behind a count of zero and "
+            + "those two numbers separate them: returned=0 is a failed CAPTUREBLT allocation and this fact "
+            + "measured nothing; returned=all-uniform is a blank or asleep display; returned=a real desktop is "
+            + "the only one that means the flash was genuinely not composited where the user would see it");
         Assert.True(run.DesktopPixelsAfterHide == 0,
             $"after the flash was hidden the desktop still carries {run.DesktopPixelsAfterHide} pixels of the "
             + "image's colour — the picture outlived the effect that put it there");

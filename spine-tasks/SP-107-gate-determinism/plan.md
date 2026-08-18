@@ -59,33 +59,61 @@ Isolates channel B. Neither harness ever re-runs anything; every verdict is coun
 
 ## 4. Measured results
 
-*(Experiment A is running as this section is written; experiment B has not been run. This section
-is filled in from the harness logs and NOTHING is written here before it is observed.)*
+Both experiments ran on the unchanged tree at `3c1572b4`, before any edit under `client/`.
 
-- Experiment A (20 sequential): **pending**
-- Experiment B (waves of 3 concurrent): **pending**
+- **Experiment A — 20 runs, one at a time: 0 red / 20 (0 %).** Channel A (intra-process fixture
+  overlap) is therefore real (§2) but NOT sufficient to produce the flake. Recorded as a hazard,
+  not as the diagnosis.
+- **Experiment B — 4 waves x 3 concurrent = 12 runs: 8 red / 12 (67 %).**
+
+Channel B reproduced on demand, and the failure text named the collision rather than leaving it to
+be inferred:
+
+```
+System.IO.IOException : The process cannot access the file
+'...\ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being used by another process.
+
+ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+Assert.Equal() Failure: Values differ   Expected: 0   Actual: 676161
+
+the OS rendered 0 of 43200 pixels as the frame (interactive desktop = True).
+Backend said: Unavailable(overlay-nothing-presented: ...)
+```
+
+676161 is exactly 951 x 711 — the whole pixel area of one flash, independently measured in §1 out of
+the run's own evidence bitmap. That number IS another process's flash counted as ours.
 
 ## 5. The named cause
 
-**Pending §4.** It will be stated only as the experiments support it, and the failure text of a
-reproduced red will be quoted verbatim rather than paraphrased.
+> **Every real-desktop fixture addresses machine-global state by CONSTANT — one evidence-file path,
+> one image colour, one spawn seed, and rectangles and hit-test points derived from the screen size,
+> which is the same number in every process on the machine. Two `check-floor.mjs` runs therefore
+> write the same file, paint the same colour in the same place, and contest the same points. The
+> port's own gate wrapper permits three concurrent runs. The gate's verdict was a function of how
+> many lanes were gating, not of the tree.**
 
-## 6. Candidate fixes under consideration (none applied yet)
+## 6. The fix applied
 
-Nothing will be skipped, retried, weakened, or moved to `allowedSkips` under any of these.
+Per-process-unique coordinates were considered and rejected: rectangles cannot be guaranteed
+disjoint for an unbounded number of processes on a finite screen, and making the evidence path
+per-process would break the stable artifact path SP-100 documented for the headed capture.
+Exclusive use is complete where disjointness is only probable.
 
-1. If channel B is the cause: **make the desktop resource each process uses unique to that
-   process** — rectangles, hit-test points, flash colour and the flash spawn seed all derived from
-   the current process id, so two concurrent runs never share a point, never overlap a rectangle
-   and never count each other's pixels. The assertions and the OS calls stay exactly as they are;
-   only coordinates and a colour change, and both are already arbitrary conveniences ("the centre
-   of the screen", "a colour nothing on a desktop is").
-2. If channel A contributes: **serialize the three real-desktop fixtures into one xunit
-   collection**, closing the §2 overlap hazard by construction. Zero waits, zero retries.
-3. Whatever remains impossible in process (a FOREIGN topmost window: the shipping WPF app
-   re-asserting `HWND_TOPMOST`, a locker, a full-screen game) is **admitted** in
-   `client/docs/verification-harness.md` as a fact the floor does not cover, with the headed tier-2
-   gate named as where a guaranteed desktop is asserted.
-4. `check-floor.mjs` gains the ability to **NAME failures from the TRX on red** — explicitly
-   allowed by the packet, and never a retry. Today it prints only the last six lines of
-   `dotnet test` output, which is why SP-106's run 7 had to be reconstructed by hand.
+1. **`RealDesktopCollection`** — the three real-desktop classes join one xunit collection, so
+   intra-collection sequentiality closes channel A by construction. Same mechanism as
+   `ProcessEnvCollection` (SP-062/SP-086). Zero waits, zero retries.
+2. **`RealDesktopLease`** — the collection's fixture holds an exclusive `FileShare.None` handle on
+   `%TEMP%/ccp-real-desktop.lease` for the life of the collection, closing channel B. A file handle
+   rather than a `Mutex` (thread affinity) and rather than a lock-file-existence scheme (the OS
+   releases a handle when a process dies, so no reaper is needed). The wait is `TestWait.UntilSync`,
+   the suite's one approved bounded wait; on expiry the collection FAILS and names the holder.
+3. **`RealDesktopCollectionGuardTests`** — membership made mechanical, so the next probe file cannot
+   rejoin the racy default collection silently.
+4. **`check-floor.mjs` NAMES failures from the TRX on red.** No retry. Nothing else changed.
+5. The residue no in-process mechanism can cover (a FOREIGN topmost window) is **admitted** in
+   `client/docs/verification-harness.md` rather than hidden.
+
+Predicted effect at the time of writing: experiment B's rate falls from 67 % toward 0, experiment A
+stays 0. Measured outcome is in `record.md` §3 — 8/12 became 2/36 under the same concurrency, with
+the two residual reds carrying a DIFFERENT signature that §4 of the record names as an open
+question rather than as a fixed defect.
