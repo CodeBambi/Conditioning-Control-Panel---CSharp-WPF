@@ -1,6 +1,0 @@
-{
-  "packet": "SP-098-session-spine-and-first-effect",
-  "unit": 47,
-  "headless": 11,
-  "reason": "SessionSpineTests (17) + FlashEffectTests (30) prove the session spine and the ported half of Flash Images with no wall-clock; StudioRackHeadlessTests (11) drive real input on the real shell: START really runs the effect, STOP really stops it, and the rack row's dot and right-click toggle are real"
-}
