@@ -131,23 +131,31 @@ reports `total drift: 1476 (pin 1472)` on every run by design (the declared delt
 applies at land), so an AFTER run counts as green only when the TRX carries **zero** failed tests in
 both projects AND the drift is check-floor's only complaint.
 
-| | Concurrency | Runs | Red | Rate |
-|---|---|---|---|---|
-| **BEFORE** | sequential | 20 | 0 | 0 % |
-| **BEFORE** | 3 concurrent | 12 | **8** | **67 %** |
-| **AFTER** | 3 concurrent, round 1 | 18 | 2 | 11 % |
-| **AFTER** | 3 concurrent, round 2 | 18 | **0** | 0 % |
-| **AFTER** | 3 concurrent, both rounds | **36** | **2** | **5.6 %** |
-| **AFTER** | sequential | 20 | SEQ_RED_PLACEHOLDER | SEQ_RATE_PLACEHOLDER |
+| | Concurrency | Window (UTC) | Runs | Red | Rate |
+|---|---|---|---|---|---|
+| **BEFORE** | sequential | 21:12–21:36 | 20 | 0 | 0 % |
+| **BEFORE** | 3 concurrent | 21:36–21:55 | 12 | **8** | **67 %** |
+| **AFTER** | 3 concurrent, round 1 | 21:56–22:04 | 18 | 2 | 11 % |
+| **AFTER** | 3 concurrent, round 2 | 22:09–22:17 | 18 | 0 | 0 % |
+| **AFTER** | sequential, round 1 | 22:17–22:42 | 20 | 2 | 10 % |
+| **AFTER** | sequential, round 2 | 22:42–23:09 | 20 | 0 | 0 % |
+| **AFTER, all** | both | 21:56–23:09 | **76** | **4** | **5.3 %** |
+| **AFTER, 3 concurrent only** | | | **36** | **2** | **5.6 %** |
 
-The three collisions of §1 are gone: not one of the 36 concurrent AFTER runs produced an
-`IOException` on the evidence file, a foreign flash's pixel count, or an
-`overlay-nothing-presented` cascade.
+**The flake this packet was written about is gone.** At the concurrency that produced it, 8 red in
+12 became 2 red in 36, and not one of the 36 concurrent AFTER runs produced an `IOException` on the
+evidence file, a foreign flash's pixel count, or an `overlay-nothing-presented` cascade. The three
+collisions of §1 do not appear again anywhere in 76 post-fix runs.
 
-## 4. THE RESIDUE, AND WHAT IS NOT KNOWN ABOUT IT
+**What is left is a different fault, and it is NOT concurrency-driven** — §4. All four post-fix reds
+are the same single fact, and they occur at the same rate with three concurrent runs (2/36) as with
+one (2/40).
 
-Two of the 36 concurrent AFTER runs failed, both on the same fact and both with a signature that is
-NOT any of the three collisions:
+## 4. THE RESIDUE: A SECOND, INDEPENDENT FAULT, MEASURED AND NAMED BUT NOT FIXED HERE
+
+All four post-fix reds are the same fact,
+`FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden`, with a
+signature that is NOT any of the three collisions:
 
 ```
 a desktop capture can see a painted layered window on this machine = True, and while the flash was
@@ -162,21 +170,43 @@ own device context. `DesktopPixelsBefore` and `DesktopPixelsAfterHide` were both
 surface the OS confirmed was on screen produced zero pixels of its colour in a full-screen
 CAPTUREBLT read taken with no wait, on a machine running three test processes at once.
 
-**The mechanism is NOT established.** Two candidates were not separated:
+**One candidate was measured and REFUTED.** The first guess was that the full-screen DIB allocation
+(2880x1800x32 = ~20 MB) fails under memory pressure, in which case `CaptureDesktop` returns an empty
+array and `CountOf([])` is 0 — indistinguishable from an absent flash. So the instrument was taught
+to report how many pixels the read actually returned, and the next occurrence answered:
 
-1. the full-screen DIB allocation (2880x1800x32 = ~20 MB) failing under three-way memory pressure,
-   in which case `CaptureDesktop` returns an empty array and `CountOf` reports 0 — indistinguishable
-   in the old failure text from an absent flash;
-2. DWM not having composited the new layered window when the screen was read. SP-100 measured that
-   an immediate CAPTUREBLT already carries the painted pixel (SP-100 record §1), but that
-   measurement was taken on an idle machine.
+```
+The screen read RETURNED 5184000 pixels (SP-107)
+```
 
-Rather than guess, the instrument was taught to tell them apart: the failure now reports how many
-pixels the read RETURNED. If it recurs, the next occurrence names its own cause instead of being
-re-diagnosed from scratch. **No wait was added and no assertion was relaxed to make this go away** —
-either of those would be the barred move, and the honest state is a named open question with an
-instrument pointed at it. It did not recur in the 18-run round that followed the diagnostic, which
-is not evidence that it is fixed.
+5,184,000 is exactly 2880 x 1800: **a complete desktop came back, and none of it was the flash's
+colour.** The allocation hypothesis is dead.
+
+**What is left, and is NOT established.** The remaining candidate is that DWM had not composited the
+layered window when the screen was read. SP-100 measured that an immediate CAPTUREBLT already
+carries the painted pixel (SP-100 record §1) — on an idle machine — and nothing contracts that. A
+third possibility, a blank or asleep display, is now separated by a second diagnostic (how many
+returned pixels are one colour), which had not fired again by the time this lane finished.
+
+**Two facts about the rate that a reviewer must weigh, because they point opposite ways.**
+
+- It is NOT concurrency-driven: 2 red in 36 runs at three-way concurrency, 2 red in 40 sequential.
+- It did NOT appear in the 20-run pre-fix sequential baseline. **So this lane cannot rule out that
+  its own change raised the fault's visibility** — the three real-desktop fixtures now run
+  back-to-back in one collection instead of being spread across the run, which changes what the
+  compositor is doing in the milliseconds before the screen read. The counter-evidence is timing:
+  all four reds fall in 21:56–22:42 UTC while 32 pre-fix runs before that window and 20 post-fix
+  runs after it were clean, in both cases with the fixture ordering unchanged within each group.
+  That is bursty, which fits an environment event better than a code change, and it is not proof.
+
+**What was deliberately NOT done.** No wait was added around the composited read, and no assertion
+was relaxed. Polling until the desktop shows the flash would make the fact "within N seconds the
+flash arrived" instead of SP-100's measured "immediately", and waiting until an assertion passes is
+retry-until-green wearing a different hat. Both are barred by this packet and both would have made
+the numbers above look better. The honest state is a named open question with an instrument pointed
+at it, and a decision for the board: either SP-100's no-wait composited read earns a bounded wait
+through `TestWait` as a deliberate, recorded divergence, or the composited-pixel fact moves behind
+the tier-2 headed gate. This lane had no mandate to choose between those.
 
 ## 5. WHAT THE FLOOR NOW CLAIMS, AND WHAT IT ADMITS
 
@@ -199,9 +229,13 @@ records.
 
 ## 6. What this work does NOT prove
 
-- **It does not prove the residue of §4 is gone.** 0 red in the 18 runs after the diagnostic landed
-  is one sample of a fault that showed at 2-in-18; the honest reading is "not observed again", not
-  "fixed".
+- **It does not fix the residue of §4, and does not prove it is unrelated to this change.** 4 red in
+  76 post-fix runs on one fact, against 0 red in 20 pre-fix sequential runs. The evidence that it is
+  environmental is a timing burst, not a mechanism.
+- **The gate is therefore better, not deterministic.** A green floor run now means "no two test
+  processes fought over the desktop", which it did not mean before. It does not yet mean "green
+  implies the tree is green" unconditionally, because §4 is still open. Three consecutive greens are
+  worth much more than they were and are still not proof.
 - **It proves nothing about a machine with more than three concurrent gate runs.** The lease is
   correct for any number, but only 3 were measured, because 3 is what `with-slot.mjs` permits.
 - **It proves nothing on Linux.** The lease's exclusivity was exercised on Windows only. Every
@@ -224,7 +258,7 @@ records.
 | `client/tests/CcpClient.Tests/OverlayCapabilityTests.cs` | `[Collection(nameof(RealDesktopCollection))]`. |
 | `client/tests/CcpClient.Tests/FlashDrawTests.cs` | Same, plus the sample-size diagnostic in the composited-desktop failure text. |
 | `client/tests/CcpClient.Tests/TrayCapabilityTests.cs` | Same attribute. |
-| `client/tests/CcpClient.Tests/FlashEndToEndObservations.cs` | Records how many pixels the screen read returned. |
+| `client/tests/CcpClient.Tests/FlashEndToEndObservations.cs` | Records how many pixels the screen read returned and how many were one colour — the three verdicts behind a count of zero. |
 | `client/tests/floor/check-floor.mjs` | Names the failing tests from the TRX on red. No retry, ever. |
 | `client/docs/verification-harness.md` | What tier 1 now covers on the real desktop, and what it admits it does not. |
 | `spine-tasks/SP-107-gate-determinism/floor-delta.json` | +4 unit / +0 headless. |
