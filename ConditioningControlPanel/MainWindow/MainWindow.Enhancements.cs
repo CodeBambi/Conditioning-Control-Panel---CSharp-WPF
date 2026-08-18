@@ -2150,12 +2150,25 @@ namespace ConditioningControlPanel
                     App.Logger?.Debug("Pink Rush flash effect failed: {Error}", ex.Message);
                 }
 
-                // Show toast notification popup
+                // Show toast notification popup.
+                //
+                // Perk-announcement opt-out (meadow, 2026-08-18): only the popup card goes. The
+                // 3x window itself, the Enhancements-tab indicator above and the half-second pink
+                // screen wash all stay - the wash is silent, wordless and is very nearly the
+                // "pink glow to signify that it's running" the reporter asked for, so muting it
+                // too would leave Pink Rush with no signal at all.
                 try
                 {
                     _pinkRushPopup?.Close();
                 }
                 catch { }
+                _pinkRushPopup = null;
+
+                if (App.PerkNotificationsSuppressed)
+                {
+                    App.Logger?.Information("Pink Rush activated! Popup suppressed by SuppressPerkNotifications.");
+                    return;
+                }
 
                 _pinkRushPopup = new PinkRushPopup();
                 _pinkRushPopup.Show();
@@ -2180,6 +2193,12 @@ namespace ConditioningControlPanel
 
         private void OnLuckyProc(object? sender, LuckyProcEventArgs e)
         {
+            // Perk-announcement opt-out (meadow, 2026-08-18). The roll already happened and the
+            // 10x/20x is already banked by the time this fires - all that is suppressed is the
+            // toast. The flash's gold glow and the bubble's sparkle burst still mark the proc in
+            // place, which was the reporter's own point about this one being redundant.
+            if (App.PerkNotificationsSuppressed) return;
+
             Dispatcher.BeginInvoke(() =>
             {
                 try

@@ -124,11 +124,15 @@ public class AppSettingsAccountSectionRenderTests
     [Fact]
     public void NotificationsSectionOwnsTheIntakeNudgeToggle()
     {
-        // Its one row, and the only notification preference AppSettings has.
+        // Both rows. ChkIntakeNudge is read at launch by MainWindow.Marquee and round-trips
+        // through LoadSettings/SaveSettings; ChkSuppressPerkNotifications is the live editor
+        // the lucky-proc / Pink Rush / quest-complete raise sites all gate on. Either one going
+        // missing still compiles and then either never nudges or silently un-mutes the app.
         OnStaThread(() =>
         {
             var s = new NotificationsSettingsSection();
             Assert.NotNull(s.ChkIntakeNudge);
+            Assert.NotNull(s.ChkSuppressPerkNotifications);
         });
     }
 }

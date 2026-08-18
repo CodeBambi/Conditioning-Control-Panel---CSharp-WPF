@@ -3352,10 +3352,13 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Plays a random chime sound for lucky flash (10x XP)
+        /// Plays a random chime sound for lucky flash (10x XP).
+        /// Silent while the perk-announcement opt-out is on (meadow, 2026-08-18) - the 10x is
+        /// still awarded, and the flash still wears its gold glow to say so.
         /// </summary>
         private void PlayLuckyFlashSound()
         {
+            if (App.PerkNotificationsSuppressed) return;
             try
             {
                 var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");

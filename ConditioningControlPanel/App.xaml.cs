@@ -619,6 +619,19 @@ namespace ConditioningControlPanel
         public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true) || (SubscribeStar?.IsAuthenticated == true) || HasCloudIdentity;
 
         /// <summary>
+        /// The gate for every "you just got a perk payout" announcement - the lucky 10x/20x XP
+        /// toasts and their chimes, the Pink Rush popup and the quest-complete popup and sound.
+        /// True means announce nothing; the payouts themselves are never gated on it (see
+        /// <see cref="Models.AppSettings.SuppressPerkNotifications"/> for the full contract).
+        ///
+        /// Null-safe and read at raise time, not cached: the raise sites live in services that
+        /// run before and after Settings exists, and no settings must read as "announce" so a
+        /// startup-order accident can never silently mute the app.
+        /// </summary>
+        public static bool PerkNotificationsSuppressed
+            => Settings?.Current?.SuppressPerkNotifications == true;
+
+        /// <summary>
         /// Whether a conditioning session is currently running. Set by MainWindow.
         /// </summary>
         public static bool IsSessionRunning { get; set; }
