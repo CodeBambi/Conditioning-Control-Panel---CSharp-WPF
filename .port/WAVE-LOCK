@@ -1,0 +1,6 @@
+WAVE: 46
+PACKETS: SP-106-moving-effect
+LANES: 1
+BASE: 44c2200b
+GATE: validate-wave.mjs WAVE OK; floor 1372/87
+OPENED: 2026-08-18T18:29:55Z
