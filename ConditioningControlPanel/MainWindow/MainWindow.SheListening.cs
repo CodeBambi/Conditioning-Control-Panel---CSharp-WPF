@@ -333,7 +333,7 @@ namespace ConditioningControlPanel
             RefreshWakeEngineStatus();
             RefreshSheListeningDeviceChips();
             RefreshSheListeningStatus();
-            RefreshPremiumGate(SheListeningTab.SheListeningGate);
+            RefreshPremiumGate(SheListeningTab.SheListeningGate, "voice");
         }
 
         /// <summary>

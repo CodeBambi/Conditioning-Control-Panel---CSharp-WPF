@@ -110,7 +110,8 @@ public partial class HapticsSetupWindow : Window
     {
         if (_connecting || App.Haptics == null) return;
 
-        if (App.Patreon?.HasPremiumAccess != true)
+        if (App.Patreon?.HasPremiumAccess != true
+            && App.DailyFree?.IsFreeToday("haptics") != true)
         {
             ShowResult(false, Loc.Get("gate_premium_locked"), Loc.Get("msg_haptic_feedback_patreon_only"),
                 Array.Empty<string>());

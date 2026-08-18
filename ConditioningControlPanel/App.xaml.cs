@@ -2915,7 +2915,8 @@ namespace ConditioningControlPanel
                 var s = Settings?.Current;
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
-                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true;
+                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true
+                                           || DailyFree?.IsFreeToday("takeover") == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
                     {
                         Autonomy?.Start();
