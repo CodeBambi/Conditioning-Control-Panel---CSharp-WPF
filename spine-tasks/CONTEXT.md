@@ -6,11 +6,11 @@
 
 ---
 
-### Wave 36 (**IN FLIGHT 2026-08-18 — SP-092 and SP-093 reported, SP-091 still implementing. NOT LANDED, and the lock stays live until every lane reports.**)
+### Wave 36 (**RAN 2026-08-18 — three lanes, ALL REPORTED, lock cleared. NOT LANDED: a fresh session certifies it, because the context that ran the work must never certify it.**)
 
 | Packet | Branch | Head | Declared delta |
 |---|---|---|---|
-| SP-091-navigation-shell | `lane/SP-091-navigation-shell` | implementing after the plan amendment | unit +3, headless +2 |
+| SP-091-navigation-shell | `lane/SP-091-navigation-shell` | `5cd38179` (base `21e381fe`, the amended packet) | unit +3, headless **+4** |
 | SP-092-entitlement-capability | `lane/SP-092-entitlement-capability` | `faa8454f` | unit +26, headless +0 |
 | SP-093-tray-capability | `lane/SP-093-tray-capability` | `8ca24761` | unit +9, headless +0 |
 
@@ -73,6 +73,44 @@ searched for a dedicated validate endpoint and found only `/patreon/validate`, w
 `ConditioningControlPanel_Patreon_v1`) — and WPF itself says that endpoint *"doesn't know about V2
 users"* (`MainWindow/MainWindow.xaml.cs:3021`). A disk check of the owner's data directory settles it:
 `auth_token.dat` present, **no `patreon_auth.dat` at all**.
+
+
+**SP-091 built the shell and declared +4 headless, not the +2 the orchestrator ratified — correctly.**
+The +2 arithmetic assumed `FeaturePopupHeadlessTests` fact 1 would die with the demo-card gesture; its W-04
+chrome assertions have no other home, so the lane kept the fact and retired only the gesture: 7 retirements,
+not 8. **Declaring the number it actually observed rather than the one it was handed is exactly the behaviour
+the floor-delta mechanism exists to produce**, and it said so rather than quietly matching the ratification.
+
+Amendment 1 was taken in full: `capture.ps1`, `checks.json` and `self-test.ps1` re-anchored in the same commit
+as the demo-card retirement, so the tree is never in a state where the harness is broken. The self-test passes
+its seeded regression on the NEW anchor — seeded `FAIL rail-door-selected-border 0/918`, restored
+`PASS 888/918` — which is what makes it a real re-anchor rather than a string rename. The harness now drives
+**two** real navigations (System door for the capability read, Companion door for the selected state) and
+confirms each by a UIA route read before any pixel is captured. The polled window wait was left untouched.
+
+Amendment 2 was verified by the lane against source before being accepted (`StudioTabView.xaml.cs:490-491`
+does pass `() => App.Settings?.Current?.SpiralEnabled`), and D5/D6 now record the missing live dot and
+right-click toggle as **gaps whose reason is "the port has nothing to wire yet"**, explicitly stating that the
+`Visuals` exception does not generalise. Thirteen divergences are recorded in `wpf-surface-reachability.md` §9.
+
+**`LoomLaunch.cs` is now the only `DtrhLoomWindow` construction site**, and `--loom-demo` calls it instead of
+constructing inline — so the CLI demonstrator and the user gesture are literally one path, with the four
+diagnostic log strings byte-identical and idempotent refocus inherited. That is the reuse the packet asked for
+rather than a second launcher beside the first.
+
+**Two defects were surfaced ONLY by the headed captures**, which is the argument for the harness in one line:
+doors sized to their labels (a ragged rail, and a harness measurement band that depended on label length) and
+the Studio blurb overrunning its column. Neither is visible to a headless frame, and both were fixed.
+
+**Bite proof:** mutating one line (`_doors[ShellRoutes.Studio] = DoorCompanion;`) reds 6 facts; restore gave
+`git diff --exit-code` 0 on a clean tree with 39 passing. The headline fact asserts the **concrete
+`DtrhLoomWindow`** type reaches the launch seam, so a stand-in cannot satisfy it.
+
+**Two stale docs are owed at land, both outside every lane's File Scope and made stale by exactly this
+rename:** `client/docs/verification-harness.md` and the root `CLAUDE.md` still document
+`-Surface dashboard-card -State lit`. **No test reads either, so nothing is red — which is precisely why it
+would be missed.** `MainWindowViewModel` and `FeaturePopupManager` survive as named A-014 infrastructure-only
+residues, undeletable in-lane because nine call sites live in out-of-scope test files.
 
 
 ### Wave 35 (**LANDED 2026-08-15 — single lane, SP-090. Floor 1048 → 1052. Second consecutive clean ladder pass.**)
