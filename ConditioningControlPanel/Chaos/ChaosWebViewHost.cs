@@ -782,12 +782,29 @@ internal sealed class ChaosWebViewHost : IDisposable
     /// <para>An older Chromium that does not know the switch ignores it, which is the pre-fix
     /// behaviour - there is no version floor to guard.</para>
     /// </summary>
-    private static string PrefersReducedMotionArgument()
+    private string PrefersReducedMotionArgument()
     {
         var setting = Models.MotionLevel.Full;
         try { setting = App.Settings?.Current?.MotionLevel ?? Models.MotionLevel.Full; }
         catch { /* no settings yet = the default, Full */ }
-        return PrefersReducedMotionArgument(setting);
+        var arg = PrefersReducedMotionArgument(setting);
+
+        // THE BREADCRUMB THAT SETTLES THE NEXT REPORT, at Information because Serilog's floor is
+        // Information (App.xaml.cs) and a Debug line can never reach a user's bug report. It is
+        // written ONLY when the override actually changed something - the OS flag was off and we
+        // overruled it - so it is silent for everyone whose Windows animations are on, and its
+        // presence in an activity log is the confirmation that this machine is one of the ones
+        // #980 was about.
+        try
+        {
+            if (!SystemParameters.ClientAreaAnimation && setting != Models.MotionLevel.Off)
+                App.Logger?.Information(
+                    "{Tag}: Windows animation effects are OFF; hosted page is kept in motion anyway ({Arg}) - #980",
+                    _opts.LogTag, arg);
+        }
+        catch { /* the flag is unreadable on some sessions; the argument still stands */ }
+
+        return arg;
     }
 
     /// <summary>The pure half of <see cref="PrefersReducedMotionArgument()"/>, split out the same
