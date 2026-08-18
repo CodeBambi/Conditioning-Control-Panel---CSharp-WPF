@@ -117,12 +117,22 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             var clips = App.BrainDrain?.AudioFileCount ?? 0;
             TxtClipCount.Text = Localization.Loc.GetF("st4_braindrain_clips_loaded_0", clips);
             NoAudioHint.Visibility = clips == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // The literal path, straight off the service. Read here rather than hardcoded in XAML
+            // because BrainDrainService.AudioFolderPath is the ONLY definition of it, and it is
+            // AppDomain.BaseDirectory-relative: a per-user install, a machine-wide install and a
+            // dev `dotnet run` all resolve somewhere different, and a wrong path printed in the UI
+            // is worse than none (support would be chasing a folder that does not exist).
+            try { TxtAudioFolderPath.Text = Services.BrainDrainService.AudioFolderPath; }
+            catch { TxtAudioFolderPath.Text = string.Empty; }
         }
 
         /// <summary>
         /// Open the clip folder in Explorer, creating it first. Same shape as
         /// <c>SpiralFeatureControl.BtnOpenSpiralFolder_Click</c> (ProcessStartInfo with
         /// UseShellExecute, after a CreateDirectory) so Explorer never opens onto nothing.
+        /// <para>Wired from BOTH the library header button and the empty-state banner's copy of
+        /// it - one handler, so the two can never drift apart.</para>
         /// </summary>
         private void BtnOpenAudioFolder_Click(object sender, RoutedEventArgs e)
         {
