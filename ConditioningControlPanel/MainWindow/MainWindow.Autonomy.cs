@@ -490,7 +490,9 @@ namespace ConditioningControlPanel
                 hint.Foreground = amber;
                 hint.Text = App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
                     ? "No microphone detected — connect one to use this."
-                    : "Speech model not installed yet — voice prompts stay off until it is.";
+                    : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
+                        ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
+                        : "Speech model not installed yet — voice prompts stay off until it is.";
                 return;
             }
             if (on && (s!.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled))
@@ -674,7 +676,9 @@ namespace ConditioningControlPanel
                 BambiTakeoverTab.TxtAutonomyVoiceHint.Text =
                     App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
                         ? "No microphone detected — connect one to use this."
-                        : "Speech model not installed yet — voice prompts stay off until it is.";
+                        : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
+                            ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
+                            : "Speech model not installed yet — voice prompts stay off until it is.";
             }
             else
             {

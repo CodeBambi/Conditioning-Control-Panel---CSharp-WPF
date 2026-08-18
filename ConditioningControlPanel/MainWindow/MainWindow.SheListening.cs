@@ -457,7 +457,9 @@ namespace ConditioningControlPanel
                 SheListeningTab.SL_StatusSub.Text =
                     App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
                         ? "No microphone detected — connect one to use voice."
-                        : "Offline speech model not installed yet — voice stays off until it is.";
+                        : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
+                            ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
+                            : "Offline speech model not installed yet — voice stays off until it is.";
                 return;
             }
 
