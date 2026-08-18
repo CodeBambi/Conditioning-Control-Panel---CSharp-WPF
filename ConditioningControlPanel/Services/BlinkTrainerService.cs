@@ -110,12 +110,25 @@ public class BlinkTrainerService : IDisposable
                 return false;
             }
 
-            // Overlay placement. Blink DETECTION itself is monitor-independent
-            // (it reads the camera, not the screen) — it is the gaze targeting
-            // that needs a calibrated screen, so the overlay is pinned to one
-            // screen. Order: explicit Monitor-dropdown pick, else the monitor
-            // the calibration was recorded on, else the normal spread.
+            // Overlay placement. Blink DETECTION is monitor-independent (it reads the
+            // camera, not the screen), so nothing here needs the calibrated screen —
+            // #979: pinning to the calibration blob stranded the overlay on whichever
+            // display happened to be calibrated. Order now: explicit "Tracking monitor"
+            // pick, else the app-wide convention (DualMonitorEnabled ? all : primary).
             var screens = GazeContentScreenPolicy.ResolveGazeReactiveScreens(settings);
+            if (screens.Length == 0)
+            {
+                LastError = Loc.Get("blink_trainer_error_overlay_create");
+                App.Logger?.Warning("BlinkTrainer: no usable screens resolved — refusing to start");
+                return false;
+            }
+            // Information (not Debug): the Serilog floor in the field is Information, and
+            // wrong-monitor reports are untriageable without knowing what we resolved.
+            App.Logger?.Information(
+                "BlinkTrainer: overlay screens resolved -> {Screens} (trackingMonitor={Pick}, dualMonitor={Dual})",
+                string.Join(", ", screens.Where(s => s != null).Select(s => $"{s.DeviceName}{(s.Primary ? " [primary]" : "")}")),
+                settings.WebcamCalibrationScreen,
+                settings.DualMonitorEnabled);
 
             var opacity = Math.Clamp(settings.BlinkTrainerOpacity, 1, 100) / 100.0;
             foreach (var screen in screens)
