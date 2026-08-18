@@ -21,25 +21,22 @@ public sealed record FlashEvent(int Ordinal, int ImagesDrawn, DateTimeOffset At)
 /// (<c>MainWindow/MainWindow.StartStop.cs:178</c>) and the first one <c>StopEngineCore</c> stops
 /// (<c>:305</c>, "Stop flash first").
 ///
-/// <para><b>WHAT THIS PORTS, AND WHAT IT DELIBERATELY DOES NOT.</b> WPF's flash has two halves.
-/// The first is a scheduler over the user's image pool: an interval derived from a dial, a
-/// variance band, a floor, and a draw of N images per firing. That half is pure, and it is
-/// ported here, exactly. The second half puts those images on the screen ABOVE every other
-/// application — one layered, always-on-top, <c>WS_EX_TRANSPARENT</c> click-through window per
-/// flash, re-asserted to <c>HWND_TOPMOST</c> as other layers fight it
-/// (<c>Services/Flash/FlashService.cs:3615</c>, <c>:3667-3668</c>, <c>:3862-3868</c>,
-/// <c>:206-240</c>). <b>That is a compositor, and this packet does not build one.</b>
-/// <c>docs/constitution.md</c> classes the previous port attempt as failure evidence largely
-/// because of overlay work, so the drawing half is a platform capability with its own packet
-/// and its own headed evidence.</para>
+/// <para><b>WHAT THIS PORTS.</b> WPF's flash has two halves. The first is a scheduler over the
+/// user's image pool: an interval derived from a dial, a variance band, a floor, and a draw of N
+/// images per firing. That half is pure, and it is ported here, exactly (SP-098). The second half
+/// puts those images on the screen ABOVE every other application — one layered, always-on-top,
+/// <c>WS_EX_TRANSPARENT</c> click-through window per flash, re-asserted to <c>HWND_TOPMOST</c> as
+/// other layers fight it (<c>Services/Flash/FlashService.cs:3615</c>, <c>:3667-3668</c>,
+/// <c>:3862-3868</c>, <c>:206-240</c>). That half is a platform capability with its own evidence
+/// (SP-099's <see cref="Overlay.IOverlayPresence"/>), and SP-100 hands the drawn paths to it.</para>
 ///
-/// <para><b>So what does the user actually see?</b> The truth: the module's dot lights when the
-/// schedule is really armed, the panel counts the flashes as they come due and says how many
-/// images each one drew, it says out loud when the pool is empty, and it says out loud that the
-/// on-screen half is not ported. Nothing here pretends a flash was shown. A counter that
-/// advanced without an overlay while the UI implied pictures had appeared would be the
-/// fake-available shape the capability contract bans; a counter that says exactly what
-/// happened is not.</para>
+/// <para><b>The drawing is downstream, and it never leads.</b> The pacing, the pool, the count and
+/// the stop are exactly what they were before a surface existed, and they do not consult one: a
+/// flash comes due, draws from the pool, counts, re-schedules and — if there is somewhere to draw —
+/// appears. Where there is no overlay (every non-Windows build refuses one honestly, SP-099 D56)
+/// the flash still comes due, still counts and still stops; it is a flash nobody sees, which is
+/// neither a crash nor a refusal to run. Nothing in this class pretends the difference away: the
+/// presenter keeps the surface's typed <c>CapabilityState</c> verbatim.</para>
 ///
 /// <para><b>Threading.</b> The schedule is a one-shot on an injected
 /// <see cref="ISessionClock"/>, re-armed at the tail of every firing — WPF's shape
@@ -65,6 +62,7 @@ public sealed class FlashImagesEffect : ISessionEffect
     private readonly ISessionClock _clock;
     private readonly IFlashImagePool _pool;
     private readonly PersistenceStore<SessionPresetDocument> _preset;
+    private readonly IFlashSurface? _surface;
     private readonly Random _random;
     private readonly object _gate = new();
 
@@ -80,7 +78,8 @@ public sealed class FlashImagesEffect : ISessionEffect
         ISessionClock clock,
         IFlashImagePool pool,
         PersistenceStore<SessionPresetDocument> preset,
-        Random? random = null)
+        Random? random = null,
+        IFlashSurface? surface = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(ui);
@@ -93,6 +92,7 @@ public sealed class FlashImagesEffect : ISessionEffect
         _pool = pool;
         _preset = preset;
         _random = random ?? new Random();
+        _surface = surface;
     }
 
     /// <inheritdoc/>
@@ -229,6 +229,7 @@ public sealed class FlashImagesEffect : ISessionEffect
         }
 
         CancelPendingSchedule();
+        HideSurfaces();
         if (!wasArmed)
         {
             return;
@@ -236,6 +237,31 @@ public sealed class FlashImagesEffect : ISessionEffect
 
         _owner.Cancel();
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Take every surface off the screen. WPF's stop closes every live flash window
+    /// (<c>FlashService.cs:3878-3884</c>), and that is the half of stop the user can see: a panic
+    /// button that leaves pictures on the screen has not stopped anything.
+    ///
+    /// <para>It goes through the SAME dispatch boundary as the draw, because a native window
+    /// belongs to the thread that made it, and disarm is reached from the UI thread (the button,
+    /// the rack toggle) AND from a teardown thread. Skip-until-bound applies: with no UI there is
+    /// no surface, because the draw could never have happened either.</para>
+    ///
+    /// <para><b>Called from <see cref="Disarm"/> and from nowhere else</b>, deliberately: teardown
+    /// reaches disarm too (<c>SessionParticipant.StopAsync</c> -> <c>SessionEngine.Stop</c> ->
+    /// <c>Disarm</c>), so hiding from the cancellation callback as well would take every surface
+    /// down twice per stop. Once is the fact the surface facts assert.</para>
+    /// </summary>
+    private void HideSurfaces()
+    {
+        if (_surface is null || !_ui.IsBound)
+        {
+            return;
+        }
+
+        _ui.Post(_surface.HideAll);
     }
 
     /// <summary>
@@ -356,7 +382,7 @@ public sealed class FlashImagesEffect : ISessionEffect
         // The per-flash signal is Fired, and Fired ALONE, because Fired goes through the
         // dispatch boundary and Changed does not. Raising Changed from this thread would hand
         // a clock-thread callback to whatever UI subscribed to it.
-        Project(generation, fired);
+        Project(generation, fired, drawn);
     }
 
     /// <summary>
@@ -373,11 +399,23 @@ public sealed class FlashImagesEffect : ISessionEffect
     }
 
     /// <summary>
-    /// The UI projection. Skip-until-bound (contract §5.3): the effect can be armed before the
-    /// window exists, and a projection is skipped then, never faulted. The liveness re-check
-    /// lives INSIDE the posted delegate (§5.5) so a post that lands during teardown is inert.
+    /// The UI projection, and — since SP-100 — the DRAW. Skip-until-bound (contract §5.3): the
+    /// effect can be armed before the window exists, and a projection is skipped then, never
+    /// faulted. The liveness re-check lives INSIDE the posted delegate (§5.5) so a post that lands
+    /// during teardown is inert.
+    ///
+    /// <para><b>Why the drawn paths ride here and not on <see cref="FlashEvent"/>.</b> The event is
+    /// content-free by construction — a COUNT, never a file name, which is the media-logging rule
+    /// the whole port holds. The surface needs the paths themselves, so they are handed straight to
+    /// it, on the one thread that may touch a native window, and they are never carried by anything
+    /// a log or a UI can subscribe to.</para>
+    ///
+    /// <para>The surface is drawn FIRST and <see cref="Fired"/> raised second: the visible half of a
+    /// flash is the user's outcome, and it must not be hostage to whatever a UI subscriber does. The
+    /// order is a property a fact holds (<c>FlashSurfacePresenterTests</c>), not a comment — swapping
+    /// these two lines reds the suite.</para>
     /// </summary>
-    private void Project(int generation, FlashEvent fired)
+    private void Project(int generation, FlashEvent fired, IReadOnlyList<string> drawn)
     {
         if (!_ui.IsBound || !_owner.IsLive(generation))
         {
@@ -386,10 +424,13 @@ public sealed class FlashImagesEffect : ISessionEffect
 
         _ui.Post(() =>
         {
-            if (_owner.IsLive(generation))
+            if (!_owner.IsLive(generation))
             {
-                Fired?.Invoke(fired);
+                return;
             }
+
+            _surface?.Show(drawn);
+            Fired?.Invoke(fired);
         });
     }
 

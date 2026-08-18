@@ -87,4 +87,34 @@ public static class OverlayReasonCodes
     /// <summary>The presence was disposed; its window is gone and it will never present another.
     /// Truthful terminal state, never a silent no-op.</summary>
     public const string OverlayPresenceDisposed = "overlay-presence-disposed";
+
+    /// <summary>
+    /// The OS enumerated no display, so there is no rectangle a surface could legally be placed
+    /// on. Distinct from <see cref="OverlayMechanismAbsent"/> on purpose: this build may have a
+    /// perfectly good backend and simply have nowhere to put a window (a session with no attached
+    /// display), and a caller's response to the two is different.
+    /// </summary>
+    public const string OverlayNoDisplay = "overlay-no-display";
+
+    /// <summary>
+    /// A frame was offered whose pixel size is not the presented surface's size. Stretching it
+    /// would put a rectangle on the user's screen that nobody asked for and would hide a stale
+    /// frame behind a plausible picture; refusing names the mismatch instead (SP-100).
+    /// </summary>
+    public const string OverlayFrameSizeMismatch = "overlay-frame-size-mismatch";
+
+    /// <summary>
+    /// The drawing mechanism itself refused: no device context, no DIB section, or the blit
+    /// returned FALSE. The detail carries the failing call and the Win32 last-error.
+    /// </summary>
+    public const string OverlayPaintRefused = "overlay-paint-refused";
+
+    /// <summary>
+    /// The blit reported success and the OS does NOT hold the frame's pixels in the surface
+    /// afterwards. This is the draw-side twin of
+    /// <see cref="OverlayNotComposited"/>: without it, "the surface was painted" would mean
+    /// "BitBlt returned TRUE", which is the same grade of evidence as the first attempt's
+    /// <c>void Show()</c>.
+    /// </summary>
+    public const string OverlayContentNotHeld = "overlay-content-not-held";
 }

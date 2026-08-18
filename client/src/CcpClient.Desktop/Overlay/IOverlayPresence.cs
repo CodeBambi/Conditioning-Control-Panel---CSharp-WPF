@@ -26,13 +26,17 @@ namespace CcpClient.Desktop.Overlay;
 /// <c>docs/constitution.md</c> classes that tree as failure evidence largely because of this
 /// subsystem.</para>
 ///
-/// <para><b>What Available still cannot mean.</b> That anything is DRAWN — this packet puts no
-/// content on the surface and wires it to no effect. That a human SEES it: composited pixels
-/// depend on DWM, on exclusive-fullscreen and DirectX applications, on Magnifier, on RDP and
-/// mirror drivers, and every OS query above can answer yes while a screen shows nothing. And that
-/// a real pointer passes through: the hit test is the window manager's routing question, asked;
-/// it is not delivered input. Those three are headed claims
-/// (<c>client/docs/verification-harness.md</c>) and nothing here discharges them.</para>
+/// <para><b>What Available still cannot mean.</b> That a human SEES it: composited pixels depend on
+/// DWM, on exclusive-fullscreen and DirectX applications, on Magnifier, on RDP and mirror drivers,
+/// and every OS query above can answer yes while a screen shows nothing. And that a real pointer
+/// passes through: the hit test is the window manager's routing question, asked; it is not
+/// delivered input. Both are headed claims (<c>client/docs/verification-harness.md</c>) and nothing
+/// here discharges them.</para>
+///
+/// <para><b>Content (SP-100).</b> <see cref="Paint"/> puts pixels on a presented surface, and its
+/// <see cref="CapabilityState.Available"/> is earned the same way as every other: the operating
+/// system is asked for the surface's content back and returns the frame. That is one step further
+/// than SP-099 went and one step short of a human seeing it.</para>
 ///
 /// <para><b>What a caller does with Unavailable.</b> Not draw. There is no lesser overlay to
 /// degrade to — a surface that is invisible, buried, or swallowing clicks is worse for the user
@@ -63,6 +67,43 @@ public interface IOverlayPresence : IDisposable
     /// afterwards and answers the new way. It never means the style write returned.</para>
     /// </summary>
     CapabilityState SetClickThrough(bool clickThrough);
+
+    /// <summary>
+    /// Puts pixels on a presented surface.
+    ///
+    /// <para><see cref="CapabilityState.Available"/> means the operating system was asked for the
+    /// surface's content BACK afterwards and returned the frame. It never means the blit returned
+    /// TRUE — "the draw call succeeded" is the same grade of evidence as the first attempt's
+    /// <c>void Show()</c>, and a surface that is present, on top, and holding nothing is the
+    /// failure this whole capability exists to make impossible.</para>
+    ///
+    /// <para><b>This is the content path, and it is deliberately NOT
+    /// <see cref="Present"/>.</b> <see cref="Present"/> walks the OS's top-level z-order and asks
+    /// the window manager's hit test in both polarities; that is right once per placement and
+    /// wrong per frame. <see cref="Paint"/> touches no style, walks no z-order and asks no hit
+    /// test. A caller shows a surface once and paints it; it never re-presents to change
+    /// content.</para>
+    ///
+    /// <para>The frame's pixel size must equal the presented surface's size
+    /// (<see cref="OverlayReasonCodes.OverlayFrameSizeMismatch"/> otherwise): this capability
+    /// scales nothing, because a scaler here would silently decide the port's DPI policy on a
+    /// surface whose coordinates are physical pixels (SP-099 divergence D55).</para>
+    /// </summary>
+    CapabilityState Paint(OverlayFrame frame);
+
+    /// <summary>
+    /// Re-asserts the topmost band for a surface that is already on screen — WPF's
+    /// <c>ForceTopmost</c> (<c>Services/Flash/FlashService.cs:3867</c>), which the shipping product
+    /// drives on a roughly one-second cadence because the band is contested and an already-showing
+    /// flash is otherwise briefly buried (<c>:206-243</c>).
+    ///
+    /// <para><b>It returns nothing, on purpose.</b> It is one <c>SetWindowPos</c> and it confirms
+    /// NOTHING: it does not re-ask the z-order, the hit test or the alpha. Returning a
+    /// <see cref="CapabilityState"/> here would be a claim with no round-trip behind it, which is
+    /// the shape this interface exists to refuse. A caller that needs the fact calls
+    /// <see cref="Present"/>, which earns it.</para>
+    /// </summary>
+    void Reassert();
 
     /// <summary>
     /// Takes the surface off the screen, keeping the window for the next

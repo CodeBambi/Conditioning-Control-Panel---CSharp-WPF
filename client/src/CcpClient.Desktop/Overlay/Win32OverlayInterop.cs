@@ -63,6 +63,19 @@ internal static class Win32OverlayInterop
 
     public const uint GwHwndnext = 2;
 
+    /// <summary>The window is asked to repaint. Serviced from the retained frame so an overlay
+    /// that the OS invalidates does not go blank (SP-100).</summary>
+    public const uint WmPaint = 0x000F;
+
+    /// <summary>Plain copy. The only raster op this capability uses: a frame replaces the
+    /// surface, it is never blended into it (blending is the window's uniform LWA_ALPHA).</summary>
+    public const int Srccopy = 0x00CC0020;
+
+    /// <summary>Uncompressed, no palette.</summary>
+    public const int BiRgb = 0;
+
+    public const uint DibRgbColors = 0;
+
     public const int SmCmonitors = 80;
     public const int SmCxscreen = 0;
     public const int SmCyscreen = 1;
@@ -104,6 +117,47 @@ internal static class Win32OverlayInterop
     {
         public int X;
         public int Y;
+    }
+
+    /// <summary>A 32bpp top-down <c>BI_RGB</c> DIB header. The <c>biHeight</c> a caller supplies is
+    /// NEGATIVE: a top-down section means the frame's first row is the surface's first row, so no
+    /// row flip is needed anywhere between an image decoder and the screen.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapInfoHeader
+    {
+        public uint biSize;
+        public int biWidth;
+        public int biHeight;
+        public ushort biPlanes;
+        public ushort biBitCount;
+        public uint biCompression;
+        public uint biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public uint biClrUsed;
+        public uint biClrImportant;
+    }
+
+    /// <summary>Header plus the three colour masks the struct reserves; unused at
+    /// <c>BI_RGB</c> but part of the layout the API reads.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapInfo
+    {
+        public BitmapInfoHeader bmiHeader;
+        public uint bmiColors0;
+        public uint bmiColors1;
+        public uint bmiColors2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PaintStruct
+    {
+        public nint hdc;
+        public int fErase;
+        public Rect rcPaint;
+        public int fRestore;
+        public int fIncUpdate;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] rgbReserved;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -189,4 +243,42 @@ internal static class Win32OverlayInterop
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern nint GetModuleHandleW(string? name);
+
+    // ---- the content mechanism (SP-100) ----------------------------------------------------
+    // GDI, deliberately: the surface is composited from a uniform LWA_ALPHA, which is exactly the
+    // mode in which ordinary painting into the window's own DC reaches the screen. The alternative
+    // (UpdateLayeredWindow) is mutually exclusive with SetLayeredWindowAttributes and would take
+    // GetLayeredWindowAttributes — the ghost check this capability is built around — away.
+
+    [DllImport("user32.dll")]
+    public static extern nint GetDC(nint window);
+
+    [DllImport("user32.dll")]
+    public static extern int ReleaseDC(nint window, nint dc);
+
+    [DllImport("user32.dll")]
+    public static extern nint BeginPaint(nint window, out PaintStruct paint);
+
+    [DllImport("user32.dll")]
+    public static extern bool EndPaint(nint window, ref PaintStruct paint);
+
+    [DllImport("gdi32.dll")]
+    public static extern nint CreateCompatibleDC(nint dc);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteDC(nint dc);
+
+    [DllImport("gdi32.dll")]
+    public static extern nint SelectObject(nint dc, nint gdiObject);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteObject(nint gdiObject);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern nint CreateDIBSection(
+        nint dc, ref BitmapInfo info, uint usage, out nint bits, nint section, uint offset);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    public static extern bool BitBlt(
+        nint destination, int x, int y, int width, int height, nint source, int sourceX, int sourceY, int rop);
 }

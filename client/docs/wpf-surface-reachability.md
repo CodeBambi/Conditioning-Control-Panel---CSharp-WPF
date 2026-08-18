@@ -719,3 +719,66 @@ cursor mid-suite and fails silently on a locked workstation, so it is a headed g
 and cross-DPI placement, because this machine reports one display; sustained topmost under contention
 (D53); and every part of Linux (D56). **Said once, plainly: nothing has been drawn on this surface,
 and nothing here should be read as saying a flash was shown.**
+
+## SP-100 — the flash draws (D47 closes on Windows; the claim it closes with is named)
+
+SP-098 landed the schedule and said "nothing is drawn". SP-099 landed the surface and said "wired to
+nothing". This packet joins them: the effect hands the paths it drew to the surface, on the one UI
+thread, and the operating system is asked what the surface holds afterwards. **D47 is closed on
+Windows and stays open on Linux (D56).**
+
+**The measurement that decided the content route**, taken on this machine before any of it was
+written (SP-100 `record.md` §1). A `WS_POPUP | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+WS_EX_NOACTIVATE` window at `LWA_ALPHA 255`, painted by `BitBlt` from a top-down 32bpp DIB into
+`GetDC(hwnd)`: the composited desktop carries the painted pixel **with no wait at all**, above the
+shipping WPF product; painting the window while it is HIDDEN is discarded (`GetPixel` returns
+`CLR_INVALID`), so the order must be show-then-paint; a freshly shown, never-painted layered window
+composites as what was underneath it, so show-then-paint has no black-frame artifact;
+`PrintWindow(hwnd, dc, 0)` returns the painted content deterministically while
+`PW_RENDERFULLCONTENT` returned an all-black bitmap on the first call after a show.
+
+**And the measurement that made D57 a pin rather than an argument.** `UpdateLayeredWindow` on this
+window, after `SetLayeredWindowAttributes`, fails with `ERROR_INVALID_PARAMETER` (87) — **until**
+`WS_EX_LAYERED` is cleared and re-set, which is the sequence the API's own documentation prescribes;
+after that it returns TRUE and `GetLayeredWindowAttributes` returns FALSE **for good**. The ghost
+check is therefore exactly two ordinary lines away from silence, and the style toggle on its own is
+harmless (the OS still reports the alpha), so the hazard does not announce itself in halves. A fact
+now asks the alpha on the far side of a paint, requires a full re-`Present` to still earn
+`Available`, and requires the content to survive the re-placement; the mutation above reds all three.
+
+| # | v6.8.1 fact | Port at SP-100 | Reason |
+|---|---|---|---|
+| **D57** | A flash window is a WPF `Window` with `AllowsTransparency = true` — per-pixel alpha through `UpdateLayeredWindow` — carrying an `Image` and an opacity animation (`Services/Flash/FlashService.cs:3611-3625`, `:1274-1281`) | Content is a **GDI `BitBlt` of a B,G,R,X frame into the raw `WS_POPUP` hwnd**, composited at the constant `LWA_ALPHA` SP-099 already sets and already asks the OS to confirm. No `UpdateLayeredWindow`, no per-pixel alpha, and **no Avalonia top-level** | `UpdateLayeredWindow` is mutually exclusive with `SetLayeredWindowAttributes`: taking it would stop `GetLayeredWindowAttributes` answering for the window, and that call is the **ghost check** — the one measured discriminator between a real surface and the defect the first attempt shipped (`CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45`). It would buy per-pixel alpha that WPF's flash does not use: upstream's window is a black-backed rectangle (`:1245`) filled edge to edge by an `Image` pinned to the window's own size (`:1274-1281`) at one uniform opacity. The Avalonia route was rejected for a bigger reason: it REPLACES the hwnd, and with it every SP-099 confirmation (z-order walk, both-polarity hit test, alpha read-back, foreground check are all written against a handle this backend owns), and it is the first attempt's own shape (`CCP.Avalonia/Platform/AvaloniaOverlaySurface.cs:14`) |
+| **D58** | A flash shows **N windows at once**, each at its own random point, `SimultaneousImages` per firing up to 20 (`AppSettings.cs:832`), capped at `MAX_CONCURRENT_FLASH = 10` for the per-flash layered-window path (`FlashService.cs:50`, `:1174-1181`) | Identical: **one surface per image**, one random placement each, cap **10** | The port is on WPF's classic per-flash layered-window path, which is the path the 10 cap exists for. The dial still goes to 20 and the cap still wins, exactly as upstream |
+| **D59** | Window opacity, image scale, flash duration, fade time, glow, solid mode, clickability, hydra and centre-exclusion are **dials** (`AppSettings.cs:749-960`) | Not ported as dials (SP-098 D49); the port uses **WPF's shipped DEFAULT for each** as a constant, cited at its line: opacity 100 % (`:853`), image scale 100 (`:838`), duration 5 s (`:926`), avoid-centre off (`:936`) | A dial nobody can move is worse than a constant nobody can move — it looks configurable and is not. The values are upstream's own defaults, so what a user sees is what an untouched shipping install shows them. Each becomes a real dial when the panel that moves it lands, and none of them changes behaviour today |
+| **D60** | A flash window's lifetime is `FlashDuration * 1000 + 1000` ms and it then **fades out** (`FlashService.cs:1073`, `:1246`, the `IsFadingOut` animation path) | The lifetime is kept **exactly** — 6 s at the shipped default, driven on the injected session clock — and the surface then **leaves with no fade** | A fade is a per-frame animation over a layered window's alpha, and this packet deliberately builds no frame loop: SP-099's own residual says `Present` is wrong per frame, and an animation is the one thing a headless suite cannot verify and a headed capture cannot verify cheaply either. The disappearance is instant instead of over ~0.4 s. **Recorded because it is user-visible**, and because the fade is the natural first job of whatever packet adds an alpha ramp |
+| **D61** | Flash windows are **clickable by default** (`FlashClickable = true`, `AppSettings.cs:772`): clicking one pops it, spawns hydra children and scores XP (`:3667`) | The surface is always **click-through** (`WS_EX_TRANSPARENT`, WPF's other arm at `:3668`) | Pop, hydra, gaze and XP are not ported. A surface that CATCHES clicks and does nothing with them would swallow the user's input over whatever it covers — the exact desktop-breaking failure `overlay-input-not-passing-through` exists to refuse. WPF's own click-through arm is what a user who turns clicking off gets today, so this is upstream's other configuration rather than a new behaviour |
+| **D62** | Topmost is re-asserted about **once a second** by the chaos layer's `RaiseAllToFront` (`FlashService.cs:206-243`) | **Same cadence**, driven by the injected session clock, for exactly as long as a surface is up — and no timer at all when nothing is showing | This narrows SP-099's D53, which recorded on-demand-only re-assertion. The contender is not hypothetical: measured twice on this machine, the window that owned the point under the surface was the shipping WPF product, topmost. A six-second flash that loses the band after one second is a flash nobody sees. `IOverlayPresence.Reassert()` returns **nothing**, because it confirms nothing — it is one `SetWindowPos`, and a `CapabilityState` there would be a claim with no round-trip behind it |
+| **D63** | Images decode through WPF's imaging stack (WIC), and decode failures are retried with fresh picks (`LoadImagesUntilAsync`) | Images decode through **GDI+ (`gdiplus.dll`)** at display size, over black. A path that cannot be decoded contributes **no surface**, and the flash still counts and still re-schedules. **WebP does not decode**, though it is in the pool's extension list | GDI+ is part of Windows, needs no package, and — the reason it was chosen — works in a process with **no Avalonia runtime**, which is what lets the entire draw path be proven in the pure-logic test project rather than only where a UI toolkit has been initialised. The WebP gap is real and named: it is a decoder swap (WIC, or Avalonia's Skia once a Skia-backed headless rig exists), not a design change. Composing over black is upstream's own composition — its flash window's background is `Brushes.Black` (`:1245`) — and it is what stops a transparent PNG showing the desktop through a shape nobody asked for on a surface with one uniform alpha |
+| **D64** | Not applicable: WPF's own window is the content host, so there is no second read | `Paint` earns `Available` only after the OS is asked for the surface's content **back** and returns the frame at 1024 spread sample points including all four corners and the centre | Symmetric with every other claim in this capability. Measured consequence, stated rather than hidden: because the read-back travels through a DIB with the same header as the frame, a **consistent orientation error is invisible to it** — the mutation that flips `biHeight` passes the product's own confirmation and is caught only by the test's independent instruments (`PrintWindow` and the composited desktop). That is the argument for the second instrument, and it is why the test frame is two-tone |
+
+**What SP-100 proves, and where it stops.** Proven from the operating system, in the pure-logic test
+project, with instruments that share no declaration with the product: the surface's own device
+context holds the painted frame; the OS's own `PrintWindow` rendering of that window is the frame,
+every pixel of it, the right way up; **the composited desktop carries the frame at the surface's
+rectangle**, both halves, with no wall-clock wait, mapped through the OS's own DPI ratio; withdrawing
+takes it back off the composited desktop; and a real `.png` on disk, through the product's decoder
+and presenter, reaches the composited desktop and leaves it when the flash is hidden. Proven with no
+screen involved: `Present` is called once per surface per flash and never per frame, `IsPresenting`
+is never consulted, the stagger is 300 ms, the lifetime is 6 s, the cadence is 1 s and stops with the
+last surface, the cap is 10, and stop takes every surface off at once and cancels the ones that had
+not appeared yet. **Undischarged, and named:** that a **human sees a flash** — a composited desktop
+read from inside the process cannot see a Magnifier, a mirror driver, an exclusive-fullscreen swap
+chain, colour management or a monitor that is physically off, and `presentation-verified` remains the
+orchestrator's headed capture; multi-monitor and cross-DPI placement, since this machine reports one
+display and the port places on the primary only; sustained topmost over minutes of real contention;
+the fade that no longer happens (D60); WebP (D63); and **every part of Linux**, where the overlay
+refuses by design and the flash runs, counts and stops with nothing on screen.
+
+**One consequence outside this packet's File Scope, reported not fixed.**
+`client/src/CcpClient.Desktop/Views/Pages/StudioPage.axaml:152` still tells the user *"Showing the
+images over your other windows is not ported yet: that needs an always-on-top click-through surface
+this build does not have. The schedule above is real and runs - it just has nowhere to draw."* On
+Windows that sentence is now **false**, and on Linux it is still exactly right. `Views/**` is outside
+SP-100's File Scope, so the text is untouched here; the follow-up is one string that has to say both
+halves — drawn where the overlay is available, absent and named where it refuses.

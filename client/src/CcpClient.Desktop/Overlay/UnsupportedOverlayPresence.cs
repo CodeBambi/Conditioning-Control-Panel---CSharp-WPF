@@ -45,6 +45,26 @@ public sealed class UnsupportedOverlayPresence : IOverlayPresence
 
     public CapabilityState SetClickThrough(bool clickThrough) => new CapabilityState.Unavailable(_reason);
 
+    /// <summary>
+    /// Refused like everything else. This is the member most likely to be quietly turned into a
+    /// no-op "because drawing nowhere harms nothing" — which is precisely the first attempt's
+    /// Linux surface, whose own doc calls it a seam where "overlay operations degrade to logged
+    /// no-ops". A caller must be able to tell "the frame went to a surface" from "the frame went
+    /// nowhere", or the effect that owns it cannot report the truth to the user.
+    /// </summary>
+    public CapabilityState Paint(OverlayFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        return new CapabilityState.Unavailable(_reason);
+    }
+
+    /// <summary>Nothing is presented and nothing can be raised. Deliberately empty and
+    /// deliberately silent — <see cref="IOverlayPresence.Reassert"/> reports nothing on any
+    /// backend, so silence here cannot be mistaken for success.</summary>
+    public void Reassert()
+    {
+    }
+
     public CapabilityState Withdraw() => new CapabilityState.Unavailable(_reason);
 
     public void Dispose()

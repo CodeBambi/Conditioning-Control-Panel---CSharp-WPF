@@ -30,16 +30,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
+    private readonly IFlashSurface _surface;
+    private readonly UiDispatchBoundary _uiDispatch;
 
     public SessionParticipant(
         ParticipantInfrastructure infra,
         string dataDirectory,
         ISessionClock? clock = null,
-        IFlashImagePool? pool = null)
+        IFlashImagePool? pool = null,
+        IFlashSurface? surface = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
         _log = infra.Log;
+        _uiDispatch = infra.UiDispatch;
         ImagesFolder = DtrhUserMedia.ImagesFolder(AssetsRootFor(dataDirectory));
 
         _preset = new PersistenceStore<SessionPresetDocument>(
@@ -56,14 +60,36 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, AssetSelectionStore.FileName),
             AssetSelectionDocument.CurrentSchemaVersion);
 
+        var sessionClock = clock ?? new SystemSessionClock();
+
+        // SP-100: where a flash goes. The presenter is built here rather than in the composition
+        // root because it needs the SAME clock the effect paces on (the stagger, the per-surface
+        // lifetime and WPF's topmost cadence all ride it, so a test drives every one of them with
+        // no wall-clock wait) and the SAME dispatch boundary the effect projects through (a native
+        // window belongs to the thread that made it). Nothing is created until a flash really
+        // draws: the factory inside it runs on the first surface, so a session that never flashes
+        // — and every headless or unit run, where the boundary is unbound and the projection is
+        // skipped — creates no window at all.
+        _surface = surface ?? FlashSurfacePresenter.Product(
+            sessionClock,
+            action =>
+            {
+                if (infra.UiDispatch.IsBound)
+                {
+                    infra.UiDispatch.Post(action);
+                }
+            });
+
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
             infra.UiDispatch,
-            clock ?? new SystemSessionClock(),
+            sessionClock,
             pool ?? new FlashImagePool(
                 AssetsRootFor(dataDirectory),
                 () => (_assetSelection.Current.DisabledAssetPaths, _assetSelection.Current.UseAssetWhitelist)),
-            _preset);
+            _preset,
+            random: null,
+            surface: _surface);
 
         // Rack order is WPF's (StudioTabView.xaml.cs:482-497), and it is also the order
         // StartEngine arms and StopEngineCore disarms in — flash first on both
@@ -80,6 +106,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>The one ported effect (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }
+
+    /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
+    /// reach is a surface nobody can interrogate.</summary>
+    public IFlashSurface Surface => _surface;
 
     /// <summary>The persisted preset store (public so a surface can save a dial it moved).</summary>
     public PersistenceStore<SessionPresetDocument> Preset => _preset;
@@ -106,9 +136,41 @@ public sealed class SessionParticipant : IBackgroundParticipant
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>The surface's teardown goes through the dispatch boundary, not down this thread.</b>
+    /// A native window belongs to the thread that created it — the UI thread — and only that thread
+    /// may destroy it. This method does NOT run there: <c>ShutdownAsync</c> resumes on a thread-pool
+    /// thread, so a synchronous <c>Dispose</c> here would take the wrong-thread branch inside
+    /// <c>Win32OverlayPresence</c>, <c>DestroyWindow</c> would fail, and the honest diagnostic it
+    /// records would be read by nobody.</para>
+    ///
+    /// <para><b>And the bound on it, stated rather than assumed.</b> A post is delivered only while
+    /// the dispatcher is still running. On the ordinary teardown path it is not, so the posted
+    /// teardown does not run and the surfaces are reclaimed by the OPERATING SYSTEM at process exit.
+    /// That is acceptable here and only here, because what the user can see has already been dealt
+    /// with one line above: <c>Engine.Stop()</c> disarms the effect, and disarm posts
+    /// <c>HideAll</c> from the UI thread the user pressed STOP on. The visible-stop guarantee rests
+    /// on that, never on process death.</para>
+    /// </remarks>
     public Task StopAsync()
     {
+        // Stop the session first: its disarm is what takes any live flash off the user's screen
+        // (WPF closes every flash window on stop, Services/Flash/FlashService.cs:3878-3884).
         Engine.Stop();
+        if (_surface is IDisposable disposable)
+        {
+            if (_uiDispatch.IsBound)
+            {
+                _uiDispatch.Post(disposable.Dispose);
+            }
+            else
+            {
+                // Never bound means the projection was always skipped, so no surface was ever
+                // created and there is no window whose thread could be wrong.
+                disposable.Dispose();
+            }
+        }
+
         return Task.WhenAll(_preset.StopAsync(), _assetSelection.StopAsync());
     }
 
