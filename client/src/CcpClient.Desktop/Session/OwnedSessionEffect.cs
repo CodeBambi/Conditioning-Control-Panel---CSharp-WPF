@@ -36,12 +36,18 @@ namespace CcpClient.Desktop.Session;
 /// module's, not the base's.</para>
 ///
 /// <para><b>Threading.</b> <see cref="Gate"/> guards the arm flag and the generation and nothing
-/// slow. <see cref="ReleaseWork"/> is called from a cancellation callback on a teardown thread, so
-/// an implementation of it must itself take no lock of its own and must be safe against another
-/// thread holding the gate. <b>The gate IS taken around the generation-guarded release</b>
-/// (<see cref="ReleaseIfStillOurs"/>, SP-106) — deliberately, and with the reason it cannot
-/// deadlock written out there: nothing in this class holds the gate while waiting on a teardown
-/// thread, because <c>Begin()</c> and <c>Cancel()</c> are called outside it.</para>
+/// slow. <see cref="ReleaseWork"/> is called from a cancellation callback on a teardown thread and
+/// must therefore be lock-free and safe against a thread holding the gate.</para>
+///
+/// <para><b>And that rule is load-bearing in a way SP-106 got wrong once and had to undo.</b> The
+/// operation owner cancels a generation while holding ITS OWN lock
+/// (<c>Lifecycle/OperationRegistry.cs:163-166</c>, <c>:148-158</c>), and the cancellation callback
+/// runs synchronously on that thread — so any lock this class takes inside such a callback is taken
+/// UNDER the owner's. <see cref="Dot"/> takes them the other way round: it holds
+/// <see cref="Gate"/> and calls <c>IsLive</c>, which takes the owner's (<c>:177-183</c>). Taking
+/// <see cref="Gate"/> in a cancellation callback therefore inverts lock order between two threads
+/// that both really exist — a dot repaint on the UI thread against a teardown stop off it. See
+/// <see cref="ReleaseIfStillOurs"/>.</para>
 /// </summary>
 public abstract class OwnedSessionEffect : ISessionEffect
 {
@@ -337,9 +343,10 @@ public abstract class OwnedSessionEffect : ISessionEffect
     private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token, int generation)
     {
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Runs on a teardown thread. It goes through ReleaseIfStillOurs rather than straight to
-        // ReleaseWork so a dead generation cannot take a live one's work down; see that method for
-        // why the gate it takes cannot deadlock against this path.
+        // Lock-free callback on purpose: it runs on a teardown thread, UNDER the operation owner's
+        // own lock (OperationRegistry.cs:163-166 cancels inside it), so anything it takes would be
+        // taken beneath that one. It goes through ReleaseIfStillOurs rather than straight to
+        // ReleaseWork so a dead generation cannot take a live one's work down.
         using var registration = token.Register(() =>
         {
             ReleaseIfStillOurs(generation);
@@ -368,40 +375,52 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// the static continuous module; the paced pair are affected too, in their own currency (a
     /// stale release would drop a live schedule's pending one-shot).</para>
     ///
-    /// <para><b>The test and the release are ONE act, under <see cref="Gate"/>, and that is the
-    /// second half of the fix.</b> Reading the generation and then releasing as two steps leaves a
-    /// narrower version of the same defect open: a stale tail can read its own generation, be
-    /// preempted, and resume after <see cref="Arm"/> has written the new generation AND placed the
-    /// new work — and then withdraw it. Holding the gate across both closes that, because
-    /// <see cref="Arm"/>'s generation write needs the same gate: either the stale release completes
-    /// first and the new arm engages after it, or the arm's write lands first and the stale release
-    /// sees a generation that is no longer its own.</para>
+    /// <para><b>Lock-free, as the callback contract at the top of this class requires.</b>
+    /// <see cref="_generation"/> is an <c>int</c> written under <see cref="Gate"/>, and a lock
+    /// release is a memory barrier, so a <see cref="Volatile.Read"/> here observes the newest value
+    /// without taking a lock this callback must not want.</para>
     ///
-    /// <para><b>Why taking the gate here is safe</b>, against the callback rule stated at the top of
-    /// this class. Nothing ever holds <see cref="Gate"/> while WAITING on a teardown thread:
-    /// <c>Begin()</c> and <c>Cancel()</c> are both called OUTSIDE it, precisely so a cancellation
-    /// callback can never wait on a lock its own caller holds, and <see cref="EngageIfEligible"/>
-    /// already holds the gate across a <see cref="ReleaseWork"/> call. So the worst case is a
-    /// teardown thread waiting briefly on work the gate is documented to keep cheap — not a cycle.
-    /// <see cref="ReleaseWork"/> itself is unchanged and is still called with no lock held from
-    /// <see cref="Disarm"/>.</para>
+    /// <para><b>THE RESIDUAL THIS LEAVES OPEN, AND WHY IT IS NOT CLOSED HERE.</b> The read and the
+    /// release are two steps, so a narrow window survives: a stale tail can read its own generation,
+    /// be preempted, and resume after <see cref="Arm"/> has written the new generation and placed
+    /// the new work — and then withdraw it. Much narrower than the window this guard closes, and
+    /// still open.</para>
+    ///
+    /// <para><b>Closing it under <see cref="Gate"/> was attempted at SP-106 and REVERTED, because it
+    /// inverts lock order against the operation owner.</b> Both chains are real and both threads
+    /// exist in the product:</para>
+    /// <list type="bullet">
+    /// <item><b>owner lock, then effect lock:</b> <see cref="Disarm"/> calls <c>_owner.Cancel()</c>;
+    /// <c>Cancel()</c> takes the owner's lock and cancels INSIDE it
+    /// (<c>Lifecycle/OperationRegistry.cs:163-166</c>), which runs the registration above
+    /// synchronously on that thread — and a gate-taking guard would then want this class's lock.
+    /// <see cref="Arm"/> reaches the same cycle through <c>_owner.Begin()</c>
+    /// (<c>OperationRegistry.cs:148-158</c>).</item>
+    /// <item><b>effect lock, then owner lock:</b> <see cref="Dot"/> holds <see cref="Gate"/> across
+    /// <c>_owner.IsLive(...)</c>, which takes the owner's lock
+    /// (<c>OperationRegistry.cs:177-183</c>).</item>
+    /// </list>
+    /// <para>A dot repaint on the UI thread (<c>Views/Pages/StudioPage.axaml.cs</c>'s refresh)
+    /// concurrent with a teardown stop off it would hang shutdown — the class SP-071/SP-073 built
+    /// the bounded-teardown machinery to prevent. <b>The real fix is the owner cancelling outside
+    /// its own lock</b>, which lives in <c>Lifecycle/**</c> and is outside SP-106's File Scope;
+    /// until then the residual above is recorded rather than traded for a deadlock. Hoisting
+    /// <see cref="ReleaseWork"/> out of such a lock would be this same code with more words.</para>
     ///
     /// <para><b>Protected rather than private</b> so the predicate can be pinned directly: both
     /// arms of it are asserted in <c>MovingEffectSpineTests</c> against a probe subclass, which is
     /// what makes this guard fail on EVERY run if the clause below is deleted rather than only on
-    /// the runs where the thread pool happens to produce the bad ordering.</para>
+    /// the runs where the thread pool happens to produce the bad ordering. That pin is
+    /// single-threaded and does not depend on any lock here.</para>
     /// </summary>
     /// <param name="generation">The generation the caller believes it is releasing for.</param>
     protected void ReleaseIfStillOurs(int generation)
     {
-        lock (_gate)
+        if (Volatile.Read(ref _generation) != generation)
         {
-            if (_generation != generation)
-            {
-                return;
-            }
-
-            ReleaseWork();
+            return;
         }
+
+        ReleaseWork();
     }
 }
