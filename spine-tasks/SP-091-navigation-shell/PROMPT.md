@@ -111,6 +111,16 @@ You cited `StudioTabView.xaml.cs:494-496` ("A dot that cannot be wired honestly 
 
 Your declared **unit +3, headless +2** stands. Retiring 8 headless facts while adding 10 nets +2; retargeting their mechanism proofs onto product controls rather than dropping them is the right call and must be visible in `record.md`.
 
+### Amendment 5 — the publish gate comes too. Take the one-token fix.
+
+You found a FIFTH consumer of the retired probe token, outside your scope, and **reported it instead of widening silently. That was the right call and it is why you are getting the scope rather than a refusal.**
+
+`client/tools/publish/matrix.ps1:75` matches `'layout-probe: card*'`. Verified by the orchestrator: the needle is exactly as you describe, and `matrix.sh:91` greps the bare `'layout-probe:'` and is genuinely unaffected. A repo-wide sweep finds no sixth.
+
+**`client/tools/publish/**` is added to your File Scope for this single change.** The reasoning is Amendment 1's, and it lands harder here: on the release gate a stale needle does not merely fail, it **kills a healthy app and reports `no render evidence`** — a publish run would look like a rendering regression when nothing is wrong. A broken gate that accuses the product is worse than no gate.
+
+Change `card` -> `door`, in the same commit as the rest, and leave `matrix.sh` alone. Note in `record.md` that you cannot run the publish matrix here, the same honesty you applied to the WSLg leg.
+
 ## Review Level: 3 (Plan, Code, Final)
 
 ## Steps
