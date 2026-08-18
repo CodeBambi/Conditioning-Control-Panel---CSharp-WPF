@@ -2352,12 +2352,16 @@ public class OverlayService : IDisposable
             {
                 _brainDrainLayer.SetIntensity(intensity);
             }
+            var drawAlpha = Compositor.BrainDrainLayer.AlphaFor(intensity) / 255.0;
             foreach (var img in _brainDrainImages.Values)
             {
                 if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
                 {
                     blur.Radius = blurRadius;
                 }
+                // Move the alpha with the radius, or a live strength change on the legacy path
+                // would only ever adjust half the effect (see CreateBrainDrainWindow).
+                img.Opacity = drawAlpha;
             }
         });
     }
@@ -2490,6 +2494,12 @@ public class OverlayService : IDisposable
             var image = new System.Windows.Controls.Image
             {
                 Stretch = Stretch.Fill,
+                // Same alpha ramp the compositor path uses (0.30 -> 0.85 across intensity 1..100).
+                // This window is an opaque blurred COPY of the desktop laid over the real one, so
+                // without an alpha it hid the screen completely at every setting and the strength
+                // dial only softened the edges. Sharing the curve makes one slider value mean one
+                // thing on both render paths.
+                Opacity = Compositor.BrainDrainLayer.AlphaFor(intensity) / 255.0,
                 Effect = new System.Windows.Media.Effects.BlurEffect
                 {
                     Radius = blurRadius,

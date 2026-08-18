@@ -269,7 +269,15 @@ public sealed class BrainDrainLayer : BaseLayer
     /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, linear to
     /// <see cref="AlphaCeiling"/> at <see cref="AlphaFullIntensity"/> and above - never fully
     /// opaque. See the field comment for why.</summary>
-    private static byte AlphaFor(int intensity)
+    /// <summary>
+    /// The draw-alpha curve, shared with the legacy per-screen window path in OverlayService the
+    /// same way <see cref="RadiusScale"/> already is. Both paths have to mean the same thing at the
+    /// same slider value: the legacy window used to paint the blurred copy fully opaque, so the
+    /// strength dial only moved the blur radius there and intensity 5 looked like intensity 100
+    /// with a softer edge. That is why the same setting read "far too intense" for legacy users and
+    /// "a subtle haze" for everyone on the compositor.
+    /// </summary>
+    internal static byte AlphaFor(int intensity)
     {
         int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
         double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
