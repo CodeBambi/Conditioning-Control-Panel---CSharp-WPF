@@ -1,8 +1,0 @@
-WAVE: 45
-PACKETS: SP-105-continuous-effect
-LANES: 1
-BASE: 252b8509
-GATE: validate-wave.mjs WAVE OK; floor 1314/81
-OPENED: 2026-08-18T15:36:53Z
-
-STATUS: PASS both levels. Head 4bca542f. Land at 1372/87 from a fresh context.
