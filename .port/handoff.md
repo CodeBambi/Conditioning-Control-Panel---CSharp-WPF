@@ -75,3 +75,40 @@ them — commit and dirty set byte-identical each time. **The lane is not broken
 is not at fault**; the API was saturated across the whole window. Expect to WAIT rather than
 to debug: resume when 529s clear, do not spawn a parallel lane on this packet, and do not
 conclude anything about `SP-105` from these failures.
+
+## UPDATE — mechanically verified by the orchestrating phase, and now committed
+
+Four resume attempts, four 529s (three never reached a tool call). Rather than a fifth
+retry, the orchestrator did the part that needs no API: verification is the orchestrator's
+role, not a lane's. Run in the lane worktree against the lane's full working tree:
+
+    dotnet build client/CcpClient.sln -c Debug   ->  0 Warning(s) 0 Error(s)
+    CcpClient.Tests           1360 passed, 0 failed, 2 allowed skips, total 1362
+    CcpClient.HeadlessTests     87 passed, 0 failed,                  total   87
+
+Declared delta unit +48 / headless +6 against the 1314/81 pin, so **observed == pin +
+declared, exactly, in both projects.** That agreement is the check that catches a lane
+declaring work it did not do, and it held. Evidence: `sp105-build.txt`, `sp105-floor.txt`
+in the session scratchpad; the floor run's TRX directory is preserved and named in that log.
+`check-floor.mjs` exiting 1 here is CORRECT and expected — a lane-side run never matches the
+pin by design.
+
+The remainder was therefore committed on the lane branch as **`b9fca7f9`** (worktree now
+clean, packet complete on disk). It was NOT pushed: the standing authorization covers
+`feat/crossplatform` only, so the lane branch stays local until it is merged at land.
+
+### What is still owed, and must not be skipped
+
+1. **No code review and no final review have run.** The packet is Review Level 3. Verified
+   mechanically is not judged. Run `port-code-reviewer` then `port-final-reviewer` when the
+   API allows.
+2. **Two claims remain the lane's word.** That `ISessionEffect` did not fit a continuous
+   module and the spine was split from the scheduler; and that the **anti-fake-timer guard
+   bites**. A fake-timer wrap was the named failure this packet exists to catch, so that is
+   the last claim to accept on trust. Send a reviewer straight at it.
+3. **Land per LAND DISCIPLINE, from a fresh context.** Merge `worktree-agent-a01e12274d69597f3`
+   (`b9fca7f9`) into `feat/crossplatform`, then `sum-deltas --check` and
+   `--apply --packets SP-105-continuous-effect` (pin 1314/81 -> **1362/87**), three consecutive
+   `check-floor.mjs` runs in a scratch worktree, `git diff` EMPTY between the verified tree and
+   the integrated tip, and the LAST action verifies the tree actually being pushed. Then clear
+   `.port/WAVE-LOCK`, write the board row, the digest and the memories.
