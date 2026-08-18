@@ -34,7 +34,7 @@ public class SpiralOverlayEffectTests
     public void TheDialIsReducedByNinetyPercentBeforeItReachesTheScreen(int dial, double expected)
     {
         // WPF: `var actualOpacity = (opacity / 100.0) * 0.1;` under the comment "Very subtle
-        // opacity - 90% reduction" (OverlayService.cs:1692-1693). The factor is behaviour: dropping
+        // opacity - 90% reduction" (OverlayService.cs:1689-1690). The factor is behaviour: dropping
         // it would multiply every existing user's spiral by ten.
         Assert.Equal(expected, new SpiralPresentation(dial).Opacity, precision: 9);
         Assert.Equal(0.1, SpiralPresentation.SubtletyFactor);
@@ -56,7 +56,7 @@ public class SpiralOverlayEffectTests
     [InlineData(4000, SpiralPresetDocument.MaxOpacityPercent)]
     public void ThePersistedOpacityIsClampedWhereWpfClampsIt(int written, int expected)
     {
-        // Math.Clamp(value, 0, 100) (CCP.Core/Models/AppSettings.cs:2674). The ceiling is 100 here
+        // Math.Clamp(value, 0, 100) (CCP.Core/Models/AppSettings.cs:2675). The ceiling is 100 here
         // and 50 for the pink tint, because this module's own x0.1 already keeps it subtle.
         var document = new SpiralPresetDocument { OpacityPercent = written };
         Assert.Equal(expected, document.OpacityPercent);
@@ -65,7 +65,7 @@ public class SpiralOverlayEffectTests
     [Fact]
     public void TheModuleShipsON_WhichIsTrueOfNoneOfTheOtherThree()
     {
-        // AppSettings.cs:2644 — `private bool _spiralEnabled = true;`. Flash ships on too but the
+        // AppSettings.cs:2645 — `private bool _spiralEnabled = true;`. Flash ships on too but the
         // other two ship off; this is the one whose DIAL is on out of the box. It costs nothing on
         // a fresh install because there is no spiral to draw, which is WPF's own second condition
         // (OverlayService.cs:377).
@@ -91,7 +91,7 @@ public class SpiralOverlayEffectTests
     public void TheFrameDelayIsWpfsOwnArithmeticAndItsOwnFallback(int hundredths, int expectedMs)
     {
         // `frameDelayMs = value * 10; if (frameDelayMs < 20 || frameDelayMs > 500) frameDelayMs = 50;`
-        // (OverlayService.cs:1549-1552). CLAMPING instead would turn a 0-hundredths GIF — which is
+        // (OverlayService.cs:1548-1549). CLAMPING instead would turn a 0-hundredths GIF — which is
         // most of the web's — into 20 ms rather than 50, and a 30-second frame into 500 ms.
         Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), SpiralFrameDelay.FromHundredths(hundredths));
     }
@@ -334,7 +334,7 @@ public class SpiralOverlayEffectTests
         // Something is on screen and the module does not believe it is armed. Contrived here, and
         // upstream's services all guard against it in as many words — WPF's bouncing text stop says
         // "Always close and clear windows, even if we thought we weren't running"
-        // (Services/Subliminal/BouncingTextService.cs:210-211), and the spiral's own StopSpiral is
+        // (Services/Subliminal/BouncingTextService.cs:213), and the spiral's own StopSpiral is
         // called unconditionally from OverlayService.Stop (:398-409) rather than under an
         // if-running.
         lab.Surface.Engage(lab.SpiralPath!, lab.Effect.Presentation);

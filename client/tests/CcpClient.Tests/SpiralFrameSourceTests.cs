@@ -70,7 +70,7 @@ public class SpiralFrameSourceTests
         Assert.Equal(2, animation.FrameCount);
 
         // The file carries 5 hundredths per frame; WPF's arithmetic makes that 50 ms
-        // (OverlayService.cs:1549-1552).
+        // (OverlayService.cs:1548-1549).
         Assert.Equal(TimeSpan.FromMilliseconds(50), animation.FrameDelay);
     }
 
@@ -170,7 +170,7 @@ public class SpiralFrameSourceTests
             return;
         }
 
-        // WPF starts no frame timer for one (OverlayService.cs:1369), and a single-frame file has
+        // WPF starts no frame timer for one (OverlayService.cs:1370), and a single-frame file has
         // no 0x5100 property to read, so the delay falls back to the default rather than to zero.
         Assert.Equal(1, animation!.FrameCount);
         Assert.Equal(SpiralFrameDelay.Default, animation.FrameDelay);
@@ -217,7 +217,7 @@ public class SpiralFrameSourceTests
     [Fact]
     public void ASourceWiderThanTheScreenIsCroppedLeftAndRightEqually()
     {
-        // WPF's Stretch.UniformToFill inside a ClipToBounds container (OverlayService.cs:1697,
+        // WPF's Stretch.UniformToFill inside a ClipToBounds container (OverlayService.cs:1695,
         // :1701-1706): the image covers the layer with nothing letterboxed and nothing distorted,
         // and the overflow is lost evenly on both sides.
         var (x, y, width, height) = GdiPlusSpiralFrameSource.SourceCrop(4000, 1000, 1000, 1000);

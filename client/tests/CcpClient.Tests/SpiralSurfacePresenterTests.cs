@@ -45,14 +45,14 @@ public class SpiralSurfacePresenterTests
         var presence = Assert.Single(rig.Presences);
         var request = Assert.Single(presence.Requests);
 
-        // WPF sizes the spiral window to the screen's own bounds (OverlayService.cs:1707-1727) and
+        // WPF sizes the spiral window to the screen's own bounds (OverlayService.cs:1709-1734) and
         // the IMAGE inside it carries `(opacity / 100.0) * 0.1` — "Very subtle opacity - 90%
-        // reduction" (:1692-1693). A dial of 10 is therefore a layer at 1 %, not 10 %.
+        // reduction" (:1689-1690). A dial of 10 is therefore a layer at 1 %, not 10 %.
         Assert.Equal(Display, request.Bounds);
         Assert.Equal(0.01, request.Opacity, precision: 6);
 
-        // WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, IsHitTestVisible=false (OverlayService.cs:1715,
-        // :1733). A full-screen layer up for a whole session that caught clicks would end the
+        // WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, IsHitTestVisible=false (OverlayService.cs:1734,
+        // :1718). A full-screen layer up for a whole session that caught clicks would end the
         // user's ability to use their computer.
         Assert.True(request.ClickThrough);
         Assert.True(rig.Presenter.Showing);
@@ -121,7 +121,7 @@ public class SpiralSurfacePresenterTests
         rig.Presenter.Engage(SpiralPath, Dial);
 
         // ONE timer on the clock, and it is the topmost cadence — not a frame advance. WPF's own
-        // condition is `if (_spiralGifFrames.Count > 1 && …)` (OverlayService.cs:1369): a one-frame
+        // condition is `if (_spiralGifFrames.Count > 1 && …)` (OverlayService.cs:1370): a one-frame
         // spiral is a picture and a timer for it would be a tick that changes nothing, forever.
         Assert.Equal(1, rig.Clock.PendingCount);
 

@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Session;
 /// <summary>
 /// SP-106: the Spiral Overlay module's persisted dials — the port's counterpart of the
 /// <c>#region Spiral Overlay</c> block WPF reads out of <c>App.Settings.Current</c>
-/// (<c>CCP.Core/Models/AppSettings.cs:2642-2682</c>).
+/// (<c>CCP.Core/Models/AppSettings.cs:2643-2682</c>).
 ///
 /// <para><b>One document per module</b>, on the precedent SP-101 set and SP-105 applied a second
 /// time (<see cref="SubliminalPresetDocument"/>, <see cref="PinkFilterPresetDocument"/>,
@@ -25,17 +25,17 @@ public sealed class SpiralPresetDocument
     /// <summary>The schema version this build writes (persistence contract §1).</summary>
     public const int CurrentSchemaVersion = 1;
 
-    /// <summary>WPF default (<c>AppSettings.cs:2670</c>): 10 %.</summary>
+    /// <summary>WPF default (<c>AppSettings.cs:2671</c>): 10 %.</summary>
     public const int DefaultOpacityPercent = 10;
 
-    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 100)</c> (<c>AppSettings.cs:2674</c>). <b>Zero is
+    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 100)</c> (<c>AppSettings.cs:2675</c>). <b>Zero is
     /// inside the range</b> and the module has to answer for it, exactly as the tint does
     /// (<see cref="Effects.SpiralPresentation.IsInvisible"/>).</summary>
     public const int MinOpacityPercent = 0;
 
-    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 100)</c> (<c>AppSettings.cs:2674</c>). The ceiling
+    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 100)</c> (<c>AppSettings.cs:2675</c>). The ceiling
     /// is 100 here and 50 for the pink tint, because the spiral's own ×0.1 reduction
-    /// (<c>OverlayService.cs:1692-1693</c>) already keeps it subtle.</summary>
+    /// (<c>OverlayService.cs:1689-1690</c>) already keeps it subtle.</summary>
     public const int MaxOpacityPercent = 100;
 
     private int _opacityPercent = DefaultOpacityPercent;
@@ -43,7 +43,7 @@ public sealed class SpiralPresetDocument
 
     /// <summary>
     /// The module's own on/off dial — WPF <c>AppSettings.SpiralEnabled</c>, <b>default true</b>
-    /// (<c>AppSettings.cs:2644</c>).
+    /// (<c>AppSettings.cs:2645</c>).
     ///
     /// <para><b>It is the only one of the four ported modules that ships ON</b>, and that is
     /// upstream's, not a choice made here. It costs nothing on a fresh install because the module
@@ -54,10 +54,10 @@ public sealed class SpiralPresetDocument
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// WPF's <c>SpiralOpacity</c> (<c>AppSettings.cs:2670-2675</c>): the dial in percent, default
+    /// WPF's <c>SpiralOpacity</c> (<c>AppSettings.cs:2671-2676</c>): the dial in percent, default
     /// 10, clamped <c>[0, 100]</c> on every write. What reaches the surface is this ×0.1 — see
     /// <see cref="Effects.SpiralPresentation.Opacity"/>, and WPF's own words at the line that
-    /// computes it ("Very subtle opacity - 90% reduction", <c>OverlayService.cs:1692-1693</c>).
+    /// computes it ("Very subtle opacity - 90% reduction", <c>OverlayService.cs:1689-1690</c>).
     /// </summary>
     public int OpacityPercent
     {

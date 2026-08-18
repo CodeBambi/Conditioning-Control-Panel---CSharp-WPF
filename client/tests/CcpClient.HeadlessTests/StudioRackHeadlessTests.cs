@@ -471,7 +471,7 @@ public class StudioRackHeadlessTests
         var row = Descendant<RadioButton>(window, "RowSpiralOverlay");
         var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
 
-        // Spiral Overlay is the ONE ported module that ships ON (AppSettings.cs:2644 —
+        // Spiral Overlay is the ONE ported module that ships ON (AppSettings.cs:2645 —
         // _spiralEnabled = true), so this row starts lit where the other three start dark, and the
         // first gesture turns it OFF. That asymmetry is upstream's and is asserted rather than
         // normalised away.

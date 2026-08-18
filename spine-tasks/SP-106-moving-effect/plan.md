@@ -15,9 +15,9 @@ condition. **Three independent blockers, none of them fixable inside this packet
 
 WPF's bouncing text is glyphs on a **transparent** window: `AllowsTransparency = true`,
 `Background = Brushes.Transparent`, a `Canvas` with one `TextBlock`/`OutlinedText` per logo
-(`Services/Subliminal/BouncingTextService.cs:820-822`, `:838-840`). Only the letters are painted;
+(`Services/Subliminal/BouncingTextService.cs:827-828`, `:842-843`). Only the letters are painted;
 the desktop shows through everywhere else, and the text's own opacity is the dial
-(`:889`, `:900` — `Opacity = opacity / 100.0`, default **100** at
+(`:876`, `:890` — `Opacity = opacity / 100.0`, default **100** at
 `CCP.Core/Models/AppSettings.cs:3619-3624`).
 
 The port's overlay composites **one uniform `LWA_ALPHA` over an opaque BGRX frame**, by design and
@@ -76,10 +76,10 @@ mechanism with a real payload."* Reading the source says it is also the only rac
 
 | Requirement | Spiral Overlay |
 |---|---|
-| Moves while it is on | The GIF's frames are advanced on a timer for the whole session (`Services/Notifications/OverlayService.cs:1369-1378`, `GifFrameTimer_Tick` `:1636-1650`) |
+| Moves while it is on | The GIF's frames are advanced on a timer for the whole session (`Services/Notifications/OverlayService.cs:1370-1378`, `GifFrameTimer_Tick` `:1636-1650`) |
 | Full-screen, ONE uniform opacity | `Image { Stretch = UniformToFill, Opacity = (SpiralOpacity / 100.0) * 0.1 }` filling a full-screen window (`OverlayService.cs:1689-1700`) — the surface is covered edge to edge by the image, so **no per-pixel alpha is needed** |
 | Present once, paint per frame | Exactly `IOverlayPresence`'s documented pattern: "A caller shows a surface once and paints it" (`IOverlayPresence.cs:84-85`) |
-| Cadence a test can drive | The GIF's own frame delay, default **50 ms**, clamped **[20, 500]** (`OverlayService.cs:1545-1552`) — 20 Hz, which the confirm-everything `Paint` path can actually sustain |
+| Cadence a test can drive | The GIF's own frame delay, default **50 ms**, clamped **[20, 500]** (`OverlayService.cs:1542-1549`) — 20 Hz, which the confirm-everything `Paint` path can actually sustain |
 | A rack row | **The row already exists and is the port's last unwired one** (`StudioPage.axaml:74-79`; D5/D6 open for exactly this row) |
 | Not a second Pink Filter | Same surface lifetime, **different every 50 ms** — which is the whole axis |
 
@@ -96,13 +96,13 @@ is NAudio and a 10 s scheduler, nothing visual); Mandatory Video needs a media s
 | The module is started by the session, gated on its own dial | `MainWindow/MainWindow.StartStop.cs:192-193` calls `App.Overlay.Start()` unconditionally; the service reads the flag (`OverlayService.cs:376-381`) | Same shape the spine already has: arm every module, the module's dial decides |
 | It needs a dial AND a payload | `if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))` (`OverlayService.cs:377`) | Two conditions, two typed outcomes |
 | Where the payload comes from | `GetSpiralPath()` (`OverlayService.cs:299-319`): configured `SpiralPath` if the file exists, else the randomiser over the library folder, else the built-in resource | Configured path, else the first supported file in `<assets>/spirals`. Randomiser and built-in resource NOT ported (divergences) |
-| Frames | `LoadSpiralGifFrames` (`:1516+`); frame count from the image's first frame dimension (`:1541-1543`) | `ISpiralFrameSource` seam; GDI+ `GdipImageSelectActiveFrame` in the product |
+| Frames | `LoadSpiralGifFrames` (`:1516+`); frame count from the image's first frame dimension (`:1539-1540`) | `ISpiralFrameSource` seam; GDI+ `GdipImageSelectActiveFrame` in the product |
 | Frame delay | property `0x5100` × 10 ms; **if `< 20` or `> 500` then 50**; missing property → 50 (`:1545-1552`) | Verbatim, as a pure function with its own facts |
 | Advance | `_currentGifFrameIndex = (_currentGifFrameIndex + 1) % frames.Count` — a **loop**, never a stop (`:1641`) | Verbatim |
-| The timer only exists when there is motion | `if (_spiralGifFrames.Count > 1 && …)` (`:1369`) — a one-frame spiral gets **no timer at all** | Verbatim, and it is why `Live` cannot simply mean "moving" (§5) |
-| Opacity | `(opacity / 100.0) * 0.1` — "Very subtle opacity - 90% reduction" (`OverlayService.cs:1692-1693`). Dial default **10**, clamp **[0, 100]** (`AppSettings.cs:2670-2675`) | Verbatim. Dial default 10 → surface opacity 0.01 |
-| Dial default | `SpiralEnabled` defaults **true** (`AppSettings.cs:2644`) — unlike the other three modules | Kept |
-| Window shape | full-screen, `Topmost`, `ShowInTaskbar=false`, `ShowActivated=false`, `IsHitTestVisible=false`, `WS_EX_TOOLWINDOW|NOACTIVATE|TRANSPARENT|LAYERED` (`OverlayService.cs:1707-1735`) | `OverlaySurfaceRequest(display, opacity, ClickThrough: true)` — what Pink Filter already asks for |
+| The timer only exists when there is motion | `if (_spiralGifFrames.Count > 1 && …)` (`:1370`) — a one-frame spiral gets **no timer at all** | Verbatim, and it is why `Live` cannot simply mean "moving" (§5) |
+| Opacity | `(opacity / 100.0) * 0.1` — "Very subtle opacity - 90% reduction" (`OverlayService.cs:1689-1690`). Dial default **10**, clamp **[0, 100]** (`AppSettings.cs:2671-2676`) | Verbatim. Dial default 10 → surface opacity 0.01 |
+| Dial default | `SpiralEnabled` defaults **true** (`AppSettings.cs:2645`) — unlike the other three modules | Kept |
+| Window shape | full-screen, `Topmost`, `ShowInTaskbar=false`, `ShowActivated=false`, `IsHitTestVisible=false`, `WS_EX_TOOLWINDOW|NOACTIVATE|TRANSPARENT|LAYERED` (`OverlayService.cs:1709-1734`) | `OverlaySurfaceRequest(display, opacity, ClickThrough: true)` — what Pink Filter already asks for |
 | Reconcile | `RefreshOverlays()`: not showing + flag on → start; showing → update opacity; flag off → stop (`OverlayService.cs:437-450`) | `OwnedSessionEffect.Refresh()`, unchanged |
 | Stop | `Stop()` → `StopSpiral()` (`OverlayService.cs:398-409`) | `ReleaseWork()` — cadence disposed AND surface withdrawn |
 | Topmost cadence | the 500 ms reconcile loop's periodic unconditional kick (`OverlayService.cs:666-671`) | `OverlaySurfaceSet`'s existing 5 s cadence, as Pink Filter uses it |
@@ -144,7 +144,7 @@ is NAudio and a 10 s scheduler, nothing visual); Mandatory Video needs a media s
   now**.
 
 The trap is that **"on screen but frozen" is two states, not one**, and WPF's own code proves it:
-a one-frame spiral gets no timer (`OverlayService.cs:1369`) and is *supposed* to sit still. So:
+a one-frame spiral gets no timer (`OverlayService.cs:1370`) and is *supposed* to sit still. So:
 
 ```
 Running  =  a surface I placed is up

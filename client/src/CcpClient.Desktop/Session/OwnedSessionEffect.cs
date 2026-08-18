@@ -36,8 +36,12 @@ namespace CcpClient.Desktop.Session;
 /// module's, not the base's.</para>
 ///
 /// <para><b>Threading.</b> <see cref="Gate"/> guards the arm flag and the generation and nothing
-/// slow. <see cref="ReleaseWork"/> is called from a cancellation callback on a teardown thread and
-/// must therefore be lock-free and safe against a thread holding the gate.</para>
+/// slow. <see cref="ReleaseWork"/> is called from a cancellation callback on a teardown thread, so
+/// an implementation of it must itself take no lock of its own and must be safe against another
+/// thread holding the gate. <b>The gate IS taken around the generation-guarded release</b>
+/// (<see cref="ReleaseIfStillOurs"/>, SP-106) — deliberately, and with the reason it cannot
+/// deadlock written out there: nothing in this class holds the gate while waiting on a teardown
+/// thread, because <c>Begin()</c> and <c>Cancel()</c> are called outside it.</para>
 /// </summary>
 public abstract class OwnedSessionEffect : ISessionEffect
 {
@@ -333,8 +337,9 @@ public abstract class OwnedSessionEffect : ISessionEffect
     private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token, int generation)
     {
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Lock-free callback on purpose: it may run on a teardown thread while another thread
-        // holds _gate, so it must not need _gate.
+        // Runs on a teardown thread. It goes through ReleaseIfStillOurs rather than straight to
+        // ReleaseWork so a dead generation cannot take a live one's work down; see that method for
+        // why the gate it takes cannot deadlock against this path.
         using var registration = token.Register(() =>
         {
             ReleaseIfStillOurs(generation);
@@ -363,18 +368,40 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// the static continuous module; the paced pair are affected too, in their own currency (a
     /// stale release would drop a live schedule's pending one-shot).</para>
     ///
-    /// <para><b>Lock-free, as the callback contract above requires.</b> <see cref="_generation"/> is
-    /// an <c>int</c> written under <see cref="Gate"/>, and a lock release is a memory barrier, so a
-    /// <see cref="Volatile.Read"/> here observes the newest value without taking the gate a teardown
-    /// thread must never need.</para>
+    /// <para><b>The test and the release are ONE act, under <see cref="Gate"/>, and that is the
+    /// second half of the fix.</b> Reading the generation and then releasing as two steps leaves a
+    /// narrower version of the same defect open: a stale tail can read its own generation, be
+    /// preempted, and resume after <see cref="Arm"/> has written the new generation AND placed the
+    /// new work — and then withdraw it. Holding the gate across both closes that, because
+    /// <see cref="Arm"/>'s generation write needs the same gate: either the stale release completes
+    /// first and the new arm engages after it, or the arm's write lands first and the stale release
+    /// sees a generation that is no longer its own.</para>
+    ///
+    /// <para><b>Why taking the gate here is safe</b>, against the callback rule stated at the top of
+    /// this class. Nothing ever holds <see cref="Gate"/> while WAITING on a teardown thread:
+    /// <c>Begin()</c> and <c>Cancel()</c> are both called OUTSIDE it, precisely so a cancellation
+    /// callback can never wait on a lock its own caller holds, and <see cref="EngageIfEligible"/>
+    /// already holds the gate across a <see cref="ReleaseWork"/> call. So the worst case is a
+    /// teardown thread waiting briefly on work the gate is documented to keep cheap — not a cycle.
+    /// <see cref="ReleaseWork"/> itself is unchanged and is still called with no lock held from
+    /// <see cref="Disarm"/>.</para>
+    ///
+    /// <para><b>Protected rather than private</b> so the predicate can be pinned directly: both
+    /// arms of it are asserted in <c>MovingEffectSpineTests</c> against a probe subclass, which is
+    /// what makes this guard fail on EVERY run if the clause below is deleted rather than only on
+    /// the runs where the thread pool happens to produce the bad ordering.</para>
     /// </summary>
-    private void ReleaseIfStillOurs(int generation)
+    /// <param name="generation">The generation the caller believes it is releasing for.</param>
+    protected void ReleaseIfStillOurs(int generation)
     {
-        if (Volatile.Read(ref _generation) != generation)
+        lock (_gate)
         {
-            return;
-        }
+            if (_generation != generation)
+            {
+                return;
+            }
 
-        ReleaseWork();
+            ReleaseWork();
+        }
     }
 }

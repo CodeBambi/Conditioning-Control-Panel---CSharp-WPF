@@ -607,7 +607,7 @@ public partial class StudioPage : UserControl
     /// frozen picture the user is entitled to be told about, because everything about the screen
     /// looks right. And a <b>still</b> spiral — a one-frame file — is up, not turning, and
     /// perfectly healthy, because WPF starts no frame timer for one either
-    /// (<c>OverlayService.cs:1369</c>). Three outcomes that a boolean cannot carry.</para>
+    /// (<c>OverlayService.cs:1370</c>). Three outcomes that a boolean cannot carry.</para>
     ///
     /// <para><b>No arm may tell a running session to start a session.</b> That was SP-105's
     /// final-review blocker one module earlier (its record §9.1), and it is prevented here the same

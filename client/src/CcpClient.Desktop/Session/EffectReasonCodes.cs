@@ -88,14 +88,14 @@ public static class EffectReasonCodes
     /// <summary>
     /// Spiral Overlay: a spiral file was found and this build could not turn it into frames — it is
     /// missing, corrupt, or in a format with no codec here. Upstream's own outcome is a warning and
-    /// a return with nothing on screen (<c>OverlayService.cs:1353-1357</c>), and it is typed here so
+    /// a return with nothing on screen (<c>OverlayService.cs:1352-1356</c>), and it is typed here so
     /// the panel can tell "you have no spiral" from "your spiral does not work".
     /// </summary>
     public const string SpiralNotDecoded = "spiral-not-decoded";
 
     /// <summary>
     /// Spiral Overlay: the opacity dial is at zero, so the module is engaged and there is nothing to
-    /// draw. WPF's clamp allows it (<c>CCP.Core/Models/AppSettings.cs:2674</c>) and WPF at zero still
+    /// draw. WPF's clamp allows it (<c>CCP.Core/Models/AppSettings.cs:2675</c>) and WPF at zero still
     /// puts a full-screen always-on-top window on the desktop holding a fully transparent image. The
     /// <see cref="PinkFilterTransparent"/> case, on the module next to it, with the same answer:
     /// <see cref="Capabilities.CapabilityState.Degraded"/> from the module, nothing placed, and a dot

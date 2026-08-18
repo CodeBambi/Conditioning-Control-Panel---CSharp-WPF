@@ -29,7 +29,7 @@ namespace CcpClient.Desktop.Effects;
 /// <see cref="EffectDotState.Live"/> when a firing is on the CLOCK. A static continuous module is
 /// <c>Live</c> when its surface is confirmed on the SCREEN. Neither can say what this module needs
 /// to say, because <b>"on screen but frozen" is a real state and it is not always a broken one</b>:
-/// WPF starts no frame timer for a one-frame spiral (<c>Services/Notifications/OverlayService.cs:1369</c>),
+/// WPF starts no frame timer for a one-frame spiral (<c>Services/Notifications/OverlayService.cs:1370</c>),
 /// so a still image sitting there is the module working. <c>Live</c> here therefore means the
 /// surface is up, the last frame was really held, AND — only when the clip has more than one frame —
 /// the next advance is on the clock. See <see cref="SpiralSurfacePresenter.Running"/>.</para>
@@ -159,7 +159,7 @@ public sealed class SpiralOverlayEffect : OwnedSessionEffect
     {
         var presentation = Presentation;
 
-        // WPF's clamp lets the opacity reach ZERO (AppSettings.cs:2674) and WPF at zero still
+        // WPF's clamp lets the opacity reach ZERO (AppSettings.cs:2675) and WPF at zero still
         // creates a full-screen always-on-top window holding a fully transparent image — the exact
         // ghost this port's overlay refuses to construct. So nothing is placed and the module says
         // so in type: it really did take the session (Degraded, not Unavailable) and really will
@@ -253,7 +253,10 @@ public sealed class SpiralOverlayEffect : OwnedSessionEffect
     /// <see cref="OwnedSessionEffect.Disarm"/> reaches this three times (directly, from the
     /// generation's cancellation callback, and from the parked operation's tail). It tests
     /// <c>Engaged</c> rather than <c>Showing</c> because a spiral whose repaint failed is no longer
-    /// showing and still owns a timer.</para>
+    /// showing and <b>still owns an open clip</b>: <see cref="OverlaySurfaceSet.Repaint"/> retires
+    /// the slot, and the advance that discovered the failure has already nulled its own handle
+    /// without re-arming, so the TIMER is gone by then — but the decoder is not, and a
+    /// <c>Showing</c> guard would leak it for the rest of the process.</para>
     /// </summary>
     protected override void ReleaseWork()
     {

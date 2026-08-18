@@ -32,7 +32,8 @@ public interface ISpiralSurface
 
     /// <summary>True while there is anything to release — a surface, a cadence, or an open clip.
     /// The module's <c>ReleaseWork</c> tests this rather than <see cref="Showing"/>, because a
-    /// spiral whose repaint failed is not showing and still owns a timer.</summary>
+    /// spiral whose repaint failed is not showing and still holds an OPEN CLIP (its cadence handle
+    /// is already null by then; the decoder is what would leak).</summary>
     bool Engaged { get; }
 
     /// <summary>How many frames the open clip has, or 0 when none is open. One means a still image,
@@ -145,7 +146,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
     /// changing.</item>
     /// <item>And, <b>only if this clip has more than one frame</b>, the next advance is on the
     /// clock. The condition is not a softening: WPF starts no frame timer for a one-frame spiral
-    /// (<c>OverlayService.cs:1369</c>), so a still image that sits there is the module working
+    /// (<c>OverlayService.cs:1370</c>), so a still image that sits there is the module working
     /// exactly as asked, and demanding motion from it would make the dot lie in the other
     /// direction.</item>
     /// </list>
@@ -236,7 +237,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         // Click-through, and the whole display: WPF's spiral window is
         // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED, topmost,
         // non-activating and explicitly IsHitTestVisible=false, sized to the screen's own bounds
-        // (OverlayService.cs:1707-1735). A full-screen layer that caught clicks would swallow every
+        // (OverlayService.cs:1709-1734). A full-screen layer that caught clicks would swallow every
         // gesture the user made for the whole session.
         var request = new OverlaySurfaceRequest(monitor, presentation.Opacity, ClickThrough: true);
 
@@ -322,7 +323,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
     }
 
     /// <summary>The frame cadence, armed only for a clip that really has more than one frame
-    /// (<c>OverlayService.cs:1369</c>: <c>if (_spiralGifFrames.Count &gt; 1 …)</c>).</summary>
+    /// (<c>OverlayService.cs:1370</c>: <c>if (_spiralGifFrames.Count &gt; 1 …)</c>).</summary>
     private void ArmAdvance()
     {
         if (_advance is not null || _surfaces.Disposed || _animation is not { FrameCount: > 1 } clip)

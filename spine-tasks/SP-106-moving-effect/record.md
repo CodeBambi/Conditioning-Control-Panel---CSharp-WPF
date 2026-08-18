@@ -1,8 +1,8 @@
 # SP-106 — record
 
 Branch `lane/SP-106-moving-effect`, base `61be3b55`.
-Floor: pin **1372 unit / 87 headless**; observed **1469 unit / 90 headless**; declared delta
-**+97 unit / +3 headless** (`floor-delta.json`). 1469 = 1372 + 97 and 90 = 87 + 3, confirmed by
+Floor: pin **1372 unit / 87 headless**; observed **1472 unit / 90 headless**; declared delta
+**+100 unit / +3 headless** (`floor-delta.json`). 1472 = 1372 + 100 and 90 = 87 + 3, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-106-moving-effect`. Two skips, both
 pre-existing (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); none added.
@@ -120,7 +120,7 @@ Running  =  a surface I placed is up
 ```
 
 **The third clause is conditional, and that is the whole subtlety.** WPF starts no frame timer for a
-one-frame spiral (`OverlayService.cs:1369`), so a still image sitting there is the module working
+one-frame spiral (`OverlayService.cs:1370`), so a still image sitting there is the module working
 exactly as asked. "On screen but frozen" is therefore **two states**:
 
 | Situation | Dot | Panel says |
@@ -171,7 +171,7 @@ Flash Images, Subliminals, Spiral Overlay, Pink Filter, in WPF's own order
   Enable checkbox uses.
 - **The dot reports what is running**, off each effect's own `Dot`.
 
-Spiral Overlay is the **one ported module that ships ON** (`AppSettings.cs:2644`), so its row starts
+Spiral Overlay is the **one ported module that ships ON** (`AppSettings.cs:2645`), so its row starts
 lit where the other three start dark and its first right-click turns it OFF. That asymmetry is
 upstream's and is asserted rather than normalised away.
 
@@ -220,17 +220,58 @@ and for a moving module it killed the cadence with it.
 would lose its tint the same way, and the paced pair would lose a live schedule's pending one-shot. It
 was invisible before because nothing had a counting fact that ran a step LATER than the withdraw.
 
-**The fix** is `OwnedSessionEffect.ReleaseIfStillOurs(generation)`: the parked operation carries the
-generation it belongs to, and a release whose generation is no longer the module's is skipped. It is
-lock-free (`Volatile.Read` of an `int` written under the gate), as the cancellation-callback contract
-directly above it requires.
+**The fix** is `OwnedSessionEffect.ReleaseIfStillOurs(generation)`, in two halves. The parked
+operation carries the generation it belongs to, and a release whose generation is no longer the
+module's is skipped — **and the test and the release are ONE act, under `Gate`**. The second half
+matters: reading the generation and then releasing as two steps leaves a narrower version of the
+same defect open, because a stale tail can read its own generation, be preempted, and resume after
+`Arm()` has written the new generation *and* placed the new work. Holding the gate across both
+closes it, because `Arm()`'s generation write needs the same gate.
 
-**The bound, stated.** `AStaleTeardownArrivingAfterARestart_MustNotTakeTheNewSessionsWorkDown` is
-**sound but not complete**. Awaiting the old generations' completions guarantees their tails have run
-by the time the assertions execute, so it can never red spuriously; but whether the tail lands before
-or after the re-arm is the thread pool's choice, so with the guard removed it fails only on runs where
-the bad ordering really happens. Forcing the ordering would need a wall-clock wait (banned) or a
-scheduler seam in the shared body (a bigger change than the defect). Named here rather than glossed.
+**Why taking the gate there is safe**, against this class's own callback rule: nothing holds `Gate`
+while WAITING on a teardown thread — `Begin()` and `Cancel()` are both called outside it, precisely
+so a cancellation callback can never wait on a lock its own caller holds — and `EngageIfEligible`
+already holds the gate across a `ReleaseWork()` call. The worst case is a teardown thread waiting
+briefly on work the gate is documented to keep cheap. `ReleaseWork` itself is unchanged and is still
+called with no lock held from `Disarm`.
+
+### 4.1 How it is pinned — deterministically, and the earlier claim that it could not be was WRONG
+
+An earlier draft of this record said forcing the ordering "would need a wall-clock wait (banned) or a
+scheduler seam in the shared body". **That was false on this test project's own evidence**, and the
+code review caught it: `AsyncLifecycleTests.StaleGenerationCompletion_IsDiscarded_CannotOverwriteNewerState`
+(`client/tests/CcpClient.Tests/AsyncLifecycleTests.cs:26-47`) already forces exactly this
+stale-generation ordering in the same assembly, with no wall clock, by holding the stale generation's
+body open on a `TaskCompletionSource` the test controls.
+
+The pin taken here is the second route the review named, and it is stronger for a guard that all four
+modules inherit: **the predicate is asserted directly.** `AsyncOperationOwner.Generation` is public
+and `ReleaseIfStillOurs` is `protected`, so `MovingEffectSpineTests.GenerationProbe` — the smallest
+possible module over the shared body, with no surface, no clock and no content — can be armed,
+disarmed and re-armed, and then asked to release for a dead generation and for the live one:
+
+| Pin | Claim |
+|---|---|
+| `AReleaseTaggedWithADeadGenerationReleasesNOTHING_AndOneTaggedWithTheLiveGenerationReleases` (2 rows) | a superseded generation's teardown releases **nothing**; the current generation's **does** |
+| `TheGuardIsNotADisarmGuard_AReleaseForTheLiveGenerationStillWorksAfterAStopAndStart` | the negative control: after two stop/start cycles the live generation's own teardown still works, so a guard keyed on "has anything ever been superseded" is caught too |
+
+**Proved to bite on EVERY run.** With the guard clause deleted, the dead-generation row failed
+**5 times out of 5** consecutive runs and the live-generation row stayed green each time (a guard that
+refused every release would have failed the other half). Restored byte-identically —
+`OwnedSessionEffect.cs` md5 `93b2c237717227a17b9270e57e14e510` before and after.
+
+**What is still argued rather than pinned**, named because the fix has two halves and only one of
+them is mechanical: the ATOMICITY (the `lock`) is not separately pinned. Distinguishing "read then
+release" from "read-and-release" requires observing a thread parked between the two, which needs a
+cross-thread rendezvous and a bounded wait. The predicate pin above covers the guard clause; the lock
+is argued structurally, above and at the method.
+
+**The end-to-end fact remains sound but not complete**, and that is now a redundancy rather than the
+only evidence. `AStaleTeardownArrivingAfterARestart_MustNotTakeTheNewSessionsWorkDown` awaits the old
+generations' completions, so it can never red spuriously; but whether the tail lands before or after
+the re-arm is the thread pool's choice, so with the guard removed it fails only on the runs where the
+bad ordering really happens. It is kept because it is the story a reader understands, and the
+predicate pin is the one that always bites.
 
 ---
 
@@ -249,7 +290,7 @@ The third is SP-101's extraction check extended to four modules: **one line of s
 least one fact reds per module.** It took a new fact to get there —
 `DisarmReleasesTheWorkUNCONDITIONALLY_EvenWhenItThoughtItWasNotArmed`, which pins the property WPF
 states in as many words for this family of services ("Always close and clear windows, even if we
-thought we weren't running", `BouncingTextService.cs:210-211`).
+thought we weren't running", `BouncingTextService.cs:213`).
 
 md5 before and after each mutation:
 `OwnedSessionEffect.cs` `ae57d7ff453da3e2ed16670205565afd`,
@@ -286,6 +327,27 @@ md5 before and after each mutation:
 - **No interaction, focus, window behaviour or animation is verified** beyond the headless input
   routing in the rack tests: no real pointer passes through a spiral, and no capture shows a click
   landing under one.
+- **ONE UNEXPLAINED FLAKE, AND ITS NAMES WERE LOST.** A single `check-floor.mjs` run reported
+  **3 failures out of 1469** in `CcpClient.Tests` (`Failed: 3, Passed: 1464, Skipped: 2`) — 1469
+  because that run predated the three pins the code review added. It
+  **post-dated** the `ReleaseIfStillOurs` fix and post-dated the last test added, so it is NOT the
+  event in §4 — that one was a single named red I root-caused and fixed. **The three names were lost**
+  because that run's output was filtered to the floor lines only, and the run's preserved TRX
+  directory was not kept. It has not recurred: five consecutive full unit runs, one clean floor run,
+  and the reviewer's own six consecutive clean full suites could neither reproduce nor explain it.
+  **It is recorded as unexplained rather than as absent.**
+
+  **The one structural suspect, named rather than guessed at.** `MovingEffectSpineTests`' rig
+  dispatches inline (`InlineDispatch`), so a surface teardown posted from the parked operation's tail
+  runs **on that pool thread** rather than on a UI thread. That aliases `SpiralSurfacePresenter`'s
+  lock-free fields — `_advance`, `_slot`, `_animation`, `_lastFrameHeld` — and the bare
+  `List<string>` inside the rig's recording presence against the test thread that is asserting on
+  them. Nothing in the product does this: on a real dispatcher the post is delivered on the UI thread
+  and every touch of a presence is single-threaded by construction (the affinity rule
+  `OverlaySurfaceSet` states). So the suspect is the RIG, not the presenter — but that is a
+  hypothesis with three lost names behind it, not a diagnosis, and a lane that says otherwise would
+  be inventing evidence.
+
 - **Bouncing Text's motion law is READ, not ported.** Its formulas, clamps and bounce arithmetic are
   cited in `plan.md` and implemented nowhere; nothing in this packet is evidence about that module.
 
@@ -308,25 +370,27 @@ its three lines).
 
 **Tests — new**
 `SpiralOverlayEffectTests.cs` (**38** TRX results), `SpiralSurfacePresenterTests.cs` (**20**),
-`MovingEffectSpineTests.cs` (**11**), `SpiralFrameSourceTests.cs` (**12**).
+`MovingEffectSpineTests.cs` (**14**), `SpiralFrameSourceTests.cs` (**12**).
 
 **Tests — changed**
-`StudioSurfaceNoticeTests.cs` (**+21**: an 11-row theory and 5 facts for the moving module's lines),
+`StudioSurfaceNoticeTests.cs` (**+16**: an 11-row theory and 5 facts for the moving module's lines),
 `ContinuousEffectSpineTests.cs` (the rack-order expectation gains a fourth member),
 `SessionSpineTests.cs` (the unknown-rack-key theory's `"spiral"` row becomes `"visuals"`, a real WPF
 rack key with no toggle — the row stopped being unknown),
 `CcpClient.HeadlessTests/StudioRackHeadlessTests.cs` (**+3** and one fact rewritten),
 `CcpClient.HeadlessTests/NavigationShellHeadlessTests.cs` (one comment corrected, no count change).
 
-38 + 20 + 11 + 12 + 21 − 5 (the `"spiral"` theory row removed, and four replaced by the `"visuals"`
-row) … measured directly instead: **1469 − 1372 = +97 unit**, **90 − 87 = +3 headless**, matching the
-declared delta.
+**38 + 20 + 14 + 12 + 16 = 100 unit**, and **90 − 87 = +3 headless** — measured per file with
+`--filter`. `SessionSpineTests.cs` contributes **0**: its `"spiral"` theory row was replaced by a
+`"visuals"` row, one for one. (An earlier draft of this section wrote the two changed-file numbers as
+"+21" and "−5"; both were wrong and the errors cancelled, so `floor-delta.json` was right for the
+wrong reason. The truth is +16 and 0.)
 
 **Docs** `client/docs/wpf-surface-reachability.md` (D83–D91, D5 and D6 closed).
 
 ---
 
-## 8. Two things a reviewer should check first
+## 8. Three things a reviewer should check first
 
 1. **`SpiralOverlayEffect` has no `ISessionClock` in its constructor** and
    `SpiralSurfacePresenter` does. That one line is the packet's whole answer, and
@@ -335,6 +399,11 @@ declared delta.
    catch. Its own doc comment says what reflection is worth (SP-105's wording, kept): the guard
    really lives in the counting facts, and this one earns its keep by failing at the line a future
    author is editing.
-2. **§4.** A shared-body defect was found and fixed, and its pin is sound but not complete. If that
-   trade is not acceptable, the alternative is a scheduler seam in `OwnedSessionEffect`, which is a
-   larger change than the defect.
+2. **§4 and §4.1.** A shared-body defect was found and fixed in two halves. The GUARD is pinned
+   deterministically against a probe subclass (both arms; 5/5 red with the clause deleted). The
+   ATOMICITY — the lock that makes the test and the release one act — is argued, not pinned, and
+   that is stated at the method, in D91 and in §4.1 rather than left for a reader to notice.
+3. **§6's unexplained flake.** One `check-floor.mjs` run produced 3 failures whose names were lost,
+   after the fix and after the last test added, never reproduced in eleven clean suites since. The
+   one structural suspect is the rig's inline dispatch, not the presenter, and the reasoning is
+   written out rather than asserted.

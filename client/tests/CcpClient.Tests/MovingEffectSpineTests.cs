@@ -121,7 +121,7 @@ public class MovingEffectSpineTests
     {
         await using var rig = await Rig.StartAsync();
 
-        // The module ships ON (AppSettings.cs:2644) and there IS a spiral in this rig's library, so
+        // The module ships ON (AppSettings.cs:2645) and there IS a spiral in this rig's library, so
         // the only thing keeping it off the screen is that nobody pressed START. A module that
         // armed its cadence at construction would be turning a layer nobody asked for.
         Assert.True(rig.Spiral.Enabled);
@@ -228,6 +228,72 @@ public class MovingEffectSpineTests
         var frames = rig.SpiralPresence.Calls.Count(c => c == "paint");
         rig.Clock.Advance(SpiralFrameDelay.Default);
         Assert.Equal(frames + 1, rig.SpiralPresence.Calls.Count(c => c == "paint"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReleaseTaggedWithADeadGenerationReleasesNOTHING_AndOneTaggedWithTheLiveGenerationReleases(
+        bool useTheLiveGeneration)
+    {
+        // THE DETERMINISTIC HALF OF THE FIX, and the one that reds on EVERY run when the guard
+        // clause in OwnedSessionEffect.ReleaseIfStillOurs is deleted.
+        //
+        // The fact above it drives the same defect end to end, but whether the stale tail lands
+        // before or after the re-arm is the thread pool's choice, so it is sound and not complete.
+        // This one asks the predicate directly, which is available because AsyncOperationOwner
+        // exposes its Generation and the guard is protected — the same shape
+        // AsyncLifecycleTests.StaleGenerationCompletion_IsDiscarded_CannotOverwriteNewerState uses
+        // to pin the registry's own stale-generation rule without a wall clock.
+        //
+        // This is SHARED code that all four modules inherit, which is why it is pinned as a
+        // predicate rather than only as a story about one of them.
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("GenerationProbe");
+        var boundary = new UiDispatchBoundary();
+        boundary.Bind(new InlineDispatch());
+        var probe = new GenerationProbe(owner, new EffectSignal(boundary, static () => true));
+
+        probe.Arm();
+        var dead = owner.Generation;
+
+        probe.Disarm();
+        probe.Arm();
+        var live = owner.Generation;
+        Assert.NotEqual(dead, live);
+
+        var before = probe.Releases;
+        probe.ReleaseFor(useTheLiveGeneration ? live : dead);
+
+        // The dead generation's teardown must release nothing at all; the live one's must release.
+        // Both arms are asserted, because a guard that refused EVERY release would pass the first
+        // half and break every stop in the port.
+        Assert.Equal(useTheLiveGeneration ? before + 1 : before, probe.Releases);
+    }
+
+    [Fact]
+    public void TheGuardIsNotADisarmGuard_AReleaseForTheLiveGenerationStillWorksAfterAStopAndStart()
+    {
+        // The negative control for the theory above, stated separately because it is the failure a
+        // too-eager guard would produce: after a stop and a start, the CURRENT generation's own
+        // teardown must still work. A guard keyed on "has anything ever been superseded" rather
+        // than on THIS generation would break every second session and nothing else would notice.
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("GenerationProbe");
+        var boundary = new UiDispatchBoundary();
+        boundary.Bind(new InlineDispatch());
+        var probe = new GenerationProbe(owner, new EffectSignal(boundary, static () => true));
+
+        probe.Arm();
+        probe.Disarm();
+        probe.Arm();
+        probe.Disarm();
+        probe.Arm();
+
+        var before = probe.Releases;
+        probe.ReleaseFor(owner.Generation);
+
+        Assert.Equal(before + 1, probe.Releases);
     }
 
     [Fact]
@@ -429,6 +495,39 @@ public class MovingEffectSpineTests
             {
             }
         }
+    }
+
+    /// <summary>
+    /// The smallest possible module over the shared body: it owns no surface, no clock and no
+    /// content, and exists only so the generation-guarded release can be asked directly.
+    ///
+    /// <para>It is here rather than in a module's own file because the guard is
+    /// <see cref="OwnedSessionEffect"/>'s and all four modules inherit it.</para>
+    /// </summary>
+    private sealed class GenerationProbe(AsyncOperationOwner owner, EffectSignal signal)
+        : OwnedSessionEffect(owner, signal, "generation-probe")
+    {
+        public int Releases { get; private set; }
+
+        public override string Id => "generation-probe";
+
+        public override string Title => "Generation probe";
+
+        public override bool Enabled => true;
+
+        public override void SetEnabled(bool enabled)
+        {
+        }
+
+        /// <summary>Ask the shared guard directly, as a stale or a live teardown would.</summary>
+        public void ReleaseFor(int generation) => ReleaseIfStillOurs(generation);
+
+        protected override bool WorkIsRunning => false;
+
+        protected override CapabilityState Engage(int generation) =>
+            new CapabilityState.Available("generation probe: engaged");
+
+        protected override void ReleaseWork() => Releases++;
     }
 
     /// <summary>A four-frame clip that never touches a file.</summary>

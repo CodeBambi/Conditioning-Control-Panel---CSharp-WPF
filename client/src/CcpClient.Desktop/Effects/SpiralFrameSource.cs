@@ -42,7 +42,7 @@ public interface ISpiralAnimation : IDisposable
 {
     /// <summary>How many frames the clip has. One means a still image, and a still image is a
     /// legitimate spiral: WPF starts no frame timer at all for one
-    /// (<c>Services/Notifications/OverlayService.cs:1369</c>).</summary>
+    /// (<c>Services/Notifications/OverlayService.cs:1370</c>).</summary>
     int FrameCount { get; }
 
     /// <summary>How long each frame is held — WPF's clamped GIF delay
@@ -62,7 +62,7 @@ public interface ISpiralAnimation : IDisposable
 /// reused full-screen buffer.
 ///
 /// <para><b>What it reproduces</b>, from <c>Services/Notifications/OverlayService.cs</c>: the frame
-/// list read off the image's FIRST frame dimension (<c>:1541-1543</c>, WPF's
+/// list read off the image's FIRST frame dimension (<c>:1539-1540</c>, WPF's
 /// <c>gif.FrameDimensionsList[0]</c>); the per-frame delay from property <c>0x5100</c> in
 /// hundredths of a second with WPF's own out-of-range fallback (<c>:1545-1552</c>, see
 /// <see cref="SpiralFrameDelay"/>); and the layer's geometry — <c>Stretch.UniformToFill</c> inside a
@@ -98,7 +98,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
     }
 
     /// <summary>
-    /// WPF's <c>Stretch.UniformToFill</c> inside a clipping container (<c>OverlayService.cs:1697</c>,
+    /// WPF's <c>Stretch.UniformToFill</c> inside a clipping container (<c>OverlayService.cs:1695</c>,
     /// <c>:1701-1706</c>), as arithmetic: the largest centred rectangle of the source that has the
     /// destination's aspect ratio. The image therefore covers the whole layer with nothing letterboxed
     /// and nothing distorted, and the overflow is cropped evenly on both sides.
@@ -307,7 +307,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
             }
         }
 
-        /// <summary>WPF's <c>gif.FrameDimensionsList[0]</c> (<c>OverlayService.cs:1541</c>). An image
+        /// <summary>WPF's <c>gif.FrameDimensionsList[0]</c> (<c>OverlayService.cs:1539-1540</c>). An image
         /// with no dimension list at all is treated as a single still frame.</summary>
         private static Guid FirstFrameDimension(nint image)
         {
@@ -335,7 +335,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
         }
 
         /// <summary>
-        /// WPF's frame-delay read (<c>OverlayService.cs:1545-1552</c>): property <c>0x5100</c>, the
+        /// WPF's frame-delay read (<c>OverlayService.cs:1542-1549</c>): property <c>0x5100</c>, the
         /// first four bytes as an <c>int</c> of hundredths, through
         /// <see cref="SpiralFrameDelay.FromHundredths"/>. Anything missing or short is the default —
         /// upstream's <c>catch</c> around the same read.
