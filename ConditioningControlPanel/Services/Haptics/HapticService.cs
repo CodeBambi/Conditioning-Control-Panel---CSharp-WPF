@@ -532,6 +532,13 @@ namespace ConditioningControlPanel.Services
             _mixer.AllowTestWindow(durationMs + 2000);
             if (!_mixer.IsGateOpen) return false;
 
+            // A stroker (Handy / Handy 2, Solace Pro) has NO level actuator — only absolute
+            // Position, which SendDeviceLevelAsync deliberately skips because position is
+            // placement, not intensity. The intensity pattern below therefore produced zero
+            // outputs and the Test button did nothing at all, while still reporting success.
+            // Give those toys the only test that means anything for them: a stroke.
+            if (!HasLevelActuator(device)) return await TestStrokeAsync(device, durationMs, token).ConfigureAwait(false);
+
             var steps = HapticPatterns.Render(mode, Math.Clamp(intensity, MinPerceptibleIntensity, 1.0),
                                               durationMs, priority: 5);
             var total = Math.Max(durationMs, HapticPatterns.TotalMs(steps));
@@ -566,6 +573,55 @@ namespace ConditioningControlPanel.Services
             }
 
             Announce("Test " + (string.IsNullOrWhiteSpace(device.Nickname) ? device.Name : device.Nickname), intensity);
+            return true;
+        }
+
+        /// <summary>True when the toy has at least one actuator the intensity path can actually
+        /// drive. Position and Stroke are placement/range, not levels — a toy with nothing but
+        /// those is a stroker and gets <see cref="TestStrokeAsync"/> instead.</summary>
+        private static bool HasLevelActuator(HapticDevice device)
+        {
+            foreach (var a in device.Actuators)
+                if (a.Type != ActuatorType.Position && a.Type != ActuatorType.Stroke) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Test for a position-only toy: a few full strokes over the test window, ending parked at
+        /// the bottom. Runs through the mixer's targeted position write (the same path FunScript
+        /// uses), so it inherits the gate but not the intensity mix — position is not an intensity.
+        /// Returns false when the toy has no Position actuator either, so the Test button reports
+        /// a failure instead of silently claiming success.
+        /// </summary>
+        private async Task<bool> TestStrokeAsync(HapticDevice device, int durationMs, CancellationToken token)
+        {
+            bool hasPosition = false;
+            foreach (var a in device.Actuators)
+                if (a.Type == ActuatorType.Position) { hasPosition = true; break; }
+            if (!hasPosition) return false;
+
+            // Long enough to actually see the carriage travel: Position coasts ~300ms and takes
+            // 1-2s to spin up (see ActuatorType.Position), so a 700ms vibe-length test would land
+            // as a twitch. Four half-second legs, two full strokes.
+            const int LegMs = 500;
+            var legs = Math.Max(4, (int)Math.Round(Math.Max(durationMs, 2000) / (double)LegMs));
+            try
+            {
+                for (int i = 0; i < legs; i++)
+                {
+                    await _mixer.SetPositionAsync(device.DeviceKey, i % 2 == 0 ? 1.0 : 0.0, token).ConfigureAwait(false);
+                    await Task.Delay(LegMs, token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { App.Logger?.Debug("TestStrokeAsync failed: {E}", ex.Message); }
+            finally
+            {
+                try { await _mixer.SetPositionAsync(device.DeviceKey, 0, CancellationToken.None).ConfigureAwait(false); }
+                catch { }
+            }
+
+            Announce("Test " + (string.IsNullOrWhiteSpace(device.Nickname) ? device.Name : device.Nickname), 1.0);
             return true;
         }
 

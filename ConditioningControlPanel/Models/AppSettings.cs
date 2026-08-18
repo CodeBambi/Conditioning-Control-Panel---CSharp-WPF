@@ -2005,7 +2005,8 @@ namespace ConditioningControlPanel.Models
         private bool _restrictGazeContentToCalibratedScreen = true;
         /// <summary>
         /// When enabled (and a webcam calibration exists), all gaze-reactive
-        /// content (Bubble Pop, Blink Trainer, Flash gaze-pop targets, etc.)
+        /// content (Bubble Pop, Flash gaze-pop targets, etc.; NOT Blink Trainer
+        /// since #979 - blink detection is monitor-independent)
         /// is pinned to the monitor calibration ran on, overriding
         /// <see cref="DualMonitorEnabled"/>. Prevents the multi-monitor
         /// case where content spawns on a screen the gaze pipeline can't
