@@ -193,6 +193,11 @@ public class NavigationShellHeadlessTests
         // SP-094 opened the Play door and the DTRH assertion below is UNCHANGED and still
         // holds: DTRH is not a door. WPF reaches it in two hops — rail door then the Play
         // page's hero card (§3) — so the rail names the PAGE, never the feature behind it.
+        //
+        // SP-095 opened the Graded Intake door and added NOTHING else: the Chaos tunnel and the
+        // AvatarTube demonstrator were investigated and refused a door (§11 D30, D31), so the
+        // array below is the mechanical record of that decision. A door per demo flag would red
+        // this test.
         var (host, window) = await BootAsync();
 
         var doors = window.GetVisualDescendants().OfType<RadioButton>()
@@ -202,9 +207,18 @@ public class NavigationShellHeadlessTests
             ShellRoutes.Declared.Select(r => r.Label).ToArray(),
             doors.Select(d => d.Content as string).ToArray());
         Assert.Equal(
-            new[] { "DoorStudio", "DoorCompanion", "DoorPlay", "DoorSystem" },
+            new[] { "DoorStudio", "DoorCompanion", "DoorPlay", "DoorIntake", "DoorSystem" },
             doors.Select(d => d.Name).ToArray());
         Assert.Equal(ShellRoutes.Declared.Count, window.Router.Routes.Count);
+
+        // No door names a surface WPF does not navigate to. "tunnel" and "avatar" are the two
+        // SP-095 refused; keeping them out mechanically is what stops the refusal from decaying
+        // into a comment nobody reads.
+        foreach (var text in doors.SelectMany(d => new[] { d.Name ?? "", d.Content as string ?? "" }))
+        {
+            Assert.DoesNotContain("tunnel", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("avatar", text, StringComparison.OrdinalIgnoreCase);
+        }
 
         // Every door reaches a page the shell actually mounts (ShellRouteBinding enforces the
         // same thing at composition; this is the rendered half of it).

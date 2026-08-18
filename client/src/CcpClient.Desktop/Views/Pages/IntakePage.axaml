@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CcpClient.Desktop.Views.Pages.IntakePage">
+  <!--
+    The Graded Intake page (WPF Views/Tabs/GradedIntakeTabView.xaml). Hop 2 of the route the
+    rail door opens: the door NAVIGATES here (WPF's BtnNavGradedIntake -> ShowTab("gradedintake"),
+    MainWindow/MainWindow.TabNavigation.cs:947) and the ONE window-opening button lives on this
+    page — WPF's one-entry rule (MainWindow/MainWindow.Presets.cs:1007,1036).
+
+    THE WORDS ARE WPF'S OWN. The title is the literal at GradedIntakeTabView.xaml:60 (deliberately
+    not localized upstream: "the intake's own page content is English-only, and the launch button
+    beside it has always been a literal too"), the sub-line is :67-68 verbatim, the section head is
+    :126, its blurb is :128-129, and the button is :154's content emoji-stripped (the §9 D8 rule —
+    the app strips emoji mod-aware, MainWindow/MainWindow.UiUpdates.cs:101,124) carrying :157's
+    tooltip verbatim.
+
+    THE WEEKLY-PASS GATE IS REAL AND IT REFUSES (§11 D26). Unlimited retakes are the patron
+    privilege upstream — Premium is "unlimited runs, no week, no door"
+    (Services/Progression/IntakePassService.cs:13) and "retakes stay a reason to subscribe" (:25-29)
+    — so an ungated button would hand every user paid content. The band below carries the refusal.
+    Two divergences from WPF's gate, both deliberate:
+      * WPF PAINTS its gate at navigation, from a pass state it already knows
+        (MainWindow.Lab.cs:368-434). The port's context — and therefore its pass — is prepared on
+        the first press, so the band appears WHEN A PRESS IS REFUSED, exactly as the DTRH band does
+        for the same class of reason (§10 D16).
+      * WPF's gate is a CURTAIN: IsHitTestVisible="True" with GradedIntakeGatedContent.IsEnabled
+        = false behind it (GradedIntakeTabView.xaml:191-192). The port's band is hit-test
+        TRANSPARENT, because a band that appears after the first press and then swallowed the
+        second would trap the user on a refusal that can expire at Monday 00:00 (§11 D34).
+
+    WHAT IS OMITTED, AND WHY (§11 D27, D29). WPF's page also carries a pass banner (:104-124), the
+    hidden classic-quiz controls (:131-147), a past-runs list (:166-175), a BETA pill (:62-64) and a
+    gate CTA that opens App Info & Data. None is ported: no AI-availability source, no persisted
+    past-run index, and nowhere for an unlock CTA to go (the §10 D17 rule). Rendering any of them
+    would be the greyed control that swallows the gesture — the §9 D7 rule. ABSENT, not disabled.
+  -->
+  <StackPanel Margin="20" Spacing="4">
+    <TextBlock Classes="page-title" Text="Graded Intake" />
+    <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
+               Text="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it." />
+
+    <Border Classes="module" Margin="0,16,0,0">
+      <Panel>
+        <StackPanel Spacing="10">
+          <TextBlock Classes="module-title" Text="Begin a run" />
+          <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
+                     Text="Each intake runs in its own window. Answer honestly - the pacing of your answers counts as much as the answers themselves." />
+
+          <!-- The one working destination on this page. GradedIntakeTabView.xaml:152 content is
+               "✨ Begin Intake"; the emoji-stripped form is what the running app renders. NEVER
+               disabled, in any branch: WPF's launch button is covered by the gate overlay, never
+               greyed, so a refused press must ARRIVE and be answered out loud. -->
+          <Button x:Name="BeginIntakeButton"
+                  Classes="module-action"
+                  AutomationProperties.AutomationId="BeginIntakeButton"
+                  AutomationProperties.Name="Begin Intake"
+                  HorizontalAlignment="Left"
+                  ToolTip.Tip="A banded descent that drafts a personalised session from how you answer (Beta)."
+                  Content="Begin Intake" />
+        </StackPanel>
+
+        <!-- The pass gate. WPF's scrim colour and radius (GradedIntakeTabView.xaml:192), the
+             port's plate (the §10 D23 lesson: prose on a translucent scrim composites through the
+             card underneath and cannot be read). IsHitTestVisible is on the ELEMENT, not in the
+             style, because it is the load-bearing attribute of the whole surface. -->
+        <Border x:Name="PassGate"
+                Classes="intake-gate"
+                IsHitTestVisible="False"
+                IsVisible="False">
+          <Border x:Name="PassGatePlate"
+                  Classes="lock-plate"
+                  AutomationProperties.AutomationId="PassGatePlate"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="16"
+                  MaxWidth="620">
+            <StackPanel Spacing="8">
+              <TextBlock x:Name="PassGateTitle"
+                         Classes="lock-title"
+                         AutomationProperties.AutomationId="PassGateTitle"
+                         HorizontalAlignment="Center"
+                         Text="" />
+              <TextBlock x:Name="PassGateText"
+                         Classes="lock-text"
+                         AutomationProperties.AutomationId="PassGateText"
+                         TextAlignment="Left"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+        </Border>
+      </Panel>
+    </Border>
+  </StackPanel>
+</UserControl>

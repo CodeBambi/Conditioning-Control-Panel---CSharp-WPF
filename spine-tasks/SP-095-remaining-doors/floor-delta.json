@@ -1,0 +1,6 @@
+{
+  "packet": "SP-095-remaining-doors",
+  "unit": 10,
+  "headless": 6,
+  "reason": "IntakePassGateTests (10 results = 8 facts + a 2-row theory): the Graded Intake weekly-pass gate as a pure function — only Premium and a READ Available grant, the greenfield no-provider default is undeterminable rather than a grant (the over-grant this packet first shipped and then closed), a spent week and a rolled-back clock carry WPF's verbatim copy, the one-day key so nobody reads 'unlocks in 1 days', a thrown evaluation is undeterminable rather than WPF's fail-closed Spent, signed-out is its own branch, the whole state-by-reason cross product lands on exactly one renderable decision with exactly two grants, no refusal message carries another refusal's sentence, and Classify never logs authored copy. IntakePageHeadlessTests (6): the cold-start door-then-button route refusing undeterminable and opening nothing, a patron authority reaching the ONE coordinator with no band, the refused page taking the click with nothing disabled and a hit-test-transparent band over an opaque plate, the door navigating without asking the gate, WPF's own strings with none of the controls the port lacks, and the rail order plus the 'Intake door' UIA name and per-door layout probe the headed capture harness derives its door set from."
+}

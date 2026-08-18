@@ -93,11 +93,15 @@ public partial class App : Application
                 _host.LogDiagnostic("app: teardown end");
             };
 
-            // The --dtrh-* harness options travel to the shell's ONE DtrhLaunch, so the
-            // demonstrator and the user's FALL IN button drive the same coordinator instance.
+            // The --dtrh-* and --intake-* harness options travel to the shell's ONE DtrhLaunch and
+            // ONE IntakeLaunch, so each demonstrator and the matching user button drive the same
+            // coordinator instance.
             var dashboard = new MainWindow(_host, _popupDemo,
                 _dtrhDemo
                     ? new Features.Dtrh.DtrhHarnessOptions(_dtrhPage, _dtrhFxDrive, _dtrhM2Test, _dtrhKillRenderers)
+                    : null,
+                _intakeDemo
+                    ? new Features.Intake.IntakeHarnessOptions(_intakeDrive, _intakeKillRenderers)
                     : null);
             desktop.MainWindow = dashboard;
 
@@ -268,13 +272,17 @@ public partial class App : Application
                 };
             }
             // SP-054 Graded Intake DEMONSTRATOR (--intake-demo): the host flow at startup
-            // (the --loom-demo demonstrator class; the dashboard flip-tile/nudge is the
-            // BLOCKED inventory's item — flagged glue, SP-054 record.md). The flow ending
-            // (window closed for real / watchdog exhaustion) ends the app (exit-0 evidence).
+            // (the --loom-demo demonstrator class). The flow ending (window closed for real /
+            // watchdog exhaustion) ends the app (exit-0 evidence).
+            // SP-095: this path no longer constructs a coordinator of its own. It uses the SAME
+            // one the shell's Graded Intake door -> "Begin Intake" button uses
+            // (Features/Intake/IntakeLaunch.cs), so there is exactly ONE construction site for
+            // IntakeLaunchCoordinator in the tree — the LoomLaunch/DtrhLaunch convention. The
+            // SP-054 note that the dashboard entry was BLOCKED glue is discharged: the door
+            // exists, and it reaches this object.
             if (_intakeDemo)
             {
-                var intakeCoordinator = new Features.Intake.IntakeLaunchCoordinator(
-                    _host, dashboard, _intakeDrive, _intakeKillRenderers);
+                var intakeCoordinator = dashboard.Intake.Coordinator;
                 intakeCoordinator.FlowEnded += () =>
                 {
                     _host.LogDiagnostic("intake: flow ended — shutting down the lifetime");
@@ -300,13 +308,23 @@ public partial class App : Application
                             }
                         }), TaskScheduler.Default);
                 };
+                // Through the COORDINATOR, not IntakeLaunch: the demonstrator deliberately steps
+                // past the weekly-pass gate, exactly as --dtrh-demo steps past the Tier-2 gate and
+                // for the same reason (§10 D22, §11 D32). This build has no entitlement authority
+                // for the intake at all, so a gated --intake-demo would refuse on EVERY machine
+                // and capture nothing; and once one does exist, the pass is spent by a completed
+                // run, so evidence capture would depend on whether the developer happened to run
+                // an intake earlier in the same ISO week. It is still the SAME coordinator the
+                // button drives — one construction site, two callers. The USER path is gated.
                 dashboard.Opened += (_, _) => intakeCoordinator.Launch();
             }
 
             // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
-            // below-Topmost surface (the --loom-demo demonstrator class; the greenfield
-            // dashboard has no Chaos game entry point — typed named limit). The drive /
-            // auto-close flags are HARNESS-ONLY (ChaosTunnelDemoDrive).
+            // below-Topmost surface (the --loom-demo demonstrator class). The tunnel gets NO
+            // dashboard door and never will: WPF renders it UNDER a running Chaos descent and
+            // navigates to it from nowhere (Chaos/ChaosTunnelService.cs:20,34 — see §11 D30 and
+            // the header of ChaosTunnelDemoDrive). The drive / auto-close flags are
+            // HARNESS-ONLY (ChaosTunnelDemoDrive).
             if (_tunnelDemo)
             {
                 Features.Chaos.ChaosTunnelDemoDrive.Attach(_host, dashboard, desktop, _tunnelDrive, _tunnelAutoCloseSeconds);

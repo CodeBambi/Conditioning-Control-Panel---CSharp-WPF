@@ -26,10 +26,18 @@ public partial class MainWindow : Window
     /// <para>SP-094 adds the second real route and the port's flagship one: Play -> the DTRH
     /// hero card -> FALL IN / Quick Drop, behind the Tier-2 gate
     /// (<c>Features/Dtrh/DtrhGate.cs</c>, <c>MainWindow/MainWindow.Lab.cs:228,313</c>).</para>
+    ///
+    /// <para>SP-095 adds the third: Graded Intake -> <c>Begin Intake</c>, the port's analogue of
+    /// WPF's rail sub-entry <c>BtnNavGradedIntake</c> (<c>MainWindow/MainWindow.xaml:811-812</c>
+    /// -> <c>MainWindow.TabNavigation.cs:947</c>) and of the destination page that entry opens.
+    /// It also settles the two surfaces that do NOT get a door — the Chaos tunnel backdrop and
+    /// the AvatarTube demonstrator; wpf-surface-reachability.md §11 carries the evidence.</para>
     /// </summary>
     /// <param name="dtrhHarness">HARNESS-ONLY <c>--dtrh-*</c> options; null on every user path.</param>
+    /// <param name="intakeHarness">HARNESS-ONLY <c>--intake-*</c> options; null on every user path.</param>
     public MainWindow(ApplicationHost host, bool popupDemo = false,
-        Features.Dtrh.DtrhHarnessOptions? dtrhHarness = null)
+        Features.Dtrh.DtrhHarnessOptions? dtrhHarness = null,
+        Features.Intake.IntakeHarnessOptions? intakeHarness = null)
     {
         InitializeComponent();
 
@@ -46,6 +54,10 @@ public partial class MainWindow : Window
                 "the shell needs the entitlement capability and this host has none — an ungated DTRH "
                 + "launcher would hand out paid content, so composition refuses rather than degrading"),
             dtrhHarness);
+        // The ONE intake construction site (Features/Intake/IntakeLaunch.cs). The --intake-demo
+        // flag reaches this same object's coordinator rather than building a second one, which is
+        // the LoomLaunch/DtrhLaunch convention two waves already depend on.
+        Intake = new Features.Intake.IntakeLaunch(host, this, intakeHarness);
 
         // SP-013 demonstrator popup manager. It has no user path now that the demonstrator card
         // is retired: it is infrastructure only (A-014 integration rule), kept because
@@ -60,11 +72,13 @@ public partial class MainWindow : Window
         _pages[ShellRoutes.Studio] = new StudioPage(Loom);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
+        _pages[ShellRoutes.Intake] = new IntakePage(Intake);
         _pages[ShellRoutes.System] = new SystemPage(host);
 
         _doors[ShellRoutes.Studio] = DoorStudio;
         _doors[ShellRoutes.Companion] = DoorCompanion;
         _doors[ShellRoutes.Play] = DoorPlay;
+        _doors[ShellRoutes.Intake] = DoorIntake;
         _doors[ShellRoutes.System] = DoorSystem;
 
         // The rail's markup and the declared route table must be the same set, in both
@@ -121,6 +135,10 @@ public partial class MainWindow : Window
     /// <summary>The one DTRH gate + launch path (public so tests drive the real gate, and so
     /// <c>--dtrh-demo</c> reaches the SAME coordinator the user path builds).</summary>
     public Features.Dtrh.DtrhLaunch Dtrh { get; }
+
+    /// <summary>The one Graded Intake launch path (public so tests drive the real seam, and so
+    /// <c>--intake-demo</c> reaches the SAME coordinator the user path builds).</summary>
+    public Features.Intake.IntakeLaunch Intake { get; }
 
     /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;

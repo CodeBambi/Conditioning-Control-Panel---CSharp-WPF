@@ -24,8 +24,8 @@ public sealed class IntakeHostContext : IDisposable
         DtrhLoom loom,
         IntakeDraftSink draftSink,
         IntakeSaveImageSink saveImageSink,
-        string subjectId,
-        IntakeServingRoots.IntakePayloadProbe payloadProbe)
+        string subjectIdPath,
+        Action<string> log)
     {
         Participant = participant;
         SettingsStore = settingsStore;
@@ -36,9 +36,15 @@ public sealed class IntakeHostContext : IDisposable
         Loom = loom;
         DraftSink = draftSink;
         SaveImageSink = saveImageSink;
-        SubjectId = subjectId;
-        PayloadProbe = payloadProbe;
+        _subjectIdPath = subjectIdPath;
+        _log = log;
     }
+
+    private readonly string _subjectIdPath;
+    private readonly Action<string> _log;
+    private string? _subjectId;
+
+    private IntakeServingRoots.IntakePayloadProbe? _payloadProbe;
 
     public IntakeParticipant Participant { get; }
 
@@ -61,19 +67,52 @@ public sealed class IntakeHostContext : IDisposable
 
     public IntakeSaveImageSink SaveImageSink { get; }
 
-    /// <summary>The 4-digit local-fiction subject id (never transmitted).</summary>
-    public string SubjectId { get; }
+    /// <summary>
+    /// The 4-digit local-fiction subject id (never transmitted), minted on FIRST READ.
+    ///
+    /// <para>Lazy since SP-095, and not as an optimisation: its only reader is the page's boot
+    /// config (<c>IntakeHostWindow.axaml.cs:612</c>), so a launch the pass gate REFUSES must not
+    /// mint one. A user who has never taken an intake should not find an intake subject id
+    /// sitting in their data directory because they once pressed a button and were told no.</para>
+    /// </summary>
+    public string SubjectId => _subjectId ??= IntakeSubjectId.LoadOrMint(_subjectIdPath, _log);
 
-    /// <summary>The intake payload probe at start (SP-048 discipline — self-evidencing transcripts).</summary>
-    public IntakeServingRoots.IntakePayloadProbe PayloadProbe { get; }
+    /// <summary>The intake payload probe, taken when the transport BINDS (SP-048 discipline —
+    /// self-evidencing transcripts). Reading it before <see cref="StartTransport"/> is a bug, not
+    /// a default: SP-095 split the bind out of construction so a refused launch never opens a
+    /// loopback origin, and a probe invented for that window would describe nothing.</summary>
+    public IntakeServingRoots.IntakePayloadProbe PayloadProbe => _payloadProbe
+        ?? throw new InvalidOperationException(
+            "the intake payload probe is taken at transport bind — call StartTransport() first");
 
     /// <summary>Start the participant + stores, run the punch-card load repairs (saving a
-    /// healed file), mint/load the subject id, and build the services + sinks.</summary>
+    /// healed file), mint/load the subject id, and build the services + sinks — then bind the
+    /// transport. <see cref="Prepare"/> plus <see cref="StartTransport"/>, for callers that want
+    /// both in one step.</summary>
     public static IntakeHostContext Start(ApplicationHost host, string? dataDirectory = null,
         IntakePassService.IIntakeEntitlementSource? entitlement = null)
     {
+        var context = Prepare(host, dataDirectory, entitlement);
+        context.StartTransport();
+        return context;
+    }
+
+    /// <summary>
+    /// Everything <see cref="Start"/> does EXCEPT binding the loopback origin: the stores, the
+    /// punch-card repairs, the subject id, the services and the sinks.
+    ///
+    /// <para>SP-095 split this out because the weekly-pass gate has to be answered BEFORE a run
+    /// opens (WPF checks <c>App.IntakePass.CanStartIntake</c> at
+    /// <c>MainWindow/MainWindow.Lab.cs:124</c>, and its pass service is app-wide so the check
+    /// costs nothing). The port's pass lives on this context, so a launch that is going to be
+    /// refused must be able to read it without standing up an HTTP origin nobody will talk to.
+    /// The participant's data directory is fixed at construction, so nothing here needs the
+    /// bind.</para>
+    /// </summary>
+    public static IntakeHostContext Prepare(ApplicationHost host, string? dataDirectory = null,
+        IntakePassService.IIntakeEntitlementSource? entitlement = null)
+    {
         var participant = new IntakeParticipant(new LogSinkAdapter(host), dataDirectory);
-        var probe = participant.Start();
         var dataDir = participant.DataDirectory;
 
         var settingsStore = new PersistenceStore<IntakeSettingsDocument>(
@@ -113,12 +152,19 @@ public sealed class IntakeHostContext : IDisposable
         var loom = new DtrhLoom(participant.SpiralsRoot, host.LogDiagnostic);
         var draftSink = new IntakeDraftSink(participant.DraftedSessionsRoot, host.LogDiagnostic);
         var saveImageSink = new IntakeSaveImageSink(participant.IntakeSpiralsRoot, null, host.LogDiagnostic);
-        var subjectId = IntakeSubjectId.LoadOrMint(Path.Combine(dataDir, "intake_subject.txt"), host.LogDiagnostic);
+        // NOT minted here — see the SubjectId property. Prepare() runs for a press the gate may
+        // refuse, and minting an identity for a refused user is a side effect nobody asked for.
+        var subjectIdPath = Path.Combine(dataDir, "intake_subject.txt");
 
         return new IntakeHostContext(
             participant, settingsStore, punchStore, assetSelectionStore, pass, punchCard, loom, draftSink, saveImageSink,
-            subjectId, probe);
+            subjectIdPath, host.LogDiagnostic);
     }
+
+    /// <summary>Bind the loopback origin and take the payload probe (idempotent — the
+    /// participant's own start latch does the deduplication). Called immediately before a host
+    /// window opens, never on a refused launch.</summary>
+    public void StartTransport() => _payloadProbe = Participant.Start();
 
     /// <summary>Flush both stores (bounded) and stop the transport (idempotent).</summary>
     public void Dispose()

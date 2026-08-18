@@ -9,9 +9,8 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Chaos;
 
 /// <summary>
-/// HARNESS-ONLY demonstrator drive (the --dtrh-demo/--loom-demo class; the greenfield
-/// dashboard has no Chaos game entry point — typed named limit). `--tunnel-demo` shows the
-/// backdrop through the REAL service path (capability check → build → sink → ready →
+/// HARNESS-ONLY demonstrator drive (the --dtrh-demo/--loom-demo class). `--tunnel-demo` shows
+/// the backdrop through the REAL service path (capability check → build → sink → ready →
 /// run-start); `--tunnel-drive "a,b,c"` runs timed steps (the SP-008 no-input-automation
 /// class — honestly labeled timed drive, never an input claim):
 ///
@@ -27,6 +26,38 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// `--tunnel-auto-close N` = timed CloseActive without a drive (WSLg exit-evidence class).
 /// On a typed-unavailable surface the demo logs the typed line and exits 0 honestly
 /// (consult ruling 3 — never a hang, never an empty window).
+///
+/// <para><b>WHY THIS SURFACE HAS NO DOOR, corrected at SP-095.</b> This comment used to open
+/// with "the greenfield dashboard has no Chaos game entry point — typed named limit", which read
+/// as a port gap waiting for a door. It is not one. <b>WPF has no tunnel entry point either.</b>
+/// The tunnel is "the endless three.js 'rabbit hole' tunnel rendered UNDER the whole Chaos game"
+/// (<c>ConditioningControlPanel/Chaos/ChaosTunnelService.cs:20</c>) — a single non-topmost
+/// fullscreen window carrying <c>WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW</c> so it cannot take focus
+/// and never appears in Alt-Tab (<c>:31-32</c>), gated on <c>ChaosTunnelEnabled</c> and
+/// <b>default OFF</b> (<c>:34,:58</c>). Nothing navigates to it and no button opens it: every
+/// caller is the classic descent's own service — <c>Services/Chaos/ChaosModeService.cs:345</c>
+/// (preload under the countdown), <c>:518</c> (show at run start), <c>:3042</c> (zone hint),
+/// <c>:3246</c> (close). Its user-facing control is a CHECKBOX, <c>ChkTunnel</c>, in the Chaos
+/// SETUP LOBBY — the Warren (<c>Chaos/ChaosHubWindow.xaml.cs:1566</c> read, <c>:1667</c> write) —
+/// which is a pre-run screen: all three of its construction sites return early when a descent is
+/// already running (<c>MainWindow/MainWindow.Lab.cs:242</c> then <c>:262-264</c>;
+/// <c>Chaos/ChaosOverlayWindow.xaml.cs:873</c> then <c>:880</c>;
+/// <c>Services/Chaos/DtrhHostService.cs:879</c> then <c>:886</c>). A setting on a setup screen is
+/// still not a destination, so a rail door here would be a port invention with no WPF
+/// counterpart. What the port is actually missing is the Chaos RUN — and the lobby that
+/// configures it — for the backdrop to sit under: a feature row, not a door. Until that lands
+/// <c>--tunnel-demo</c> is the correct and only way to render this surface. Recorded at
+/// wpf-surface-reachability.md §11 D30.</para>
+///
+/// <para><b>An earlier revision of this comment said the lobby was "reachable only from inside a
+/// running classic descent", which is the INVERSE of what its own citation does</b> — and it is
+/// left named here rather than silently rewritten, because the failure mode matters more than the
+/// sentence. The citation pointed at real lines; the prose described the conclusion the author
+/// had already reached, and it happened to make WPF's tunnel control look less reachable than it
+/// is, which flattered the no-door verdict. Third instance in this project of a citation aimed at
+/// real lines while describing their opposite (wpf-surface-reachability.md §8.5's occluded title;
+/// §10 D24's two-term grant recorded as one term). Read the cited lines, then write the
+/// sentence.</para>
 /// </summary>
 public static class ChaosTunnelDemoDrive
 {

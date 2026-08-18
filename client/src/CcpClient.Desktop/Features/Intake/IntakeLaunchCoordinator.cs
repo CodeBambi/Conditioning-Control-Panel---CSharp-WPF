@@ -18,19 +18,22 @@ public sealed class IntakeLaunchCoordinator
     private readonly string? _drive;
     private readonly bool _killRenderers;
     private readonly IntakePassService.IIntakeEntitlementSource? _entitlement;
+    private readonly string? _dataDirectory;
     private readonly DtrhWatchdog _watchdog = new();
     private IntakeHostContext? _context;
     private IntakeHostWindow? _closingForRecovery;
     private int _flowEnded;
 
     public IntakeLaunchCoordinator(ApplicationHost host, Window owner, string? drive = null,
-        bool killRenderers = false, IntakePassService.IIntakeEntitlementSource? entitlement = null)
+        bool killRenderers = false, IntakePassService.IIntakeEntitlementSource? entitlement = null,
+        string? dataDirectory = null)
     {
         _host = host;
         _owner = owner;
         _drive = drive;
         _killRenderers = killRenderers;
         _entitlement = entitlement;
+        _dataDirectory = dataDirectory;
     }
 
     /// <summary>The live host window (null before launch / after close).</summary>
@@ -43,8 +46,20 @@ public sealed class IntakeLaunchCoordinator
     /// end the flow — the DtrhLaunchCoordinator consult-CORRECTION-2 shape). One-shot.</summary>
     public event Action? FlowEnded;
 
+    /// <summary>
+    /// The session context, prepared but NOT bound to a transport (SP-095). The weekly-pass gate
+    /// in <see cref="IntakeLaunch"/> reads <see cref="IntakeHostContext.Pass"/> through this
+    /// before deciding whether a run may open, which is WPF's ordering — the pass check happens
+    /// before <c>IntakeHostService.Launch</c> ever runs (<c>MainWindow/MainWindow.Lab.cs:124</c>
+    /// vs <c>:159</c>). A refused launch therefore opens no loopback origin and no window.
+    /// </summary>
+    public IntakeHostContext EnsureContext() =>
+        _context ??= IntakeHostContext.Prepare(_host, _dataDirectory, _entitlement);
+
     /// <summary>Idempotent launch (IntakeHostService.cs:74-75 parity — a live instance is
-    /// only re-focused).</summary>
+    /// only re-focused). UNGATED by design: the gate lives one layer up in
+    /// <see cref="IntakeLaunch"/>, so the <c>--intake-demo</c> evidence path can reach this
+    /// directly — the same split DtrhLaunch/DtrhLaunchCoordinator already use (§11 D32).</summary>
     public void Launch()
     {
         if (HostWindow is { IsVisible: true })
@@ -53,7 +68,7 @@ public sealed class IntakeLaunchCoordinator
             return;
         }
 
-        _context ??= IntakeHostContext.Start(_host, entitlement: _entitlement);
+        EnsureContext().StartTransport();
         OpenWindow(recoveryWindowed: false);
     }
 

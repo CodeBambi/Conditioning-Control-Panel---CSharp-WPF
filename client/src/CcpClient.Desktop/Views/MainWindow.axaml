@@ -12,11 +12,19 @@
     supersession. The SP-003/SP-006 startup-trace and capability proofs moved to the System
     page; they are never deleted.
 
-    FOUR doors, and every one of them has a working destination (§9 D1, §10 D14): Studio
+    FIVE doors, and every one of them has a working destination (§9 D1, §10 D14, §11 D25): Studio
     reaches THE LOOM, Companion reaches the companion window, Play reaches DOWN THE RABBIT HOLE
-    behind its Tier-2 gate, System reaches the live trace. WPF's other doors are absent rather
-    than dead. Play sits after Companion because that is WPF's rail order (§8.1); System is the
-    port's own door (§9 D2) and stays last.
+    behind its Tier-2 gate, Graded Intake reaches the intake host, System reaches the live trace.
+    WPF's other doors are absent rather than dead. Play sits after Companion because that is WPF's
+    rail order (§8.1) and Graded Intake sits after Play because WPF keeps "gradedintake" inside the
+    Play door's entry list (MainWindow.TabNavigation.cs:600-601); System is the port's own door
+    (§9 D2) and stays last.
+
+    AutomationProperties.Name on each door is "<route id> door" and that shape is load-bearing:
+    the headed capture harness DERIVES the rail's door set from these UIA names and demands a
+    layout probe per door (client/tools/verify/capture.ps1:136-151, after a hard-coded list went
+    blind to SP-094's door). Adding a door widens the harness by itself; renaming one to anything
+    that is not "<id> door" makes it invisible to that check again.
   -->
   <Window.Styles>
     <!-- A-012/cheat sheet §Styling: selectors + pseudo-classes, never WPF triggers. -->
@@ -225,6 +233,18 @@
       <Setter Property="LineHeight" Value="18" />
     </Style>
 
+    <!-- SP-095: the Graded Intake pass gate. WPF's intake scrim is #CC0A0A14 at CornerRadius 12
+         (Views/Tabs/GradedIntakeTabView.xaml:192) — a different, more opaque scrim than the DTRH
+         band's #A8120A1E, and deliberately kept at WPF's own value rather than unified with it.
+         The message still gets its OWN OPAQUE PLATE: that is the §10 D23 lesson, found by a headed
+         capture on the DTRH band, and it applies to any prose sitting on a translucent scrim. -->
+    <Style Selector="Border.intake-gate">
+      <Setter Property="Background" Value="#CC0A0A14" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+    </Style>
+
     <Style Selector="TextBlock.rail-brand">
       <Setter Property="Foreground" Value="#FFE8E0EE" />
       <Setter Property="FontWeight" Value="Bold" />
@@ -293,6 +313,11 @@
                      AutomationProperties.Name="Play door"
                      ToolTip.Tip="Games, modes, and the deep end"
                      Content="Play" />
+        <RadioButton x:Name="DoorIntake" Classes="door" GroupName="rail"
+                     AutomationProperties.AutomationId="DoorIntake"
+                     AutomationProperties.Name="Intake door"
+                     ToolTip.Tip="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."
+                     Content="Graded Intake" />
         <RadioButton x:Name="DoorSystem" Classes="door" GroupName="rail"
                      AutomationProperties.AutomationId="DoorSystem"
                      AutomationProperties.Name="System door"
