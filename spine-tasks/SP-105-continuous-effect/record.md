@@ -1,11 +1,55 @@
 # SP-105 — record
 
 Branch `lane/SP-105-continuous-effect`, base `252b8509`.
-Floor: pin **1314 unit / 81 headless**; observed **1362 unit / 87 headless**; declared delta
-**+48 unit / +6 headless** (`floor-delta.json`). 1362 = 1314 + 48, and 87 = 81 + 6. Two skips, both
-pre-existing (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
+Floor after the final-review revision: pin **1314 unit / 81 headless**; observed **1372 unit /
+87 headless**; declared delta **+58 unit / +6 headless** (`floor-delta.json`).
+1372 = 1314 + 58, and 87 = 81 + 6. Two skips, both pre-existing
+(`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); none added.
 Build: 0 errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
+
+---
+
+## 0. THE HEADLINE — the spine and the scheduler were not the same thing
+
+**`ISessionEffect` fit a continuous module unchanged. `PacedSessionEffect<TFiring>` did not, and it
+had been standing in for the spine since SP-098.**
+
+- **What did not fit.** Not the interface. Every member of `ISessionEffect` — `Id`, `Title`,
+  `Enabled`, `Dot`, `Completion`, `Changed`, `SetEnabled`, `Arm`, `Disarm` — is implemented by the
+  continuous module with no edit to any of them. What did not fit was the only *implementation* of
+  it, which was also the only thing a new module could inherit from. `PacedSessionEffect` requires a
+  subclass to supply `NextInterval()`, `Compose()`, `Stamp()` and `Deliver()`, takes an
+  `ISessionClock` in its constructor, and answers "is this module running" with `ScheduleArmed` — a
+  pending one-shot. **A module that is simply on has no interval, no firing, no clock and no
+  one-shot.** All four would have had to be answered with a lie.
+- **What forced the split.** Concretely, `Arm()`. In the old class `Arm()` *was* `ScheduleNext()`:
+  begin a generation, park a completion, put a one-shot on the clock, return
+  `Available("…the next firing is on the clock in Ns")`. Eleven of those parts are what ANY module
+  needs in order to take a session; one of them — the one-shot — is what a *paced* module needs.
+  There was no way to reuse the eleven without implementing the one, and implementing
+  `NextInterval()` on a module with no interval is the fake timer this packet exists to catch.
+- **What the new seam is.** `Session/OwnedSessionEffect.cs`: an abstract class implementing
+  `ISessionEffect`, with **three** abstract members instead of four plus a clock —
+  `WorkIsRunning` (is this module's work really running), `Engage(int generation)` (start or
+  re-evaluate it) and `ReleaseWork()` (drop it, from any thread). It owns the idempotent arm, the
+  generation and its parked completion, the disarm order, the eligibility gate and its two typed
+  refusals, `Refresh()`, `Ready()`, the `Changed` signal, and two of the dot's three clauses.
+- **What each kind now depends on.**
+
+  | | Paced module | Continuous module |
+  |---|---|---|
+  | Base | `PacedSessionEffect<TFiring>`, itself an `OwnedSessionEffect` | `OwnedSessionEffect` directly |
+  | Clock | **Required** — a constructor parameter; the schedule rides it | **None at all.** The module takes no `ISessionClock` |
+  | `WorkIsRunning` | `ScheduleArmed` — a claim about the CLOCK | the surface's confirmed presence — a claim about the SCREEN |
+  | `Engage` | put the next one-shot on the clock | put the layer on the screen |
+  | `ReleaseWork` | dispose the pending one-shot; nothing on screen is touched | withdraw the surface — for this kind, releasing the work IS taking it off screen |
+  | Contributes | identity, dial, interval, payload, pool, presenter | identity, dial, payload, presenter |
+  | Arm can refuse because | the dial is off, the generation died | those two, **plus** the surface refused, the opacity is zero, or no UI thread is bound |
+
+- **What did NOT change.** `ISessionEffect`, `EffectDotState`, `SessionEngine`, `EffectSignal`,
+  `ScheduledFire`, and every behaviour of `FlashImagesEffect` and `SubliminalsEffect`. The paced
+  class kept its timing verbatim and lost only the parts that were never about timing.
 
 ---
 
@@ -190,7 +234,9 @@ touched, and no landed fact's meaning changed.
 
 ## 5. Proving it bites
 
-Three mutations, each reverted, each run against the whole unit suite:
+**Five mutations across the whole packet**, every one reverted and the file compared byte-for-byte afterwards: the three in the table below, the fake timer (§8.1) and the live-state collapse (§9.1).
+
+These three were each run against the whole unit suite as it stood at the time — **1362 results**, before the final review added ten:
 
 | Mutation | Result |
 |---|---|
@@ -241,17 +287,143 @@ new module's on/off breaks reds only the new module.
 `Session/PacedSessionEffect.cs` (now over the shared base; behaviour unchanged),
 `Session/EffectReasonCodes.cs` (three codes), `Session/SessionParticipant.cs` (composes the third
 module and its store), `Effects/OverlaySurfaceSet.cs` (nullable lifetime — the one change),
-`Views/Pages/StudioPage.axaml` + `.axaml.cs` (two rack rows, two module panels),
+`Views/Pages/StudioPage.axaml` + `.axaml.cs` (two rack rows, two module panels; and at final review
+the continuous module's live-state line split into one sentence per state, §9.1),
 `Views/MainWindow.axaml.cs` (the stale duplicate `<summary>` at `:207-211` deleted — its text said
 the marshalling lived there, directly above the block that says it moved to the producer at SP-101).
 
 **Tests — new**
 `PinkFilterEffectTests.cs` (**28** TRX results = 17 `[Fact]` plus three theories' 11 rows),
 `ContinuousEffectSpineTests.cs` (**10**), `PinkFilterSurfacePresenterTests.cs` (**10**).
-28 + 10 + 10 = **+48 unit**, measured per file with `--filter`, and it matches the declared delta.
 
 **Tests — changed**
-`SecondEffectSpineTests.cs` (one expectation, §4), `CcpClient.HeadlessTests/StudioRackHeadlessTests.cs`
-(+6 rack facts).
+`SecondEffectSpineTests.cs` (one expectation, §4),
+`StudioSurfaceNoticeTests.cs` (**+10**: a 7-row theory and 3 facts for the live-state line, §9.1),
+`PinkFilterEffectTests.cs` (the reflection fact renamed, §8.2 — no count change),
+`ContinuousEffectSpineTests.cs` (one comment corrected, §9.3 — no count change),
+`CcpClient.HeadlessTests/StudioRackHeadlessTests.cs` (+6 rack facts).
+
+28 + 10 + 10 + 10 = **+58 unit** and **+6 headless**, measured per file with `--filter`, matching the
+declared delta and the observed 1372 / 87.
 
 **Docs** `client/docs/wpf-surface-reachability.md` (D73-D82, D72 closed, D4 corrected).
+
+
+---
+
+## 8. THE ANTI-FAKE-TIMER GUARD — how it was PROVED to bite
+
+The named failure of this packet is wrapping a continuous effect in a timer to make it fit the
+spine. Three things stand against that, and only the first is real evidence.
+
+**8.1 The behavioural guard, and the mutation that proves it.** Two facts in
+`ContinuousEffectSpineTests` are the protection, and they work by counting the SESSION CLOCK rather
+than by inspecting a type:
+
+- `PressingStart_ArmsAllThree_AndTheContinuousOneIsAlreadyRunningWithNoClockAtAll` asserts
+  `rig.Clock.PendingCount == 2` with all three modules armed — one one-shot for Flash Images, one
+  for Subliminals, **nothing for Pink Filter** — while simultaneously asserting the continuous
+  module is already `Live` with its surface up.
+- `NoAmountOfClockChangesTheContinuousModule_BecauseItIsNotPaced` advances twenty flash intervals
+  and asserts the module's engagement and withdrawal counters have not moved.
+
+**Executed, not asserted.** The fake timer was really written, in the shape the trap would take: an
+optional `ISessionClock` added to `PinkFilterEffect`'s constructor, wired from `SessionParticipant`
+with the same `sessionClock` the paced modules use, and a one-second one-shot re-armed inside
+`Engage` that calls `EngageIfEligible()`. Result: **4 facts red** —
+`PressingStart_ArmsAllThree_…` (PendingCount 3, expected 2),
+`NoAmountOfClockChangesTheContinuousModule_…`,
+`Stop_TakesTheTintOffAtOnce_AndNoAmountOfClockBringsAnyOfTheThreeBack`, and the structural tripwire —
+with 34 of the 38 filtered results still passing. Reverted byte-identically: `PinkFilterEffect.cs`
+md5 `79f0460dbbd5633f5005586564ce8139` and `SessionParticipant.cs` md5
+`65a2982b2dcccd138f899e969f400cff` before and after, and `git status` shows neither file modified.
+
+**The bound on that claim, stated.** These facts see any timer on the **session clock** — which is
+the only clock a module can reach through the spine, and therefore the only shape the trap can
+plausibly take. A module that constructed its own `SystemSessionClock` internally would evade the
+count (it would still be caught by the tripwire in §8.2 only if it also took one in its
+constructor). Nothing in this packet proves that case, and it is named here rather than glossed.
+
+**8.2 The structural tripwire, renamed to what it is.** The reflection fact used to be called
+`…SoAFakeTimerCannotBeSmuggledIn`, which over-claimed: `GetConstructors`/`BaseType` is defeated by a
+field-constructed clock in one line. It is now
+`TheContinuousModulesConstructorAndBaseClass_StillCarryNoClockAndNoPacedBase`, and its doc comment
+names both behavioural facts above as the place the guard actually lives. It earns its keep for two
+reasons: it fails at the line a reader is editing rather than three files away, and it pins the other
+half of the split — that `PacedSessionEffect<T>` is a SIBLING of the continuous module under
+`OwnedSessionEffect`, not its parent.
+
+**8.3 The type system.** `PinkFilterEffect` cannot inherit `PacedSessionEffect` without implementing
+`NextInterval()`, which is the moment a reviewer sees the lie. Not evidence, but it is why the trap
+takes deliberate effort rather than drift.
+
+---
+
+## 9. FINAL-REVIEW REVISION — one blocker and two cheap fixes
+
+### 9.1 BLOCKER — a running session was told to start a session
+
+`StudioPage.DescribePinkFilterState` answered **every** `EffectDotState.Armed` with *"Armed. Nothing
+is drawn until the session starts."* `OwnedSessionEffect` returns `Armed` for anything that is not
+`Off` and not really running, and for this module "really running" is the SCREEN — so **a running
+session whose overlay refused landed in that arm.** On Linux the overlay refuses by design, so that
+is not an edge case there: every Linux user would have read, for the whole of every session, an
+instruction to start a session they had already started.
+
+That is a message misdescribing state, which is exactly what SP-101 was sent to fix one string
+earlier (`StudioPage.axaml:152`). **I introduced it while writing the very finding that predicts
+it**: §1.3 already said `Armed` "covers both 'no session yet' and 'the session is running and the
+tint is not on screen'", and the words only covered the first. Worth stating plainly — the finding
+was right and the sentence built on it was wrong, which is the failure mode of a packet that proves
+something about a base class and then hand-writes the copy.
+
+**The fix.** The `Armed` arm splits on state the page already holds — `_session.Engine.Running` and
+the surface's last `CapabilityState` — so each situation names its own cause:
+
+| Situation | Sentence |
+|---|---|
+| running, opacity 0 | "Running, but nothing is on your screen: the opacity is at 0%. Move the slider up." |
+| running, surface refused | "Running, but nothing is on your screen: this build could not put the tint's overlay surface up (*reason-code*)." |
+| running, nothing up and nothing recorded | "Running, but nothing is on your screen: the tint's overlay surface is not up." |
+| not running, opacity 0 | "Armed, but the opacity is at 0%, so there is nothing to draw. Move the slider up." |
+| not running | "Armed. Nothing is drawn until the session starts." |
+
+The refusal names the reason **code**, not the detail: on Linux the detail is the backend's whole
+manual gate, and `DescribePinkFilterSurface` already prints it verbatim in the notice directly
+beneath. Saying it twice in one panel is not twice as honest.
+
+**Pinned, and proved to bite.** `StudioSurfaceNoticeTests` gains a 7-row theory plus 3 facts
+(**+10 unit**): every state a user can be in produces a non-blank and **mutually distinct** sentence;
+every running state starts with "Running" and none contains "until the session starts"; no
+non-running state contains "Running"; the refusal case names the surface and carries the reason code;
+the zero-opacity case blames the dial and offers the remedy without borrowing the surface's wording;
+and the unexplained case invents no cause. Mutation: the two running arms collapsed back into the
+single blocked sentence — **7 results red** (5 theory rows + 2 facts), 1363 passed, every
+`FlashImagesEffect`, `SubliminalsEffect` and `PinkFilterEffect` behavioural fact green, because this
+is a wording defect and the mutation is confined to wording. Restored byte-identically
+(`StudioPage.axaml.cs` md5 `842f1acd513dacdf6ba22f8edddf40eb` before and after).
+
+**The paced siblings were NOT changed**, as the review directed and for the reason it gave: their
+`WorkIsRunning` is `ScheduleArmed`, which is surface-independent, so a running session whose overlay
+refuses still reads `Live` there — correctly, because their schedule really is on the clock.
+
+`DescribePinkFilterState` became `public` to be reachable from the test project, matching the three
+`Describe*Surface` methods beside it.
+
+### 9.2 The reflection fact, renamed — see §8.2.
+
+### 9.3 A comment that claimed more than its assertion
+
+`ContinuousEffectSpineTests` said the withdraw "has already happened when Stop returns".
+`ReleaseWork()` ends in `Signal.Post(_surface.Withdraw)` and `EffectSignal.Post` is "always a post,
+never inline" by contract, so the green came from the rig's inline dispatch — and this record's own
+threading paragraph (§1.3 item 3) says the opposite. **The assertion stands; the prose was wrong.**
+It now says what is really proved: Stop *decides* synchronously and *queues* the teardown before it
+returns, nothing is left scheduled, and nothing can re-place itself afterwards. On a real dispatcher
+the withdraw lands on the UI thread's next turn.
+
+### 9.4 Floor after the revision
+
+Declared delta moved **+48 → +58 unit** (headless unchanged at **+6**) in the same commit as the ten
+new facts. Observed **1372 / 87** against pin **1314 / 81**; 1372 = 1314 + 58 and 87 = 81 + 6.
+`floor.json` was not opened.

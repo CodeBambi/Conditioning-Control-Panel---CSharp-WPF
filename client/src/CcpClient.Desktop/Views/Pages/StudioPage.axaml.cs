@@ -345,7 +345,8 @@ public partial class StudioPage : UserControl
         var tint = _pinkFilter.Tint;
         PinkFilterSwatch.Fill = new SolidColorBrush(Color.FromRgb(tint.Red, tint.Green, tint.Blue));
         PinkFilterTintState.Text = DescribeTint(tint, PinkFilterColour.TryParseHex(pink.Colour, out _));
-        PinkFilterLiveState.Text = DescribePinkFilterState(RenderedPinkFilterDot, tint);
+        PinkFilterLiveState.Text = DescribePinkFilterState(
+            RenderedPinkFilterDot, tint, _session.Engine.Running, _pinkFilter.LastPlacement);
         PinkFilterSurfaceState.Text = DescribePinkFilterSurface(_pinkFilter.LastPlacement);
     }
 
@@ -470,20 +471,75 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
-    /// The three states for a CONTINUOUS module, and the one place on this page where the words had
-    /// to change. There is no clock and no count, so <c>Live</c> cannot say "the next one is
-    /// scheduled" — it says the tint is up, which is the only thing this module's <c>Live</c> is
-    /// entitled to mean. <c>Armed</c> covers both "no session yet" and "the session is running and
-    /// the tint is not on screen", and the second of those is exactly the case a dot that reported
-    /// the dial instead of the surface would have got wrong.
+    /// The words for a CONTINUOUS module, and the one place on this page where they had to change.
+    ///
+    /// <para>There is no clock and no count, so <c>Live</c> cannot say "the next one is scheduled" —
+    /// it says the tint is up, which is the only thing this module's <c>Live</c> is entitled to
+    /// mean. The consequence is that <see cref="EffectDotState.Armed"/> covers <b>four different
+    /// situations</b> here where a paced module's covers one, because <see cref="OwnedSessionEffect"/>
+    /// returns <c>Armed</c> for anything that is not <c>Off</c> and not really running — and for
+    /// this module "really running" is the SCREEN.</para>
+    ///
+    /// <para><b>Why they are four sentences and not one (SP-105 final review).</b> This method used
+    /// to answer every <c>Armed</c> with "Nothing is drawn until the session starts." On Linux the
+    /// overlay refuses by design (see <see cref="PinkFilterEffect"/>), so a running session with the
+    /// dial on lands in that arm — and every Linux user would have read, for the whole of every
+    /// session, an instruction to start a session they had already started. A message that
+    /// misdescribes state is the exact failure SP-101 was sent to fix one string earlier, and one
+    /// arm of a switch is all it takes to reintroduce it. Each situation now names its own cause,
+    /// and the running-but-not-drawn one names the SURFACE rather than the session.</para>
+    ///
+    /// <para><b>The paced siblings are not exposed the same way</b> and are deliberately left alone:
+    /// their <c>WorkIsRunning</c> is <c>ScheduleArmed</c>, which is surface-independent, so a running
+    /// session whose overlay refuses still reads <c>Live</c> there — correctly, because their
+    /// schedule really is on the clock.</para>
     /// </summary>
-    internal static string DescribePinkFilterState(EffectDotState dot, PinkFilterTint tint) => dot switch
+    /// <param name="dot">The module's own derived state — the same value the row's dot paints.</param>
+    /// <param name="tint">The tint the dials currently describe, for the zero-opacity case.</param>
+    /// <param name="sessionRunning">Whether a session owns the rack right now. Read from the engine,
+    /// never inferred from the dot: inferring it is what produced the defect above.</param>
+    /// <param name="placement">The surface's last verbatim outcome, for naming the refusal.</param>
+    public static string DescribePinkFilterState(
+        EffectDotState dot, PinkFilterTint tint, bool sessionRunning, CapabilityState? placement) => dot switch
     {
         EffectDotState.Live => "Running: the tint is on your screen for as long as the session lasts.",
+
+        // Running, and the user's own dial is the reason nothing is drawn — so the remedy is theirs.
+        EffectDotState.Armed when sessionRunning && tint.IsInvisible =>
+            "Running, but nothing is on your screen: the opacity is at 0%. Move the slider up.",
+
+        // Running, and the SURFACE is the reason. This is the Linux case, and the arm that did not
+        // exist before final review.
+        EffectDotState.Armed when sessionRunning =>
+            RefusalCode(placement) is { } code
+                ? "Running, but nothing is on your screen: this build could not put the tint's "
+                    + $"overlay surface up ({code})."
+                : "Running, but nothing is on your screen: the tint's overlay surface is not up.",
+
         EffectDotState.Armed when tint.IsInvisible =>
             "Armed, but the opacity is at 0%, so there is nothing to draw. Move the slider up.",
         EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
         _ => "Switched off. Nothing will happen, session or no session.",
+    };
+
+    /// <summary>
+    /// The stable reason code out of any refusing <see cref="CapabilityState"/>, or null when the
+    /// state is <see cref="CapabilityState.Available"/> or nothing has been attempted.
+    ///
+    /// <para>The CODE and not the detail, on purpose: the detail is a paragraph on the platform
+    /// where this matters most — the Linux backend's refusal carries its whole manual gate — and it
+    /// is already printed verbatim, once, by <see cref="DescribePinkFilterSurface"/>. Saying it
+    /// twice in one panel is not twice as honest. The code is short, stable, and the thing a bug
+    /// report quotes.</para>
+    /// </summary>
+    private static string? RefusalCode(CapabilityState? placement) => placement switch
+    {
+        CapabilityState.Unavailable u => u.Reason.Code,
+        CapabilityState.Degraded d => d.Reason.Code,
+        CapabilityState.PermissionRequired p => p.Reason.Code,
+        CapabilityState.DependencyMissing m => m.Reason.Code,
+        CapabilityState.Faulted f => f.Reason.Code,
+        _ => null,
     };
 
     private static string DescribePhrasePool(int activePhrases) => activePhrases > 0

@@ -1,6 +1,6 @@
 {
   "packet": "SP-105-continuous-effect",
-  "unit": 48,
+  "unit": 58,
   "headless": 6,
-  "reason": "the first continuous module: WPF's colour and linear-opacity law, the module's dials and clamps, the dot that is Live only while the surface is really up, the zero-opacity and no-UI-thread refusals, the anti-fake-timer guard, three modules under one spine with only two clocks between them, the surface that is placed with no lifetime and holds the topmost band, and six headless rack facts for the Subliminals and Pink Filter rows"
+  "reason": "the first continuous module: WPF's colour and linear-opacity law, the module's dials and clamps, the dot that is Live only while the surface is really up, the zero-opacity and no-UI-thread refusals, the constructor/base-class tripwire, three modules under one spine with only two clocks between them, the surface placed with no lifetime that holds the topmost band, six headless rack facts for the Subliminals and Pink Filter rows, and (final review) ten facts pinning one true sentence per state on the continuous module's live-state line so a running session whose overlay refused is never told to start a session"
 }

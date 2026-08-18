@@ -77,8 +77,17 @@ public class ContinuousEffectSpineTests
         Assert.True(rig.Engine.Stop());
 
         // WPF's stop closes every filter window (MainWindow.StartStop.cs:338 ->
-        // OverlayService.cs:407 -> :1233-1249). The visible half of stop is not a promise about a
-        // callback that will get there: it has already happened when Stop returns.
+        // OverlayService.cs:407 -> :1233-1249).
+        //
+        // WHAT THIS ASSERTS, precisely (corrected at SP-105 final review — the comment used to say
+        // the withdraw "has already happened when Stop returns", and that is not what is proved):
+        // Stop DECIDES synchronously, and the withdraw is POSTED — ReleaseWork ends in
+        // Signal.Post(_surface.Withdraw), and EffectSignal.Post is "always a post, never inline"
+        // by contract. This rig's dispatch runs a post on the calling thread, so the effect is
+        // observable here on the same line; on a real dispatcher it lands on the UI thread's next
+        // turn. What is genuinely proved is the ORDER — nothing is left scheduled, nothing can
+        // re-place itself afterwards, and the teardown is queued before Stop returns rather than
+        // left to some later reconcile.
         Assert.False(rig.PinkSurface.Showing);
         Assert.Equal(0, rig.Clock.PendingCount);
 

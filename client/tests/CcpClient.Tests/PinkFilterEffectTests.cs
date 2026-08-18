@@ -358,15 +358,35 @@ public class PinkFilterEffectTests
     }
 
     // ---------------------------------------------------------------------------------
-    //  the anti-fake-timer guard
+    //  the shape tripwire — NOT the anti-fake-timer guard itself
     // ---------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A cheap structural tripwire over the module's constructor and base class, and it is named for
+    /// what it is rather than for what it protects (SP-105 final review).
+    ///
+    /// <para><b>This is not where the fake timer is caught.</b> Reflection over a constructor is
+    /// defeatable in one line — a clock constructed in a field initialiser, or reached through a
+    /// static, passes this fact untouched. What actually catches a fake timer is BEHAVIOURAL and
+    /// lives in two places:</para>
+    /// <list type="bullet">
+    /// <item><see cref="ContinuousEffectSpineTests"/>
+    /// <c>.PressingStart_ArmsAllThree_AndTheContinuousOneIsAlreadyRunningWithNoClockAtAll</c> —
+    /// with all three modules armed, the session clock holds exactly TWO pending callbacks, so any
+    /// timer this module smuggled in from anywhere would make that count three.</item>
+    /// <item><see cref="ContinuousEffectSpineTests"/>
+    /// <c>.NoAmountOfClockChangesTheContinuousModule_BecauseItIsNotPaced</c> — twenty flash
+    /// intervals of clock go by and the module neither re-places nor withdraws, so a timer that
+    /// paced it would move one of those counters.</item>
+    /// </list>
+    ///
+    /// <para>Kept anyway, because it fails at the line a reader is editing rather than three files
+    /// away, and because it pins the OTHER half of the split: that the paced base is a SIBLING of
+    /// this module under <see cref="OwnedSessionEffect"/> and not its parent.</para>
+    /// </summary>
     [Fact]
-    public void TheContinuousModuleTakesNoClockAndIsNotPaced_SoAFakeTimerCannotBeSmuggledIn()
+    public void TheContinuousModulesConstructorAndBaseClass_StillCarryNoClockAndNoPacedBase()
     {
-        // The named trap of SP-105: wrapping a continuous effect in a timer to make it fit the
-        // spine. It cannot be done accidentally after this — a clock would have to be added to a
-        // constructor, and a base class would have to change, and both are asserted here.
         var constructors = typeof(PinkFilterEffect).GetConstructors(BindingFlags.Public | BindingFlags.Instance);
         var clockParameters = constructors
             .SelectMany(c => c.GetParameters())
