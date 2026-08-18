@@ -255,7 +255,10 @@ public class FlashDrawTests
             $"a desktop capture can see a painted layered window on this machine = {run.DesktopCaptureIsLive}, "
             + $"and while the flash was up the composited desktop carried {run.DesktopPixelsDuring} pixels of the "
             + $"image's colour against an expected area of at least {expectedArea / 2}. Those two must agree: "
-            + "where the screen can be read, the user's own image must really be on it");
+            + "where the screen can be read, the user's own image must really be on it. "
+            + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels (SP-107): zero there means the "
+            + "full-screen CAPTUREBLT allocation itself failed and this fact measured nothing, which is a "
+            + "different verdict from a flash that was not on the screen");
         Assert.True(run.DesktopPixelsAfterHide == 0,
             $"after the flash was hidden the desktop still carries {run.DesktopPixelsAfterHide} pixels of the "
             + "image's colour — the picture outlived the effect that put it there");

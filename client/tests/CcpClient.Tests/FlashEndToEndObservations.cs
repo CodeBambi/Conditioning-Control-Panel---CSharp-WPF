@@ -43,6 +43,14 @@ internal static class FlashEndToEndObservations
     /// <param name="DesktopPixelsBefore">Pixels of the image's colour on the desktop before the flash.</param>
     /// <param name="DesktopPixelsDuring">…while it is up.</param>
     /// <param name="DesktopPixelsAfterHide">…after the presenter is told to hide everything.</param>
+    /// <param name="DesktopPixelsSampledDuring">
+    /// SP-107: how many pixels the screen read actually RETURNED for the measurement above.
+    /// <c>CountOf</c> of an empty capture is 0, which is the same number as "the flash is not on the
+    /// screen" — so without this the two are indistinguishable in the failure. A full-screen
+    /// CAPTUREBLT allocates a ~20 MB DIB, and three concurrent floor runs are exactly when that
+    /// allocation is most likely to fail. This field is diagnostic only; nothing is asserted about
+    /// it and nothing is silenced by it.
+    /// </param>
     /// <param name="TransparentHalfIsBlack">A transparent PNG half composes over black, as WPF's window does.</param>
     /// <param name="OpaqueHalfIsTheImage">…and the opaque half is the image.</param>
     /// <param name="MissingFileDecodes">A path that does not exist must produce no frame and no exception.</param>
@@ -57,6 +65,7 @@ internal static class FlashEndToEndObservations
         int DesktopPixelsBefore,
         int DesktopPixelsDuring,
         int DesktopPixelsAfterHide,
+        int DesktopPixelsSampledDuring,
         bool TransparentHalfIsBlack,
         bool OpaqueHalfIsTheImage,
         bool MissingFileDecodes,
@@ -97,7 +106,8 @@ internal static class FlashEndToEndObservations
 
             var before = CountDesktop(display);
             presenter.Show([imagePath]);
-            var during = CountDesktop(display, evidence: "desktop-with-a-real-flash.bmp", display);
+            var (during, sampledDuring) = CountDesktopWithSampleSize(
+                display, evidence: "desktop-with-a-real-flash.bmp", display);
             var shown = presenter.SurfacesShown;
 
             presenter.HideAll();
@@ -113,6 +123,7 @@ internal static class FlashEndToEndObservations
                 DesktopPixelsBefore: before,
                 DesktopPixelsDuring: during,
                 DesktopPixelsAfterHide: after,
+                DesktopPixelsSampledDuring: sampledDuring,
                 TransparentHalfIsBlack: transparentIsBlack,
                 OpaqueHalfIsTheImage: opaqueIsImage,
                 MissingFileDecodes: frames.Render(
@@ -134,7 +145,11 @@ internal static class FlashEndToEndObservations
         }
     }
 
-    private static int CountDesktop(OverlayBounds display, string? evidence = null, OverlayBounds? area = null)
+    private static int CountDesktop(OverlayBounds display, string? evidence = null, OverlayBounds? area = null) =>
+        CountDesktopWithSampleSize(display, evidence, area).Count;
+
+    private static (int Count, int Sampled) CountDesktopWithSampleSize(
+        OverlayBounds display, string? evidence = null, OverlayBounds? area = null)
     {
         var rect = area ?? display;
         var pixels = FlashPixelProbe.CaptureDesktop(rect.X, rect.Y, rect.Width, rect.Height);
@@ -148,7 +163,7 @@ internal static class FlashEndToEndObservations
                 Path.Combine(FlashDrawObservations.EvidenceFolder, evidence), width, height, pixels);
         }
 
-        return FlashPixelProbe.CountOf(pixels, ImageColour);
+        return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length);
     }
 
     /// <summary>The smallest clock that satisfies the presenter: this run shows one image, so
