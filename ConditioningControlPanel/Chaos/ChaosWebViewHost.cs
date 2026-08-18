@@ -747,6 +747,75 @@ internal sealed class ChaosWebViewHost : IDisposable
         "try{window.chrome.webview.postMessage({type:'" + HostEscapeMessageType + "'});}catch(_){}" +
         "},true);}catch(_){}})();";
 
+    /// <summary>
+    /// WHO ANSWERS <c>prefers-reduced-motion</c> FOR A PAGE THIS APP HOSTS (ccp-bugs #980).
+    ///
+    /// <para><b>What broke.</b> Just Drop played as a set of still images: the spiral did not turn,
+    /// the media never rotated on its interval, and only re-opening the session's own settings
+    /// panel produced a single visible change before it froze again. Windowed or fullscreen, the
+    /// same. That is not a stalled host or a dead network - it is the web player taking its
+    /// reduced-motion path. Under <c>prefers-reduced-motion: reduce</c> it paints every canvas
+    /// layer at a FROZEN clock (a fixed t) and serves the media Window one still poster that never
+    /// advances, and re-opening its gear panel remounts the layers, which bakes one fresh still.
+    /// Every symptom in the report, exactly.</para>
+    ///
+    /// <para><b>Why Chromium said "reduce".</b> Blink maps that media query on Windows to
+    /// <c>SPI_GETCLIENTAREAANIMATION</c> - the "Animation effects" checkbox in Windows Settings.
+    /// That is the very same flag <see cref="Services.MotionFx"/> reads through
+    /// <c>SystemParameters.ClientAreaAnimation</c>, so this app already knows it has users running
+    /// with it off: they are the ones MotionFx caps to <c>MotionLevel.Reduced</c>.</para>
+    ///
+    /// <para><b>Why that answer is wrong here.</b> In this app the reduced-motion gate governs
+    /// CHROME - hover lifts, ambient loops, entrance staggers, tier livery. It has never governed
+    /// CONTENT: no service under Services/ consults MotionFx, so flashes, spirals, subliminals and
+    /// overlays all run at full motion whatever Windows says, because that content is the thing the
+    /// user asked for. A page in one of these hosts is content too, and a browser engine cannot
+    /// tell the two apart - so the host has to answer for it. That is already the doctrine one
+    /// layer up: <c>Controls/SpiralEmbedView</c> hands its embed an explicit <c>reduced_motion</c>
+    /// over the bridge rather than letting the page guess. A remote page we do not own has no such
+    /// bridge, so we set the media query itself.</para>
+    ///
+    /// <para><b>The one preference that is still forwarded</b> is <c>MotionLevel.Off</c> - the
+    /// user's explicit, in-app "no animation at all". An OS checkbox they ticked for Explorer is
+    /// not that, and must not silently turn a session they ordered into a photograph.</para>
+    ///
+    /// <para>An older Chromium that does not know the switch ignores it, which is the pre-fix
+    /// behaviour - there is no version floor to guard.</para>
+    /// </summary>
+    private string PrefersReducedMotionArgument()
+    {
+        var setting = Models.MotionLevel.Full;
+        try { setting = App.Settings?.Current?.MotionLevel ?? Models.MotionLevel.Full; }
+        catch { /* no settings yet = the default, Full */ }
+        var arg = PrefersReducedMotionArgument(setting);
+
+        // THE BREADCRUMB THAT SETTLES THE NEXT REPORT, at Information because Serilog's floor is
+        // Information (App.xaml.cs) and a Debug line can never reach a user's bug report. It is
+        // written ONLY when the override actually changed something - the OS flag was off and we
+        // overruled it - so it is silent for everyone whose Windows animations are on, and its
+        // presence in an activity log is the confirmation that this machine is one of the ones
+        // #980 was about.
+        try
+        {
+            if (!SystemParameters.ClientAreaAnimation && setting != Models.MotionLevel.Off)
+                App.Logger?.Information(
+                    "{Tag}: Windows animation effects are OFF; hosted page is kept in motion anyway ({Arg}) - #980",
+                    _opts.LogTag, arg);
+        }
+        catch { /* the flag is unreadable on some sessions; the argument still stands */ }
+
+        return arg;
+    }
+
+    /// <summary>The pure half of <see cref="PrefersReducedMotionArgument()"/>, split out the same
+    /// way <see cref="Services.MotionFx.ResolveLevel"/> is so the rule can be tested without an
+    /// App. Note what is NOT a parameter: the OS animation flag. Reduced is not Off - a user who
+    /// asked for calmer CHROME did not ask for a session that never moves.</summary>
+    internal static string PrefersReducedMotionArgument(Models.MotionLevel setting)
+        => setting == Models.MotionLevel.Off
+            ? "--force-prefers-reduced-motion"
+            : "--force-prefers-no-reduced-motion";
+
     private async Task InitWebAsync()
     {
         if (_initStarted || _web == null) return;
@@ -761,6 +830,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             // native payload windows stack over the page; Chromium's occlusion tracker would
             // decide the page is covered and throttle rAF — turn it off.
             var args = "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion";
+            args += " " + PrefersReducedMotionArgument();
             if (!string.IsNullOrWhiteSpace(_opts.ExtraBrowserArguments))
                 args += " " + _opts.ExtraBrowserArguments;
             var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = args };

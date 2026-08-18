@@ -120,8 +120,19 @@ namespace ConditioningControlPanel.Services.JustDrop
                     OwnedByMainWindow = true,
                     WindowTitle = "Just Drop",
                     LogTag = "JustDropHost",
-                    // The session's audio bed must start without a user gesture.
-                    ExtraBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+                    // --autoplay-policy: the session's audio bed must start without a user gesture.
+                    // --disable-background-timer-throttling / --disable-backgrounding-occluded-windows:
+                    //   a drop is a LIVE CLOCK, exactly like a Goon match - one rAF loop drives the
+                    //   spiral, the media rotation and the audio ramp, and the feed layer reads a
+                    //   clock that did not move as "paused" and stops its videos. Meanwhile the app
+                    //   is spending the whole session throwing topmost payload windows over this one
+                    //   (bug #980's own log shows flashes, subliminals and bouncing text firing all
+                    //   the way through the drop). Chromium throttling a window it thinks is
+                    //   backgrounded would not slow the session down, it would stop it.
+                    ExtraBrowserArguments =
+                        "--autoplay-policy=no-user-gesture-required "
+                        + "--disable-background-timer-throttling "
+                        + "--disable-backgrounding-occluded-windows",
                     OnCoreCreated = AttachAuthHeader,
                     OnMessage = OnPageMessage,
                     OnReady = () => App.Logger?.Information("JustDropHost: page ready"),
