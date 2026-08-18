@@ -34,7 +34,10 @@ namespace CcpClient.Tests;
 ///
 /// <para><b>What this is NOT.</b> Not a retry: nothing is ever re-run, and a run that fails still
 /// fails. Not a skip and not an <c>allowedSkips</c> entry: when the lease cannot be taken the
-/// collection FAILS, loudly, naming the process that holds the desktop. No assertion anywhere was
+/// collection FAILS, loudly, reporting whatever pid the lease file RECORDS and saying plainly when it
+/// records none. That is not the same as identifying the live holder: the file keeps the last
+/// writer's pid after a <c>Dispose</c>, and a refusal that is an ACL rather than a peer says so
+/// instead of naming anyone. No assertion anywhere was
 /// weakened to obtain it — the OS-level facts are byte-for-byte the ones SP-099 and SP-100
 /// earned.</para>
 ///

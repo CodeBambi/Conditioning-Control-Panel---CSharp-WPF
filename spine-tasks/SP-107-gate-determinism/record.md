@@ -129,7 +129,28 @@ cannot be taken silently.
 
 **`check-floor.mjs` names the failures.** It now reads the TRX on red and prints every failed test
 with its message. It gained nothing else, and it must never gain a retry: re-running until green is
-how an intermittent gets laundered into a pass. SP-106's run 7 had six failures and a six-line
+how an intermittent gets laundered into a pass. **Demonstrated once against a deliberate red**, at
+review, because this is the only capability the packet permitted that file to gain, it executes
+solely in the runner-error catch branch, and no committed artifact exercised it — every red log in
+`evidence/` came from this lane's own experiment harness reading the TRX itself, not from
+`check-floor.mjs`. One assertion in `RealDesktopLeaseTests` was inverted, the gate was run, and the
+change was reverted with `git checkout --` (`git diff HEAD` empty afterwards, so byte-identical):
+
+```
+FLOOR CHECK FAILED (SP-065):
+  dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  --- CcpClient.Tests: 1 named failure(s) from the TRX ---
+    CcpClient.Tests.RealDesktopLeasePrimitiveTests.TheLease_IsExclusiveWhileHeld_AndHandsTheDesktopBackWhenItIsReleased
+      Assert.Null() Failure: Value is not null
+Expected: null
+Actual:   FileStream { CanRead = False, ... }
+  --- CcpClient.Tests dotnet output tail ---
+  ...
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-DLRjMR
+```
+
+The fully-qualified name and the assertion text both arrive, from the TRX, independently of how much
+of the tail `dotnet test` happened to print. SP-106's run 7 had six failures and a six-line
 stdout tail, which is why that flake had to be reconstructed by hand.
 
 **An empty screen read no longer reads as an absent flash.** `CountOf([])` is 0 and so is "the flash
@@ -139,10 +160,43 @@ silenced by it.
 
 ## 3. THE NUMBERS, BEFORE AND AFTER
 
-Same machine, same harness, every launched run counted, nothing re-run. After the fix the floor
-reports `total drift: 1476 (pin 1472)` on every run by design (the declared delta the orchestrator
-applies at land), so an AFTER run counts as green only when the TRX carries **zero** failed tests in
-both projects AND the drift is check-floor's only complaint.
+Same machine, every launched run counted, nothing re-run. After the fix the floor reports a
+`total drift` against the pin on every run by design (the declared delta the orchestrator applies at
+land), so an AFTER run counts as green only when the TRX carries **zero** failed tests in both
+projects AND that drift is check-floor's only complaint. **The drift figure MOVED during the
+packet:** the runs below were taken while the delta was `+4` and so report `1476 (pin 1472)`; the
+head declares `+5` and reports **1477**, because the headless-assembly no-probe fact was added at
+review.
+
+### 3.1 Provenance — WHICH tree each run was taken on
+
+"Same harness" would be false, and this is where it has to be said plainly, because leaving it out
+would be this packet's own thesis one level further up: **a number true as observed, about to become
+citable history for a tree it was never measured on.**
+
+| Round | Window (UTC, 2026-08-18) | Tree under test |
+|---|---|---|
+| BEFORE sequential + BEFORE concurrent | 21:12–21:55 | `client/` identical to base `3c1572b4` (commit `6ae6e03a` at 21:26Z added only `spine-tasks/plan.md`) |
+| AFTER concurrent round 1 | 21:56–22:04 | the working tree that became **`737fa739`** — collection + lease, `FileShare.None`, no capture diagnostics |
+| AFTER concurrent round 2 | 22:09–22:17 | the tree that became **`e068d50f`** — same lease, plus the returned-pixel-count diagnostic |
+| AFTER sequential round 1 | 22:17–22:42 | **`e068d50f`** exactly |
+| AFTER sequential round 2 | 22:42–23:09 | the tree that became **`87752586`** — same lease, plus the uniformity diagnostic |
+
+**So none of the 76 AFTER runs was taken on the tree being landed.** The shipped lease (`a6979f26`)
+grants read sharing and writes `pid=N` so the holder is nameable; every measured lease opened
+`FileShare.None` and wrote nothing. The three differing failure texts visible across the committed
+logs are the diagnostics arriving between rounds, and they are the same tell.
+
+**What the numbers still license.** The EXCLUSION those runs measured is unchanged by the review
+edit: both variants deny a second write-open and both release on `Dispose`, and exclusion is pinned
+PER RUN by `RealDesktopLeaseTests` — one fact from inside the collection asserting a contender is
+refused while the fixture holds it, one on a private temp path asserting take / refuse / release. So
+every green run in the table below carries its own proof that exclusion held during it, and so does
+every future run. What the review edit changed is who can be NAMED in a failure, not who is excluded.
+
+**What they do not license.** The shipped mechanism has not itself been re-baselined over 76 runs and
+nothing here claims it has. A re-measurement was considered and deliberately not run: the per-run pin
+makes it redundant for the exclusion claim, and the reviewer did not ask for one.
 
 | | Concurrency | Window (UTC) | Runs | Red | Rate |
 |---|---|---|---|---|---|
@@ -164,7 +218,7 @@ checkable rather than merely asserted. Nothing was re-run and no run is missing 
 evidence file, a foreign flash's pixel count, or an `overlay-nothing-presented` cascade. The three
 collisions of §1 do not appear again anywhere in 76 post-fix runs.
 
-**What is left is a different fault, and it is NOT concurrency-driven** — §4. All four post-fix reds
+**What is left is a different fault, and no concurrency dependence is visible in it** — §4. All four post-fix reds
 are the same single fact, and they occur at the same rate with three concurrent runs (2/36) as with
 one (2/40).
 
@@ -225,14 +279,20 @@ already separates by reporting how many returned pixels are one colour.
 **So the instrument now records the display metrics at BOTH reads** — `PlacementScreen`,
 `PlacementHorizontal`, `PlacementVertical` taken with the placement, and `CaptureHorizontalDuring`,
 `CaptureVerticalDuring` taken by the capture itself — and the failure text states whether they
-agree. The next occurrence discriminates between four verdicts instead of speculating between two.
+agree. **One named limit on that verdict, and it matters because the board decision is gated on it:**
+the capture-side pair is read ADJACENT to `CaptureDesktop`, not inside it, so a change landing in the
+few microseconds between those two calls would be invisible and the verdict would read "held still"
+when it did not. Closing that means moving the read inside `FlashPixelProbe.CaptureDesktop` and
+returning it with the pixels, which is a successor-packet change to a probe this packet had no reason
+to reshape. Until then a "metrics moved" verdict is trustworthy and a "metrics held still" verdict
+has a small blind window. The next occurrence discriminates between four verdicts instead of speculating between two.
 This matters beyond bookkeeping: the board options below were, in the first draft of this record,
 both predicated on the DWM hypothesis, and one of them would have bought a bounded wait against
 SP-100's measured no-wait fact **to fix what may be a geometry desynchronisation instead**.
 
 **Two facts about the rate that a reviewer must weigh, because they point opposite ways.**
 
-- It is NOT concurrency-driven: 2 red in 36 runs at three-way concurrency, 2 red in 40 sequential.
+- No concurrency dependence is VISIBLE: 2 red in 36 runs at three-way concurrency, 2 red in 40 sequential. That is four events in total and cannot establish independence — it is an absence of signal at these counts, not a demonstrated property of the fault.
 - It did NOT appear in the 20-run pre-fix sequential baseline. **So this lane cannot rule out that
   its own change raised the fault's visibility** — the three real-desktop fixtures now run
   back-to-back in one collection instead of being spread across the run, which changes what the
