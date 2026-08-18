@@ -3,7 +3,7 @@
 # (SP-007 AVLN2000 precedent; NO defect-injection flags in product code):
 #   1. edit the REAL MainWindow.axaml — break the SELECTED rail-door border brush
 #   2. build, capture rail-door/selected, assert CcpVerify FAILS the SPECIFIC NAMED check
-#   3. restore (git checkout), rebuild, re-capture, assert green
+#   3. restore (from the bytes captured in memory, never git), rebuild, re-capture, assert green
 # Re-runnable: pwsh client/tools/verify/self-test.ps1
 $ErrorActionPreference = 'Stop'
 
@@ -14,14 +14,29 @@ $verify = Join-Path $clientDir 'tools\verify\CcpVerify\bin\Debug\net10.0\CcpVeri
 $manifest = Join-Path $verifyDir 'checks.json'
 $capture = Join-Path $verifyDir 'artifacts\windows-rail-door-selected.png'
 
+# RESTORE FROM MEMORY, NEVER FROM GIT (SP-094 near-miss, 2026-08-18).
+# This used `git checkout -- MainWindow.axaml` in both the failure path and the finally
+# block. That restores the COMMITTED content, so running the self-test on a tree with
+# uncommitted edits to that file DISCARDS them -- silently, and before anything is read.
+# It ate a lane's in-progress rail markup mid-run and the lane had to reconstruct it.
+# A verification harness must never be able to destroy the work it is verifying.
+#
+# The exact bytes are captured here, before any mutation, and every restore path writes
+# them back. That is also STRICTER than git: it restores what was actually there, so an
+# uncommitted work-in-progress survives the run untouched.
+$original = [IO.File]::ReadAllText($axaml)
+
+function Restore-Axaml {
+    [IO.File]::WriteAllText($axaml, $original, [Text.UTF8Encoding]::new($false))
+}
+
 function Fail([string]$msg) {
     Write-Output "SELF-TEST FAIL: $msg"
-    # Never leave the product source mutated.
-    git -C $clientDir checkout -- 'src/CcpClient.Desktop/Views/MainWindow.axaml' 2>$null
+    # Never leave the product source mutated -- and never discard anything either.
+    Restore-Axaml
     exit 1
 }
 
-$original = [IO.File]::ReadAllText($axaml)
 if ($original -notmatch '#FFE066FF') { Fail "AXAML does not contain the selected-door brush #FFE066FF - self-test anchor missing" }
 
 Write-Output '--- phase 1: seed the regression (selected-door border brush -> #FF336633) ---'
@@ -44,8 +59,13 @@ try {
 }
 finally {
     Write-Output '--- phase 2: restore ---'
-    git -C $clientDir checkout -- 'src/CcpClient.Desktop/Views/MainWindow.axaml'
-    if ($LASTEXITCODE -ne 0) { Fail 'git restore failed - AXAML may still be mutated' }
+    Restore-Axaml
+    # Prove the restore, rather than trusting the write: the seeded brush must be gone and
+    # the anchor back. A silent partial restore would leave the product mutated and the
+    # remaining phases would then be measuring the wrong tree.
+    $restored = [IO.File]::ReadAllText($axaml)
+    if ($restored -ne $original) { Fail 'restore did not reproduce the original AXAML byte-for-byte' }
+    if ($restored -match '#FF336633') { Fail 'the seeded brush survived the restore - AXAML is still mutated' }
 }
 
 dotnet build (Join-Path $clientDir 'CcpClient.sln') -c Debug --nologo | Out-Null
