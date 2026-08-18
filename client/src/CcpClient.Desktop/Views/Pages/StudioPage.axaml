@@ -4,13 +4,18 @@
   <!--
     The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
     down the left, one panel on the right, left-click a row to open its panel. WPF has four
-    groups and fifteen rows; the port now has TWO rows, and only one of them is an effect.
+    groups and fifteen rows; the port now has FOUR rows, and three of them are real effects.
 
-    SP-098 lands the first one that is: Flash Images, WPF's own first EFFECTS row, above Spiral
-    Overlay because that is WPF's rack order (StudioTabView.xaml.cs:484,487). It carries the two
-    things §9 D5/D6 recorded as missing "because the port has nothing to wire yet" — a LIVE
-    STATE DOT and a RIGHT-CLICK QUICK-TOGGLE — and it carries them because there is now a real
-    effect whose state can be reported and whose dial can be flipped.
+    Rack ORDER is WPF's own (StudioTabView.xaml.cs:483-493): flash, [video], subliminal, spiral,
+    pinkfilter. Mandatory Video is not ported, so the ported rows close up around it without
+    reordering the ones that are here.
+
+    SP-098 landed Flash Images with the two things §9 D5/D6 recorded as missing "because the port
+    has nothing to wire yet" — a LIVE STATE DOT and a RIGHT-CLICK QUICK-TOGGLE. SP-105 adds the
+    rows for Subliminals (which landed in SP-101 with no way to switch it on at all — D72) and for
+    Pink Filter, the first continuous module. All three carry the full grammar, and they carry it
+    because there is a real effect behind each one whose state can be reported and whose dial can
+    be flipped.
 
     The Spiral Overlay row still has neither, and that is not an oversight: D5/D6 stay open for
     it. Its rule is WPF's own, written for the one row with no master toggle — "A dot that
@@ -52,12 +57,40 @@
             </Grid>
           </RadioButton>
 
+          <RadioButton x:Name="RowSubliminals"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowSubliminals"
+                       AutomationProperties.Name="Subliminals rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Subliminals" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="SubliminalRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="SubliminalRowDot" />
+            </Grid>
+          </RadioButton>
+
           <RadioButton x:Name="RowSpiralOverlay"
                        Classes="rack-row"
                        GroupName="rack"
                        AutomationProperties.AutomationId="RowSpiralOverlay"
                        AutomationProperties.Name="Spiral Overlay rack row"
                        Content="Spiral Overlay" />
+
+          <RadioButton x:Name="RowPinkFilter"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowPinkFilter"
+                       AutomationProperties.Name="Pink Filter rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Pink Filter" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="PinkFilterRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="PinkFilterRowDot" />
+            </Grid>
+          </RadioButton>
         </StackPanel>
       </Border>
     </StackPanel>
@@ -154,6 +187,66 @@
           </Border>
         </StackPanel>
 
+        <!-- ================= Subliminals ================= -->
+        <StackPanel x:Name="SubliminalModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Subliminals" />
+          <TextBlock Classes="page-blurb" Text="A phrase flashes over your screen on a schedule while the session runs." />
+
+          <!-- TWO dials, and both are read by the running effect. WPF's panel also carries a card
+               duration, a card opacity, the whisper-audio pair and the phrase-pool editor
+               (Features/SubliminalFeatureControl.xaml). The pool editor is a surface of its own and
+               the audio half is not ported at all (D68); the two remaining sliders move numbers the
+               port does honour, and they arrive with the panel that has room for them. A disabled
+               dial swallows the gesture and tells the user nothing (§9 D7), so what is not here is
+               absent rather than greyed. -->
+          <CheckBox x:Name="SubliminalEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="SubliminalEnableToggle"
+                    AutomationProperties.Name="Subliminals enabled"
+                    Content="Enable Subliminals" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Messages per minute" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="SubliminalFrequencySlider"
+                    Minimum="1" Maximum="30"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="SubliminalFrequencySlider"
+                    AutomationProperties.Name="Messages per minute" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="SubliminalFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="SubliminalFrequencyValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="SubliminalLiveState"
+                         AutomationProperties.AutomationId="SubliminalLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="SubliminalPoolState"
+                         AutomationProperties.AutomationId="SubliminalPoolState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="SubliminalSurfaceState"
+                       AutomationProperties.AutomationId="SubliminalSurfaceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
         <!-- ================= Spiral Overlay ================= -->
         <StackPanel x:Name="SpiralModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Spiral Overlay" />
@@ -177,6 +270,72 @@
                   AutomationProperties.AutomationId="LoomButton"
                   AutomationProperties.Name="THE LOOM — weave your own spiral"
                   Content="THE LOOM — weave your own spiral" />
+        </StackPanel>
+
+        <!-- ================= Pink Filter ================= -->
+        <StackPanel x:Name="PinkFilterModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Pink Filter" />
+          <TextBlock Classes="page-blurb" Text="A tint sits over your whole screen for as long as the session runs." />
+
+          <!-- The whole module, in two dials, because that is the whole module: it has no schedule,
+               no pool and no payload beyond a colour and an opacity. WPF's panel also carries a
+               colour picker with a reset, a ramp-link checkbox and a display-monitor dropdown
+               (Features/PinkFilterFeatureControl.xaml). The colour is honoured — the persisted
+               string is read and parsed — but nothing here PICKS one yet, so the swatch below
+               reports the tint in force rather than offering a control that does not work. -->
+          <CheckBox x:Name="PinkFilterEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="PinkFilterEnableToggle"
+                    AutomationProperties.Name="Pink Filter enabled"
+                    Content="Enable Pink Filter" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Tint opacity" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="PinkFilterOpacitySlider"
+                    Minimum="0" Maximum="50"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="PinkFilterOpacitySlider"
+                    AutomationProperties.Name="Tint opacity" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="PinkFilterOpacityValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="PinkFilterOpacityValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="PinkFilterLiveState"
+                         AutomationProperties.AutomationId="PinkFilterLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Rectangle x:Name="PinkFilterSwatch"
+                           Width="18" Height="18"
+                           RadiusX="3" RadiusY="3"
+                           AutomationProperties.AutomationId="PinkFilterSwatch" />
+                <TextBlock x:Name="PinkFilterTintState"
+                           AutomationProperties.AutomationId="PinkFilterTintState"
+                           Foreground="#FFE8E0EE"
+                           Opacity="0.7"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Text="" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="PinkFilterSurfaceState"
+                       AutomationProperties.AutomationId="PinkFilterSurfaceState"
+                       Text="" />
+          </Border>
         </StackPanel>
       </Panel>
     </Border>

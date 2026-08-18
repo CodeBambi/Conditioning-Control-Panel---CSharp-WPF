@@ -29,10 +29,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly PersistenceStore<SubliminalPresetDocument> _subliminalPreset;
+    private readonly PersistenceStore<PinkFilterPresetDocument> _pinkFilterPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
     private readonly ISubliminalSurface _subliminalSurface;
+    private readonly IPinkFilterSurface _pinkFilterSurface;
     private readonly UiDispatchBoundary _uiDispatch;
 
     public SessionParticipant(
@@ -42,7 +44,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IFlashImagePool? pool = null,
         IFlashSurface? surface = null,
         ISubliminalSurface? subliminalSurface = null,
-        Func<bool>? onSignalThread = null)
+        Func<bool>? onSignalThread = null,
+        IPinkFilterSurface? pinkFilterSurface = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -62,6 +65,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("SubliminalPreset"), infra.Log,
             Path.Combine(dataDirectory, SubliminalPresetDocument.FileName),
             SubliminalPresetDocument.CurrentSchemaVersion);
+
+        // SP-105: the Pink Filter module's own document, on the same per-module precedent (D71).
+        _pinkFilterPreset = new PersistenceStore<PinkFilterPresetDocument>(
+            infra.OwnerFor("PinkFilterPreset"), infra.Log,
+            Path.Combine(dataDirectory, PinkFilterPresetDocument.FileName),
+            PinkFilterPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -104,6 +113,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
         _surface = surface ?? FlashSurfacePresenter.Product(sessionClock, Dispatch);
         _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
 
+        // SP-105: the continuous module's surface. It takes the same clock as the other two, and
+        // for one reason only — the topmost cadence WPF spends on a layer that is up for a whole
+        // session (OverlayService.cs:666-671). The module itself has no clock at all.
+        _pinkFilterSurface = pinkFilterSurface ?? PinkFilterSurfacePresenter.Product(sessionClock, Dispatch);
+
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
             signal,
@@ -124,12 +138,18 @@ public sealed class SessionParticipant : IBackgroundParticipant
             random: null,
             surface: _subliminalSurface);
 
-        // Rack order is WPF's (StudioTabView.xaml.cs:484-487), and it is also the order
-        // StartEngine arms in — flash first, then the modules after it
-        // (MainWindow.StartStop.cs:178, :186). Mandatory Video sits between them upstream and is
-        // not ported, so the two ported modules are adjacent here; the ORDER between them is
-        // upstream's and is what this list encodes.
-        Engine = new SessionEngine([Flash, Subliminals], _preset, signal);
+        PinkFilter = new PinkFilterEffect(
+            infra.OwnerFor("PinkFilter"),
+            signal,
+            _pinkFilterPreset,
+            _pinkFilterSurface);
+
+        // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
+        // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
+        // overlay service that owns the continuous pair (:192-193). Mandatory Video and Spiral
+        // Overlay sit between them upstream and are not ported, so the three ported modules are
+        // adjacent here; the ORDER between them is upstream's and is what this list encodes.
+        Engine = new SessionEngine([Flash, Subliminals, PinkFilter], _preset, signal);
     }
 
     public string Name => "Session";
@@ -145,6 +165,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Subliminals, the second ported module (SP-101). Public for the same reason.</summary>
     public SubliminalsEffect Subliminals { get; }
 
+    /// <summary>Pink Filter, the first CONTINUOUS module (SP-105). Public for the same reason.</summary>
+    public PinkFilterEffect PinkFilter { get; }
+
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
     public IFlashSurface Surface => _surface;
@@ -152,11 +175,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Where its subliminals are drawn.</summary>
     public ISubliminalSurface SubliminalSurface => _subliminalSurface;
 
+    /// <summary>Where its tint is drawn.</summary>
+    public IPinkFilterSurface PinkFilterSurface => _pinkFilterSurface;
+
     /// <summary>The persisted preset store (public so a surface can save a dial it moved).</summary>
     public PersistenceStore<SessionPresetDocument> Preset => _preset;
 
     /// <summary>The Subliminals module's persisted store, same reason.</summary>
     public PersistenceStore<SubliminalPresetDocument> SubliminalPreset => _subliminalPreset;
+
+    /// <summary>The Pink Filter module's persisted store, same reason.</summary>
+    public PersistenceStore<PinkFilterPresetDocument> PinkFilterPreset => _pinkFilterPreset;
 
     /// <summary>Where the flash pool reads the user's images from. The module panel shows this
     /// so an empty pool has an answer to "where do I put them", which WPF's own comment calls
@@ -169,6 +198,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         cancellationToken.ThrowIfCancellationRequested();
         await _preset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _subliminalPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _pinkFilterPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -177,6 +207,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // other module's dials to defaults.
         LogIfDegraded("session-preset", _preset.LastLoadOutcome);
         LogIfDegraded("subliminal-preset", _subliminalPreset.LastLoadOutcome);
+        LogIfDegraded("pinkfilter-preset", _pinkFilterPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -204,14 +235,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Engine.Stop();
         DisposeSurface(_surface);
         DisposeSurface(_subliminalSurface);
+        DisposeSurface(_pinkFilterSurface);
 
-        return Task.WhenAll(_preset.StopAsync(), _subliminalPreset.StopAsync(), _assetSelection.StopAsync());
+        return Task.WhenAll(
+            _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
+            _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
     /// asset selection has no writer, so it has nothing to flush.</summary>
     public Task FlushAsync(TimeSpan boundedWait) =>
-        Task.WhenAll(_preset.FlushAsync(boundedWait), _subliminalPreset.FlushAsync(boundedWait));
+        Task.WhenAll(
+            _preset.FlushAsync(boundedWait),
+            _subliminalPreset.FlushAsync(boundedWait),
+            _pinkFilterPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {
