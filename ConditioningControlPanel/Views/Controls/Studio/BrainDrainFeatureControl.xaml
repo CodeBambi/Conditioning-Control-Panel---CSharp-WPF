@@ -265,19 +265,57 @@
                             <TextBlock Text="{loc:Str st4_braindrain_folder_hint}"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="11" TextWrapping="Wrap"/>
+
+                            <!-- WHAT belongs in the folder. "Where is it" was only half the support
+                                 question - the other half was "and what do I even put in there?",
+                                 which nothing in the app answered. Brain Drain picks ONE file per
+                                 trigger and (post-#983) plays it to its end without displacing it,
+                                 so whole tracks are the right content, not one-second stings. -->
+                            <TextBlock Text="{loc:Str st4_braindrain_folder_contents}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                            <!-- The literal resolved path, filled in from
+                                 BrainDrainService.AudioFolderPath (never hardcoded here - the
+                                 service is the single source of truth and the install root moves
+                                 between per-user and machine-wide installs). It is what a user
+                                 pastes into Discord when the Explorer button is not enough, and it
+                                 is the answer to "where IS that folder" without a support round
+                                 trip. -->
+                            <TextBlock x:Name="TxtAudioFolderPath" x:FieldModifier="internal"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5"
+                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Grid>
                 </Border>
 
                 <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
                      feature is a completely silent no-op with no way to tell why: the
-                     service logs a warning and returns, and the UI would look armed. -->
+                     service logs a warning and returns, and the UI would look armed.
+                     It carries its OWN copy of the Open Folder button (same handler, no second
+                     code path): this banner is the exact moment the user is asking the question,
+                     and the button up in the library header is above the fold on the 520px
+                     feature popup. -->
                 <Border x:Name="NoAudioHint" x:FieldModifier="internal"
                         Margin="0,10,0,0"
                         Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
                         CornerRadius="10" Padding="16,12" Visibility="Collapsed">
-                    <TextBlock Text="{loc:Str st4_braindrain_no_audio_hint}"
-                               Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_no_audio_hint}"
+                                   Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" x:Name="BtnOpenAudioFolderEmpty"
+                                Content="{loc:Str btn_open_folder}"
+                                Style="{DynamicResource OutlineButton}"
+                                Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                ToolTip="{loc:Str st4_braindrain_open_folder_tt}"
+                                Click="BtnOpenAudioFolder_Click"/>
+                    </Grid>
                 </Border>
             </StackPanel>
 
