@@ -178,22 +178,29 @@ public sealed class PinkFilterEffect : OwnedSessionEffect
     }
 
     /// <summary>
-    /// Nothing to release. This is the shape of the whole finding, in one method: the paced base's
-    /// counterpart disposes a pending one-shot, and this module has no handle, no timer and no
-    /// callback in flight because it never scheduled anything. What the user can SEE is taken down
-    /// by <see cref="OnDisarmed"/>, on the UI thread, where a native window may legally be touched —
-    /// and never from here, which is called on a teardown thread from the generation's cancellation
-    /// callback.
+    /// Take the tint off the screen. WPF's stop closes every filter window
+    /// (<c>OverlayService.cs:407</c> -&gt; <c>:1233-1249</c>) and its reconcile does the same the
+    /// moment the dial goes off (<c>:434-437</c>) — the half of stop the user can see.
+    ///
+    /// <para><b>This is the shape of the whole finding, in one method.</b> For a PACED module,
+    /// "release the work" and "take it off the screen" are two different acts: the base drops the
+    /// pending one-shot here and the surfaces that are already up retire on their own lifetimes,
+    /// which is why nothing hides when a flash module's dial goes off mid-session
+    /// (<c>FlashService.cs:538-546</c> returns without closing a window). For a CONTINUOUS module
+    /// they are the SAME act, because the work IS the surface. So the withdraw lives here rather
+    /// than in <see cref="OwnedSessionEffect.OnDisarmed"/>, which means the dial-off path takes the
+    /// tint down as well as the stop path — and that is upstream's behaviour, not a convenience.</para>
+    ///
+    /// <para><b>Thread.</b> This is called from a teardown thread as well as from a gesture, and a
+    /// native window belongs to the thread that made it, so the withdraw is POSTED. The
+    /// <see cref="IPinkFilterSurface.Showing"/> test in front of it is not an optimisation: one
+    /// <see cref="OwnedSessionEffect.Disarm"/> reaches this three times (directly, from the
+    /// generation's cancellation callback, and from the parked operation's tail), and without it
+    /// every stop would queue three teardowns of a surface that only exists once.</para>
     /// </summary>
     protected override void ReleaseWork()
     {
-    }
-
-    /// <summary>Take the tint off the screen. WPF's stop closes every filter window
-    /// (<c>OverlayService.cs:407</c> -&gt; <c>:1233-1249</c>) — the half of stop the user can see.</summary>
-    protected override void OnDisarmed()
-    {
-        if (_surface is null)
+        if (_surface is not { Showing: true })
         {
             return;
         }
