@@ -937,8 +937,9 @@ namespace ConditioningControlPanel
                 }
                 CompanionTab.AiPermissions?.ApplyTierGate();
 
-                // Bambi Takeover: Requires Patreon (any tier)
-                var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
+                // Bambi Takeover: Requires Patreon (any tier), or its ? box free day.
+                var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true
+                                       || App.DailyFree?.IsFreeToday("takeover") == true;
                 if (BambiTakeoverTab.AutonomyLocked != null) BambiTakeoverTab.AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BambiTakeoverTab.AutonomyUnlocked != null) BambiTakeoverTab.AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;
 

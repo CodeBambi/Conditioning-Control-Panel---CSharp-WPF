@@ -41,7 +41,7 @@ namespace ConditioningControlPanel
         private void SyncAwarenessTabUI()
         {
             // Toggle the premium gating overlay based on current subscription state.
-            RefreshPremiumGate(AwarenessTab.AwarenessGate);
+            RefreshPremiumGate(AwarenessTab.AwarenessGate, "awareness");
 
             var settings = App.Settings?.Current;
             if (settings == null) return;

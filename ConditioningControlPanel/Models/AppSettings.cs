@@ -455,6 +455,32 @@ namespace ConditioningControlPanel.Models
             set { _lastPerfectWeekStreakAwarded = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        private bool _suppressPerkNotifications = false;
+        /// <summary>
+        /// Silences the ANNOUNCEMENT of a progression payout - never the payout. When true the
+        /// app stops raising the four interrupting celebrations meadow reported as immersion
+        /// breaking (2026-08-18), and nothing else changes:
+        ///
+        ///   - the LUCKY! 10x XP toast and its chime, on a lucky flash proc
+        ///   - the LUCKY! 20x XP toast and its chime, on a lucky bubble proc
+        ///   - the Pink Rush popup (its countdown card)
+        ///   - the quest-complete popup and its celebration sound
+        ///
+        /// The XP, the multipliers, the Pink Rush window, the quest reward and every in-place
+        /// visual (the flash's gold glow, the bubble's sparkle burst, the Pink Rush screen wash
+        /// and tab indicator, the inline quest banner) are untouched, because the complaint was
+        /// that people were DECLINING these perks to avoid the popups - suppressing the perk
+        /// would be solving the wrong half.
+        ///
+        /// Defaults false: nobody's experience changes until they ask for it.
+        /// </summary>
+        [JsonProperty]
+        public bool SuppressPerkNotifications
+        {
+            get => _suppressPerkNotifications;
+            set { _suppressPerkNotifications = value; OnPropertyChanged(); }
+        }
+
         #region Bark system
 
         private int _barkChatSuppressionMs = 10000;
@@ -2005,7 +2031,8 @@ namespace ConditioningControlPanel.Models
         private bool _restrictGazeContentToCalibratedScreen = true;
         /// <summary>
         /// When enabled (and a webcam calibration exists), all gaze-reactive
-        /// content (Bubble Pop, Blink Trainer, Flash gaze-pop targets, etc.)
+        /// content (Bubble Pop, Flash gaze-pop targets, etc.; NOT Blink Trainer
+        /// since #979 - blink detection is monitor-independent)
         /// is pinned to the monitor calibration ran on, overriding
         /// <see cref="DualMonitorEnabled"/>. Prevents the multi-monitor
         /// case where content spawns on a screen the gaze pipeline can't

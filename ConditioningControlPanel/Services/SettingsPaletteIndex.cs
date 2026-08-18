@@ -464,6 +464,9 @@ namespace ConditioningControlPanel.Services
             // Notifications (landed)
             Setting("intake_nudge", "label_intake_nudge_enabled", "🔔", "notifications",
                     new[] { "ChkIntakeNudge" }, "set2_section_notifications", "intake pass reminder nudge weekly");
+            Setting("suppress_perk_notifications", "label_suppress_perk_notifications", "🔕", "notifications",
+                    new[] { "ChkSuppressPerkNotifications" }, "set2_section_notifications",
+                    "silence mute perk popup toast lucky 10x 20x xp multiplier pink rush quest complete ping sound immersion");
 
             // Account (landed)
             Setting("patreon_login", "set2_palette_patreon_login", "🅿️", "account",

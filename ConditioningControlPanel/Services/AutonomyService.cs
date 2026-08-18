@@ -350,8 +350,18 @@ namespace ConditioningControlPanel.Services
         {
             if (App.Speech?.IsAvailable != true)
             {
+                // Name the ACTUAL cause. The small speech model ships with the app, so the old
+                // blanket "drop a Vosk model in" advice was wrong for almost everyone who saw it -
+                // it sent users off to download multi-GB models they did not need, which then made
+                // things worse (see SpeechService.ResolveModelDir).
+                var reason =
+                    App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
+                        ? "No microphone was detected. Connect one, then try again."
+                        : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
+                            ? "The speech model on disk would not load. If you added your own model under Resources\\Models\\vosk, remove it so the bundled one is used, then restart."
+                            : "No speech model was found under Resources\\Models\\vosk (see the README there).";
                 System.Windows.MessageBox.Show(
-                    "Speech isn't available.\n\nDrop a Vosk model into Resources/Models/vosk/ (see the README there) and make sure a microphone is connected, then try again.",
+                    "Speech isn't available.\n\n" + reason,
                     "Voice Test — Not Available");
                 return;
             }

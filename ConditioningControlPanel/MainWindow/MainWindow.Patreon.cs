@@ -50,11 +50,20 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Toggles a translucent gating overlay's visibility based on the user's
         /// premium subscription state. Used by the new visible-but-locked tabs.
+        ///
+        /// <para><paramref name="dailyKey"/> is the feature's
+        /// <see cref="Models.ExclusiveFeature.DailyFreeKey"/>, for the six pool features. On the
+        /// day the ? box rotates that key in, the veil lifts - the same OR every other gate in the
+        /// app applies (TierGate's keyed overloads, AutonomyService, HapticMixer,
+        /// KeywordTriggerService). Without it the door's own page stayed padlocked on its free day
+        /// while the rail chip and the vault card both said FREE TODAY (#978). Features the
+        /// rotation never names (Lockdown) pass null and are untouched by it.</para>
         /// </summary>
-        private void RefreshPremiumGate(Border? gate)
+        private void RefreshPremiumGate(Border? gate, string? dailyKey = null)
         {
             if (gate == null) return;
-            var hasPremium = App.Patreon?.HasPremiumAccess == true;
+            var hasPremium = App.Patreon?.HasPremiumAccess == true
+                             || (dailyKey != null && App.DailyFree?.IsFreeToday(dailyKey) == true);
             gate.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
 
             // FX (PR-4a): one shared animated treatment for every gate in the app - scrim fog
@@ -64,6 +73,36 @@ namespace ConditioningControlPanel
             // choke point six of the eight gates already share; the other two (Blink Trainer,
             // Graded Intake) attach from their own refresh methods.
             Controls.PremiumGateFx.Attach(gate);
+        }
+
+        /// <summary>
+        /// Repaints every entitlement veil that the ? box can lift, in one place, so the day-roll /
+        /// server-override path and the tier-change path cannot disagree about which doors are shut.
+        /// Each pool feature passes its <see cref="Models.ExclusiveFeature.DailyFreeKey"/>; Lockdown
+        /// is never on the wheel and passes none.
+        /// </summary>
+        internal void RefreshEntitlementVeils()
+        {
+            // Haptics content grid - the dim-and-disable half of that page's gate. It has to ask
+            // the same question HapticsGate does, or the free day lifts the veil and leaves an
+            // inert page underneath.
+            var hasHapticsAccess = App.Patreon?.HasPremiumAccess == true
+                                   || App.DailyFree?.IsFreeToday("haptics") == true;
+            if (HapticsTab?.HapticsContentGrid != null)
+            {
+                HapticsTab.HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
+                HapticsTab.HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
+            }
+            if (HapticsTab?.HapticsConnectionBox != null) HapticsTab.HapticsConnectionBox.IsEnabled = hasHapticsAccess;
+            if (HapticsTab?.HapticsFeatureBox != null) HapticsTab.HapticsFeatureBox.IsEnabled = hasHapticsAccess;
+
+            RefreshPremiumGate(BambiTakeoverTab?.BambiTakeoverGate, "takeover");
+            RefreshPremiumGate(HapticsTab?.HapticsGate, "haptics");
+            RefreshPremiumGate(RemoteControlTab?.RemoteControlGate, "remote");
+            RefreshPremiumGate(AwarenessTab?.AwarenessGate, "awareness");
+            // Lockdown is not in the rotation and has no DailyFreeKey.
+            RefreshPremiumGate(LockdownTab?.LockdownGate);
+            if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate, "voice");
         }
 
         #endregion
@@ -121,12 +160,6 @@ namespace ConditioningControlPanel
             // fully veils; both read App.HasCloudIdentity through the room's own sync.
             CompanionRoom?.SyncBrain();
 
-            // Update feature lockboxes
-            // All features are now Tier 1 (or whitelisted)
-            var hasPremiumAccess = App.Patreon?.HasPremiumAccess == true;
-            var level1Unlocked = hasPremiumAccess;
-            var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
-
             // PHASE 8: PatreonFeaturesOverlay - the one big "become a patron" veil over the old
             // Exclusives grid - went with PatreonTabView. The Play door's per-card lockbands
             // (RefreshPlayCards, below) are the wall now, and they repaint on this same path.
@@ -134,27 +167,12 @@ namespace ConditioningControlPanel
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
 
-            // Haptics - unlock for all Patreon supporters.
-            // Phase E deleted the three dead lock overlays (HapticsConnectionLock,
-            // HapticsFeatureLock, HapticsComingSoonOverlay) — they were all Collapsed-forever
-            // leftovers stacked behind the one live gate, HapticsGate, refreshed below.
-            var hasHapticsAccess = hasPremiumAccess;
-            HapticsTab.HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
-            HapticsTab.HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
-            HapticsTab.HapticsConnectionBox.IsEnabled = hasHapticsAccess;
-            HapticsTab.HapticsFeatureBox.IsEnabled = hasHapticsAccess;
-
             // Bambi Takeover (Autonomy) — visible-but-locked: keep BambiTakeoverTab.AutonomyUnlocked
             // always visible, BambiTakeoverTab.AutonomyLocked stays collapsed (legacy element), and the
             // new BambiTakeoverTab.BambiTakeoverGate translucent overlay handles gating.
             if (BambiTakeoverTab.AutonomyLocked != null) BambiTakeoverTab.AutonomyLocked.Visibility = Visibility.Collapsed;
             if (BambiTakeoverTab.AutonomyUnlocked != null) BambiTakeoverTab.AutonomyUnlocked.Visibility = Visibility.Visible;
-            RefreshPremiumGate(BambiTakeoverTab.BambiTakeoverGate);
-            RefreshPremiumGate(HapticsTab.HapticsGate);
-            RefreshPremiumGate(RemoteControlTab.RemoteControlGate);
-            RefreshPremiumGate(AwarenessTab.AwarenessGate);
-            RefreshPremiumGate(LockdownTab.LockdownGate);
-            if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
+            RefreshEntitlementVeils();
             if (GradedIntakeTab != null) RefreshGradedIntakeGate();
             // PHASE 6: the Play door's wall is per-card lockbands, not one overlay, so entitlement
             // arriving (or lapsing) has to repaint it the same way it repaints every gate above.

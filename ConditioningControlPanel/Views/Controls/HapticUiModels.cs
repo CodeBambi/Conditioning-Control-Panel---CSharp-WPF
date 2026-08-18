@@ -382,7 +382,7 @@ namespace ConditioningControlPanel.Views.Controls
         public string DeviceKey { get; }
         public string Name { get; }
         public string ProviderLabel { get; }
-        public int? BatteryPercent { get; }
+        public int? BatteryPercent { get; private set; }
 
         public string BatteryText => BatteryPercent.HasValue
             ? BatteryPercent.Value.ToString(CultureInfo.InvariantCulture) + "%"
@@ -390,6 +390,24 @@ namespace ConditioningControlPanel.Views.Controls
 
         /// <summary>Providers that never report a battery must not show an empty pill.</summary>
         public Visibility BatteryVisibility => BatteryPercent.HasValue ? Visibility.Visible : Visibility.Collapsed;
+
+        /// <summary>
+        /// Push provider-owned live state (currently just the battery reading) into an EXISTING
+        /// card instead of replacing it. #977: replacing the card means the ItemsControl destroys
+        /// its container, and a battery poll landing mid-drag would kill the trim slider's mouse
+        /// capture exactly like the config write-back used to. User-owned fields (trim / role /
+        /// enabled / nickname) are deliberately untouched here — this VM is their authority and
+        /// re-raising them mid-drag is what fought the mouse in the first place.
+        /// </summary>
+        public void SyncLiveState(HapticDevice device)
+        {
+            if (device == null) return;
+            if (BatteryPercent == device.BatteryPercent) return;
+            BatteryPercent = device.BatteryPercent;
+            Raise(nameof(BatteryPercent));
+            Raise(nameof(BatteryText));
+            Raise(nameof(BatteryVisibility));
+        }
 
         public ObservableCollection<string> Capabilities { get; }
 

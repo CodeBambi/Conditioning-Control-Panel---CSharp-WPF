@@ -11,6 +11,24 @@ using Vosk;
 
 namespace ConditioningControlPanel.Services.Speech
 {
+    /// <summary>
+    /// Why the offline speech model is or is not usable. The UI needs "there is no model" and
+    /// "there IS a model and it refused to load" to read differently: users who hit the second
+    /// case were being told to install a model they had already installed, which sent them off to
+    /// download another one and land in the same place.
+    /// </summary>
+    public enum SpeechModelStatus
+    {
+        /// <summary>Not probed yet (nothing has asked for speech this run).</summary>
+        NotProbed,
+        /// <summary>A model loaded; speech can run.</summary>
+        Ok,
+        /// <summary>Nothing under the model root looks like a Vosk model.</summary>
+        NoModelFound,
+        /// <summary>A model directory was found, but Vosk refused to load it.</summary>
+        LoadFailed,
+    }
+
     /// <summary>Outcome of a single "say this" listen window.</summary>
     public sealed class PhraseResult
     {
@@ -69,6 +87,7 @@ namespace ConditioningControlPanel.Services.Speech
         private readonly object _gate = new();
         private Model? _model;
         private bool _modelLoadAttempted;
+        private SpeechModelStatus _modelStatus = SpeechModelStatus.NotProbed;
         private bool _disposed;
 
         // Only one capture session may run at a time.
@@ -111,6 +130,23 @@ namespace ConditioningControlPanel.Services.Speech
                 if (!HasCaptureDevice) return false;
                 EnsureModel();
                 return _model != null;
+            }
+        }
+
+        /// <summary>
+        /// Why the model half of <see cref="IsAvailable"/> is where it is. Probes lazily on first
+        /// query, exactly as <see cref="IsAvailable"/> does, so asking this costs nothing extra.
+        /// Deliberately says nothing about the microphone — callers check
+        /// <see cref="HasCaptureDevice"/> for that and report the mic first, since a missing mic
+        /// makes the model question moot.
+        /// </summary>
+        public SpeechModelStatus ModelStatus
+        {
+            get
+            {
+                if (_disposed) return SpeechModelStatus.NotProbed;
+                EnsureModel();
+                return _modelStatus;
             }
         }
 
@@ -182,21 +218,29 @@ namespace ConditioningControlPanel.Services.Speech
             {
                 if (_model != null || _modelLoadAttempted) return;
                 _modelLoadAttempted = true;
+                string? dir = null;
                 try
                 {
-                    var dir = ResolveModelDir();
+                    dir = ResolveModelDir();
                     if (dir == null)
                     {
+                        _modelStatus = SpeechModelStatus.NoModelFound;
                         App.Logger?.Information("SpeechService: no Vosk model found under {Root} — speech disabled", ModelRoot);
                         return;
                     }
                     _model = new Model(dir);
+                    _modelStatus = SpeechModelStatus.Ok;
                     App.Logger?.Information("SpeechService: Vosk model loaded from {Dir}", dir);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Error(ex, "SpeechService: failed to load Vosk model — speech disabled");
+                    // A model IS on disk and Vosk would not take it. Overwhelmingly this is an
+                    // unsupported or half-unpacked drop-in (e.g. one of the multi-GB full models),
+                    // so name the directory - "install a model" is the one instruction that cannot
+                    // help someone who is already looking at one.
+                    _modelStatus = SpeechModelStatus.LoadFailed;
                     _model = null;
+                    App.Logger?.Error(ex, "SpeechService: Vosk refused the model at {Dir} — speech disabled", dir);
                 }
             }
         }
@@ -222,15 +266,34 @@ namespace ConditioningControlPanel.Services.Speech
             if (candidates.Count == 0) return null;
             if (candidates.Count == 1) return candidates[0];
 
-            // Rank: lgraph (best, grammar-capable) > anything not "small" > small.
+            // Rank: lgraph (best, grammar-capable) > small (grammar-capable) > anything else.
+            //
+            // This used to rank "anything not small" ABOVE small, which inverted the doc comment
+            // above and actively broke installs: a user who followed bad advice and dropped a full
+            // model (e.g. vosk-model-en-us-0.42-gigaspeech) next to the bundled small one had the
+            // full model PREFERRED, and full non-lgraph models ignore the runtime grammar JSON that
+            // BuildRecognizer relies on — so speech got worse, or refused to load at all, purely by
+            // adding a file. Grammar-capable models now win; a full model is the last resort and
+            // says so in the log.
             static int Rank(string dir)
             {
                 var name = Path.GetFileName(dir).ToLowerInvariant();
                 if (name.Contains("lgraph")) return 2;
-                if (!name.Contains("small")) return 1;
+                if (name.Contains("small")) return 1;
                 return 0;
             }
-            return candidates.OrderByDescending(Rank).First();
+
+            var ranked = candidates.OrderByDescending(Rank).ToList();
+            var chosen = ranked[0];
+            if (Rank(chosen) == 0)
+            {
+                App.Logger?.Warning(
+                    "SpeechService: only non-grammar Vosk models are present ({Candidates}); using {Chosen}. " +
+                    "Full models ignore the runtime grammar, so recognition accuracy for lock cards and mantras " +
+                    "will be worse than the bundled small model.",
+                    string.Join(", ", ranked.Select(Path.GetFileName)), Path.GetFileName(chosen));
+            }
+            return chosen;
         }
 
         private static bool LooksLikeModel(string dir) =>

@@ -112,6 +112,16 @@ public sealed class BrainDrainLayer : BaseLayer
         ArmFirstFrameWatchdog(intensity, melt);
     }
 
+    /// <summary>True once <see cref="Start"/> has built a capture pump and it has not been torn
+    /// down. Read by <c>OverlayService.StartBrainDrainBlur</c> so "started on compositor layer" is
+    /// only logged when the layer really armed, and by its liveness check so a layer that is
+    /// <see cref="BaseLayer.IsActive"/> but pump-less cannot suppress restarts forever (#975).</summary>
+    internal bool PumpArmed => _pump != null;
+
+    /// <summary>Frames the current pump has published, or -1 when there is no pump. Purely for the
+    /// diagnostic lines - a report can now say "active, armed, 0 frames" instead of just "started".</summary>
+    internal int FramesPublished => _pump?.FramesPublished ?? -1;
+
     public void Stop()
     {
         DisarmFirstFrameWatchdog();
@@ -190,7 +200,12 @@ public sealed class BrainDrainLayer : BaseLayer
         try { timer?.Stop(); } catch { }
     }
 
-    private static void NotifyNoFrames()
+    /// <summary>The user-facing half of the zero-render report. Internal rather than private
+    /// because the LEGACY per-screen-window route now has the same watchdog
+    /// (<c>OverlayService.ArmLegacyFirstFrameWatchdog</c>) and a user on that route must be told
+    /// the same thing in the same words - #975 was triaged blind partly because only one of the
+    /// two render paths said anything at all when it produced no pixels.</summary>
+    internal static void NotifyNoFrames()
     {
         try
         {
@@ -254,7 +269,15 @@ public sealed class BrainDrainLayer : BaseLayer
     /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, linear to
     /// <see cref="AlphaCeiling"/> at <see cref="AlphaFullIntensity"/> and above - never fully
     /// opaque. See the field comment for why.</summary>
-    private static byte AlphaFor(int intensity)
+    /// <summary>
+    /// The draw-alpha curve, shared with the legacy per-screen window path in OverlayService the
+    /// same way <see cref="RadiusScale"/> already is. Both paths have to mean the same thing at the
+    /// same slider value: the legacy window used to paint the blurred copy fully opaque, so the
+    /// strength dial only moved the blur radius there and intensity 5 looked like intensity 100
+    /// with a softer edge. That is why the same setting read "far too intense" for legacy users and
+    /// "a subtle haze" for everyone on the compositor.
+    /// </summary>
+    internal static byte AlphaFor(int intensity)
     {
         int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
         double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);

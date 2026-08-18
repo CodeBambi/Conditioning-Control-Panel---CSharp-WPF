@@ -71,6 +71,30 @@ namespace ConditioningControlPanel
                 DragMove();
         }
 
+        /// <summary>
+        /// Focus a control that may sit in a panel made visible THIS dispatcher pass.
+        /// Focusing before the first layout pass runs the control's template triggers
+        /// against a not-yet-built template, and any throw from that chrome would
+        /// otherwise abort the whole sign-in continuation (the 'Bd' name-scope bug).
+        /// A cosmetic focus glow must never be able to kill a login, so the retry is
+        /// deferred past layout and the last-resort failure is swallowed.
+        /// </summary>
+        private void FocusSafely(System.Windows.Controls.Control control)
+        {
+            try
+            {
+                if (control.Focus()) return;
+            }
+            catch (InvalidOperationException ex)
+            {
+                App.Logger?.Warning("LoginDialog: pre-layout focus on {Name} threw ({Error}) - retrying after layout", control.Name, ex.Message);
+            }
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () =>
+            {
+                try { control.Focus(); } catch { /* focus is best-effort */ }
+            });
+        }
+
         /// <summary>Clear all sensitive data from memory and UI fields.</summary>
         private void ClearSensitiveData()
         {
@@ -236,7 +260,7 @@ namespace ConditioningControlPanel
             TxtUsernameSubtitle.Text = Loc.Get("label_this_will_be_shown_on_the_leaderboard");
 
             BtnConfirmUsername.IsEnabled = true;
-            TxtUsername.Focus();
+            FocusSafely(TxtUsername);
         }
 
         private async void TxtUsername_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -455,7 +479,7 @@ namespace ConditioningControlPanel
                 TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("login_already_have_account") + " ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
                 TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("btn_login")) { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
 
-                TxtInviteCode.Focus();
+                FocusSafely(TxtInviteCode);
             }
             else
             {
@@ -475,7 +499,7 @@ namespace ConditioningControlPanel
                 TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("login_dont_have_account") + " ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
                 TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("btn_create_account")) { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
 
-                TxtLoginDisplayName.Focus();
+                FocusSafely(TxtLoginDisplayName);
             }
         }
 
