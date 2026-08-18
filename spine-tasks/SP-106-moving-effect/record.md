@@ -445,3 +445,47 @@ wrong reason. The truth is +16 and 0.)
    after the fix and after the last test added, never reproduced in eleven clean suites since. The
    one structural suspect is the rig's inline dispatch, not the presenter, and the reasoning is
    written out rather than asserted.
+
+## §6.1 — THE FLAKE REPRODUCED AT LAND, AND ITS NAME WAS CAPTURED
+
+Added by the landing orchestrator, 2026-08-19. **The unexplained intermittent recorded in §6 reproduced during the land, and this time the name was kept.**
+
+Run 1 of the land's floor sequence, on the merged tree:
+
+```
+Failed!  - Failed: 1, Passed: 1469, Skipped: 2, Total: 1472
+CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden [FAIL]
+```
+
+Runs 2-6 were green (five consecutive), so the land's three-consecutive requirement was met by runs 4-6.
+
+**This corrects the leading hypothesis rather than confirming it.** §6 and D91 name the rig's `InlineDispatch` aliasing `SpiralSurfacePresenter`'s lock-free fields and the recording presence's bare `List<string>` against the asserting thread. **That is not what failed.** The failing fact is SP-100's real-composited-desktop test, which places a REAL overlay on the REAL desktop and reads pixels back — it is environment-sensitive by construction (foreground windows, lock state, compositor timing), predates this packet entirely, and touches none of the spiral code. The lane had already flagged it by name to the orchestrator as "environment-sensitive and pre-existing"; that flag was correct and should have been in the record.
+
+**What this does NOT establish.** The lane's original event was **3** failures; this is **1**. One shared name is not proof they were the same event, and the other two names remain lost. So `InlineDispatch` is not exonerated — it is merely no longer the only suspect, and it is now the less likely one. The honest statement is that at least one intermittent in this suite is a real-desktop environment fact, not a concurrency defect in the new rig.
+
+**Follow-up worth a board row if it recurs:** a real-composited-desktop fact that fails when the desktop is busy is a test that will flake forever on a developer machine. Either it earns a precondition guard naming the environment it requires (the `allowedSkips` contract is for exactly this: a precondition that is a property of the machine), or it moves behind the headed gate where a real desktop is guaranteed. It must NOT simply be retried until green.
+
+## §6.2 — THE FLAKE IS A CLASS, NOT A TEST. The floor gate is not deterministic on a busy desktop.
+
+Second reproduction during the same land, run 7 of 9. **Six failures, all in one fixture:**
+
+```
+CcpClient.Tests.OverlayCapabilityTests.PresentingTheSurface_IsConfirmedByTheOperatingSystem_NotByTheBackendsOwnSayso [FAIL]
+CcpClient.Tests.OverlayCapabilityTests.InputPassesThroughTheSurface_MeasuredInBothPolaritiesAtTheSamePoint [FAIL]
+CcpClient.Tests.OverlayCapabilityTests.TheHitTestOracle_CanTellAClickThroughWindowFromAnOpaqueOne [FAIL]
+CcpClient.Tests.OverlayCapabilityTests.NothingInThisCapabilityDrawsAnything_AndTheContractSaysSo [FAIL]
+CcpClient.Tests.OverlayCapabilityTests.TheSurfaceSitsAboveEveryOrdinaryWindow_InTheOperatingSystemsOwnZOrder [FAIL]
+CcpClient.Tests.OverlayCapabilityTests.WithdrawingTheSurface_TakesItOffTheScreenForReal [FAIL]
+```
+
+Land sequence, nine runs on one tree: **1 RED, 2-6 green, 7 RED, 8-9 green.** Roughly a **1-in-5 failure rate** for the whole gate.
+
+**The two reds share a cause class and neither is SP-106's.** Run 1 was SP-100's real-composited-desktop fact; run 7 was SP-099's real-OS overlay capability fixture. Both create REAL windows and ask the OPERATING SYSTEM about them — presence, z-order, click-through, pixels. Both predate this packet. Neither touches spiral code. **This retires the `InlineDispatch` hypothesis in §6/§6.1/D91 as the leading explanation** and replaces it with something more consequential:
+
+> **A family of real-OS tests in this suite fails intermittently when the desktop is contended, and they are inside the mechanical floor gate.**
+
+**Why this matters far beyond SP-106.** The port's land discipline rests on "three consecutive `check-floor.mjs` runs". On this evidence, three consecutive greens on a busy machine has roughly a **1-in-2 chance of containing no red only because the dice fell that way** — and the historical practice of re-running until green is exactly how an intermittent gets laundered into a pass. Every prior land's three-green claim was true as observed and weaker as evidence than it appeared. **No prior wave is impugned; the gate's determinism is.**
+
+**What was NOT done, deliberately:** these tests were not skipped, quarantined, retried-until-green, or added to `allowedSkips`. `allowedSkips` is for preconditions that are properties of the machine or OS, and "the desktop was busy" is a property of the moment, not the machine. Laundering a real intermittent through that list would blind the floor exactly where it is load-bearing.
+
+**Filed as a board row at this land.** The honest options are a precondition guard that names the environment these facts require, or moving them behind the headed gate where a real desktop is guaranteed. Not a retry loop.
