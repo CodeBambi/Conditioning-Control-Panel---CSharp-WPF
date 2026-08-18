@@ -71,6 +71,22 @@ namespace ConditioningControlPanel.Services
         private Window? _subscribedWindow;
 
         /// <summary>
+        /// How many overlay windows are live (+ how many realizations are still queued), for the
+        /// hang report. Read by <see cref="HangContext"/> on the WATCHDOG thread while the UI thread
+        /// may be wedged, so this must stay a pair of plain field reads: Dictionary/HashSet Count is
+        /// an int field, safe to read concurrently (a stale value is fine, a lock would not be — the
+        /// UI thread could be holding it, which is exactly the case we are diagnosing).
+        /// </summary>
+        internal string ActiveWindowCount
+        {
+            get
+            {
+                try { return _windows.Count + "+" + _pending.Count + "pending"; }
+                catch { return "(unavailable)"; }
+            }
+        }
+
+        /// <summary>
         /// Tears down every overlay and re-shows the ones currently enabled in settings.
         /// Safe to call from any thread; marshals to the UI thread. The teardown is synchronous but
         /// each re-show is deferred one dispatcher pass (see QueueShow). Call after any config
@@ -247,6 +263,7 @@ namespace ConditioningControlPanel.Services
 
             foreach (var w in new List<Window>(_windows.Values))
             {
+                ReleaseAnimator(w);
                 try { w.Close(); }
                 catch { /* already gone */ }
             }
@@ -269,10 +286,35 @@ namespace ConditioningControlPanel.Services
             if (_windows.TryGetValue(index, out var w))
             {
                 _windows.Remove(index);
+                ReleaseAnimator(w);
                 try { w.Close(); }
                 catch { /* already gone */ }
             }
             SyncSentinel();
+        }
+
+        /// <summary>
+        /// Clear the GIF source before closing the overlay window. RepeatBehavior.Forever installs
+        /// a clock that keeps handing the render thread native-size WriteableBitmap frames and pins
+        /// the Image for as long as the source is set; Close() alone does not tear it down. These
+        /// overlays are rebuilt on every settings edit (the size/opacity sliders refresh a slot per
+        /// debounce rest, an enable toggle or a SpiralPath change rebuilds BOTH slots), so without
+        /// this each edit leaves another live animator driving the render thread - a slow-onset
+        /// render-thread saturation that ends in the UI thread blocking inside WriteableBitmap.Lock
+        /// with no exception. Same teardown every other XamlAnimatedGif site in the app performs.
+        /// </summary>
+        private static void ReleaseAnimator(Window w)
+        {
+            try
+            {
+                if (w.Content is Image img)
+                {
+                    try { AnimationBehavior.SetSourceUri(img, null); } catch { }
+                    try { img.Source = null; } catch { }
+                }
+                w.Content = null;
+            }
+            catch { /* teardown must never throw */ }
         }
 
         private int BumpSlot(int index)
@@ -587,7 +629,13 @@ namespace ConditioningControlPanel.Services
             _windows[index] = window;
             try
             {
-                window.Show();
+                // Show() on a layered window realizes its render target synchronously; if the render
+                // thread wedges here the hang report must name this call rather than "(idle)".
+                using (VideoDiag.UiScope($"CornerGifService.ShowOne(slot {index}, layered Show)"))
+                using (HangContext.Scope($"cornerGif.show[{index}]"))
+                {
+                    window.Show();
+                }
             }
             catch (Exception ex)
             {
