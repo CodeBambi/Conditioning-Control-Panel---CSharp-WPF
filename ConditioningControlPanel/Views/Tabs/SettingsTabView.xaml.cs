@@ -462,16 +462,7 @@ namespace ConditioningControlPanel.Views.Tabs
 
         // Self-contained on the old dashboard too - it only opens a window.
         private void HomeBtnAudioLayers_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                new LayeredAudioWindow { Owner = Window.GetWindow(this) }.Show();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Home/Audio: Audio Layers window launch failed");
-            }
-        }
+            => LayeredAudioWindow.Open(this);
 
         // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so
         // the dashboard can show it without the user visiting the Programs tab first.
