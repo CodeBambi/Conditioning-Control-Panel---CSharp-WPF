@@ -97,6 +97,22 @@ public sealed class CompositionRoot
     /// </summary>
     public Func<ILogSink, Entitlement.HostLoginEntitlement>? EntitlementFactory { get; init; }
 
+    /// <summary>
+    /// SP-098: the conditioning session's clock seam. Product default is the real
+    /// <see cref="Session.SystemSessionClock"/>; a headless test substitutes a manual clock so
+    /// it can drive the REAL shell — press the real START button, advance, and watch the real
+    /// effect fire — without a wall-clock wait anywhere in it. It is a TIMER source only: it can
+    /// make an effect fire sooner, never make one available that is not.
+    /// </summary>
+    public Func<Session.ISessionClock>? SessionClockFactory { get; init; }
+
+    /// <summary>
+    /// SP-098: the Flash Images pool seam. Product default reads the user's own
+    /// <c>&lt;dataDir&gt;/assets/images</c>. Tests substitute an in-memory pool so the session
+    /// spine's proofs never depend on a filesystem.
+    /// </summary>
+    public Func<Effects.IFlashImagePool>? FlashImagePoolFactory { get; init; }
+
     public CompositionRoot()
     {
         // Instance default (needs SettingsPathFactory); init-only so tests can override.
@@ -206,6 +222,13 @@ public sealed class CompositionRoot
                 infra, _capabilitiesForParticipants ?? new CapabilityRegistry(),
                 Path.GetDirectoryName(SettingsPathFactory())!,
                 AiOllamaHostOverride),
+            // SP-098 the conditioning session: the preset store, the effect rack and the
+            // engine START drives. Registered LAST so its phase-3 preset load runs after every
+            // other store's — and it starts NO session: WPF's engine runs only when the user
+            // presses START (MainWindow/MainWindow.StartStop.cs:34,105).
+            new Session.SessionParticipant(
+                infra, Path.GetDirectoryName(SettingsPathFactory())!,
+                SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke()),
         ];
     }
 
@@ -254,6 +277,10 @@ public sealed class CompositionRoot
         var slotStores = participants.OfType<Features.Dtrh.DtrhSaveSlots>().FirstOrDefault();
         // SP-046: the companion's memory store flushes in the same slot (SP-005 contract §11).
         var companion = participants.OfType<Features.Companion.CompanionParticipant>().FirstOrDefault();
+        // SP-098: the session preset flushes in the same slot. A dial the user moved on the way
+        // out is a persisted setting like any other, and teardown's head slot is the ONE place
+        // the port guarantees it reaches disk.
+        var session = participants.OfType<Session.SessionParticipant>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
@@ -295,13 +322,14 @@ public sealed class CompositionRoot
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
-            preDrainFlush: store is null && slotStores is null && companion is null
+            preDrainFlush: store is null && slotStores is null && companion is null && session is null
                 ? null
                 : async () =>
                 {
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (session is not null) await session.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                 },
             capabilities: capabilities, probeRunner: probeRunner, entitlement: entitlement);
     }

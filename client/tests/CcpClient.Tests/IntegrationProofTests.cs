@@ -1,4 +1,4 @@
-using CcpClient.Desktop;
+﻿using CcpClient.Desktop;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 using Xunit;
@@ -34,7 +34,7 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(7, host.Participants.Count);
+        Assert.Equal(8, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
         var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
@@ -43,6 +43,13 @@ public class IntegrationProofTests
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhParticipant>(host.Participants[5]);
         // SP-046: the companion AI chain composes last (memory store started in phase-3 order).
         Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[6]);
+        // SP-098: the conditioning session registers LAST, and its phase-3 start loads the
+        // preset WITHOUT starting a session — WPF's engine runs only when the user presses
+        // START (MainWindow/MainWindow.StartStop.cs:34,105).
+        var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
+        Assert.True(session.Running);
+        Assert.False(session.Engine.Running);
+        Assert.IsType<LoadOutcome.Missing>(session.Preset.LastLoadOutcome);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it
         Assert.Equal(1, heartbeat.StartCount);
         Assert.True(ticker.Running); // phase 3 started the participant...

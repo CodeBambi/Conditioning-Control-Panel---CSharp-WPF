@@ -326,6 +326,90 @@
       <Setter Property="Opacity" Value="0.75" />
       <Setter Property="FontSize" Value="10" />
     </Style>
+
+    <!-- ==========================================================================
+         SP-098 — the session action bar, the rack row's live dot, and module dials.
+         ========================================================================== -->
+
+    <!-- WPF's persistent bottom action bar (§8.6). The port carries ONE control off it, the
+         large gradient START, because START is the only verb on that bar with a ported
+         meaning: favourite, the start-options chevron, Save and Exit all name subsystems the
+         port does not have, and rendering them would be the greyed control that swallows the
+         gesture (§9 D7's rule). §9 D10 recorded the whole bar as absent; this narrows it. -->
+    <Style Selector="Border.actionbar">
+      <Setter Property="Background" Value="#FF19141F" />
+      <Setter Property="BorderBrush" Value="#FF2A2130" />
+      <Setter Property="BorderThickness" Value="0,1,0,0" />
+      <Setter Property="Padding" Value="20,12" />
+    </Style>
+
+    <!-- Idle: WPF's PinkBrush, the shell's existing #FFD05CE8 (MainWindow.StartStop.cs:779).
+         WPF's caption is the literal "▶ START"/"■ STOP" pair built in code, NOT the localized
+         btn_start/btn_stop keys (:761-762, :786-787) — the port keeps the literals and drops
+         the glyphs, which is the §9 D8 emoji-stripping rule. -->
+    <Style Selector="Button.session-start">
+      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Padding" Value="42,12" />
+    </Style>
+    <!-- Running: WPF paints the SAME button red, Color.FromRgb(255,107,107) = #FFFF6B6B
+         (MainWindow.StartStop.cs:756). One control in two states, never two controls and never
+         a disabled one — a stop the user cannot press is the failure mode a panic button
+         exists to prevent. -->
+    <Style Selector="Button.session-start.running">
+      <Setter Property="Background" Value="#FFFF6B6B" />
+    </Style>
+    <Style Selector="TextBlock.session-status">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The rack row's live state dot (§8.3: "The dot on each row is live"). THREE liveries,
+         because the port's dot has three honest things to say (see EffectDotState): a hollow
+         ring for off, a dim fill for armed-but-idle, a lit fill with a rim for really running.
+         Off is a RING rather than a dark disc so "this module is switched off" is legible on
+         the rack's own dark ground instead of vanishing into it. -->
+    <Style Selector="Ellipse.dot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="Stroke" Value="#FF6B5B73" />
+      <Setter Property="StrokeThickness" Value="1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Ellipse.dot.armed">
+      <Setter Property="Fill" Value="#FF6B5B73" />
+      <Setter Property="Stroke" Value="#FF6B5B73" />
+    </Style>
+    <Style Selector="Ellipse.dot.live">
+      <Setter Property="Fill" Value="#FFE066FF" />
+      <Setter Property="Stroke" Value="#FFF3C4FF" />
+    </Style>
+
+    <Style Selector="TextBlock.dial-label">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.8" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.dial-value">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+    <Style Selector="CheckBox.dial-enable">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
   </Window.Styles>
 
   <DockPanel>
@@ -337,6 +421,32 @@
         <TextBlock x:Name="RouteProbeText" Classes="diagnostic" Text="route: pending" />
         <TextBlock x:Name="LayoutProbeText" Classes="diagnostic" Text="layout-probe: pending" />
       </StackPanel>
+    </Border>
+
+    <!-- SP-098 — the session action bar. Docked AFTER the diagnostic footer so it sits ABOVE
+         it, which is where WPF's action bar is: at the foot of the app, on every page (§8.6).
+         It is shell chrome and not a page concern, exactly as §8.6's own design consequence
+         says, so a session started here survives every navigation.
+
+         ONE button. WPF's BtnStart_Click reads _isRunning and branches
+         (MainWindow/MainWindow.StartStop.cs:34,50,105); it is never disabled and never
+         duplicated. -->
+    <Border DockPanel.Dock="Bottom" Classes="actionbar">
+      <Grid ColumnDefinitions="Auto,*">
+        <Button Grid.Column="0"
+                x:Name="SessionStartButton"
+                Classes="session-start"
+                AutomationProperties.AutomationId="SessionStartButton"
+                AutomationProperties.Name="START"
+                ToolTip.Tip="Start the session. Every armed module in the Studio rack runs while it is up."
+                Content="START" />
+        <TextBlock Grid.Column="1"
+                   x:Name="SessionStatusText"
+                   Classes="session-status"
+                   Margin="16,0,0,0"
+                   AutomationProperties.AutomationId="SessionStatusText"
+                   Text="" />
+      </Grid>
     </Border>
 
     <!-- The rail. Declared HERE, in markup, and cross-checked against ShellRoutes.Declared by

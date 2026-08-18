@@ -80,7 +80,15 @@ public partial class MainWindow : Window
                 : new FeaturePopupWindow(),
             FeaturePopupManager.CreateFocusRestoration(this));
 
-        _pages[ShellRoutes.Studio] = new StudioPage(Loom);
+        // SP-098: the conditioning session, composed once by the composition root and reached
+        // through the host — the same rule the entitlement capability follows. A shell-local
+        // second engine would let the START button and the rack row drive different sessions.
+        Session = host.Participants.OfType<Session.SessionParticipant>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "the shell needs the conditioning session and this host has none — a START button "
+                + "wired to nothing is the flag-instead-of-a-session shape the spine exists to prevent");
+
+        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
@@ -111,6 +119,18 @@ public partial class MainWindow : Window
                 }
             };
         }
+
+        // The ONE start/stop control (WPF's BtnStart_Click, MainWindow/MainWindow.StartStop.cs:34):
+        // it reads the session's state and branches. It is never disabled — a stop the user
+        // cannot press is exactly the failure a panic button exists to prevent — and it lives on
+        // the shell so a session started here survives every navigation (§8.6).
+        SessionStartButton.Click += (_, _) =>
+        {
+            Session.Engine.Toggle();
+            RenderSessionState();
+        };
+        Session.Engine.Changed += OnSessionEngineChanged;
+        RenderSessionState();
 
         Mount(Router.Current.Id);
         _doors[Router.Current.Id].IsChecked = true;
@@ -160,6 +180,45 @@ public partial class MainWindow : Window
     /// <summary>The shell's ONE duck/restore and tray owner (SP-096); public so tests drive the
     /// real menu and the real window transitions.</summary>
     public ShellTray ShellTray { get; }
+
+    /// <summary>The conditioning session START drives (SP-098); public so tests drive the real
+    /// engine and the real effect rather than a shell-local copy of either.</summary>
+    public Session.SessionParticipant Session { get; }
+
+    /// <summary>
+    /// WPF's <c>UpdateStartButton</c> (<c>MainWindow/MainWindow.StartStop.cs:751-796</c>): one
+    /// control, two states. Running paints it red (<c>Color.FromRgb(255,107,107)</c>, <c>:756</c>)
+    /// and captions it <c>STOP</c> (<c>:762</c>); idle restores the pink and <c>START</c>
+    /// (<c>:779,787</c>). The glyphs (<c>■</c>/<c>▶</c>) are dropped under the §9 D8
+    /// emoji-stripping rule; the words are WPF's literals, not its <c>btn_start</c>/<c>btn_stop</c>
+    /// localization keys, which this code path does not use.
+    /// </summary>
+    private void RenderSessionState()
+    {
+        var running = Session.Engine.Running;
+        SessionStartButton.Content = running ? "STOP" : "START";
+        SessionStartButton.SetValue(Avalonia.Automation.AutomationProperties.NameProperty, running ? "STOP" : "START");
+        SessionStartButton.Classes.Set("running", running);
+        SessionStatusText.Text = running
+            ? "Session running."
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// The session can be stopped from a thread that is not this one — the host's teardown
+    /// stops it on the shutdown path. Marshalling here is what stops a closing window from
+    /// touching its own controls off-thread.
+    /// </summary>
+    private void OnSessionEngineChanged()
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            RenderSessionState();
+            return;
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(RenderSessionState);
+    }
 
     /// <summary>The page currently mounted in the host, by route id.</summary>
     public Control PageFor(string routeId) => _pages[routeId];

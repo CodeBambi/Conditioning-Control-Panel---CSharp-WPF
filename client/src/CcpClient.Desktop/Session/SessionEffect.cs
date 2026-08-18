@@ -1,0 +1,91 @@
+using CcpClient.Desktop.Lifecycle;
+
+namespace CcpClient.Desktop.Session;
+
+/// <summary>
+/// What a rack row's dot is allowed to say. THREE states, not two, and the third one exists
+/// because WPF's own copy and WPF's own mechanism disagree about what the dot means.
+///
+/// <para>The Studio onboarding card promises: <i>"The dot on each row is live: at a glance you
+/// can see everything that is currently running."</i> (quoted in
+/// <c>client/docs/wpf-surface-reachability.md</c> §8.3). The mechanism reads the persisted
+/// ENABLE FLAG — <c>Add("flash", …, () =&gt; App.Settings?.Current?.FlashEnabled)</c>
+/// (<c>Views/Tabs/StudioTabView.xaml.cs:484-485</c>) — which says "armed", not "running". The
+/// two coincide only while the engine runs, because <c>StartEngine</c> gates each service on
+/// its flag and the quick-toggle starts/stops the live service
+/// (<c>MainWindow/MainWindow.Presets.cs:1250</c>).</para>
+///
+/// <para>Rather than pick one and be wrong about the other, the port says both. A dot that
+/// could only be lit or unlit would have to claim a stopped-but-armed effect is "running" or
+/// that an armed one is "off"; the capability contract bans exactly that kind of confident
+/// half-truth.</para>
+/// </summary>
+public enum EffectDotState
+{
+    /// <summary>The module's own dial is off. Nothing will happen, session or no session.</summary>
+    Off,
+
+    /// <summary>Armed — the dial is on — but no session owns it, so nothing is scheduled.</summary>
+    Armed,
+
+    /// <summary>Really running: an owned operation is live and the effect's work is scheduled.</summary>
+    Live,
+}
+
+/// <summary>
+/// One effect module under the conditioning session. This is the spine's contract, and the
+/// other fourteen rack modules (<c>wpf-surface-reachability.md</c> §8.3) implement THIS —
+/// which is why it is deliberately small: a stable identity, a display title, one persisted
+/// dial, a truthful dot, and an arm/disarm pair with an owned completion behind it.
+///
+/// <para>Implementations must be idempotent (the SP-003 §5.3 participant rule at effect
+/// granularity): arming an armed effect starts no second generation, and disarming a
+/// never-armed effect is a no-op.</para>
+/// </summary>
+public interface ISessionEffect
+{
+    /// <summary>
+    /// The stable dispatch identity (A-004) — WPF's own rack key, e.g. <c>"flash"</c>
+    /// (<c>StudioTabView.xaml.cs:484</c>, and the same key
+    /// <c>MainWindow.Presets.cs:1250</c> switches on). Never a display string, never localized.
+    /// </summary>
+    string Id { get; }
+
+    /// <summary>Display text. Mutating it must never affect dispatch.</summary>
+    string Title { get; }
+
+    /// <summary>The persisted on/off dial for this module.</summary>
+    bool Enabled { get; }
+
+    /// <summary>What the row's dot is entitled to show right now. Derived, never a stored bool.</summary>
+    EffectDotState Dot { get; }
+
+    /// <summary>
+    /// The armed schedule's owned completion (async-lifecycle-fault-contract §1): it exists
+    /// from the first arm and terminates with a typed outcome when the generation is
+    /// cancelled. Null before the effect has ever been armed.
+    /// </summary>
+    Task<OperationOutcome>? Completion { get; }
+
+    /// <summary>Raised when the dot, the counters or the dial move. Fired on whatever thread moved them.</summary>
+    event Action? Changed;
+
+    /// <summary>
+    /// Writes the persisted dial. Separate from <see cref="Arm"/> because WPF's quick-toggle
+    /// writes the flag whether or not anything is running and then starts/stops only if the
+    /// engine is up (<c>MainWindow.Presets.cs:1250</c>).
+    /// </summary>
+    void SetEnabled(bool enabled);
+
+    /// <summary>
+    /// Take ownership of a live generation and schedule the work. Called by the session on
+    /// START, and by the quick-toggle when a module is switched on mid-session.
+    /// </summary>
+    void Arm();
+
+    /// <summary>
+    /// Stop the work. Called by the session on STOP, and by the quick-toggle when a module is
+    /// switched off mid-session. After this returns, nothing this effect scheduled may fire.
+    /// </summary>
+    void Disarm();
+}

@@ -4,26 +4,54 @@
   <!--
     The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
     down the left, one panel on the right, left-click a row to open its panel. WPF has four
-    groups and fifteen rows; the port has ONE ported module, so it declares one group and one
-    row. A rack of rows that open blank panels is the same dead decor as a rail of dead doors.
+    groups and fifteen rows; the port now has TWO rows, and only one of them is an effect.
 
-    Two omissions from WPF's row, both DIVERGENCES and neither of them parity (§9 D5, D6):
-    the live state dot and the right-click quick-toggle. WPF's spiral row has both
-    (StudioTabView.xaml.cs:490-491 passes () => App.Settings?.Current?.SpiralEnabled). The port
-    has no spiral-overlay effect whose state could be reported or flipped, and a dot that always
-    reads "off" is the fake-available shape the capability contract bans.
+    SP-098 lands the first one that is: Flash Images, WPF's own first EFFECTS row, above Spiral
+    Overlay because that is WPF's rack order (StudioTabView.xaml.cs:484,487). It carries the two
+    things §9 D5/D6 recorded as missing "because the port has nothing to wire yet" — a LIVE
+    STATE DOT and a RIGHT-CLICK QUICK-TOGGLE — and it carries them because there is now a real
+    effect whose state can be reported and whose dial can be flipped.
+
+    The Spiral Overlay row still has neither, and that is not an oversight: D5/D6 stay open for
+    it. Its rule is WPF's own, written for the one row with no master toggle — "A dot that
+    cannot be wired honestly is omitted" (StudioTabView.xaml.cs:494-496) — and the port applies
+    it to every row with no ported effect behind it.
   -->
   <Grid ColumnDefinitions="248,*" Margin="20">
     <StackPanel Grid.Column="0" Spacing="4">
       <TextBlock Classes="page-title" Text="Studio" />
       <TextBlock Classes="page-blurb" Text="Every effect, one rack. Pick a module on the left." />
+      <!-- The grammar, said out loud. WPF surfaces it in a rail chip tooltip (§2,
+           Views/Tabs/SettingsTabView.xaml:453 — "left-click opens it, right-click turns it
+           on") and again in the Studio onboarding card (§8.3). A second gesture nobody is told
+           about is a second gesture nobody uses. -->
+      <TextBlock Classes="page-blurb"
+                 AutomationProperties.AutomationId="RackGrammarHint"
+                 Text="Left-click a row to open it. Right-click a row to flip that effect on or off." />
 
       <Border Classes="rack" Margin="0,12,0,0">
         <StackPanel Spacing="2">
           <TextBlock Classes="rack-group" Text="EFFECTS" />
+
           <!-- The rack row is a RadioButton, as WPF's is (StudioTabView.xaml.cs:645-651) —
                single-selection, and its keyboard activation is the control's own, not a
-               bespoke key handler. -->
+               bespoke key handler. The dot lives on the ROW, right-aligned, as WPF's does
+               (BuildRestingStrip: "art (or emoji) chip | caption | state dot"); the gesture
+               belongs to the whole row and never to the 8px dot (:658-659). -->
+          <RadioButton x:Name="RowFlashImages"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowFlashImages"
+                       AutomationProperties.Name="Flash Images rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Flash Images" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="FlashRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="FlashRowDot" />
+            </Grid>
+          </RadioButton>
+
           <RadioButton x:Name="RowSpiralOverlay"
                        Classes="rack-row"
                        GroupName="rack"
@@ -41,6 +69,91 @@
                    VerticalAlignment="Center" HorizontalAlignment="Center"
                    Text="Pick a module on the left." />
 
+        <!-- ================= Flash Images ================= -->
+        <StackPanel x:Name="FlashModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Flash Images" />
+          <TextBlock Classes="page-blurb" Text="Images flash on a schedule while the session runs." />
+
+          <!-- THREE DIALS, and every one of them is read by the running effect. WPF's panel has
+               a dozen more (opacity, scale, duration, fade, clickable, hydra, centre exclusion —
+               Features/FlashFeatureControl.xaml, AppSettings.cs:749-960) and every one of those
+               describes how a flash is DRAWN. The port draws none, so they are ABSENT rather
+               than greyed: a disabled dial swallows the gesture and tells the user nothing
+               (§9 D7). They arrive with the surface that honours them. -->
+          <CheckBox x:Name="FlashEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="FlashEnableToggle"
+                    AutomationProperties.Name="Flash Images enabled"
+                    Content="Enable Flash Images" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Flashes per hour" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="FlashFrequencySlider"
+                    Minimum="1" Maximum="180"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="FlashFrequencySlider"
+                    AutomationProperties.Name="Flashes per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="FlashFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="FlashFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Images per flash" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="FlashImagesSlider"
+                    Minimum="1" Maximum="20"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="FlashImagesSlider"
+                    AutomationProperties.Name="Images per flash" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="FlashImagesValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="FlashImagesValue"
+                       Text="" />
+          </Grid>
+
+          <!-- What the effect ACTUALLY did. Counts, never file names: the media-logging rule
+               the DTRH manifest already holds. This is the surface that makes "the effect runs"
+               and "the effect stopped" observable to a user with no overlay on screen. -->
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="FlashLiveState"
+                         AutomationProperties.AutomationId="FlashLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="FlashPoolState"
+                         AutomationProperties.AutomationId="FlashPoolState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <!-- THE NAMED GAP. Half of this effect is a scheduler over the user's image pool and
+               that half is ported exactly. The other half puts those images on screen above
+               every other application - one layered, always-on-top, WS_EX_TRANSPARENT
+               click-through window per flash, re-asserted to HWND_TOPMOST as other layers fight
+               it (Services/Flash/FlashService.cs:3615,3667-3668,3862-3868). That is a
+               compositor, docs/constitution.md classes the previous port attempt as failure
+               evidence largely because of it, and it is a platform packet of its own. Said in
+               plain words rather than left for the user to discover by pressing START and
+               watching nothing happen. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="FlashOverlayGapNotice"
+                       Text="Showing the images over your other windows is not ported yet: that needs an always-on-top click-through surface this build does not have. The schedule above is real and runs - it just has nowhere to draw." />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Spiral Overlay ================= -->
         <StackPanel x:Name="SpiralModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Spiral Overlay" />
           <TextBlock Classes="page-blurb" Text="Show hypnotic spiral overlay" />

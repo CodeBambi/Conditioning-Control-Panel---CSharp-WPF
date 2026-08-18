@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Lifecycle;
+﻿using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 using Xunit;
 
@@ -59,7 +59,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(7, host.Participants.Count);
+        Assert.Equal(8, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
@@ -73,6 +73,9 @@ public class CompositionRootValidationTests
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[4]);
         // SP-046: the companion AI chain (pipeline + memory + awareness + executor).
         Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[6]);
+        // SP-098: the conditioning session registers last (its preset load runs after every
+        // other store's phase-3 load).
+        Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
     }
 
     [Fact]
@@ -86,6 +89,11 @@ public class CompositionRootValidationTests
         Assert.False(heartbeat.Running);
         Assert.Equal(0, heartbeat.StartCount);
         Assert.False(host.Participants[0].Running);
+        // SP-098: construction composes the session and starts NO session with it.
+        var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
+        Assert.False(session.Running);
+        Assert.False(session.Engine.Running);
+        Assert.Null(session.Flash.Completion);
     }
 
     [Fact]

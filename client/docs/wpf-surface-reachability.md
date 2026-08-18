@@ -606,3 +606,56 @@ the only input that makes the sealed capability throw); `IntakePage`'s `RefusedS
 `RefusedNeedsAccount` render arms (driven through the page with injected entitlement seams and the
 real pass service's own completion-spend, never a stubbed decision); and `DtrhLaunch.RestoreOwner`
 (the real coordinator's `FlowEnded`, raised by really cancelling the real slot picker).
+
+---
+
+## 14. Port divergences, recorded at SP-098 (the session, and the first effect that runs)
+
+**Numbering note.** §13 ended at **D44**, so this section starts at **D45**.
+
+**What landed.** The port had a shell and no app: five doors, a tray, honest refusals, and zero
+effects. It now has a **conditioning session** — WPF's ENGINE, not its scripted-session layer — with
+**one real effect under it**, Flash Images, reachable by a real gesture from a cold start:
+`DoorStudio` -> rack row **Flash Images** -> its module panel, and the shell's own action bar ->
+**START**.
+
+**Two names, one word.** WPF has two things called "session" and the port models only one of them.
+The **engine** is `MainWindow/MainWindow.StartStop.cs:34,159,296` and `App.IsEngineRunning`
+(`:269,:387`): `START` arms every enabled module and stop disarms them. The **scripted session** is
+`Services/Session/SessionEngine.cs` + `SessionManager.cs` — a definition with phases, a duration and
+XP — and it is **not ported** (D51).
+
+### D5 and D6 — what closed, and what did not
+
+| gap | at SP-091 | at SP-098 |
+|---|---|---|
+| **D5** (live dot) | no dot on any row, "the port has no spiral-overlay effect whose state could be reported" | **CLOSED for the `Flash Images` row**, which has a real effect and therefore a dot that can report truthfully (three states — D45). **STILL OPEN for `Spiral Overlay`**, which still has no ported effect; WPF's own rule for such a row is to omit the dot (`StudioTabView.xaml.cs:494-496`), and a dot that always read "off" would be the fake-available shape the capability contract bans |
+| **D6** (right-click toggle) | the gesture is unhandled on every row | **CLOSED for the `Flash Images` row**: right-click flips the persisted dial and starts/stops the live effect, WPF's own body (`MainWindow/MainWindow.Presets.cs:1250`, `:1264`). **STILL OPEN for `Spiral Overlay`**, deliberately unhandled — WPF's own case for a toggle-less row (`StudioTabView.xaml.cs:659`) |
+
+Both close for a row when an effect lands behind that row, and for no other reason.
+`StudioRackHeadlessTests` holds both halves: the flash row has the dot and the toggle, the spiral row
+has neither, in the same run.
+
+### The divergences
+
+| # | v6.8.1 fact | Port at SP-098 | Reason |
+|---|---|---|---|
+| **D45** | The rack dot reads the **persisted enable flag** — `Add("flash", …, () => App.Settings?.Current?.FlashEnabled)` (`Views/Tabs/StudioTabView.xaml.cs:484-485`) — while the Studio onboarding card promises *"The dot on each row is live: at a glance you can see everything that is currently running"* (§8.3) | A **three-state** dot: `Off` (the module's dial is off), `Armed` (dial on, no session owns it), `Live` (an owned operation really has work scheduled) | **WPF's copy and WPF's code disagree, and the source wins (the §8 rule) — but a two-state dot has to be wrong about one of them.** WPF's two readings coincide only while the engine runs, because `StartEngine` gates each service on its flag (`MainWindow.StartStop.cs:181,200,…`) and the quick-toggle starts/stops the live service (`Presets.cs:1250`); with the engine stopped, WPF's dot is lit for something that is not running. The port says both things instead of picking one and asserting the other. `Live` derives from the OPERATION authority (`AsyncOperationOwner.IsLive` plus a real pending timer), never from a cached bool — the `StatusTickerParticipant.IsOperationLive` precedent — so a cancelled generation reads not-live even if nobody repainted the row |
+| **D46** | Switching a module ON mid-session **does not arm it** if it was off when the engine started: `FlashService.Start()` returns at `if (_isRunning) return;` (`Services/Flash/FlashService.cs:347`) while `_isRunning` was already set by the unconditional `App.Flash.Start()` at `MainWindow.StartStop.cs:178`, so the quick-toggle (`Presets.cs:1250`) and the panel checkbox (`Features/FlashFeatureControl.xaml.cs:168-175`) both silently do nothing | Arming is **idempotent about the generation** (a second arm starts no second generation — the re-entrant double-toggle guard) but **always re-evaluates the schedule**, so a module switched on during a session runs | This is the one place the port declines to reproduce the code, and it is deliberate: the rack's own onboarding text tells the user *"Right-click it to flip that effect on or off"*, and a gesture that is documented, offered and inert is worse than one that is absent. WPF's own path even self-heals by accident — nudging the frequency slider calls `RefreshSchedule` (`FlashService.cs:527-531`), which arms what the toggle would not — so the observable intent is not in doubt. Recorded rather than filed as a WPF bug, because it is upstream's tree, not this packet's |
+| **D47** | A flash **puts images on screen above every other application**: one layered, always-on-top, `WS_EX_TRANSPARENT` click-through window per flash, re-asserted to `HWND_TOPMOST` as other layers fight it (`FlashService.cs:3615`, `:3667-3668`, `:3862-3868`, `:206-240`) | **Nothing is drawn.** The schedule, the dials, the pool and the draw are ported exactly; the on-screen half is **absent and named on the module panel in plain words** | **That half is a compositor, and `docs/constitution.md` classes the previous port attempt as failure evidence largely because of overlay work.** It is a platform capability with its own packet and its own headed evidence, not something to smuggle in behind a first effect. The port refuses the two dishonest alternatives as well: it does not draw the flash inside its own window (a different, lesser outcome dressed as the real one), and it does not let the module imply pixels appeared. What the user gets instead is truthful: the dot lights, the panel counts the flashes as they come due and says how many images each drew, and a notice says the drawing half is not ported. **Nothing in this packet is a `presentation-verified` claim, and nothing in it proves a flash was ever visible** |
+| **D48** | The persistent bottom action bar carries a favourite toggle, a large gradient **START**, a start-options chevron, **Save** and **Exit** (§8.6); `START` additionally refuses while a remote controller is connected (`MainWindow.StartStop.cs:40`) or while lockdown is active (`:44-49`) | A shell action bar with **START alone**, never disabled, painted WPF's pink `#FFD05CE8` idle and WPF's red `#FFFF6B6B` running (`:756`, `:779`), captioned with WPF's literal `START`/`STOP` (`:762`, `:787`) minus the glyphs (the §9 D8 emoji rule) | §9 D10 recorded the whole bar as absent; this narrows it to the one verb with a ported meaning. Favourite, the chevron's "Jump right in" (`:127`), Save and Exit all name subsystems the port does not have, and rendering them would be the greyed control that swallows the gesture (§9 D7). There is no remote controller and no lockdown to refuse for. The button is **never disabled in either state**, which is WPF's shape and matters most in the stop direction: a stop the user cannot press is the failure a panic button exists to prevent |
+| **D49** | The Flash module panel carries **a dozen dials** — enable, frequency, images, opacity, image scale, duration, fade, clickable, glow, solid mode, hydra limit and linked timing, centre exclusion (`Features/FlashFeatureControl.xaml`, `CCP.Core/Models/AppSettings.cs:749-960`) | **Three**: enable, flashes per hour (1-180), images per flash (1-20). The rest are **absent, not disabled** | Every absent dial describes how a flash is DRAWN, and nothing draws (D47). A persisted opacity nothing reads is the storage form of the greyed control, and a slider that moves a number nobody consumes is worse than no slider. The three that remain are the three the running effect really reads, and `StudioRackHeadlessTests` proves it by moving one and watching the next flash change |
+| **D50** | Every dial lives in the one `settings.json` behind `App.Settings.Current`, under WPF's names (`FlashEnabled`, `FlashFrequency`, `SimultaneousImages`) | A **new document**, `session_preset.json`, with `FlashEnabled`, `FlashesPerHour`, `ImagesPerFlash`; WPF's clamps kept verbatim in the setters (`AppSettings.cs:769,835`) and WPF's defaults kept verbatim (`:751` true, `:763` 10, `:831` 5) | The `AssetSelectionDocument` precedent: a new document is additive by construction — no schema bump elsewhere, no absent-member case, and a `Missing` load is simply fresh defaults. It is deliberately not a member of `DemoSettings`, whose own doc says it is "not a feature model". Two members are renamed because WPF's names describe a mechanism the port does not have: `FlashFrequency` carries its unit in a comment only ("Flashes per hour", `:763`) and the schedule's whole law is `3600.0 / this`; `SimultaneousImages` describes windows on screen, of which there are none. Behaviour is byte-for-byte WPF's — the formula, the ±30 % band, the 3-second floor, the clamps, the with-replacement draw |
+| **D51** | Pressing stop **during a scripted session** opens a confirmation dialog listing the session name, elapsed and remaining time and the XP that will be lost, and stop is refused outright during lockdown (`MainWindow.StartStop.cs:44-49,52-88`); the quick-toggle is likewise refused while a running session owns that dose (`Presets.cs:1242`) | **STOP always stops, immediately, with no dialog and no refusal**, and no quick-toggle is ever refused | The scripted-session layer (`Services/Session/SessionEngine.cs`, `SessionManager.cs`), XP, progression and lockdown are not ported, so there is no prescribed dose to defend and nothing to lose by stopping. The divergence is recorded because it is **user-visible and will change**: when the scripted session lands, stop acquires a confirmation and the toggle acquires a refusal, and that must be a deliberate addition rather than a surprise. Until then the safer default is the one where stop stops |
+
+**What SP-098 proves, and where it stops.** Proven at unit level with an injected clock and no
+wall-clock wait: the pacing law and its clamps, the dials and their persistence, the pool and the
+active-pool seam, and — the load-bearing one — that stop really stops (the effect's owned generation
+terminates `Cancelled`, no timer survives on the clock, no operation is left outstanding or
+unobserved, and ten further clock windows produce nothing). Proven at draw level through the real
+shell with real input: the cold-start route, START/STOP, the dot's three states, the right-click
+toggle, the dials, and the panel's account of what happened. **Undischarged:** every
+composited-pixel claim — the action bar's real placement, the dot's legibility at real scaling, the
+button's colours as a human sees them — belongs to a headed capture. **And, said once more because
+it is the shape of the packet: no flash has been shown on a screen, and nothing here should be read
+as saying one was.**
