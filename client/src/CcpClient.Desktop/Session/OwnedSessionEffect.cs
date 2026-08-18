@@ -179,7 +179,8 @@ public abstract class OwnedSessionEffect : ISessionEffect
                 _generation = generation;
             }
 
-            Completion = _owner.RunAsync(_operationName, ParkUntilCancelledAsync);
+            Completion = _owner.RunAsync(
+                _operationName, token => ParkUntilCancelledAsync(token, generation));
         }
 
         var engaged = EngageIfEligible();
@@ -326,19 +327,54 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// it like everything else, and so "the module is still running" is a question the registry can
     /// answer rather than this class.
     /// </summary>
-    private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token)
+    /// <param name="generation">The generation this parked operation belongs to. It is carried so
+    /// the release below can tell its OWN teardown from a later session's work — see
+    /// <see cref="ReleaseIfStillOurs"/>.</param>
+    private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token, int generation)
     {
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         // Lock-free callback on purpose: it may run on a teardown thread while another thread
         // holds _gate, so it must not need _gate.
         using var registration = token.Register(() =>
         {
-            ReleaseWork();
+            ReleaseIfStillOurs(generation);
             stopped.TrySetResult();
         });
 
         await stopped.Task.ConfigureAwait(false);
-        ReleaseWork();
+        ReleaseIfStillOurs(generation);
         return OperationOutcome.Cancelled.Instance;
+    }
+
+    /// <summary>
+    /// Release this module's work, unless a LATER generation has taken it over.
+    ///
+    /// <para><b>Why this guard exists (SP-106, found by a test rather than by reading).</b> The
+    /// parked operation's tail runs on a thread-pool continuation
+    /// (<c>TaskCreationOptions.RunContinuationsAsynchronously</c>), so it arrives some time AFTER
+    /// the <see cref="Disarm"/> that cancelled it — and "some time after" can be after the user has
+    /// already switched the module back on. Without this test, the rack's own double right-click
+    /// (off, then on, mid-session) could let a dead generation's teardown withdraw the LIVE
+    /// session's surface, and the module would sit there switched on with nothing on screen.</para>
+    ///
+    /// <para>It surfaced on the MOVING module because that module is the first whose release also
+    /// kills a repeating cadence — a stale release there stops the picture as well as taking it
+    /// down, which a counting fact can see. The hazard is the shared body's and applies equally to
+    /// the static continuous module; the paced pair are affected too, in their own currency (a
+    /// stale release would drop a live schedule's pending one-shot).</para>
+    ///
+    /// <para><b>Lock-free, as the callback contract above requires.</b> <see cref="_generation"/> is
+    /// an <c>int</c> written under <see cref="Gate"/>, and a lock release is a memory barrier, so a
+    /// <see cref="Volatile.Read"/> here observes the newest value without taking the gate a teardown
+    /// thread must never need.</para>
+    /// </summary>
+    private void ReleaseIfStillOurs(int generation)
+    {
+        if (Volatile.Read(ref _generation) != generation)
+        {
+            return;
+        }
+
+        ReleaseWork();
     }
 }

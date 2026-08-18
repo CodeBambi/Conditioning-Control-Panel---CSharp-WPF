@@ -163,6 +163,211 @@ public class StudioSurfaceNoticeTests
         };
     }
 
+    // =====================================================================================
+    //  SP-106 — the MOVING module's live-state line, where "on screen and stopped" is a sentence
+    // =====================================================================================
+
+    /// <summary>Every situation a user of the moving module can really be in.</summary>
+    public enum SpiralLine
+    {
+        /// <summary>Dial off. No session involved either way.</summary>
+        Off,
+
+        /// <summary>Armed, no session, everything ready.</summary>
+        ArmedIdle,
+
+        /// <summary>Armed, no session, and the opacity dial is at zero.</summary>
+        ArmedIdleTransparent,
+
+        /// <summary>Armed, no session, and the library has nothing in it.</summary>
+        ArmedIdleNoSpiral,
+
+        /// <summary>Session running, opacity at zero, nothing placed.</summary>
+        RunningTransparent,
+
+        /// <summary>Session running, nothing in the library, nothing placed.</summary>
+        RunningNoSpiral,
+
+        /// <summary>Session running and the overlay backend refused (every Linux session).</summary>
+        RunningRefused,
+
+        /// <summary>Session running, nothing up, and nothing recorded to explain it.</summary>
+        RunningUnexplained,
+
+        /// <summary>Session running, the layer IS on screen, and it has stopped turning.</summary>
+        RunningFrozen,
+
+        /// <summary>Session running and a single-frame spiral is up, exactly as asked.</summary>
+        LiveStill,
+
+        /// <summary>Session running and the spiral is turning.</summary>
+        LiveTurning,
+    }
+
+    [Theory]
+    [InlineData(SpiralLine.Off)]
+    [InlineData(SpiralLine.ArmedIdle)]
+    [InlineData(SpiralLine.ArmedIdleTransparent)]
+    [InlineData(SpiralLine.ArmedIdleNoSpiral)]
+    [InlineData(SpiralLine.RunningTransparent)]
+    [InlineData(SpiralLine.RunningNoSpiral)]
+    [InlineData(SpiralLine.RunningRefused)]
+    [InlineData(SpiralLine.RunningUnexplained)]
+    [InlineData(SpiralLine.RunningFrozen)]
+    [InlineData(SpiralLine.LiveStill)]
+    [InlineData(SpiralLine.LiveTurning)]
+    public void TheMovingModulesLine_SaysADIFFERENTTrueThingInEveryStateAUserCanBeIn(SpiralLine state)
+    {
+        var text = SpiralLineFor(state);
+
+        Assert.False(string.IsNullOrWhiteSpace(text));
+        foreach (var other in Enum.GetValues<SpiralLine>())
+        {
+            if (other != state)
+            {
+                Assert.NotEqual(SpiralLineFor(other), text);
+            }
+        }
+
+        // SP-105's final-review rule, carried to the fourth module: only a state with NO session
+        // running may tell the user to start one, and every running state must say so. This module
+        // has ELEVEN states against the tint's seven, which is exactly why the rule is asserted
+        // mechanically rather than read.
+        var running = state is not (SpiralLine.Off or SpiralLine.ArmedIdle
+            or SpiralLine.ArmedIdleTransparent or SpiralLine.ArmedIdleNoSpiral);
+        if (running)
+        {
+            Assert.StartsWith("Running", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("until the session starts", text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("Running", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ALayerThatIsOnScreenAndHasStoppedTurning_SaysSO_AndIsNotConfusedWithAStillSpiral()
+    {
+        // THE STATE THIS MODULE ADDED, and the reason the dot needed a third meaning. Two situations
+        // look identical on the user's screen — a motionless picture — and only one of them is the
+        // module working.
+        var frozen = SpiralLineFor(SpiralLine.RunningFrozen);
+        var still = SpiralLineFor(SpiralLine.LiveStill);
+
+        Assert.Contains("STOPPED TURNING", frozen, StringComparison.Ordinal);
+        Assert.Contains("frozen", frozen, StringComparison.Ordinal);
+
+        // The healthy one must not borrow any of that vocabulary, and must say the file is the
+        // reason rather than leaving the user to suspect a fault.
+        Assert.DoesNotContain("STOPPED", still, StringComparison.Ordinal);
+        Assert.DoesNotContain("frozen", still, StringComparison.Ordinal);
+        Assert.Contains("still frame", still, StringComparison.Ordinal);
+        Assert.Contains("not a fault", still, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARunningSessionWithNoSpiralInTheLibrary_BlamesTheLIBRARY_AndNotTheSurface()
+    {
+        // The first-run state for most users, because this port bundles no spiral (D86). It must not
+        // read like a platform failure.
+        var text = SpiralLineFor(SpiralLine.RunningNoSpiral);
+
+        Assert.Contains("no spiral", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("overlay surface", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("opacity", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheMovingModulesRefusedLine_NamesTheSurfaceAndItsCode_TheSameWayTheTintsDoes()
+    {
+        var text = SpiralLineFor(SpiralLine.RunningRefused);
+
+        Assert.Contains("Running, but nothing is on your screen", text, StringComparison.Ordinal);
+        Assert.Contains("overlay surface", text, StringComparison.Ordinal);
+        Assert.Contains(OverlayReasonCodes.OverlayMechanismAbsent, text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheLibraryLine_NamesTheFOLDERWhenEmptyAndTheFILENAMEWhenNot_AndNeverTheFullPath()
+    {
+        var folder = Path.Combine("C:", "data", "assets", "spirals");
+
+        var empty = StudioPage.DescribeSpiralLibrary(null, folder);
+        Assert.Contains(folder, empty, StringComparison.Ordinal);
+        Assert.Contains(".gif", empty, StringComparison.Ordinal);
+
+        // A file name, never its path: the media-logging rule the DTRH manifest holds applies to
+        // what a panel prints as much as to what a log writes.
+        var drawing = StudioPage.DescribeSpiralLibrary(Path.Combine(folder, "classic.gif"), folder);
+        Assert.Contains("classic.gif", drawing, StringComparison.Ordinal);
+        Assert.DoesNotContain(folder, drawing, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheMovingModulesSurfaceLine_UsesThePresentTense_BecauseItsLayerStays()
+    {
+        // The two paced modules place something that is gone a moment later, so their line is about
+        // the LAST one; this one places something that stays, so its line is about NOW — the same
+        // choice the tint's line makes.
+        Assert.Contains("Nothing has been drawn yet", StudioPage.DescribeSpiralSurface(null), StringComparison.Ordinal);
+        Assert.Contains(
+            "The spiral is on an always-on-top overlay surface",
+            StudioPage.DescribeSpiralSurface(new CapabilityState.Available("placed")),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Nothing is drawn on screen",
+            StudioPage.DescribeSpiralSurface(new CapabilityState.Unavailable(
+                new CapabilityReason(OverlayReasonCodes.OverlayMechanismAbsent, "no backend here"))),
+            StringComparison.Ordinal);
+    }
+
+    private static string SpiralLineFor(SpiralLine state)
+    {
+        var visible = new SpiralPresentation(10);
+        var transparent = new SpiralPresentation(0);
+        var refused = new CapabilityState.Unavailable(new CapabilityReason(
+            OverlayReasonCodes.OverlayMechanismAbsent, "no Linux overlay backend is implemented"));
+        var placed = new CapabilityState.Available("win32 overlay: placed");
+
+        return state switch
+        {
+            SpiralLine.Off => StudioPage.DescribeSpiralState(
+                EffectDotState.Off, visible, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: false, placement: null),
+            SpiralLine.ArmedIdle => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: false, placement: null),
+            SpiralLine.ArmedIdleTransparent => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, transparent, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: false, placement: null),
+            SpiralLine.ArmedIdleNoSpiral => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: false, showing: false, frameCount: 0,
+                sessionRunning: false, placement: null),
+            SpiralLine.RunningTransparent => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, transparent, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: true, placement: null),
+            SpiralLine.RunningNoSpiral => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: false, showing: false, frameCount: 0,
+                sessionRunning: true, placement: null),
+            SpiralLine.RunningRefused => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: true, placement: refused),
+            SpiralLine.RunningUnexplained => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: true, showing: false, frameCount: 0,
+                sessionRunning: true, placement: placed),
+            SpiralLine.RunningFrozen => StudioPage.DescribeSpiralState(
+                EffectDotState.Armed, visible, hasSpiral: true, showing: true, frameCount: 12,
+                sessionRunning: true, placement: placed),
+            SpiralLine.LiveStill => StudioPage.DescribeSpiralState(
+                EffectDotState.Live, visible, hasSpiral: true, showing: true, frameCount: 1,
+                sessionRunning: true, placement: placed),
+            _ => StudioPage.DescribeSpiralState(
+                EffectDotState.Live, visible, hasSpiral: true, showing: true, frameCount: 12,
+                sessionRunning: true, placement: placed),
+        };
+    }
+
     [Fact]
     public void BeforeAnythingIsAttempted_ItNamesTheMechanism_AndClaimsNothingAboutTheScreen()
     {

@@ -592,7 +592,7 @@ public partial class StudioPage : UserControl
     /// <para>The FILE NAME only, never the full path: the media-logging rule the DTRH manifest holds
     /// applies to what a panel prints as much as to what a log writes.</para>
     /// </summary>
-    internal static string DescribeSpiralLibrary(string? spiralPath, string spiralsFolder) =>
+    public static string DescribeSpiralLibrary(string? spiralPath, string spiralsFolder) =>
         spiralPath is null
             ? $"No spiral to draw. Put a .gif, .png or .jpg in {spiralsFolder} and this module will find it."
             : $"Drawing {System.IO.Path.GetFileName(spiralPath)}.";
