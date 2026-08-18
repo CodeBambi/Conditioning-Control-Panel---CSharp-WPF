@@ -183,3 +183,34 @@ surface-refused-MID-SESSION branch, which is a user-visible string wrong for its
 
 Final review (`port-final-reviewer`) is RUNNING. Land only after it returns PASS, and land from
 a FRESH context — never this one.
+
+## FINAL REVIEW: REVISE — one blocker, lane sent back
+
+Final reviewer ran the contract command ITSELF and got 1360/0/1362 and 87/0/87, matching
+pin+declared exactly. It upheld everything else: split real, guard bites, D72 closed (full
+integration path traced `MainWindow.axaml.cs:91` -> `SessionParticipant` -> the rack rows ->
+`SessionEngine.cs:210-238 QuickToggle` -> persisted document -> real `OverlayPresenceFactory`),
+template verdict honest and naming its own wrong prediction, D73-D82 cited, `record.md:207-231`
+declining headed/composition/Linux/multi-monitor claims outright.
+
+**BLOCKER — `StudioPage.axaml.cs:485`.** The `Armed` fall-through renders "Armed. Nothing is
+drawn until the session starts." in a branch that ALSO covers *session running, surface
+refused* — the lane's own comment at `:473-479` says so, and `PinkFilterEffect.cs:29-32`
+records that as the designed Linux path. So on Linux every user reads, for the whole of every
+session, a sentence telling them to start a session they already started. A message
+misdescribing state, which this port forbids; same class as the `StudioPage.axaml:152` string
+SP-101 was sent to fix. Fix is to split the arm on `Engine.Running` / a non-`Available`
+`LastPlacement`, give the running-but-not-drawn case its own sentence naming the surface
+refusal, pin all four sentences with a theory over `DescribePinkFilterState`, and bump
+`floor-delta.json` in the same commit. Paced siblings at `:435`/`:457` are NOT exposed
+(`WorkIsRunning` is `ScheduleArmed`, surface-independent) — leave them.
+
+Same pass, cheap: rename `PinkFilterEffectTests.cs:361-381` to what it is (a
+constructor/base-class tripwire) and point it at the real property; correct the prose at
+`ContinuousEffectSpineTests.cs:79-81` (the withdraw is issued synchronously and POSTED —
+`EffectSignal.cs:52-53` says "Always a post, never inline"; the green comes from the rig's
+inline dispatch). Follow-ups, do NOT hold the land: the `AppSettings.cs:751`/`:1234` cites are
+each one line short but inherited from SP-098/SP-101 and misstate no fact.
+
+**Lane resumed with this REVISE.** After it reports: re-run code review on the new diff, then
+final review, then land from a FRESH context at the new pin.
