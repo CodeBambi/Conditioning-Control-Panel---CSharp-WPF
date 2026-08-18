@@ -68,6 +68,19 @@ namespace ConditioningControlPanel
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(2, 4, 0, 0),
                 });
+                // "Is this button bugged?" support-cost guard: with the master on and nothing
+                // in the list the feature is audibly indistinguishable from broken.
+                if (ChkMasterEnable.IsChecked == true)
+                {
+                    SlotsPanel.Children.Add(new TextBlock
+                    {
+                        Text = "⚠ The master switch is on, but with no layers there is nothing to play - it stays silent until you add a file.",
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0xA8, 0x4C)),
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(2, 8, 0, 0),
+                    });
+                }
                 return;
             }
             for (int i = 0; i < list.Count; i++)
@@ -243,6 +256,9 @@ namespace ConditioningControlPanel
 
             if (s.AudioLayersEnabled) App.LayeredAudio?.Start();
             else App.LayeredAudio?.Stop();
+
+            // The empty-state warning above depends on this toggle.
+            if (Tracks().Count == 0) BuildRows();
         }
 
         private void ChkAudioOnly_Changed(object sender, RoutedEventArgs e)

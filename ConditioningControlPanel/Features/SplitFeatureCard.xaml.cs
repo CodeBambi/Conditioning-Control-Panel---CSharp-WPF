@@ -62,8 +62,10 @@ namespace ConditioningControlPanel.Features
         /// becomes the boundary a click is about to be resolved against, so it earns the weight.</summary>
         private const double SeamFilledThickness = 2.4;
         /// <summary>Black over the peek wedge at full fill. Enough to push the wedge behind the
-        /// filled half without making its art unreadable - it is the reveal, after all.</summary>
-        private const double PeekScrimOpacity = 0.32;
+        /// filled half without making its art unreadable - it is the reveal, after all. 0.32
+        /// crushed the darker plates (Mind Wipe) into a solid black triangle in play-testing,
+        /// which defeats the recognise-the-art point of the peek.</summary>
+        private const double PeekScrimOpacity = 0.20;
         private const double TitleExpandedScale = 1.35;
         private const double RingInset = 2.0;
         /// <summary>Pill margin + padding, taken off before capping the grown title's width.</summary>
