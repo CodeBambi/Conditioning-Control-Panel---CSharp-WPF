@@ -16,9 +16,10 @@ namespace ConditioningControlPanel.Features
     /// ClickB), right-click toggles it (ToggleA/ToggleB) - the same left=open / right=toggle
     /// grammar the rail chips and the single tiles use.
     ///
-    /// Hovering a half sweeps the seam off the card until that half fills the square (see
-    /// <see cref="SplitProgressProperty"/>); leaving sweeps it back. While a half is filled it
-    /// owns the whole tile, clicks included.
+    /// Hovering a half sweeps the seam across the card until that half fills the square (see
+    /// <see cref="SplitProgressProperty"/>); leaving sweeps it back. The fill deliberately stops
+    /// one corner-peek short, so the opposing half always keeps a visible, clickable wedge - the
+    /// other choice never leaves the screen and never needs the mouse to leave the tile.
     ///
     /// FX plumbing (breath clock, hover lift, focus gating) is deliberately copied from
     /// <see cref="FeatureCard"/> rather than shared through a base class: the two controls'
@@ -40,10 +41,29 @@ namespace ConditioningControlPanel.Features
         // ---- hover fill (the seam sweep) ----
         /// <summary>Seam parameter at rest: the 50/50 "/" diagonal.</summary>
         private const double SplitRest = 1.0;
-        /// <summary>Seam parameter with half A grown over the card (the line has left by the BR corner).</summary>
-        private const double SplitFullA = 2.0;
-        /// <summary>Seam parameter with half B grown over the card (the line has left by the TL corner).</summary>
-        private const double SplitFullB = 0.0;
+        /// <summary>
+        /// How much of the card the RECEDING half keeps when the other one fills: the corner peek,
+        /// as a fraction of each edge. 0 would be the pre-6.8.2 behaviour (seam swept clean off the
+        /// card, other half gone). At 0.26 the survivor is a corner wedge with legs a quarter of
+        /// each edge - about 3% of the tile's area, big enough to recognise the art in and to hit
+        /// without aiming, small enough that the hovered half still reads as having filled.
+        /// </summary>
+        private const double SplitPeekFraction = 0.26;
+        /// <summary>Seam parameter with half A filled: pushed towards the BR corner, stopping one
+        /// peek short of it so half B keeps its wedge.</summary>
+        private const double SplitFillA = 2.0 - SplitPeekFraction;
+        /// <summary>Seam parameter with half B filled: the mirror, one peek short of the TL corner.</summary>
+        private const double SplitFillB = SplitPeekFraction;
+        /// <summary>Seam opacity on the resting tile. The stroke brush is the full-fill white, so
+        /// this is what keeps the resting hair line at the ~#66 it has always been.</summary>
+        private const double SeamRestOpacity = 0.60;
+        private const double SeamRestThickness = 1.2;
+        /// <summary>Seam thickness with a half filled. The seam stops being decoration there and
+        /// becomes the boundary a click is about to be resolved against, so it earns the weight.</summary>
+        private const double SeamFilledThickness = 2.4;
+        /// <summary>Black over the peek wedge at full fill. Enough to push the wedge behind the
+        /// filled half without making its art unreadable - it is the reveal, after all.</summary>
+        private const double PeekScrimOpacity = 0.32;
         private const double TitleExpandedScale = 1.35;
         private const double RingInset = 2.0;
         /// <summary>Pill margin + padding, taken off before capping the grown title's width.</summary>
@@ -136,9 +156,9 @@ namespace ConditioningControlPanel.Features
 
         /// <summary>
         /// Where the seam sits, in the card's own normalised coordinates: the seam is the line
-        /// x/W + y/H = SplitProgress. 1 is the resting 50/50 "/" diagonal, 2 is the line pushed
-        /// out past the bottom-right corner (half A owns the whole square), 0 is it pulled past
-        /// the top-left corner (half B owns it).
+        /// x/W + y/H = SplitProgress. 1 is the resting 50/50 "/" diagonal, SplitFillA pushes it
+        /// towards the bottom-right corner (half A filled, half B down to its peek wedge) and
+        /// SplitFillB pulls it towards the top-left one (the mirror).
         ///
         /// EVERY size-dependent thing on this card - both clips, both washes, the seam, both
         /// active rings and the per-half hit test - is a function of this one number, which is
@@ -157,7 +177,8 @@ namespace ConditioningControlPanel.Features
 
         /// <summary>
         /// True when the point sits on half A's side of the seam AT THE SEAM'S CURRENT POSITION -
-        /// so the test follows the fill: once A has swept over the card, every point is A's.
+        /// so the test follows the fill, right down to the corner wedge the fill leaves behind,
+        /// which is what makes that wedge a real target rather than a picture of one.
         /// </summary>
         private bool IsInHalfA(Point p)
         {
@@ -167,11 +188,18 @@ namespace ConditioningControlPanel.Features
         }
 
         /// <summary>
-        /// Which half a click belongs to: the half the mouse committed the card to (so an expanded
-        /// half takes clicks anywhere on the tile, even mid-sweep), falling back to the positional
-        /// test when nothing is hovered - touch and programmatic clicks never move the mouse.
+        /// Which half a click belongs to. Purely positional, against the seam where it is DRAWN at
+        /// that instant - so the answer is always the one the user can see.
+        ///
+        /// It used to prefer <see cref="_halfHover"/>, because a fully-swept half owned every pixel
+        /// of the tile and there was no other honest answer. The corner peek ends that: the wedge
+        /// is on screen precisely so it can be clicked, and deferring to the committed half would
+        /// hand the wedge's clicks to the half that just covered it - the one bug that would make
+        /// the whole affordance a lie. The positional test cannot disagree with the committed half
+        /// anywhere else either, since the seam always sweeps AWAY from the point that summoned it.
+        /// Touch and programmatic clicks get the position they actually landed on, as before.
         /// </summary>
-        private bool ResolveHalfA(Point p) => _halfHover ?? IsInHalfA(p);
+        private bool ResolveHalfA(Point p) => IsInHalfA(p);
 
         private void OnContentSizeChanged(object sender, SizeChangedEventArgs e)
         {
@@ -235,8 +263,34 @@ namespace ConditioningControlPanel.Features
             var seam = new LineGeometry(s1, s2);
             seam.Freeze();
             SeamLine.Data = seam;
-            // A seam with nothing left to separate should not sit in the corner as a stray tick.
-            SeamLine.Opacity = Math.Max(0, 1 - Math.Abs(k - SplitRest));
+
+            ApplyPeekChrome(k, regionA, regionB);
+        }
+
+        /// <summary>
+        /// The corner-peek chrome, all of it a function of how far the fill has run: 0 on the
+        /// resting tile, 1 with a half filled. At 0 every line below is a no-op that leaves the
+        /// card exactly as it looked before the peek existed - that is the point of writing it as
+        /// one ramp rather than as an on/off state.
+        ///
+        /// The scrim goes on the RECEDING half (the one keeping the wedge) and the seam brightens
+        /// and thickens for both, because once a half is filled the seam is no longer decoration:
+        /// it is the line the next click gets resolved against, and the user is about to aim near
+        /// it deliberately.
+        /// </summary>
+        private void ApplyPeekChrome(double k, PathGeometry regionA, PathGeometry regionB)
+        {
+            double fill = Math.Min(1.0, Math.Abs(k - SplitRest) / (SplitRest - SplitPeekFraction));
+            bool aFilling = k > SplitRest;
+
+            // Same frozen geometries the clips and washes use - no extra polygon work per frame.
+            PeekScrimA.Data = regionA;
+            PeekScrimB.Data = regionB;
+            PeekScrimA.Opacity = aFilling ? 0 : fill * PeekScrimOpacity;
+            PeekScrimB.Opacity = aFilling ? fill * PeekScrimOpacity : 0;
+
+            SeamLine.Opacity = SeamRestOpacity + (1 - SeamRestOpacity) * fill;
+            SeamLine.StrokeThickness = SeamRestThickness + (SeamFilledThickness - SeamRestThickness) * fill;
         }
 
         /// <summary>The seam's two endpoints on the card's edge for a given seam parameter.</summary>
@@ -322,14 +376,15 @@ namespace ConditioningControlPanel.Features
 
         /// <summary>
         /// Commits the card to a half: the wash flips, the seam sweeps until that half fills the
-        /// square and its title grows into the tile's only label. Null hands the card back to the
-        /// 50/50 split.
+        /// square bar the opposing corner peek, and its title grows into the tile's only label.
+        /// Null hands the card back to the 50/50 split.
         ///
         /// Idempotent on purpose - MouseMove calls this on every pixel, and restarting the sweep
-        /// each time would pin it at its first frame. Note the seam always moves AWAY from the
-        /// point that summoned it, so the hovered half can never flip out from under the cursor
-        /// mid-sweep: once a half owns the card the only way to the other one is to leave and
-        /// come back in through it, which is the owner's grammar.
+        /// each time would pin it at its first frame. The seam always moves AWAY from the point
+        /// that summoned it, so the hovered half can never flip out from under the cursor
+        /// mid-sweep. Since the peek landed, the way to the OTHER half is to slide onto its corner
+        /// wedge, which lands this method with the opposite value and sweeps the fill back the
+        /// other way - no leaving the tile, which was the whole complaint.
         /// </summary>
         private void SetHalfHover(bool? halfA)
         {
@@ -339,7 +394,7 @@ namespace ConditioningControlPanel.Features
             HoverWashA.Opacity = halfA == true ? 1 : 0;
             HoverWashB.Opacity = halfA == false ? 1 : 0;
 
-            double target = halfA switch { true => SplitFullA, false => SplitFullB, _ => SplitRest };
+            double target = halfA switch { true => SplitFillA, false => SplitFillB, _ => SplitRest };
             AnimateSplit(target, expanding: halfA != null);
             ApplyTitleEmphasis(halfA);
         }
@@ -448,6 +503,9 @@ namespace ConditioningControlPanel.Features
                 _halfHover = null;
                 BeginAnimation(SplitProgressProperty, null);
                 SplitProgress = SplitRest;
+                // Assigning a value it already holds raises no property-changed callback, so the
+                // peek chrome would survive a teardown that happened to land on the rest value.
+                SafeRebuildGeometry();
                 HoverWashA.Opacity = 0;
                 HoverWashB.Opacity = 0;
                 CapGrownTitle(TxtTitleA, false);

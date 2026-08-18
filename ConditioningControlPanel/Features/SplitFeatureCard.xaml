@@ -24,11 +24,26 @@
          one handler for the help-button carve-out.
 
          HOVER FILL (owner, 2026-08-13): hovering a half sweeps the seam
-         off the card until that half owns the whole square and its title
-         is the only label left; leaving sweeps it back. One number drives
-         it (SplitProgress in the code-behind) - clips, washes, seam,
-         rings and the hit test are all functions of it, so the half
-         genuinely FILLS rather than two stacked layers cross-fading. -->
+         across the card until that half owns nearly the whole square and
+         its title is the only label left; leaving sweeps it back. One
+         number drives it (SplitProgress in the code-behind) - clips,
+         washes, seam, rings and the hit test are all functions of it, so
+         the half genuinely FILLS rather than two stacked layers
+         cross-fading.
+
+         CORNER PEEK (Rosalyn, 2026-08-18): the fill used to run the seam
+         clean off the card, which left the other half with nothing on
+         screen - you had to leave the tile entirely and come back in
+         through the other side, and new users never learned the other
+         half was there at all. The fill now stops a fixed fraction short
+         (SplitPeekFraction), so the opposing half keeps a dog-eared
+         corner wedge: its own art, its active ring if it is on, and a
+         hit region, all still there. Because the hit test is a function
+         of the same seam parameter, that wedge is genuinely clickable -
+         left-click opens the other half, right-click toggles it, and
+         moving onto it flips the fill the other way without leaving the
+         card. Nothing about the RESTING tile changes: every piece of the
+         peek chrome below is at zero until the fill starts running. -->
 
     <Border x:Name="RootBorder"
             Background="{DynamicResource ElevatedSurfaceBrush}"
@@ -61,10 +76,24 @@
             <Path x:Name="HoverWashA" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
             <Path x:Name="HoverWashB" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
 
+            <!-- Peek scrim: the half that is NOT filling gets its surviving corner
+                 wedge darkened as the fill runs, so the filled half reads as a card
+                 laid ON TOP and the wedge as the one underneath. That depth cue is
+                 what makes the wedge read as "the other choice, still here" rather
+                 than as a stray sliver of art. Both sit at Opacity 0 at rest and the
+                 code only ever raises the one belonging to the receding half. -->
+            <Path x:Name="PeekScrimA" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
+            <Path x:Name="PeekScrimB" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
+
             <!-- The seam. Drawn over the art so the split is legible even when the
-                 two artworks share a palette. -->
-            <Path x:Name="SeamLine" Stroke="#66FFFFFF" StrokeThickness="1.2"
-                  IsHitTestVisible="False"/>
+                 two artworks share a palette - and over the scrim, because while a
+                 half is filled the seam IS the answer to "which half will this click
+                 hit". Stroke is the FULL-fill white; the code-behind parks its Opacity
+                 at SeamRestOpacity so the resting seam still renders as the ~#66 hair
+                 line it always was, then brightens and thickens it as the fill runs.
+                 Opacity rather than a swapped brush: no per-frame allocation. -->
+            <Path x:Name="SeamLine" Stroke="#B3FFFFFF" StrokeThickness="1.2"
+                  Opacity="0.6" IsHitTestVisible="False"/>
 
             <!-- Per-half active rings: triangle outlines in the mod glow colour,
                  the split card's equivalent of FeatureCard's ActiveBorder. -->
