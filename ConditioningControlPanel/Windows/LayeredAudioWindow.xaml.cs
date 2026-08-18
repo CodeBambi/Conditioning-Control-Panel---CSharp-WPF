@@ -296,5 +296,136 @@ namespace ConditioningControlPanel
         }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+        // ---------------------------------------------------------------------------------
+        //  Opening the window  (field report v6.8.2: "the Audio Layers button does nothing")
+        //
+        //  Both call sites (Settings > Audio, and the old Home dashboard card) used to do
+        //  `new LayeredAudioWindow { Owner = Window.GetWindow(this) }.Show()` inside a
+        //  try/catch that only logged at Warning. Three separate ways that reads as a dead
+        //  button, all of them closed here:
+        //
+        //   1. Setting Owner throws (WPF refuses an owner that has never been shown, and
+        //      throws again if the owner is mid-close). That killed the whole open even
+        //      though the window itself was fine - Owner is best-effort now, and the window
+        //      still opens unowned.
+        //   2. WindowStartupLocation=CenterOwner does its own arithmetic off the owner's
+        //      Left/Top, which are the RESTORE bounds while the owner is maximized, against
+        //      the maximized ActualWidth. A main window whose restore position sits toward
+        //      the right of a monitor therefore centres this one clean off the desktop, and
+        //      WPF does not clamp - EnsureOnScreen pulls it back after Show().
+        //   3. Any other construction failure was a Warning in a log nobody reads. It is an
+        //      Error plus a message box now: the user gets told, not left clicking a brick.
+        //
+        //  Also single-instance: a second click surfaces the window that is already up
+        //  instead of stacking another copy on top of it.
+        // ---------------------------------------------------------------------------------
+
+        private static LayeredAudioWindow? _open;
+
+        /// <summary>
+        /// Open (or re-surface) the Audio Layers window. <paramref name="context"/> is any
+        /// element inside the window that should own it; null falls back to MainWindow.
+        /// Never throws.
+        /// </summary>
+        internal static void Open(DependencyObject? context)
+        {
+            LayeredAudioWindow? win = null;
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                if (_open != null)
+                {
+                    if (_open.WindowState == WindowState.Minimized) _open.WindowState = WindowState.Normal;
+                    _open.Show();
+                    _open.Activate();
+                    EnsureOnScreen(_open);
+                    return;
+                }
+
+                win = new LayeredAudioWindow();
+
+                // Best-effort ownership: a bad owner must never cost the user the window.
+                try
+                {
+                    var owner = (context != null ? Window.GetWindow(context) : null)
+                                ?? Application.Current?.MainWindow;
+                    if (owner != null && owner.IsLoaded && owner.IsVisible && !ReferenceEquals(owner, win))
+                        win.Owner = owner;
+                }
+                catch (Exception ownerEx)
+                {
+                    App.Logger?.Warning(ownerEx,
+                        "[AudioLayers] Could not attach the window to an owner; opening it unowned.");
+                }
+
+                // CenterOwner with no owner silently degrades to the primary screen's top-left.
+                if (win.Owner == null) win.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
+                var opened = win;
+                opened.Closed += (_, _) => { if (ReferenceEquals(_open, opened)) _open = null; };
+                _open = opened;
+
+                opened.Show();
+                opened.Activate();
+                EnsureOnScreen(opened);
+                App.Logger?.Information("[AudioLayers] Window opened at {Left},{Top}.", opened.Left, opened.Top);
+            }
+            catch (Exception ex)
+            {
+                _open = null;
+                try { win?.Close(); } catch { }
+                App.Logger?.Error(ex, "[AudioLayers] Could not open the Audio Layers window.");
+                try
+                {
+                    MessageBox.Show(
+                        "Audio Layers could not open.\n\n" + ex.Message +
+                        "\n\nThe full details are in the app log - please include them if you report this.",
+                        "Audio Layers", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Pull a just-shown window back inside the virtual desktop. Guards the CenterOwner
+        /// arithmetic above (and a position inherited from a monitor that is gone) from
+        /// parking the window where the user can never reach it.
+        /// </summary>
+        private static void EnsureOnScreen(Window win)
+        {
+            try
+            {
+                double vl = SystemParameters.VirtualScreenLeft;
+                double vt = SystemParameters.VirtualScreenTop;
+                double vw = SystemParameters.VirtualScreenWidth;
+                double vh = SystemParameters.VirtualScreenHeight;
+                if (vw <= 0 || vh <= 0) return;
+
+                double w = win.ActualWidth > 0 ? win.ActualWidth : win.Width;
+                double h = win.ActualHeight > 0 ? win.ActualHeight : win.Height;
+                double left = win.Left, top = win.Top;
+                if (double.IsNaN(w) || double.IsNaN(h) || w <= 0 || h <= 0) return;
+                if (double.IsNaN(left) || double.IsNaN(top)) return;
+
+                // Clamp so the whole window sits in the virtual desktop when it fits, and so
+                // its top-left corner does at minimum when it does not.
+                double newLeft = Math.Min(Math.Max(left, vl), Math.Max(vl, vl + vw - w));
+                double newTop = Math.Min(Math.Max(top, vt), Math.Max(vt, vt + vh - h));
+                if (Math.Abs(newLeft - left) < 0.5 && Math.Abs(newTop - top) < 0.5) return;
+
+                win.Left = newLeft;
+                win.Top = newTop;
+                App.Logger?.Warning(
+                    "[AudioLayers] Window opened off-screen at {OldLeft},{OldTop} (virtual desktop {VL},{VT} {VW}x{VH}); moved it to {NewLeft},{NewTop}.",
+                    left, top, vl, vt, vw, vh, newLeft, newTop);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[AudioLayers] On-screen check failed.");
+            }
+        }
     }
 }

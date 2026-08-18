@@ -79,17 +79,10 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         }
 
         // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
+        // LayeredAudioWindow.Open owns the whole open: best-effort ownership, an on-screen
+        // clamp, single-instance re-surfacing, and a visible failure instead of a Warning
+        // line nobody reads. Do not inline `new LayeredAudioWindow(...).Show()` again here.
         private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var win = new LayeredAudioWindow { Owner = Window.GetWindow(this) };
-                win.Show();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Settings/Audio: Audio Layers window launch failed");
-            }
-        }
+            => LayeredAudioWindow.Open(this);
     }
 }
