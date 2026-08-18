@@ -12,9 +12,11 @@
     supersession. The SP-003/SP-006 startup-trace and capability proofs moved to the System
     page; they are never deleted.
 
-    THREE doors, and every one of them has a working destination (§9 D1): Studio reaches THE
-    LOOM, Companion reaches the companion window, System reaches the live trace. WPF's other
-    doors are absent rather than dead.
+    FOUR doors, and every one of them has a working destination (§9 D1, §10 D14): Studio
+    reaches THE LOOM, Companion reaches the companion window, Play reaches DOWN THE RABBIT HOLE
+    behind its Tier-2 gate, System reaches the live trace. WPF's other doors are absent rather
+    than dead. Play sits after Companion because that is WPF's rail order (§8.1); System is the
+    port's own door (§9 D2) and stays last.
   -->
   <Window.Styles>
     <!-- A-012/cheat sheet §Styling: selectors + pseudo-classes, never WPF triggers. -->
@@ -140,6 +142,73 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
     </Style>
 
+    <!-- SP-094: the Play page's DTRH hero card. CornerRadius 16 is WPF's PlayCard radius
+         (Views/Tabs/PlayTabView.xaml:252 derives the band's 15 from "the card's 16 minus its
+         1px border"), which is why the band below is 15. -->
+    <Style Selector="Border.hero">
+      <Setter Property="Background" Value="#FF1B1622" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="24" />
+    </Style>
+    <Style Selector="Border.tier-badge">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="7,2" />
+    </Style>
+    <Style Selector="TextBlock.tier-badge-text">
+      <Setter Property="Foreground" Value="#FFCFE9FF" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.hero-title">
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="FontSize" Value="25" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Button.hero-primary">
+      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Padding" Value="30,14" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <Style Selector="Button.hero-secondary">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#FFD05CE8" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="9" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="14,6" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <!-- The refusal band's two colours are WPF's own: the ~66% scrim #A8120A1E and the tier-2
+         rim #FFB47BFF (Views/Tabs/PlayTabView.xaml:245,248). IsHitTestVisible is set on the
+         ELEMENT rather than here — see the comment in PlayPage.axaml. -->
+    <Style Selector="Border.lock-band">
+      <Setter Property="Background" Value="#A8120A1E" />
+      <Setter Property="BorderBrush" Value="#FFB47BFF" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="15" />
+    </Style>
+    <Style Selector="TextBlock.lock-title">
+      <Setter Property="Foreground" Value="#FFB47BFF" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.lock-text">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+
     <Style Selector="TextBlock.rail-brand">
       <Setter Property="Foreground" Value="#FFE8E0EE" />
       <Setter Property="FontWeight" Value="Bold" />
@@ -203,6 +272,11 @@
                      AutomationProperties.Name="Companion door"
                      ToolTip.Tip="Chat, takeover, awareness and permissions"
                      Content="Companion" />
+        <RadioButton x:Name="DoorPlay" Classes="door" GroupName="rail"
+                     AutomationProperties.AutomationId="DoorPlay"
+                     AutomationProperties.Name="Play door"
+                     ToolTip.Tip="Games, modes, and the deep end"
+                     Content="Play" />
         <RadioButton x:Name="DoorSystem" Classes="door" GroupName="rail"
                      AutomationProperties.AutomationId="DoorSystem"
                      AutomationProperties.Name="System door"

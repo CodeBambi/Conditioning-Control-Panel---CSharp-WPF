@@ -30,10 +30,13 @@ public class NavigationRouteTableTests
             Assert.False(string.IsNullOrWhiteSpace(route.Tooltip));
         }
 
-        // The SP-092 boundary, made mechanical. DTRH is Tier-2 gated in WPF
-        // (MainWindow.Lab.cs:228,313) and the port has no entitlement service, so an ungated
-        // DTRH door would hand out paid content. It may not be added by a quiet edit; it is
-        // added by SP-092, with its gate, and this assertion is what it must change.
+        // The two-hop boundary, made mechanical, and it OUTLIVED the reason it was written.
+        // SP-091 wrote it to stop an ungated DTRH door appearing before an entitlement service
+        // existed; SP-092 landed the capability and SP-094 opened the Play door behind it. The
+        // assertion is unchanged and still binding for a second, permanent reason: WPF reaches
+        // DTRH in TWO hops — rail door "Play" then the hero card's FALL IN (§3) — so a rail
+        // door named for the feature would be the one-hop launcher WPF deliberately does not
+        // have (MainWindow.Presets.cs:1007,1036).
         foreach (var text in declared.SelectMany(r => new[] { r.Id, r.Label, r.Tooltip }))
         {
             Assert.DoesNotContain("dtrh", text, StringComparison.OrdinalIgnoreCase);
@@ -77,9 +80,16 @@ public class NavigationRouteTableTests
 
         ShellRouteBinding.ValidateOrThrow(declared, declared); // the honest rail is accepted
 
+        // "library" is one of WPF's six rail doors (§8.1) that the port has no destination for
+        // and therefore does not declare — so it is a real undeclared id, which "play" stopped
+        // being when SP-094 landed the Play page. Pinned against the declared set rather than
+        // assumed, so this fixture cannot silently stop testing anything again.
+        const string undeclared = "library";
+        Assert.DoesNotContain(undeclared, declared);
+
         var doorWithNoPage = Assert.Throws<InvalidOperationException>(
-            () => ShellRouteBinding.ValidateOrThrow(declared.Append("play"), declared));
-        Assert.Contains("play", doorWithNoPage.Message, StringComparison.Ordinal);
+            () => ShellRouteBinding.ValidateOrThrow(declared.Append(undeclared), declared));
+        Assert.Contains(undeclared, doorWithNoPage.Message, StringComparison.Ordinal);
         Assert.Contains("no mounted page", doorWithNoPage.Message, StringComparison.Ordinal);
 
         var pageWithNoDoor = Assert.Throws<InvalidOperationException>(

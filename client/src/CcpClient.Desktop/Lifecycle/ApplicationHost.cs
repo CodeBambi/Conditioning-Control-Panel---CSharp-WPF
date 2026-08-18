@@ -36,7 +36,8 @@ public sealed class ApplicationHost
         TimeSpan? drainTimeout = null,
         Func<Task>? preDrainFlush = null,
         CapabilityRegistry? capabilities = null,
-        CapabilityProbeRunner? probeRunner = null)
+        CapabilityProbeRunner? probeRunner = null,
+        Entitlement.HostLoginEntitlement? entitlement = null)
     {
         _log = log;
         _participants = participants;
@@ -47,7 +48,16 @@ public sealed class ApplicationHost
         _preDrainFlush = preDrainFlush;
         Capabilities = capabilities;
         ProbeRunner = probeRunner;
+        Entitlement = entitlement;
     }
+
+    /// <summary>
+    /// SP-092's entitlement capability, composed once by <see cref="CompositionRoot.Build"/>
+    /// so the object the DTRH gate consults is the SAME object whose probe the System page
+    /// reports. Null only in owner-less test hosts built through the convenience constructor;
+    /// a UI surface that needs it says so loudly rather than degrading into an ungated door.
+    /// </summary>
+    public Entitlement.HostLoginEntitlement? Entitlement { get; }
 
     /// <summary>Capability states for the window's user-visible surface (capability contract §9). Null only in owner-less test hosts.</summary>
     public CapabilityRegistry? Capabilities { get; }

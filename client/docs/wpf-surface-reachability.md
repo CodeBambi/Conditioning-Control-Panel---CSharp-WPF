@@ -367,8 +367,20 @@ on a live entitled account.
 
 Headed **"Play / Games, modes, and the deep end."** The DTRH hero card carries a **PRIME SUBJECT**
 diamond badge (this is the tier livery's user-facing wording — the port should not render the literal
-string "TIER 2"), the title `THE RABBIT HOLE`, a blurb, and on the right `FALL IN` (pink primary),
-`Quick Drop` (outlined), and two options: **Announcements** and **3D game (recommended)**.
+string "TIER 2"), the title **`DOWN THE RABBIT HOLE`**, a blurb, and on the right `FALL IN` (pink
+primary), `Quick Drop` (outlined), and two options: **Announcements** and **3D game (recommended)**.
+
+> **CORRECTION (2026-08-18, SP-094).** This section originally recorded the title as
+> `THE RABBIT HOLE`. That was wrong. The capture it was transcribed from
+> (`evidence/wpf-ui-v681/play-page.jpg`) has the left of the title occluded by the onboarding
+> card and the tier badge, and the visible glyphs were written down as though they were the
+> whole string — while §3, taken from source, already said `DOWN THE RABBIT HOLE`
+> (`Views/Tabs/PlayTabView.xaml:426`, literally `🐇 DOWN THE RABBIT HOLE`).
+> **The §8 rule "observation beats source" was applied to an observation that was partially
+> hidden. An occluded observation is not an observation; it is a guess with a photograph
+> attached.** Cross-check every reading in this survey against source before relying on it, and
+> treat any string whose capture is overlapped by the onboarding card, a badge or a popup as
+> unread rather than as read.
 
 Below it a **TOGETHER** section: **Goon Game** (BETA) with meta chips "free to join / send your own
 media / host a room" and a `Jump In !` button; and **Remote Control** with a **BASIC SUBJECT** badge
@@ -418,3 +430,29 @@ is "the port has nothing to wire yet", it says so: a gap recorded as a feature i
 three destinations. DTRH, Graded Intake, the AvatarTube demonstrator and the Chaos tunnel backdrop
 are still reachable only by a CLI flag. Their doors are absent rather than dead, which is the honest
 state, not the finished one.
+
+---
+
+## 10. Port divergences, recorded at SP-094 (the Play door and the DTRH gate)
+
+The route in §3 is now real: **`DoorPlay` -> the Play page's DTRH hero card -> `FALL IN` /
+`Quick Drop` -> the Tier-2 gate -> `DtrhLaunchCoordinator`**, from a cold start with no command-line
+arguments. Same rule as §9: every divergence is written here, in the commit that creates it.
+
+| # | v6.8.1 fact | Port at SP-094 | Reason |
+|---|---|---|---|
+| **D14** | The rail is **six doors** (§8.1); §9 **D1** recorded Play as ABSENT | The rail is **four doors**: Studio, Companion, **Play**, System — in that order, because Play sits after Companion in WPF's own rail and System is the port's own door (D2) | D1's stated condition — "each absent door has no ported destination" — is discharged **for Play only**. Home, You, Library and The Spiral stay absent for exactly the reason D1 gave |
+| **D15** | §9 **D12**: "No DTRH door and no DTRH launcher anywhere in the shell … **Closes at SP-092**" | **CLOSED.** The launcher exists and is gated by `Features/Dtrh/DtrhGate.cs` over SP-092's `HostLoginEntitlement` | The condition D12 named (no entitlement service; an ungated button would hand out paid content) no longer holds. DTRH is still **not a door**: WPF reaches it in two hops and so does the port, so `NavigationRouteTableTests` still refuses "dtrh"/"rabbit" in any door's id, label or tooltip |
+| **D16** | The lock band advertises the lock **before** any click — a violet scrim reading "Lab only" (`Views/Tabs/PlayTabView.xaml:508-512`; `hm3_rail_lock_t2`, `en.json:4842`) | The band **appears when a press is refused** and carries the refusal text; its caption is `LAB ONLY` on a real refusal and `COULD NOT VERIFY` on an unknown one | The port cannot know a tier without an async read of the shipping app's login. A band painted at page-mount from a cached read would advertise a state nobody re-checked. WPF's colours and its load-bearing property are kept exactly: scrim `#A8120A1E`, tier-2 rim `#FFB47BFF`, corner 15, and **`IsHitTestVisible="False"`** so the press passes through (`:245,248,252,257`) |
+| **D17** | The refusal is an **8-second Warning toast** whose "See tiers" action opens App Info & Data (`Services/TierGate.cs:128,133`; `en.json:4704,4705`) | The refusal is text on the card, plus a class-and-code diagnostic line. WPF's sentence is carried **verbatim**; the upgrade route is named **in words** | The port has no toast system and no App Info & Data page. A "See tiers" button with nowhere to go is the dead control this packet exists to avoid |
+| **D18** | The card carries **Announcements** and **3D game (recommended)** checkboxes, and they are the ONE genuinely disabled part when gated (`PlayTabView.xaml:488,494`; `MainWindow/MainWindow.PlayTab.cs:88-91`) | **Absent, not disabled** | Neither setting is ported, and unticking the 3D box selects the classic WPF descent, which the port does not have (`MainWindow.Lab.cs:233,242,255-264`). Rendering them would be dead dials — the §9 D7 rule |
+| **D19** | The title carries a **NEW** pill (`PlayTabView.xaml:432`) | Absent | Nothing about this surface is new in the port, and a NEW pill that is always on is decoration that means nothing |
+| **D20** | **The main window is tucked into the tray** the instant the hole opens, and restored from the tray when it closes (`Services/Chaos/DtrhHostService.cs:156` -> `MainWindow/MainWindow.RemoteControl.cs:1517` -> `Services/Notifications/TrayIconService.cs:145-148`; restore at `DtrhHostService.cs:998`) | **No tuck.** The shell is **plain-minimized** when the host window opens and restored to its prior state when the flow ends. **A user sees:** the CCP button stays in the taskbar the whole time (WPF's leaves it), there is **no tray icon**, **no tray menu**, and **no first-minimize balloon** | SP-093 landed the icon capability but no MENU, so a tuck built on it would hide the window behind an icon that does nothing on right-click — worse than WPF and worse than not tucking. A menu-only fix would still not be parity: WPF's tuck fires a balloon on its **first-ever** invocation (`TrayIconService.cs:152-157` — the comment at `RemoteControl.cs:1515` says "no notification" and the **code** says otherwise), and WPF's menu carries four items including the companion wake entry (`TrayIconService.cs:96-109`, §5). And every user-visible claim such a tuck would make is a **headed** claim this packet may not make. So the port reuses its own landed shape for this exact situation — `Features/Intake/IntakeHostWindow.axaml.cs:120-162`, "Plain MainWindow minimize (explicitly NOT tray tuck)" with prior-state restore — and `ITrayPresence` stays unwired. **Closes when `ITrayPresence` grows a menu surface and a headed gate proves the tuck** |
+| **D21** | **WPF has no third answer.** With a null Patreon service `RequiresLab` evaluates `App.Patreon?.HasLabAccess == true` to false and refuses (`Services/TierGate.cs:88-94`) — "I could not tell" is rendered to the user as "you are not a patron" | The port refuses too, but with a **different message** that says entitlement could not be verified, names which part could not be told, and says in words that nothing was decided about the account | **This is a deliberate IMPROVEMENT on WPF, recorded as such rather than smuggled in as parity.** It is also not an edge case: this build ships `UnconfiguredTierSource`, so `Unavailable(tier-authority-absent)` is the **only** branch a real user reaches until an owner permission decision lands. If it rendered as WPF's refusal, the port would tell every user they had stopped paying |
+| **D22** | — (port-internal) | `--dtrh-demo` reaches `DtrhLaunch.Coordinator` **directly**, stepping past the gate | Not an oversight. Gating the headed-evidence path would make DTRH evidence depend on the developer's Patreon tier, and with no authority configured a gated `--dtrh-demo` would refuse everywhere and capture nothing. The **user** path is gated; the evidence path is one `--dtrh-demo` flag away from being unreachable, and the reason is written at the call site so it is not "fixed" later |
+
+**Not closed by this section, and named so it is not mistaken for done:** the port's shell now
+reaches four destinations. Graded Intake, the AvatarTube demonstrator and the Chaos tunnel backdrop
+are still reachable only by a CLI flag. Nothing here is presentation-verified: the gate, the band and
+the route are headless (draw-level) facts, and the minimize/restore, the DTRH host window itself and
+every composited pixel remain undischarged headed claims.

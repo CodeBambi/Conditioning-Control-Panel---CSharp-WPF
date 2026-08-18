@@ -187,8 +187,12 @@ public class NavigationShellHeadlessTests
     public async Task TheRail_DeclaresExactlyTheDeclaredRoutes_AndNoDtrhDoor()
     {
         // The anti-decoration pin. The rail is declared in MARKUP and the route table in code;
-        // they can drift, and this is what catches it. A fourth door cannot appear without
-        // reddening a named test, and the DTRH door SP-092 owns cannot appear at all.
+        // they can drift, and this is what catches it. A fifth door cannot appear without
+        // reddening a named test.
+        //
+        // SP-094 opened the Play door and the DTRH assertion below is UNCHANGED and still
+        // holds: DTRH is not a door. WPF reaches it in two hops — rail door then the Play
+        // page's hero card (§3) — so the rail names the PAGE, never the feature behind it.
         var (host, window) = await BootAsync();
 
         var doors = window.GetVisualDescendants().OfType<RadioButton>()
@@ -198,7 +202,7 @@ public class NavigationShellHeadlessTests
             ShellRoutes.Declared.Select(r => r.Label).ToArray(),
             doors.Select(d => d.Content as string).ToArray());
         Assert.Equal(
-            new[] { "DoorStudio", "DoorCompanion", "DoorSystem" },
+            new[] { "DoorStudio", "DoorCompanion", "DoorPlay", "DoorSystem" },
             doors.Select(d => d.Name).ToArray());
         Assert.Equal(ShellRoutes.Declared.Count, window.Router.Routes.Count);
 

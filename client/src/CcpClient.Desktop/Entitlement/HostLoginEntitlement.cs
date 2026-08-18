@@ -162,8 +162,18 @@ public sealed class HostLoginEntitlement
         {
             // The ONLY producer of a refusal in this namespace.
             TierLookupStatus.NoEntitlement => new EntitlementOutcome.NotEntitled(lookup.Detail),
-            TierLookupStatus.Entitled when lookup.Tier is { } tier =>
+            TierLookupStatus.Entitled when lookup.Tier is { } tier && Enum.IsDefined(tier) =>
                 new EntitlementOutcome.Entitled(tier, lookup.Detail),
+            TierLookupStatus.Entitled when lookup.Tier is not null =>
+                // SP-094: the ONE hole in this capability that leaned toward GRANTING. The
+                // missing-tier arm below was already closed toward refusal, but an UNDEFINED
+                // enum value slipped past it: (EntitlementTier)0 or (EntitlementTier)99 from a
+                // rogue or malformed authority response rendered as entitled(0) / entitled(99),
+                // and a consumer comparing `tier >= Lab` would hand out paid content on the
+                // second. A tier this capability does not define is a tier the authority did
+                // not name in a vocabulary this build understands — unknown, never granted.
+                Unavailable(EntitlementReasonCodes.TierAuthorityFault,
+                    "the entitlement authority named a tier this build does not define"),
             TierLookupStatus.Entitled =>
                 // "Entitled" with no tier names nothing; inventing one would be inventing a
                 // tier when the server did not give one.

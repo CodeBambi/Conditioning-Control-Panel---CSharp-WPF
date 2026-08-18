@@ -87,6 +87,16 @@ public sealed class CompositionRoot
     /// <summary>Each required participant is named here; deleting one is a compile error or a validation failure.</summary>
     public Func<ParticipantInfrastructure, IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; }
 
+    /// <summary>
+    /// SP-094: the entitlement capability seam. Product default is
+    /// <see cref="Entitlement.HostLoginEntitlement.ForCurrentPlatform"/> — the real DPAPI read of
+    /// the shipping app's login, over this build's real (unconfigured) authority. Tests inject
+    /// their own reader/authority doubles here so no test ever touches the developer's real
+    /// store; nothing may inject a stub that returns <c>Entitled</c> on a product path, which is
+    /// the fake-available shape the capability contract bans.
+    /// </summary>
+    public Func<ILogSink, Entitlement.HostLoginEntitlement>? EntitlementFactory { get; init; }
+
     public CompositionRoot()
     {
         // Instance default (needs SettingsPathFactory); init-only so tests can override.
@@ -267,6 +277,20 @@ public sealed class CompositionRoot
         // dependency is literally the same engine load).
         capabilities.Register(Features.Chaos.ChaosTunnelCapabilityProbes.EmbeddedCapability, _ =>
             Task.FromResult(Features.Chaos.ChaosTunnelCapabilityProbes.ProbeEmbedded()));
+        // SP-094 registers SP-092's entitlement capability, and registers it HERE rather than
+        // letting the shell build its own, for a reason bigger than tidiness. Today this build
+        // has no entitlement authority, so the honest answer for every user is
+        // Unavailable(tier-authority-absent) and the DTRH door refuses everyone. A capability
+        // that refuses everyone while staying invisible in the ONE place the port reports what
+        // it cannot do — the System page, which renders every registered capability's typed
+        // state — is exactly the shape the truthful-capability contract exists to prevent.
+        // The probe answers a NARROWER question than the gate (can this environment read the
+        // shipping app's login at all) and never claims a tier: a readable login with no
+        // authority behind it is Degraded, never Available (HostLoginEntitlement.ProbeAsync).
+        var entitlement = EntitlementFactory is { } entitlementFactory
+            ? entitlementFactory(log)
+            : Entitlement.HostLoginEntitlement.ForCurrentPlatform(log: log.Log);
+        capabilities.Register(Entitlement.HostLoginEntitlement.CapabilityName, entitlement.ProbeAsync);
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
 
         return new ApplicationHost(
@@ -279,6 +303,6 @@ public sealed class CompositionRoot
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                 },
-            capabilities: capabilities, probeRunner: probeRunner);
+            capabilities: capabilities, probeRunner: probeRunner, entitlement: entitlement);
     }
 }

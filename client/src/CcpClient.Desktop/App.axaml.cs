@@ -93,7 +93,12 @@ public partial class App : Application
                 _host.LogDiagnostic("app: teardown end");
             };
 
-            var dashboard = new MainWindow(_host, _popupDemo);
+            // The --dtrh-* harness options travel to the shell's ONE DtrhLaunch, so the
+            // demonstrator and the user's FALL IN button drive the same coordinator instance.
+            var dashboard = new MainWindow(_host, _popupDemo,
+                _dtrhDemo
+                    ? new Features.Dtrh.DtrhHarnessOptions(_dtrhPage, _dtrhFxDrive, _dtrhM2Test, _dtrhKillRenderers)
+                    : null);
             desktop.MainWindow = dashboard;
 
             // SP-015 AvatarTube DEMONSTRATOR (--avatartube-demo): opens the tube at
@@ -136,7 +141,16 @@ public partial class App : Application
             // evidence); WSLg has no input automation — SP-008 named limit.
             if (_dtrhDemo)
             {
-                var coordinator = new Features.Dtrh.DtrhLaunchCoordinator(_host, dashboard, _dtrhPage, _dtrhFxDrive, _dtrhM2Test, _dtrhKillRenderers);
+                // SP-094: the SAME coordinator the shell's Play page builds (one construction
+                // site, Features/Dtrh/DtrhLaunch.cs), reached DIRECTLY rather than through
+                // DtrhLaunch.FallInAsync — i.e. the demonstrator deliberately steps past the
+                // Tier-2 gate. That is not an oversight to fix: gating the headed-evidence path
+                // would make DTRH evidence depend on the developer's Patreon tier, which would
+                // make the demonstrator useless on exactly the machines that need it (today
+                // this build has no entitlement authority at all, so a gated --dtrh-demo would
+                // refuse everywhere and capture nothing). The USER path is gated; this is the
+                // evidence path, and it is one `--dtrh-demo` flag away from being unreachable.
+                var coordinator = dashboard.Dtrh.Coordinator;
                 var flowEndedOnce = 0;
                 coordinator.FlowEnded += () =>
                 {

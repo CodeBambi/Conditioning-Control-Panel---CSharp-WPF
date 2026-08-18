@@ -455,7 +455,7 @@ public class CapabilityTests
             // SP-046: the companion participant's probes register at construction (before
             // the demonstrator registrations) — registration order IS this list's order.
             Assert.Equal(
-                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded"],
+                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement"],
                 capabilities.Names);
 
             // SP-046 AI provider probes: real typed states. local-ollama is a REAL
@@ -489,6 +489,19 @@ public class CapabilityTests
                         or CapabilityState.DependencyMissing,
                     $"unexpected {name} state: {state}");
             }
+
+            // SP-094: the entitlement capability is registered here so its state reaches the
+            // System page — the one place the port reports what it cannot do. The probe ran
+            // for real against this machine and reports one of the honest typed states.
+            var entitlementState = capabilities.GetState("host-login-entitlement");
+            Assert.True(
+                entitlementState is CapabilityState.Degraded or CapabilityState.DependencyMissing
+                    or CapabilityState.Unavailable or CapabilityState.Faulted,
+                $"unexpected host-login-entitlement state: {entitlementState}");
+            // And it can NEVER be Available in this build, on any machine, because Available
+            // requires a configured entitlement authority and the shipped default is
+            // UnconfiguredTierSource. A green row here would be the fake-available shape.
+            Assert.IsNotType<CapabilityState.Available>(entitlementState);
         }
         finally
         {

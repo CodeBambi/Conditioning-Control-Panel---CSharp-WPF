@@ -22,13 +22,30 @@ public partial class MainWindow : Window
     /// in the port — a landed surface reachable by a real gesture from a cold start with no
     /// command-line arguments: Studio -> Spiral Overlay -> THE LOOM
     /// (wpf-surface-reachability.md §8.4, verified against the running v6.8.1 app).
+    ///
+    /// <para>SP-094 adds the second real route and the port's flagship one: Play -> the DTRH
+    /// hero card -> FALL IN / Quick Drop, behind the Tier-2 gate
+    /// (<c>Features/Dtrh/DtrhGate.cs</c>, <c>MainWindow/MainWindow.Lab.cs:228,313</c>).</para>
     /// </summary>
-    public MainWindow(ApplicationHost host, bool popupDemo = false)
+    /// <param name="dtrhHarness">HARNESS-ONLY <c>--dtrh-*</c> options; null on every user path.</param>
+    public MainWindow(ApplicationHost host, bool popupDemo = false,
+        Features.Dtrh.DtrhHarnessOptions? dtrhHarness = null)
     {
         InitializeComponent();
 
         _host = host;
         Loom = new LoomLaunch(host, this);
+        // The entitlement capability comes from the composition root, which is also where its
+        // probe is registered — so the state the gate consumes is the SAME state the System
+        // page reports. A shell-local instance would let the two drift, and the one place the
+        // port tells the truth about what it cannot do would be reporting a different object
+        // than the one refusing people.
+        Dtrh = new Features.Dtrh.DtrhLaunch(
+            host, this,
+            host.Entitlement ?? throw new InvalidOperationException(
+                "the shell needs the entitlement capability and this host has none — an ungated DTRH "
+                + "launcher would hand out paid content, so composition refuses rather than degrading"),
+            dtrhHarness);
 
         // SP-013 demonstrator popup manager. It has no user path now that the demonstrator card
         // is retired: it is infrastructure only (A-014 integration rule), kept because
@@ -42,10 +59,12 @@ public partial class MainWindow : Window
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
+        _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
         _pages[ShellRoutes.System] = new SystemPage(host);
 
         _doors[ShellRoutes.Studio] = DoorStudio;
         _doors[ShellRoutes.Companion] = DoorCompanion;
+        _doors[ShellRoutes.Play] = DoorPlay;
         _doors[ShellRoutes.System] = DoorSystem;
 
         // The rail's markup and the declared route table must be the same set, in both
@@ -98,6 +117,10 @@ public partial class MainWindow : Window
 
     /// <summary>The one Loom studio launch path (public so tests observe the real seam).</summary>
     public LoomLaunch Loom { get; }
+
+    /// <summary>The one DTRH gate + launch path (public so tests drive the real gate, and so
+    /// <c>--dtrh-demo</c> reaches the SAME coordinator the user path builds).</summary>
+    public Features.Dtrh.DtrhLaunch Dtrh { get; }
 
     /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;

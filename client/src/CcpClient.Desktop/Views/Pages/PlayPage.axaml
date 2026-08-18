@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CcpClient.Desktop.Views.Pages.PlayPage">
+  <!--
+    The Play page and its DTRH hero card (wpf-surface-reachability.md §3 and §8.5; source at
+    Views/Tabs/PlayTabView.xaml). Hop 2 of the port's flagship route: the rail door NAVIGATES
+    here, and the one window-opening button lives on this page — WPF's one-entry rule
+    (MainWindow/MainWindow.Presets.cs:1007,1036).
+
+    THE CARD TAKES THE CLICK. Nothing here is ever disabled. WPF's lock band is a scrim, not a
+    curtain: IsHitTestVisible="False" so the press passes straight through and TierGate.DemandLab
+    inside the handler does the refusing (PlayTabView.xaml:508-512, style :251-258, and the
+    band's own comment at :503-506 — "a band that swallowed the click would be a dead end").
+    The one genuinely disabled part in WPF is the checkbox pair, and only because it writes
+    settings through a binding with no handler to refuse in (MainWindow/MainWindow.PlayTab.cs:88-91).
+
+    WHAT IS OMITTED, AND WHY (divergences §9 D18, D19). WPF's card also carries "Announcements"
+    and "3D game (recommended)" checkboxes (PlayTabView.xaml:488,494) and a NEW pill (:432).
+    Neither setting is ported, and unticking the 3D box selects a classic WPF descent the port
+    does not have — so rendering them would be dead dials, which is the greyed control that
+    swallows the gesture (the §9 D7 rule). They are absent, not disabled.
+  -->
+  <StackPanel Margin="20" Spacing="4">
+    <TextBlock Classes="page-title" Text="Play" />
+    <!-- The page's own live sub-line (§8.5). -->
+    <TextBlock Classes="page-blurb" Text="Games, modes, and the deep end." />
+
+    <Border Classes="hero" Margin="0,16,0,0">
+      <Panel>
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="10">
+            <!-- The tier livery, top-left on this hero exactly as in WPF
+                 (PlayTabView.xaml:398-411, Tier="2"). The words are the badge ART's words
+                 (Controls/TierBadge.cs:21 — "BASIC SUBJECT" / "PRIME SUBJECT" are baked into
+                 the PNGs, which is why the feature adds no localisation keys). The literal
+                 string "TIER 2" appears nowhere in the running app and must not appear here.
+                 It is a PRICE TAG on the feature, never a claim about the person reading it:
+                 the badge "reads the tier, never decides it" (TierBadge.cs:24). -->
+            <Border Classes="tier-badge" HorizontalAlignment="Left">
+              <TextBlock x:Name="TierBadgeText"
+                         Classes="tier-badge-text"
+                         AutomationProperties.AutomationId="TierBadgeText"
+                         Text="PRIME SUBJECT" />
+            </Border>
+
+            <!-- PlayTabView.xaml:426, emoji-stripped (the §9 D8 rule: the app strips emoji
+                 mod-aware, MainWindow/MainWindow.UiUpdates.cs:101,124). §8.5 of the evidence
+                 doc read this as "THE RABBIT HOLE" from a capture in which the onboarding card
+                 and the badge occluded the left of the title; that reading is corrected in the
+                 doc by this packet. -->
+            <TextBlock x:Name="HeroTitle"
+                       Classes="hero-title"
+                       AutomationProperties.AutomationId="HeroTitle"
+                       Text="DOWN THE RABBIT HOLE" />
+
+            <!-- PlayTabView.xaml:435, verbatim. Deliberately never localized upstream. -->
+            <TextBlock Classes="page-blurb" MaxWidth="520" HorizontalAlignment="Left"
+                       Text="it's right there. it's always been right there. bubbles drift up carrying flashes, videos, overlays. snap them in time or let them trigger you. stack streaks, accept mantras, sink deeper." />
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0" Spacing="8">
+            <!-- PlayTabView.xaml:455,458 — the pink primary, and its tooltip verbatim. -->
+            <Button x:Name="FallInButton"
+                    Classes="hero-primary"
+                    AutomationProperties.AutomationId="FallInButton"
+                    AutomationProperties.Name="FALL IN"
+                    ToolTip.Tip="you were always going to."
+                    Content="FALL IN" />
+            <!-- PlayTabView.xaml:468-469 — outlined, skips the picker, reuses the last slot. -->
+            <Button x:Name="QuickDropButton"
+                    Classes="hero-secondary"
+                    AutomationProperties.AutomationId="QuickDropButton"
+                    AutomationProperties.Name="Quick Drop"
+                    ToolTip.Tip="skip the dollhouse. fall straight in with your saved settings"
+                    Content="Quick Drop" />
+          </StackPanel>
+        </Grid>
+
+        <!-- The refusal band. WPF's colours: scrim #A8120A1E ("~66% so the card art still reads
+             through it. Seeing what you are missing is the entire job." PlayTabView.xaml:247-248),
+             tier-2 rim #FFB47BFF (:245), corner 15 = the card's 16 minus its 1px border (:252).
+
+             IsHitTestVisible="False" is declared on the ELEMENT, not tucked into a style, because
+             it is the load-bearing attribute of the whole surface (PlayTabView.xaml:257): a band
+             that took the click would swallow the gesture and tell the user nothing.
+
+             DIVERGENCE §9 D16: WPF paints its band from the tier it already knows, BEFORE any
+             click, and the band reads "Lab only". The port cannot know a tier without an async
+             read, and a band painted from a cached read would advertise a state nobody
+             re-checked — so this band appears when a press is refused and carries the refusal
+             itself. §9 D17: WPF's refusal is additionally an 8-second Warning toast with a
+             "See tiers" action (Services/TierGate.cs:133); the port has neither a toast system
+             nor an App Info & Data page. -->
+        <Border x:Name="GateBand"
+                Classes="lock-band"
+                IsHitTestVisible="False"
+                IsVisible="False">
+          <StackPanel VerticalAlignment="Center" Spacing="8" Margin="24">
+            <TextBlock x:Name="GateBandTitle"
+                       Classes="lock-title"
+                       AutomationProperties.AutomationId="GateBandTitle"
+                       HorizontalAlignment="Center"
+                       Text="" />
+            <TextBlock x:Name="GateBandText"
+                       Classes="lock-text"
+                       AutomationProperties.AutomationId="GateBandText"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       MaxWidth="620"
+                       Text="" />
+          </StackPanel>
+        </Border>
+      </Panel>
+    </Border>
+  </StackPanel>
+</UserControl>
