@@ -456,6 +456,186 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
+    //  SP-105 — the rack rows that switch the other two modules on
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheRackIsInWpfsOrder_AndEveryRowWithAPortedEffectBehindItCarriesADot()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        // WPF's EFFECTS group is flash, video, subliminal, spiral, pinkfilter
+        // (StudioTabView.xaml.cs:483-493). Mandatory Video is not ported, so the ported rows close
+        // up around it — the ORDER of the ones that are here is upstream's and is asserted, because
+        // a rack that reorders itself as modules land stops being the rack the user learned.
+        var rows = window.GetVisualDescendants().OfType<RadioButton>()
+            .Where(r => r.Classes.Contains("rack-row"))
+            .Select(r => r.Name)
+            .ToList();
+        Assert.Equal(["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter"], rows);
+
+        // Three of the four have an effect whose state can be reported. The fourth does not, and
+        // still has no dot — D5/D6 stay open for exactly one row now instead of one of two.
+        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowPinkFilter" })
+        {
+            Assert.Contains(
+                Descendant<RadioButton>(window, name).GetVisualDescendants()
+                    .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+                e => e.Classes.Contains("dot"));
+        }
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnTheSubliminalsRow_ReallyTurnsTheModuleOn_WhichNoGestureCouldDoBefore()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowSubliminals");
+        var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
+
+        // D72, closed. The module landed in SP-101 with no row, so until this gesture existed only
+        // a test or a hand-edited file could switch it on. It ships OFF
+        // (CCP.Core/Models/AppSettings.cs:1234), which is why the dot starts unlit.
+        Assert.False(window.Session.Subliminals.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedSubliminalDot);
+
+        Click(window, row, MouseButton.Right);
+
+        Assert.True(window.Session.Subliminals.Enabled);
+        Assert.True(window.Session.SubliminalPreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Armed, page.RenderedSubliminalDot);
+
+        // And it really toggles, both ways — a row whose toggle only goes one way is a row whose
+        // toggle does not toggle.
+        Click(window, row, MouseButton.Right);
+        Assert.False(window.Session.Subliminals.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedSubliminalDot);
+
+        // The gesture opens nothing and selects nothing, exactly as the flash row's does.
+        Assert.False(row.IsChecked);
+        Assert.Empty(window.GetVisualDescendants().OfType<ContextMenu>());
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnThePinkFilterRow_ReallyTurnsTheContinuousModuleOn_AndTheDotFollows()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowPinkFilter");
+        var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
+
+        // Pink Filter ships OFF too (AppSettings.cs:3726). No session is running here, so the
+        // gesture writes the dial and nothing is drawn — which is WPF's own outcome: its
+        // quick-toggle calls RefreshOverlays() unconditionally (MainWindow.Presets.cs:1255) and
+        // that method returns at once while the overlay service is stopped (OverlayService.cs:421).
+        Assert.False(window.Session.PinkFilter.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedPinkFilterDot);
+
+        Click(window, row, MouseButton.Right);
+
+        Assert.True(window.Session.PinkFilter.Enabled);
+        Assert.True(window.Session.PinkFilterPreset.Current.Enabled);
+
+        // Armed, not Live: the dial is on and nothing is on screen. For a CONTINUOUS module those
+        // two are the same instant once a session owns it, which is why this row's dot is derived
+        // from the surface rather than from the flag it was just handed.
+        Assert.Equal(EffectDotState.Armed, page.RenderedPinkFilterDot);
+        Assert.False(window.Session.PinkFilterSurface.Showing);
+
+        Click(window, row, MouseButton.Right);
+        Assert.False(window.Session.PinkFilter.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedPinkFilterDot);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task EachNewRowOpensItsOwnPanel_AndOnlyThat()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        Click(window, Descendant<RadioButton>(window, "RowSubliminals"));
+        Assert.True(Descendant<StackPanel>(window, "SubliminalModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "FlashModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "PinkFilterModulePanel").IsVisible);
+
+        Click(window, Descendant<RadioButton>(window, "RowPinkFilter"));
+        Assert.True(Descendant<StackPanel>(window, "PinkFilterModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "SubliminalModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "SpiralModulePanel").IsVisible);
+
+        // The panel shows the module's real persisted dials, not placeholder numbers.
+        Assert.Equal(
+            window.Session.PinkFilterPreset.Current.OpacityPercent,
+            (int)Math.Round(Descendant<Slider>(window, "PinkFilterOpacitySlider").Value));
+        Assert.Equal(
+            window.Session.SubliminalPreset.Current.PerMinute,
+            (int)Math.Round(Descendant<Slider>(window, "SubliminalFrequencySlider").Value));
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ThePinkFilterPanelsCheckbox_AndItsRowsRightClick_AreTheSameOnePath()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowPinkFilter"));
+        var check = Descendant<CheckBox>(window, "PinkFilterEnableToggle");
+
+        Assert.False(check.IsChecked);
+
+        Click(window, Descendant<RadioButton>(window, "RowPinkFilter"), MouseButton.Right);
+        Assert.True(check.IsChecked);          // the row's gesture repainted the panel's dial
+
+        Click(window, check);
+        Assert.False(check.IsChecked);
+        Assert.False(window.Session.PinkFilterPreset.Current.Enabled);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ThePinkFilterPanel_ReportsTheTintInForce_AndNeverClaimsItIsOnScreen()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowPinkFilter"));
+
+        // The colour has no picker yet, so the panel REPORTS the tint rather than offering a dead
+        // control (§9 D7). The default is WPF's hot pink and the panel says it is the default.
+        Assert.Equal("#FF69B4 (the default)", ReadTintHead(window));
+
+        // And the surface line claims nothing: nothing has been drawn in this session, and that is
+        // a fact about the session rather than about the screen.
+        var surface = Descendant<TextBlock>(window, "PinkFilterSurfaceState").Text ?? string.Empty;
+        Assert.Contains("Nothing has been drawn yet", surface, StringComparison.Ordinal);
+        Assert.DoesNotContain("is on an always-on-top", surface, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    private static string ReadTintHead(MainWindow window)
+    {
+        var text = Descendant<TextBlock>(window, "PinkFilterTintState").Text ?? string.Empty;
+        var start = text.IndexOf('#', StringComparison.Ordinal);
+        var end = text.IndexOf(" at ", StringComparison.Ordinal);
+        return start >= 0 && end > start ? text[start..end] : text;
+    }
+
+    // =====================================================================================
     //  doubles: the two seams the spine declares, and nothing else
     // =====================================================================================
 

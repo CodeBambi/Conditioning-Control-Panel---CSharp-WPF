@@ -134,8 +134,14 @@ public class SecondEffectSpineTests
         var subliminal = Assert.IsType<CapabilityState.Unavailable>(rig.Engine.ArmOutcomes[SubliminalsEffect.EffectId]);
         Assert.Equal(EffectReasonCodes.EffectDialOff, subliminal.Reason.Code);
 
-        // And the session can NAME the hole rather than merely having one.
-        Assert.Equal([SubliminalsEffect.EffectId], rig.Engine.ArmRefusals.Select(r => r.Id));
+        // And the session can NAME the holes rather than merely having them, in rack order.
+        // SP-105 added a third module that also ships off (Pink Filter,
+        // CCP.Core/Models/AppSettings.cs:3726), so this list grew by one — the FACT is unchanged and
+        // the assertion is stronger for it: two modules declined the same session for the same
+        // reason and both are named, which is the whole point of a typed arm.
+        Assert.Equal(
+            [SubliminalsEffect.EffectId, PinkFilterEffect.EffectId],
+            rig.Engine.ArmRefusals.Select(r => r.Id));
     }
 
     [Fact]

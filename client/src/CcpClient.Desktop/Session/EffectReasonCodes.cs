@@ -40,4 +40,38 @@ public static class EffectReasonCodes
     /// holds, the visible half really does not.
     /// </summary>
     public const string SubliminalNoActivePhrase = "subliminal-no-active-phrase";
+
+    /// <summary>
+    /// A CONTINUOUS module's work is a native window, and this composition has no surface to place
+    /// one on (SP-105). Distinct from <see cref="EffectNoUiThread"/>: there, a surface exists and
+    /// there is no thread that may legally touch it; here there is no surface at all, which is what
+    /// a build or a test that composed the module without one produces.
+    /// </summary>
+    public const string EffectNoSurface = "effect-no-surface";
+
+    /// <summary>
+    /// No UI thread is bound, so a continuous module's surface could not be placed (SP-105).
+    ///
+    /// <para><b>This code exists because a continuous module cannot use skip-until-bound the way a
+    /// paced one does.</b> A paced module schedules on a clock — no UI needed — and its DRAW is a
+    /// later posted projection that is silently skipped while the boundary is unbound
+    /// (async-lifecycle-fault-contract §5.3). For a module that is simply on, the arm and the draw
+    /// are the same act, so "skipped" is the whole outcome and has to be sayable rather than
+    /// swallowed.</para>
+    /// </summary>
+    public const string EffectNoUiThread = "effect-no-ui-thread";
+
+    /// <summary>
+    /// Pink Filter: the opacity dial is at zero, so the module is engaged and there is nothing to
+    /// draw. WPF's clamp allows it — <c>Math.Clamp(value, 0, 50)</c>
+    /// (<c>CCP.Core/Models/AppSettings.cs:3737</c>) — and WPF at zero still puts a full-screen
+    /// layered window on the desktop holding alpha 0. The port refuses to place an invisible
+    /// always-on-top window (<c>Overlay/OverlaySurfaceRequest.cs</c> will not construct one), so the
+    /// arm result is <see cref="Capabilities.CapabilityState.Degraded"/>: the module really took the session, and
+    /// really will show nothing. The Subliminals shape (<see cref="SubliminalNoActivePhrase"/>) with
+    /// one difference that matters — the dot goes with it. A paced module with nothing to show is
+    /// still <c>Live</c> because its clock is running; this one has no clock, so it reads
+    /// <c>Armed</c>.
+    /// </summary>
+    public const string PinkFilterTransparent = "pink-filter-transparent";
 }

@@ -205,11 +205,6 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The session can be stopped from a thread that is not this one — the host's teardown
-    /// stops it on the shutdown path. Marshalling here is what stops a closing window from
-    /// touching its own controls off-thread.
-    /// </summary>
-    /// <summary>
     /// Repaint the START/STOP control. Called directly, off no dispatcher check of its own: since
     /// SP-101 the session's <c>Changed</c> is raised through <see cref="Session.EffectSignal"/> and
     /// arrives on the UI thread whenever one exists, so the marshalling this method used to carry

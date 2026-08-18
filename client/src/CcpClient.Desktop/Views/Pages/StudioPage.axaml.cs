@@ -1,7 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Navigation;
@@ -28,11 +30,22 @@ namespace CcpClient.Desktop.Views.Pages;
 /// <see cref="SessionEngine.QuickToggle"/> — so the row's right-click and the panel's Enable
 /// checkbox cannot drift into two behaviours (the A-004 one-command-path rule the retired
 /// demonstrator card established).</para>
+///
+/// <para><b>SP-105 — the grammar generalises, and one of the rows is continuous.</b> Two more
+/// rows land: <c>Subliminals</c>, whose module shipped in SP-101 with no way to switch it on at
+/// all (D72), and <c>Pink Filter</c>, the port's first module with no schedule. Both go through
+/// the same one dispatch entry, and neither needed a new gesture: the RACK grammar turns out to
+/// be indifferent to whether a module is paced. Its <b>dot</b> is not — a continuous module's
+/// <see cref="EffectDotState.Live"/> is a claim about the SCREEN rather than about a clock — but
+/// that is decided inside the effect (see <see cref="OwnedSessionEffect.WorkIsRunning"/>) and
+/// this page reads the same three states off the same property for all three modules.</para>
 /// </summary>
 public partial class StudioPage : UserControl
 {
     private readonly SessionParticipant _session;
     private readonly FlashImagesEffect _flash;
+    private readonly SubliminalsEffect _subliminals;
+    private readonly PinkFilterEffect _pinkFilter;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -43,39 +56,42 @@ public partial class StudioPage : UserControl
 
         _session = session;
         _flash = session.Flash;
+        _subliminals = session.Subliminals;
+        _pinkFilter = session.PinkFilter;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
         // (StudioTabView.xaml.cs:664-665), so the panel can never drift out of step with the
         // selection.
         RowFlashImages.IsCheckedChanged += (_, _) => ApplySelection();
+        RowSubliminals.IsCheckedChanged += (_, _) => ApplySelection();
         RowSpiralOverlay.IsCheckedChanged += (_, _) => ApplySelection();
+        RowPinkFilter.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
         // Right-click is NOT handled on the Spiral Overlay row — that row has no effect to
         // flip, which is WPF's own unhandled case (:659, "Rows with no Toggle fall through
         // unhandled"), and a fake toggle there would be worse than no gesture.
-        RowFlashImages.AddHandler(PointerReleasedEvent, OnFlashRowPointerReleased, RoutingStrategies.Tunnel);
+        AddQuickToggle(RowFlashImages, FlashImagesEffect.EffectId);
+        AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId);
+        AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
 
-        FlashEnableToggle.IsCheckedChanged += (_, _) => OnEnableToggled();
-        FlashFrequencySlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == RangeBase.ValueProperty)
-            {
-                OnFrequencyMoved();
-            }
-        };
-        FlashImagesSlider.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == RangeBase.ValueProperty)
-            {
-                OnImagesPerFlashMoved();
-            }
-        };
+        FlashEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
+        SubliminalEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(SubliminalEnableToggle, _subliminals, SubliminalsEffect.EffectId);
+        PinkFilterEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(PinkFilterEnableToggle, _pinkFilter, PinkFilterEffect.EffectId);
+
+        OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
+        OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
+        OnSliderMoved(SubliminalFrequencySlider, OnSubliminalFrequencyMoved);
+        OnSliderMoved(PinkFilterOpacitySlider, OnPinkFilterOpacityMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
+        _subliminals.Fired += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -87,13 +103,54 @@ public partial class StudioPage : UserControl
     /// (public so a test reads the RENDERED claim rather than the model it came from).</summary>
     public EffectDotState RenderedFlashDot { get; private set; } = EffectDotState.Off;
 
+    /// <summary>The Subliminals row's dot, same reason (SP-105).</summary>
+    public EffectDotState RenderedSubliminalDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Pink Filter row's dot, same reason. This is the one that had to be earned:
+    /// a continuous module is <c>Live</c> only while its surface is really up (SP-105).</summary>
+    public EffectDotState RenderedPinkFilterDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>
+    /// The tint the Pink Filter panel is currently reporting, as text.
+    ///
+    /// <para>The module's colour has no picker yet, so the panel REPORTS the tint in force instead
+    /// of offering a control that does nothing — WPF's own swatch is beside a picker
+    /// (<c>Features/PinkFilterFeatureControl.xaml.cs:217-220</c>) and the port has the swatch
+    /// without the picker. The words name the fallback explicitly when the fallback is what is in
+    /// use, because "hot pink" being a default rather than a choice is exactly the kind of thing a
+    /// user should not have to guess.</para>
+    /// </summary>
+    internal static string DescribeTint(PinkFilterTint tint, bool userPicked) =>
+        userPicked
+            ? $"Tint #{tint.Red:X2}{tint.Green:X2}{tint.Blue:X2} at {tint.OpacityPercent}% opacity."
+            : $"Tint #{tint.Red:X2}{tint.Green:X2}{tint.Blue:X2} (the default) at {tint.OpacityPercent}% opacity.";
+
+    private static void OnSliderMoved(Slider slider, Action handler) =>
+        slider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == RangeBase.ValueProperty)
+            {
+                handler();
+            }
+        };
+
+    private void AddQuickToggle(RadioButton row, string effectId) =>
+        row.AddHandler(
+            PointerReleasedEvent,
+            (_, e) => OnRowPointerReleased(e, effectId),
+            RoutingStrategies.Tunnel);
+
     private void ApplySelection()
     {
         var flashOpen = RowFlashImages.IsChecked == true;
+        var subliminalOpen = RowSubliminals.IsChecked == true;
         var spiralOpen = RowSpiralOverlay.IsChecked == true;
+        var pinkOpen = RowPinkFilter.IsChecked == true;
         FlashModulePanel.IsVisible = flashOpen;
+        SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
-        RackHint.IsVisible = !flashOpen && !spiralOpen;
+        PinkFilterModulePanel.IsVisible = pinkOpen;
+        RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen;
     }
 
     /// <summary>
@@ -101,7 +158,7 @@ public partial class StudioPage : UserControl
     /// than also selecting the row (<c>StudioTabView.xaml.cs:1115</c>): a toggle that also
     /// opened the panel would make the two gestures indistinguishable.
     /// </summary>
-    private void OnFlashRowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    private void OnRowPointerReleased(PointerReleasedEventArgs e, string effectId)
     {
         if (e.InitialPressMouseButton != MouseButton.Right)
         {
@@ -109,31 +166,33 @@ public partial class StudioPage : UserControl
         }
 
         e.Handled = true;
-        _session.Engine.QuickToggle(FlashImagesEffect.EffectId);
+        _session.Engine.QuickToggle(effectId);
         LoadDialsFromPreset();
         Refresh();
     }
 
     /// <summary>
-    /// The panel's Enable checkbox. WPF's does the same work as the row's right-click — write
+    /// A panel's Enable checkbox. WPF's does the same work as the row's right-click — write
     /// the flag, then start/stop the live service if the engine is running
-    /// (<c>Features/FlashFeatureControl.xaml.cs:159-175</c>) — so it routes through the SAME
-    /// entry rather than growing a second copy of that body.
+    /// (<c>Features/FlashFeatureControl.xaml.cs:159-175</c>, and the continuous pair's
+    /// <c>Features/PinkFilterFeatureControl.xaml.cs:87-95</c>, which writes the flag and
+    /// reconciles) — so it routes through the SAME entry rather than growing a second copy of
+    /// that body, once per module.
     /// </summary>
-    private void OnEnableToggled()
+    private void OnEnableToggled(CheckBox toggle, ISessionEffect effect, string effectId)
     {
         if (_syncing)
         {
             return;
         }
 
-        var target = FlashEnableToggle.IsChecked == true;
-        if (target == _flash.Enabled)
+        var target = toggle.IsChecked == true;
+        if (target == effect.Enabled)
         {
             return;
         }
 
-        _session.Engine.QuickToggle(FlashImagesEffect.EffectId);
+        _session.Engine.QuickToggle(effectId);
         Refresh();
     }
 
@@ -175,6 +234,49 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
+    /// The Subliminals frequency slider writes the setting and saves — and, unlike the flash
+    /// frequency slider directly above it, does <b>not</b> re-pace the live schedule. That is not
+    /// an inconsistency in the port: WPF's two panels really differ here
+    /// (<c>Features/SubliminalFeatureControl.xaml.cs:89-98</c> writes and saves;
+    /// <c>Features/FlashFeatureControl.xaml.cs:177-188</c> also calls
+    /// <c>App.Flash.RefreshSchedule()</c>), so a subliminal frequency change takes effect at the
+    /// next firing rather than immediately. Kept, because a user who moves both sliders is
+    /// entitled to the timing they already have.
+    /// </summary>
+    private void OnSubliminalFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(SubliminalFrequencySlider.Value);
+        _session.SubliminalPreset.Mutate(p => p.PerMinute = value);
+        _ = _session.SubliminalPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Pink Filter opacity slider writes the setting, re-tints whatever is already on screen
+    /// and saves — WPF's own order (<c>Features/PinkFilterFeatureControl.xaml.cs:99-109</c>:
+    /// write, save, <c>RefreshOverlays()</c>, reconciled at <c>OverlayService.cs:434-437</c>).
+    /// The re-tint goes through the module rather than the surface so the arm state and the dot
+    /// move with it.
+    /// </summary>
+    private void OnPinkFilterOpacityMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(PinkFilterOpacitySlider.Value);
+        _pinkFilter.SetOpacityPercent(value);
+        _ = _session.PinkFilterPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
     /// The session's state can move on a thread that is not this one — teardown stops the engine
     /// from the shutdown path. This handler nonetheless touches controls directly, because since
     /// SP-101 the marshalling is the PRODUCER's: every module raises <c>Changed</c> through
@@ -197,6 +299,14 @@ public partial class StudioPage : UserControl
             FlashEnableToggle.IsChecked = preset.FlashEnabled;
             FlashFrequencySlider.Value = preset.FlashesPerHour;
             FlashImagesSlider.Value = preset.ImagesPerFlash;
+
+            var subliminal = _session.SubliminalPreset.Current;
+            SubliminalEnableToggle.IsChecked = subliminal.Enabled;
+            SubliminalFrequencySlider.Value = subliminal.PerMinute;
+
+            var pink = _session.PinkFilterPreset.Current;
+            PinkFilterEnableToggle.IsChecked = pink.Enabled;
+            PinkFilterOpacitySlider.Value = pink.OpacityPercent;
         }
         finally
         {
@@ -205,9 +315,10 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
-    /// Repaint what is true right now. The dot's classes come from
+    /// Repaint what is true right now. Every dot's classes come from
     /// <see cref="ISessionEffect.Dot"/> — the effect's own derived state, never a bool this
-    /// page keeps — so the row cannot claim a module is running after its schedule is gone.
+    /// page keeps — so a row cannot claim a module is running after its schedule is gone, or
+    /// after its surface was refused.
     /// </summary>
     private void Refresh()
     {
@@ -215,14 +326,36 @@ public partial class StudioPage : UserControl
         FlashFrequencyValue.Text = preset.FlashesPerHour.ToString(System.Globalization.CultureInfo.CurrentCulture);
         FlashImagesValue.Text = preset.ImagesPerFlash.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
-        var dot = _flash.Dot;
-        RenderedFlashDot = dot;
-        FlashRowDot.Classes.Set("armed", dot == EffectDotState.Armed);
-        FlashRowDot.Classes.Set("live", dot == EffectDotState.Live);
-
-        FlashLiveState.Text = DescribeState(dot, _flash.FlashCount, _flash.Last);
+        RenderedFlashDot = PaintDot(FlashRowDot, _flash);
+        FlashLiveState.Text = DescribeState(RenderedFlashDot, _flash.FlashCount, _flash.Last);
         FlashPoolState.Text = DescribePool(_flash.Last);
         FlashSurfaceState.Text = DescribeSurface(_session.Surface.LastPlacement);
+
+        var subliminal = _session.SubliminalPreset.Current;
+        SubliminalFrequencyValue.Text = subliminal.PerMinute.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        RenderedSubliminalDot = PaintDot(SubliminalRowDot, _subliminals);
+        SubliminalLiveState.Text = DescribeSubliminalState(
+            RenderedSubliminalDot, _subliminals.SubliminalCount, _subliminals.Last);
+        SubliminalPoolState.Text = DescribePhrasePool(_subliminals.ActivePhraseCount);
+        SubliminalSurfaceState.Text = DescribeSubliminalSurface(_session.SubliminalSurface.LastPlacement);
+
+        var pink = _session.PinkFilterPreset.Current;
+        PinkFilterOpacityValue.Text = $"{pink.OpacityPercent}%";
+        RenderedPinkFilterDot = PaintDot(PinkFilterRowDot, _pinkFilter);
+        var tint = _pinkFilter.Tint;
+        PinkFilterSwatch.Fill = new SolidColorBrush(Color.FromRgb(tint.Red, tint.Green, tint.Blue));
+        PinkFilterTintState.Text = DescribeTint(tint, PinkFilterColour.TryParseHex(pink.Colour, out _));
+        PinkFilterLiveState.Text = DescribePinkFilterState(
+            RenderedPinkFilterDot, tint, _session.Engine.Running, _pinkFilter.LastPlacement);
+        PinkFilterSurfaceState.Text = DescribePinkFilterSurface(_pinkFilter.LastPlacement);
+    }
+
+    private static EffectDotState PaintDot(Shape dot, ISessionEffect effect)
+    {
+        var state = effect.Dot;
+        dot.Classes.Set("armed", state == EffectDotState.Armed);
+        dot.Classes.Set("live", state == EffectDotState.Live);
+        return state;
     }
 
     /// <summary>
@@ -256,6 +389,41 @@ public partial class StudioPage : UserControl
         _ => placement.ToString() ?? string.Empty,
     };
 
+    /// <summary>The same rule for the Subliminals card, with the module's own nouns. Derived from
+    /// the presenter's last typed outcome for the reason above, never from a platform check.</summary>
+    public static string DescribeSubliminalSurface(CapabilityState? placement) => placement switch
+    {
+        null => "Subliminal cards are drawn on an always-on-top, click-through overlay above your "
+            + "other windows. Nothing has been drawn yet.",
+        CapabilityState.Available => "The last subliminal was placed on an always-on-top overlay "
+            + "surface above your other windows.",
+        CapabilityState.Unavailable u => $"Nothing was drawn on screen: {u.Reason.Detail}",
+        CapabilityState.Degraded d => $"Partly drawn: {d.SurvivingSemantics}. {d.Reason.Detail}",
+        CapabilityState.PermissionRequired p => $"Nothing was drawn on screen: {p.Reason.Detail}",
+        CapabilityState.DependencyMissing m => $"Nothing was drawn on screen: {m.Reason.Detail}",
+        CapabilityState.Faulted f => $"Nothing was drawn on screen: {f.Reason.Detail}",
+        _ => placement.ToString() ?? string.Empty,
+    };
+
+    /// <summary>
+    /// The same rule again for the tint — and the tense is different on purpose. The other two
+    /// modules place something that is gone a moment later, so their line is about the LAST one;
+    /// this one places something that stays, so its line is about what is on screen NOW.
+    /// </summary>
+    public static string DescribePinkFilterSurface(CapabilityState? placement) => placement switch
+    {
+        null => "The tint is drawn on an always-on-top, click-through overlay above your other "
+            + "windows. Nothing has been drawn yet.",
+        CapabilityState.Available => "The tint is on an always-on-top overlay surface above your "
+            + "other windows.",
+        CapabilityState.Unavailable u => $"Nothing is drawn on screen: {u.Reason.Detail}",
+        CapabilityState.Degraded d => $"Partly drawn: {d.SurvivingSemantics}. {d.Reason.Detail}",
+        CapabilityState.PermissionRequired p => $"Nothing is drawn on screen: {p.Reason.Detail}",
+        CapabilityState.DependencyMissing m => $"Nothing is drawn on screen: {m.Reason.Detail}",
+        CapabilityState.Faulted f => $"Nothing is drawn on screen: {f.Reason.Detail}",
+        _ => placement.ToString() ?? string.Empty,
+    };
+
     /// <summary>
     /// The row's dot has three states and so does this line, because the line is what a screen
     /// reader gets instead of the dot. They are derived from the SAME value.
@@ -279,6 +447,104 @@ public partial class StudioPage : UserControl
             : $" The last one drew {last.ImagesDrawn} image{(last.ImagesDrawn == 1 ? "" : "s")}.";
         return $"{head} {flashCount} flash{(flashCount == 1 ? "" : "es")} so far.{drew}";
     }
+
+    /// <summary>The same three states for a second PACED module, whose <c>Live</c> means exactly
+    /// what the flash module's does: a firing is on the clock.</summary>
+    internal static string DescribeSubliminalState(EffectDotState dot, int count, SubliminalEvent? last)
+    {
+        var head = dot switch
+        {
+            EffectDotState.Live => "Running: the next subliminal is on the clock.",
+            EffectDotState.Armed => "Armed. Nothing is scheduled until the session starts.",
+            _ => "Switched off. Nothing will happen, session or no session.",
+        };
+
+        if (count == 0)
+        {
+            return head;
+        }
+
+        var held = last is null
+            ? string.Empty
+            : $" The last one held for {last.HeldMilliseconds} ms.";
+        return $"{head} {count} subliminal{(count == 1 ? "" : "s")} so far.{held}";
+    }
+
+    /// <summary>
+    /// The words for a CONTINUOUS module, and the one place on this page where they had to change.
+    ///
+    /// <para>There is no clock and no count, so <c>Live</c> cannot say "the next one is scheduled" —
+    /// it says the tint is up, which is the only thing this module's <c>Live</c> is entitled to
+    /// mean. The consequence is that <see cref="EffectDotState.Armed"/> covers <b>four different
+    /// situations</b> here where a paced module's covers one, because <see cref="OwnedSessionEffect"/>
+    /// returns <c>Armed</c> for anything that is not <c>Off</c> and not really running — and for
+    /// this module "really running" is the SCREEN.</para>
+    ///
+    /// <para><b>Why they are four sentences and not one (SP-105 final review).</b> This method used
+    /// to answer every <c>Armed</c> with "Nothing is drawn until the session starts." On Linux the
+    /// overlay refuses by design (see <see cref="PinkFilterEffect"/>), so a running session with the
+    /// dial on lands in that arm — and every Linux user would have read, for the whole of every
+    /// session, an instruction to start a session they had already started. A message that
+    /// misdescribes state is the exact failure SP-101 was sent to fix one string earlier, and one
+    /// arm of a switch is all it takes to reintroduce it. Each situation now names its own cause,
+    /// and the running-but-not-drawn one names the SURFACE rather than the session.</para>
+    ///
+    /// <para><b>The paced siblings are not exposed the same way</b> and are deliberately left alone:
+    /// their <c>WorkIsRunning</c> is <c>ScheduleArmed</c>, which is surface-independent, so a running
+    /// session whose overlay refuses still reads <c>Live</c> there — correctly, because their
+    /// schedule really is on the clock.</para>
+    /// </summary>
+    /// <param name="dot">The module's own derived state — the same value the row's dot paints.</param>
+    /// <param name="tint">The tint the dials currently describe, for the zero-opacity case.</param>
+    /// <param name="sessionRunning">Whether a session owns the rack right now. Read from the engine,
+    /// never inferred from the dot: inferring it is what produced the defect above.</param>
+    /// <param name="placement">The surface's last verbatim outcome, for naming the refusal.</param>
+    public static string DescribePinkFilterState(
+        EffectDotState dot, PinkFilterTint tint, bool sessionRunning, CapabilityState? placement) => dot switch
+    {
+        EffectDotState.Live => "Running: the tint is on your screen for as long as the session lasts.",
+
+        // Running, and the user's own dial is the reason nothing is drawn — so the remedy is theirs.
+        EffectDotState.Armed when sessionRunning && tint.IsInvisible =>
+            "Running, but nothing is on your screen: the opacity is at 0%. Move the slider up.",
+
+        // Running, and the SURFACE is the reason. This is the Linux case, and the arm that did not
+        // exist before final review.
+        EffectDotState.Armed when sessionRunning =>
+            RefusalCode(placement) is { } code
+                ? "Running, but nothing is on your screen: this build could not put the tint's "
+                    + $"overlay surface up ({code})."
+                : "Running, but nothing is on your screen: the tint's overlay surface is not up.",
+
+        EffectDotState.Armed when tint.IsInvisible =>
+            "Armed, but the opacity is at 0%, so there is nothing to draw. Move the slider up.",
+        EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
+        _ => "Switched off. Nothing will happen, session or no session.",
+    };
+
+    /// <summary>
+    /// The stable reason code out of any refusing <see cref="CapabilityState"/>, or null when the
+    /// state is <see cref="CapabilityState.Available"/> or nothing has been attempted.
+    ///
+    /// <para>The CODE and not the detail, on purpose: the detail is a paragraph on the platform
+    /// where this matters most — the Linux backend's refusal carries its whole manual gate — and it
+    /// is already printed verbatim, once, by <see cref="DescribePinkFilterSurface"/>. Saying it
+    /// twice in one panel is not twice as honest. The code is short, stable, and the thing a bug
+    /// report quotes.</para>
+    /// </summary>
+    private static string? RefusalCode(CapabilityState? placement) => placement switch
+    {
+        CapabilityState.Unavailable u => u.Reason.Code,
+        CapabilityState.Degraded d => d.Reason.Code,
+        CapabilityState.PermissionRequired p => p.Reason.Code,
+        CapabilityState.DependencyMissing m => m.Reason.Code,
+        CapabilityState.Faulted f => f.Reason.Code,
+        _ => null,
+    };
+
+    private static string DescribePhrasePool(int activePhrases) => activePhrases > 0
+        ? $"{activePhrases} phrase{(activePhrases == 1 ? "" : "s")} active in the pool."
+        : "No phrase in the pool is active, so the schedule will run and nothing will be shown.";
 
     private string DescribePool(FlashEvent? last)
     {

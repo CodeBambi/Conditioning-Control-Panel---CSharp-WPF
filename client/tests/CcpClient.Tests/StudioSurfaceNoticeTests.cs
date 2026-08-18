@@ -1,5 +1,7 @@
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
+using CcpClient.Desktop.Session;
 using CcpClient.Desktop.Views.Pages;
 using Xunit;
 
@@ -23,6 +25,144 @@ namespace CcpClient.Tests;
 /// </summary>
 public class StudioSurfaceNoticeTests
 {
+    // =====================================================================================
+    //  SP-105 final review — the CONTINUOUS module's live-state line, one sentence per state
+    // =====================================================================================
+
+    /// <summary>
+    /// The state a sentence is written for, so the theory rows read as states rather than as
+    /// argument tuples. Each one is a situation a user can really be in.
+    /// </summary>
+    public enum PinkLine
+    {
+        /// <summary>Dial off. No session involved either way.</summary>
+        Off,
+
+        /// <summary>Dial on, no session yet.</summary>
+        ArmedIdle,
+
+        /// <summary>Dial on, no session yet, and the opacity is at zero.</summary>
+        ArmedIdleTransparent,
+
+        /// <summary>Session running, opacity at zero: the user's own dial is why nothing is drawn.</summary>
+        RunningTransparent,
+
+        /// <summary>Session running and the SURFACE refused. Every Linux session is this one.</summary>
+        RunningRefused,
+
+        /// <summary>Session running, nothing up, and nothing has recorded a refusal to name.</summary>
+        RunningUnexplained,
+
+        /// <summary>Session running and the tint is confirmed on screen.</summary>
+        Live,
+    }
+
+    [Theory]
+    [InlineData(PinkLine.Off)]
+    [InlineData(PinkLine.ArmedIdle)]
+    [InlineData(PinkLine.ArmedIdleTransparent)]
+    [InlineData(PinkLine.RunningTransparent)]
+    [InlineData(PinkLine.RunningRefused)]
+    [InlineData(PinkLine.RunningUnexplained)]
+    [InlineData(PinkLine.Live)]
+    public void TheContinuousModulesLine_SaysADIFFERENTTrueThingInEveryStateAUserCanBeIn(PinkLine state)
+    {
+        var text = PinkLineFor(state);
+
+        // No line may be blank, and no two states may share a sentence: a line that collapsed two
+        // situations into one wording is exactly how "Nothing is drawn until the session starts"
+        // came to be shown to a user whose session was already running.
+        Assert.False(string.IsNullOrWhiteSpace(text));
+        foreach (var other in Enum.GetValues<PinkLine>())
+        {
+            if (other != state)
+            {
+                Assert.NotEqual(PinkLineFor(other), text);
+            }
+        }
+
+        // And the load-bearing half: only a state with NO session running may tell the user to
+        // start one, and every running state must say so.
+        var running = state is PinkLine.RunningTransparent or PinkLine.RunningRefused
+            or PinkLine.RunningUnexplained or PinkLine.Live;
+        if (running)
+        {
+            Assert.StartsWith("Running", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("until the session starts", text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("Running", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ARunningSessionWhoseOverlayRefused_NamesTheSURFACE_AndNeverTellsTheUserToStartASession()
+    {
+        // THE regression this pass exists for. On Linux the overlay backend refuses by design, so
+        // this is not an edge case there — it is every session, for its whole length.
+        var text = PinkLineFor(PinkLine.RunningRefused);
+
+        Assert.Contains("Running, but nothing is on your screen", text, StringComparison.Ordinal);
+        Assert.Contains("overlay surface", text, StringComparison.Ordinal);
+        Assert.Contains(OverlayReasonCodes.OverlayMechanismAbsent, text, StringComparison.Ordinal);
+
+        // The sentence the old single Armed arm produced here, named so a revert is visible.
+        Assert.DoesNotContain("Nothing is drawn until the session starts", text, StringComparison.Ordinal);
+        Assert.NotEqual(PinkLineFor(PinkLine.ArmedIdle), text);
+    }
+
+    [Fact]
+    public void ARunningSessionWithTheOpacityAtZero_BlamesTheDIAL_AndOffersTheRemedy()
+    {
+        // The other running-but-blank case, and its cause is the user's own, not the platform's —
+        // so it must not borrow the surface's wording.
+        var text = PinkLineFor(PinkLine.RunningTransparent);
+
+        Assert.Contains("opacity is at 0%", text, StringComparison.Ordinal);
+        Assert.Contains("Move the slider up", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("overlay surface", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithNothingRecorded_TheRunningLineStillRefusesToInventACause()
+    {
+        // A running session with nothing up and no recorded refusal is not reachable on today's
+        // product path, and the line still has to be true rather than a guess.
+        var text = PinkLineFor(PinkLine.RunningUnexplained);
+
+        Assert.Contains("Running, but nothing is on your screen", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("(", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("opacity", text, StringComparison.Ordinal);
+    }
+
+    private static string PinkLineFor(PinkLine state)
+    {
+        var visible = new PinkFilterTint(255, 105, 180, 10);
+        var transparent = visible with { OpacityPercent = 0 };
+        var refused = new CapabilityState.Unavailable(new CapabilityReason(
+            OverlayReasonCodes.OverlayMechanismAbsent, "no Linux overlay backend is implemented"));
+        var placed = new CapabilityState.Available("win32 overlay: placed");
+
+        return state switch
+        {
+            PinkLine.Off => StudioPage.DescribePinkFilterState(
+                EffectDotState.Off, visible, sessionRunning: false, placement: null),
+            PinkLine.ArmedIdle => StudioPage.DescribePinkFilterState(
+                EffectDotState.Armed, visible, sessionRunning: false, placement: null),
+            PinkLine.ArmedIdleTransparent => StudioPage.DescribePinkFilterState(
+                EffectDotState.Armed, transparent, sessionRunning: false, placement: null),
+            PinkLine.RunningTransparent => StudioPage.DescribePinkFilterState(
+                EffectDotState.Armed, transparent, sessionRunning: true, placement: null),
+            PinkLine.RunningRefused => StudioPage.DescribePinkFilterState(
+                EffectDotState.Armed, visible, sessionRunning: true, placement: refused),
+            PinkLine.RunningUnexplained => StudioPage.DescribePinkFilterState(
+                EffectDotState.Armed, visible, sessionRunning: true, placement: placed),
+            _ => StudioPage.DescribePinkFilterState(
+                EffectDotState.Live, visible, sessionRunning: true, placement: placed),
+        };
+    }
+
     [Fact]
     public void BeforeAnythingIsAttempted_ItNamesTheMechanism_AndClaimsNothingAboutTheScreen()
     {

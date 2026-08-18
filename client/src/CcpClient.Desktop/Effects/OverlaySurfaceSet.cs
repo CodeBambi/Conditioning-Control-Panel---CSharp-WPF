@@ -151,8 +151,17 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// <summary>
     /// Put one frame on one slot for <paramref name="lifetime"/>: present, then paint, then hold.
     /// Every outcome is recorded verbatim; false means nothing is on screen for this call.
+    ///
+    /// <para><b><paramref name="lifetime"/> may be null (SP-105), and that is the one thing this
+    /// class had to learn for a CONTINUOUS module.</b> Flash Images and Subliminals each place a
+    /// surface for a computed span and it retires itself; Pink Filter's layer is up from START to
+    /// STOP and has no span at all — WPF's overlay service arms no timer for it, only a reconcile
+    /// loop (<c>Services/Notifications/OverlayService.cs:419-452</c>). Null means "hold until
+    /// something retires it", and it is deliberately not expressed as a very large
+    /// <see cref="TimeSpan"/>: a lifetime of ten hours is a timer that exists, that a stop has to
+    /// remember to cancel, and that would fire in a session nobody meant it to reach.</para>
     /// </summary>
-    public bool Place(Slot slot, OverlaySurfaceRequest request, OverlayFrame frame, TimeSpan lifetime)
+    public bool Place(Slot slot, OverlaySurfaceRequest request, OverlayFrame frame, TimeSpan? lifetime)
     {
         ArgumentNullException.ThrowIfNull(slot);
         ArgumentNullException.ThrowIfNull(frame);
@@ -180,7 +189,9 @@ public sealed class OverlaySurfaceSet : IDisposable
         SurfacesShown++;
 
         slot.Lifetime?.Dispose();
-        slot.Lifetime = _clock.Schedule(lifetime, () => _dispatch(() => Retire(slot)));
+        slot.Lifetime = lifetime is { } span
+            ? _clock.Schedule(span, () => _dispatch(() => Retire(slot)))
+            : null;
         EnsureCadence();
         return true;
     }
