@@ -214,3 +214,53 @@ each one line short but inherited from SP-098/SP-101 and misstate no fact.
 
 **Lane resumed with this REVISE.** After it reports: re-run code review on the new diff, then
 final review, then land from a FRESH context at the new pin.
+
+## REVISION LANDED IN THE LANE — head `4bca542f`, new delta +58/+6 (pin -> 1372/87)
+
+Branch `lane/SP-105-continuous-effect`, worktree `.claude/worktrees/agent-a01e12274d69597f3`,
+three commits on `252b8509`: `7883494e`, `b9fca7f9`, `4bca542f`. Build 0/0. `.DONE` created and
+uncommitted. **`floor-delta.json` now declares +58 unit / +6 headless**, so the land applies
+1314/81 -> **1372/87**, not the 1362/87 written higher up this file.
+
+**THE TEMPLATE VERDICT IS NOT WHAT THE EARLIER SECTIONS OF THIS FILE SAY.** Corrected by the
+lane, and it is the more useful answer: **`ISessionEffect` IS a spine and fit the continuous
+module unchanged** — all nine members implemented, no edit. `PacedSessionEffect<TFiring>` had
+been standing in for the spine since SP-098. `Arm()` *was* `ScheduleNext()`, so the eleven
+parts any module needs to take a session were unreachable without implementing the one part
+only a paced module needs. New seam `Session/OwnedSessionEffect.cs`: three abstracts
+(`WorkIsRunning`, `Engage(generation)`, `ReleaseWork()`) and no clock; `PacedSessionEffect`
+derives from it with behaviour verbatim; `PinkFilterEffect` derives directly **with no clock**.
+The dot kept three states because its third clause MOVED: paced `Live` is a claim about the
+clock (Subliminals over an empty pool is correctly `Live`); continuous `Live` can only be a
+claim about the screen. The lane's own wrong prediction (a `ContinuousSessionEffect`
+intermediate it never wrote) is recorded at `record.md` §1.4.
+
+**Blocker fixed:** the `Armed` arm splits on `_session.Engine.Running` and the surface's last
+`CapabilityState`; running-but-not-drawn now reads "Running, but nothing is on your screen:
+this build could not put the tint's overlay surface up (`overlay-mechanism-absent`)" — naming
+the surface and its reason code, never the session. Ten facts in `StudioSurfaceNoticeTests`
+pin every state to a non-blank, mutually distinct sentence; collapsing the arms reds 7.
+
+**The guard was EXECUTED, not asserted.** The lane injected an optional `ISessionClock` into
+the module, wired it from `SessionParticipant` with the spine's clock, re-armed a one-shot in
+`Engage` — **4 facts red** — then reverted byte-identically (md5 compared, `git status` clean).
+Stated bound at `record.md` §8.1: those facts see any timer on the SESSION clock, which is the
+only clock a module reaches through the spine; a module constructing its own
+`SystemSessionClock` internally would evade the count. The misnamed test is renamed
+`TheContinuousModulesConstructorAndBaseClass_StillCarryNoClockAndNoPacedBase`.
+
+One existing assertion changed: `SecondEffectSpineTests.ArmingAModuleWhoseDialIsOff_...` from
+`ArmRefusals == ["subliminal"]` to `["subliminal","pinkfilter"]`, a third module also shipping
+off. Lane calls it a widening; the re-review is checking that.
+
+Divergences D73-D82, plus **D72 closed** and **D4 corrected**.
+
+**Still not proven, in the lane's own words:** no headed capture, `presentation-verified`
+undischarged, every overlay in these facts a recording double, the headless rack facts
+deliberately drive no session (a running pink filter would put a real full-screen always-on-top
+window over whoever ran the suite), so **no test anywhere proves the tint reaches a real
+screen**. Linux asserted only as a refusal path. Multi-monitor unverified. The alpha byte the
+OS finally holds is asserted nowhere (D79).
+
+**Code re-review of `b9fca7f9..4bca542f` is RUNNING.** Then final review, then land from a
+FRESH context at **1372/87**.
