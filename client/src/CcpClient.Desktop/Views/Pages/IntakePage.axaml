@@ -89,6 +89,45 @@
             </StackPanel>
           </Border>
         </Border>
+
+        <!-- SP-097 — THE FAILURE SURFACE. WPF's is a blocking MessageBox titled "Graded Intake"
+             reading "Couldn't start Graded Intake:" plus the exception message, with
+             MessageBoxImage.Warning (MainWindow/MainWindow.Lab.cs:161-166). The port had none: the
+             button called IntakeLaunch.Launch() synchronously, so a throw while preparing the
+             session context escaped the click handler into Avalonia's dispatcher with nothing on
+             screen to show for it.
+
+             The same reasoning as the Play page's fault band, and the same livery — one failure
+             idiom for the port, two headlines, because WPF's two catches carry two different
+             strings. It must not look like the pass gate above it: that gate can say "you already
+             had your run this week", and a fault that wore those clothes would tell a user their
+             week was gone when in fact the app broke. Divergence §13 D41. -->
+        <Border x:Name="FaultBand"
+                Classes="fault-band"
+                IsHitTestVisible="False"
+                IsVisible="False">
+          <Border x:Name="FaultBandPlate"
+                  Classes="fault-plate"
+                  AutomationProperties.AutomationId="FaultBandPlate"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="16"
+                  MaxWidth="620">
+            <StackPanel Spacing="8">
+              <TextBlock x:Name="FaultBandTitle"
+                         Classes="fault-title"
+                         AutomationProperties.AutomationId="FaultBandTitle"
+                         HorizontalAlignment="Center"
+                         Text="" />
+              <TextBlock x:Name="FaultBandText"
+                         Classes="fault-text"
+                         AutomationProperties.AutomationId="FaultBandText"
+                         TextAlignment="Left"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+        </Border>
       </Panel>
     </Border>
   </StackPanel>

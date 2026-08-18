@@ -1,8 +1,10 @@
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless.XUnit;
 using CcpClient.Desktop;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Entitlement;
+using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Tray;
 using CcpClient.Desktop.Views;
@@ -269,6 +271,137 @@ public class ShellTrayHeadlessTests
         await host!.ShutdownAsync();
     }
 
+    [AvaloniaFact]
+    public async Task TheMenusExitEntry_WithNoClassicLifetime_SaysSoAndShutsNothingDown()
+    {
+        // SP-097: the ONE menu entry whose effect had never been executed by anything. WPF's Exit
+        // (TrayIconService.cs:109-111 -> MainWindow/MainWindow.xaml.cs:323-343) ends in
+        // Application.Current.Shutdown(); the port's counterpart is the classic desktop lifetime's
+        // Shutdown(), which reaches the one guarded teardown (App.axaml.cs:88-95).
+        //
+        // The branch assertable here is the OTHER one — a host with no classic lifetime, which is
+        // exactly what a test runner is. It exists so a menu entry can never kill the process that
+        // is checking it, and it was written and then never run.
+        var log = new List<string>();
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-sp097-exit-" + Guid.NewGuid().ToString("N"));
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
+            EntitlementFactory = _ => new HostLoginEntitlement(new NoLoginReader()),
+            LogSinkFactory = () => new ListLogSink(log),
+        };
+        var trace = new StartupTrace();
+        ApplicationHost? host = null;
+        Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
+            Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+
+        var window = new MainWindow(host!);
+        window.Show();
+        window.UpdateLayout();
+
+        // THE PRECONDITION IS ASSERTED BEFORE THE ENTRY IS INVOKED, deliberately. If a future
+        // headless host ever grew a classic lifetime, invoking Exit would shut the TEST RUNNER
+        // down and the failure would look like an unrelated crash. This fails first, and says why.
+        Assert.False(
+            Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime,
+            "this headless host now HAS a classic desktop lifetime, so invoking the tray's Exit entry would really "
+            + "shut the test runner down. Re-point this fact at the no-lifetime branch some other way before "
+            + "letting it run");
+
+        var exit = window.ShellTray.Menu.Items.Single(i => i.Id == "exit");
+        Assert.Equal("Exit", exit.Label);      // WPF's string, TrayIconService.cs:109
+        Assert.False(exit.IsSeparator);
+        Assert.False(exit.IsRestore);          // Exit is not a way back; only "Show Dashboard" is
+
+        exit.Invoke();
+
+        // Nothing was shut down, and the app SAID so rather than failing silently or throwing.
+        Assert.False(host!.IsShutdown);
+        Assert.True(window.IsVisible);
+        Assert.Contains(
+            log.ToArray(),
+            line => line.Contains("tray: Exit chosen", StringComparison.Ordinal)
+                && line.Contains("no classic desktop lifetime", StringComparison.Ordinal)
+                && line.Contains("nothing was shut down", StringComparison.Ordinal));
+
+        // Idempotent: a second Exit on a host that cannot exit still must not throw or half-do it.
+        exit.Invoke();
+        Assert.False(host.IsShutdown);
+        Assert.True(window.IsVisible);
+
+        window.Close();
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheDtrhFlowENDING_RestoresTheShell_ThroughDtrhLaunchsOwnFunnel()
+    {
+        // SP-097: SP-096 proved the duck and every restore route ShellTray owns. What had no fact
+        // is DtrhLaunch's own wiring of the restore — `coordinator.FlowEnded += RestoreOwner`
+        // (Features/Dtrh/DtrhLaunch.cs) — the single funnel every real flow end goes through:
+        // host window closed, picker cancelled, descend failed. WPF restores at the same point
+        // (Services/Chaos/DtrhHostService.cs:998).
+        //
+        // The flow end here is REAL: an entitled FALL IN opens the REAL slot picker through the
+        // REAL default descent seam, and cancelling it is WPF's own back-out (slot == null -> no
+        // launch, MainWindow.Lab.cs:246-247) which raises FlowEnded from the real coordinator.
+        // Only the DUCK is invoked directly, because the duck's real trigger is HostOpened — a
+        // WebView2 host window no headless frame can present. That half is SP-096's; this is the
+        // half it left open.
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-sp097-restore-" + Guid.NewGuid().ToString("N"));
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
+            EntitlementFactory = _ => new HostLoginEntitlement(new NoLoginReader()),
+        };
+        var trace = new StartupTrace();
+        ApplicationHost? host = null;
+        Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
+            Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+
+        var owner = new Window { Width = 500, Height = 380 };
+        owner.Show();
+        var presence = new AvailablePresence();
+        var log = new List<string>();
+        var tray = new ShellTray(owner, log.Add, wakeCompanion: () => { }, exit: () => { }, () => presence);
+
+        // The launcher's OWN entitlement, entitled at the Lab bar so the gate really proceeds and
+        // the real picker really opens. Nothing about the restore wiring is stubbed.
+        var entitlement = new HostLoginEntitlement(new FixtureLoginReader(), new EntitledAuthority());
+        var dtrh = new DtrhLaunch(host!, owner, entitlement, tray);
+        Assert.Same(tray, dtrh.Tray);
+
+        _ = dtrh.FallInAsync();
+        await CcpClient.Tests.TestWait.Until(
+            () => dtrh.Coordinator.Picker is not null,
+            "the real slot picker to open after an entitled FALL IN",
+            () => $"decision={dtrh.LastDecision}, picker={dtrh.Coordinator.Picker}, fault={dtrh.LastFault}");
+
+        // The shell gets out of the way exactly as DuckOwner does it (ShellTray.Duck, the one
+        // implementation), so what follows is a restore of a really-ducked shell.
+        tray.Duck();
+        Assert.True(tray.IsDucked);
+        Assert.True(tray.IsIconPlaced);
+        Assert.Equal(WindowState.Minimized, owner.WindowState);
+
+        dtrh.Coordinator.Picker!.Close();
+
+        await CcpClient.Tests.TestWait.Until(
+            () => !tray.IsDucked,
+            "cancelling the picker to end the flow and restore the shell through DtrhLaunch.RestoreOwner",
+            () => $"ducked={tray.IsDucked}, picker={dtrh.Coordinator.Picker}, state={owner.WindowState}");
+
+        Assert.Equal(WindowState.Normal, owner.WindowState);
+        Assert.True(owner.IsVisible);
+        Assert.False(tray.IsIconPlaced);
+        // The icon came down before the window came back, WPF's order (TrayIconService.cs:165-169).
+        Assert.Equal(new[] { "SetMenu", "Place", "ShowNotification", "Remove" }, presence.Calls.ToArray());
+        Assert.Null(dtrh.Coordinator.HostWindow);
+
+        owner.Close();
+        await host!.ShutdownAsync();
+    }
+
     // ---------- fixtures ----------
 
     private static (Window Shell, ShellTray Tray, List<string> Log) Build(Func<ITrayPresence> presenceFactory)
@@ -339,5 +472,33 @@ public class ShellTrayHeadlessTests
     private sealed class NoLoginReader : IHostAuthTokenReader
     {
         public HostTokenRead Read() => HostTokenRead.NoTokenFile();
+    }
+
+    /// <summary>A readable login for the one test that needs the DTRH gate to say yes. Fresh per
+    /// call: the capability disposes the read on every path.</summary>
+    private sealed class FixtureLoginReader : IHostAuthTokenReader
+    {
+        public HostTokenRead Read() =>
+            HostTokenRead.Found(new HostAuthToken("SP097-FIXTURE-NOT-A-REAL-TOKEN-4c1f9e"));
+    }
+
+    /// <summary>An authority that confirms the Lab tier. It never sees a real credential.</summary>
+    private sealed class EntitledAuthority : IEntitlementTierSource
+    {
+        public Task<TierLookup> LookupAsync(HostAuthToken token, CancellationToken cancellationToken) =>
+            Task.FromResult(TierLookup.Entitled(EntitlementTier.Lab));
+    }
+
+    /// <summary>The host's diagnostic sink, captured — a menu entry that only LOGS its refusal is
+    /// checkable only through the log.</summary>
+    private sealed class ListLogSink(List<string> lines) : ILogSink
+    {
+        public void Log(string message)
+        {
+            lock (lines)
+            {
+                lines.Add(message);
+            }
+        }
     }
 }

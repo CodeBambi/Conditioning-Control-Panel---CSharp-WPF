@@ -67,6 +67,17 @@ public sealed record DtrhHarnessOptions(
 /// <see cref="Tray.ShellTray"/> and wpf-surface-reachability.md §12 D35. What a user gets is a
 /// minimized shell with its taskbar button, plus a real tray icon whose menu restores it — three
 /// ways back where WPF has two.</para>
+///
+/// <para><b>AND WHEN IT BREAKS, THE USER IS TOLD.</b> WPF wraps the entire handler and shows a
+/// warning dialog reading "Couldn't start Down the Rabbit Hole:" plus the message
+/// (<c>MainWindow/MainWindow.Lab.cs:266-271</c>). Until SP-097 the port caught only around
+/// <c>ResolveAsync</c> and the page fired the launch as a discarded task, so a throw from the
+/// descent became an UNOBSERVED task exception — collected by the panic hook at some later GC
+/// (<c>Program.cs:313</c>) and invisible on screen. <see cref="Faulted"/> is the fix, and it is
+/// deliberately not a fourth <see cref="DtrhGateDecision"/>: what the user sees for a fault wears
+/// its own livery and its own words, because a refusal band that also meant "the app broke" would
+/// teach a user that a broken app and an unknown subscription are one event
+/// (wpf-surface-reachability.md §13 D41).</para>
 /// </summary>
 public sealed class DtrhLaunch
 {
@@ -122,51 +133,110 @@ public sealed class DtrhLaunch
     /// <summary>Raised after every gate decision, refusals included.</summary>
     public event Action<DtrhGateDecision>? Decided;
 
+    /// <summary>
+    /// SP-097: raised when the launch flow THREW. WPF wraps its whole handler and shows the user
+    /// a warning dialog (<c>MainWindow/MainWindow.Lab.cs:266-271</c>); the port raises this, and
+    /// <see cref="Views.Pages.PlayPage"/> renders the fault plate from it. The exception is passed
+    /// WHOLE rather than pre-rendered: the surface decides what a user reads, and a subscriber
+    /// that wants the type or the stack still has it. Not a <see cref="DtrhGateDecision"/> and
+    /// deliberately never one — a fault is not a verdict about the account, and typing it as a
+    /// fourth decision case is how the two would eventually be rendered as each other.
+    /// </summary>
+    public event Action<Exception>? Faulted;
+
+    /// <summary>The exception the last faulted launch threw, or null if none has. Kept so the
+    /// detail survives in-process even when nothing is subscribed to <see cref="Faulted"/>: the
+    /// defect this closes is an INVISIBLE failure, and a swallowed one is the same defect.</summary>
+    public Exception? LastFault { get; private set; }
+
     /// <summary>The hero card's FALL IN (<c>Views/Tabs/PlayTabView.xaml:455</c>).</summary>
-    public Task<DtrhGateDecision> FallInAsync(CancellationToken cancellationToken = default) =>
+    public Task<DtrhGateDecision?> FallInAsync(CancellationToken cancellationToken = default) =>
         GateThenDescendAsync(DtrhEntry.FallIn, cancellationToken);
 
     /// <summary>Quick Drop (<c>Views/Tabs/PlayTabView.xaml:468</c>).</summary>
-    public Task<DtrhGateDecision> QuickDropAsync(CancellationToken cancellationToken = default) =>
+    public Task<DtrhGateDecision?> QuickDropAsync(CancellationToken cancellationToken = default) =>
         GateThenDescendAsync(DtrhEntry.QuickDrop, cancellationToken);
 
-    private async Task<DtrhGateDecision> GateThenDescendAsync(DtrhEntry entry, CancellationToken cancellationToken)
+    /// <returns>The gate's decision, or <c>null</c> when the flow THREW and the fault surface was
+    /// raised instead. Null rather than an invented refusal, for the reason
+    /// <see cref="Intake.IntakeLaunch.Launch"/> already returns null on its own no-decision path:
+    /// reporting a verdict nobody reached would log a refusal of an account that was never
+    /// adjudicated.</returns>
+    private async Task<DtrhGateDecision?> GateThenDescendAsync(DtrhEntry entry, CancellationToken cancellationToken)
     {
         GateArrivals++;
 
-        EntitlementOutcome outcome;
+        // WPF's try starts at the TOP of the handler and covers everything after it —
+        // MainWindow.Lab.cs:221-271, whose catch is the only reason a broken descent is visible
+        // to a user at all. So this one covers the gate call, the render the Decided event
+        // performs, the coordinator's construction (which reaches into the host's participants)
+        // and the descent itself — not merely the last of those.
         try
         {
-            outcome = await _entitlement.ResolveAsync(cancellationToken).ConfigureAwait(true);
+            EntitlementOutcome outcome;
+            try
+            {
+                outcome = await _entitlement.ResolveAsync(cancellationToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A throw HERE is still "could not tell", so it stays a refusal rather than
+                // becoming the fault plate: the question asked was about the entitlement and the
+                // honest answer is that it could not be determined. The one thing it must never
+                // become is a dead control or a refusal of the account. Type name only: an
+                // exception message on this path can carry a path or a bearer.
+                outcome = new EntitlementOutcome.Unavailable(new EntitlementReason(
+                    EntitlementReasonCodes.TierAuthorityFault,
+                    "resolving the entitlement threw " + ex.GetType().Name));
+            }
+
+            var decision = DtrhGate.Decide(outcome);
+            LastDecision = decision;
+            // Outcome CLASS plus reason CODE, never the detail and never anything token-derived
+            // (the SP-092 logging discipline; EntitlementOutcome.Describe is that rendering).
+            _host.LogDiagnostic($"dtrh: gate on {entry} — entitlement {outcome.Describe()} -> {Classify(decision)}");
+            Decided?.Invoke(decision);
+
+            if (decision is DtrhGateDecision.Proceed)
+            {
+                await Descend(entry, Coordinator).ConfigureAwait(true);
+            }
+
+            return decision;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // The caller asked for the stop. Painting a failure for it would be the small lie
+            // the entitlement capability's own comment refuses (HostLoginEntitlement.cs).
             throw;
         }
         catch (Exception ex)
         {
-            // WPF wraps the whole handler and tells the user rather than dying silently
-            // (MainWindow.Lab.cs:269). A throw here is still "could not tell" — the one thing
-            // it must never become is a dead control or a refusal of the account. Type name
-            // only: an exception message on this path can carry a path or a bearer.
-            outcome = new EntitlementOutcome.Unavailable(new EntitlementReason(
-                EntitlementReasonCodes.TierAuthorityFault,
-                "resolving the entitlement threw " + ex.GetType().Name));
+            RaiseFault(entry, ex);
+            return null;
         }
+    }
 
-        var decision = DtrhGate.Decide(outcome);
-        LastDecision = decision;
-        // Outcome CLASS plus reason CODE, never the detail and never anything token-derived
-        // (the SP-092 logging discipline; EntitlementOutcome.Describe is that rendering).
-        _host.LogDiagnostic($"dtrh: gate on {entry} — entitlement {outcome.Describe()} -> {Classify(decision)}");
-        Decided?.Invoke(decision);
-
-        if (decision is DtrhGateDecision.Proceed)
-        {
-            await Descend(entry, Coordinator).ConfigureAwait(true);
-        }
-
-        return decision;
+    /// <summary>
+    /// The failure the user sees. TYPE AND MESSAGE, both, and both in the log too: WPF puts
+    /// <c>ex.Message</c> in front of the user (<c>MainWindow.Lab.cs:269</c>) and its own error into
+    /// the log (<c>:268</c>), and the trap this packet was authored against is a catch that shows
+    /// a band and drops the detail. Past the gate there is no bearer in play — the token was read,
+    /// used and dropped inside <c>ResolveAsync</c> — so this is the port's ordinary diagnostic
+    /// convention for a thrown subsystem (<c>Audio/SoundArbitration.cs:412</c>) rather than the
+    /// entitlement path's type-only rule.
+    /// </summary>
+    private void RaiseFault(DtrhEntry entry, Exception ex)
+    {
+        LastFault = ex;
+        _host.LogDiagnostic(
+            $"dtrh: launch from {entry} FAULTED ({ex.GetType().Name}: {ex.Message}) — the hole did not open; "
+            + "the page carries the failure (WPF MainWindow.Lab.cs:266-271 shows a warning dialog)");
+        Faulted?.Invoke(ex);
     }
 
     /// <summary>Log-safe decision class. Never the message: it is authored text, but the log

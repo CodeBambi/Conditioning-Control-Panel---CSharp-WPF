@@ -133,6 +133,60 @@
             </StackPanel>
           </Border>
         </Border>
+
+        <!-- SP-097 — THE FAILURE SURFACE, and it is deliberately NOT the band above.
+
+             WPF wraps the whole DTRH handler and shows a blocking MessageBox titled "Down the
+             Rabbit Hole" reading "Couldn't start Down the Rabbit Hole:" plus the exception message,
+             with MessageBoxImage.Warning (MainWindow/MainWindow.Lab.cs:266-271, and the identical
+             catch on Quick Start at :333-338). The port had no such surface at all: PlayPage fired
+             `_ = dtrh.FallInAsync();` and a throw from the descent became an unobserved task
+             exception — logged by the panic hook at some later GC (Program.cs:313) and never shown.
+
+             WHY A BAND AND NOT A DIALOG. The port has no dialog service, so a modal here would be
+             a new window class whose every user-visible property (modality, activation, focus
+             return, z-order) is presentation-class evidence a headless frame cannot discharge; and
+             the page already has an honest in-page idiom for saying something out loud. WPF's
+             dialog is dismissed and the card is live again, which is what a hit-test-transparent
+             band gives without a modal loop.
+
+             WHY IT LOOKS DIFFERENT FROM THE BAND ABOVE, on purpose. That band means "we could not
+             determine your entitlement". If a fault rendered identically, the user would be taught
+             that a broken app and an unknown subscription are the same event. So this is a
+             different ELEMENT (not the same one re-tinted), in a different livery (amber — the
+             severity MessageBoxImage.Warning carries as a glyph, carried here as colour), under a
+             different headline (WPF's own "Couldn't start …" words), and its text says in prose
+             that nothing was refused. Divergence §13 D41.
+
+             The two are mutually exclusive: raising this hides the gate band, and the next gate
+             decision hides this. Same IsHitTestVisible="False" rule, for the same reason as above
+             and for WPF's: a dismissed dialog leaves a live card, so the retry must arrive. -->
+        <Border x:Name="FaultBand"
+                Classes="fault-band"
+                IsHitTestVisible="False"
+                IsVisible="False">
+          <Border x:Name="FaultBandPlate"
+                  Classes="fault-plate"
+                  AutomationProperties.AutomationId="FaultBandPlate"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="16"
+                  MaxWidth="600">
+            <StackPanel Spacing="8">
+              <TextBlock x:Name="FaultBandTitle"
+                         Classes="fault-title"
+                         AutomationProperties.AutomationId="FaultBandTitle"
+                         HorizontalAlignment="Center"
+                         Text="" />
+              <TextBlock x:Name="FaultBandText"
+                         Classes="fault-text"
+                         AutomationProperties.AutomationId="FaultBandText"
+                         TextAlignment="Left"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+        </Border>
       </Panel>
     </Border>
   </StackPanel>

@@ -566,3 +566,43 @@ WPF's `MinimizeToTray()` (`Services/Notifications/TrayIconService.cs:145-158`) h
 
 **Why it is recorded anyway.** The guard is inherited from SP-094's plain-minimize shape rather than invented by SP-096, it is the kind of branch a later packet makes reachable without noticing (any non-gesture launch — a scheduler, a resume, a remote trigger — walks straight into it), and an unrecorded divergence is indistinguishable from a bug. **Close condition: when any launch path can start a descent while the shell is minimized, either drop the guard to match WPF or record why the port keeps it.**
 
+
+## 13. Port divergences, recorded at SP-097 (the failure a user should see)
+
+**Numbering note.** The packet said "record divergences from D40 onward". **D40 was already taken** —
+recorded at the wave-39 land by the SP-096 final review — so this section starts at **D41**.
+
+**What was wrong.** WPF wraps its DTRH and Graded Intake handlers whole and, when anything throws,
+logs it and shows a blocking `MessageBox` with `MessageBoxImage.Warning` reading *"Couldn't start
+Down the Rabbit Hole:"* / *"Couldn't start Graded Intake:"* plus `ex.Message`
+(`MainWindow/MainWindow.Lab.cs:161-166`, `:266-271`, `:333-338`). The port caught only around
+`ResolveAsync`. `PlayPage` fired `_ = dtrh.FallInAsync()`, so a throw from the descent became an
+**unobserved task exception** — raked up by the panic hook at some later GC (`Program.cs:313`) and
+never shown to anybody. `IntakePage` was worse in a way the packet brief did not state: its click
+handler called `intake.Launch()` **synchronously**, so a throw escaped into Avalonia's dispatcher
+rather than into a discarded task. Same user-visible defect, different process outcome; the fix
+covers both, and both launchers now wrap the whole flow the way WPF's handlers do.
+
+| # | v6.8.1 fact | Port at SP-097 | Reason |
+|---|---|---|---|
+| **D41** | The failure surface is a **modal `MessageBox`** with a warning icon, dismissed by the user, after which the card is live again (`MainWindow.Lab.cs:164-165`, `:269-270`) | An **in-page fault plate** in the SP-094/SP-095 idiom - a **different element** (`FaultBand`, not the refusal `GateBand`/`PassGate`), in a **different livery** (amber rim `#FFF0A02E` and warm plate `#FF241505`, never the tier-2 violet `#FFB47BFF` or the intake's `#FFD05CE8`), under WPF's **own headline**, and hit-test transparent so the retry still arrives. The two bands are **mutually exclusive**: raising one lowers the other | The port has no dialog service, so a modal here would be a new window class whose every user-visible property (modality, activation, focus return, z-order) is **presentation**-class evidence a headless frame cannot discharge. It also already has an honest idiom for saying something out loud on this exact card. **The differentiation is the load-bearing part, not the container:** the refusal band already means *"we could not determine your entitlement"*, and a failure that rendered identically would teach a user that a broken app and an unknown subscription are one event. WPF never faces that question because its failure is a different WINDOW; the port reuses the surface, so it carries the difference in element, colour, headline and words at once - five axes, so no single later tidy-up collapses them. `PlayPageHeadlessTests.AFailureLooksNothingLikeARefusal_AndTheTwoAreNeverUpTogether` pins all five |
+| **D42** | The dialog body is `ex.Message` alone; the exception **type** goes only to the log (`App.Logger?.Error(ex, ...)`, `:163`, `:268`) | The user reads the **type AND the message**; the diagnostic carries **both** as well | Strictly WPF's disclosure plus the type - the type is what survives a paraphrase in a bug report, and the trap this packet was authored against is a catch that renders a band and drops the detail. **One path deliberately keeps the old rule:** a throw from `HostLoginEntitlement.ResolveAsync` is still converted to `Unavailable(tier-authority-fault)` with the exception **type only** and still renders as a **refusal**, not a fault. The question asked there was *what is this account entitled to*, and "could not be determined" is the honest answer; the message on that one path can carry a path or a bearer. `PlayPageHeadlessTests.WhenResolvingTheEntitlementTHROWS_ItStaysARefusal_AndLandsTheTierAuthorityFaultFallback` pins both halves, including that the reader's secret-shaped message never reaches the log |
+| **D43** | The body puts a **blank line** between the headline and the message (`"...:\n\n" + ex.Message`) | A **single** newline | **Measured, and it is not about taste.** In Avalonia 12.1.1 a wrapped `TextBlock` inside these plates whose text contains an **empty line** wedges the layout pass: the press that raised the band never returns, so the app (and the test suite) hangs rather than fails. It reproduces with a two-character body (`"A:\n\nB"`), with and without `LineHeight`, and - the part that makes it a port-wide fact - **identically in the existing refusal plate**, so it is a property of the surface and not of this feature. Single newlines are what the landed refusal copy already uses and are proven safe. `LaunchFaultTextTests.NoStringAPlateCanRENDER_ContainsABlankLine_AndTheSetIsDERIVED_NeverHandListed` holds the line in the unit suite, because the failure mode it prevents is a hang and a hang is the one failure a test suite reports worst. **Its set is DERIVED, after review caught the first version being the very defect it guards against:** it hand-listed eight strings, omitted `IntakePassGate.SpentMessageFormat` (rendered on six days in seven) and sampled `UnverifiedMessage` at one of eleven reason codes, while claiming to cover every plate string. It now reflects every public string member of `DtrhGate`, `IntakePassGate` and `LaunchFaultText`, drives both gates Decide over every reason code, tier and (state, reason) pair, and sweeps the composed fault bodies - ~150 strings, with the derivation itself pinned by name and by count floors so an over-narrow filter fails loudly. Band TITLES are deliberately NOT claimed: they are NoWrap TextBlocks and the wedge was measured on a wrapped one. **Closes when an Avalonia release lays out an empty line in a wrapped `TextBlock` without wedging** - re-measure with that two-character body before restoring WPF's spacing |
+| **D44** | The `MessageBox` **grows to fit** whatever `ex.Message` contains, and is then dismissed | The message is flattened to one line and **clamped to 400 characters**, with a marker saying it was cut | The plate is a fixed panel inside a card that stays on screen, not a window that sizes itself and goes away. An unclamped multi-line message would push its own tail - and the *"this is a fault, not a decision"* sentence under it - out of the plate, which is the §10 D23 illegibility defect arriving by a second route: the words would be right and unreadable. The clamp keeps the **type at the front**, so it can never be what the clamp removes, and says out loud that the text was truncated rather than letting a sentence appear to end mid-word |
+
+**What SP-097 proves, and where it stops.** Draw-level only: that the fault plate exists, is visible,
+carries the type and the message, is a different element in a different livery from the refusal
+band, never appears beside it, and never swallows the next press. **Undischarged and belonging to a
+headed capture:** that the amber really reads as "something broke" to a human, that the plate
+composites legibly over the card at real scaling, and every other composited-pixel claim. Nothing
+here is a `presentation-verified` claim.
+
+**Four never-executed paths closed by the same packet**, each with a fact that fails if it
+regresses: `MainWindow.RequestApplicationExit`'s no-lifetime branch (the tray menu's `Exit`, the one
+entry whose effect nothing had ever run - asserted through the real menu item, with the lifetime
+precondition asserted FIRST so the entry can never shut the test runner down); `DtrhLaunch`'s
+`catch` -> `Unavailable(tier-authority-fault)` fallback (reached through a read seam that throws,
+the only input that makes the sealed capability throw); `IntakePage`'s `RefusedSpent` and
+`RefusedNeedsAccount` render arms (driven through the page with injected entitlement seams and the
+real pass service's own completion-spend, never a stubbed decision); and `DtrhLaunch.RestoreOwner`
+(the real coordinator's `FlowEnded`, raised by really cancelling the real slot picker).

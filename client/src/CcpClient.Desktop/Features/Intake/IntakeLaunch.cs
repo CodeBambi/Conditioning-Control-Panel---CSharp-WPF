@@ -104,42 +104,78 @@ public sealed class IntakeLaunch
     public event Action<IntakePassDecision>? Decided;
 
     /// <summary>
+    /// SP-097: raised when the launch flow THREW. WPF wraps its whole handler and shows the user a
+    /// warning dialog reading "Couldn't start Graded Intake:" plus the message
+    /// (<c>MainWindow/MainWindow.Lab.cs:161-166</c>); the port raises this and
+    /// <see cref="Views.Pages.IntakePage"/> renders the fault plate from it. Never an
+    /// <see cref="IntakePassDecision"/>: this page already has three refusals whose whole design
+    /// is that one may not be rendered as another, and "the app broke" is a fourth kind of thing
+    /// again.
+    /// </summary>
+    public event Action<Exception>? Faulted;
+
+    /// <summary>The exception the last faulted launch threw, or null if none has. Kept so the
+    /// detail survives in-process even with nothing subscribed to <see cref="Faulted"/>.</summary>
+    public Exception? LastFault { get; private set; }
+
+    /// <summary>
     /// Begin a run, or refocus the one already running. No picker and no setup step: WPF's click
     /// goes straight to <c>IntakeHostService.Launch</c> once the pass allows it
     /// (<c>MainWindow.Lab.cs:159</c>).
+    ///
+    /// <para>The whole body is wrapped, as WPF's handler is (<c>:109-166</c>). Preparing the
+    /// context really starts stores and reads files, and this method is called STRAIGHT from a
+    /// click handler — so before SP-097 a throw here escaped into Avalonia's dispatcher with
+    /// nothing on screen to show for it.</para>
     /// </summary>
-    /// <returns>The gate's decision, or <c>null</c> when no decision was taken because a live run
-    /// was refocused instead — WPF's own early return (<c>MainWindow.Lab.cs:112-117</c>).
-    /// Inventing a Proceed for that path would log a grant nobody asked for.</returns>
+    /// <returns>The gate's decision; <c>null</c> when no decision was taken because a live run was
+    /// refocused instead — WPF's own early return (<c>MainWindow.Lab.cs:112-117</c>) — or because
+    /// the flow threw and the fault surface was raised instead. Inventing a Proceed for either
+    /// path would log a grant nobody asked for.</returns>
     public IntakePassDecision? Launch()
     {
         LaunchCount++;
 
-        // MainWindow.Lab.cs:112-117 — "Already open? Just focus it — never re-launch a live run",
-        // and it returns BEFORE the pass check. The coordinator owns the refocus itself, so there
-        // is exactly one implementation of that rule.
-        if (Coordinator.HostWindow is { IsVisible: true })
+        try
         {
-            _host.LogDiagnostic("intake: a run is already up — refocusing, gate not re-asked (WPF :112-117 ordering)");
-            Open(Coordinator);
+            // MainWindow.Lab.cs:112-117 — "Already open? Just focus it — never re-launch a live
+            // run", and it returns BEFORE the pass check. The coordinator owns the refocus itself,
+            // so there is exactly one implementation of that rule.
+            if (Coordinator.HostWindow is { IsVisible: true })
+            {
+                _host.LogDiagnostic("intake: a run is already up — refocusing, gate not re-asked (WPF :112-117 ordering)");
+                Open(Coordinator);
+                return null;
+            }
+
+            var (state, reason) = Coordinator.EnsureContext().Pass.Evaluate();
+            var decision = IntakePassGate.Decide(
+                state, reason, IntakePassService.DaysUntilNextPass(DateTime.Now));
+
+            LastDecision = decision;
+            // State + reason CODE and the decision CLASS — never the message, never a day count
+            // attached to a person (the SP-092 logging discipline).
+            _host.LogDiagnostic($"intake: pass gate — {state}/{reason} -> {IntakePassGate.Classify(decision)}");
+            Decided?.Invoke(decision);
+
+            if (decision is IntakePassDecision.Proceed)
+            {
+                Open(Coordinator);
+            }
+
+            return decision;
+        }
+        catch (Exception ex)
+        {
+            // TYPE AND MESSAGE, both, and both in the log: WPF logs its own error (:163) and puts
+            // ex.Message in front of the user (:164). Dropping the detail here would replace an
+            // invisible failure with a silent one, which is the same defect.
+            LastFault = ex;
+            _host.LogDiagnostic(
+                $"intake: launch FAULTED ({ex.GetType().Name}: {ex.Message}) — no run opened; the page carries the "
+                + "failure (WPF MainWindow.Lab.cs:161-166 shows a warning dialog)");
+            Faulted?.Invoke(ex);
             return null;
         }
-
-        var (state, reason) = Coordinator.EnsureContext().Pass.Evaluate();
-        var decision = IntakePassGate.Decide(
-            state, reason, IntakePassService.DaysUntilNextPass(DateTime.Now));
-
-        LastDecision = decision;
-        // State + reason CODE and the decision CLASS — never the message, never a day count
-        // attached to a person (the SP-092 logging discipline).
-        _host.LogDiagnostic($"intake: pass gate — {state}/{reason} -> {IntakePassGate.Classify(decision)}");
-        Decided?.Invoke(decision);
-
-        if (decision is IntakePassDecision.Proceed)
-        {
-            Open(Coordinator);
-        }
-
-        return decision;
     }
 }

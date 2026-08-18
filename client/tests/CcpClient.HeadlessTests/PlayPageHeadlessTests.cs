@@ -48,13 +48,18 @@ public class PlayPageHeadlessTests
         new(new FixtureReader(), authorityAnswer is null ? null : new FixtureAuthority(authorityAnswer));
 
     private static async Task<(ApplicationHost Host, MainWindow Window, DtrhLaunch Dtrh)> BootAsync(
-        TierLookup? authorityAnswer)
+        TierLookup? authorityAnswer, List<string>? diagnostics = null, IHostAuthTokenReader? reader = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp094-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot
         {
             SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
-            EntitlementFactory = _ => Capability(authorityAnswer),
+            EntitlementFactory = _ => reader is null
+                ? Capability(authorityAnswer)
+                : new HostLoginEntitlement(reader),
+            LogSinkFactory = diagnostics is null
+                ? () => new DebugLogSink()
+                : () => new CapturingLogSink(diagnostics),
         };
         var trace = new StartupTrace();
         ApplicationHost? host = null;
@@ -87,6 +92,14 @@ public class PlayPageHeadlessTests
     {
         Click(window, window.FindControl<RadioButton>("DoorPlay")!);
         Click(window, Descendant<Button>(window, buttonName));
+    }
+
+    private static async Task WaitForFaultAsync(DtrhLaunch dtrh)
+    {
+        await TestWait.Until(
+            () => dtrh.LastFault is not null,
+            "the DTRH launcher to surface the fault a thrown descent produced",
+            () => $"gate arrivals={dtrh.GateArrivals}, decision={dtrh.LastDecision}, fault={dtrh.LastFault}");
     }
 
     private static async Task<DtrhGateDecision> WaitForDecisionAsync(DtrhLaunch dtrh)
@@ -389,6 +402,205 @@ public class PlayPageHeadlessTests
         await host.ShutdownAsync();
     }
 
+    // ---------- SP-097: the failure a user can see, and the fallback nothing had run ----------
+
+    [AvaloniaFact]
+    public async Task WhenTheDescentThrows_TheUserIsTOLD_InWpfsOwnWords_AndTheDetailIsNotDropped()
+    {
+        // THE DEFECT THIS CLOSES. WPF wraps its whole handler and shows a warning MessageBox
+        // reading "Couldn't start Down the Rabbit Hole:" plus ex.Message
+        // (MainWindow/MainWindow.Lab.cs:266-271). The port caught only around ResolveAsync, and
+        // PlayPage fires `_ = dtrh.FallInAsync()` — so a throw from the descent became an
+        // UNOBSERVED task exception: raked up by the panic hook at some later GC (Program.cs:313)
+        // and never shown to anyone. Entitled, so the gate really opens and the throw is
+        // unambiguously PAST it.
+        var diagnostics = new List<string>();
+        var (host, window, dtrh) = await BootAsync(TierLookup.Entitled(EntitlementTier.Lab), diagnostics);
+        dtrh.Descend = async (_, _) =>
+        {
+            // Thrown from a CONTINUATION, not synchronously: that is the exact shape that used to
+            // become an unobserved task exception, and a catch that only covered the synchronous
+            // call would still be green.
+            await Task.Yield();
+            throw new InvalidOperationException("the WebView2 host refused to construct");
+        };
+
+        PressCardButton(window, "FallInButton");
+
+        // The gate still said yes — a fault must not be back-written into the verdict.
+        var decision = await WaitForDecisionAsync(dtrh);
+        Assert.IsType<DtrhGateDecision.Proceed>(decision);
+        await WaitForFaultAsync(dtrh);
+
+        // The user sees it, on the page, in WPF's words.
+        var band = Descendant<Border>(window, "FaultBand");
+        var text = Descendant<TextBlock>(window, "FaultBandText").Text ?? "";
+        Assert.True(band.IsVisible);
+        Assert.Equal(PlayPage.FaultBandTitleText, Descendant<TextBlock>(window, "FaultBandTitle").Text);
+        Assert.Equal("Couldn't start Down the Rabbit Hole", PlayPage.FaultBandTitleText);
+        Assert.StartsWith("Couldn't start Down the Rabbit Hole:", text, StringComparison.Ordinal);
+
+        // THE TRAP: not swallowed. The type AND the message reach the user, the exception object
+        // is still on the launcher, and the diagnostic carries both as well.
+        Assert.Contains("InvalidOperationException", text, StringComparison.Ordinal);
+        Assert.Contains("the WebView2 host refused to construct", text, StringComparison.Ordinal);
+        Assert.IsType<InvalidOperationException>(dtrh.LastFault);
+        Assert.Contains(
+            diagnostics.ToArray(),
+            line => line.Contains("FAULTED", StringComparison.Ordinal)
+                && line.Contains("InvalidOperationException", StringComparison.Ordinal)
+                && line.Contains("the WebView2 host refused to construct", StringComparison.Ordinal));
+
+        // Nothing opened, and the card is still live so the user can try again — WPF's dialog is
+        // dismissed and leaves a working card, which is the outcome being ported.
+        Assert.Null(dtrh.Coordinator.Picker);
+        Assert.Null(dtrh.Coordinator.HostWindow);
+        Assert.True(Descendant<Button>(window, "FallInButton").IsEnabled);
+        Assert.False(band.IsHitTestVisible);
+
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task AFailureLooksNothingLikeARefusal_AndTheTwoAreNeverUpTogether()
+    {
+        // THE SECOND TRAP, named at authoring. The band on this card already means "we could not
+        // determine your entitlement". If a failure rendered the same way, the user would learn
+        // that a broken app and an unknown subscription are the same event. Five independent
+        // differences are pinned here — element, livery, headline, wording, and mutual exclusion —
+        // because any one of them alone can be "tidied" away by a later edit.
+        var authority = new MutableAuthority(TierLookup.Entitled(EntitlementTier.Lab));
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-sp097-headless-" + Guid.NewGuid().ToString("N"));
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
+            EntitlementFactory = _ => new HostLoginEntitlement(new FixtureReader(), authority),
+        };
+        var trace = new StartupTrace();
+        ApplicationHost? host = null;
+        Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
+            Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+        var window = new MainWindow(host!);
+        window.Show();
+        window.UpdateLayout();
+        var dtrh = window.Dtrh;
+        dtrh.Descend = (_, _) => throw new TimeoutException("the descent never answered");
+
+        // Press 1: entitled, and the descent throws.
+        PressCardButton(window, "FallInButton");
+        await WaitForFaultAsync(dtrh);
+        window.UpdateLayout();
+
+        var gateBand = Descendant<Border>(window, "GateBand");
+        var faultBand = Descendant<Border>(window, "FaultBand");
+        var faultPlate = Descendant<Border>(window, "FaultBandPlate");
+        var faultText = Descendant<TextBlock>(window, "FaultBandText");
+
+        // (1) A different ELEMENT — not the refusal band recoloured.
+        Assert.NotSame(gateBand, faultBand);
+        Assert.True(faultBand.IsVisible);
+        Assert.False(gateBand.IsVisible);
+
+        // (2) A different LIVERY. Amber, carrying MessageBoxImage.Warning's severity across the
+        // idiom change; never the tier-2 violet the refusal wears.
+        var refusalRim = Color.Parse("#FFB47BFF");
+        Assert.Equal(Color.Parse("#FFF0A02E"), ((ISolidColorBrush)faultBand.BorderBrush!).Color);
+        Assert.NotEqual(refusalRim, ((ISolidColorBrush)faultBand.BorderBrush!).Color);
+        Assert.Equal(refusalRim, ((ISolidColorBrush)gateBand.BorderBrush!).Color);
+        Assert.NotEqual(
+            ((ISolidColorBrush)gateBand.Background!).Color, ((ISolidColorBrush)faultBand.Background!).Color);
+        Assert.NotEqual(
+            ((ISolidColorBrush)Descendant<Border>(window, "GateBandPlate").Background!).Color,
+            ((ISolidColorBrush)faultPlate.Background!).Color);
+        // …and the §10 D23 lesson still holds on the new plate: prose needs an OPAQUE ground,
+        // while the scrim stays translucent so the card underneath still reads.
+        Assert.Equal(0xFF, ((ISolidColorBrush)faultPlate.Background!).Color.A);
+        Assert.True(((ISolidColorBrush)faultBand.Background!).Color.A < 0xFF);
+        Assert.Contains(faultText, faultPlate.GetVisualDescendants());
+        Assert.True(faultPlate.Bounds.Width > 0 && faultPlate.Bounds.Height > 0);
+        Assert.True(faultPlate.Bounds.Width < faultBand.Bounds.Width);
+
+        // (3) A different HEADLINE, and (4) different WORDS: no refusal vocabulary anywhere.
+        var text = faultText.Text ?? "";
+        Assert.NotEqual(PlayPage.NotEntitledBandTitle, PlayPage.FaultBandTitleText);
+        Assert.NotEqual(PlayPage.UnverifiedBandTitle, PlayPage.FaultBandTitleText);
+        Assert.DoesNotContain("Tier 2 perk", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("upgrade your pledge", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("could not verify your entitlement", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not a decision about your account", text, StringComparison.Ordinal);
+
+        // (5) MUTUAL EXCLUSION, driven both ways. A later refused press replaces the fault plate
+        // rather than stacking beside it…
+        authority.Answer = TierLookup.NoEntitlement();
+        PressCardButton(window, "FallInButton");
+        await TestWait.Until(
+            () => dtrh.LastDecision is DtrhGateDecision.RefusedNotEntitled,
+            "the second press to be refused now the authority answers no pledge",
+            () => $"decision={dtrh.LastDecision}");
+        Assert.True(gateBand.IsVisible);
+        Assert.False(faultBand.IsVisible);
+        Assert.Equal(PlayPage.NotEntitledBandTitle, Descendant<TextBlock>(window, "GateBandTitle").Text);
+
+        // …and a later fault replaces the refusal.
+        authority.Answer = TierLookup.Entitled(EntitlementTier.Lab);
+        PressCardButton(window, "FallInButton");
+        await TestWait.Until(
+            () => dtrh.GateArrivals == 3 && Descendant<Border>(window, "FaultBand").IsVisible,
+            "the third press to fault and replace the refusal band",
+            () => $"arrivals={dtrh.GateArrivals}, fault={dtrh.LastFault}, decision={dtrh.LastDecision}");
+        Assert.False(gateBand.IsVisible);
+
+        window.Close();
+        await host!.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task WhenResolvingTheEntitlementTHROWS_ItStaysARefusal_AndLandsTheTierAuthorityFaultFallback()
+    {
+        // THE PATH NOTHING HAD EVER EXECUTED: DtrhLaunch's catch around ResolveAsync, which
+        // synthesises Unavailable(tier-authority-fault). HostLoginEntitlement is sealed and turns
+        // every DETERMINABLE failure into an outcome rather than a throw, so the only way in is a
+        // read seam that throws — which is a real shape (a DPAPI or filesystem call can throw
+        // outside the reader's own handling).
+        var diagnostics = new List<string>();
+        var (host, window, dtrh) = await BootAsync(
+            authorityAnswer: null, diagnostics, reader: new ThrowingReader());
+
+        PressCardButton(window, "FallInButton");
+
+        var decision = await WaitForDecisionAsync(dtrh);
+        var unverified = Assert.IsType<DtrhGateDecision.RefusedUnverified>(decision);
+        Assert.Equal(EntitlementReasonCodes.TierAuthorityFault, unverified.ReasonCode);
+
+        // It stays a REFUSAL, not the fault plate, and that is the point: the question asked was
+        // "what is this account entitled to" and the honest answer is that it could not be
+        // determined. Rendering it as "the app broke" would be as wrong as rendering it as
+        // "you are not a patron" (the §10 D21 rule, third direction).
+        Assert.True(Descendant<Border>(window, "GateBand").IsVisible);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+        Assert.Null(dtrh.LastFault);
+        Assert.Equal(PlayPage.UnverifiedBandTitle, Descendant<TextBlock>(window, "GateBandTitle").Text);
+        Assert.Contains(
+            "The entitlement lookup itself failed.",
+            Descendant<TextBlock>(window, "GateBandText").Text ?? "",
+            StringComparison.Ordinal);
+
+        // And the log names the reason code and the exception TYPE — but never the message, which
+        // on this one path can carry a path or a bearer (DtrhLaunch's own comment).
+        Assert.Contains(
+            diagnostics.ToArray(),
+            line => line.Contains("tier-authority-fault", StringComparison.Ordinal)
+                && line.Contains("refused(unverified:tier-authority-fault)", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            diagnostics.ToArray(),
+            line => line.Contains(ThrowingReader.SecretShapedMessage, StringComparison.Ordinal));
+
+        Assert.Null(dtrh.Coordinator.Picker);
+        Assert.Null(dtrh.Coordinator.HostWindow);
+
+        await host.ShutdownAsync();
+    }
+
     /// <summary>A readable shipping-app login. Fresh per call, because the capability disposes
     /// the read on every path — a shared instance would be a double-disposed token.</summary>
     private sealed class FixtureReader : IHostAuthTokenReader
@@ -396,10 +608,44 @@ public class PlayPageHeadlessTests
         public HostTokenRead Read() => HostTokenRead.Found(new HostAuthToken(FixtureToken));
     }
 
+    /// <summary>A read seam that THROWS rather than reporting a typed failure — the only input
+    /// that makes the sealed capability's ResolveAsync throw, and therefore the only way to reach
+    /// DtrhLaunch's tier-authority-fault fallback.</summary>
+    private sealed class ThrowingReader : IHostAuthTokenReader
+    {
+        /// <summary>Shaped like the thing the type-only logging rule exists to keep out of a log.</summary>
+        public const string SecretShapedMessage = @"C:\Users\someone\AppData\Local\ConditioningControlPanel\auth.bin";
+
+        public HostTokenRead Read() => throw new UnauthorizedAccessException(SecretShapedMessage);
+    }
+
     /// <summary>An authority with a scripted answer. It never sees a real credential.</summary>
     private sealed class FixtureAuthority(TierLookup answer) : IEntitlementTierSource
     {
         public Task<TierLookup> LookupAsync(HostAuthToken token, CancellationToken cancellationToken) =>
             Task.FromResult(answer);
+    }
+
+    /// <summary>An authority whose answer can change between presses — the gate resolves per press
+    /// precisely so it can (DtrhLaunch's class remarks), and mutual exclusion of the two bands is
+    /// only checkable across presses that decide differently.</summary>
+    private sealed class MutableAuthority(TierLookup answer) : IEntitlementTierSource
+    {
+        public TierLookup Answer { get; set; } = answer;
+
+        public Task<TierLookup> LookupAsync(HostAuthToken token, CancellationToken cancellationToken) =>
+            Task.FromResult(Answer);
+    }
+
+    /// <summary>The host's diagnostic sink, captured. The port's log is half of "not swallowed".</summary>
+    private sealed class CapturingLogSink(List<string> lines) : ILogSink
+    {
+        public void Log(string message)
+        {
+            lock (lines)
+            {
+                lines.Add(message);
+            }
+        }
     }
 }

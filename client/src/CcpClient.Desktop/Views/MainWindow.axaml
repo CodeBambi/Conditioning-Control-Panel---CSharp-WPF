@@ -245,6 +245,53 @@
       <Setter Property="CornerRadius" Value="12" />
     </Style>
 
+    <!-- SP-097: the FAILURE livery, and it exists to be told apart from the two refusal liveries
+         above at a glance. WPF's failure surface is a modal MessageBox with MessageBoxImage.Warning
+         (MainWindow/MainWindow.Lab.cs:164-165, :269-270, :336-337) — a different WINDOW, so WPF
+         never has to make a failure look unlike a refusal. The port reuses the plate idiom, which
+         means the differentiation has to be carried here.
+
+         Amber, not the tier-2 violet #FFB47BFF or the intake's #FFD05CE8: that is
+         MessageBoxImage.Warning's own severity signal, moved from a glyph to the rim and the
+         headline. The scrim stays TRANSLUCENT for PlayTabView.xaml:247-248's reason — the card
+         underneath still reads, so the user can see the thing that failed to open — and slightly
+         more opaque than the DTRH band because the plate on it carries more text.
+
+         A failure band that merely re-tinted the refusal band would still be one visual event; the
+         two are also different ELEMENTS on both pages, with different names, so no later edit can
+         render one through the other. -->
+    <Style Selector="Border.fault-band">
+      <Setter Property="Background" Value="#C8140A02" />
+      <Setter Property="BorderBrush" Value="#FFF0A02E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="15" />
+    </Style>
+    <!-- Opaque, exactly as lock-plate is and for the §10 D23 reason: prose on a translucent scrim
+         composites through the card and cannot be read. Its ground is warm rather than violet so
+         the plate reads as a different KIND of surface, not a recoloured one. -->
+    <Style Selector="Border.fault-plate">
+      <Setter Property="Background" Value="#FF241505" />
+      <Setter Property="BorderBrush" Value="#FFF0A02E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="20,16" />
+    </Style>
+    <Style Selector="TextBlock.fault-title">
+      <Setter Property="Foreground" Value="#FFF0A02E" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <!-- Same LineHeight as lock-text, and the same BLANK-LINE PROHIBITION rides with it: a text
+         containing an empty line wedges the layout pass on these plates in Avalonia 12.1.1
+         (measured this packet, §13 D43 — it wedges the refusal plate identically, so this is a
+         property of the plate and not of the fault surface). LaunchFaultText never emits one and
+         LaunchFaultTextTests holds that line over a derived set, never a hand-written one. -->
+    <Style Selector="TextBlock.fault-text">
+      <Setter Property="Foreground" Value="#FFF3E9DC" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="LineHeight" Value="18" />
+    </Style>
+
     <Style Selector="TextBlock.rail-brand">
       <Setter Property="Foreground" Value="#FFE8E0EE" />
       <Setter Property="FontWeight" Value="Bold" />

@@ -44,10 +44,16 @@ namespace CcpClient.HeadlessTests;
 public class IntakePageHeadlessTests
 {
     private static async Task<(ApplicationHost Host, MainWindow Window, List<IntakeLaunchCoordinator> Opened)>
-        BootAsync(IntakePassService.IIntakeEntitlementSource? entitlement = null)
+        BootAsync(IntakePassService.IIntakeEntitlementSource? entitlement = null, List<string>? diagnostics = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp095-headless-" + Guid.NewGuid().ToString("N"));
-        var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
+            LogSinkFactory = diagnostics is null
+                ? () => new DebugLogSink()
+                : () => new CapturingLogSink(diagnostics),
+        };
         var trace = new StartupTrace();
         ApplicationHost? host = null;
         var outcome = await StartupPhaseRunner.RunAsync(
@@ -298,6 +304,178 @@ public class IntakePageHeadlessTests
         await host.ShutdownAsync();
     }
 
+    // ---------- SP-097: the failure a user can see, and the two arms nothing had rendered ----------
+
+    [AvaloniaFact]
+    public async Task WhenOpeningTheRunThrows_TheUserIsTOLD_InWpfsOwnWords_AndTheDetailIsNotDropped()
+    {
+        // THE DEFECT THIS CLOSES. WPF wraps its whole handler and shows a warning MessageBox
+        // reading "Couldn't start Graded Intake:" plus ex.Message
+        // (MainWindow/MainWindow.Lab.cs:161-166). The port's button called IntakeLaunch.Launch()
+        // straight from the click handler with nothing wrapped past the gate, so a throw escaped
+        // into Avalonia's dispatcher and the page said nothing at all.
+        var diagnostics = new List<string>();
+        var entitlement = new MutableIntakeSource { IsLoggedInAnswer = false };
+        var (host, window, opened) = await BootAsync(entitlement, diagnostics);
+
+        Click(window, Door(window, "DoorIntake"));
+        var button = Descendant<Button>(window, "BeginIntakeButton");
+
+        // PRESS 1 — a real refusal, so the pass gate is genuinely UP before the fault arrives.
+        // Without this the "the gate came down" assertion below would be vacuous: a gate that was
+        // never raised is trivially invisible. PlayPage pins mutual exclusion in both directions
+        // and this is that shape, on the page whose gate has three refusals to be mistaken for.
+        Click(window, button);
+        window.UpdateLayout();
+        Assert.IsType<IntakePassDecision.RefusedNeedsAccount>(window.Intake.LastDecision);
+        Assert.True(Descendant<Border>(window, "PassGate").IsVisible);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+
+        // PRESS 2 — the pass now allows the run, and opening it throws.
+        entitlement.IsPremiumAnswer = true;
+        window.Intake.Open = _ => throw new IOException("the loopback origin could not bind");
+        Click(window, button);
+        window.UpdateLayout();
+
+        // The gate still said yes; the fault did not rewrite the verdict, and it did not escape.
+        Assert.IsType<IntakePassDecision.Proceed>(window.Intake.LastDecision);
+        Assert.IsType<IOException>(window.Intake.LastFault);
+        Assert.Empty(opened);
+
+        var band = Descendant<Border>(window, "FaultBand");
+        var text = Descendant<TextBlock>(window, "FaultBandText").Text ?? "";
+        Assert.True(band.IsVisible);
+        Assert.Equal("Couldn't start Graded Intake", IntakePage.FaultBandTitleText);
+        Assert.Equal(IntakePage.FaultBandTitleText, Descendant<TextBlock>(window, "FaultBandTitle").Text);
+        Assert.StartsWith("Couldn't start Graded Intake:", text, StringComparison.Ordinal);
+
+        // THE TRAP: not swallowed. Type AND message reach the user — AND the diagnostic, which is
+        // the half WPF keeps in its log (Lab.cs:163). Both ends are pinned here, as they are on
+        // the DTRH side, or "not swallowed" would be only half-proved on this page.
+        Assert.Contains("IOException", text, StringComparison.Ordinal);
+        Assert.Contains("the loopback origin could not bind", text, StringComparison.Ordinal);
+        Assert.Contains(
+            diagnostics.ToArray(),
+            line => line.Contains("intake: launch FAULTED", StringComparison.Ordinal)
+                && line.Contains("IOException", StringComparison.Ordinal)
+                && line.Contains("the loopback origin could not bind", StringComparison.Ordinal));
+
+        // THE SECOND TRAP: it is not the pass gate wearing a different hat. The gate was really UP
+        // one press ago, and raising the fault plate took it DOWN — different element, different
+        // livery, and none of the three refusals' words.
+        var gate = Descendant<Border>(window, "PassGate");
+        Assert.NotSame(gate, band);
+        Assert.False(gate.IsVisible);
+        Assert.Equal(string.Empty, Descendant<TextBlock>(window, "PassGateText").Text);
+        Assert.Equal(Color.Parse("#FFF0A02E"), ((ISolidColorBrush)band.BorderBrush!).Color);
+        Assert.NotEqual(
+            ((ISolidColorBrush)gate.BorderBrush!).Color, ((ISolidColorBrush)band.BorderBrush!).Color);
+        Assert.Equal(0xFF, ((ISolidColorBrush)Descendant<Border>(window, "FaultBandPlate").Background!).Color.A);
+        Assert.True(((ISolidColorBrush)band.Background!).Color.A < 0xFF);
+        Assert.DoesNotContain("You've taken your free Graded Intake", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not determine your Graded Intake pass", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sign in and this week's run is yours", text, StringComparison.Ordinal);
+        Assert.Contains("not a decision about your account", text, StringComparison.Ordinal);
+
+        // The button is still live, so the retry WPF's dismissed dialog leaves possible arrives.
+        Assert.True(button.IsEnabled);
+        Assert.False(band.IsHitTestVisible);
+
+        // PRESS 3 — the other direction: a later decision replaces the fault plate rather than
+        // stacking beside it.
+        window.Intake.Open = opened.Add;
+        Click(window, button);
+        window.UpdateLayout();
+        Assert.Equal(3, window.Intake.LaunchCount);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+        Assert.Same(window.Intake.Coordinator, Assert.Single(opened));
+
+        // PRESS 4 — and a later REFUSAL replaces it too, which is the leg that proves the two
+        // surfaces swap rather than merely that the fault one can be cleared.
+        entitlement.IsPremiumAnswer = false;
+        Click(window, button);
+        window.UpdateLayout();
+        Assert.IsType<IntakePassDecision.RefusedNeedsAccount>(window.Intake.LastDecision);
+        Assert.True(Descendant<Border>(window, "PassGate").IsVisible);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+        Assert.Equal(string.Empty, Descendant<TextBlock>(window, "FaultBandText").Text);
+
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task AnAccountlessSeam_ReachesTheNeedsAccountArm_ThroughThePage()
+    {
+        // THE FIRST OF TWO RENDER ARMS NOTHING HAD EVER EXECUTED. IntakePassGate.NeedsLogin is
+        // proved at the pure-gate layer, but IntakePage's `case RefusedNeedsAccount` had never run
+        // — this build ships no login provider, so the arm is unreachable on the product path
+        // (IntakePassService's own class remarks). It is implemented rather than collapsed because
+        // the state is real upstream (WPF Services/Progression/IntakePassService.cs:15, branch at
+        // :115), and an unexecuted arm is one refusal away from rendering as another.
+        var (host, window, opened) = await BootAsync(new SignedOutSource());
+
+        Click(window, Door(window, "DoorIntake"));
+        Click(window, Descendant<Button>(window, "BeginIntakeButton"));
+        window.UpdateLayout();
+
+        var decision = Assert.IsType<IntakePassDecision.RefusedNeedsAccount>(window.Intake.LastDecision);
+        Assert.Equal(IntakePassGate.NeedsAccountMessage, decision.Message);
+        Assert.Empty(opened);
+
+        // WPF's signed-out copy, verbatim (en.json:21-22), under WPF's own headline — and NOT the
+        // spent copy, which would tell a signed-out user their week was gone.
+        var gate = Descendant<Border>(window, "PassGate");
+        var text = Descendant<TextBlock>(window, "PassGateText").Text ?? "";
+        Assert.True(gate.IsVisible);
+        Assert.Equal(IntakePage.NeedsAccountBandTitle, Descendant<TextBlock>(window, "PassGateTitle").Text);
+        Assert.Equal("Claim your weekly pass", IntakePage.NeedsAccountBandTitle);
+        Assert.Equal(
+            "Your free Graded Intake is tied to your account. Sign in and this week's run is yours.", text);
+        Assert.DoesNotContain("You've taken your free Graded Intake", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not determine", text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ASpentWeek_ReachesTheSpentArm_ThroughThePage()
+    {
+        // THE SECOND ARM. The pass is spent through the REAL service by the REAL spend site's
+        // method — completion-spend only, WPF's sole spend path
+        // (Services/Progression/IntakePassService.cs:163-181) — rather than by fabricating a
+        // decision, so the store, the ISO week key and the gate all really participate.
+        var (host, window, opened) = await BootAsync(new FreeAccountSource());
+
+        Click(window, Door(window, "DoorIntake"));
+        window.Intake.Coordinator.EnsureContext().Pass.ConsumeForCompletedIntake();
+
+        Click(window, Descendant<Button>(window, "BeginIntakeButton"));
+        window.UpdateLayout();
+
+        var decision = Assert.IsType<IntakePassDecision.RefusedSpent>(window.Intake.LastDecision);
+        Assert.True(decision.DaysUntilNextPass >= 1, "WPF floors the count at 1 so the UI never says 'in 0 days' (IntakePassService.cs:80-86)");
+        Assert.Empty(opened);
+
+        // WPF's spent copy, and its two-key day handling (en.json:25,26 — "unlocks in 1 days" is
+        // the sort of thing that gets screenshotted, MainWindow.Lab.cs:416-418).
+        var text = Descendant<TextBlock>(window, "PassGateText").Text ?? "";
+        Assert.True(Descendant<Border>(window, "PassGate").IsVisible);
+        Assert.Equal(IntakePage.SpentBandTitle, Descendant<TextBlock>(window, "PassGateTitle").Text);
+        Assert.Equal("This week's intake is done", IntakePage.SpentBandTitle);
+        Assert.StartsWith("You've taken your free Graded Intake for this week.", text, StringComparison.Ordinal);
+        Assert.EndsWith("Patrons retake it as often as they like.", text, StringComparison.Ordinal);
+        Assert.Equal(
+            decision.DaysUntilNextPass == 1,
+            text.Contains("unlocks tomorrow", StringComparison.Ordinal));
+        Assert.DoesNotContain("unlocks in 1 days", text, StringComparison.Ordinal);
+        // Never the could-not-determine words: this user's week really WAS read and really is gone.
+        Assert.DoesNotContain("could not determine", text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Descendant<Border>(window, "FaultBand").IsVisible);
+
+        await host.ShutdownAsync();
+    }
+
     /// <summary>An authority that reports a patron. It is the SP-054 seam, not a stubbed
     /// decision: the real pass service still evaluates, and the real gate still decides.</summary>
     private sealed class PatronSource : IntakePassService.IIntakeEntitlementSource
@@ -309,5 +487,62 @@ public class IntakePageHeadlessTests
 #pragma warning disable CS0067 // never raised — this fixture's tier does not change mid-test
         public event Action? TierChanged;
 #pragma warning restore CS0067
+    }
+
+    /// <summary>A login provider that exists and reports LOGGED OUT — distinct from this build's
+    /// default, which has no provider at all and therefore reports <c>null</c>.</summary>
+    private sealed class SignedOutSource : IntakePassService.IIntakeEntitlementSource
+    {
+        public bool IsPremium => false;
+
+        public bool? IsLoggedIn => false;
+
+#pragma warning disable CS0067 // never raised — this fixture's tier does not change mid-test
+        public event Action? TierChanged;
+#pragma warning restore CS0067
+    }
+
+    /// <summary>A read account with no pledge: the free user whose one run a week is real.</summary>
+    private sealed class FreeAccountSource : IntakePassService.IIntakeEntitlementSource
+    {
+        public bool IsPremium => false;
+
+        public bool? IsLoggedIn => true;
+
+#pragma warning disable CS0067 // never raised — this fixture's tier does not change mid-test
+        public event Action? TierChanged;
+#pragma warning restore CS0067
+    }
+
+    /// <summary>An entitlement seam whose answer can change between presses. The pass is evaluated
+    /// per press precisely so it can (a week rolls over at Monday 00:00), and mutual exclusion of
+    /// the two bands is only checkable across presses that decide differently. TierChanged is
+    /// never raised, so the late-premium refund path stays out of these facts.</summary>
+    private sealed class MutableIntakeSource : IntakePassService.IIntakeEntitlementSource
+    {
+        public bool IsPremiumAnswer { get; set; }
+
+        public bool? IsLoggedInAnswer { get; set; }
+
+        public bool IsPremium => IsPremiumAnswer;
+
+        public bool? IsLoggedIn => IsLoggedInAnswer;
+
+#pragma warning disable CS0067 // never raised — a raise would exercise the refund hook, not this
+        public event Action? TierChanged;
+#pragma warning restore CS0067
+    }
+
+    /// <summary>The host's diagnostic sink, captured. The log is the other half of "not
+    /// swallowed", and a claim about it needs the lines.</summary>
+    private sealed class CapturingLogSink(List<string> lines) : ILogSink
+    {
+        public void Log(string message)
+        {
+            lock (lines)
+            {
+                lines.Add(message);
+            }
+        }
     }
 }

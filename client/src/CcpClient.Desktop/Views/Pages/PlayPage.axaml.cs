@@ -26,6 +26,10 @@ public partial class PlayPage : UserControl
     /// refusal of the person: nothing was determined about them (§10 D21).</summary>
     public const string UnverifiedBandTitle = "COULD NOT VERIFY";
 
+    /// <summary>WPF's own failure headline, <c>MainWindow/MainWindow.Lab.cs:269</c>. It is not a
+    /// caption for a refusal and must never be reused as one.</summary>
+    public const string FaultBandTitleText = LaunchFaultText.DtrhHeadline;
+
     public PlayPage(DtrhLaunch dtrh)
     {
         ArgumentNullException.ThrowIfNull(dtrh);
@@ -35,14 +39,26 @@ public partial class PlayPage : UserControl
         // app's login) and a click handler may not block the UI thread. The awaited work
         // resumes on this thread, so Decided lands here and renders below. Neither button is
         // ever disabled, in any branch — a gated press must ARRIVE (PlayTabView.xaml:503-506).
+        //
+        // Discarding the task is SAFE ONLY BECAUSE the launcher no longer lets one fault escape
+        // it (SP-097): DtrhLaunch wraps the whole flow the way WPF wraps its whole handler
+        // (MainWindow.Lab.cs:221-271) and raises Faulted. Before that, a throw from the descent
+        // landed in TaskScheduler.UnobservedTaskException at some later GC and the user saw
+        // nothing at all.
         FallInButton.Click += (_, _) => _ = dtrh.FallInAsync();
         QuickDropButton.Click += (_, _) => _ = dtrh.QuickDropAsync();
 
         dtrh.Decided += Render;
+        dtrh.Faulted += RenderFault;
     }
 
     private void Render(DtrhGateDecision decision)
     {
+        // A gate decision is the newest thing known about this card, so a failure plate from an
+        // earlier press is stale — including on the SAME press, where Decided fires before the
+        // descent that may fault.
+        ClearFault();
+
         switch (decision)
         {
             case DtrhGateDecision.Proceed:
@@ -62,6 +78,32 @@ public partial class PlayPage : UserControl
                 Show(UnverifiedBandTitle, unverified.Message);
                 break;
         }
+    }
+
+    /// <summary>
+    /// The launch threw. WPF's counterpart is a modal warning dialog carrying the same headline
+    /// and the exception's message (<c>MainWindow/MainWindow.Lab.cs:266-271</c>).
+    ///
+    /// <para>The refusal band comes DOWN first, unconditionally. The two surfaces mean different
+    /// things — "we could not determine your entitlement" and "the app broke" — and showing both
+    /// at once would put the user back where a single shared band would have left them.</para>
+    /// </summary>
+    private void RenderFault(Exception exception)
+    {
+        GateBand.IsVisible = false;
+        GateBandTitle.Text = string.Empty;
+        GateBandText.Text = string.Empty;
+
+        FaultBandTitle.Text = FaultBandTitleText;
+        FaultBandText.Text = LaunchFaultText.Compose(FaultBandTitleText, exception);
+        FaultBand.IsVisible = true;
+    }
+
+    private void ClearFault()
+    {
+        FaultBand.IsVisible = false;
+        FaultBandTitle.Text = string.Empty;
+        FaultBandText.Text = string.Empty;
     }
 
     private void Show(string title, string message)

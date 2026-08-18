@@ -31,6 +31,10 @@ public partial class IntakePage : UserControl
     /// of the person: nothing was determined about them (the §10 D21 rule).</summary>
     public const string UndeterminableBandTitle = "COULD NOT DETERMINE YOUR PASS";
 
+    /// <summary>WPF's own failure headline, <c>MainWindow/MainWindow.Lab.cs:164</c>. Not a caption
+    /// for any of the three refusals, and never to be reused as one.</summary>
+    public const string FaultBandTitleText = LaunchFaultText.IntakeHeadline;
+
     public IntakePage(IntakeLaunch intake)
     {
         ArgumentNullException.ThrowIfNull(intake);
@@ -41,10 +45,16 @@ public partial class IntakePage : UserControl
         BeginIntakeButton.Click += (_, _) => intake.Launch();
 
         intake.Decided += Render;
+        intake.Faulted += RenderFault;
     }
 
     private void Render(IntakePassDecision decision)
     {
+        // A pass decision is the newest thing known about this page, so a failure plate from an
+        // earlier press is stale — including on the SAME press, where Decided fires before the
+        // Open call that may throw.
+        ClearFault();
+
         switch (decision)
         {
             case IntakePassDecision.Proceed:
@@ -67,6 +77,32 @@ public partial class IntakePage : UserControl
                 Show(UndeterminableBandTitle, undeterminable.Message);
                 break;
         }
+    }
+
+    /// <summary>
+    /// The launch threw. WPF's counterpart is a modal warning dialog carrying this headline and
+    /// the exception's message (<c>MainWindow/MainWindow.Lab.cs:161-166</c>).
+    ///
+    /// <para>The pass gate comes DOWN first, unconditionally. That gate can say "you already had
+    /// your run this week"; leaving it up beside a fault would tell a user their week was gone
+    /// when what actually happened is that the app broke.</para>
+    /// </summary>
+    private void RenderFault(Exception exception)
+    {
+        PassGate.IsVisible = false;
+        PassGateTitle.Text = string.Empty;
+        PassGateText.Text = string.Empty;
+
+        FaultBandTitle.Text = FaultBandTitleText;
+        FaultBandText.Text = LaunchFaultText.Compose(FaultBandTitleText, exception);
+        FaultBand.IsVisible = true;
+    }
+
+    private void ClearFault()
+    {
+        FaultBand.IsVisible = false;
+        FaultBandTitle.Text = string.Empty;
+        FaultBandText.Text = string.Empty;
     }
 
     private void Show(string title, string message)
