@@ -24,7 +24,7 @@ today is *"the port could not verify your entitlement"*, never *"you are not a p
 | `Lifecycle/CompositionRoot.cs`, `Lifecycle/ApplicationHost.cs` | Amendment 4: the entitlement capability is composed once and **registered with a probe**, so the object the gate consults is the object the System page reports |
 | `App.axaml.cs` | `--dtrh-demo` uses the shell's one coordinator, with the reason for stepping past the gate written at the call site (amendment 5) |
 | `client/docs/wpf-surface-reachability.md` | §8.5 corrected (amendment 3) and a new §10 with nine divergence rows |
-| tests | `DtrhGateTests` (+10 results), `PlayPageHeadlessTests` (+8), and three existing tests updated for the fourth door and the new capability |
+| tests | `DtrhGateTests` (+10 results), `PlayPageHeadlessTests` (+9), and three existing tests updated for the fourth door and the new capability |
 
 ## 2. The three branches, and what proves each
 
@@ -147,9 +147,41 @@ Ten rows, `client/docs/wpf-surface-reachability.md` §10: **D14** four doors, **
 App Info & Data, **D18** the two checkboxes absent rather than disabled, **D19** no NEW pill,
 **D20** the tray decision, **D21** `Unavailable` as a deliberate improvement on WPF (which fails
 closed and renders "could not tell" as "no"), **D22** `--dtrh-demo` past the gate, **D23** the
-message plate under WPF's still-translucent scrim (§5a).
+message plate under WPF's still-translucent scrim (§5a), **D24** the unported drop-day grant
+(§6a).
 
 §8.5 is corrected in place per amendment 3, with a short note on why the error happened.
+
+## 6a. WPF GRANTS ON TWO CONDITIONS AND THIS PORT IMPLEMENTS ONE
+
+Caught by the final review. `TierGate.RequiresLab` is
+`App.Patreon?.HasLabAccess == true || App.DailyFree?.IsFreeToday(dailyKey) == true`
+(`Services/TierGate.cs:90-91`), and **both** DTRH call sites pass the KEYED overload
+(`MainWindow/MainWindow.Lab.cs:228,313`). The comment two lines above the `:228` I cited
+throughout says what the key is for: *"Keyed: on a server-declared DtRH drop day
+(DailyFreeService, off-pool override) the door opens for everyone"* (`:225-227`).
+
+**User-visible: on a drop day, a free user who would fall in on WPF is refused by the port** —
+and refused with the tier message, which on that day is not just a gap but wrong, because the
+feature really is free that day.
+
+**The port implements the tier term only, and that is the honest answer, not a shortcut.** There
+is no `DailyFreeService`, no `/config/daily-feature` fetch and no server. DTRH reaches that list
+**only** through a server override; the local rotation never lands on tier-2 content
+(`Services/DailyFreeService.cs:16-18,133-144`). A locally-decided "free today" would hand out
+tier-2 content on a date this port picked for itself — worse than a recorded gap. Recorded as
+§10 D24 with its close condition: when the port has a server-supplied daily-free key, the gate
+ORs it in where WPF does, with the same `"dtrh"` key.
+
+**How it stayed invisible, which matters more than the miss.** `DtrhGate.cs` cited
+`TierGate.cs:88-94` — the range that *contains* the second term — while describing only
+`HasLabAccess`, and `DtrhLaunch.cs` quoted the keyed call while describing unkeyed semantics.
+`wpf-surface-reachability.md:105-107`, in the §3 my own Step 1 told me to read first, already
+said *"Allowed with Lab access **or** when the server names `dtrh` as today's free feature"* —
+and I carried the second half of that sentence into D21 while dropping the first. This is the
+same failure as the §8.5 title correction, one layer down: **a partial reading written into a
+load-bearing comment, where it then reads as the whole truth to everyone after.** Both comments
+now name both terms and point at D24.
 
 ## 7. Floor
 
@@ -162,15 +194,35 @@ that arithmetic and nothing else; `floor.json` was never opened. Skips were exac
 pinned Linux-gated names, and the SP-057 data-root pin executed (it did not skip), so the floor
 was not blind.
 
+`pwsh client/tools/verify/self-test.ps1` — **SELF-TEST PASS**, run on the committed tree, with
+the layout probe reporting all four doors and `rail-door-selected-border` at 888/918 pixels
+(fraction 0.967). Adding the Play door did not disturb the harness SP-091 re-anchored, and the
+harness was run, never edited. It is a Completion Criterion and this is the assertion of it.
+
 ## 8. What this does NOT prove
 
 Nothing here is `presentation-verified`. Headless frames do not verify composited pixels, window
 activation, z-order, focus, animation or audio. Specifically undischarged:
 
-- **The minimize/restore.** That the shell really leaves the screen and comes back on a real
-  desktop, and that an owned `DtrhHostWindow` behaves correctly while its owner is minimized, is
-  a headed claim. The shape is the landed intake precedent, not new code, but this packet
-  captured nothing.
+- **The drop-day grant is ABSENT, not merely unproven.** §6a / §10 D24. Every other item on this
+  list is something built but unmeasured; this one is a capability the port does not have, and
+  on a WPF drop day a free user is refused here. Named separately so it is never read as a
+  testing gap.
+- **The minimize/restore has NO TEST AT ALL.** Nothing in either project touches `WindowState`:
+  `DuckOwner`/`RestoreOwner` are exercised by no test, headless or otherwise, and the entitled
+  paths in the suite stop before a host window ever opens, which is precisely what would raise
+  `HostOpened`. Calling it "the landed intake precedent, not new code" understated it — the
+  shape is precedent, but the prior-state branching (Maximized comes back Maximized, else Normal
+  + Activate) is **new code that nothing runs**. The safety property survives structurally
+  rather than by test: the port minimizes instead of `Hide()`, so the taskbar button is the way
+  back even if the restore logic were wrong. Whether the shell really leaves the screen and
+  returns, and how an owned `DtrhHostWindow` behaves while its owner is minimized, are headed
+  claims this packet captured nothing for.
+- **The `catch` fallback on the user path is exercised by nothing.** `DtrhLaunch.cs`'s
+  `catch (Exception ex)` around `ResolveAsync` maps a throw to
+  `Unavailable(tier-authority-fault)` so a fault can never become a dead control or a refusal of
+  the account. It sits on the product path and no test drives a throwing reader or authority
+  through it. The reasoning is sound and unverified; a throwing-seam test would close it cheaply.
 - **The DTRH host window itself.** No test here opens one: the entitled FALL IN stops at the
   picker and the entitled Quick Drop uses the descent seam, because `QuickStartAsync` builds a
   real WebView2 host a headless frame cannot present.

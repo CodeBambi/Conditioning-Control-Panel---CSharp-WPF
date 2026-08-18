@@ -23,7 +23,7 @@ public partial class PlayPage : UserControl
     public const string NotEntitledBandTitle = "LAB ONLY";
 
     /// <summary>The band caption for the branch WPF does not have. It must never read like a
-    /// refusal of the person: nothing was determined about them (§9 D21).</summary>
+    /// refusal of the person: nothing was determined about them (§10 D21).</summary>
     public const string UnverifiedBandTitle = "COULD NOT VERIFY";
 
     public PlayPage(DtrhLaunch dtrh)

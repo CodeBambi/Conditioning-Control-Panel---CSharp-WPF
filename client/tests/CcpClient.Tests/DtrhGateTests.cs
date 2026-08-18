@@ -83,7 +83,7 @@ public class DtrhGateTests
     {
         // Services/TierGate.cs:128,133 raises an 8s Warning toast carrying
         // Loc.GetF("tiergate_denied_lab", featureName) with a "See tiers" action. The port has
-        // no toast and no App Info & Data page (divergence §9 D17), so it carries the same
+        // no toast and no App Info & Data page (divergence §10 D17), so it carries the same
         // sentence and names the route in words.
         var decision = DtrhGate.Decide(new EntitlementOutcome.NotEntitled("the authority answered: no pledge"));
 

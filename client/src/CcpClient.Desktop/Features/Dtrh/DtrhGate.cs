@@ -40,10 +40,28 @@ public abstract record DtrhGateDecision
 ///
 /// <para><b>WPF parity.</b> The gate is the FIRST statement of both handlers:
 /// <c>if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;</c>
-/// (<c>MainWindow/MainWindow.Lab.cs:228</c> for FALL IN, <c>:313</c> for Quick Drop). The bar
-/// is tier 2 (<c>Services/TierGate.cs:88-94</c>, <c>HasLabAccess</c>), and the refusal names
-/// the tier and the upgrade route (<c>Services/TierGate.cs:128,133</c>;
+/// (<c>MainWindow/MainWindow.Lab.cs:228</c> for FALL IN, <c>:313</c> for Quick Drop). The
+/// refusal names the tier and the upgrade route (<c>Services/TierGate.cs:128,133</c>;
 /// <c>Localization/Languages/en.json:4704,4705</c>).</para>
+///
+/// <para><b>WPF GRANTS ON TWO CONDITIONS AND THIS GATE IMPLEMENTS ONE.</b> Read the whole
+/// expression, not its first line: <c>TierGate.RequiresLab</c> is
+/// <c>App.Patreon?.HasLabAccess == true || App.DailyFree?.IsFreeToday(dailyKey) == true</c>
+/// (<c>Services/TierGate.cs:90-91</c>), and both DTRH call sites pass the KEYED overload with
+/// <c>"dtrh"</c>. <c>MainWindow.Lab.cs:225-227</c> says what that buys: "on a server-declared
+/// DtRH drop day (DailyFreeService, off-pool override) the door opens for everyone".
+/// <list type="bullet">
+///   <item>TERM 1, the tier bar — <c>HasLabAccess</c>, tier 2. <b>Ported</b>, as
+///   <see cref="RequiredTier"/>.</item>
+///   <item>TERM 2, the drop-day grant — the server naming <c>"dtrh"</c> as today's free feature.
+///   <b>NOT ported</b>, and it cannot be: the port has no <c>DailyFreeService</c> and no
+///   <c>/config/daily-feature</c> fetch, and DTRH reaches that list only through a server
+///   override, never the local rotation (<c>Services/DailyFreeService.cs:16-18,143-144</c>).</item>
+/// </list>
+/// The user-visible consequence — a free user who would fall in on a WPF drop day is refused
+/// here — is recorded as a divergence with its close condition
+/// (wpf-surface-reachability.md §10 D24), because the port has nothing to wire and inventing a
+/// second grant condition out of nothing would be worse than the gap.</para>
 ///
 /// <para><b>Where the port improves on WPF, deliberately.</b> WPF has no third answer: with a
 /// null Patreon service <c>RequiresLab</c> evaluates <c>App.Patreon?.HasLabAccess == true</c>
@@ -51,7 +69,7 @@ public abstract record DtrhGateDecision
 /// "you are not a patron". The port refuses too (it must: an unknown entitlement may not open
 /// paid content) but it refuses with a DIFFERENT message that says which part could not be
 /// determined. That is a divergence, recorded as an improvement rather than smuggled in as
-/// parity (wpf-surface-reachability.md §9 D21).</para>
+/// parity (wpf-surface-reachability.md §10 D21).</para>
 ///
 /// <para><b>And this is not the rare branch.</b> This build's authority is
 /// <see cref="UnconfiguredTierSource"/>, so every real user today gets
@@ -63,7 +81,13 @@ public static class DtrhGate
     /// <summary>The feature name WPF passes to the gate (<c>MainWindow.Lab.cs:228,313</c>).</summary>
     public const string FeatureName = "Down the Rabbit Hole";
 
-    /// <summary>The bar. <c>TierGate.RequiresLab</c> is tier 2 (<c>Services/TierGate.cs:88-94</c>).</summary>
+    /// <summary>
+    /// The tier bar, and the ONLY one of <c>RequiresLab</c>'s two grant terms the port
+    /// implements: <c>App.Patreon?.HasLabAccess == true</c>, i.e. tier 2
+    /// (<c>Services/TierGate.cs:90</c>). The second term — <c>IsFreeToday("dtrh")</c> on a
+    /// server-declared drop day (<c>:91</c>) — has nothing to bind to in this port; see the
+    /// class remarks and wpf-surface-reachability.md §10 D24.
+    /// </summary>
     public const EntitlementTier RequiredTier = EntitlementTier.Lab;
 
     /// <summary>The tier livery's user-facing wording for tier 2+, baked into the badge art
@@ -78,7 +102,7 @@ public static class DtrhGate
     /// WPF's refusal toast carries a "See tiers" action opening App Info &amp; Data
     /// (<c>Services/TierGate.cs:133</c>; <c>en.json:4705</c>). The port has no such page, and a
     /// "See tiers" button with nowhere to go is a dead control — so the route is named in
-    /// words and the gap is admitted (divergence §9 D17).
+    /// words and the gap is admitted (divergence §10 D17).
     /// </summary>
     public const string UpgradeRoute =
         "See tiers in the shipping Conditioning Control Panel app (App Info & Data) — this port has no tiers page of its own yet.";

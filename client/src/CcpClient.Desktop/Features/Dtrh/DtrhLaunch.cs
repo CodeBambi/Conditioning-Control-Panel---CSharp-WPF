@@ -38,6 +38,15 @@ public sealed record DtrhHarnessOptions(
 /// the already-open check, before the picker, before anything. Resolving per press rather than
 /// caching one answer is deliberate: a cached verdict is a claim about a tier nobody re-checked.</para>
 ///
+/// <para><b>That call is KEYED, and the key is a second grant condition this port does not
+/// have.</b> The <c>"dtrh"</c> argument is not decoration: it selects the overload that ORs
+/// <c>IsFreeToday("dtrh")</c> into the verdict, so on a server-declared drop day WPF opens the
+/// door for a free user (<c>Services/TierGate.cs:90-91</c>; <c>MainWindow.Lab.cs:225-227</c>).
+/// <see cref="DtrhGate"/> implements the tier term only, because the port has no
+/// <c>DailyFreeService</c> to implement the other — divergence and close condition at
+/// wpf-surface-reachability.md §10 D24. Quoting the keyed call while describing unkeyed
+/// semantics is how that fact stayed invisible through a whole first submission.</para>
+///
 /// <para><b>The card is never disabled.</b> WPF's lock band is <c>IsHitTestVisible="False"</c>
 /// so the click passes through and is refused out loud (<c>Views/Tabs/PlayTabView.xaml:508-512</c>,
 /// style at <c>:251-258</c>); the one genuinely disabled part is the checkbox pair, which
@@ -50,7 +59,7 @@ public sealed record DtrhHarnessOptions(
 /// (<c>Services/Chaos/DtrhHostService.cs:156</c> -> <c>MainWindow/MainWindow.RemoteControl.cs:1517</c>
 /// -> <c>Services/Notifications/TrayIconService.cs:145-148</c>; restore at
 /// <c>DtrhHostService.cs:998</c>). The port does NOT tuck — see
-/// wpf-surface-reachability.md §9 D20 for the decision and what a user sees differently. It
+/// wpf-surface-reachability.md §10 D20 for the decision and what a user sees differently. It
 /// plain-minimizes and restores instead, reusing the port's own landed shape for exactly this
 /// situation (<c>Features/Intake/IntakeHostWindow.axaml.cs:120-162</c>), so the taskbar button
 /// is the way back at every instant and no icon has to exist for the window to return.</para>
@@ -172,7 +181,7 @@ public sealed class DtrhLaunch
     /// <summary>
     /// Plain minimize, recording the prior state so a maximized shell comes back maximized.
     /// Explicitly NOT a tray tuck: <c>Hide()</c> without a tray icon strands the user, and the
-    /// port's tray capability has no menu to bring the window back with (§9 D20).
+    /// port's tray capability has no menu to bring the window back with (§10 D20).
     /// </summary>
     private void DuckOwner()
     {

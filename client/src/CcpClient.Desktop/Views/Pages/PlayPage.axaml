@@ -14,7 +14,7 @@
     The one genuinely disabled part in WPF is the checkbox pair, and only because it writes
     settings through a binding with no handler to refuse in (MainWindow/MainWindow.PlayTab.cs:88-91).
 
-    WHAT IS OMITTED, AND WHY (divergences §9 D18, D19). WPF's card also carries "Announcements"
+    WHAT IS OMITTED, AND WHY (divergences §10 D18, D19). WPF's card also carries "Announcements"
     and "3D game (recommended)" checkboxes (PlayTabView.xaml:488,494) and a NEW pill (:432).
     Neither setting is ported, and unticking the 3D box selects a classic WPF descent the port
     does not have — so rendering them would be dead dials, which is the greyed control that
