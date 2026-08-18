@@ -23,6 +23,7 @@ namespace CcpClient.Tests;
 /// taskbar, about Explorer-restart recovery, or about Linux. Those are headed claims and a
 /// named manual gate (SP-093 record.md).</para>
 /// </summary>
+[Collection(nameof(RealDesktopCollection))]
 public class TrayCapabilityTests
 {
     [Fact]

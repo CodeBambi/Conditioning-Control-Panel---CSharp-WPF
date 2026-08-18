@@ -24,6 +24,7 @@ namespace CcpClient.Tests;
 /// here. Nor do they prove anything at all on Linux, where the overlay refuses by design (SP-099
 /// D56) and the facts below assert that the refusal is complete.</para>
 /// </summary>
+[Collection(nameof(RealDesktopCollection))]
 public class FlashDrawTests
 {
     // ---------------------------------------------------------------------------------

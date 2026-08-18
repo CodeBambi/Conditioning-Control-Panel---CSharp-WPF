@@ -288,6 +288,36 @@ function assertBuildIsFresh(project) {
   }
 }
 
+// SP-107: NAME the failures on red, from the TRX rather than from a six-line stdout tail.
+// The tail is where a red goes to die: SP-106's run 7 had SIX failing tests and the tail could
+// only carry a couple of lines of them, so the flake had to be reconstructed by hand from the
+// preserved results directory. A gate that says WHICH fact failed and WHY is the difference
+// between "the floor is flaky" and "two runs contended for the same point on the desktop".
+//
+// THIS IS THE ONLY THING THIS FUNCTION MAY EVER DO. It reports; it never re-runs anything, and
+// check-floor.mjs must never gain a retry: re-running until green is how an intermittent gets
+// laundered into a pass, which is the exact failure SP-107 exists to end.
+function namedFailures(resultsDir) {
+  let xml;
+  try {
+    const trx = fs.readdirSync(resultsDir).filter((f) => f.toLowerCase().endsWith(".trx"));
+    if (trx.length === 0) return [];
+    xml = fs.readFileSync(path.join(resultsDir, trx[0]), "utf8");
+  } catch {
+    return []; // no TRX to read is itself reported by the checks above
+  }
+  const unescape = (s) => s
+    .replace(/&#xD;/g, "").replace(/&#xA;/g, " ")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  const rows = [];
+  for (const m of xml.matchAll(/<UnitTestResult\b[^>]*?outcome="(Failed|Error|Timeout|Aborted)"[\s\S]*?<\/UnitTestResult>/g)) {
+    const name = m[0].match(/testName="([^"]*)"/)?.[1] ?? "(unnamed)";
+    const message = unescape(m[0].match(/<Message>([\s\S]*?)<\/Message>/)?.[1] ?? "").trim();
+    rows.push(`${name}\n      ${message.slice(0, 600)}`);
+  }
+  return rows;
+}
+
 function runProject(project, runDir) {
   assertBuildIsFresh(project);
   const resultsDir = path.join(runDir, project.name);
@@ -344,6 +374,10 @@ export function main() {
         failures.push(err.message);
       } else {
         failures.push(`${project.name}: unexpected wrapper error: ${err.message}`);
+      }
+      const named = namedFailures(resultsDir);
+      if (named.length > 0) {
+        failures.push(`--- ${project.name}: ${named.length} named failure(s) from the TRX ---\n    ${named.join("\n    ")}`);
       }
       if (output) {
         const tail = output.trimEnd().split("\n").slice(-6).join("\n");

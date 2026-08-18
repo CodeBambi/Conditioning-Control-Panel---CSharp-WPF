@@ -51,6 +51,20 @@ Every check in the manifest declares an evidence class:
 
 **A headed Windows/WSLg gate is NEVER dischargeable by a headless frame.** All current manifest checks against real captures are `presentation-verified`; `draw-verified` checks appear when a task adds headless-frame assertions (none exist yet — the headless spike asserts tree/layout/style/binding facts, not frames).
 
+## What tier 1 does NOT cover on the real desktop (SP-107, admitted rather than hidden)
+
+Some tier-1 facts are not headless. `OverlayCapabilityTests` (SP-099), `FlashDrawTests` (SP-100) and `TrayCapabilityTests` (SP-093) put REAL windows on the developer's REAL desktop inside `dotnet test` and ask the operating system about them: presence, z-order, click-through routing, layered alpha, composited pixels. That is deliberate and it is the port's only OS-level evidence for those capabilities. It also means those facts share a resource with everything else on the machine, so the boundary has to be stated.
+
+**Covered, and mechanically enforced.** Those three fixtures live in one xunit collection, `RealDesktopCollection`, which holds an exclusive machine-wide lease (`%TEMP%/ccp-real-desktop.lease`) for as long as it runs. So no two of them contend inside a process, and **no two `check-floor.mjs` runs contend across processes** — which matters because `client/tools/gate/with-slot.mjs --slots 3` permits three concurrent gate runs by design. `RealDesktopCollectionGuardTests` fails the suite when a class that touches the desktop is not in the collection. Measured: 3-way concurrent floor runs went from 8 red in 12 to 0 red in 18 (SP-107 record §2, §5).
+
+**NOT covered, and no in-process mechanism can cover it.** A FOREIGN topmost window can still own a point on the real desktop while these facts run:
+
+- the shipping WPF product re-asserting `HWND_TOPMOST` on a cadence (`Services/Flash/FlashService.cs:206-243`) — measured as the window that won the point while SP-099 was being written;
+- a locked workstation, a screen saver, a UAC secure desktop, a full-screen exclusive game, Magnifier, a mirror driver, or an RDP session;
+- any other application that raises itself over the test's rectangle at the moment the hit test is asked.
+
+When that happens the facts **fail loudly and name the winning window's class** (`OverlayInputNotReceived`, `OverlayNotOnTop`), which is correct: the port would rather see a red it can read than a green it cannot trust. None of these are `allowedSkips` candidates — that list is for properties of the MACHINE, and "something else was on top just then" is a property of the MOMENT. **The floor therefore claims exclusivity against other test processes and claims nothing at all against the rest of the desktop.** Sustained topmost under real contention, multi-monitor placement, cross-DPI behaviour and delivered (rather than routed) input remain tier-2 headed claims and the named manual gates in the SP-093/SP-099/SP-100 records.
+
 ## Check manifest schema
 
 `client/tools/verify/checks.json`:

@@ -1,0 +1,6 @@
+{
+  "packet": "SP-107-gate-determinism",
+  "unit": 4,
+  "headless": 0,
+  "reason": "real-desktop collection membership guard (2) and the machine-wide desktop lease held/exclusive/released facts (2)"
+}

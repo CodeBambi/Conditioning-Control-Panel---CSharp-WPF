@@ -32,6 +32,7 @@ namespace CcpClient.Tests;
 /// minutes of contention, and every part of Linux. Those are headed claims and a named manual gate
 /// (SP-099 record.md).</para>
 /// </summary>
+[Collection(nameof(RealDesktopCollection))]
 public class OverlayCapabilityTests
 {
     [Fact]
