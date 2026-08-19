@@ -118,6 +118,13 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     private int _solvedCount;
     private int _dismissedCount;
 
+    /// <summary>How many times this arm has put a firing on the clock. See
+    /// <see cref="NextInterval"/>: the first-card offset belongs to the first schedule of a RUN, and
+    /// getting that wrong is a hot loop rather than a nuance. Interlocked because
+    /// <see cref="NextInterval"/> runs off the gate, on the clock's thread, in the tail of a
+    /// firing.</summary>
+    private int _schedulesThisArm;
+
     public LockCardEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
@@ -280,14 +287,28 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
 
     /// <summary>
     /// Upstream's spacing (<c>LockCardService.cs:127-134</c>), with its first-card offset
-    /// (<c>:159-168</c>) applied while nothing has fired yet — see
-    /// <see cref="LockCardSchedule"/> for why the first one is not spaced like the others.
+    /// (<c>:159-168</c>) applied to the FIRST schedule of an arm — see <see cref="LockCardSchedule"/>
+    /// for why the first one is not spaced like the others.
+    ///
+    /// <para><b>"First schedule of this arm", and NOT "nothing has fired yet".</b> Those two differ
+    /// exactly when a firing came due and produced nothing — an empty phrase pool, a card already up,
+    /// a desktop that cannot take the input — and the difference is a hot loop rather than a nuance:
+    /// the offset is <c>roll * interval</c>, which can legitimately be ZERO, so a module that
+    /// re-armed at the offset after every unproductive firing would re-fire immediately, forever.
+    /// Found by writing the empty-pool fact, which hung. Upstream cannot have the bug because its
+    /// offset is computed once in <c>Start</c> (<c>LockCardService.cs:74</c>) while every
+    /// <c>Timer_Tick</c> recomputes the ±30 % interval (<c>:127-134</c>) whether or not the tick
+    /// showed anything — and this counter is how that distinction is expressed against a base class
+    /// that re-arms in the tail of every firing.</para>
     /// </summary>
-    protected override TimeSpan NextInterval() =>
-        FireCount == 0
+    protected override TimeSpan NextInterval()
+    {
+        var perHour = _preset.Current.PerHour;
+        return Interlocked.Increment(ref _schedulesThisArm) == 1
             ? TimeSpan.FromMinutes(LockCardSchedule.FirstCardDelayMinutes(
-                _preset.Current.PerHour, windowMinutes: null, _random.NextDouble()))
-            : LockCardSchedule.Interval(_preset.Current.PerHour, _random.NextDouble());
+                perHour, windowMinutes: null, _random.NextDouble()))
+            : LockCardSchedule.Interval(perHour, _random.NextDouble());
+    }
 
     /// <summary>
     /// One card comes due. Upstream's show path, in upstream's order and with upstream's answers to
@@ -445,6 +466,11 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     /// </summary>
     protected override void OnDisarmed()
     {
+        // The next arm is a new RUN and gets the first-card offset again — WPF recomputes it in
+        // Start() every time (LockCardService.cs:74). Reset here rather than in Arm because Disarm
+        // is the only place that runs exactly once per stop.
+        Interlocked.Exchange(ref _schedulesThisArm, 0);
+
         var attempt = Attempt;
         _presence.Dismiss();
         if (attempt is not null)

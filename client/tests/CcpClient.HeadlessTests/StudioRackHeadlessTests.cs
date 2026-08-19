@@ -11,6 +11,7 @@ using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Persistence;
 using CcpClient.Desktop.Session;
 using CcpClient.Desktop.Views;
+using CcpClient.Desktop.Views.Pages;
 using CcpClient.Tests;
 using Xunit;
 
@@ -1172,6 +1173,147 @@ public class StudioRackHeadlessTests
         window.UpdateLayout();
         Assert.True(boot.Session.BrainDrainPreset.Current.HighRefresh);
         Assert.False(boot.Session.BrainDrainPreset.Current.Enabled); // and it did NOT enable the module
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    // =================================================================================
+    //  SP-110 — the one row that ASKS
+    // =================================================================================
+
+    [AvaloniaFact]
+    public async Task TheLockCardPanelLEADSWithTheFactThatThisModuleInterruptsYou()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowLockCard"));
+
+        // THE INTERRUPTION WARNING IS LOAD-BEARING. Every other row on this page draws, tints,
+        // paces, ramps or plays OVER whatever the user is doing; this one takes the keyboard away
+        // from it. A user is entitled to know that before they tick the box, not the first time a
+        // card lands in the middle of somebody else's chat window.
+        //
+        // "LEADS" is a POSITIONAL claim, so it is pinned positionally as SP-109's missing-half
+        // notice is: the warning sits above the enable, so nobody can reach the switch without
+        // passing it. Pinning only the text would stay green if it were moved to the bottom.
+        var panel = Descendant<StackPanel>(window, "LockCardModulePanel");
+        var children = panel.Children.ToList();
+        var noticeIndex = children.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "LockCardInterruptionNotice"));
+        var enableIndex = children.FindIndex(c => c.Name == "LockCardEnableToggle");
+        Assert.True(noticeIndex >= 0 && enableIndex >= 0, "both the warning and the enable are on the panel");
+        Assert.True(
+            noticeIndex < enableIndex,
+            $"the interruption warning is at index {noticeIndex} and the enable at {enableIndex} — the warning "
+            + "must come first");
+
+        var notice = Descendant<TextBlock>(window, "LockCardInterruptionNotice");
+        Assert.Equal(InputPanelNotices.InterruptionNotice, notice.Text);
+        Assert.Contains("INTERRUPTS you", notice.Text!, StringComparison.Ordinal);
+
+        // And the ESCAPE PROMISE is in it, because it is the safety property this build rests on:
+        // upstream's own fall-open rule (LockCardWindow.xaml.cs:632, :610-622) evaluates to "Esc
+        // always closes" here, since there is no panic hook for strict mode to lean on.
+        Assert.Contains("Esc always closes a card in this build", notice.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheLockCardPanelHasNoSurfaceLine_AndSaysInsteadWhatTheOsWasAskedAboutTheKeyboard()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowLockCard"));
+
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("LockCardSurfaceState", names);
+
+        // Before anything has been asked the line names the MECHANISM and says nothing has been
+        // attempted — a fact about this session rather than a claim about the machine, and it is
+        // there before the user presses anything.
+        Assert.Equal(
+            "A card is a window that takes the keyboard. Nothing has been asked of the operating system yet.",
+            Descendant<TextBlock>(window, "LockCardCaptureState").Text);
+
+        // The scope notice names both halves that are NOT ported, where the user reads them.
+        var scope = Descendant<TextBlock>(window, "LockCardScopeNotice");
+        Assert.Equal(InputPanelNotices.ScopeNotice, scope.Text);
+        Assert.Contains("EVERY monitor", scope.Text!, StringComparison.Ordinal);
+        Assert.Contains("SPEAKING the phrase", scope.Text!, StringComparison.Ordinal);
+
+        // And the phrase pool is named with the file that edits it, so it is never a mystery.
+        var phrases = Descendant<TextBlock>(window, "LockCardPhraseState");
+        Assert.Contains("GOOD GIRLS OBEY", phrases.Text!, StringComparison.Ordinal);
+        Assert.Contains(LockCardPresetDocument.FileName, phrases.Text!, StringComparison.Ordinal);
+
+        // No control offers the two halves that do not exist. A greyed voice-mode switch would be
+        // the dead dial §9 D7 refuses, and worse: it would imply a microphone is one setting away.
+        Assert.DoesNotContain("LockCardVoiceToggle", names);
+        Assert.DoesNotContain("LockCardPhraseEditorButton", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheLockCardDialsAreTheRealPersistedOnes_AndMovingOneWritesThroughTheModule()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowLockCard"));
+
+        var frequency = Descendant<Slider>(window, "LockCardFrequencySlider");
+        Assert.Equal(LockCardSchedule.DefaultPerHour, frequency.Value);
+        Assert.Equal(LockCardSchedule.MinPerHour, frequency.Minimum);
+        Assert.Equal(LockCardSchedule.MaxPerHour, frequency.Maximum);
+
+        frequency.Value = 7;
+        window.UpdateLayout();
+        Assert.Equal(7, boot.Session.LockCardPreset.Current.PerHour);
+        Assert.Equal("7", Descendant<TextBlock>(window, "LockCardFrequencyValue").Text);
+
+        var repeats = Descendant<Slider>(window, "LockCardRepeatsSlider");
+        Assert.Equal(LockCardSchedule.DefaultRepeats, repeats.Value);
+        repeats.Value = 6;
+        window.UpdateLayout();
+        Assert.Equal(6, boot.Session.LockCardPreset.Current.Repeats);
+        Assert.Equal("6x", Descendant<TextBlock>(window, "LockCardRepeatsValue").Text);
+
+        // Strict is the module's own dial, not the rack's enable, so it writes through the module
+        // and does NOT switch the module on.
+        var strict = Descendant<CheckBox>(window, "LockCardStrictToggle");
+        Assert.False(boot.Session.LockCardPreset.Current.Strict);
+        strict.IsChecked = true;
+        window.UpdateLayout();
+        Assert.True(boot.Session.LockCardPreset.Current.Strict);
+        Assert.False(boot.Session.LockCardPreset.Current.Enabled);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheLockCardRowCarriesTheSameGrammarAsEveryOtherRow_IncludingItsQuickToggle()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        var label = Descendant<RadioButton>(window, "RowLockCard")
+            .GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal("Lock Card", label.Text);
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowLockCard").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        // WPF's right-click quick-toggle reaches this row like any other (StudioTabView.xaml.cs:660
+        // -> :1109-1133): nothing about the row tells the user it is a different KIND of module.
+        Assert.False(boot.Session.LockCardPreset.Current.Enabled);
+        Click(window, Descendant<RadioButton>(window, "RowLockCard"), MouseButton.Right);
+        Assert.True(boot.Session.LockCardPreset.Current.Enabled);
 
         await boot.Host.ShutdownAsync();
     }
