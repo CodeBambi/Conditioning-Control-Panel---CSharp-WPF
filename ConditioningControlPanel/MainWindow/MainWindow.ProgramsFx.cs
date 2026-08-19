@@ -126,8 +126,15 @@ namespace ConditioningControlPanel
         private DropShadowEffect? _programBossGlow;
         private AmbientFxCanvas? _programParticles;
 
-        /// <summary>Set when the comet was asked to run before the rail had a measured width.</summary>
-        private bool _programCometPending;
+        /// <summary>
+        /// How many times the comet has been deferred waiting for a measured rail. Capped by
+        /// <see cref="ProgramCometGate.MaxAttempts"/>; a counter rather than the one-shot bool this
+        /// replaced, because that bool was cleared before the retry recursed and so guarded nothing
+        /// (ccp-bugs #984, #993, #996, #1001). Reset on a successful run and by
+        /// <see cref="StopProgramIgnitionLoops"/>, so an in-flight retry can never latch the comet
+        /// off for the rest of the session.
+        /// </summary>
+        private int _programCometAttempts;
 
         /// <summary>Seconds the live session sheen is currently sweeping at, so heat can retune it.</summary>
         private double _programSheenSeconds;
@@ -662,8 +669,19 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// T4: a comet runs the day rail. Skipped (and retried once at Loaded priority) while the
-        /// rail has no measured width - the travel distance IS that width.
+        /// T4: a comet runs the day rail. Skipped (and re-asked, at most
+        /// <see cref="ProgramCometGate.MaxAttempts"/> times and always BELOW input priority) while
+        /// the rail has no measured width - the travel distance IS that width.
+        ///
+        /// <para><b>This method used to hard-freeze the app</b> (ccp-bugs #984, #993, #996, #1001).
+        /// Three independent faults lined up: the width was read from a host that is authored
+        /// Collapsed and only shown further down, so it was structurally always 0; the retry
+        /// re-posted at DispatcherPriority.Loaded (6), which outranks Input (5); and it cleared its
+        /// own one-shot guard before recursing, with no cap. The result was an unbounded chain of
+        /// above-input work - a window that still rendered and never logged a crash, but accepted
+        /// no clicks, on every visit to a Programs tab at Ignited heat with Motion FX at Full. All
+        /// three are fixed below and each one alone would be enough; the effect is cosmetic, so its
+        /// worst failure must be "no comet", never "no app".</para>
         /// </summary>
         private void ApplyProgramRailComet(ProgramsTabView tab, bool ambient)
         {
@@ -675,19 +693,38 @@ namespace ConditioningControlPanel
                 {
                     tab.RailCometHost.Visibility = Visibility.Collapsed;
                     tab.RailComet.Opacity = 0;
+                    _programCometAttempts = 0;
                     return;
                 }
 
-                var width = tab.RailCometHost.ActualWidth;
-                if (width < 60)
+                // LAYER 1. Show the host BEFORE measuring it. WPF never measures a collapsed
+                // element, so reading ActualWidth while it is still Collapsed can only ever
+                // return 0 - the gate below could not pass, ever.
+                tab.RailCometHost.Visibility = Visibility.Visible;
+
+                var gate = ProgramCometGate.Decide(
+                    tab.RailCometHost.ActualWidth, tab.ProgramDayRail.ActualWidth, _programCometAttempts);
+                _programCometAttempts = gate.Attempts;
+
+                if (gate.Action != ProgramCometAction.Run)
                 {
-                    if (_programCometPending) return;
-                    _programCometPending = true;
+                    tab.RailComet.Opacity = 0;
+                    // LAYER 3: out of attempts. Park the host and leave the rail alone.
+                    if (gate.Action == ProgramCometAction.GiveUp)
+                    {
+                        tab.RailCometHost.Visibility = Visibility.Collapsed;
+                        return;
+                    }
+
                     var dispatcher = Application.Current?.Dispatcher;
                     if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-                    dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+
+                    // LAYER 2: Background (4) sits BELOW Input (5). Layout still runs first
+                    // (Render/Loaded outrank it), so the re-ask sees a measured rail - but a
+                    // pathological repeat can only ever degrade to "no comet", never to a window
+                    // that ignores the mouse. The counter is NOT cleared before recursing.
+                    dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
                     {
-                        _programCometPending = false;
                         try
                         {
                             var live = ProgramsTab;
@@ -698,9 +735,9 @@ namespace ConditioningControlPanel
                     return;
                 }
 
+                var width = gate.Width;
                 tab.RailComet.Fill = _programCometBrush;
                 tab.RailComet.Opacity = 1;
-                tab.RailCometHost.Visibility = Visibility.Visible;
 
                 var run = new DoubleAnimation(-140, width + 40,
                     TimeSpan.FromSeconds(ProgramHeat.CometLapSeconds(_programHeat)))
@@ -801,6 +838,9 @@ namespace ConditioningControlPanel
         private void StopProgramIgnitionLoops()
         {
             _programFxSignature = null;
+            // Re-arm the comet with a full attempt budget. Without this a tab hidden mid-retry
+            // would come back with the counter already spent and never light the rail again.
+            _programCometAttempts = 0;
             try
             {
                 _programParticles?.Stop();
