@@ -266,10 +266,18 @@ public sealed class BubblePopEffect : OwnedSessionEffect
     /// mid-session clears the desktop too.
     ///
     /// <para><b>Thread.</b> Called from a teardown thread as well as from a gesture, and a native
-    /// window belongs to the thread that made it, so the withdraw is POSTED. The
-    /// <see cref="IBubblePopSurface.Showing"/> test in front of it is not an optimisation: one
+    /// window belongs to the thread that made it, so the withdraw is POSTED.</para>
+    ///
+    /// <para><b>The <see cref="IBubblePopSurface.Showing"/> test in front of it IS only a cost
+    /// saving here, and that is a correction rather than a claim.</b> One
     /// <see cref="OwnedSessionEffect.Disarm"/> reaches this three times (directly, from the
-    /// generation's cancellation callback, and from the parked operation's tail).</para>
+    /// generation's cancellation callback, and from the parked operation's tail), and Pink Filter's
+    /// identical guard is load-bearing for its surface. This presenter's <c>Withdraw</c> is
+    /// idempotent under its own gate — after the first call its target map is empty, both cadence
+    /// handles are null and <c>_engaged</c> is false — so a triple post produces one teardown and
+    /// two no-ops. The mutation that removes this guard SURVIVES the sweep for exactly that reason
+    /// (M-ch), and the record disposes of it as an equivalent mutant with that proof rather than
+    /// inventing a fact to pin a difference nobody can observe.</para>
     /// </summary>
     protected override void ReleaseWork()
     {
