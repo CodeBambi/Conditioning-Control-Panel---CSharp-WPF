@@ -207,8 +207,15 @@ public class ContinuousEffectSpineTests
 
         // Subliminals ships off, and so does SP-108's Intensity Ramp
         // (CCP.Core/Models/AppSettings.cs:2574-2579); the continuous module took the session.
+        //
+        // SP-109 adds two more modules that ship off — Mind Wipe and Brain Drain's audio half — and
+        // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
+        // four modules declined the same session for the same reason and all four are named.
         Assert.Equal(
-            [SubliminalsEffect.EffectId, IntensityRampEffect.EffectId],
+            [
+                SubliminalsEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
+                IntensityRampEffect.EffectId,
+            ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }
 
@@ -231,10 +238,16 @@ public class ContinuousEffectSpineTests
         // LAST for two upstream reasons that agree: the rack puts TIMING after EFFECTS, GAMES & CARDS
         // and IMMERSION (StudioTabView.xaml.cs:482-541), and StartEngine starts the ramp timer after
         // every effect service (MainWindow.StartStop.cs:265-269).
+        //
+        // SP-109 adds two IMMERSION rows, and they land BETWEEN the effects and the ramp — which is
+        // where both orders that matter put them, and they agree again: the rack's group order, and
+        // StartEngine's own (Mind Wipe :229-230 and Brain Drain :241-244 come after every effect
+        // service and before the ramp timer). Mind Wipe first, Brain Drain second, in both.
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, IntensityRampEffect.EffectId,
+                PinkFilterEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
+                IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

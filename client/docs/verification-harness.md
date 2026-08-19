@@ -51,6 +51,60 @@ Every check in the manifest declares an evidence class:
 
 **A headed Windows/WSLg gate is NEVER dischargeable by a headless frame.** All current manifest checks against real captures are `presentation-verified`; `draw-verified` checks appear when a task adds headless-frame assertions (none exist yet — the headless spike asserts tree/layout/style/binding facts, not frames).
 
+## Audio evidence class (SP-109)
+
+Audio needs its own class, and for a reason none of the visual classes have: **every audio failure
+mode is inaudible from inside the process, and silence is indistinguishable from a working clip
+played too quietly to hear.** A drawing capability that lies is at least visibly wrong — nothing
+appears. An audio capability that lies looks exactly like an audio capability that works. So the
+class is defined by WHAT WAS ASKED OF THE OPERATING SYSTEM, never by what the product's own call
+returned.
+
+- **`render-session-verified`** — the check asserts that the operating system reports an **active
+  audio render session owned by this process**, read back through an instrument INDEPENDENT of the
+  code that opened the device. On Windows that is `IMMDeviceEnumerator::EnumAudioEndpoints` for the
+  endpoint count, `IAudioSessionManager2::GetSessionEnumerator` +
+  `IAudioSessionControl2::GetProcessId` for ownership, and `IAudioSessionControl::GetState` for
+  liveness. Satisfiable inside `dotnet test` on a Windows box with a render endpoint
+  (`AudioCapabilityTests`), and on a box with none it is satisfied by both sides going false
+  together — the assertion still bites.
+- **`render-metered`** — the strongest automated audio claim this port can make: the OS's own peak
+  meter (`IAudioMeterInformation::GetPeakValue`) read a **non-zero** sample level on this process's
+  stream while a clip played, and **zero** on the same stream with the device open and nothing cued.
+  The second half is what stops the first from passing vacuously: a product that opened a device and
+  played nothing reads zero and reds. The number is produced by the Windows audio engine from the
+  samples it consumed from us; it is not a value this process chose.
+- **`audible-verified`** — **a human confirmed they heard it.** NOT satisfiable by any automated
+  step on any platform, Windows included. It is a manual gate and it is the only thing that closes
+  the last link.
+
+**A `render-metered` green is never an `audible-verified` green,** and the gap is not a formality.
+`render-metered` proves samples reached the Windows audio ENGINE. It says nothing about endpoint
+mute, endpoint volume, an exclusive-mode holder, a disabled jack, a DAC, an amplifier, or whether
+anything is plugged in. **A virtual or RDP sink satisfies every automated audio check in this
+document with no physical output anywhere** — the port has already recorded exactly that class on
+WSLg (`client/docs/audio-backend-spike.md:24,88`: a single "RDP Sink", and no `pactl` present to
+check it).
+
+**What tier 1 cannot cover for audio, stated as its own list rather than folded into the desktop
+section below.** Tier 1 runs `AudioCapabilityTests` against this machine's real endpoint, so it
+carries the same real-resource caveat as the overlay and tray fixtures — plus three of its own:
+
+1. **Nothing is heard.** No tier discharges `audible-verified`; there is no capture device in the
+   harness and adding one would prove the room, not the app.
+2. **Content is not checked.** A peak proves non-silent samples, not which clip, not the right
+   channel, not the intended moment. Two modules cueing the wrong clip each would pass every check.
+3. **A muted endpoint or a muted session is a property of the MACHINE and would legitimately red
+   `render-metered`.** That is the honest failure and it must not be answered by weakening the
+   assertion or by adding a name to `allowedSkips` — the assertion is doing exactly its job.
+
+**Linux audio is `render-session-verified`-INCAPABLE in this build**, and refuses in type rather than
+claiming anything: the backend works there (SoundFlow ships `libminiaudio.so` per-RID) and the
+read-back does not exist, so `AudioPresenceFactory` returns a typed refusal carrying its own four-step
+manual gate (`Audio/AudioPresenceFactory.LinuxManualGate` — `pactl list short sinks`,
+`pactl list sink-inputs` filtered on `application.process.id`, `pw-dump` for the rendering node, and a
+human). WSLg cannot discharge it.
+
 ## What tier 1 does NOT cover on the real desktop (SP-107, admitted rather than hidden)
 
 Some tier-1 facts are not headless. `OverlayCapabilityTests` (SP-099), `FlashDrawTests` (SP-100) and `TrayCapabilityTests` (SP-093) put REAL windows on the developer's REAL desktop inside `dotnet test` and ask the operating system about them: presence, z-order, click-through routing, layered alpha, composited pixels. That is deliberate and it is the port's only OS-level evidence for those capabilities. It also means those facts share a resource with everything else on the machine, so the boundary has to be stated.

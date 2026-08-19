@@ -111,6 +111,8 @@ public sealed class WasapiAudioPresence : IAudioPresence
     /// <inheritdoc/>
     public CapabilityState Open()
     {
+        bool alreadyUp;
+        string? name;
         lock (_gate)
         {
             if (_disposed)
@@ -119,38 +121,48 @@ public sealed class WasapiAudioPresence : IAudioPresence
                     AudioReasonCodes.RenderPresenceDisposed,
                     "this audio presence was disposed; its device is gone and it will never render again")));
             }
+
+            alreadyUp = _deviceUp;
+            name = _endpointName;
         }
 
-        // Asked BEFORE anything is attempted, and it is a real OS question rather than a platform
-        // check: zero endpoints is WPF's own suppression precondition (Services/AudioService.cs:163-166,
-        // issue #779 — suppressed with a cooldown, never session-permanent).
-        var endpoints = _endpointCount();
-        if (endpoints <= 0)
+        // IDEMPOTENT, and the shape of the idempotence is load-bearing. A second Open must NOT
+        // re-init the device: the two audio modules share one presence, so a mid-session quick-toggle
+        // of one of them would otherwise stop and re-create the device out from under the other one's
+        // playing clip. What a second Open DOES do is ask the OS again — which is the whole point of
+        // the call, and the only part worth repeating.
+        if (!alreadyUp)
         {
-            return Remember(new CapabilityState.DependencyMissing(
-                "an active audio render endpoint",
-                new CapabilityReason(
-                    AudioReasonCodes.NoRenderEndpoint,
-                    "the OS reports no active render endpoint, so there is nowhere for this process to "
-                    + "play. Nothing was attempted. Plugging in or enabling an output device and "
-                    + "starting the session again re-asks — this is not latched for the process")));
-        }
+            // Asked BEFORE anything is attempted, and it is a real OS question rather than a
+            // platform check: zero endpoints is WPF's own suppression precondition
+            // (Services/AudioService.cs:163-166, issue #779 — suppressed with a cooldown, never
+            // session-permanent).
+            if (_endpointCount() <= 0)
+            {
+                return Remember(new CapabilityState.DependencyMissing(
+                    "an active audio render endpoint",
+                    new CapabilityReason(
+                        AudioReasonCodes.NoRenderEndpoint,
+                        "the OS reports no active render endpoint, so there is nowhere for this process "
+                        + "to play. Nothing was attempted. Plugging in or enabling an output device and "
+                        + "starting the session again re-asks — this is not latched for the process")));
+            }
 
-        // Device call OUTSIDE the gate: TryInit re-enumerates and opens a native device (the F1
-        // discipline lives in the backend) and must never be held across this class's lock.
-        var initialised = _backend.TryInit(null, out var error);
-        if (!initialised)
-        {
-            return Remember(new CapabilityState.Unavailable(new CapabilityReason(
-                AudioReasonCodes.RenderDeviceRefused,
-                $"an endpoint exists and the native device open was really attempted and refused: {error}")));
-        }
+            // Device call OUTSIDE the gate: TryInit re-enumerates and opens a native device (the F1
+            // discipline lives in the backend) and must never be held across this class's lock.
+            if (!_backend.TryInit(null, out var error))
+            {
+                return Remember(new CapabilityState.Unavailable(new CapabilityReason(
+                    AudioReasonCodes.RenderDeviceRefused,
+                    $"an endpoint exists and the native device open was really attempted and refused: {error}")));
+            }
 
-        var name = _backend.EnumerateDevices().FirstOrDefault();
-        lock (_gate)
-        {
-            _deviceUp = true;
-            _endpointName = name;
+            name = _backend.EnumerateDevices().FirstOrDefault();
+            lock (_gate)
+            {
+                _deviceUp = true;
+                _endpointName = name;
+            }
         }
 
         // THE EARNING STEP. Everything above is this process talking to itself; this is the OS

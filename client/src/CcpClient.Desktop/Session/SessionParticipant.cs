@@ -57,7 +57,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
         ISpiralSurface? spiralSurface = null,
         IAudioPresence? audio = null,
         IAudioCuePool? mindWipeClips = null,
-        IAudioCuePool? brainDrainClips = null)
+        IAudioCuePool? brainDrainClips = null,
+        Random? mindWipeRandom = null,
+        Random? brainDrainRandom = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -243,7 +245,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
             sessionClock,
             mindWipeClips ?? new AudioCuePool(AssetsRootFor(dataDirectory), MindWipeEffect.ClipFolderName),
             _audio,
-            _mindWipePreset);
+            _mindWipePreset,
+            // Injectable for the same reason the other four modules' Random is: the ROLL is what a
+            // fact has to make deterministic, and the PROBABILITY it is compared against must stay
+            // the module's own arithmetic rather than a number a test double re-derives.
+            mindWipeRandom);
 
         // HALF a row, deliberately and permanently: upstream's same flag also drives a desktop-wide
         // blur this port cannot draw (OverlayService.cs:382-386, :1965-1995). The row's title, its
@@ -254,7 +260,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             sessionClock,
             brainDrainClips ?? new AudioCuePool(AssetsRootFor(dataDirectory), BrainDrainEffect.ClipFolderName),
             _audio,
-            _brainDrainPreset);
+            _brainDrainPreset,
+            brainDrainRandom);
 
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the

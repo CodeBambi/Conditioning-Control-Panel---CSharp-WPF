@@ -1,0 +1,440 @@
+using CcpClient.Desktop.Audio;
+using CcpClient.Desktop.Capabilities;
+using Xunit;
+
+namespace CcpClient.Tests;
+
+/// <summary>
+/// SP-109 — <b>the packet's central trap, stated as assertions.</b>
+///
+/// <para>An earlier wave refused to ship an audio module because "nothing in this project can
+/// actually verify that a sound played". A test that asserted <c>Play()</c> returned would be the
+/// shape this port has rejected four times: the tray method returning, the overlay flag being set,
+/// the fake dial re-imposing its own clamp. So not one fact in this file reads a return value from
+/// the product as its evidence. Every one of them asks the <b>Windows audio engine</b>, through
+/// <see cref="WasapiRenderProbe"/>'s own independent COM declarations, and compares the OS's answer
+/// with the product's claim.</para>
+///
+/// <para><b>The four links, and each fact says which one it pins:</b></para>
+/// <list type="number">
+/// <item>the OS reports N active render endpoints;</item>
+/// <item>after the port opens a device, the OS holds a render session whose owning process id is
+/// this process — one it did not hold a moment earlier;</item>
+/// <item>that session's state is <c>AudioSessionStateActive</c>, and it is not after teardown;</item>
+/// <item><b>the OS's own peak meter reads a non-zero level on this process's stream while a clip
+/// plays, and ZERO on the same stream with the device open and nothing cued.</b></item>
+/// </list>
+///
+/// <para><b>Where the chain stops, and no fact here pretends otherwise.</b> Link 4 proves the
+/// Windows audio engine metered non-silent samples from us. It does not prove the endpoint was
+/// unmuted, that a DAC converted anything, that speakers were attached, or that a human heard it.
+/// Those are a named manual gate (<c>record.md</c>), and a green run here never discharges it.</para>
+///
+/// <para><b>Why the shape is <c>Assert.Equal(machineFact, productClaim)</c>.</b> A box with no
+/// output device is a real machine and the port must be honest there too: both sides of every
+/// equality below go false together, so the fact still bites rather than being skipped. That is
+/// <see cref="TrayCapabilityTests"/>' discipline and the reason no predicate appears in a fact body.</para>
+/// </summary>
+public class AudioCapabilityTests
+{
+    // =================================================================================
+    //  the earned Available — links 1, 2 and 3
+    // =================================================================================
+
+    [Fact]
+    public void BeforeAnyDeviceIsOpened_TheOsHoldsNoRenderSessionForThisProcess()
+    {
+        // THE NEGATIVE CONTROL FOR THE WHOLE FILE. If this were false the oracle would be
+        // certifying a session that exists for some other reason, and every fact below would pass
+        // without the product doing anything at all.
+        var before = WasapiRenderProbe.SessionForThisProcess();
+
+        Assert.False(
+            before.SessionForThisProcess,
+            $"the OS already holds a render session for pid {Environment.ProcessId} before this suite "
+            + $"opened one: {before}");
+    }
+
+    [Fact]
+    public async Task OpenClaimsAvailableEXACTLYWhenTheOsReportsAnActiveRenderSessionForThisProcess()
+    {
+        var clip = NewClip();
+        var run = AudioObservations.FullLifecycle(clip, WaitUntil);
+
+        // The claim and the OS's answer, side by side. Not "Open returned Available" — that is the
+        // banned shape. The equality is what makes a presence that shortcut the read-back fail.
+        Assert.Equal(run.OsHeldActiveSessionAfterOpen, run.ClaimedAvailableOnOpen);
+
+        // And the machine's own property decides which way both of them go, established by the
+        // probe rather than by the product.
+        Assert.Equal(run.MachineCanRender, run.ClaimedAvailableOnOpen);
+        Assert.Equal(run.MachineCanRender, run.ClaimedRenderingAfterOpen);
+
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task TheAvailableDetailNamesTheApiThatEarnedIt_AndRefusesTheClaimItCannotMake()
+    {
+        var run = AudioObservations.FullLifecycle(NewClip(), WaitUntil);
+
+        // A detail that said "audio is working" would be a sentence; this one has to name what was
+        // asked, which is what a bug report quotes and what a reviewer can check.
+        var detail = run.OpenState switch
+        {
+            CapabilityState.Available a => a.Detail,
+            CapabilityState.Unavailable u => u.Reason.Detail,
+            CapabilityState.DependencyMissing m => m.Reason.Detail,
+            _ => run.OpenState.ToString() ?? string.Empty,
+        };
+
+        Assert.Equal(run.MachineCanRender, detail.Contains("IAudioSessionControl2::GetProcessId", StringComparison.Ordinal));
+        Assert.Equal(run.MachineCanRender, detail.Contains("AudioSessionStateActive", StringComparison.Ordinal));
+
+        // The ceiling, stated in the product's own words rather than only in a record file.
+        Assert.Equal(
+            run.MachineCanRender,
+            detail.Contains("does NOT mean", StringComparison.Ordinal)
+            && detail.Contains("anybody heard it", StringComparison.Ordinal));
+
+        await Task.CompletedTask;
+    }
+
+    // =================================================================================
+    //  LINK 4 — the strongest fact this machine can produce, with its own negative control
+    // =================================================================================
+
+    [Fact]
+    public async Task WhileAClipPlays_WindowsMetersANonZeroPeakOnThisProcessesOwnStream()
+    {
+        var run = AudioObservations.FullLifecycle(NewClip(), WaitUntil);
+
+        // The number does not come from this process. IAudioMeterInformation::GetPeakValue reports
+        // what the Windows audio engine measured on the samples it consumed from our stream.
+        Assert.Equal(run.MachineCanRender, run.OsMeteredNonZeroPeakWhileRendering);
+        Assert.Equal(run.MachineCanRender, run.OsSawActiveSessionWhileRendering);
+
+        // AND THE CONTROL THAT MAKES IT BITE: the same meter, on the same stream, with the device
+        // open and started and nothing cued, reads zero. Without this line the fact above would be
+        // satisfied by opening a device and playing nothing — which is precisely the "the method
+        // returned" evidence this packet exists to refuse.
+        Assert.Equal(
+            0f,
+            run.PeakWithDeviceOpenAndNothingCued);
+
+        Assert.True(
+            !run.MachineCanRender || run.PeakWhileRendering > run.PeakWithDeviceOpenAndNothingCued,
+            $"the metered peak did not rise once a clip was cued. {run.Evidence}. A machine whose "
+            + "output endpoint is muted, or whose session was muted in the volume mixer, is the one "
+            + "legitimate way this fails without a product defect — that is a property of this "
+            + "machine and it is the honest failure, not a reason to weaken the assertion");
+
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task CueClaimsAvailableEXACTLYWhenTheOsStillConfirmsTheSession_AndSilenceStopsTheSlot()
+    {
+        var run = AudioObservations.FullLifecycle(NewClip(), WaitUntil);
+
+        Assert.Equal(run.MachineCanRender, run.ClaimedAvailableOnCue);
+
+        // Silence reports Available only because it really had a player to stop. On a machine with
+        // no endpoint the cue never produced one, so there is nothing to stop and it refuses —
+        // which is the point: a stop that reported success for work it did not do would let a
+        // teardown pin read green on a build that never played anything.
+        Assert.Equal(run.MachineCanRender, run.ClaimedAvailableOnSilence);
+
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task AfterTeardown_TheOsNoLongerReportsAnActiveRenderSession()
+    {
+        var run = AudioObservations.FullLifecycle(NewClip(), WaitUntil);
+
+        // Link 3's other half. Measured 1 -> 0 on this machine: the session drops to
+        // AudioSessionStateInactive when the device is disposed. Both columns again — the product
+        // must stop claiming at the same moment the OS stops confirming.
+        Assert.False(run.OsSessionStillActiveAfterDispose, run.Evidence);
+        Assert.False(run.ClaimedRenderingAfterDispose, run.Evidence);
+
+        await Task.CompletedTask;
+    }
+
+    // =================================================================================
+    //  the read-back is what earns it — the branch that only exists because a call returning is not proof
+    // =================================================================================
+
+    [Fact]
+    public void ADeviceThatOpensWithoutTheOsConfirmingASession_IsUNAVAILABLE_NotAvailable()
+    {
+        // A backend whose TryInit succeeds — the state a capability that trusted its own return
+        // value would report as working — with a read-back that says the OS holds nothing for us.
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => new AudioRenderObservation(
+                Asked: true, EndpointName: "Stub Endpoint", SessionOwnedByThisProcess: false,
+                SessionActive: false, MeterReadable: false, Peak: 0f, SessionsOnEndpoint: 7),
+            endpointCount: () => 1);
+
+        var open = presence.Open();
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(open);
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, unavailable.Reason.Code);
+        Assert.Contains("the native device open succeeded", unavailable.Reason.Detail, StringComparison.Ordinal);
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void ACueThatStartsWhileTheOsStopsConfirming_IsDEGRADED_NamingWhichHalfHolds()
+    {
+        // The device came up confirmed and the OS withdrew the session afterwards. One half really
+        // holds (a player is on the mixer) and one really does not, which is exactly what Degraded
+        // is for — and it must never be reported as a working cue.
+        var confirmed = new AudioRenderObservation(true, "Stub Endpoint", true, true, true, 0.5f, 3);
+        var withdrawn = new AudioRenderObservation(true, "Stub Endpoint", false, false, false, 0f, 3);
+        var calls = 0;
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => calls++ == 0 ? confirmed : withdrawn,
+            endpointCount: () => 1);
+
+        Assert.IsType<CapabilityState.Available>(presence.Open());
+        var cue = presence.Cue(new AudioCue("slot", "irrelevant.wav", 0.5f));
+
+        var degraded = Assert.IsType<CapabilityState.Degraded>(cue);
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, degraded.Reason.Code);
+        Assert.Contains("attached to the device's mixer", degraded.SurvivingSemantics, StringComparison.Ordinal);
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void NoEndpointAtAll_IsDependencyMissing_AndNothingIsEverAttempted()
+    {
+        var backend = new StubBackend(initialises: true);
+        var presence = new WasapiAudioPresence(
+            backend, _ => { },
+            readback: _ => new AudioRenderObservation(true, null, true, true, true, 1f, 1),
+            endpointCount: () => 0);
+
+        var missing = Assert.IsType<CapabilityState.DependencyMissing>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.NoRenderEndpoint, missing.Reason.Code);
+        // Nothing was attempted: the endpoint question is asked BEFORE the device call, so a box
+        // with no output never reaches a native init at all.
+        Assert.Equal(0, backend.InitAttempts);
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void ASecondOpenDoesNotReInitTheDevice_ButDoesAskTheOsAgain()
+    {
+        // Two modules share one presence, so a mid-session quick-toggle of one must not stop the
+        // device out from under the other's playing clip. Re-ASKING is the part worth repeating.
+        var backend = new StubBackend(initialises: true);
+        var reads = 0;
+        var presence = new WasapiAudioPresence(
+            backend, _ => { },
+            readback: _ => { reads++; return new AudioRenderObservation(true, "Stub", true, true, true, 0f, 2); },
+            endpointCount: () => 1);
+
+        presence.Open();
+        presence.Open();
+
+        Assert.Equal(1, backend.InitAttempts);
+        Assert.Equal(2, reads);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void CueBeforeOpen_RefusesTyped_AndNoPlayerIsEverBuilt()
+    {
+        var backend = new StubBackend(initialises: true);
+        var presence = new WasapiAudioPresence(backend, _ => { });
+
+        var refusal = Assert.IsType<CapabilityState.Unavailable>(
+            presence.Cue(new AudioCue("slot", "irrelevant.wav", 1f)));
+
+        Assert.Equal(AudioReasonCodes.RenderDeviceNotOpen, refusal.Reason.Code);
+        Assert.Equal(0, backend.PlayersCreated);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void ASecondCueOnOneSlotREPLACESTheFirst_AndTheDisplacedPlayerIsStoppedAndDisposed()
+    {
+        // WPF's per-service stop-replace (MindWipeService.cs:826-845 publishes the new pair and
+        // disposes the displaced one; BrainDrainService.cs:276-292 does the same).
+        var backend = new StubBackend(initialises: true);
+        var presence = new WasapiAudioPresence(
+            backend, _ => { },
+            readback: _ => new AudioRenderObservation(true, "Stub", true, true, true, 0f, 1),
+            endpointCount: () => 1);
+        presence.Open();
+
+        presence.Cue(new AudioCue("mindwipe", "a.wav", 1f));
+        var first = backend.Players[0];
+        presence.Cue(new AudioCue("mindwipe", "b.wav", 1f));
+
+        Assert.True(first.Stopped, "the displaced player was stopped");
+        Assert.True(first.Disposed, "the displaced player was disposed");
+        Assert.False(backend.Players[1].Disposed, "the new player is still live");
+
+        // And a cue on the OTHER slot does not touch it: one module's clip can never silence the
+        // other's, which is what upstream gets from having two separate services.
+        presence.Cue(new AudioCue("braindrain", "c.wav", 1f));
+        Assert.False(backend.Players[1].Disposed);
+        presence.Dispose();
+    }
+
+    // =================================================================================
+    //  Linux refuses, typed, with the gate named — and it is not a no-op
+    // =================================================================================
+
+    [Fact]
+    public void Linux_RefusesTyped_AndNamesTheApiThatWouldEarnItPlusTheManualGate()
+    {
+        var presence = Assert.IsType<UnsupportedAudioPresence>(
+            AudioPresenceFactory.CreateFor(AudioHostPlatform.Linux, _ => { }));
+
+        Assert.Equal(AudioReasonCodes.RenderReadbackAbsent, presence.Reason.Code);
+
+        // The refusal is NOT "Linux cannot play audio" — the port's own backend enumerates there.
+        // It is that this build cannot EARN the claim, and the detail has to say so, name the
+        // Windows API that earns it here, name the Linux analogue that would earn it there, and
+        // name why this machine cannot discharge the gate.
+        var detail = presence.Reason.Detail;
+        Assert.Contains("libminiaudio.so", detail, StringComparison.Ordinal);
+        Assert.Contains("IAudioMeterInformation::GetPeakValue", detail, StringComparison.Ordinal);
+        Assert.Contains("pactl list sink-inputs", detail, StringComparison.Ordinal);
+        Assert.Contains("application.process.id", detail, StringComparison.Ordinal);
+        Assert.Contains("pw-dump", detail, StringComparison.Ordinal);
+        Assert.Contains("RDP Sink", detail, StringComparison.Ordinal);
+        Assert.Contains("MANUAL GATE (Linux, undischarged)", detail, StringComparison.Ordinal);
+
+        // The gate names the step NO platform's automation discharges, Windows included.
+        Assert.Contains("a human confirms they heard it", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheLinuxRefusalIsNotANoOp_EveryPathRefusesAndNothingIsEverObserved()
+    {
+        // A no-op would swallow the call and return success. For audio that is indistinguishable
+        // from working, which is why every path is asserted rather than only the first.
+        var presence = AudioPresenceFactory.CreateFor(AudioHostPlatform.Linux, _ => { });
+
+        Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+        Assert.IsType<CapabilityState.Unavailable>(presence.Cue(new AudioCue("slot", "a.wav", 1f)));
+        Assert.IsType<CapabilityState.Unavailable>(presence.Silence("slot"));
+        Assert.False(presence.IsRendering);
+
+        // "We did not ask" and "we asked and the level was zero" are different facts. A zeroed
+        // observation would read like a measurement; Asked=false says no measurement was taken.
+        Assert.False(presence.Observe().Asked);
+        Assert.False(presence.LastObservation.Asked);
+        Assert.False(presence.Observe().Confirmed);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void SelectionIsNeverAvailability_NoPlatformBranchProducesAvailableWithoutAskingTheOs()
+    {
+        // runtime-capability-contract §2 rule 2. Three of the four branches cannot produce Available
+        // at all, and the fourth only does after WasapiAudioPresence.Open has read the OS back.
+        foreach (var platform in new[]
+                 {
+                     AudioHostPlatform.Linux, AudioHostPlatform.MacOs, AudioHostPlatform.Unknown,
+                 })
+        {
+            var presence = AudioPresenceFactory.CreateFor(platform, _ => { });
+            Assert.IsNotType<CapabilityState.Available>(presence.Open());
+            presence.Dispose();
+        }
+
+        Assert.IsType<WasapiAudioPresence>(AudioPresenceFactory.CreateFor(AudioHostPlatform.Windows, _ => { }));
+    }
+
+    // =================================================================================
+
+    private static Task WaitUntil(Func<bool> condition, string what) =>
+        TestWait.Until(condition, what, window: TimeSpan.FromSeconds(15));
+
+    private static string NewClip()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(), "ccp-sp109-" + Guid.NewGuid().ToString("N"), "tone.wav");
+        return TestWav.Write(path, seconds: 4.0);
+    }
+
+    /// <summary>A backend that never touches a device. It exists so the branches that only occur
+    /// when the OS and the API DISAGREE can be reached on a machine whose OS agrees.</summary>
+    private sealed class StubBackend : IAudioBackend
+    {
+        private readonly bool _initialises;
+
+        public StubBackend(bool initialises) => _initialises = initialises;
+
+        public List<StubPlayer> Players { get; } = [];
+
+        public int InitAttempts { get; private set; }
+
+        public int PlayersCreated => Players.Count;
+
+        public IReadOnlyList<string> EnumerateDevices() => ["Stub Endpoint"];
+
+        public bool TryInit(string? deviceName, out string? error)
+        {
+            InitAttempts++;
+            error = _initialises ? null : "stub refused";
+            return _initialises;
+        }
+
+        public IAudioPlayer CreatePlayer(string path, float volume)
+        {
+            var player = new StubPlayer();
+            Players.Add(player);
+            return player;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class StubPlayer : IAudioPlayer
+    {
+        public event EventHandler? PlaybackEnded
+        {
+            add { }
+            remove { }
+        }
+
+        public AudioPlayerState State { get; private set; } = AudioPlayerState.Stopped;
+
+        public double PositionSec => 0;
+
+        public float Volume { get; set; }
+
+        public bool Stopped { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public void Play() => State = AudioPlayerState.Playing;
+
+        public void Pause() => State = AudioPlayerState.Paused;
+
+        public void Stop()
+        {
+            Stopped = true;
+            State = AudioPlayerState.Stopped;
+        }
+
+        public void Dispose() => Disposed = true;
+    }
+}

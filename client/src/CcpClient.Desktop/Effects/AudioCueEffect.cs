@@ -227,6 +227,27 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
             return scheduled;
         }
 
+        // THE DEVICE IS OPENED HERE, and the placement is a compromise the spine forced — recorded
+        // rather than hidden.
+        //
+        // It must not be at app start: a render device opened in phase 3 would take a WASAPI session
+        // (and a row in the user's volume mixer) on every launch, including every launch by a user
+        // who never enables either audio module — and both of them ship OFF. It must not be in
+        // Compose(): a device open on a clock callback is a half-second native call on a pool thread
+        // once per window. Arming is the right moment, and Ready is the ONLY hook this module has
+        // that runs on an arm — Engage is sealed by PacedSessionEffect and Arm is not virtual.
+        //
+        // The consequence, and the reason for the RaiseChanged below: OwnedSessionEffect.Arm raises
+        // Changed BEFORE it calls Ready, so a UI that repainted on that notification would have read
+        // the dot while the device was still shut. The second notification is what makes the row's
+        // dot correct on the first frame after START. It costs one extra repaint per arm — an arm is
+        // a gesture, not a firing, so that is affordable where a per-firing notification would not be.
+        //
+        // A SIXTH module will hit this again. The spine has no per-module "acquire your capability"
+        // hook that runs before the arm's notification, and that is the gap.
+        _presence.Open();
+        RaiseChanged();
+
         if (!_presence.IsRendering)
         {
             // The whole output channel is gone. Unavailable, not Degraded: there is no surviving

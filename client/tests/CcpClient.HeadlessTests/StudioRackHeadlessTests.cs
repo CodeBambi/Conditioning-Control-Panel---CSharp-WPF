@@ -447,7 +447,8 @@ public class StudioRackHeadlessTests
         // which SP-108's fifth row (from a different rack GROUP) had to keep true rather than dent.
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp",
+            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -572,7 +573,10 @@ public class StudioRackHeadlessTests
             .Select(r => r.Name)
             .ToList();
         Assert.Equal(
-            ["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp"],
+            [
+                "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            ],
             rows);
 
         // SP-105: three of the four had an effect whose state could be reported, and D5/D6 stayed
@@ -582,7 +586,8 @@ public class StudioRackHeadlessTests
         // exactly as upstream orders its groups (StudioTabView.xaml.cs:482-541).
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp",
+            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -760,7 +765,10 @@ public class StudioRackHeadlessTests
             .Where(t => t.Classes.Contains("rack-group"))
             .Select(t => t.Text)
             .ToList();
-        Assert.Equal(["EFFECTS", "TIMING"], groups);
+        // SP-109 adds IMMERSION, and it goes BETWEEN them: upstream's group order is EFFECTS,
+        // GAMES & CARDS, IMMERSION, TIMING (StudioTabView.xaml.cs:483/498/508/530) and the port has
+        // no GAMES & CARDS row, so the ported groups close up without reordering.
+        Assert.Equal(["EFFECTS", "IMMERSION", "TIMING"], groups);
 
         // And the row order is still upstream's, with the new group after the old one.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
@@ -768,7 +776,10 @@ public class StudioRackHeadlessTests
             .Select(r => r.Name)
             .ToList();
         Assert.Equal(
-            ["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp"],
+            [
+                "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            ],
             rows);
 
         // The new row carries the same grammar the other four do: a dot, and nothing about it says
@@ -989,5 +1000,160 @@ public class StudioRackHeadlessTests
                 }
             }
         }
+    }
+
+    // =====================================================================================
+    //  SP-109 — the two rows nobody can SEE, and the one that is half a row
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheRackGainsAThirdGroup_AndTheTwoAudioRowsCarryTheSameGrammarAsEveryOtherRow()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        // Left-click opens its own panel and only its own — the grammar needed nothing new for a
+        // module whose output is sound rather than pixels.
+        Click(window, Descendant<RadioButton>(window, "RowMindWipe"));
+        Assert.True(Descendant<StackPanel>(window, "MindWipeModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "BrainDrainModulePanel").IsVisible);
+        Assert.False(Descendant<TextBlock>(window, "RackHint").IsVisible);
+
+        Click(window, Descendant<RadioButton>(window, "RowBrainDrain"));
+        Assert.True(Descendant<StackPanel>(window, "BrainDrainModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "MindWipeModulePanel").IsVisible);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnAnAudioRow_ReallyFlipsTheModule_AndTheDotFollowsBothWays()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowMindWipe");
+        var page = window.GetVisualDescendants().OfType<CcpClient.Desktop.Views.Pages.StudioPage>().Single();
+
+        // Ships OFF (MainWindow.StartStop.cs:229 gates on the flag), so the dot starts dark.
+        Assert.False(boot.Session.MindWipePreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedMindWipeDot);
+
+        Click(window, row, MouseButton.Right);
+
+        // The persisted dial really moved, and the dot really followed — with NO session running,
+        // so nothing here opens an audio device or claims anything about sound.
+        Assert.True(boot.Session.MindWipePreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Armed, page.RenderedMindWipeDot);
+
+        Click(window, row, MouseButton.Right);
+        Assert.False(boot.Session.MindWipePreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedMindWipeDot);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBrainDrainRowSAYSItIsHalfARow_OnTheRowItselfAndOnItsPanel()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBrainDrain"));
+
+        // THE ROW'S LABEL IS LOAD-BEARING, not decoration: the module's dot is Live while its audio
+        // half runs, and that is only honest because the row says which half it is. This fact is
+        // what stops the label being "tidied" back to plain "Brain Drain".
+        var label = Descendant<RadioButton>(window, "RowBrainDrain")
+            .GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal("Brain Drain (audio half)", label.Text);
+
+        // And the panel leads with the missing half, in the MODULE's own words — the same constant
+        // the arm result's typed reason carries, so the panel and the outcome are one account.
+        var notice = Descendant<TextBlock>(window, "BrainDrainVisualHalfState");
+        Assert.Equal(BrainDrainEffect.VisualHalfNotice, notice.Text);
+        Assert.Contains("VISUAL half", notice.Text!, StringComparison.Ordinal);
+        Assert.Contains("30 to 60 times a second", notice.Text!, StringComparison.Ordinal);
+
+        // No control on this panel offers the missing half. A greyed blur slider would be the dead
+        // dial §9 D7 refuses, and worse here: it would imply the blur is one setting away.
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("BrainDrainBlurSlider", names);
+        Assert.DoesNotContain("BrainDrainMeltToggle", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheAudioPanelsHaveNoSurfaceLine_AndSayInsteadWhatTheOsWasAsked()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowMindWipe"));
+
+        // Every DRAWING module's panel ends in a "where did the pixels go" line. These two cannot
+        // have one, so the absence is asserted the way SP-108 asserted the ramp's.
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("MindWipeSurfaceState", names);
+        Assert.DoesNotContain("BrainDrainSurfaceState", names);
+        Assert.Contains("FlashSurfaceState", names);
+
+        // What they have instead: a line that quotes the operating system. Before anything has been
+        // asked it names the MECHANISM and says so — a fact about this session, not a claim about
+        // the machine, and it is there before the user presses anything.
+        var audioLine = Descendant<TextBlock>(window, "MindWipeAudioState");
+        Assert.Equal(
+            "Clips play on a shared audio output device. Nothing has been asked of the operating "
+            + "system yet.",
+            audioLine.Text);
+
+        // And the clip folder is named, so an empty pool has an answer.
+        Assert.Contains(
+            "Put .mp3, .wav or .ogg files in",
+            Descendant<TextBlock>(window, "MindWipeClipState").Text!,
+            StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheAudioPanelsDialsAreTheRealPersistedOnes_AndMovingOneWritesThroughTheModule()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowMindWipe"));
+
+        var frequency = Descendant<Slider>(window, "MindWipeFrequencySlider");
+        Assert.Equal(MindWipeSchedule.DefaultPerHour, frequency.Value);
+        Assert.Equal(MindWipeSchedule.MinPerHour, frequency.Minimum);
+        Assert.Equal(MindWipeSchedule.MaxPerHour, frequency.Maximum);
+
+        frequency.Value = 42;
+        window.UpdateLayout();
+        Assert.Equal(42, boot.Session.MindWipePreset.Current.PerHour);
+        Assert.Equal("42", Descendant<TextBlock>(window, "MindWipeFrequencyValue").Text);
+
+        Click(window, Descendant<RadioButton>(window, "RowBrainDrain"));
+        var intensity = Descendant<Slider>(window, "BrainDrainIntensitySlider");
+        Assert.Equal(BrainDrainSchedule.MinIntensity, intensity.Minimum);
+        Assert.Equal(BrainDrainSchedule.MaxIntensity, intensity.Maximum);
+
+        intensity.Value = 77;
+        window.UpdateLayout();
+        Assert.Equal(77, boot.Session.BrainDrainPreset.Current.IntensityPercent);
+
+        // The high-refresh switch is the module's own dial, not the rack's enable, so it writes
+        // through the module rather than through QuickToggle.
+        var highRefresh = Descendant<CheckBox>(window, "BrainDrainHighRefreshToggle");
+        Assert.False(boot.Session.BrainDrainPreset.Current.HighRefresh);
+        highRefresh.IsChecked = true;
+        window.UpdateLayout();
+        Assert.True(boot.Session.BrainDrainPreset.Current.HighRefresh);
+        Assert.False(boot.Session.BrainDrainPreset.Current.Enabled); // and it did NOT enable the module
+
+        await boot.Host.ShutdownAsync();
     }
 }
