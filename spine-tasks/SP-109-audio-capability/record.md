@@ -1,8 +1,8 @@
 # SP-109 — record
 
 Branch `lane/SP-109-audio-capability`, base `2b348901`.
-Floor: pin **1527 unit / 95 headless**; observed **1563 unit / 100 headless**; declared delta
-**+36 unit / +5 headless** (`floor-delta.json`). 1527 + 36 = 1563 and 95 + 5 = 100, confirmed by
+Floor: pin **1527 unit / 95 headless**; observed **1589 unit / 100 headless**; declared delta
+**+62 unit / +5 headless** (`floor-delta.json`). 1527 + 62 = 1589 and 95 + 5 = 100, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-109-audio-capability`. The floor run
 therefore REPORTS a violation against the pin, and that is the expected shape: the orchestrator sums
 the deltas and applies one bump. Two skips, both pre-existing
@@ -112,7 +112,7 @@ Neither clause is redundant. Without the first, a module whose tick died keeps c
 Without the second, a module lights its dot on a machine with no output device — the Pink Filter
 failure, in the one medium where a user cannot check by looking. **Upstream draws the same line in
 the same place**, one call deeper: `if (App.Audio?.IsOutputSuppressed == true) return;` with the
-comment "endpoint down — stay quiet, don't spin" (`MindWipeService.cs:770`,
+comment "endpoint down — stay quiet, don't spin" (`MindWipeService.cs:771`,
 `BrainDrainService.cs:211`).
 
 ### And the sub-rule that answers the half-row, which is the packet's actual question
@@ -143,37 +143,86 @@ Drain" turns a truthful dot into a false one AND reds.
 
 ---
 
-## 3. PROVING IT BITES — two mutations, and the second one found a real hole in the first's coverage
+## 3. PROVING IT BITES — 24 mutations, TWO ROUNDS, and the first round found ten holes
 
-**M1 — claim `Available` without opening a device.** Replaced the `TryInit` call site in
-`WasapiAudioPresence.Open()` with `if (false)`, so the endpoint check passed and no device was ever
-opened. **5 facts red**, including the two that matter most:
+The first submission mutated two predicates and stopped. The code review named that as the fifth
+appearance of this port's own rule — **a sweep bounded by where the last instance was found is not a
+sweep** — and it was right: mutating **every** conjunct and predicate in the capability found **ten
+survivors**, one of which the reviewer had already predicted.
 
-```
-OpenClaimsAvailableEXACTLYWhenTheOsReportsAnActiveRenderSessionForThisProcess  [FAIL]
-WhileAClipPlays_WindowsMetersANonZeroPeakOnThisProcessesOwnStream             [FAIL]
-CueClaimsAvailableEXACTLYWhenTheOsStillConfirmsTheSession...                  [FAIL]
-TheAvailableDetailNamesTheApiThatEarnedIt_AndRefusesTheClaimItCannotMake      [FAIL]
-ASecondOpenDoesNotReInitTheDevice_ButDoesAskTheOsAgain                        [FAIL]
-```
-Restored byte-identically (`grep -c "if (false)"` → 0, both `if (!observation.Confirmed)` sites back).
+### Round 1 — 24 mutations, 14 caught, 10 survived
 
-**M2 — delete the READ-BACK GATE itself**, keeping the real device open (`if (!observation.Confirmed)`
-→ `if (false)` in `Open`). **Exactly one fact red**, and it is the right one:
-`ADeviceThatOpensWithoutTheOsConfirmingASession_IsUNAVAILABLE_NotAvailable`.
+| # | mutation | round 1 |
+|---|---|---|
+| M-a | `Confirmed` drops `SessionActive` | **SURVIVED** → closed |
+| M-b | `Confirmed` drops `SessionOwnedByThisProcess` | **SURVIVED** → closed |
+| M-c | `Confirmed` drops `Asked` | **SURVIVED** → closed |
+| M-d | `IsRendering` drops the read-back conjunct | caught ×5 |
+| M-e | `IsRendering` drops `_deviceUp` | **SURVIVED** → equivalent |
+| M-f | `IsRendering` drops `!_disposed` | **SURVIVED** → equivalent |
+| M-g | `Open` re-inits the device on every call | caught |
+| M-h | `Open` skips the endpoint question | caught |
+| M-i | `Open` ignores `TryInit`'s ANSWER (device still opened) | **SURVIVED** → closed |
+| M-j | `Open` skips the read-back gate | caught ×3 |
+| M-k | `Cue` skips the read-back gate | caught ×2 |
+| M-l | `Remember` keeps a stale confirmation | **SURVIVED** → equivalent |
+| M-m | `WorkIsRunning` drops the OS clause | caught |
+| M-n | `WorkIsRunning` drops the CLOCK clause | **SURVIVED** → closed |
+| M-o | `Compose` stops honouring a suppressed endpoint | caught |
+| M-p | `Compose` stops honouring an empty pool | **SURVIVED** → equivalent |
+| M-q | `Compose` stops rolling | caught |
+| M-r | `Ready` stops refusing on an unconfirmed session | caught ×2 |
+| M-s | `Ready` stops degrading over an empty pool | caught |
+| M-t | `Ready` stops opening the device at arm | **SURVIVED** → closed |
+| M-u | Brain Drain stops declaring its missing half | caught |
+| M-v | the pool stops re-reading while empty | **incomplete mutation** — see below |
+| M-w | the pool recurses into subfolders again | caught |
+| M-x | the pool stops filtering by extension | caught |
 
-**The hole M2 exposes, and why the design already answers it.** The real-device facts CANNOT catch
-M2, because on a machine whose OS confirms the session, "gate present" and "gate deleted" produce the
-same answer. The earning step is therefore pinned by a *different* fact — one that injects a
-read-back saying the OS holds nothing while the device call succeeds, which is exactly the state a
-capability trusting its own return value would report as working. **That is why `WasapiAudioPresence`
-takes its read-back as an injected delegate**: not for convenience, but because the branch that only
-exists for a disagreement between the API and the OS is unreachable on a machine where they agree.
-The same reasoning produced `ACueThatStartsWhileTheOsStopsConfirming_IsDEGRADED_NamingWhichHalfHolds`.
+### Round 2 — the ten survivors, re-run against the closed suite
 
-Both mutations restored; the file is byte-identical to the committed version.
+**Six were real holes and are now closed**, each by a fact that isolates the clause:
 
----
+| # | closed by |
+|---|---|
+| M-a | `ASessionTheOsOWNSButReportsINACTIVE_IsUNAVAILABLE_NotAvailable` (+ the Cue-side twin) |
+| M-b | `AnACTIVESessionOwnedByANOTHERProcess_DoesNotEarnAvailable` |
+| M-c | `AnObservationThatWasNeverASKED_IsNotConfirmed_WhateverItsOtherFieldsSay` |
+| M-i | `ADeviceThatREFUSESToOpen_IsUnavailable_AndCarriesTheBackendsOwnError` |
+| M-n | `BOTHClausesOfTheFifthDotMeaningAreLoadBearing_PinnedOnThePredicateItself` |
+| M-t | `ArmingAnEnabledAudioModuleOPENSTheDevice_AndArmingNoneNeverDoes` |
+
+**M-b is the sharpest of them.** Every injected observation in the file moved ownership and liveness
+TOGETHER, so `Confirmed` dropping `SessionOwnedByThisProcess` was invisible — and that clause is
+`GetProcessId`, the entire reason the read-back enumerates SESSIONS instead of asking the endpoint.
+Without it, **another application playing music would have earned this process an `Available`.**
+
+**M-v was an incomplete mutation, not a hole.** It changed only `Draw()`, and the fact reads
+`ActiveCount` first, which re-reads. Re-run against BOTH accessors it is **caught by two facts**.
+
+**Four remain, and all four are EQUIVALENT MUTANTS** — the guard is redundant, not unpinned. Reported
+rather than papered over with a fact that would only assert the implementation's shape:
+
+- **M-e / M-f** (`IsRendering`'s `_deviceUp` and `!_disposed`). `Dispose` sets `_deviceUp = false`
+  AND `_lastObservation = NotAsked`; `_deviceUp` can only be false when nothing was ever opened, in
+  which case the observation is `NotAsked` too. Any one of the three conjuncts is sufficient on every
+  reachable path. The suite pins the OUTCOME — not rendering after teardown — rather than which guard
+  produced it, which is the right thing to pin.
+- **M-l** (`Remember` clearing the remembered answer on a non-`Available` open). Every path that
+  reaches it with a refusal either has `_deviceUp == false` already, or has just written an
+  unconfirmed observation through `ReadAndRemember`. Writing the fact is what proved this: the first
+  attempt asserted a second `Open` noticing a vanished endpoint, and it **failed**, because an
+  idempotent `Open` deliberately does not re-ask the endpoint question (re-initialising would stop
+  the other module's clip). The fact was rewritten to the reachable case — an endpoint pulled
+  mid-session is noticed by the READ-BACK at the next ask — and it says in its own body that it does
+  not discriminate M-l.
+- **M-p** (`Compose`'s empty-pool check). With an empty pool the mutant reaches the roll and then
+  `Draw()` returns null, so `Compose` returns null either way; the only difference is one consumed
+  random draw. Kept because it is upstream's ORDER (the empty check precedes the roll,
+  `MindWipeService.cs:704-708`) and it avoids a pointless roll.
+
+Every mutation was restored byte-identically; the three key predicates are verified present by grep
+after the sweep.
 
 ## 4. THE SHARED-CODE CHANGE — one word, and the reason is a finding
 
@@ -266,18 +315,67 @@ byte-identical to base.** The packet's instruction was to read `AudioSeams.cs` a
 the new capability is a layer ABOVE `IAudioBackend` that adds the one thing it does not have.
 
 **Tests — new.** `WasapiRenderProbe.cs` (the independent oracle), `TestWav.cs`, `AudioObservations.cs`,
-`AudioCapabilityTests.cs` (**15**), `AudioModuleSpineTests.cs` (**21**).
+`AudioCapabilityTests.cs` (**22**), `AudioModuleSpineTests.cs` (**23**), `AudioCuePoolTests.cs`
+(**8**).
 
-**Tests — changed.** `StudioRackHeadlessTests.cs` (**+5**, plus the row lists and group list extended
-from five names to seven), `ContinuousEffectSpineTests.cs` and `SecondEffectSpineTests.cs` (refusal
-and rack-order lists extended — **0 count change**).
+**Tests — changed.** `StudioSurfaceNoticeTests.cs` (**+9**: a six-row theory over the audio panel's
+states plus three facts for the pool line and the capability line),
+`StudioRackHeadlessTests.cs` (**+5**, plus the row lists and group list extended from five names to
+seven, and the missing-half notice pinned POSITIONALLY rather than only by text),
+`ContinuousEffectSpineTests.cs` and `SecondEffectSpineTests.cs` (refusal and rack-order lists
+extended — **0 count change**).
 
 **Docs.** `client/docs/wpf-surface-reachability.md` (D101–D109),
 `client/docs/verification-harness.md` (the audio evidence class).
 
 ---
 
-## 8. Divergences from D101 onward, in one line each
+## 8b. WHAT THE CODE REVIEW CHANGED, beyond the two blockers
+
+Five smaller corrections, all of them real:
+
+1. **`AudioCuePool` recursed into subfolders; upstream does not.** `Directory.GetFiles(folder, "*.*")`
+   with no overload is `TopDirectoryOnly` (`MindWipeService.cs:162`, `BrainDrainService.cs:87`). A
+   subfolder of clips would have been audible in the port and silent in the shipping app — a
+   behaviour difference with no upstream evidence behind it. **Matched to upstream** rather than
+   recorded as a divergence, and pinned by `EnumerationIsTOPLEVELONLY_BecauseUpstreamsIs`.
+2. **Brain Drain's `Ready` replaced the audio half's own degradation — code AND detail — with the
+   visual-half notice**, so a Brain Drain armed over an empty clip folder lost "there is no audio clip
+   in `<folder>`" from its arm result entirely. **Both now travel**: the code stays the build-level
+   one (true on every run), and the run-level cause is carried verbatim, with its own code, at the
+   front of the detail.
+3. **The negative control was order-dependent.** It asserted `SessionForThisProcess`, and this
+   packet's own measurement shows that stays TRUE after teardown — only the STATE falls to Inactive.
+   Any xunit ordering that put a lifecycle fact first would have reddened it for a non-defect. It now
+   asserts `Active`, which is false both before the first open and after every teardown.
+4. **`DescribeCueState` had four branches, zero facts — and one of the branches was FALSE.** Writing
+   the theory found it: the fourth arm (session running, audio confirmed, schedule not on the clock)
+   repeated "Nothing plays until the session starts" to a user who had already started one — exactly
+   the instruction SP-105 had to split apart. Rewritten, and the theory now asserts that no row with
+   a running session may contain that phrase.
+5. **"The panel LEADS with the missing half" was a positional claim pinned only by text.** The
+   headless fact now asserts the notice's INDEX is below the enable toggle's, so moving it to the
+   bottom reds.
+
+Also swept: **53 citation corrections** across 16 files. The reviewer named four drifted line numbers;
+a full sweep of every `File.cs:line` in the packet's own files against the shipping source found
+fifty-three, including the frequency clamp (`:98-99` → `:100`), the extension filter (`:158-161` →
+`:162-165`), the per-clip device open (`:783` → `:791`), `StopCurrentAudio` (`:851-869` → `:857-874`),
+the Discord call (`:206` → `:212`) and the Brain Drain rack row (`:514` → `:513`). The behaviour each
+one described was correct in every case; only the pointers were stale.
+
+---
+
+## 8c. What the reviewer verified, and what remains unverifiable
+
+The review independently confirmed all eight COM GUIDs and every vtable slot against the SDK headers,
+that the equality facts genuinely bit on this machine, that the zero-peak control is asserted
+unconditionally, and that **D108 holds against the shipping source**. None of that changes the
+ceiling: `audible-verified` is still undischarged and still not dischargeable here.
+
+---
+
+## 9. Divergences from D101 onward, in one line each
 
 Full rows with citations are in `client/docs/wpf-surface-reachability.md` §SP-109.
 
@@ -286,7 +384,7 @@ Full rows with citations are in `client/docs/wpf-surface-reachability.md` §SP-1
 | **D101** | Brain Drain ships as its audio half; the desktop blur is absent and is stated on the row, in the panel and in a `Degraded` arm on every run |
 | **D102** | The dot gains an OS clause — `Live` needs a confirmed render session, not just a firing on the clock |
 | **D103** | One playback device for the app instead of a fresh `WaveOutEvent` per clip |
-| **D104** | Clips read from `<dataDir>/assets/sounds/<module>`, and a missing folder is named rather than created |
+| **D104** | Clips read from `<dataDir>/assets/sounds/<module>`, and a missing folder is named rather than created. Enumeration is TOP-LEVEL, matching upstream (corrected at code review) |
 | **D105** | A moved volume slider takes effect on the next cue, not on the clip already playing |
 | **D106** | Brain Drain gets its own volume dial because the port has no master volume |
 | **D107** | Loop mode, the crossfade engine, Clean Slate, the custom clip, `TriggerOnce`, session mode, Discord presence and both level unlocks are not ported |

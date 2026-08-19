@@ -42,17 +42,27 @@ public class AudioCapabilityTests
     // =================================================================================
 
     [Fact]
-    public void BeforeAnyDeviceIsOpened_TheOsHoldsNoRenderSessionForThisProcess()
+    public void WithNoDeviceOpen_TheOsReportsNoACTIVERenderSessionForThisProcess()
     {
         // THE NEGATIVE CONTROL FOR THE WHOLE FILE. If this were false the oracle would be
         // certifying a session that exists for some other reason, and every fact below would pass
         // without the product doing anything at all.
+        //
+        // IT ASSERTS `Active`, NOT `SessionForThisProcess`, AND THE DIFFERENCE IS MEASURED RATHER
+        // THAN STYLISTIC (code review, and plan.md §0's raw run): once this process has opened and
+        // torn down a device, the OS KEEPS reporting a session for our pid and only drops its STATE
+        // to AudioSessionStateInactive. An earlier version of this fact asserted
+        // `SessionForThisProcess` and was therefore order-dependent — any xunit ordering that put a
+        // lifecycle fact first would have reddened it for a reason that is not a defect. `Active` is
+        // false both before the first open and after every teardown, so the control holds whatever
+        // order this class runs in, and it is still the control that matters: an already-ACTIVE
+        // session for this pid is exactly what would make F2/F3 pass vacuously.
         var before = WasapiRenderProbe.SessionForThisProcess();
 
         Assert.False(
-            before.SessionForThisProcess,
-            $"the OS already holds a render session for pid {Environment.ProcessId} before this suite "
-            + $"opened one: {before}");
+            before.Active,
+            $"the OS already reports an ACTIVE render session for pid {Environment.ProcessId} with no "
+            + $"device open in this suite: {before}");
     }
 
     [Fact]
@@ -189,6 +199,189 @@ public class AudioCapabilityTests
     }
 
     [Fact]
+    public void ASessionTheOsOWNSButReportsINACTIVE_IsUNAVAILABLE_NotAvailable()
+    {
+        // THE SIBLING CONJUNCT, and it was open until the code review found it.
+        //
+        // `Confirmed` is `Asked && SessionOwnedByThisProcess && SessionActive`. Every other injected
+        // observation in this file moved the last two clauses TOGETHER, and the real device reports
+        // both true, so deleting `&& SessionActive` left the whole suite green — a session the OS
+        // holds but reports Inactive would have earned Available, in the one capability whose entire
+        // point is not trusting its own return value. This is that state, isolated.
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => new AudioRenderObservation(
+                Asked: true, EndpointName: "Stub Endpoint", SessionOwnedByThisProcess: true,
+                SessionActive: false, MeterReadable: true, Peak: 0f, SessionsOnEndpoint: 4),
+            endpointCount: () => 1);
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, unavailable.Reason.Code);
+
+        // And the detail takes the GetState branch rather than the no-session-at-all branch: the
+        // product carries a bespoke sentence for exactly this case (WasapiAudioPresence.cs), and
+        // until now nothing executed it.
+        Assert.Contains(
+            "owns one whose IAudioSessionControl::GetState is not AudioSessionStateActive",
+            unavailable.Reason.Detail,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("owns none of them", unavailable.Reason.Detail, StringComparison.Ordinal);
+
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void AnACTIVESessionOwnedByANOTHERProcess_DoesNotEarnAvailable()
+    {
+        // THE THIRD CONJUNCT, and the mutation sweep found it open: every injected observation moved
+        // ownership and liveness TOGETHER, so `Confirmed` dropping `SessionOwnedByThisProcess` left
+        // the whole suite green — and a machine playing music in another app would have earned this
+        // process an Available. GetProcessId is the entire reason the read-back enumerates sessions
+        // instead of asking the endpoint.
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => new AudioRenderObservation(
+                Asked: true, EndpointName: "Stub Endpoint", SessionOwnedByThisProcess: false,
+                SessionActive: true, MeterReadable: true, Peak: 0.9f, SessionsOnEndpoint: 9),
+            endpointCount: () => 1);
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, unavailable.Reason.Code);
+        // And the detail takes the no-session-for-us branch, not the inactive-session branch.
+        Assert.Contains("owns none of them", unavailable.Reason.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetState is not", unavailable.Reason.Detail, StringComparison.Ordinal);
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void AnObservationThatWasNeverASKED_IsNotConfirmed_WhateverItsOtherFieldsSay()
+    {
+        // The `Asked` conjunct pinned directly on the record, because the sweep showed it is
+        // unreachable through the presence: the only Asked=false value the product produces is
+        // AudioRenderObservation.NotAsked, whose other fields are already false, so dropping the
+        // clause was invisible. A read-back that reported fields it never measured is exactly the
+        // "we did not ask" / "we asked and it was fine" collapse this type exists to prevent.
+        var neverAsked = new AudioRenderObservation(
+            Asked: false, EndpointName: "Stub", SessionOwnedByThisProcess: true, SessionActive: true,
+            MeterReadable: true, Peak: 1f, SessionsOnEndpoint: 3);
+
+        Assert.False(neverAsked.Confirmed);
+        Assert.False(AudioRenderObservation.NotAsked.Confirmed);
+
+        // The positive control, so this is not satisfied by Confirmed being false forever.
+        Assert.True(new AudioRenderObservation(true, "Stub", true, true, true, 1f, 3).Confirmed);
+    }
+
+    [Fact]
+    public void ADeviceThatREFUSESToOpen_IsUnavailable_AndCarriesTheBackendsOwnError()
+    {
+        // The sweep's M-i: keeping the TryInit CALL but ignoring its ANSWER survived, because no
+        // fact drove a backend that refuses. An endpoint exists, the native open is really
+        // attempted, and it fails — WPF's own #778/#779 class.
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: false),
+            _ => { },
+            readback: _ => new AudioRenderObservation(true, "Stub", true, true, true, 1f, 3),
+            endpointCount: () => 1);
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.RenderDeviceRefused, unavailable.Reason.Code);
+        // The backend's own words survive to the user, never a summary of them.
+        Assert.Contains("stub refused", unavailable.Reason.Detail, StringComparison.Ordinal);
+
+        // And a confirming read-back cannot rescue it: the device is not open, so nothing renders.
+        Assert.False(presence.IsRendering);
+        Assert.IsType<CapabilityState.Unavailable>(presence.Cue(new AudioCue("slot", "a.wav", 1f)));
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void AnEndpointPulledMidSessionStopsRendering_AtTheNextOpenOrCue()
+    {
+        // A first Open confirms; the output device is then pulled and the OS stops reporting a
+        // session for this process. The presence must stop claiming AT THE NEXT ASK, so the modules'
+        // dots go dark instead of staying lit on a machine with nothing to play to.
+        var confirming = true;
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => confirming
+                ? new AudioRenderObservation(true, "Stub", true, true, true, 0.5f, 3)
+                : new AudioRenderObservation(true, "Stub", false, false, false, 0f, 2),
+            endpointCount: () => 1);
+
+        Assert.IsType<CapabilityState.Available>(presence.Open());
+        Assert.True(presence.IsRendering);
+
+        confirming = false;
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, unavailable.Reason.Code);
+        Assert.False(presence.IsRendering);
+        Assert.False(presence.LastObservation.Confirmed);
+
+        // A SECOND Open is what re-asks. The device is NOT re-initialised (that would stop the other
+        // module's clip), so the READ-BACK is the only thing that can notice — which is the whole
+        // reason a second Open still costs a round trip.
+        //
+        // NOTE, and it is a finding rather than a claim: this fact does NOT discriminate the
+        // `Remember` clear (mutation M-l). That clear is redundant with the `_deviceUp` conjunct in
+        // IsRendering on every path that can reach it, and the sweep proved it — see record.md §3.
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void AReadBackThatWasNeverASKED_IsUNAVAILABLE_AndCannotMasqueradeAsAMeasurement()
+    {
+        // The FIRST conjunct, isolated for the same reason: `Asked: false` is the Linux/no-mechanism
+        // shape, and a presence that treated "we never asked" as "we asked and it was fine" would be
+        // the platform-check-produces-Available the contract bans (§2 rule 2).
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => AudioRenderObservation.NotAsked,
+            endpointCount: () => 1);
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(presence.Open());
+
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, unavailable.Reason.Code);
+        Assert.False(presence.IsRendering);
+        Assert.False(presence.LastObservation.Asked);
+        presence.Dispose();
+    }
+
+    [Fact]
+    public void ACueOnASessionTheOsReportsINACTIVE_IsDEGRADED_NotAvailable()
+    {
+        // The same sibling conjunct on the CUE path. Open confirms, then the OS drops the session to
+        // Inactive while still owning it — the player really starts and nothing may be claimed about
+        // it reaching an output.
+        var confirmed = new AudioRenderObservation(true, "Stub Endpoint", true, true, true, 0.5f, 3);
+        var inactive = new AudioRenderObservation(true, "Stub Endpoint", true, false, true, 0f, 3);
+        var calls = 0;
+        var presence = new WasapiAudioPresence(
+            new StubBackend(initialises: true),
+            _ => { },
+            readback: _ => calls++ == 0 ? confirmed : inactive,
+            endpointCount: () => 1);
+
+        Assert.IsType<CapabilityState.Available>(presence.Open());
+        var degraded = Assert.IsType<CapabilityState.Degraded>(
+            presence.Cue(new AudioCue("slot", "irrelevant.wav", 0.5f)));
+
+        Assert.Equal(AudioReasonCodes.RenderSessionUnconfirmed, degraded.Reason.Code);
+        Assert.False(presence.IsRendering);
+        presence.Dispose();
+    }
+
+    [Fact]
     public void ACueThatStartsWhileTheOsStopsConfirming_IsDEGRADED_NamingWhichHalfHolds()
     {
         // The device came up confirmed and the OS withdrew the session afterwards. One half really
@@ -269,8 +462,8 @@ public class AudioCapabilityTests
     [Fact]
     public void ASecondCueOnOneSlotREPLACESTheFirst_AndTheDisplacedPlayerIsStoppedAndDisposed()
     {
-        // WPF's per-service stop-replace (MindWipeService.cs:826-845 publishes the new pair and
-        // disposes the displaced one; BrainDrainService.cs:276-292 does the same).
+        // WPF's per-service stop-replace (MindWipeService.cs:825-848 publishes the new pair and
+        // disposes the displaced one; BrainDrainService.cs:271-292 does the same).
         var backend = new StubBackend(initialises: true);
         var presence = new WasapiAudioPresence(
             backend, _ => { },

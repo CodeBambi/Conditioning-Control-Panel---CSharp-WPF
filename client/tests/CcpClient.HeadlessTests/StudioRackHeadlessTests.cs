@@ -1069,8 +1069,25 @@ public class StudioRackHeadlessTests
             .GetVisualDescendants().OfType<TextBlock>().First();
         Assert.Equal("Brain Drain (audio half)", label.Text);
 
-        // And the panel leads with the missing half, in the MODULE's own words — the same constant
+        // And the panel LEADS with the missing half, in the MODULE's own words — the same constant
         // the arm result's typed reason carries, so the panel and the outcome are one account.
+        //
+        // "LEADS" is a POSITIONAL claim, so it is pinned positionally rather than asserted in prose
+        // (code review): the notice sits above every control on the panel, so a user meets the
+        // missing half before they meet the switch that enables the half that exists. An earlier
+        // version of this fact pinned only the text and the absence of blur controls, which would
+        // have stayed green if the notice were moved to the bottom.
+        var panel = Descendant<StackPanel>(window, "BrainDrainModulePanel");
+        var children = panel.Children.ToList();
+        var noticeIndex = children.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "BrainDrainVisualHalfState"));
+        var enableIndex = children.FindIndex(c => c.Name == "BrainDrainEnableToggle");
+        Assert.True(noticeIndex >= 0 && enableIndex >= 0, "both the notice and the enable are on the panel");
+        Assert.True(
+            noticeIndex < enableIndex,
+            $"the missing-half notice is at index {noticeIndex} and the enable at {enableIndex} — the "
+            + "notice must come first");
+
         var notice = Descendant<TextBlock>(window, "BrainDrainVisualHalfState");
         Assert.Equal(BrainDrainEffect.VisualHalfNotice, notice.Text);
         Assert.Contains("VISUAL half", notice.Text!, StringComparison.Ordinal);

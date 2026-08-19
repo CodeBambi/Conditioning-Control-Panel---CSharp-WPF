@@ -73,6 +73,7 @@ internal static class AudioObservations
             return new LifecycleRun(
                 MachineRenderEndpoints: WasapiRenderProbe.ActiveRenderEndpointCount(),
                 OsHeldSessionBeforeAnything: beforeAnything.SessionForThisProcess,
+                OsHeldACTIVESessionBeforeAnything: beforeAnything.Active,
                 OpenState: open,
                 ClaimedAvailableOnOpen: open is CapabilityState.Available,
                 OsHeldActiveSessionAfterOpen: afterOpen.Active,
@@ -97,6 +98,7 @@ internal static class AudioObservations
     internal sealed record LifecycleRun(
         int MachineRenderEndpoints,
         bool OsHeldSessionBeforeAnything,
+        bool OsHeldACTIVESessionBeforeAnything,
         CapabilityState OpenState,
         bool ClaimedAvailableOnOpen,
         bool OsHeldActiveSessionAfterOpen,
@@ -118,6 +120,7 @@ internal static class AudioObservations
         /// <summary>Everything, for a failure message: which side disagreed is the whole diagnosis.</summary>
         internal string Evidence =>
             $"endpoints={MachineRenderEndpoints}; osSessionBefore={OsHeldSessionBeforeAnything}; "
+            + $"osActiveBefore={OsHeldACTIVESessionBeforeAnything}; "
             + $"open={OpenState.GetType().Name}; osActiveAfterOpen={OsHeldActiveSessionAfterOpen}; "
             + $"claimedRendering={ClaimedRenderingAfterOpen}; peakIdle={PeakWithDeviceOpenAndNothingCued}; "
             + $"cue={CueState.GetType().Name}; peakRendering={PeakWhileRendering}; "

@@ -53,7 +53,7 @@ public sealed class BrainDrainPresetDocument
 
     /// <summary>
     /// The module's own on/off dial — WPF's <c>BrainDrainEnabled</c>, the flag its rack row binds its
-    /// dot to (<c>Views/Tabs/StudioTabView.xaml.cs:514-515</c>). Ships OFF. In the port it switches
+    /// dot to (<c>Views/Tabs/StudioTabView.xaml.cs:513-514</c>). Ships OFF. In the port it switches
     /// the AUDIO half only.
     /// </summary>
     public bool Enabled { get; set; }

@@ -472,7 +472,7 @@
 
           <!-- TWO dials, and both are read by the running effect. WPF's panel also carries loop
                mode with its A/B crossfade engine, a custom-clip file picker and a test button
-               (MindWipeService.cs:294-380, :139-146, :879-895). None is ported, so all three are
+               (MindWipeService.cs:293-380, :139-146, :879-895). None is ported, so all three are
                ABSENT rather than greyed — a disabled dial swallows the gesture and tells the user
                nothing (§9 D7). -->
           <CheckBox x:Name="MindWipeEnableToggle"

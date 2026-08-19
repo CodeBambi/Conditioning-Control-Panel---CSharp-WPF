@@ -16,7 +16,7 @@ namespace CcpClient.Desktop.Effects;
 /// law the other two share.</para>
 ///
 /// <para><b>The divisor is 360 and the code comment says otherwise.</b>
-/// <c>MindWipeService.cs:710-711</c> says "probability of triggering in this 30-second window" and
+/// <c>MindWipeService.cs:710</c> says "probability of triggering in this 30-second window" and
 /// <c>:733</c> says "At 180/hour, probability = 0.5 = 50% chance per interval", but the timer's
 /// interval is <b>10</b> seconds (<c>:127-129</c>) and the arithmetic at <c>:734</c> is
 /// <c>_frequencyPerHour / 360.0</c> — which is 3600/10, the number of TEN-second windows in an hour,
@@ -36,10 +36,10 @@ public static class MindWipeSchedule
     /// <summary>WPF default (<c>MindWipeService.cs:25</c>): 6 per hour.</summary>
     public const int DefaultPerHour = 6;
 
-    /// <summary>WPF clamp <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:98-99</c>).</summary>
+    /// <summary>WPF clamp <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:100</c>).</summary>
     public const int MinPerHour = 1;
 
-    /// <summary>WPF clamp <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:98-99</c>).</summary>
+    /// <summary>WPF clamp <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:100</c>).</summary>
     public const int MaxPerHour = 180;
 
     /// <summary>The chance that one window fires — <c>_frequencyPerHour / 360.0</c>

@@ -16,7 +16,7 @@ public interface IAudioCuePool
     string Folder { get; }
 
     /// <summary>One clip path, or null when the pool is empty. WPF returns before it plays or counts
-    /// anything on an empty pool (<c>Services/LockCard/MindWipeService.cs:706-710</c>,
+    /// anything on an empty pool (<c>Services/LockCard/MindWipeService.cs:704-708</c>,
     /// <c>Services/LockCard/BrainDrainService.cs:181</c>), so the caller must render null as
     /// "nothing to play", never as a failure and never as a firing.</summary>
     string? Draw();
@@ -27,7 +27,7 @@ public interface IAudioCuePool
 ///
 /// <para><b>Location, and the one place this diverges from upstream.</b> WPF reads
 /// <c>&lt;install&gt;/Resources/sounds/mindwipe</c> and <c>.../braindrain</c> — clips that SHIP with
-/// the app (<c>MindWipeService.cs:147</c>, <c>BrainDrainService.cs:75</c>). Those bytes belong to the
+/// the app (<c>MindWipeService.cs:149</c>, <c>BrainDrainService.cs:75</c>). Those bytes belong to the
 /// legacy tree and are never forked into <c>client/</c> (the payload rule in this repo's own build
 /// props), so the port reads <c>&lt;dataDir&gt;/assets/sounds/&lt;module&gt;</c> — the same
 /// user-media root the flash pool, DTRH and Graded Intake already draw from. A fresh install
@@ -37,8 +37,8 @@ public interface IAudioCuePool
 /// mysterious.</para>
 ///
 /// <para><b>Extensions</b> are upstream's own set, in upstream's own order:
-/// <c>.mp3</c>/<c>.wav</c>/<c>.ogg</c> (<c>MindWipeService.cs:158-161</c>,
-/// <c>BrainDrainService.cs:88-91</c>).</para>
+/// <c>.mp3</c>/<c>.wav</c>/<c>.ogg</c> (<c>MindWipeService.cs:162-165</c>,
+/// <c>BrainDrainService.cs:87-91</c>).</para>
 ///
 /// <para><b>Draw policy.</b> One uniform pick per firing —
 /// <c>_audioFiles[_random.Next(_audioFiles.Length)]</c> (<c>MindWipeService.cs:755</c>,
@@ -53,7 +53,7 @@ public interface IAudioCuePool
 /// </summary>
 public sealed class AudioCuePool : IAudioCuePool
 {
-    /// <summary>Upstream's extension set (<c>MindWipeService.cs:158-161</c>).</summary>
+    /// <summary>Upstream's extension set (<c>MindWipeService.cs:162-165</c>).</summary>
     private static readonly string[] Extensions = [".mp3", ".wav", ".ogg"];
 
     /// <summary>The folder under the user-media root that holds every module's clips.</summary>
@@ -110,7 +110,7 @@ public sealed class AudioCuePool : IAudioCuePool
     }
 
     /// <summary>Drops the cached enumeration; the next draw re-reads the folder. WPF's
-    /// <c>ReloadAudioFiles</c> (<c>MindWipeService.cs:183-186</c>).</summary>
+    /// <c>ReloadAudioFiles</c> (<c>MindWipeService.cs:189-192</c>).</summary>
     public void Invalidate()
     {
         lock (_gate)
@@ -124,7 +124,7 @@ public sealed class AudioCuePool : IAudioCuePool
         var found = new List<string>();
         if (!Directory.Exists(_folder))
         {
-            // WPF creates the folder here so the user can find it (MindWipeService.cs:152-157).
+            // WPF creates the folder here so the user can find it (MindWipeService.cs:153-157).
             // The port does NOT: a pool scan that writes to disk is a side effect in the middle of a
             // read, and the port's answer to "where do I put them" is the panel naming the path —
             // the shape the flash panel already uses (FlashImagePool has no create either).
@@ -133,7 +133,12 @@ public sealed class AudioCuePool : IAudioCuePool
 
         try
         {
-            foreach (var file in Directory.EnumerateFiles(_folder, "*", SearchOption.AllDirectories))
+            // TOP LEVEL ONLY, which is upstream's own enumeration: Directory.GetFiles(folder, "*.*")
+            // with no SearchOption overload defaults to TopDirectoryOnly (MindWipeService.cs:162,
+            // BrainDrainService.cs:87). An earlier draft of this file recursed, which would have made
+            // a subfolder of clips audible here and silent in the shipping app — a behaviour
+            // difference with no upstream evidence behind it.
+            foreach (var file in Directory.EnumerateFiles(_folder, "*", SearchOption.TopDirectoryOnly))
             {
                 if (Extensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
                 {
@@ -144,7 +149,7 @@ public sealed class AudioCuePool : IAudioCuePool
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // A folder that cannot be read is an EMPTY pool, never a fault — upstream logs and
-            // carries on with an empty array (MindWipeService.cs:175-180).
+            // carries on with an empty array (MindWipeService.cs:179-182).
             return found;
         }
 

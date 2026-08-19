@@ -55,7 +55,7 @@ public sealed record AudioCueFiring(AudioCueEvent Event, string Path, float Volu
 /// the second, a module would light its dot on a machine with no output device, which is the Pink
 /// Filter failure in a medium nobody can check by looking — and upstream draws exactly the same line
 /// in exactly the same place, refusing to play at all when the endpoint is down
-/// (<c>MindWipeService.cs:770</c>, <c>BrainDrainService.cs:211</c>: "endpoint down — stay quiet,
+/// (<c>MindWipeService.cs:771</c>, <c>BrainDrainService.cs:211</c>: "endpoint down — stay quiet,
 /// don't spin").</para>
 ///
 /// <para><b>What an empty clip folder does NOT do.</b> It does not darken the dot. That case takes
@@ -151,14 +151,14 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
 
     /// <summary>
     /// One window comes due. Upstream's tick body, in upstream's order: the empty-pool return first
-    /// (<c>MindWipeService.cs:706-710</c>, <c>BrainDrainService.cs:181</c>), then the roll
+    /// (<c>MindWipeService.cs:704-708</c>, <c>BrainDrainService.cs:181</c>), then the roll
     /// (<c>:741-742</c>, <c>:185</c>), then the draw (<c>:755</c>, <c>:197</c>). The suppressed-output
     /// check sits with them — upstream applies it one call later, inside <c>PlayAudio</c>
     /// (<c>:770</c>, <c>:211</c>), which is the same outcome and one less object built.
     /// </summary>
     protected sealed override AudioCueFiring? Compose()
     {
-        // "Endpoint down — stay quiet, don't spin" (MindWipeService.cs:770). Not counted, not
+        // "Endpoint down — stay quiet, don't spin" (MindWipeService.cs:771). Not counted, not
         // played, and the schedule keeps running so a device that comes back is picked up at the
         // next window rather than at the next session.
         if (!_presence.IsRendering)

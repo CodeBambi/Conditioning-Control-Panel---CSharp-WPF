@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
@@ -650,5 +651,138 @@ public class StudioSurfaceNoticeTests
         Assert.Contains("Holding nothing", noHold, StringComparison.Ordinal);
         Assert.Contains("no dials to drive", noDials, StringComparison.Ordinal);
         Assert.NotEqual(noHold, noDials);
+    }
+
+    // =====================================================================================
+    //  SP-109 — the AUDIO panels' lines. Four states for a module nobody can SEE.
+    // =====================================================================================
+
+    /// <summary>The state an audio sentence is written for. Every one is a situation a user can
+    /// really be in, and three of them look identical from inside the process.</summary>
+    public enum AudioLine
+    {
+        /// <summary>Dial off. No session involved either way.</summary>
+        Off,
+
+        /// <summary>Dial on, no session. The ordinary armed state.</summary>
+        ArmedNoSession,
+
+        /// <summary>Session running and the OS reports no render session for this process. The
+        /// module is genuinely not running, and it must NOT be told to start a session.</summary>
+        RunningButSilent,
+
+        /// <summary>Session running, audio confirmed, and this module's schedule is not on the
+        /// clock — a cancelled generation, or a repaint between the switch-on and the arm.</summary>
+        RunningNotScheduled,
+
+        /// <summary>Really running, nothing played yet.</summary>
+        LiveNoCuesYet,
+
+        /// <summary>Really running, with cues behind it.</summary>
+        LiveWithCues,
+    }
+
+    [Theory]
+    [InlineData(AudioLine.Off, EffectDotState.Off, false, false, 0)]
+    [InlineData(AudioLine.ArmedNoSession, EffectDotState.Armed, false, false, 0)]
+    [InlineData(AudioLine.RunningButSilent, EffectDotState.Armed, true, false, 0)]
+    [InlineData(AudioLine.RunningNotScheduled, EffectDotState.Armed, true, true, 0)]
+    [InlineData(AudioLine.LiveNoCuesYet, EffectDotState.Live, true, true, 0)]
+    [InlineData(AudioLine.LiveWithCues, EffectDotState.Live, true, true, 3)]
+    public void EveryAudioPanelState_GetsItsOwnSentence_AndNoTwoAreTheSame(
+        AudioLine state, EffectDotState dot, bool sessionRunning, bool rendering, int cueCount)
+    {
+        var last = cueCount == 0 ? null : new AudioCueEvent(cueCount, DateTimeOffset.UnixEpoch);
+        var line = AudioPanelNotices.DescribeCueState(dot, "clip", cueCount, last, sessionRunning, rendering);
+
+        Assert.NotEmpty(line);
+
+        var expected = state switch
+        {
+            AudioLine.Off => "Switched off",
+            AudioLine.ArmedNoSession => "Armed. Nothing plays until the session starts.",
+            AudioLine.RunningButSilent => "Running, but silent",
+            AudioLine.RunningNotScheduled => "not scheduled right now",
+            _ => "Running: the next clip is on the clock.",
+        };
+        Assert.Contains(expected, line, StringComparison.Ordinal);
+
+        // THE CLAUSE THAT CAUGHT A REAL DEFECT. SP-105's finding was that telling a user to start a
+        // session they have already started is the failure mode of a one-sentence Armed. Two of the
+        // six rows here have a session running, and neither may say it.
+        if (sessionRunning)
+        {
+            Assert.DoesNotContain("until the session starts", line, StringComparison.Ordinal);
+        }
+
+        // And the count only appears once something has really played.
+        Assert.Equal(cueCount > 0, line.Contains("played so far", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheSixAudioSentencesAreSixDIFFERENTSentences()
+    {
+        // The negative control for the theory above: a switch that collapsed two states onto one
+        // sentence would satisfy every row individually and still tell the user nothing.
+        var lines = new[]
+        {
+            AudioPanelNotices.DescribeCueState(EffectDotState.Off, "clip", 0, null, false, false),
+            AudioPanelNotices.DescribeCueState(EffectDotState.Armed, "clip", 0, null, false, false),
+            AudioPanelNotices.DescribeCueState(EffectDotState.Armed, "clip", 0, null, true, false),
+            AudioPanelNotices.DescribeCueState(EffectDotState.Armed, "clip", 0, null, true, true),
+            AudioPanelNotices.DescribeCueState(EffectDotState.Live, "clip", 0, null, true, true),
+            AudioPanelNotices.DescribeCueState(
+                EffectDotState.Live, "clip", 3, new AudioCueEvent(3, DateTimeOffset.UnixEpoch), true, true),
+        };
+
+        Assert.Equal(6, lines.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void TheClipPoolLineNamesTheFolderWhenItIsEmpty_AndCountsWhenItIsNot()
+    {
+        var empty = AudioPanelNotices.DescribeClipPool(0, @"C:\assets\sounds\mindwipe");
+        var one = AudioPanelNotices.DescribeClipPool(1, @"C:\assets\sounds\mindwipe");
+        var many = AudioPanelNotices.DescribeClipPool(4, @"C:\assets\sounds\mindwipe");
+
+        // The port's standing answer to "where do I put them" — the shape the flash panel uses.
+        Assert.Contains(@"C:\assets\sounds\mindwipe", empty, StringComparison.Ordinal);
+        Assert.Contains(".mp3, .wav or .ogg", empty, StringComparison.Ordinal);
+        // And it promises the LATE DROP, which is the pool behaviour AudioCuePoolTests pins.
+        Assert.Contains("without restarting", empty, StringComparison.Ordinal);
+
+        Assert.Contains("1 clip in", one, StringComparison.Ordinal);
+        Assert.Contains("4 clips in", many, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAudioCapabilityLineQuotesTheCapability_AndNeverInventsASentenceAboutThePlatform()
+    {
+        // Before anything is asked: names the MECHANISM and says nothing was asked. A fact about
+        // this session, not a claim about the machine.
+        var nothingAsked = AudioPanelNotices.DescribeAudioCapability(null, AudioRenderObservation.NotAsked);
+        Assert.Contains("Nothing has been asked of the operating system yet.", nothingAsked, StringComparison.Ordinal);
+
+        // A refusal repeats the capability's OWN detail verbatim — a Linux run therefore reads its
+        // own manual gate here rather than a summary somebody wrote about Linux.
+        var refused = AudioPanelNotices.DescribeAudioCapability(
+            new CapabilityState.Unavailable(new CapabilityReason("audio-render-readback-absent", "GATE-TEXT-VERBATIM")),
+            AudioRenderObservation.NotAsked);
+        Assert.Contains("GATE-TEXT-VERBATIM", refused, StringComparison.Ordinal);
+
+        // A confirmed run appends the OS's own measurement AND the ceiling on it, in the same
+        // sentence, so the number can never be read as proof that anybody heard anything.
+        var confirmed = AudioPanelNotices.DescribeAudioCapability(
+            new CapabilityState.Available("OS-DETAIL-VERBATIM"),
+            new AudioRenderObservation(true, "Speakers", true, true, true, 0.4049835f, 6));
+        Assert.Contains("OS-DETAIL-VERBATIM", confirmed, StringComparison.Ordinal);
+        Assert.Contains("0.405", confirmed, StringComparison.Ordinal);
+        Assert.Contains("does NOT prove your speakers were on", confirmed, StringComparison.Ordinal);
+
+        // No meter, no number — "we could not read one" must never render as "we read zero".
+        var noMeter = AudioPanelNotices.DescribeAudioCapability(
+            new CapabilityState.Available("OS-DETAIL-VERBATIM"),
+            new AudioRenderObservation(true, "Speakers", true, true, false, 0f, 6));
+        Assert.DoesNotContain("metered", noMeter, StringComparison.Ordinal);
     }
 }

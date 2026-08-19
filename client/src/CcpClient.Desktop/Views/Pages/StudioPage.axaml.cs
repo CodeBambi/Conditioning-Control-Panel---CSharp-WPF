@@ -477,7 +477,7 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>Mind Wipe's volume dial. WPF pushes a moved slider onto the CLIP THAT IS PLAYING as
-    /// well (<c>MindWipeService.cs:103-118</c>); the port's audio seam has no live-gain path, so it
+    /// well (<c>MindWipeService.cs:102-122</c>); the port's audio seam has no live-gain path, so it
     /// takes effect on the next cue — a divergence whose whole window is one short clip.</summary>
     private void OnMindWipeVolumeMoved()
     {

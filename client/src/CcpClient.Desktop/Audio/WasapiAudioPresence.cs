@@ -25,10 +25,10 @@ namespace CcpClient.Desktop.Audio;
 /// for the same reason.</para>
 ///
 /// <para><b>One device for the whole session, not one per clip — a deliberate divergence.</b> WPF
-/// builds a fresh <c>WaveOutEvent</c> per clip (<c>Services/LockCard/MindWipeService.cs:783</c>,
+/// builds a fresh <c>WaveOutEvent</c> per clip (<c>Services/LockCard/MindWipeService.cs:791</c>,
 /// <c>Services/LockCard/BrainDrainService.cs:231</c>) and then has to move the whole build
 /// off-thread because opening a device is a half-second blocking call that made the app hitch every
-/// few seconds (<c>MindWipeService.cs:779-781</c>, issue #890). The port's backend is one playback
+/// few seconds (<c>MindWipeService.cs:781-783</c>, issue #890). The port's backend is one playback
 /// device with a MasterMixer that players are added to (<c>SoundFlowAudioBackend.cs</c>,
 /// audio-backend-spike.md §6 channel ownership), so the device is opened once and the per-clip cost
 /// is a player. Same user-visible outcome; the hitch upstream had to engineer around does not
@@ -36,7 +36,7 @@ namespace CcpClient.Desktop.Audio;
 ///
 /// <para><b>Slots, and why replacement rather than mixing.</b> Both upstream services keep exactly
 /// ONE player field and a generation counter, and a new clip displaces the old one under a lock
-/// (<c>MindWipeService.cs:820-845</c>, <c>BrainDrainService.cs:265-292</c>). A slot here is that one
+/// (<c>MindWipeService.cs:821-853</c>, <c>BrainDrainService.cs:265-292</c>). A slot here is that one
 /// field, keyed by the caller's channel id, so two modules cannot displace each other's audio while
 /// each still replaces its own — which is what upstream gets from having two separate services.</para>
 ///
@@ -235,7 +235,7 @@ public sealed class WasapiAudioPresence : IAudioPresence
             // Play() only queues the device thread, so it is cheap enough to hold the gate across —
             // and holding it is what stops a Silence from landing between starting the player and
             // publishing it where a Silence can find it. Upstream's own reasoning, verbatim in
-            // shape: MindWipeService.cs:376-379.
+            // shape: MindWipeService.cs:399-402.
             player.Play();
             _slots.Remove(cue.Slot, out displaced);
             _slots[cue.Slot] = player;
@@ -285,7 +285,7 @@ public sealed class WasapiAudioPresence : IAudioPresence
         }
 
         // Never under the gate: stop/dispose reach native teardown, and upstream keeps its own lock
-        // out of exactly those calls (MindWipeService.cs:660-665 / BrainDrainService.cs:304-308).
+        // out of exactly those calls (MindWipeService.cs:568-573 / BrainDrainService.cs:304-308).
         SafeStopAndDispose(player);
         return new CapabilityState.Available($"the '{slot}' slot was stopped and its player disposed");
     }

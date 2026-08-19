@@ -15,7 +15,7 @@ namespace CcpClient.Desktop.Session;
 /// in the setters, exactly where WPF puts them.</para>
 ///
 /// <para><b>What is NOT here, and why each one is absent rather than present-and-inert.</b>
-/// <c>MindWipeLoop</c> and its crossfade pair (<c>MindWipeService.cs:294-380</c>) are a second
+/// <c>MindWipeLoop</c> and its crossfade pair (<c>MindWipeService.cs:293-380</c>) are a second
 /// playback mode with an A/B crossfade engine — a feature of its own, not a dial, and it is recorded
 /// as a divergence rather than shipped as a switch that does nothing.
 /// <c>MindWipeAudioPath</c> — the custom-clip override that wins over the folder
@@ -36,10 +36,10 @@ public sealed class MindWipePresetDocument
     public const int DefaultVolumePercent = 50;
 
     /// <summary>WPF clamp <c>Math.Clamp(value, 0, 1)</c> on the 0..1 gain
-    /// (<c>MindWipeService.cs:104</c>), expressed here in the percent the panel shows.</summary>
+    /// (<c>MindWipeService.cs:107</c>), expressed here in the percent the panel shows.</summary>
     public const int MinVolumePercent = 0;
 
-    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 1)</c> (<c>MindWipeService.cs:104</c>).</summary>
+    /// <summary>WPF clamp <c>Math.Clamp(value, 0, 1)</c> (<c>MindWipeService.cs:107</c>).</summary>
     public const int MaxVolumePercent = 100;
 
     private int _perHour = MindWipeSchedule.DefaultPerHour;
@@ -54,7 +54,7 @@ public sealed class MindWipePresetDocument
 
     /// <summary>
     /// How many clips an hour the roll aims for — WPF's <c>MindWipeFrequency</c>, clamped
-    /// <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:98-99</c>). It sets the ODDS of each
+    /// <c>Math.Clamp(value, 1, 180)</c> (<c>MindWipeService.cs:100</c>). It sets the ODDS of each
     /// ten-second window, not the spacing (<see cref="MindWipeSchedule"/>).
     /// </summary>
     public int PerHour
@@ -66,7 +66,7 @@ public sealed class MindWipePresetDocument
     /// <summary>
     /// Playback gain as a percentage — WPF's <c>MindWipeVolume</c>, divided by 100 on the way into
     /// the service (<c>MainWindow/MainWindow.StartStop.cs:230</c>) and clamped to 0..1 there
-    /// (<c>MindWipeService.cs:104</c>). Stored as percent because that is what the panel shows and
+    /// (<c>MindWipeService.cs:107</c>). Stored as percent because that is what the panel shows and
     /// what WPF persists.
     /// </summary>
     public int VolumePercent

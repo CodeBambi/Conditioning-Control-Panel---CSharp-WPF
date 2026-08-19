@@ -33,7 +33,7 @@ namespace CcpClient.Desktop.Effects;
 /// </list>
 ///
 /// <para><b>What is NOT ported</b>, and is not pretended: loop mode with its A/B crossfade engine
-/// (<c>Services/LockCard/MindWipeService.cs:294-380</c>, started from
+/// (<c>Services/LockCard/MindWipeService.cs:293-380</c>, started from
 /// <c>MainWindow.StartStop.cs:232-237</c>), the "Clean Slate" achievement at 60 s of looping
 /// (<c>:355-365</c>), session mode's escalating frequency (<c>:213-235</c>, which belongs to the
 /// scripted preset session the port does not have — D99), the custom-clip override
@@ -51,7 +51,7 @@ public sealed class MindWipeEffect : AudioCueEffect
     /// not render (<c>StudioTabView.xaml.cs:509</c>, <c>en.json:1432</c> — "🧠 Mind Wipe").</summary>
     public const string DisplayTitle = "Mind Wipe";
 
-    /// <summary>Upstream's folder name under the sounds root (<c>MindWipeService.cs:147</c>).</summary>
+    /// <summary>Upstream's folder name under the sounds root (<c>MindWipeService.cs:149</c>).</summary>
     public const string ClipFolderName = "mindwipe";
 
     private readonly PersistenceStore<MindWipePresetDocument> _preset;
@@ -121,7 +121,7 @@ public sealed class MindWipeEffect : AudioCueEffect
 
     /// <summary>
     /// The volume dial. WPF applies a moved slider to the CURRENTLY PLAYING clip as well as to the
-    /// next one (<c>MindWipeService.cs:103-118</c> sets <c>_audioReader.Volume</c> live). The port
+    /// next one (<c>MindWipeService.cs:102-122</c> sets <c>_audioReader.Volume</c> live). The port
     /// does not: <see cref="IAudioPresence"/> has no live-gain seam, so a moved slider takes effect
     /// on the next cue. Recorded as a divergence — a clip is a second or two long, so the window in
     /// which the two differ is that clip.

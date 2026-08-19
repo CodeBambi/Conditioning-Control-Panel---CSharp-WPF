@@ -19,7 +19,7 @@ namespace CcpClient.Desktop.Audio;
 ///
 /// <para><b>Not a no-op.</b> A caller that sees Unavailable must stay quiet and stop scheduling
 /// work, which is exactly what WPF does with its own suppressed-output flag
-/// (<c>Services/LockCard/MindWipeService.cs:770</c>, <c>Services/LockCard/BrainDrainService.cs:211</c>
+/// (<c>Services/LockCard/MindWipeService.cs:771</c>, <c>Services/LockCard/BrainDrainService.cs:211</c>
 /// — "endpoint down — stay quiet, don't spin"), and it must report its module as NOT running. A
 /// module that kept its dot lit over a presence that refuses would be claiming a sound nobody can
 /// hear, which is the precise failure this whole capability exists to make impossible.</para>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
@@ -44,7 +45,7 @@ public static class AudioPanelNotices
 
         if (dot == EffectDotState.Armed && !sessionRunning)
         {
-            return $"Armed. Nothing plays until the session starts.";
+            return "Armed. Nothing plays until the session starts.";
         }
 
         if (dot == EffectDotState.Armed && !rendering)
@@ -58,7 +59,14 @@ public static class AudioPanelNotices
 
         if (dot == EffectDotState.Armed)
         {
-            return $"Armed. Nothing plays until the session starts.";
+            // Session running, audio confirmed, and this module's schedule is still not on the clock.
+            // AN EARLIER VERSION REPEATED THE "nothing plays until the session starts" SENTENCE HERE
+            // — which is false in front of a user who has already started one, and is precisely the
+            // instruction SP-105 had to split apart for its own module. Found by writing this
+            // branch's fact rather than by reading. It is reachable: a module whose generation was
+            // cancelled, or one switched on between the arm and the repaint, lands here.
+            return $"This module is not scheduled right now, though the session is running and audio "
+                + $"output is confirmed. Switching it off and on again re-arms it.";
         }
 
         var head = $"Running: the next {noun} is on the clock.";
@@ -108,8 +116,13 @@ public static class AudioPanelNotices
             _ => open.ToString() ?? string.Empty,
         };
 
+        // INVARIANT, deliberately, where every other number on this page is CurrentCulture: this one
+        // is quoted from an operating-system API and travels into bug reports, and the same
+        // measurement rendering as "0.405" in one locale and "0,405" in another makes one fact two
+        // strings to search for.
+        var peak = observation.Peak.ToString("0.000", CultureInfo.InvariantCulture);
         return observation.MeterReadable
-            ? $"{head} Windows last metered a peak of {observation.Peak:0.000} on this process's own "
+            ? $"{head} Windows last metered a peak of {peak} on this process's own "
                 + "audio stream — which proves samples reached its mixer, and does NOT prove your "
                 + "speakers were on."
             : head;

@@ -45,7 +45,7 @@ public sealed record AudioRenderObservation(
 /// <summary>One clip to play. <paramref name="Slot"/> is the caller's own channel identity: a second
 /// cue on the same slot REPLACES the first, which is what both upstream services do with their one
 /// player field (<c>Services/LockCard/MindWipeService.cs:826-840</c>,
-/// <c>Services/LockCard/BrainDrainService.cs:276-292</c>).</summary>
+/// <c>Services/LockCard/BrainDrainService.cs:271-292</c>).</summary>
 /// <param name="Slot">Stable channel id, e.g. the module's rack key.</param>
 /// <param name="Path">A local audio file.</param>
 /// <param name="Volume">Gain 0..1.</param>
@@ -77,7 +77,7 @@ public sealed record AudioCue(string Slot, string Path, float Volume);
 /// <para><b>What a caller does with Unavailable.</b> Exactly what WPF does: stay quiet and do not
 /// spin. Both upstream audio services open their tick with
 /// <c>if (App.Audio?.IsOutputSuppressed == true) return;</c>
-/// (<c>Services/LockCard/MindWipeService.cs:770</c>, <c>Services/LockCard/BrainDrainService.cs:211</c>)
+/// (<c>Services/LockCard/MindWipeService.cs:771</c>, <c>Services/LockCard/BrainDrainService.cs:211</c>)
 /// — the comment there is "endpoint down — stay quiet, don't spin", and the spin it is avoiding is a
 /// device re-open every tick forever (issues #778/#779). A caller must never respond to Unavailable
 /// by carrying on and reporting itself as running: a module whose sound cannot reach anybody is not
@@ -110,7 +110,7 @@ public interface IAudioPresence : IDisposable
 
     /// <summary>
     /// Stop and drop whatever a slot is playing — WPF's <c>StopCurrentAudio</c>
-    /// (<c>MindWipeService.cs:851-869</c>, <c>BrainDrainService.cs:316-334</c>), which both services
+    /// (<c>MindWipeService.cs:857-874</c>, <c>BrainDrainService.cs:316-334</c>), which both services
     /// call unconditionally on stop so a panic can always reach the audio. Silent on a slot that has
     /// nothing, which is not a success claim: it returns <see cref="CapabilityState.Unavailable"/>
     /// with <see cref="AudioReasonCodes.RenderDeviceNotOpen"/> when there was nothing to stop.

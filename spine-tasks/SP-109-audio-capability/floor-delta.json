@@ -1,6 +1,6 @@
 {
   "packet": "SP-109-audio-capability",
-  "unit": 36,
+  "unit": 62,
   "headless": 5,
-  "reason": "AudioCapabilityTests (15, OS-earned render session + peak meter) and AudioModuleSpineTests (21, the two IMMERSION modules and the dot's fifth meaning); 5 headless rack/panel facts for the two audio rows"
+  "reason": "AudioCapabilityTests (22 — the OS-earned render session, the peak meter, and every conjunct of the earning predicate found by the mutation sweep), AudioModuleSpineTests (23 — the two IMMERSION modules and both clauses of the dot's fifth meaning), AudioCuePoolTests (8 — the late drop the dot ruling rests on), StudioSurfaceNoticeTests (+9 — the audio panels' six states); 5 headless rack/panel facts for the two audio rows"
 }

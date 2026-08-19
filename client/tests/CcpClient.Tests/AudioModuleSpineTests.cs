@@ -83,7 +83,7 @@ public class AudioModuleSpineTests
         rig.Engine.QuickToggle(MindWipeEffect.EffectId);
 
         // Upstream's StopCurrentAudio is per-SERVICE, and each service owns one player field
-        // (MindWipeService.cs:851-869 / BrainDrainService.cs:316-334). Here the slot is the module
+        // (MindWipeService.cs:857-874 / BrainDrainService.cs:316-334). Here the slot is the module
         // id, so switching one module off can never silence the other's clip.
         Assert.Equal([MindWipeEffect.EffectId], rig.Audio.Silenced);
     }
@@ -105,7 +105,7 @@ public class AudioModuleSpineTests
         // still Armed, because nothing this module plays can reach anybody. This is SP-105's rule
         // (a module whose whole output channel is gone is not running) applied to a channel nobody
         // can check by looking, and it is upstream's own gate: "endpoint down — stay quiet, don't
-        // spin" (MindWipeService.cs:770, BrainDrainService.cs:211).
+        // spin" (MindWipeService.cs:771, BrainDrainService.cs:211).
         Assert.True(rig.MindWipe.ScheduleArmed);
         Assert.True(rig.BrainDrain.ScheduleArmed);
         Assert.Equal(EffectDotState.Armed, rig.MindWipe.Dot);
@@ -148,7 +148,7 @@ public class AudioModuleSpineTests
         rig.Clock.Advance(MindWipeSchedule.Window);
 
         // Nothing counted, nothing played, and the schedule keeps running — upstream's own outcome
-        // (MindWipeService.cs:706-710 returns before the roll and the timer is untouched).
+        // (MindWipeService.cs:704-708 returns before the roll and the timer is untouched).
         Assert.Equal(0, rig.MindWipe.CueCount);
         Assert.Empty(rig.Audio.Cues);
         Assert.True(rig.MindWipe.ScheduleArmed);
@@ -175,6 +175,61 @@ public class AudioModuleSpineTests
         // honest rather than an under-claim. If this title were ever changed to plain "Brain Drain",
         // the dot would become a lie, so the title is pinned here beside the dot it justifies.
         Assert.Equal("Brain Drain (audio half)", rig.BrainDrain.Title);
+    }
+
+    [Fact]
+    public void BOTHClausesOfTheFifthDotMeaningAreLoadBearing_PinnedOnThePredicateItself()
+    {
+        // The sweep found the CLOCK clause open: no product path this file can construct leaves a
+        // module armed, its generation live and its audio confirmed while its schedule is NOT on the
+        // clock, so deleting `ScheduleArmed &&` was invisible. It is pinned directly instead — the
+        // precedent MovingEffectSpineTests set for ReleaseIfStillOurs, and for the same reason: a
+        // clause that can only fail on a rare interleaving should fail on EVERY run when it is
+        // deleted, not on the runs where the thread pool obliges.
+        var registry = new OperationRegistry();
+        var boundary = new UiDispatchBoundary();
+        boundary.Bind(new InlineDispatch());
+        var infra = new ParticipantInfrastructure(registry, boundary, new NullSink());
+        var signal = new EffectSignal(boundary, static () => true);
+        var clock = new ManualSessionClock();
+        var presence = new RecordingAudioPresence(rendering: true);
+        var probe = new WorkIsRunningProbe(
+            infra.OwnerFor("Probe"), signal, clock, new StubCuePool("clip.mp3", "folder"), presence);
+
+        probe.SetEnabled(true);
+        probe.Arm();
+
+        // Both clauses true: on the clock AND the OS confirms. This is the only Live.
+        Assert.True(probe.ScheduleArmed);
+        Assert.True(presence.IsRendering);
+        Assert.True(probe.ExposedWorkIsRunning);
+        Assert.Equal(EffectDotState.Live, probe.Dot);
+
+        // Drop ONLY the clock clause: still armed, still confirmed, nothing scheduled.
+        probe.ForceReleaseWork();
+        Assert.False(probe.ScheduleArmed);
+        Assert.True(presence.IsRendering);
+        Assert.False(probe.ExposedWorkIsRunning);
+        Assert.Equal(EffectDotState.Armed, probe.Dot);
+    }
+
+    [Fact]
+    public async Task ArmingAnEnabledAudioModuleOPENSTheDevice_AndArmingNoneNeverDoes()
+    {
+        // The sweep's M-t: deleting the device open from the arm survived, because the recording
+        // presence reports a CONSTANT rendering state and the only fact that read Opens asserted it
+        // was ZERO. Both directions are asserted here.
+        await using var off = await Rig.StartAsync();
+        off.Engine.Start();
+        // Both audio modules ship OFF, and that is exactly why the device is opened at ARM rather
+        // than at app start: a user who never enables either never gives this process a WASAPI
+        // session or a row in their volume mixer.
+        Assert.Equal(0, off.Audio.Opens);
+
+        await using var on = await Rig.StartAsync();
+        on.EnableMindWipe();
+        on.Engine.Start();
+        Assert.True(on.Audio.Opens > 0, "arming an enabled audio module asks the OS for a device");
     }
 
     // =================================================================================
@@ -237,7 +292,7 @@ public class AudioModuleSpineTests
     public void MindWipesTriggerProbabilityIsPerHourOver360_NotOver120(int perHour, double expected)
     {
         // The divisor is 3600/10 — ten-second windows in an hour. Upstream's code comment says
-        // "30-second window" (MindWipeService.cs:710-711) and its timer interval is 10 s
+        // "30-second window" (MindWipeService.cs:710) and its timer interval is 10 s
         // (:127-129); the ARITHMETIC at :734 is /360.0 and it is the behaviour. A port that
         // followed the comment would fire a third as often as the shipping app.
         Assert.Equal(expected, MindWipeSchedule.TriggerProbability(perHour), 10);
@@ -553,6 +608,49 @@ public class AudioModuleSpineTests
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>
+    /// A bare <see cref="AudioCueEffect"/> that exposes the dot's third input and the schedule
+    /// release, so both conjuncts of the fifth dot meaning can be moved INDEPENDENTLY. It adds no
+    /// behaviour of its own: every number it answers with is a constant, so nothing here can
+    /// re-derive a decision the product should be making.
+    /// </summary>
+    private sealed class WorkIsRunningProbe : AudioCueEffect
+    {
+        private bool _enabled;
+
+        public WorkIsRunningProbe(
+            AsyncOperationOwner owner, EffectSignal signal, ISessionClock clock, IAudioCuePool pool,
+            IAudioPresence presence)
+            : base(owner, signal, clock, "probe-schedule", pool, presence)
+        {
+        }
+
+        public override string Id => "probe";
+
+        public override string Title => "Probe";
+
+        public override bool Enabled => _enabled;
+
+        /// <summary>The dot's third input, verbatim.</summary>
+        public bool ExposedWorkIsRunning => WorkIsRunning;
+
+        /// <summary>Drops the pending one-shot without disarming, which is the only way to hold one
+        /// clause true and the other false.</summary>
+        public void ForceReleaseWork() => ReleaseWork();
+
+        public override void SetEnabled(bool enabled)
+        {
+            _enabled = enabled;
+            RaiseChanged();
+        }
+
+        protected override TimeSpan Window => TimeSpan.FromSeconds(10);
+
+        protected override double TriggerProbability => 1.0;
+
+        protected override float Volume => 1f;
     }
 
     /// <summary>A clip pool with one file, or none. No disk, so an empty pool is a state a fact

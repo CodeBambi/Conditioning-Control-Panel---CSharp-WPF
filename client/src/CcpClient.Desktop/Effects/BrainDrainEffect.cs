@@ -8,7 +8,7 @@ namespace CcpClient.Desktop.Effects;
 
 /// <summary>
 /// <b>Brain Drain — the AUDIO half, and only the audio half.</b> WPF's IMMERSION rack row
-/// (<c>Views/Tabs/StudioTabView.xaml.cs:514-515</c>), started by <c>StartEngine</c> at
+/// (<c>Views/Tabs/StudioTabView.xaml.cs:513-514</c>), started by <c>StartEngine</c> at
 /// <c>MainWindow/MainWindow.StartStop.cs:241-244</c> and stopped at <c>:342</c>.
 ///
 /// <para><b>THIS ROW IS HALF A ROW, PERMANENTLY, AND SAYS SO EVERYWHERE A USER CAN SEE.</b> Upstream
@@ -56,11 +56,11 @@ namespace CcpClient.Desktop.Effects;
 /// </summary>
 public sealed class BrainDrainEffect : AudioCueEffect
 {
-    /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:514</c>).</summary>
+    /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:513</c>).</summary>
     public const string EffectId = "braindrain";
 
     /// <summary>
-    /// The row's label — upstream's "Brain Drain" (<c>StudioTabView.xaml.cs:514</c>,
+    /// The row's label — upstream's "Brain Drain" (<c>StudioTabView.xaml.cs:513</c>,
     /// <c>en.json:1428</c>) with the scope appended. <b>The suffix is load-bearing, not decoration:</b>
     /// it is what makes the dot's <c>Live</c> honest, because the dot is scoped to what the row says
     /// it is. Renaming this row to plain "Brain Drain" would turn a truthful dot into a false one.
@@ -193,23 +193,39 @@ public sealed class BrainDrainEffect : AudioCueEffect
     protected override CapabilityState Ready(CapabilityState scheduled)
     {
         var audio = base.Ready(scheduled);
-        var surviving = audio switch
-        {
-            CapabilityState.Available a => a.Detail,
-            CapabilityState.Degraded d => d.SurvivingSemantics,
-            // The audio half itself refused (no render session, dial off, generation cancelled).
-            // That refusal is returned untouched: there is no surviving half to qualify, and
-            // stacking a second reason on top of it would bury the one the user needs.
-            _ => null,
-        };
 
-        if (surviving is null)
+        // The audio half itself refused (no render session, dial off, generation cancelled). That
+        // refusal is returned UNTOUCHED: there is no surviving half to qualify, and stacking the
+        // permanent notice on top of it would bury the one fact the user can act on.
+        if (audio is not (CapabilityState.Available or CapabilityState.Degraded))
         {
             return audio;
         }
 
+        var surviving = audio switch
+        {
+            CapabilityState.Available a => a.Detail,
+            CapabilityState.Degraded d => d.SurvivingSemantics,
+            _ => string.Empty,
+        };
+
+        // BOTH reasons travel, and this is a correction from the code review: an earlier version
+        // REPLACED the audio half's own degradation — code and detail — with the visual-half notice,
+        // so a Brain Drain armed over an empty clip folder lost the actionable "there is no audio
+        // clip in <folder>" text from its arm result entirely, and it survived only on a separate
+        // panel line.
+        //
+        // The CODE stays the build-level one, because that is the claim that is true on every run
+        // and a consumer that only ever saw `audio-no-clip` here would learn nothing about the half
+        // that does not exist. The run-level cause is not dropped: its own code and its own detail
+        // are carried verbatim at the FRONT of the detail, where the user reads it and where a grep
+        // for the code still finds it.
+        var detail = audio is CapabilityState.Degraded degraded
+            ? $"[{degraded.Reason.Code}] {degraded.Reason.Detail} ALSO, and permanently: {VisualHalfNotice}"
+            : VisualHalfNotice;
+
         return new CapabilityState.Degraded(
             $"the AUDIO half of Brain Drain is armed — {surviving}",
-            new CapabilityReason(EffectReasonCodes.BrainDrainVisualHalfAbsent, VisualHalfNotice));
+            new CapabilityReason(EffectReasonCodes.BrainDrainVisualHalfAbsent, detail));
     }
 }
