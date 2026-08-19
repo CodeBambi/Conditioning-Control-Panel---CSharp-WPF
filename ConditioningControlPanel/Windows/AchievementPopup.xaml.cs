@@ -35,7 +35,10 @@ public partial class AchievementPopup : Window
         
         // Position in bottom-right corner of primary screen
         PositionWindow();
-        
+
+        // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs #1000).
+        Helpers.PassiveToastWindow.Apply(this);
+
         // Auto-close after 6 seconds
         _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _autoCloseTimer.Tick += (s, e) =>

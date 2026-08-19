@@ -87,6 +87,9 @@ public partial class ItemUnlockedPopup : Window
 
         PositionWindow(stackIndex);
 
+        // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs #1000).
+        Helpers.PassiveToastWindow.Apply(this);
+
         _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _autoCloseTimer.Tick += (s, e) =>
         {
