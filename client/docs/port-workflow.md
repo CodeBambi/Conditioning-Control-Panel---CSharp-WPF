@@ -255,3 +255,26 @@ The agents and skills under `.claude/` are tracked files and land like code. To 
 4. Record the change and its evidence in `client/docs/task-board.md` gate history.
 
 Never widen a mechanical guard to make a step pass. If a guard is wrong, fix the guard deliberately in its own commit with the reason stated, never as a side effect of unblocking a lane.
+
+## The equivalence rule (adopted 2026-08-20, after four false claims in three waves)
+
+**An equivalence claim in a mutation sweep is INADMISSIBLE until every consumer of the mutated
+symbol has been enumerated by `grep`, and the claim discharged against each one by name.**
+
+"Equivalent mutant" is the only sweep disposition that asserts a UNIVERSAL - that no input
+distinguishes the mutant from the original - and it is written by the same reasoning that
+produced the code. Four have been disproved, each in the same shape: **a true proposition about
+ONE consumer of the mutated symbol, generalised to "no input distinguishes".**
+
+| claim | what the proof forgot |
+|---|---|
+| SP-112 M-s | the pixel grid inside the box (nearest centre is within `sqrt(0.5)`) |
+| SP-113 M-ch | the **null** receiver - the guard was also a null guard |
+| SP-113 M-au | the **reader** - `DiscBox` also drove `ReadInk`'s scan window and stride |
+| SP-113 M-aq | that the painter is not the only **writer** into the DC |
+
+SP-113 M-ch's false proof was asserted in **shipped product source**, where the next reader would
+have acted on it. Two of the four were killable by a single assertion once the consumer was named.
+
+**If enumeration is not done, the survivor is UNCOVERED, not equivalent.** Uncovered is an honest
+gap; a false equivalence is a false belief, and it propagates.
