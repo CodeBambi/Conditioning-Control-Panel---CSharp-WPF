@@ -1318,4 +1318,109 @@ public class StudioRackHeadlessTests
 
         await boot.Host.ShutdownAsync();
     }
+
+    // =====================================================================================
+    //  SP-111 — the row that plays a FILE, and it is half a row
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheMandatoryVideoRowSAYSItIsHalfARow_OnTheRowItselfAndOnItsPanel()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowMandatoryVideo"));
+
+        // THE ROW'S LABEL IS LOAD-BEARING, not decoration: the module's dot goes Live while the
+        // picture moves, and that is only honest because the row says which half it is. This fact is
+        // what stops the label being "tidied" back to plain "Mandatory Video".
+        var label = Descendant<RadioButton>(window, "RowMandatoryVideo")
+            .GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal(MandatoryVideoEffect.DisplayTitle, label.Text);
+        Assert.Equal("Mandatory Video (silent half)", label.Text);
+
+        // And the panel LEADS with the missing half, in the MODULE's own words — the same constant
+        // the arm result's typed reason carries, so the panel and the outcome are one account of the
+        // absence rather than two. "LEADS" is a POSITIONAL claim and is pinned positionally.
+        var panel = Descendant<StackPanel>(window, "MandatoryVideoModulePanel");
+        var children = panel.Children.ToList();
+        var noticeIndex = children.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "MandatoryVideoSilentHalfState"));
+        var enableIndex = children.FindIndex(c => c.Name == "MandatoryVideoEnableToggle");
+        Assert.True(noticeIndex >= 0 && enableIndex >= 0, "both the notice and the enable are on the panel");
+        Assert.True(
+            noticeIndex < enableIndex,
+            $"the missing-half notice is at index {noticeIndex} and the enable at {enableIndex} — the "
+            + "notice must come first");
+
+        var notice = Descendant<TextBlock>(window, "MandatoryVideoSilentHalfState");
+        Assert.Equal(MandatoryVideoEffect.VideoPanelNoticeText, notice.Text);
+        Assert.Contains("SILENTLY", notice.Text!, StringComparison.Ordinal);
+        Assert.Contains("ABSENT rather than broken", notice.Text!, StringComparison.Ordinal);
+
+        // No control on this panel offers the missing half. A greyed volume slider would be the dead
+        // dial §9 D7 refuses, and worse here: it would imply the sound is one setting away.
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("MandatoryVideoVolumeSlider", names);
+        Assert.DoesNotContain("MandatoryVideoAudioDeviceBox", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheMandatoryVideoRowCarriesTheWholeRackGrammar_AndItsPanelQuotesTheOperatingSystem()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowMandatoryVideo").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        // WPF's right-click quick-toggle reaches this row like any other (StudioTabView.xaml.cs:660
+        // -> :1109-1133). The rack grammar needed nothing new for a module that plays a file.
+        Assert.False(boot.Session.MandatoryVideoPreset.Current.Enabled);
+        Click(window, Descendant<RadioButton>(window, "RowMandatoryVideo"), MouseButton.Right);
+        Assert.True(boot.Session.MandatoryVideoPreset.Current.Enabled);
+
+        // The panel's closing line is the CAPABILITY's own answer, not a sentence this page composed.
+        // Before anything has been asked it says "nobody asked", which is a different fact from "the
+        // answer was no" and is the distinction VideoSurfaceObservation.NotAsked exists to hold.
+        Click(window, Descendant<RadioButton>(window, "RowMandatoryVideo"));
+        var surfaceLine = Descendant<TextBlock>(window, "MandatoryVideoSurfaceState");
+        Assert.Contains(
+            "The video surface has not been asked for anything yet.",
+            surfaceLine.Text!,
+            StringComparison.Ordinal);
+        Assert.Contains("nobody asked", surfaceLine.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheVideoPanelsDialsAreUpstreamsSliderBounds_AndTheCapIsShownAsNoCapAtZero()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowMandatoryVideo"));
+
+        var frequency = Descendant<Slider>(window, "MandatoryVideoFrequencySlider");
+        Assert.Equal(MandatoryVideoSchedule.MinPerHour, frequency.Minimum);
+        Assert.Equal(MandatoryVideoSchedule.MaxPerHour, frequency.Maximum);
+        Assert.Equal(MandatoryVideoSchedule.DefaultPerHour, frequency.Value);
+
+        // Zero is upstream's own "no cap" (VideoService.cs:5509-5510) and the panel says so in
+        // words rather than showing a bare 0 the user would read as "no video at all".
+        Assert.Equal("no cap", Descendant<TextBlock>(window, "MandatoryVideoMaxLengthValue").Text);
+
+        var cap = Descendant<Slider>(window, "MandatoryVideoMaxLengthSlider");
+        cap.Value = 120;
+        Assert.Equal(120, boot.Session.MandatoryVideoPreset.Current.MaxSeconds);
+        Assert.Equal("120s", Descendant<TextBlock>(window, "MandatoryVideoMaxLengthValue").Text);
+
+        await boot.Host.ShutdownAsync();
+    }
 }

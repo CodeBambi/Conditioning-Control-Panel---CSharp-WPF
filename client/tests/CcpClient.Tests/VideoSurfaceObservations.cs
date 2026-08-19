@@ -1,4 +1,5 @@
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Input;
 using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Video;
 
@@ -209,6 +210,190 @@ internal static class VideoSurfaceObservations
                 120,
                 90);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    //  TRAP 1: the overlay AND the card must both survive a video surface
+    // ---------------------------------------------------------------------------------------
+
+    private static readonly Lazy<CoexistenceRun> LazyCoexistence = new(RunCoexistence, isThreadSafe: true);
+
+    /// <summary>The coexistence run. Cached: it puts three real windows on the real desktop.</summary>
+    internal static CoexistenceRun Coexistence => LazyCoexistence.Value;
+
+    /// <summary>The overlay's state at one moment, read entirely through
+    /// <see cref="OverlayWindowProbe"/> — SP-099's own instrument, unmodified.</summary>
+    /// <param name="PointPassesThrough">The window manager routes the overlay's own centre to
+    /// something that is NOT the overlay.</param>
+    /// <param name="AboveEveryOrdinaryWindow">The OS's z-order walk still puts it above every
+    /// ordinary window. Not "above every window": a video surface is topmost too and legitimately
+    /// contests the band, which is the same wording and the same reason as SP-099's own fact.</param>
+    /// <param name="Alpha">The layered alpha the OS still holds, or -1 for none.</param>
+    /// <param name="TransparentStyleHeld"><c>WS_EX_TRANSPARENT</c> is still set.</param>
+    /// <param name="IsForeground">Whether the overlay became the foreground window.</param>
+    internal readonly record struct OverlayReading(
+        bool PointPassesThrough,
+        bool AboveEveryOrdinaryWindow,
+        int Alpha,
+        bool TransparentStyleHeld,
+        bool IsForeground);
+
+    /// <summary>The card's state at one moment, read entirely through
+    /// <see cref="InputWindowProbe"/> — SP-110's own instrument, unmodified.</summary>
+    /// <param name="Visible">The OS reports the card visible.</param>
+    /// <param name="IsForeground"><c>GetForegroundWindow()</c> is the card.</param>
+    /// <param name="HoldsSystemKeyboardFocus"><c>GetGUIThreadInfo(0).hwndFocus</c> is the card — the
+    /// SYSTEM read, never the thread-local one that answers for a window nobody can type into.</param>
+    internal readonly record struct CardReading(bool Visible, bool IsForeground, bool HoldsSystemKeyboardFocus);
+
+    /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation is compared against.</param>
+    /// <param name="OverlayPresented">The real overlay presence claimed Available before anything else existed.</param>
+    /// <param name="CardTookTheInput">The real card really took the foreground and the keyboard —
+    /// without this leg every reading below is a test of nothing happening.</param>
+    /// <param name="OverlayBefore">The overlay before any video surface existed.</param>
+    /// <param name="OverlayDuring">The overlay while a video surface was up and holding a picture.</param>
+    /// <param name="OverlayAfter">The overlay after the video surface came down and was disposed.</param>
+    /// <param name="CardBefore">The card before any video surface existed.</param>
+    /// <param name="CardDuring">The card while the video surface was up. <b>This is the trap-1
+    /// fact:</b> the video surface must not take the foreground or the keyboard from it.</param>
+    /// <param name="CardAfter">The card after the video surface came down.</param>
+    /// <param name="VideoEarnedAvailableBesideThem">The video surface's own Show earned Available
+    /// while BOTH of the others were up — so this is coexistence rather than the video failing
+    /// politely.</param>
+    /// <param name="VideoShowState">That state, for failure messages.</param>
+    /// <param name="OverlayCatchesItsOwnPointWhenMadeOpaque">The differential, run after the video is
+    /// gone: with <c>WS_EX_TRANSPARENT</c> cleared, the same point routes TO the overlay. Without it,
+    /// "the point went elsewhere" is also true of a window that is not there.</param>
+    /// <param name="OverlayStillEarnsAvailable">The overlay's own <c>Present</c> still returns
+    /// Available after the whole video lifecycle — the capability's own oracle, re-asked.</param>
+    /// <param name="OverlayRePresentState">That state, for failure messages.</param>
+    internal sealed record CoexistenceRun(
+        bool MachineHasInteractiveDesktop,
+        bool OverlayPresented,
+        bool CardTookTheInput,
+        OverlayReading OverlayBefore,
+        OverlayReading OverlayDuring,
+        OverlayReading OverlayAfter,
+        CardReading CardBefore,
+        CardReading CardDuring,
+        CardReading CardAfter,
+        bool VideoEarnedAvailableBesideThem,
+        CapabilityState VideoShowState,
+        bool OverlayCatchesItsOwnPointWhenMadeOpaque,
+        bool OverlayStillEarnsAvailable,
+        CapabilityState OverlayRePresentState);
+
+    private static CoexistenceRun RunCoexistence()
+    {
+        var (screenWidth, screenHeight) = OverlayWindowProbe.PrimarySize;
+        const int overlayWidth = 200;
+        const int overlayHeight = 150;
+
+        // DISJOINT from the video surface's and the card's rectangles on purpose: the overlay's
+        // hit-test point must never be occluded by the things under test, or "the point went past
+        // the overlay" would be measuring one of them instead of the overlay.
+        var overlayBounds = new OverlayBounds(
+            Math.Max(0, (screenWidth / 2) - overlayWidth - 460),
+            Math.Max(0, (screenHeight / 2) - overlayHeight),
+            overlayWidth,
+            overlayHeight);
+        var (overlayX, overlayY) = overlayBounds.Centre;
+
+        using var overlay = new Win32OverlayPresence();
+        var presented = overlay.Present(new OverlaySurfaceRequest(overlayBounds, 0.6, ClickThrough: true));
+        var overlayWindow = overlay.NativeHandles.Window;
+
+        OverlayReading ReadOverlay() => new(
+            PointPassesThrough: OverlayWindowProbe.HitTest(overlayX, overlayY) != overlayWindow,
+            AboveEveryOrdinaryWindow: OverlayWindowProbe.ReadZOrder(overlayWindow).AboveEveryOrdinaryWindow,
+            Alpha: OverlayWindowProbe.LayeredAlphaOf(overlayWindow),
+            TransparentStyleHeld: (OverlayWindowProbe.ExStyleOf(overlayWindow) & 0x00000020) != 0,
+            IsForeground: OverlayWindowProbe.IsForeground(overlayWindow));
+
+        // A real card, taking the real foreground, at a rectangle disjoint from both others.
+        var cardBounds = new InputBounds(
+            Math.Max(0, (screenWidth / 2) + 140),
+            Math.Max(0, (screenHeight / 2) + 120),
+            360,
+            180);
+        using var card = new Win32InputPresence();
+        card.Prompt(new InputPromptRequest(
+            cardBounds,
+            new InputPromptContent("say this", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+        var cardWindow = card.NativeHandles.Window;
+
+        // TAKEN FROM THE PROBE, not from the presence under test's sibling: sourcing "a card really
+        // was up" from a capability would let one that lied turn this whole run into a test of
+        // nothing happening. Same rule, and the same wording, as SP-110's own coexistence run.
+        CardReading ReadCard() => new(
+            Visible: InputWindowProbe.WindowIsVisible(cardWindow),
+            IsForeground: InputWindowProbe.Foreground() == cardWindow,
+            HoldsSystemKeyboardFocus: InputWindowProbe.SystemKeyboardFocus() == cardWindow);
+
+        var cardTookTheInput = ReadCard() is { Visible: true, IsForeground: true, HoldsSystemKeyboardFocus: true };
+        var overlayBefore = ReadOverlay();
+        var cardBefore = ReadCard();
+
+        // The subject: a real video surface, opened, given a real decoded picture, and closed.
+        var path = WriteFixtureClip("coexistence.avi");
+        var source = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows);
+        source.Open(path, out var clip);
+        var frame = clip?.ReadFrame();
+
+        var videoBounds = new VideoBounds(
+            Math.Max(0, (screenWidth / 2) - 200),
+            Math.Max(0, (screenHeight / 2) - 320),
+            SurfaceWidth,
+            SurfaceHeight);
+        var video = new Win32VideoPresence(source);
+        video.Present(new VideoSurfaceRequest(videoBounds, Letterbox));
+        var show = frame is null
+            ? new CapabilityState.Unavailable(new CapabilityReason("(no frame)", "nothing decoded"))
+            : video.Show(frame);
+
+        var overlayDuring = ReadOverlay();
+        var cardDuring = ReadCard();
+
+        video.Withdraw();
+        video.Dispose();
+        clip?.Dispose();
+
+        // The overlay's own re-assertion, exactly as a live session would: WPF re-raises its topmost
+        // windows on a cadence (Services/Flash/FlashService.cs:206-243) and the port's overlay owns
+        // the same call. Asking it here is not helping the overlay pass — it is what the product
+        // already does, and the z-order reading is what would fail if the video had permanently
+        // taken the band.
+        overlay.Reassert();
+        var overlayAfter = ReadOverlay();
+        var cardAfter = ReadCard();
+
+        card.Dismiss();
+
+        // The differential, deliberately taken on the OVERLAY rather than on a scratch window: it
+        // proves this specific surface WOULD have caught the point, so "the point went elsewhere"
+        // cannot be satisfied by an overlay that quietly stopped existing.
+        overlay.SetClickThrough(false);
+        var overlayCatchesItsOwnPoint = OverlayWindowProbe.HitTest(overlayX, overlayY) == overlayWindow;
+        overlay.SetClickThrough(true);
+
+        var rePresent = overlay.Present(new OverlaySurfaceRequest(overlayBounds, 0.6, ClickThrough: true));
+
+        return new CoexistenceRun(
+            MachineHasInteractiveDesktop: OverlayWindowProbe.MachineHasInteractiveDesktop,
+            OverlayPresented: presented is CapabilityState.Available,
+            CardTookTheInput: cardTookTheInput,
+            OverlayBefore: overlayBefore,
+            OverlayDuring: overlayDuring,
+            OverlayAfter: overlayAfter,
+            CardBefore: cardBefore,
+            CardDuring: cardDuring,
+            CardAfter: cardAfter,
+            VideoEarnedAvailableBesideThem: show is CapabilityState.Available,
+            VideoShowState: show,
+            OverlayCatchesItsOwnPointWhenMadeOpaque: overlayCatchesItsOwnPoint,
+            OverlayStillEarnsAvailable: rePresent is CapabilityState.Available,
+            OverlayRePresentState: rePresent);
     }
 
     private static uint ColourRef((byte B, byte G, byte R) colour) =>

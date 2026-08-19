@@ -77,6 +77,13 @@ public class RealDesktopCollectionGuardTests
         "InputWindowProbe",
         "InputCaptureObservations",
         "Win32InputPresence",
+
+        // SP-111. A video surface is a layered topmost window that this process paints frame by
+        // frame and then READS BACK, and the read-back leg the harness adds reads the composited
+        // DESKTOP. Two of these running concurrently would contest the same points on the one
+        // machine-global screen, and the desktop-capture control would be reading the other run.
+        "VideoSurfaceObservations",
+        "Win32VideoPresence",
     ];
 
     /// <summary>
@@ -110,6 +117,8 @@ public class RealDesktopCollectionGuardTests
         "TrayCapabilityTests.cs",
         "InputCapabilityTests.cs",
         "InputOverlayCoexistenceTests.cs",
+        "VideoCapabilityTests.cs",
+        "VideoOverlayCoexistenceTests.cs",
     ];
 
     [Fact]
