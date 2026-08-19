@@ -1,8 +1,9 @@
 # SP-112 — record
 
 Branch `lane/SP-112-second-consumer`, base `7a35f6d8`.
-Floor: pin **1742 unit / 107 headless**; observed and declared numbers are in §9 and in
-`floor-delta.json`. Build: 0 errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
+Floor: pin **1742 unit / 107 headless**; observed **1829 unit / 111 headless**; declared **+87 unit /
++4 headless** — see §8, which also carries the ONE named failure that is not this packet's. Build: 0
+errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
 
 > **This document's real subject is not the module.** It is the answer to one question asked of two
 > capabilities that had exactly one consumer each: **did they fit, or did I have to reach around
@@ -212,7 +213,163 @@ with no retry loop and Escape always live, a strict switch would move nothing.
 
 ---
 
-## 6. Files changed
+## 6. PROVING IT BITES — 75 mutations, three rounds, **8 survivors**
+
+Every conjunct and predicate this packet added was mutated one at a time by
+`spine-tasks/SP-112-second-consumer/sweep.mjs` — which lives inside this packet's folder and writes
+only inside it, because a previous wave's driver wrote three levels above its own root into the
+shared checkout. The raw logs are beside this record (`sweep-round1.log`, `sweep-round2.log`,
+`sweep-round3.log`) and every count below is taken from them. Each mutation ran the module's own
+suites plus `LockCardModuleTests`, `MandatoryVideoModuleTests`, `VideoSurfacePresenterTests`,
+`StudioSurfaceNoticeTests` and the three spine suites; the driver restores each file byte-identically
+and asserts `git status --porcelain client/src` is empty at the end, which it was on every round.
+
+**The books:** 75 distinct mutations; 39 + 1 + 25 + 2 = **67 caught**; **8 survive**; 67 + 8 = 75.
+
+### Round 1 — 39 caught, 9 survived, **27 NOT PATCHED, and that was the driver's own defect**
+
+Every multi-line needle failed to match. The working tree is CRLF (git's `autocrlf`) and the needles
+are written with LF, so 27 of the most interesting predicates — every `Compose` guard, every
+teardown guard, two of the dot's clauses — were reported as *not patched* rather than as caught.
+**A sweep that silently skips its own hardest cases is worse than no sweep**, so it is recorded here
+rather than quietly re-run: the driver now normalises for matching and writes the mutant back in the
+file's own line endings, and round 2 re-ran all 27.
+
+### Round 2 — the 27 plus the 9 survivors: **25 caught, 10 survived**
+
+Eleven of round 1's survivors-and-skips were real holes and are closed by facts that isolate the
+clause: the 30 s fallback in `Target`, the 0.7 spacing factor, `Recompute`'s own fallback, the
+lifetime's random span, the pop's fade and growth, the module's own pacing interval, and the four
+`Compose` guards.
+
+### Round 3 — the two real holes round 2 found: **2 caught, 0 survived**
+
+`M-ap` (a clip the surface refused outright leaves the run unresolved, so the panel tells the user
+nothing at all) and `M-aw` (a keystroke for a question the module has already finished with).
+
+### The eight survivors, each with the evidence that disposes of it
+
+**Four are EQUIVALENT MUTANTS, and two of them are findings about my own code:**
+
+- **M-m — the lead-in tick's unconditional spawn.** Removing it makes the first tick apply
+  upstream's `roll < 0.7 || shown < target/2` rule — and at `shown == 0` with a target floored at
+  **three**, `0 < 3/2 == 1` is always true, so **the first tick spawns either way**. The clause
+  cannot change any reachable outcome, which is a fact about upstream's own two rules meeting, and
+  the comment that claimed it was load-bearing is corrected rather than defended.
+- **M-p — a bubble's END of life in `Paint`.** `Draw` returns immediately when the animation's
+  opacity is zero, and `Animation` clamps the pop's progress to 1, so a bubble past `GoneAt` draws
+  nothing whichever guard is removed. Redundant, not unpinned.
+- **M-s — the sub-pixel radius guard.** With the guard widened, a radius under one pixel still
+  paints nothing: every pixel centre inside the loop's bounding box is further from the bubble's
+  centre than the radius. The guard makes that explicit rather than incidental.
+- **M-q — both ends of a bubble's life.** It additionally allows drawing a bubble BEFORE it is born,
+  which no caller can reach: a bubble's `BornAt` is the tick that spawned it, the presenter's
+  elapsed time is monotonic, and a bubble is therefore never in the list at a time before its own
+  birth.
+
+**Four are UNCOVERED, and each names why:**
+
+- **M-c — the sixty-second interval floor.** Unreachable through the dial's own clamp: at ten games
+  an hour with the jitter at its minimum the interval is `3600/10*0.8 = 288 s`. **Upstream has the
+  same structure** (`Math.Max(1, Math.Min(10, …))` at `:88` and `Math.Max(60, …)` at `:95`), so the
+  floor is upstream's own belt-and-braces that its own clamp makes dead. It is ported because it is
+  upstream's line and it sits where a later dial change would meet it, and the fact now asserts the
+  STRUCTURAL property — *the clamp keeps the interval above the floor* — rather than reaching the
+  branch by a route no caller has.
+- **M-t — the left clamp on the painted disc.** Also arithmetically unreachable: the placement
+  offset is `0.15 * width` and the largest radius is `0.0586 * width`, so the disc's left edge is
+  never negative. Kept as a structural guarantee; reaching it would mean asserting against a
+  placement no product path produces.
+- **M-bd — the dot's CLOCK clause.** The same residue SP-110 named as its own `M-aa` and SP-111 as
+  its `M-be`: `OwnedSessionEffect.Dot` returns `Armed` before consulting `WorkIsRunning` when the
+  module is disarmed, so isolating this clause needs `ScheduleArmed == false` while armed — which
+  only `ReleaseWork` produces, and it is `protected sealed` on `PacedSessionEffect` with this module
+  sealed. **Unsealing a product class purely to reach it was rejected**, exactly as both earlier
+  packets rejected it.
+- **M-bp — `PrimaryDisplayPlacement` picking the PRIMARY display rather than the first.** Machine
+  conditional: on a single-display machine the two are the same window. Named rather than faked with
+  a second monitor nobody has.
+
+---
+
+## 7. THE OVERLAY AND THE LOCK CARD, proven unharmed rather than assumed
+
+`Overlay/**`, `Audio/**` and `Input/**` were **not edited**. They were CONSUMED:
+`BubbleCountObservations.RunPainted` builds a real `Win32OverlayPresence` presenting a real
+click-through surface, opens a real clip through the operating system's own media stack, paints a
+real bubble into the decoded picture, hands it to a real `Win32VideoPresence`, takes it down, and
+only then puts a real card up — measuring the overlay through `OverlayWindowProbe` and the card
+through `InputWindowProbe`, both SP-099's and SP-110's own instruments, unmodified. The three
+rectangles are disjoint, so no surface's hit-test point is occluded by another.
+
+Six facts in `BubbleCountCapabilityTests`:
+
+1. **The positive control:** the OS opened the clip, a bubble was really spawned, and the painter
+   really changed pixels the decoder produced — measured on the FRAME, before the operating system
+   was involved at all. Without this leg every reading below is a test of nothing happening.
+2. **The operating system holds a picture THIS PROCESS PAINTED.** The capability's own differential
+   is unchanged and unweakened, and an INDEPENDENT read through `PrintWindow` — a call the product
+   never makes — carries the bubble's own pixels exactly as this port composed them, at points that
+   are also asserted NOT to be the decoder's flat colour (without which background compared against
+   background would pass).
+3. **After the clip comes down, the question takes the foreground and the system keyboard focus** —
+   the order SP-111's own coexistence run never took.
+4. The overlay is click-through, above every ordinary window, never the foreground, and still holds
+   its `LWA_ALPHA` of 153 at **four** moments: before, during the clip, during the question, and
+   after.
+5. The overlay's own differential still bites (with `WS_EX_TRANSPARENT` cleared the same point
+   routes TO it) and its own `Present` still earns `Available` after the whole game.
+6. The game's geometry constants are pinned against upstream's numbers, so a change to the placement
+   arithmetic moves the sample points with it instead of quietly sampling background.
+
+Every expectation **flips with the machine** rather than being skipped: on a machine with no
+interactive desktop each leg is asserted false, which is why this file carries no early return and
+no entry in the vacuous-shape ledger.
+
+**The nine landed modules' facts are unchanged in SEMANTICS.** Four rack-order/refusal lists and two
+headless rack lists grew by one entry each, exactly as they did at SP-105, SP-106, SP-108, SP-109 and
+SP-111; `MandatoryVideoModuleTests`' surface double gained the painter parameter and records it. No
+landed assertion was relaxed, reworded to be weaker, or deleted.
+
+---
+
+## 8. THE FLOOR, and the one failure that is NOT this packet's
+
+Pin **1742 unit / 107 headless**; observed **1829 unit / 111 headless**; declared
+**+87 unit / +4 headless** (`floor-delta.json`). 1742 + 87 = 1829 and 107 + 4 = 111, confirmed by
+`node client/tests/floor/sum-deltas.mjs --check --packets SP-112-second-consumer`. The floor run
+therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator sums the
+deltas and applies one bump. Two skips, both pre-existing
+(`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
+`ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); none added, none widened.
+Build: 0 errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
+
+**The floor run also reports ONE named failure, and it is a landed fact this packet did not touch:**
+`InputCapabilityTests.TheThreadLocalFocusRead_ClaimsAWindowThatReceivesNothing_WhichIsWhyTheSystemReadIsTheOneUsed`.
+It is reported rather than quarantined, and here is the evidence trail rather than an assertion:
+
+* `client/src/CcpClient.Desktop/Input/**`, `InputCapabilityTests.cs`, `InputWindowProbe.cs` and
+  `InputCaptureObservations.cs` are **byte-identical to base** (`git diff 7a35f6d8` is empty for all
+  four).
+* The test **passes in isolation**, repeatedly, and **fails when its own class siblings run first**,
+  repeatedly.
+* **With the entire `client/` tree reverted to base inside this worktree** — product files restored,
+  every changed test file restored, every new file moved aside — **it still failed.** The same code
+  fails here, so the cause is not this packet's code.
+* The failing clause is the trap's own positive control: `GetGUIThreadInfo(thread).hwndFocus` did not
+  name the parked window. It is a Win32 focus question whose answer depends on which process owns the
+  foreground at that instant, and **the shipping WPF product v6.8.1 is running on this desktop** with
+  its own topmost windows — the exact machine-state residue `RealDesktopCollection`'s own doc names
+  and that SP-111 already recorded biting this suite (its plan.md §0 Q4 found the same application
+  owning a surface's point).
+
+**Nothing was added to `allowedSkips` and the pin was not widened.** A landed fact that is
+machine-state sensitive is a finding for the packet that owns it, not a line for this one to
+quarantine.
+
+---
+
+## 9. Files changed
 
 **Product — new:** `Effects/BubbleCountSchedule.cs`, `Effects/BubbleCountGame.cs`,
 `Effects/BubbleCountAnswer.cs`, `Effects/BubbleCountEffect.cs`,
@@ -223,18 +380,63 @@ with no retry loop and Escape always live, a strict switch would move nothing.
 refusal, the shared placement), `Effects/LockCardEffect.cs` (the shared placement),
 `Video/VideoReasonCodes.cs` (**one** additive constant), `Session/SessionParticipant.cs` (the tenth
 module, its store, the shared surface and presence), `Views/Pages/StudioPage.axaml` plus `.axaml.cs`
-(the row FIRST in GAMES & CARDS, the panel, two dials).
+(the row FIRST in GAMES & CARDS, the panel, two dials, and the rack's new ScrollViewer — D140).
 
 **`Input/**` is byte-identical to base. `Overlay/**` and `Audio/**` are byte-identical to base.**
 
+**Tests — new.** Counts are TEST CASES, each `[Theory]` row counted individually, which is the unit
+`check-floor.mjs` counts and the unit `floor-delta.json` declares.
+
+| file | cases | what it is |
+|---|---|---|
+| `BubbleCountModuleTests.cs` | **72** | the pacing law, the counting arithmetic, the painter, the answer machine, the six arm outcomes, the five-clause dot, every resolution, the guarded teardown and the shared placement |
+| `BubbleCountObservations.cs` | — | the one real-desktop run |
+| `BubbleCountCapabilityTests.cs` | **6** | the OS holding a painted picture, the video-then-card order, and the overlay at four moments |
+
+**Tests — changed:** `VideoSurfacePresenterTests.cs` (**+4** — the paint seam and the already-playing
+refusal, with its own positive control), `StudioSurfaceNoticeTests.cs` (**+5** — the two-channel
+row's seven Armed sentences, its six endings, both quoted capabilities, the shared-folder line and
+the difficulty line), `MandatoryVideoModuleTests.cs` (the surface double takes and records the
+painter — **0 count change**), `RealDesktopCollectionGuardTests.cs` (the helper census gains
+`BubbleCountObservations` — a STRENGTHENING, **0 count change**), `AudioModuleSpineTests.cs`,
+`ContinuousEffectSpineTests.cs`, `SecondEffectSpineTests.cs` (rack-order and refusal lists grow by
+one — **0 count change**), `StudioRackHeadlessTests.cs` (the rack lists grow by one; **+4** new
+cases, which is the whole declared headless delta, and its `Click` helper now scrolls the target into
+view — see D140).
+
+72 + 6 + 4 + 5 = **87**, which is the declared unit delta.
+
+**Docs:** `client/docs/wpf-surface-reachability.md` (§SP-112, D133–D140).
+
 ---
 
-## 7. What this work does NOT prove
+## 10. What this work does NOT prove
 
 - **Nothing here proves a human watched or counted anything.** `watched-verified` and
-  `answered-verified` are named manual gates and no automated step on any platform discharges them.
-- **No headed capture was taken.** `presentation-verified` is untouched.
-- A window read-back is not a monitor (SP-111 §0 stopping point 2 applies unchanged).
-- Nothing measures cadence, order or timing; every frame advance is driven by hand on the injected
-  clock.
-- Linux refuses in type on both capabilities, through the landed factories' own gates.
+  `answered-verified` are named manual gates and no automated step on any platform discharges them,
+  Windows included.
+- **No headed capture was taken.** `presentation-verified` is untouched. The window read-back is an
+  OS query about pixels the OS holds FOR A WINDOW — SP-111 measured that it is not monitor-aware —
+  and nothing here says the bubbles are legible, countable at speed, or on a screen anybody is
+  looking at.
+- **Nothing measures cadence, order or timing.** Every frame advance in every fact is driven by hand
+  on the injected clock, so a game whose bubbles appeared twice as fast as intended satisfies every
+  check here.
+- **The COMPOSITED DESKTOP leg was not taken for this module.** SP-111's video facts read the screen
+  through `BitBlt`; this packet's run reads the window's own copy and `PrintWindow` only. The
+  stronger leg is machine-conditional and it was not re-run here.
+- **Nothing proves the count a user would make matches the count the module asks about.** The module
+  asks about bubbles it drew into pictures the OS confirmed holding; whether a human watching could
+  have counted them is exactly the manual gate above.
+- **The painter's cost was not profiled.** Every bubble is a managed per-pixel blend over its own
+  disc, on the surface thread, once per frame. Measured fast enough at 320x240 in the harness; not
+  profiled at 1080p on a contended machine, and it stacks with the nearest-neighbour composition
+  SP-111 already named as the most likely place the port's video will need work.
+- **Concurrency is single-threaded.** The module's keystrokes, its dot, its safety end and its
+  resolutions are exercised on one thread. Two threads racing a resolution against a disarm are not
+  covered, and the single-tenancy residue in §3 is precisely a two-thread question.
+- **Linux is unproven** on both capabilities and refuses in type through the landed factories' own
+  gates; nothing in this packet changes or discharges either.
+- **No second instance of anything was exercised.** One video surface, one input presence, one
+  process — the composition root's rule. What two of either would do to one foreground or one
+  rectangle is still untested.
