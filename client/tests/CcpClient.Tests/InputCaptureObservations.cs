@@ -256,6 +256,10 @@ internal static class InputCaptureObservations
     /// <param name="BlankPromptInkedPixels">What the ink read-back counted for it.</param>
     /// <param name="BlankPromptBackgroundHeld">Whether the painted background was really there —
     /// which is what tells "nothing was drawn" from "nothing was painted at all".</param>
+    /// <param name="BlankRepaintWasDegraded">A REPAINT that leaves the card blank must degrade the
+    /// same way the first paint does — the ink check lives on both paths and both need the
+    /// background control.</param>
+    /// <param name="BlankRepaintCode">The reason code that repaint carried.</param>
     /// <param name="ControlCharacterReachedTheCaller">A <c>WM_CHAR</c> carrying a control character
     /// (Ctrl+V's 0x16) posted straight to the card must NOT arrive as typing.</param>
     /// <param name="PrintableCharacterReachedTheCaller">The same route with a printable character
@@ -273,6 +277,8 @@ internal static class InputCaptureObservations
         string BlankPromptCode,
         int BlankPromptInkedPixels,
         bool BlankPromptBackgroundHeld,
+        bool BlankRepaintWasDegraded,
+        string BlankRepaintCode,
         bool ControlCharacterReachedTheCaller,
         bool PrintableCharacterReachedTheCaller,
         bool CharacterAfterDismissReachedTheCaller);
@@ -324,6 +330,13 @@ internal static class InputCaptureObservations
         typed.Prompt(new InputPromptRequest(CentreBounds, content, delivered.Add));
         var window = typed.NativeHandles.Window;
 
+        // A REPAINT that leaves the card blank. Update carries its OWN copy of the ink check and its
+        // own copy of the background control that stops an unpainted window reading as inked, so it
+        // needs its own measurement.
+        var blankRepaint = typed.Update(
+            new InputPromptContent(string.Empty, string.Empty, string.Empty, string.Empty));
+        typed.Update(content);
+
         InputWindowProbe.PostCharacter(window, ''); // Ctrl+V's WM_CHAR
         InputWindowProbe.PumpUntil(() => { typed.Pump(64); return false; });
         var controlArrived = delivered.Any(k => k.Kind == InputKeystrokeKind.Character);
@@ -352,6 +365,8 @@ internal static class InputCaptureObservations
             BlankPromptCode: blankState is CapabilityState.Degraded d ? d.Reason.Code : "none",
             BlankPromptInkedPixels: blankObservation.InkedPixels,
             BlankPromptBackgroundHeld: blankObservation.BackgroundHeld,
+            BlankRepaintWasDegraded: blankRepaint is CapabilityState.Degraded,
+            BlankRepaintCode: blankRepaint is CapabilityState.Degraded repaint ? repaint.Reason.Code : "none",
             ControlCharacterReachedTheCaller: controlArrived,
             PrintableCharacterReachedTheCaller: printableArrived,
             CharacterAfterDismissReachedTheCaller: afterDismiss);

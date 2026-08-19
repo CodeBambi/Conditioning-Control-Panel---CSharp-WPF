@@ -1,8 +1,8 @@
 # SP-110 — record
 
 Branch `lane/SP-110-input-capturing-window`, base `b8187eb4`.
-Floor: pin **1589 unit / 100 headless**; observed **1641 unit / 104 headless**; declared delta
-**+52 unit / +4 headless** (`floor-delta.json`). 1589 + 52 = 1641 and 100 + 4 = 104, confirmed by
+Floor: pin **1589 unit / 100 headless**; observed **1646 unit / 104 headless**; declared delta
+**+57 unit / +4 headless** (`floor-delta.json`). 1589 + 57 = 1646 and 100 + 4 = 104, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-110-input-capturing-window`. The floor
 run therefore REPORTS a violation against the pin, and that is the expected shape: the orchestrator
 sums the deltas and applies one bump. Two skips, both pre-existing
@@ -166,7 +166,123 @@ opposite lie.
 
 ## 4. PROVING IT BITES — the mutation sweep
 
-<!--SWEEP-->
+**60 mutations, THREE rounds, 54 caught, 6 survivors — and round 1 found nine real holes.** Every
+conjunct of every predicate this packet added was mutated one at a time, the WHOLE unit suite was run
+against each, and each file was restored byte-identically afterwards (verified by `git status` and by
+grepping the three key predicates back out). The sweep is not bounded by where the last hole was
+found: it covers the two observation records, the presence's six gates, the escalation ladder, the
+window procedure, the module's three-clause dot, its three `Compose` refusals, both `Ready`
+narrowings, the schedule arithmetic, every typing rule, the phrase rotation and every clamp on the
+document.
+
+### Round 1 — 36 mutations, 23 caught, 13 survived
+
+| # | mutation | round 1 |
+|---|---|---|
+| M-a…M-g | `InputCaptureObservation.Confirmed` drops each of `Asked` / `IsForegroundWindow` / `SystemKeyboardFocusIsThisWindow` / `HitTestRoutesHere` / `WindowVisible` / `AboveEveryOrdinaryWindow` / `WindowExists` | caught ×7 |
+| M-h…M-k | `InputStationObservation.Confirmed` drops each of its four | caught ×4 |
+| M-l | `HitTestRoutesHere` drops the non-zero window guard | **SURVIVED** → closed |
+| M-m | `HoldsTheInput` drops the foreground clause | **SURVIVED** → equivalent |
+| M-n | `HoldsTheInput` drops the system-focus clause | caught |
+| M-o | `HoldsTheInput` drops the visibility clause | **SURVIVED** → equivalent |
+| **M-p** | **`SystemKeyboardFocus` asks the THREAD instead of the foreground** | **SURVIVED** → equivalent, and this is the finding |
+| M-q | `Prompt` stops refusing on an unusable window station | **SURVIVED** → closed |
+| M-r | `Prompt` never tries to take the foreground | caught ×6 |
+| M-s | `Prompt` stops degrading on a blank card | **SURVIVED** → closed |
+| **M-t** | **`Prompt` never paints the card at all** | **SURVIVED** → closed, and it exposed a blind ink check |
+| M-u | `TakeForeground` never escalates (WPF's plain call only) | caught ×6 |
+| M-v | `Escalate` stops attaching the input queue | caught ×6 |
+| M-w | `Dismiss` stops checking the hit test | **SURVIVED** → unreachable |
+| M-x | `Dismiss` keeps feeding the caller's callback | **SURVIVED** → closed |
+| M-y | a refused prompt is left ON SCREEN | **SURVIVED** → uncovered, named |
+| M-z | control characters count as typing | **SURVIVED** → closed |
+| M-aa | the dot drops the CLOCK clause | **SURVIVED** → uncovered, named |
+| M-ab | the dot drops the STATION clause | caught |
+| M-ac | the dot drops the DEMAND clause | caught |
+| M-ad | the dot requires the input even with no card up | caught |
+| M-ae | `Compose` stops honouring an unreachable user | **SURVIVED** → closed |
+| M-af | `Compose` stacks a second card on the first | caught |
+| M-ag | `Compose` invents a phrase for an empty pool | caught ×2 |
+| M-ah | `Ready` stops refusing when nothing can be asked | caught |
+| M-ai | `Ready` stops degrading over an empty phrase pool | caught |
+| M-aj | a refused card is left up and reported as shown | caught ×3 |
+
+### THE SHARPEST SURVIVOR — M-t, and it means the ink check was BLIND
+
+Deleting the paint call entirely survived. The reason is the kind of thing only a mutation finds:
+**the card's window class registers no background brush**, so an UNPAINTED window's device context
+holds whatever the OS left in it — which differs from the background colour just as reliably as text
+does. A bare "count the pixels that are not the background" therefore reported *inked* for a window
+nothing had ever drawn on.
+
+The check is now a **differential**, like every other fact in this port: a control point in a margin
+the painter fills and never writes on must read back **exactly** the background colour — which is
+what proves the fill happened — and only then does a differing pixel in the question band count as
+ink. `InputCaptureObservation.Inked` is `BackgroundHeld && InkedPixels > 0`, and three further
+mutations were added to cover the new clause (M-bf/M-bg/M-bh, all caught). The read's stride is now
+derived from the band's size toward a target sample count, because the same read runs on every
+repaint and a card covering half a 4K display must not cost proportionally more than a small one.
+
+### Round 2 — the 13 survivors plus 3 new ink mutations; 9 more closed
+
+| # | closed by |
+|---|---|
+| M-l | `EveryClauseOfConfirmed_IsLoadBearing...` (the `NotAsked` observation must not claim a hit test routes to a window it does not have — `0 == 0`) |
+| M-q | `DisarmReleasesTheWorkUNCONDITIONALLY...` (a landed fact, reached once the station read gained a consumer) |
+| M-s, M-t, M-bf, M-bh | `ACardWithNothingWrittenOnIt_IsDEGRADED_AndTheInkCheckKnowsAPaintedBackgroundFromAnUnpaintedWindow` and `ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt` |
+| M-x | `AfterDismissTheCardStopsFeedingTheCaller_EvenForAMessageAlreadyInItsQueue` |
+| M-z | `AControlCharacterIsNotTyping_AndAPrintableOneIs` |
+| M-ae | `WithNoDesktopToAskOn_TheModuleIsARMED...`, extended to advance the clock and assert **no card is ever shown** |
+| M-bg | `ACardWithNothingWrittenOnIt...`, extended to the REPAINT path, which carries its own copy of the check |
+
+### Round 3 — the 22 not yet run: **22 caught, 0 survived**
+
+The schedule arithmetic (M-ak…M-ap), every typing rule (M-aq…M-aw), the phrase rotation
+(M-ax…M-ba) and every clamp on the document (M-bb…M-be).
+
+**M-ak is caught by WEDGING the suite** — it reintroduces the hot loop of §6, and the hang *is* the
+assertion. The sweep driver bounds each run so a wedge is reported rather than stalling it, and that
+outcome is recorded as what it is rather than dressed up as a failing assertion.
+
+### The six survivors, and not one of them is papered over with a fact that asserts shape
+
+**Three are EQUIVALENT MUTANTS**, and the middle one is this packet's most interesting finding:
+
+- **M-m / M-p — the foreground clause and the system-vs-thread focus read cannot be prised apart for
+  a childless top-level window, and that is MEASURED.** The state that would separate them (the
+  foreground on one window, the foreground thread's focus on another, both on one thread) **cannot be
+  built**: `SetFocus` ACTIVATES the top-level window it focuses, so the two move together —
+  measured inside `HoldingTheInputRequiresTheFOREGROUND_NotJustAFocusRead`, which asserts the
+  relationship rather than an outcome it wanted. The consequence for the packet's central trap is
+  worth stating plainly: **`GetGUIThreadInfo(0)` versus the thread-local read only changes an answer
+  when our window's thread is NOT the foreground thread — and in exactly that case the foreground
+  clause has already said no.** The trap is real (it is reproduced deterministically by the probe's
+  own negative control, where the two reads DO disagree) and the port is immune to it by redundancy,
+  not by having asked the right question. Both are kept: they are two different questions, and they
+  diverge the moment the card grows a child control.
+- **M-o** (`HoldsTheInput`'s visibility clause). Hiding a window takes the foreground away from it —
+  the port's own `Dismiss` asserts exactly that — so the visibility conjunct cannot be false while the
+  foreground conjunct is true. Redundant, not unpinned.
+
+**Three are UNCOVERED, and each names why:**
+
+- **M-w** (`Dismiss` re-checking the hit test). After `ShowWindow(SW_HIDE)` the OS never routes to the
+  window again, so no reachable state makes this clause false. The OUTCOME it guards is pinned
+  independently by the probe (`DismissingThePrompt_TakesItDownAndGivesTheKeyboardBack` asserts the hit
+  test no longer answers the card), so the product's own claim is redundant with a fact taken through
+  a second code path.
+- **M-y** (a refused prompt left on screen). **No deterministic post-placement refusal could be
+  constructed on a healthy machine** — and the attempt is itself a finding: a card placed at a
+  rectangle NO MONITOR COVERS still passes every routing check, because `WindowFromPoint` walks the
+  window tree rather than the monitors. That card is caught by the ink link instead, and the
+  MODULE-level equivalent (any non-`Available` takes the card down) is covered by two facts.
+- **M-aa** (the dot's CLOCK clause). Isolating it needs `ScheduleArmed == false` while the module is
+  still armed, enabled and live, which only `ReleaseWork` produces — and it is `protected sealed` on
+  `PacedSessionEffect` with `LockCardEffect` sealed, so no probe subclass can reach it. SP-109 solved
+  the same problem for the audio pair with a probe subclass of the shared base, and the clause is
+  pinned THERE (`BOTHClausesOfTheFifthDotMeaningAreLoadBearing...`) for that module's override.
+  **Unsealing a product class purely to reach it was rejected**; the remedy is named instead.
+
 
 ---
 

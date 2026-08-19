@@ -193,6 +193,22 @@ internal static class InputWindowProbe
     }
 
     /// <summary>
+    /// Give a window this thread's keyboard focus WITHOUT changing which window is the foreground.
+    ///
+    /// <para>The two are different facts and this is the only way to hold them apart:
+    /// <c>SetFocus</c> moves the focus inside the CALLING thread's input queue, so with two windows
+    /// on one thread the foreground can be one of them while the focus is the other. That state is
+    /// what makes the foreground clause of a capture check non-redundant.</para>
+    /// </summary>
+    internal static void FocusWindow(nint window)
+    {
+        if (WindowsHost && window != 0)
+        {
+            SetFocus(window);
+        }
+    }
+
+    /// <summary>
     /// Put one <c>WM_CHAR</c> straight into a window's queue.
     ///
     /// <para><b>This is NOT the OS routing input</b>, and no fact built on it may say it is — that

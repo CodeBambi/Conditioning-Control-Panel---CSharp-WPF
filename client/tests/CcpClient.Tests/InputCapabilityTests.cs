@@ -455,6 +455,15 @@ public class InputCapabilityTests
             "the painted background was NOT read back from the blank card's own device context. Without that the "
             + "ink count means nothing: an unpainted window's DC differs from the background too");
         Assert.Equal(0, run.BlankPromptInkedPixels);
+
+        // The REPAINT path carries its own copy of the check, and its own copy of the background
+        // control. Found by mutation: deleting the control from Update alone survived a sweep whose
+        // only blank-card fact went through Prompt.
+        Assert.True(run.BlankRepaintWasDegraded == InputWindowProbe.MachineHasInteractiveDesktop,
+            $"repainting a live card with nothing on it claimed success: code={run.BlankRepaintCode}");
+        Assert.Equal(
+            InputWindowProbe.MachineHasInteractiveDesktop ? InputReasonCodes.InputPromptNotInked : "none",
+            run.BlankRepaintCode);
     }
 
     [Fact]
@@ -530,6 +539,28 @@ public class InputCapabilityTests
         Assert.False(heldAfterTheft,
             "the card still reports holding the input while ANOTHER window holds the foreground. Every keystroke "
             + "is going somewhere else and the module's dot would claim the user is being asked a question");
+
+        // AND THE MEASUREMENT THAT SAYS WHY THE TWO CLAUSES CANNOT BE PRISED APART, which is a
+        // finding rather than an assertion of convenience. The mutation sweep asked whether the
+        // FOREGROUND clause is separable from the system-focus one; the attempt to build the state
+        // that would separate them — the foreground on the thief, the foreground thread's focus on
+        // the card, both windows on one thread — is IMPOSSIBLE for a childless top-level window:
+        // SetFocus ACTIVATES the top-level window it focuses, so the two move together.
+        //
+        // That is measured here, not assumed: after SetFocus(card) the card is BOTH the focus and
+        // the foreground again. The consequence is recorded honestly in the sweep — dropping either
+        // clause is an EQUIVALENT mutation for this window shape, and both are kept because they are
+        // two different questions that would diverge the moment the card grew a child control.
+        InputWindowProbe.FocusWindow(window);
+        var focusFollowed = InputWindowProbe.SystemKeyboardFocus() == window;
+        var foregroundFollowed = InputWindowProbe.Foreground() == window;
+
+        Assert.True(focusFollowed == InputWindowProbe.MachineHasInteractiveDesktop,
+            "SetFocus did not give the card the foreground thread's focus back");
+        Assert.Equal(focusFollowed, foregroundFollowed);
+        Assert.True(presence.HoldsTheInput == InputWindowProbe.MachineHasInteractiveDesktop,
+            "the card does not hold the input after being focused again, though the OS reports it as both the "
+            + "focus and the foreground");
     }
 
     [Fact]
