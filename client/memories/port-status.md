@@ -504,3 +504,10 @@ Floor pin **1589 unit / 100 headless**. Next task ID **SP-110**. **SEVEN modules
 **The dot has now meant five things:** the clock (paced), the screen (continuous), change (moving), custody (non-drawing), and REACH (audio - a resource the process does not own). Subset sub-rule: the dot is scoped to what the row IS, and a subset row must say so where the user reads it.
 **Mutation-sweep lesson, fifth and sixth instance of the SP-108 §9.5 rule:** a 24-mutation sweep of ONE capability found ten survivors and six real holes, including one where another application's audio would have earned this process `Available`. Fixing the instance you were shown is not a sweep. Sweep every conjunct of every predicate.
 **Standing risk:** `PacedSessionEffect.WorkIsRunning` is unsealed and its narrow-only contract is a doc comment, not a mechanical gate.
+
+## 2026-08-19 - wave 50 landed
+Floor pin **1648 unit / 104 headless**. Next task ID **SP-111**. **EIGHT modules of fifteen.** Bubble Pop and Bubble Count unblocked on input (Bubble Count still needs video).
+**Win32 lesson worth more than the module:** `GetGUIThreadInfo(ourThreadId).hwndFocus` is THREAD-LOCAL and will answer 'our window has focus' while the user's keystrokes go to another application. Only `GetGUIThreadInfo(0)` tells the truth. A capability built on the thread-local read passes every test on a real machine with the OS agreeing.
+**Standing safety rule (D112): this port never ships a window the user cannot dismiss, even where upstream's behaviour is ambiguous.** The Lock Card always closes on Escape.
+**The dot has now meant six things:** clock (paced), screen (continuous), change (moving), custody (non-drawing), reach (audio), DEMAND (input - Live while a prompt is up and unanswered).
+**Review lesson:** a test double that cannot exhibit the state under test is the session's most repeated defect - a fake dial re-imposing its own clamp, a stub pool with a constant count, and here a recording presence that set `IsPrompting` only for `Available`, hiding a card left on screen with Escape dead.
