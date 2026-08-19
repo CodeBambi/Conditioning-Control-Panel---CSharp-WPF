@@ -205,8 +205,11 @@ public class ContinuousEffectSpineTests
         Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[FlashImagesEffect.EffectId]);
         Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[PinkFilterEffect.EffectId]);
 
-        // Subliminals ships off and is the only hole in this session; the continuous module took it.
-        Assert.Equal([SubliminalsEffect.EffectId], rig.Engine.ArmRefusals.Select(r => r.Id));
+        // Subliminals ships off, and so does SP-108's Intensity Ramp
+        // (CCP.Core/Models/AppSettings.cs:2575-2580); the continuous module took the session.
+        Assert.Equal(
+            [SubliminalsEffect.EffectId, IntensityRampEffect.EffectId],
+            rig.Engine.ArmRefusals.Select(r => r.Id));
     }
 
     [Fact]
@@ -223,10 +226,15 @@ public class ContinuousEffectSpineTests
         // puts it (fourth, between Subliminals and Pink Filter) rather than where OverlayService's
         // own body starts it (second of the pair). Those two orders disagree upstream and D90
         // records which one the port took and why.
+        //
+        // SP-108 adds the fifth, and it is the first member from a group other than EFFECTS. It goes
+        // LAST for two upstream reasons that agree: the rack puts TIMING after EFFECTS, GAMES & CARDS
+        // and IMMERSION (StudioTabView.xaml.cs:482-541), and StartEngine starts the ramp timer after
+        // every effect service (MainWindow.StartStop.cs:265-269).
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId,
+                PinkFilterEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

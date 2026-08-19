@@ -443,8 +443,12 @@ public class StudioRackHeadlessTests
             spiral.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>(),
             e => e.Classes.Contains("dot"));
 
-        // Every rack row, without exception — which is the claim that was not available before.
-        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter" })
+        // Every rack row, without exception — which is the claim that was not available before, and
+        // which SP-108's fifth row (from a different rack GROUP) had to keep true rather than dent.
+        foreach (var name in new[]
+        {
+            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp",
+        })
         {
             Assert.Contains(
                 Descendant<RadioButton>(window, name).GetVisualDescendants()
@@ -567,12 +571,19 @@ public class StudioRackHeadlessTests
             .Where(r => r.Classes.Contains("rack-row"))
             .Select(r => r.Name)
             .ToList();
-        Assert.Equal(["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter"], rows);
+        Assert.Equal(
+            ["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp"],
+            rows);
 
         // SP-105: three of the four had an effect whose state could be reported, and D5/D6 stayed
         // open for exactly one row. SP-106 gave that row an effect, so the loop below is now every
         // row on the page — see TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack.
-        foreach (var name in new[] { "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter" })
+        // SP-108 adds a fifth from a different rack GROUP (TIMING), placed after the EFFECTS block
+        // exactly as upstream orders its groups (StudioTabView.xaml.cs:482-541).
+        foreach (var name in new[]
+        {
+            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp",
+        })
         {
             Assert.Contains(
                 Descendant<RadioButton>(window, name).GetVisualDescendants()
@@ -727,6 +738,169 @@ public class StudioRackHeadlessTests
         var start = text.IndexOf('#', StringComparison.Ordinal);
         var end = text.IndexOf(" at ", StringComparison.Ordinal);
         return start >= 0 && end > start ? text[start..end] : text;
+    }
+
+    // =====================================================================================
+    //  SP-108 — the rack's SECOND GROUP, and the row for a module that draws nothing
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheRackNowHasTWOGROUPS_AndTheSecondOneHoldsAModuleThatDrawsNothing()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        // WPF has FOUR groups — EFFECTS, GAMES & CARDS, IMMERSION, TIMING (§8.3, built at
+        // StudioTabView.xaml.cs:483/497/508/533) — and until SP-108 the port had rows in exactly one
+        // of them, because every module it had ported was an EFFECT that painted an overlay. The
+        // group headers are upstream's own strings (st4_studio_group_effects / _timing,
+        // en.json:4816,4819).
+        var groups = window.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.Classes.Contains("rack-group"))
+            .Select(t => t.Text)
+            .ToList();
+        Assert.Equal(["EFFECTS", "TIMING"], groups);
+
+        // And the row order is still upstream's, with the new group after the old one.
+        var rows = window.GetVisualDescendants().OfType<RadioButton>()
+            .Where(r => r.Classes.Contains("rack-row"))
+            .Select(r => r.Name)
+            .ToList();
+        Assert.Equal(
+            ["RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter", "RowIntensityRamp"],
+            rows);
+
+        // The new row carries the same grammar the other four do: a dot, and nothing about it says
+        // "this module is different" to the user.
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowIntensityRamp").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnTheRampRow_ReallyFlipsTheNonDrawingModule_AndTheDotFollowsBothWays()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowIntensityRamp");
+        var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
+
+        // It ships OFF (CCP.Core/Models/AppSettings.cs:2575-2580), so the dot starts unlit.
+        Assert.False(window.Session.Ramp.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedRampDot);
+
+        Click(window, row, MouseButton.Right);
+        Assert.True(window.Session.Ramp.Enabled);
+        Assert.True(window.Session.RampPreset.Current.Enabled);
+
+        // Armed, not Live: no session owns it, so it is holding nothing. The row's dot is the
+        // module's own derived state and this is the first module for which the third clause is a
+        // claim about CUSTODY rather than about a clock or a screen.
+        Assert.Equal(EffectDotState.Armed, page.RenderedRampDot);
+        Assert.Empty(window.Session.Ramp.HeldDials);
+
+        Click(window, row, MouseButton.Right);
+        Assert.False(window.Session.Ramp.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedRampDot);
+
+        // The gesture still opens no menu and selects nothing, exactly as on every other row.
+        Assert.Null(row.ContextMenu);
+        Assert.Empty(window.GetVisualDescendants().OfType<ContextMenu>());
+        Assert.False(row.IsChecked);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheRampPanelOpensOnItsOwn_AndHasNOSurfaceLineBecauseItHasNoSurface()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowIntensityRamp"));
+
+        Assert.True(Descendant<StackPanel>(window, "RampModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "FlashModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "PinkFilterModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "SpiralModulePanel").IsVisible);
+
+        // THE STRUCTURAL HALF OF THE PACKET'S SECOND TRAP. Every module before this one ends its
+        // panel with a line about where its pixels went. This one has no such line, and the absence
+        // is asserted rather than left to a reader: a surface notice here would be a sentence about
+        // a capability the module deliberately never acquires.
+        var named = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Name).ToList();
+        Assert.Contains("FlashSurfaceState", named);
+        Assert.Contains("SubliminalSurfaceState", named);
+        Assert.Contains("SpiralSurfaceState", named);
+        Assert.Contains("PinkFilterSurfaceState", named);
+        Assert.DoesNotContain("RampSurfaceState", named);
+
+        // What it has instead: a custody line, saying it has borrowed nothing yet.
+        var custody = Descendant<TextBlock>(window, "RampCustodyState").Text ?? string.Empty;
+        Assert.Contains("Holding nothing", custody, StringComparison.Ordinal);
+
+        // Its dials are the real persisted ones, not placeholder numbers.
+        Assert.Equal(
+            window.Session.RampPreset.Current.DurationMinutes,
+            (int)Math.Round(Descendant<Slider>(window, "RampDurationSlider").Value));
+        Assert.Equal(
+            window.Session.RampPreset.Current.Multiplier,
+            Descendant<Slider>(window, "RampMultiplierSlider").Value,
+            3);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheRampPanelsCheckbox_AndItsRowsRightClick_AreTheSameOnePath()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowIntensityRamp"));
+        var check = Descendant<CheckBox>(window, "RampEnableToggle");
+
+        Assert.False(check.IsChecked);
+
+        Click(window, Descendant<RadioButton>(window, "RowIntensityRamp"), MouseButton.Right);
+        Assert.True(check.IsChecked);          // the row's gesture repainted the panel's dial
+
+        Click(window, check);
+        Assert.False(check.IsChecked);
+        Assert.False(window.Session.RampPreset.Current.Enabled);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheRampsOwnLinkSwitchesWriteItsDocument_AndOnlyTheTwoDialsThePortReallyHas()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowIntensityRamp"));
+
+        Click(window, Descendant<CheckBox>(window, "RampLinkSpiralToggle"));
+        Assert.True(window.Session.RampPreset.Current.LinkSpiralOpacity);
+
+        Click(window, Descendant<CheckBox>(window, "RampLinkPinkFilterToggle"));
+        Assert.True(window.Session.RampPreset.Current.LinkPinkFilterOpacity);
+
+        // D93. WPF has FIVE link switches (AppSettings.cs:2590-2622); flash opacity, master volume
+        // and subliminal volume have no dial on any ported panel, so their switches are ABSENT rather
+        // than present-and-inert — a switch that quietly does nothing is the greyed control §9 D7
+        // refuses.
+        var names = window.GetVisualDescendants().OfType<CheckBox>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("RampLinkFlashToggle", names);
+        Assert.DoesNotContain("RampLinkMasterAudioToggle", names);
+        Assert.DoesNotContain("RampLinkSubliminalAudioToggle", names);
+
+        await boot.Host.ShutdownAsync();
     }
 
     // =====================================================================================

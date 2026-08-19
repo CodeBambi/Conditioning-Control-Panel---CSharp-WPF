@@ -449,4 +449,174 @@ public class StudioSurfaceNoticeTests
         Assert.All(states.Where(s => s is not CapabilityState.Available), state =>
             Assert.Contains(reason.Detail, StudioPage.DescribeSurface(state), StringComparison.Ordinal));
     }
+
+    // =====================================================================================
+    //  SP-108 — the panel that has NO surface line, and what it says instead
+    // =====================================================================================
+
+    /// <summary>The state the Intensity Ramp's live line is written for. Every row is a situation a
+    /// user can really be in, and two of them look alike and are not.</summary>
+    public enum RampLine
+    {
+        /// <summary>Dial off. No session involved either way.</summary>
+        Off,
+
+        /// <summary>Dial on, no session yet, and something is linked.</summary>
+        ReadyWithALink,
+
+        /// <summary>Dial on, no session yet, and NOTHING is linked — the state a freshly enabled ramp
+        /// is in, because every link ships off.</summary>
+        ReadyWithNoLink,
+
+        /// <summary>Session running and the ramp holds nothing, because nothing is linked.</summary>
+        RunningHoldingNothing,
+
+        /// <summary>Session running, dials held, and the multiplier is at its 1.0 floor.</summary>
+        RunningAtNeutralGain,
+
+        /// <summary>Session running and climbing.</summary>
+        Climbing,
+
+        /// <summary>The climb finished and the ramp is still holding what it took.</summary>
+        Finished,
+    }
+
+    [Theory]
+    [InlineData(RampLine.Off)]
+    [InlineData(RampLine.ReadyWithALink)]
+    [InlineData(RampLine.ReadyWithNoLink)]
+    [InlineData(RampLine.RunningHoldingNothing)]
+    [InlineData(RampLine.RunningAtNeutralGain)]
+    [InlineData(RampLine.Climbing)]
+    [InlineData(RampLine.Finished)]
+    public void TheRampsLiveLineSaysSomethingDifferentAndTrueInEveryStateItCanBeIn(RampLine line)
+    {
+        var preset = new IntensityRampPresetDocument { Enabled = true, DurationMinutes = 60 };
+        var dot = EffectDotState.Live;
+        var progress = 0.5;
+        var current = 2.0;
+        var held = 2;
+
+        switch (line)
+        {
+            case RampLine.Off:
+                preset.Enabled = false;
+                dot = EffectDotState.Off;
+                held = 0;
+                break;
+            case RampLine.ReadyWithALink:
+                preset.LinkSpiralOpacity = true;
+                preset.Multiplier = 3.0;
+                dot = EffectDotState.Armed;
+                held = 0;
+                break;
+            case RampLine.ReadyWithNoLink:
+                preset.Multiplier = 3.0;
+                dot = EffectDotState.Armed;
+                held = 0;
+                break;
+            case RampLine.RunningHoldingNothing:
+                preset.Multiplier = 3.0;
+                dot = EffectDotState.Armed;
+                held = 0;
+                break;
+            case RampLine.RunningAtNeutralGain:
+                preset.Multiplier = IntensityRampPresetDocument.MinMultiplier;
+                current = 1.0;
+                break;
+            case RampLine.Climbing:
+                preset.LinkPinkFilterOpacity = true;
+                preset.Multiplier = 3.0;
+                break;
+            case RampLine.Finished:
+                preset.LinkPinkFilterOpacity = true;
+                preset.Multiplier = 3.0;
+                progress = 1.0;
+                current = 3.0;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(line));
+        }
+
+        var sessionRunning = line is not (RampLine.Off or RampLine.ReadyWithALink or RampLine.ReadyWithNoLink);
+        var text = RampPanelNotices.DescribeRampState(dot, preset, progress, current, held, sessionRunning);
+
+        Assert.False(string.IsNullOrWhiteSpace(text), $"{line} renders as blank space");
+        Assert.EndsWith(".", text.TrimEnd(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTwoStatesThatLookAlikeSayDifferentThings_BecauseOneIsRunningAndTheOtherIsNot()
+    {
+        // THE PAIR THIS SENTENCE EXISTS FOR. A ramp holding nothing and a ramp holding two dials at
+        // 1.0x are both "nothing is climbing" — and the first will never do anything while the second
+        // starts the moment the multiplier moves and still owes the user their dials back. A line
+        // that described them the same way would make the dot's two states unreadable.
+        var nothingLinked = new IntensityRampPresetDocument { Enabled = true, Multiplier = 3.0 };
+        var neutralGain = new IntensityRampPresetDocument
+        {
+            Enabled = true,
+            LinkPinkFilterOpacity = true,
+            Multiplier = IntensityRampPresetDocument.MinMultiplier,
+        };
+
+        var holdingNothing = RampPanelNotices.DescribeRampState(
+            EffectDotState.Armed, nothingLinked, 0.4, 1.8, 0, sessionRunning: true);
+        var atNeutral = RampPanelNotices.DescribeRampState(
+            EffectDotState.Live, neutralGain, 0.4, 1.0, 1, sessionRunning: true);
+
+        Assert.Contains("holding nothing", holdingNothing, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("nothing has to be put back", holdingNothing, StringComparison.Ordinal);
+
+        Assert.Contains("1 dial", atNeutral, StringComparison.Ordinal);
+        Assert.Contains("goes back", atNeutral, StringComparison.Ordinal);
+        Assert.DoesNotContain("holding nothing", atNeutral, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AFreshlyEnabledRampIsToldWhatToDoNext_BecauseEveryLinkShipsOff()
+    {
+        // Every link flag defaults false (AppSettings.cs:2590-2622), so switching this module on and
+        // walking away is the state a first-time user really lands in, and "nothing happened" is not
+        // an acceptable answer to it.
+        var preset = new IntensityRampPresetDocument { Enabled = true, Multiplier = 2.0 };
+
+        var text = RampPanelNotices.DescribeRampState(
+            EffectDotState.Armed, preset, 0, 1.0, 0, sessionRunning: false);
+
+        Assert.Contains("nothing is linked", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Link to ramp", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCustodyLineNamesEveryBorrowedDialAndBothOfItsNumbers()
+    {
+        // The line this module has INSTEAD of a surface line. "Your spiral opacity says 27 and you
+        // set it to 10" is the question a user looking at another module's panel mid-session will
+        // have, and the answer must not be "the ramp, probably".
+        var text = RampPanelNotices.DescribeRampCustody(
+            2,
+            [
+                new RampDialHold("Spiral Overlay opacity", 10, 27),
+                new RampDialHold("Pink Filter opacity", 12, 24),
+            ]);
+
+        Assert.Contains("Spiral Overlay opacity 10% → 27%", text, StringComparison.Ordinal);
+        Assert.Contains("Pink Filter opacity 12% → 24%", text, StringComparison.Ordinal);
+        Assert.Contains("goes back to the first number", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCustodyLineTellsAnEmptyHoldFromABuildWithNothingToDrive()
+    {
+        // Two different nothings: "the ramp has not borrowed anything yet" is a fact about this
+        // session, and "this build gives it no dials" is a fact about the composition. A single
+        // sentence for both would hide a typed refusal behind a shrug.
+        var noHold = RampPanelNotices.DescribeRampCustody(2, []);
+        var noDials = RampPanelNotices.DescribeRampCustody(0, []);
+
+        Assert.Contains("Holding nothing", noHold, StringComparison.Ordinal);
+        Assert.Contains("no dials to drive", noDials, StringComparison.Ordinal);
+        Assert.NotEqual(noHold, noDials);
+    }
 }
