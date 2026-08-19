@@ -212,7 +212,7 @@ public class ContinuousEffectSpineTests
         // SP-110 a third, Lock Card (AppSettings.cs:3331), and SP-112 a fourth, Bubble Count, so
         // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
         // six modules declined the same session for the same reason and all six are named. SP-113
-        // adds a fifth that ships off (Bubble Pop, AppSettings.cs:2204's BubblesEnabled default),
+        // adds a fifth that ships off (Bubble Pop, CCP.Core/Models/AppSettings.cs:2737-2738's BubblesEnabled default),
         // and it lands FIRST in GAMES & CARDS because that is the rack's order
         // (StudioTabView.xaml.cs:499).
         Assert.Equal(

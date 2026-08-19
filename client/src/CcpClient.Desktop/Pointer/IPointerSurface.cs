@@ -316,8 +316,8 @@ public interface IPointerSurface : IDisposable
     /// position the OS holds THEN. The product never hit-tests and then acts on the answer — the
     /// arbiter at click time is the OS — so the residue is only that a caller's belief about
     /// routing can be one move old. With upstream's own constants that is at most
-    /// <c>sqrt(12² + 4.5²) = 12.81</c> DIP of travel per 30 ms step (<c>BubbleService.cs:53</c>,
-    /// <c>:2825</c>, <c>:2831-2836</c>, <c>:3458-3464</c>, <c>:3496</c>) against a smallest legal
+    /// <c>sqrt(12² + 4.5²) = 12.81</c> DIP of travel per 30 ms step (<c>BubbleService.cs:54</c>,
+    /// <c>:2823</c>, <c>:2831-2834</c>, <c>:3460-3463</c>, <c>:3496</c>) against a smallest legal
     /// radius of 30 DIP (<c>Services/BubbleSizing.cs:70</c>), so the target's own centre never
     /// leaves the target in one step.</para>
     /// </summary>

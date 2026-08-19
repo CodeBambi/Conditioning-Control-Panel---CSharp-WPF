@@ -330,7 +330,7 @@ public class PointerCapabilityTests
     public void ASurfaceRefusesAFourthTarget_RatherThanSilentlyDroppingIt()
     {
         // Upstream's own per-window cap is three and its stated reason is that every move is a
-        // SetWindowPos (Services/BubbleService.cs:25). Upstream logs and returns; this port refuses
+        // SetWindowPos (Services/BubbleService.cs:26). Upstream logs and returns; this port refuses
         // in type, because a caller that keeps opening targets and never notices they stopped
         // appearing is the failure the whole contract forbids.
         using var surface = new Win32PointerSurface();
@@ -417,6 +417,53 @@ public class PointerCapabilityTests
     {
         Assert.Throws<ArgumentException>(() =>
             new PointerTargetRequest(new PointerBounds(0, 0, 120, 120), 0x00201020, 0x00201020));
+    }
+
+    [Fact]
+    public void THEINKREADSCANSTheDISCSOWNBOX_AtAStrideDerivedFromIt_AndBothAreObservable()
+    {
+        // DiscBox has TWO consumers, and an earlier equivalence proof for the mutation that zeroes
+        // its inset enumerated only the painter. ReadInk derives the SCAN RECTANGLE and the STRIDE
+        // from the same box, and both surface through the public Observe as SampledPixels — so the
+        // disc's geometry is observable from outside after all.
+        //
+        // The figure is a LITERAL rather than a re-derivation through the product's own DiscBox and
+        // SampleStep, which would be tautological. For the run's 160 px target: inset
+        // max(3+1, 160/10) = 16, box (16,16,144,144), stride (int)sqrt(128*128/400) = 6, and
+        // ceil(128/6) = 22 rows of 22 columns. With the inset zeroed it is a 160-wide box at stride
+        // 8, which is 20 by 20 = 400 — a different number, which is what makes this fact bite.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(160, PointerSurfaceObservations.TargetSide);
+        Assert.Equal(run.MachineHasInteractiveDesktop ? 484 : 0, run.ObservedSampledPixels);
+        Assert.True(run.ObservedInkedPixels > 0 == run.MachineHasInteractiveDesktop,
+            $"the capability sampled {run.ObservedSampledPixels} pixels of its own client area and found "
+            + $"{run.ObservedInkedPixels} that were not the fill");
+        Assert.True(run.ObservedInkedPixels <= run.ObservedSampledPixels,
+            "more pixels came back inked than were ever sampled");
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.ObservedBackgroundHeld);
+    }
+
+    [Fact]
+    public void DIRTYINGTheFARCornerFromOutsideTurnsBACKGROUNDHELDFalse_WhichIsWhyThereAreFOUROfThem()
+    {
+        // The ink differential exists BECAUSE a window's device context is not guaranteed to hold
+        // what the painter last drew — the capability's own remarks say an unpainted window's DC
+        // "holds whatever the OS left in it", and that one control point "is satisfied by a single
+        // stray pixel of the right colour". Both statements are about a DC something else touched,
+        // and no reasoning from the painter's geometry can stand in for constructing that state.
+        //
+        // So the harness constructs it: one foreign pixel, at the FAR corner only. A check that
+        // looked at the near corner alone would still say the background is held.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.FarCornerDirtied);
+        Assert.True(run.ObservedBackgroundHeld == run.MachineHasInteractiveDesktop,
+            "the background was not held BEFORE the corner was dirtied, so the reading after it says nothing");
+        Assert.False(run.BackgroundHeldAfterFarCornerDirtied,
+            "one foreign pixel at the far corner control point did not turn BackgroundHeld false. The four "
+            + "control points are then not four, and 'these pixels are not the background' is satisfied by a "
+            + "window something else has scribbled on");
     }
 
     [Fact]

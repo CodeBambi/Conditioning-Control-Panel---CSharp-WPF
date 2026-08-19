@@ -1693,7 +1693,7 @@ public class StudioRackHeadlessTests
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
         Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
 
-        // Spawns per MINUTE, 1..60 (Models/AppSettings.cs:2210) — not per hour, which is what every
+        // Spawns per MINUTE, 1..60 (CCP.Core/Models/AppSettings.cs:2743-2747) — not per hour, which is what every
         // other paced row on this page uses and what a reader would otherwise assume.
         var frequency = Descendant<Slider>(window, "BubblePopFrequencySlider");
         Assert.Equal(BubblePopField.MinPerMinute, frequency.Minimum);
@@ -1702,7 +1702,7 @@ public class StudioRackHeadlessTests
         Assert.Contains("one every 12 s", Descendant<TextBlock>(window, "BubblePopFrequencyValue").Text!,
             StringComparison.Ordinal);
 
-        // Size, 50..150 % (Services/BubbleSizing.cs:52,59), shown in the PIXELS the user will see.
+        // Size, 50..150 % (Services/BubbleSizing.cs:50,57), shown in the PIXELS the user will see.
         var size = Descendant<Slider>(window, "BubblePopSizeSlider");
         Assert.Equal(BubblePopField.MinSizePercent, size.Minimum);
         Assert.Equal(BubblePopField.MaxSizePercent, size.Maximum);
@@ -1711,7 +1711,7 @@ public class StudioRackHeadlessTests
         Assert.Contains("75 to", Descendant<TextBlock>(window, "BubblePopSizeValue").Text!,
             StringComparison.Ordinal);
 
-        // Extra speed, 0..500 % (Models/AppSettings.cs:2262), shown WITH the race bound, because
+        // Extra speed, 0..500 % (CCP.Core/Models/AppSettings.cs:2814-2818), shown WITH the race bound, because
         // they are the same number.
         var speed = Descendant<Slider>(window, "BubblePopSpeedSlider");
         Assert.Equal(BubblePopField.MinSpeedBoostPercent, speed.Minimum);
@@ -1733,7 +1733,7 @@ public class StudioRackHeadlessTests
         Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
 
         // D93's rule: a dial that moves nothing is ABSENT, never present-and-disabled. Upstream's
-        // card carries Solid mode (AppSettings.cs:2224), a pop-volume slider (:2230), a ramp link
+        // card carries Solid mode (AppSettings.cs:2758), a pop-volume slider (:2230), a ramp link
         // (:2236), a session-clickable switch (:2242) and the Trigger Bubbles block (:2250-2280);
         // BubblePopPresetDocument says why each one is gone.
         var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();

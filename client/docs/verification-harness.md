@@ -381,7 +381,7 @@ could hit. That remains `presentation-verified` and is undischarged for this sur
    product never hit-tests and then acts on the answer — each target is its own top-level window, so
    the arbiter at click time is the window manager over the position the OS itself holds — but a
    caller's belief about routing can be one animation step old. One step moves a bubble at most
-   `sqrt(12² + 4.5²) = 12.81` px (`BubbleService.cs:53`, `:2825`, `:2831-2836`, `:3458-3464`) against
+   `sqrt(12² + 4.5²) = 12.81` px (`BubbleService.cs:54`, `:2823`, `:2831-2834`, `:3460-3463`) against
    a smallest legal radius of 30 px (`BubbleSizing.cs:70`), so the target's own centre never leaves
    the target in one step. Both directions are MEASURED with real windows and real clicks
    (`PointerCapabilityTests`: one step later the click still arrives; more than a side later it does

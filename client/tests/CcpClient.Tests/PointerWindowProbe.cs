@@ -125,6 +125,42 @@ internal static class PointerWindowProbe
     internal static bool NonActivatingStyleHeld(nint window) => (ExStyleOf(window) & WsExNoactivate) != 0;
 
     /// <summary>
+    /// Write one pixel into a window's own device context from OUTSIDE the capability.
+    ///
+    /// <para><b>Why the harness is allowed to do this, and why it is the only way.</b> The ink
+    /// differential exists precisely because a window's DC is NOT guaranteed to hold what the
+    /// painter last drew — <c>Win32PointerSurface.ReadInk</c>'s own remarks say an unpainted
+    /// window's DC "holds whatever the OS left in it", and its four control points exist because
+    /// "a single one is satisfied by a single stray pixel of the right colour". Both statements are
+    /// about a DC something else has touched, and nothing inside the product can construct that.
+    /// This can: it dirties one NAMED corner and leaves the other three alone.</para>
+    /// </summary>
+    /// <returns>True when the OS reports the pixel back as the colour that was written.</returns>
+    internal static bool DirtyPixel(nint window, int x, int y, uint colour)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return false;
+        }
+
+        var dc = GetDC(window);
+        if (dc == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            SetPixel(dc, x, y, colour);
+            return (GetPixel(dc, x, y) & 0x00FFFFFF) == (colour & 0x00FFFFFF);
+        }
+        finally
+        {
+            ReleaseDC(window, dc);
+        }
+    }
+
+    /// <summary>
     /// Clear <c>WS_EX_NOACTIVATE</c> on a window this process owns, from OUTSIDE the capability.
     ///
     /// <para><b>Why the harness is allowed to do this.</b> The whole reason the capability READS the
@@ -628,4 +664,8 @@ internal static class PointerWindowProbe
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref Msg msg);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint DispatchMessageW(ref Msg msg);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string? name);
+    [DllImport("user32.dll")] private static extern nint GetDC(nint window);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(nint window, nint dc);
+    [DllImport("gdi32.dll")] private static extern uint SetPixel(nint dc, int x, int y, uint colour);
+    [DllImport("gdi32.dll")] private static extern uint GetPixel(nint dc, int x, int y);
 }

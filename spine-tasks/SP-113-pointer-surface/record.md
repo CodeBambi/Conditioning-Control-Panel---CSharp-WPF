@@ -1,8 +1,8 @@
 # SP-113 — record
 
 Branch `lane/SP-113-pointer-surface`, base `431e424a`.
-Floor: pin **1830 unit / 112 headless**; observed **1927 unit / 117 headless**; declared
-**+97 unit / +5 headless** (`floor-delta.json`). 1830 + 97 = 1927 and 112 + 5 = 117, confirmed by
+Floor: pin **1830 unit / 112 headless**; observed **1930 unit / 117 headless**; declared
+**+100 unit / +5 headless** (`floor-delta.json`). 1830 + 100 = 1930 and 112 + 5 = 117, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-113-pointer-surface`. The floor run
 therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator sums the
 deltas and applies one bump. Two skips, both pre-existing
@@ -147,21 +147,25 @@ arbiter at click time is the window manager, at the instant of the click, over t
 operating system itself holds.** Nothing in `Win32PointerSurface` hit-tests and then acts on the
 answer; `WindowFromPoint` appears only where `Available` is earned. That is upstream's own per-window
 path (`:3113`) and the port takes its cost with it: **three concurrent bubbles** (`MAX_BUBBLES = 3`,
-`:25`, *"SetWindowPos-bound — keep small"*), not the shared host's forty.
+`:26`, *"SetWindowPos-bound — keep small"*), not the shared host's forty.
 
 ### 3b. The residue, bounded by arithmetic over upstream's own constants
 
 `Open`/`Move` return `Available` on a routing answer that can be up to **one animation step** old.
 
-- step `STEP_MS = 30` ms (`:53`)
-- vertical `_posY -= _speed`, `_speed ∈ [1,2)` (`:2825`), boosted up to 6× (`:2831-2836`) → **≤ 12 px**
+- step `STEP_MS = 30` ms (`:54`)
+- vertical `_posY -= _speed`, `_speed ∈ [1,2)` (`:2823`), boosted up to 6× (`:2831-2834`) → **≤ 12 px**
 - horizontal: the steepest of upstream's four wobbles is case 1, `30·sin(7.5t)` over `t += 0.02`
-  (`:3458-3464`, `:3399`) → **4.5 px** (case 3 gives 3.6, case 0 3.0, case 2 2.7)
+  (`:3460-3463`, `:3399`) → **4.5 px** (case 3 gives 3.6, case 0 3.0, case 2 2.7)
 - worst case `sqrt(12² + 4.5²)` = **12.816 px**; smallest legal radius `ClickableFloorDip/2` = **30 px**
   (`BubbleSizing.cs:70`)
 
-**The bound holds by a factor of 2.34**, and the fact asserts the factor as well as the inequality,
-so a change that halves the margin reddens instead of merely passing.
+**The bound holds by a factor of 2.3409**, and it is pinned in two places rather than one:
+`PointerCapabilityTests.ONESTEPNeverCarriesABubbleOffItsOwnCentre_...` asserts the inequality plus
+`MaxWobbleStep`, `MaxStepDisplacement` and `StepInterval` to six decimal places, which is TIGHTER
+than the factor; `BubblePopModuleTests.ONESTEPCannotCarryABubbleOffItsOwnCentre_...` asserts the
+factor itself is above 2.0, which is what makes a change that merely HALVES the margin visible
+rather than still-passing.
 
 ### 3c. And it is MEASURED, with real windows and real clicks, in both directions
 
@@ -202,13 +206,13 @@ decoration — on screen, unhittable). Same meaning, different instrument. **The
 screen, change, custody, reach, demand, motion.**
 
 **Why the third clause is a DISJUNCTION.** Between two spawns there is legitimately nothing on the
-desktop — at the bottom of the dial that is fifty-nine seconds in every sixty (`60000/1` ms, `:189`)
+desktop — at the bottom of the dial that is fifty-nine seconds in every sixty (`60000/1` ms, `:188`)
 — and a dot that went dark there would report the module broken for almost the whole session. It
 darkens for the state that is really wrong: targets ARE up and the window manager routes none of them
 here.
 
 **Why "at least one" and not "all".** Upstream's spawn band is a random x per bubble with no
-separation rule (`:2853`), so one bubble covering another's centre is an ordinary state of the game.
+separation rule (`:2852`), so one bubble covering another's centre is an ordinary state of the game.
 A field with one hittable bubble in it is a game.
 
 | situation | arm result | dot | why |
@@ -237,21 +241,21 @@ Small always-on-top windows float up the screen and pop when clicked, at upstrea
 and spawn rate.
 
 **Upstream's arithmetic is ported verbatim** with per-line citations in `BubblePopField`: the spawn
-interval `60000/frequency` (`:189`) with the dial clamped 1..60 (`AppSettings.cs:2210`); size drawn
+interval `60000/frequency` (`:188`) with the dial clamped 1..60 (`CCP.Core/Models/AppSettings.cs:2743-2747`); size drawn
 from 150..250 scaled by the user's 50..150 % and railed into 60..500
-(`BubbleSizing.cs:41/48/52/59/70/82`); speed `1.0 + rand` px/step (`:2825`) times the 0..500 % boost
-(`:2831-2836`); the four wobbles (`:3458-3464`) over `_timeAlive += 0.02` (`:3399`); FloatUp's
+(`BubbleSizing.cs:40/47/50/57/70/81`); speed `1.0 + rand` px/step (`:2823`) times the 0..500 % boost
+(`:2831-2834`); the four wobbles (`:3460-3463`) over `_timeAlive += 0.02` (`:3399`); FloatUp's
 `_posY -= _speed`, `_posX = _startX + offset` (`:3496-3497`); the exit at `area.Y - size - 50`
-(`:2846`); the pop's `_scale += 0.04`, `_fadeAlpha -= 0.066` (`:3227-3228`) with destruction deferred
-to the animation completing (gotcha 6); the spawn band `random.Next(50, …)` (`:2853`); and the
-per-window cap of three (`:25`).
+(`:2847`); the pop's `_scale += 0.04`, `_fadeAlpha -= 0.066` (`:3228-3229`) with destruction deferred
+to the animation completing (gotcha 6); the spawn band `random.Next(50, …)` (`:2852`); and the
+per-window cap of three (`:26`).
 
 **Not ported, declared rather than stubbed** (D145/D146, and in the code beside the dials that would
-have carried it): the pop SOUND and its pooled devices (`:1839-1905`); XP, the lucky roll,
-achievements, haptics and Discord (`:941-968`); Trigger Bubbles and the seven payloads a pop can fire
-(`:973-1053`); the whole Chaos Mode roguelite this service is 90 % of (`:1096-1675`); gaze-pop
-(`:81`); the companion easter egg (`:592-680`); the shared-host and compositor render paths (primer
-§5); multi-monitor spawning (`:851-857`, D66); and the sprite art (D86).
+have carried it): the pop SOUND and its pooled devices (`:1971-2016`); XP, the lucky roll,
+achievements, haptics and Discord (`:951-980`); Trigger Bubbles and the seven payloads a pop can fire
+(`:1021-1076`); the whole Chaos Mode roguelite this service is 90 % of (`:1228-1807`); gaze-pop
+(`:82`); the companion easter egg (`:599-632`); the shared-host and compositor render paths (primer
+§5); multi-monitor spawning (`:877-881`, D66); and the sprite art (D86).
 
 ---
 
@@ -265,8 +269,8 @@ only inside it. Raw logs beside this record (`sweep-round1.log`, `sweep-round2.l
 suites. The driver restores each file byte-identically and asserts `git status --porcelain client/src`
 is empty at the end.
 
-**The books: 99 distinct mutations; 71 (round 1) + 12 (round 2) + 1 (round 3) = 84 caught; 15
-survive; 84 + 15 = 99.** The driver carries a `--check` mode that verifies every needle without
+**The books: 99 distinct mutations; 71 (round 1) + 12 (round 2) + 1 (round 3) + 1 (round 4)
++ 2 (round 5) = 87 caught; 12 survive; 87 + 12 = 99.** The driver carries a `--check` mode that verifies every needle without
 running anything, and it reported **0 not-patched on every round** — SP-112's round-1 CRLF defect is
 not repeated (the driver normalises for matching and writes back in the file's own line endings).
 
@@ -296,42 +300,111 @@ five-minute advance, which let the orphaned timers fire and retire themselves; m
 after the withdraw, it catches. The assertion's own comment now says why the position is
 load-bearing.
 
-### THE FIFTEEN SURVIVORS — **five equivalent with proofs, ten uncovered with reasons**
+### Round 4 — the review's own finding: **1 caught, 0 survived**
 
-**FIVE ARE EQUIVALENT MUTANTS, and each proof is discharged here rather than asserted:**
+**M-ch, and the reason it is here is worse than a miscount.** An earlier draft of this record
+discharged it as an EQUIVALENT MUTANT on the ground that `BubblePopSurfacePresenter.Withdraw` is
+idempotent, **and asserted the same thing in PRODUCT SOURCE** — `BubblePopEffect.ReleaseWork`'s doc
+said the `Showing` test "IS only a cost saving here". Idempotence is true and beside the point:
 
-- **M-b — `Confirmed` drops its own `Window != 0`.** `Confirmed` requires `HitTestRoutesHere`, and
-  `HitTestRoutesHere => Window != 0 && HitTestWinner == Window`. So `Confirmed ⇒ Window != 0` with
-  or without the clause, for every possible input. **Redundant, not unpinned** — and the guard it is
-  redundant WITH is M-j, which round 2 closed.
-- **M-aq — three of the four ink control points.** Equivalent iff all four corners always read the
-  same value. The painter fills the whole client rect with `Fill` and then draws ONE filled ellipse
-  (NULL pen) inscribed in `DiscBox(w,h) = [inset, w-inset] × [inset, h-inset]` with
-  `inset = max(ControlMargin+1, min(w,h)/10) ≥ 4`. The control points are at `x ∈ {2, w-3}`,
-  `y ∈ {2, h-3}`. `2 < 4 ≤ inset`, and `w-3 > w-inset ⟺ inset > 3` ✓. **All four lie strictly
-  outside the disc's bounding box**, hence outside the ellipse, hence exactly `Fill`. No input
-  distinguishes the mutant.
-- **M-au — the disc's inset away from the control points.** `inset = 0` makes the ellipse span the
-  whole client rect, and an ellipse inscribed in `[0,w] × [0,h]` still does not reach a corner: at
-  `(2,2)` the normalised radius is `(1 - 4/w)² + (1 - 4/h)²`, which for any side ≥ 60 is
-  `≥ 2 × 0.871 = 1.742 > 1`. **The corner control points are insensitive to the inset**, so the
-  mutant is equivalent — **and the finding is that the inset is not what protects them; the corner
-  geometry is.** The inset stays because it is the rim the drawing wants, not because the
-  differential needs it, and that is now the honest statement of what it does.
-- **M-bn — the race bound being an inequality at all.** `OneStepNeverCarriesABubbleOffItsOwnCentre`
-  is a static expression over `const` inputs only: `sqrt(12² + 4.5²) = 12.816 < 30` evaluates to
-  `true` with no free variables, so `=> true` returns the same value for every call that can ever be
-  made. **Equivalent by construction.** What the property guards is a FUTURE edit to those
+```csharp
+if (_surface is not { Showing: true }) { return; }   // ALSO matches when _surface is null
+Signal.Post(_surface.Withdraw);
+```
+
+`_surface` is `IBubblePopSurface?`, a composition with no pointer surface is a real construction that
+this packet's own fixture builds (`Lab(composeSurface: false)`), and `OwnedSessionEffect` reaches
+`ReleaseWork` **without screening** — unconditionally from `Disarm` before its own `wasArmed` return,
+and from the eligibility gate on the dial-off and dead-generation paths. Deleting the guard therefore
+turns a disarm on a surfaceless module into a `NullReferenceException`. It survived because **no fact
+drove that path**: uncovered, not equivalent.
+
+**This is exactly the obligation trap 4 imposed after SP-112's M-s, and it is worse in one respect —
+that false proof lived only in a record, and this one was asserted in shipped product source where a
+reader would have acted on it.** Both are corrected rather than defended:
+`RELEASINGAModuleWithNoSurfaceDoesNothing_RatherThanDereferencingOne` drives every path that reaches
+`ReleaseWork` on a module composed with no surface, M-ch is now **caught** (`sweep-round4.log`), and
+the doc comment says what the guard really does.
+
+### Round 5 — **two more false equivalences, and the method rule that follows from them**
+
+**M-au and M-aq were both in the equivalent column and both were wrong.** Each is now caught.
+
+**M-au — the disc's inset.** The earlier proof showed the four corner control points are insensitive
+to the inset, and that corner arithmetic is correct. It is also incomplete, because
+`Win32PointerSurface.DiscBox` has a **second consumer the proof never enumerated**: `ReadInk` derives
+both the SCAN RECTANGLE and, through `SampleStep`, the STRIDE from the same box. So the inset is
+observable after all, through a public property, on a run this packet already makes:
+
+| side | product box / stride | `SampledPixels` | with the inset zeroed | `SampledPixels` |
+|---|---|---|---|---|
+| 60 | (6,6,54,54) / 2 | **576** | (0,0,60,60) / 3 | 400 |
+| **160** (this run's target) | (16,16,144,144) / 6 | **484** | (0,0,160,160) / 8 | 400 |
+| 250 | (25,25,225,225) / 10 | **400** | (0,0,250,250) / 12 | 441 |
+
+`THEINKREADSCANSTheDISCSOWNBOX_AtAStrideDerivedFromIt_AndBothAreObservable` asserts the LITERAL 484
+through `Observe(target)` — a literal rather than a re-derivation through the product's own `DiscBox`
+and `SampleStep`, which would be tautological.
+
+**M-aq — three of the four ink control points.** The earlier proof concluded "no input distinguishes
+them" from the PAINTER's geometry — that is, from the assumption that the device context holds
+exactly what the painter drew. **The capability's own remarks say the opposite, and are the reason
+four control points exist**: an unpainted window's DC "holds whatever the OS left in it", and one
+control point "is satisfied by a single stray pixel of the right colour". Both sentences are about a
+DC something ELSE has touched, so a proof that assumes the painter's output is what is there assumes
+away the very invariant the read-back exists to detect. `PointerWindowProbe.DirtyPixel` now
+constructs that state exactly as it constructs M-ag's style clear — one foreign pixel at the **far**
+corner `(width-3, height-3)`, which a near-corner-only check would never look at — and
+`DIRTYINGTheFARCornerFromOutsideTurnsBACKGROUNDHELDFalse_WhichIsWhyThereAreFOUROfThem` asserts
+`BackgroundHeld` goes false.
+
+> ### THE METHOD RULE, and it is the most useful thing this packet produced
+>
+> SP-112's M-s, SP-113's M-ch, SP-113's M-au, SP-113's M-aq — **four false equivalence claims across
+> three waves, and every one of them failed the same way**: a proposition that is TRUE of one
+> consumer of the mutated symbol, generalised to "no input distinguishes the mutant". M-s reasoned
+> about a bounding box and forgot the pixel grid inside it; M-ch reasoned about idempotence and
+> forgot the null receiver; M-au reasoned about the painter and forgot the reader; M-aq reasoned
+> about the painter's geometry and forgot that the reader exists precisely because the painter is
+> not the only writer.
+>
+> **The rule, and it is now port-wide: an equivalence claim is INADMISSIBLE until every consumer of
+> the mutated symbol has been enumerated by grep, and the claim discharged against each one by
+> name.** Not "I cannot think of a caller" — the enumeration, written down. The two claims this
+> record still makes carry theirs below.
+
+### THE TWELVE SURVIVORS — **two equivalent with enumerated proofs, ten uncovered with reasons**
+
+**TWO ARE EQUIVALENT MUTANTS. Each carries its consumer enumeration, per the rule above:**
+
+- **M-b — `Confirmed` drops its own `Window != 0`.**
+  **Consumers of the mutated symbol, enumerated by grep:** `PointerTargetObservation.Confirmed` is
+  read in exactly two places, both assertions — `ANotAskedObservationClaimsNOTHING_...`
+  (`PointerCapabilityTests.cs:519,524`) and `EveryClauseOfConfirmed_IsLoadBearing_AndNoneOfThemIsInk`
+  (`:583-593`). **There is NO product consumer at all**: `Win32PointerSurface.Classify` reads the
+  individual clauses rather than `Confirmed`, so that it can name WHICH one failed in the refusal it
+  returns. (A finding worth having on its own — the contract property the interface documents as
+  "what Available may rest on" is a summary the backend deliberately does not use, and a later
+  backend that DID use it would lose the per-clause reason codes.)
+  **Discharged against each:** `Confirmed` requires `HitTestRoutesHere`, and
+  `HitTestRoutesHere => Window != 0 && HitTestWinner == Window`, so `Confirmed ⇒ Window != 0` holds
+  with or without the clause for every possible input — including both records those two facts
+  construct. **Redundant, not unpinned**, and the guard it is redundant WITH is M-j, which round 2
+  closed.
+- **M-bn — the race bound being an inequality at all.**
+  **Consumers of the mutated symbol, enumerated by grep:**
+  `BubblePopField.OneStepNeverCarriesABubbleOffItsOwnCentre` is read in exactly two places, both
+  assertions — `PointerCapabilityTests.cs:235` and `PointerSurfaceObservations.cs:480` (recorded as
+  `RaceRun.BoundHoldsArithmetically` and asserted by `AClickAtAPointTheTargetHasLEFT...`). No product
+  code reads it; it is a checkable statement about the constants, not a branch.
+  **Discharged against each:** the property is a nullary static over `const` inputs only —
+  `sqrt(12² + 4.5²) = 12.816 < 30` — so it has no free variables and evaluates to `true` at compile
+  time. Both consumers read a `bool` and neither derives anything else from the mutated expression,
+  so `=> true` returns the identical value for every call either can ever make. **Equivalent by
+  construction — and unlike M-au, the enumeration is what establishes that, rather than an
+  assumption that the two readers are the only ones.** What the property guards is a FUTURE edit to those
   constants, and each constituent constant is mutated separately and caught (M-bb the boost, M-bj/bk
   the wobble amplitude and rate, M-bm the time increment, M-ay the size floor).
-- **M-ch — the `Showing` guard in front of the posted withdraw.** `BubblePopSurfacePresenter.Withdraw`
-  is idempotent under its own gate: after the first call the target map is empty, both cadence handles
-  are null and `_engaged` is false, so a triple post produces one teardown and two no-ops that touch
-  the surface not at all. **The guard here is a cost saving and not a correctness rule** — which is
-  DIFFERENT from `PinkFilterEffect`'s identical-looking guard, whose own comment says it is not an
-  optimisation. `BubblePopEffect.ReleaseWork`'s doc repeated Pink Filter's stronger wording; **it is
-  corrected in this diff rather than defended**, and it names this mutant.
-
 **TEN ARE UNCOVERED, and each names why:**
 
 - **M-v, M-ad, M-ae, M-af, M-ah, M-ai, M-aj — seven refusal branches inside `Open`/`Classify` that no
@@ -390,9 +463,14 @@ Six facts in `PointerCoexistenceTests`:
 5. The video surface's own read-back still confirms its picture with a pointer target up beside it.
 6. The MOVE itself earns `Available` with all three of the others on the desktop.
 
-Every expectation **flips with the machine** rather than being skipped: on a machine with no
-interactive desktop each leg is asserted false, which is why this file carries no early return and no
-entry in the vacuous-shape ledger.
+No expectation is ever skipped: on a machine with no interactive desktop each leg is asserted
+false, which is why these files carry no early return and no entry in the vacuous-shape ledger.
+**The precise claim is narrower than "flips with the machine", and the narrower one is the true
+one.** `PointerWindowProbe.MachineHasInteractiveDesktop` reads `SM_CMONITORS` and `SM_CXSCREEN`; it
+can see "no display at all" and it CANNOT see a locked workstation or the secure desktop, both of
+which leave those metrics intact while silently refusing every injection. In that state the facts
+FAIL — loudly, naming the injection that was refused — rather than passing. That is failing safe, not
+adapting, and it is the honest description.
 
 **The ten landed modules' facts are unchanged in SEMANTICS.** Three rack-order/refusal lists and two
 headless rack lists grew by one entry each, exactly as they did at SP-105, SP-106, SP-108, SP-109,
@@ -402,13 +480,56 @@ SP-111 and SP-112. No landed assertion was relaxed, reworded to be weaker, or de
 
 ## 8. THE FLOOR
 
-Pin **1830 unit / 112 headless**; observed **1927 unit / 117 headless**, **0 failures in either
-suite**; declared **+97 unit / +5 headless** (`floor-delta.json`). 1830 + 97 = 1927 and 112 + 5 = 117,
+Pin **1830 unit / 112 headless**; observed **1930 unit / 117 headless**, **0 failures in either
+suite**; declared **+100 unit / +5 headless** (`floor-delta.json`). 1830 + 100 = 1930 and 112 + 5 = 117,
 confirmed by `node client/tests/floor/sum-deltas.mjs --check --packets SP-113-pointer-surface`. The
 floor run therefore REPORTS a violation against the pin, which is the expected shape. Two skips, both
 pre-existing; none added, none widened. `client/tests/floor/floor.json` was never opened.
 
 ---
+
+## 8b. THE CITATION DRIFT THE REVIEW CAUGHT, and where it came from
+
+**Every upstream line number in this packet was re-derived with `grep -n` against the shipping
+source, and the corrections below were applied by exact-string replacement over an enumerated file
+list.** That sentence is deliberately narrower than the one an earlier draft made — *"every upstream
+line number was re-derived"* was itself an over-general claim of the same species as the equivalence
+overreach it sits beside: **the sweep was by PATTERN, and a pattern misses what it does not match.**
+The review found `:25` still standing in four places, including product source and the landed ledger,
+after that sentence had been written. So what is true is that each pattern was verified against
+source, not that every site was reached. All four are fixed here — `:25` is the class's opening
+brace, `MAX_BUBBLES` is `:26` and `MAX_BUBBLES_HOST` is `:27` — and the remaining `:25` occurrences
+in the tree belong to other packets' unrelated files. The root cause is named rather than glossed: most of them were taken from
+`docs/primers/BUBBLE_POP_PRIMER.md`, whose own header warns that `BubbleService.cs` *"is ~4850 lines
+and churns — confirm a line with a quick read before quoting it"*, and I quoted without confirming.
+
+**The worst one was in product source and it actively misled.** `BubblePopField` cited
+`BubbleService.cs:2825` for `_speed = 1.0 + rand`. The real line is **`:2823`**; `:2825` is a
+DIFFERENT rule — `_speed *= Math.Clamp(1.4 - (_size - 150) / 220.0, 0.6, 1.4)`, guarded by
+`if (spec != null)`, chaos bubbles only, and **correctly not ported**. A reader following that
+citation would have landed on plausible arithmetic the port deliberately omits and concluded the
+port was incomplete.
+
+**`AppSettings.cs` was wrong in its PATH as well as its lines.** The shipping tree has no
+`ConditioningControlPanel/Models/AppSettings.cs`; the settings model lives at
+`ConditioningControlPanel/CCP.Core/Models/AppSettings.cs`, which is where SP-105 and SP-110 already
+cite it. The Bubbles region is `:2736`, and the five dials D146 declares absent are `:2758`
+(Solid mode), `:2764` (volume), `:2789` (ramp link), `:2795` (clickable), `:2803` (triggers). All
+five exist with the semantics claimed.
+
+The rest, each re-derived: `:25`→`:26`, `:26`→`:27`, `:53`→`:54`, `:81`→`:82`, `:189`→`:188`,
+`:199`→`:200`, `:592-680`→`:599-632`, `:715-736`→`:725-739`, `:850-854`→`:862-866`,
+`:851-857`→`:877-881`, `:941-968`→`:951-980`, `:973-1053`→`:1021-1076`, `:1096-1675`→`:1228-1807`,
+`:1839-1905`→`:1971-2016`, `:2831-2836`→`:2831-2834`, `:2846`→`:2847`, `:2853`→`:2852`,
+`:3227/:3228`→`:3228/:3229`, `:3458-3464`→`:3460-3463`; `BubbleSizing.cs` `:41`→`:40`, `:48`→`:47`,
+`:52`→`:50`, `:59`→`:57`, `:64`→`:60`, `:82`→`:81` (only `:70`, the clickable floor, was exact).
+
+**Two citations the review flagged were already right and are kept unchanged after checking:**
+`:2846` for `_screenTop` is `:2847` (corrected), but `MouseLeftButtonDown` at `:2966`/`:3018`/`:3113`,
+`IsHitTestVisible` at `:2960`/`:2988`/`:3103`, `ShowActivated = false` at `:2158`, `HideFromAltTab`'s
+`:4877`/`:4887`/`:4889`/`:4899`, `BringToFront`'s `:4778`/`:4785`, the reposition at `:4807`,
+`_timeAlive += 0.02` at `:3399`, FloatUp at `:3496-3497`, `Pop()`'s guard at `:3990`, `OnMiss` at
+`:1194` and `Destroy` at `:4715` all verified exact.
 
 ## 9. Files changed
 
@@ -433,9 +554,12 @@ and an evidence notice).
 |---|---|---|
 | `PointerWindowProbe.cs` | — | the new instrument: mouse `SendInput`, the raising hit test, the style clear |
 | `PointerSurfaceObservations.cs` | — | the three real-desktop runs |
-| `PointerCapabilityTests.cs` | **22** | the chain, the race in both directions, the refusals, and the observation records |
+| `PointerCapabilityTests.cs` | **30** | the chain, the race in both directions, the refusals, the ink read's own geometry, and the observation records |
 | `PointerCoexistenceTests.cs` | **6** | four surfaces, one desktop |
-| `BubblePopModuleTests.cs` | **67** | the arithmetic, the presenter, the module, the dot, the panel's sentences and the Linux refusal |
+| `BubblePopModuleTests.cs` | **64** | the arithmetic, the presenter, the module, the dot, the panel's sentences and the Linux refusal |
+
+30 + 6 + 64 = **100**, which is the declared unit delta. The five headless facts are the row's own
+grammar, the evidence notice, the three dials, the five absent dials and the panel exclusivity.
 
 **Tests — changed:** `RealDesktopCollectionGuardTests.cs` (the helper census gains the three pointer
 helpers and the bound controls gain the two new real-desktop classes — a STRENGTHENING),
@@ -476,6 +600,20 @@ GAMES & CARDS order fact now pins all three ported rows, **+5** new facts).
   `GetPixel` read PER TARGET PER 30 ms STEP is a real per-frame cost that was never measured on a
   contended machine. **This is the single most likely place the port's Bubble Pop will need work**,
   and it is upstream's own reason for capping the per-window path at three.
+- **THE COEXISTENCE EVIDENCE DOES NOT SCALE AS WRITTEN, and a fifth surface breaks it.** Its whole
+  strength comes from the four rectangles being DISJOINT (§7), so no surface's hit-test point can be
+  occluded by another — which is precisely the property a fifth contending surface removes. The six
+  facts are hand-written pairwise readings and they do not generalise: adding a surface means either
+  another hand-written set or, properly, occlusion-aware arbitration that decides which surface owns
+  a point rather than arranging for the question never to arise. **A later packet that adds a fifth
+  surface must not extend this file; it needs the arbitration.**
+- **NOTHING MECHANICAL OBSERVES COMPILER WARNINGS ANYWHERE IN THIS PORT.** `check-floor.mjs` runs
+  `--no-build` by design and has no warning handling at all, so every packet's "0 warnings" rests on
+  a lane reading its own unfiltered build output. **Mine was not doing that** — my own
+  `grep -E "error|warning CS|Build succ"` filter hid two `xUnit2013` warnings for the whole packet,
+  and I reported "0 warnings" four times on a filtered stream before the review made me look. The
+  warnings are fixed and a full rebuild now reports `0 Warning(s)` by observation, which is
+  sufficient for SP-113 — but the PRACTICE gap is port-wide and no fact in this packet closes it.
 - **Linux is unproven** and refuses in type with a five-step gate that is run separately on X11 and
   Wayland because they answer differently; nothing in this packet discharges it, and the gate names
   `_NET_ACTIVE_WINDOW` being unchanged across a click as the step most likely to fail because

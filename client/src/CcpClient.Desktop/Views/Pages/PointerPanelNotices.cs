@@ -34,7 +34,7 @@ public static class PointerPanelNotices
 
     /// <summary>
     /// What is NOT here, in the user's own words. Upstream pays a pop with a sound, XP, an
-    /// achievement, a haptic pulse and a Discord update (<c>Services/BubbleService.cs:941-968</c>);
+    /// achievement, a haptic pulse and a Discord update (<c>Services/BubbleService.cs:951-980</c>);
     /// this port pays it with a pop.
     /// </summary>
     public const string ScopeNotice =
@@ -152,7 +152,7 @@ public static class PointerPanelNotices
     };
 
     /// <summary>The spawn-rate dial's own line, in the units upstream's dial uses
-    /// (<c>Models/AppSettings.cs:2210</c>: spawns per MINUTE, not per hour).</summary>
+    /// (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>: spawns per MINUTE, not per hour).</summary>
     public static string DescribeSpawnRate(int perMinute)
     {
         var interval = BubblePopField.SpawnInterval(perMinute);

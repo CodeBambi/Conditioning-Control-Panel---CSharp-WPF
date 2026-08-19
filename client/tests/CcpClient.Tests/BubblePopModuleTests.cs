@@ -30,8 +30,8 @@ public class BubblePopModuleTests
     [Fact]
     public void TheSpawnIntervalIsUpstreamsOwnDivision_AndTheDialsClampIsAppliedBeforeIt()
     {
-        // WPF: 60000.0 / Math.Max(1, frequency) (Services/BubbleService.cs:189), with the dial itself
-        // clamped 1..60 (Models/AppSettings.cs:2210).
+        // WPF: 60000.0 / Math.Max(1, frequency) (Services/BubbleService.cs:188), with the dial itself
+        // clamped 1..60 (CCP.Core/Models/AppSettings.cs:2743-2747).
         Assert.Equal(TimeSpan.FromMilliseconds(60000.0 / 5), BubblePopField.SpawnInterval(5));
         Assert.Equal(TimeSpan.FromMilliseconds(60000.0 / 60), BubblePopField.SpawnInterval(60));
         Assert.Equal(TimeSpan.FromMilliseconds(60000.0 / 1), BubblePopField.SpawnInterval(1));
@@ -64,7 +64,7 @@ public class BubblePopModuleTests
     public void TheFourWobblesAreUpstreamsOwn_AndTheSTEEPESTOneIsWhatBoundsTheRace(
         int animType, double rate, double amplitude)
     {
-        // Services/BubbleService.cs:3458-3464. Cases 0 and 1 are sines, case 2 a cosine, case 3 a sum.
+        // Services/BubbleService.cs:3460-3463. Cases 0 and 1 are sines, case 2 a cosine, case 3 a sum.
         var t = 0.37;
         var expected = animType == 2 ? Math.Cos(t * rate) * amplitude : Math.Sin(t * rate) * amplitude;
         Assert.Equal(expected, BubblePopField.Wobble(animType, t), 9);
@@ -89,7 +89,7 @@ public class BubblePopModuleTests
         Assert.True(BubblePopField.MinSize / 2.0 / BubblePopField.MaxStepDisplacement > 2.0,
             $"the bound holds by a factor of "
             + $"{BubblePopField.MinSize / 2.0 / BubblePopField.MaxStepDisplacement:0.###}, which is thinner than "
-            + "the 2.34 this port measured. A change to the speed band, the boost ceiling or the size floor has "
+            + "the 2.3409 this port measured. A change to the speed band, the boost ceiling or the size floor has "
             + "eaten the margin");
 
         Assert.Equal(12.0, BubblePopField.MaxSpeed * (1 + (BubblePopField.MaxSpeedBoostPercent / 100.0)));
@@ -122,7 +122,7 @@ public class BubblePopModuleTests
     [Fact]
     public void BUBBLESSpawnAcrossTheWidthOfThePlayArea_AtUpstreamsOwnBand()
     {
-        // _startX = area.X + random.Next(50, max(100, area.Width - _size - 50)) (:2853). A field
+        // _startX = area.X + random.Next(50, max(100, area.Width - _size - 50)) (:2852). A field
         // whose bubbles all appeared at the same x would be a column, not a game.
         var field = new BubblePopField(0, 0, 1920, 1080, new Random(29));
         var xs = new List<double>();
@@ -139,7 +139,7 @@ public class BubblePopModuleTests
     [Fact]
     public void ABubbleThatFloatsOffTheTopIsMISSED_AtUpstreamsOwnMargin()
     {
-        // _screenTop = area.Y - _size - 50 (:2846); exit at _posY < _screenTop (:3497-3499); OnMiss
+        // _screenTop = area.Y - _size - 50 (:2847); exit at _posY < _screenTop (:3497-3499); OnMiss
         // removes it immediately with no animation (:1194-1200).
         var field = new BubblePopField(0, 0, 1920, 400, new Random(3));
         var born = field.Spawn(100, 0)!.Value;
@@ -163,7 +163,7 @@ public class BubblePopModuleTests
     public void AHITStartsThePopAnimation_AndTheBubbleIsNotCountedUntilTheAnimationFINISHES()
     {
         // Upstream defers destruction to the pop animation completing rather than doing it inside
-        // the click (BUBBLE_POP_PRIMER §9.6, Services/BubbleService.cs:3226-3231).
+        // the click (BUBBLE_POP_PRIMER §9.6, Services/BubbleService.cs:3225-3231).
         var field = new BubblePopField(0, 0, 1920, 1080, new Random(11));
         var born = field.Spawn(100, 0)!.Value;
 
@@ -216,7 +216,7 @@ public class BubblePopModuleTests
     [Fact]
     public void CLEARINGTheFieldCountsNeitherAPopNorAMiss_BecauseNeitherHappened()
     {
-        // Upstream's Stop() calls PopAllBubbles() (:715-736), which ENDS a run rather than resolving
+        // Upstream's Stop() calls PopAllBubbles() (:725-739), which ENDS a run rather than resolving
         // one. Counting those as pops would inflate the number the panel shows the user.
         var field = new BubblePopField(0, 0, 1920, 1080, new Random(19));
         field.Spawn(100, 0);
@@ -238,7 +238,7 @@ public class BubblePopModuleTests
     [InlineData(-40, 1.0)]      // and at its floor
     public void TheSpeedBoostIsUpstreamsOwnMultiplierAndItsOwnClamp(int boost, double multiplier)
     {
-        // speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0 (:2831-2836).
+        // speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0 (:2831-2834).
         var plain = new BubblePopField(0, 0, 1920, 1080, new Random(23)).Spawn(100, 0)!.Value;
         var boosted = new BubblePopField(0, 0, 1920, 1080, new Random(23)).Spawn(100, boost)!.Value;
 
@@ -252,13 +252,13 @@ public class BubblePopModuleTests
     [Fact]
     public void ENGAGINGPlacesTheFirstTargetIMMEDIATELY_BecauseUpstreamSpawnsOneBeforeTheTimerRuns()
     {
-        // "Spawn first bubble immediately" (Services/BubbleService.cs:199).
+        // "Spawn first bubble immediately" (Services/BubbleService.cs:200).
         using var lab = new Lab();
 
         var state = lab.Presenter.Engage(new BubblePopSettings(5, 100, 0));
 
         Assert.IsType<CapabilityState.Available>(state);
-        Assert.Equal(1, lab.Surface.Opened.Count);
+        Assert.Single(lab.Surface.Opened);
         Assert.Equal(1, lab.Presenter.TargetsUp);
         Assert.True(lab.Presenter.Showing);
         Assert.True(lab.Presenter.Running);
@@ -288,7 +288,7 @@ public class BubblePopModuleTests
         using var lab = new Lab();
         lab.Presenter.Engage(new BubblePopSettings(60, 100, 0));
 
-        Assert.Equal(1, lab.Surface.Opened.Count);
+        Assert.Single(lab.Surface.Opened);
         lab.Clock.Advance(BubblePopField.SpawnInterval(60));
 
         Assert.Equal(2, lab.Surface.Opened.Count);
@@ -437,7 +437,7 @@ public class BubblePopModuleTests
     public void ANEMPTYFieldBetweenSpawnsIsSTILLRunning_BecauseTheGapIsMostOfEverySession()
     {
         // At the bottom of the dial the gap is fifty-nine seconds in every sixty
-        // (60000/1 ms, Services/BubbleService.cs:189). A dot that went dark there would report the
+        // (60000/1 ms, Services/BubbleService.cs:188). A dot that went dark there would report the
         // module broken for almost the whole session, which is the opposite lie.
         using var lab = new Lab();
         lab.Presenter.Engage(new BubblePopSettings(1, 100, 0));
@@ -456,7 +456,7 @@ public class BubblePopModuleTests
     [Fact]
     public void ONELIVEROUTABLETARGETIsEnoughToBeRunning_BecauseUpstreamsBubblesOverlapFreely()
     {
-        // Upstream's spawn band is a random x per bubble with no separation rule (:2853), so one
+        // Upstream's spawn band is a random x per bubble with no separation rule (:2852), so one
         // bubble covering another's centre is an ordinary state of the game rather than a failure of
         // the channel. A field with one hittable bubble in it is a game.
         using var lab = new Lab();
@@ -561,6 +561,40 @@ public class BubblePopModuleTests
         Assert.Equal(EffectReasonCodes.EffectNoSurface,
             Assert.IsType<CapabilityState.Unavailable>(armed).Reason.Code);
         Assert.Equal(EffectDotState.Armed, lab.Effect.Dot);
+    }
+
+    [Fact]
+    public void RELEASINGAModuleWithNoSurfaceDoesNothing_RatherThanDereferencingOne()
+    {
+        // THE GUARD IN ReleaseWork IS ALSO THE NULL GUARD, and this is the fact that says so.
+        // OwnedSessionEffect reaches ReleaseWork WITHOUT screening: unconditionally from Disarm
+        // before its own wasArmed return, and from the eligibility gate on the dial-off and
+        // dead-generation paths. A composition with no pointer surface is a real construction — the
+        // spine's own "compose the module with nowhere to place anything" case — so a module that
+        // dereferenced there would throw on a stop it never even started.
+        //
+        // An earlier draft of the record discharged the mutation that deletes that guard as an
+        // EQUIVALENT MUTANT on the ground that Withdraw is idempotent. That was true and beside the
+        // point: idempotence says nothing about a null receiver. The claim is withdrawn and this
+        // fact replaces it.
+        using var lab = new Lab(composeSurface: false);
+        lab.Effect.SetEnabled(true);
+
+        var armed = lab.Effect.Arm();
+
+        // Every path that reaches ReleaseWork, on a module that has no surface at all.
+        lab.Effect.Disarm();
+        lab.Effect.Refresh();
+        lab.Effect.SetEnabled(false);
+        lab.Effect.Refresh();
+        lab.Effect.Disarm();
+
+        Assert.Equal(EffectReasonCodes.EffectNoSurface,
+            Assert.IsType<CapabilityState.Unavailable>(armed).Reason.Code);
+        Assert.Equal(EffectDotState.Off, lab.Effect.Dot);
+        Assert.Equal(0, lab.Effect.Targets.Up);
+        Assert.Equal(0, lab.Effect.Popped);
+        Assert.Null(lab.Effect.LastPlacement);
     }
 
     [Fact]

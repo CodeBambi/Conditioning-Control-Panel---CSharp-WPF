@@ -167,7 +167,7 @@ public sealed class BubblePopEffect : OwnedSessionEffect
     }
 
     /// <summary>Move the travel-speed boost. Applied to the next spawn, as upstream applies it in the
-    /// bubble's own constructor (<c>Services/BubbleService.cs:2831-2836</c>).</summary>
+    /// bubble's own constructor (<c>Services/BubbleService.cs:2831-2834</c>).</summary>
     public void SetSpeedBoostPercent(int percent)
     {
         var clamped = Math.Clamp(
@@ -260,7 +260,7 @@ public sealed class BubblePopEffect : OwnedSessionEffect
 
     /// <summary>
     /// Drop the field. Upstream's <c>Stop()</c> stops the spawn timer, stops the animation driver and
-    /// pops every bubble (<c>Services/BubbleService.cs:715-736</c>) — and for a CONTINUOUS module
+    /// pops every bubble (<c>Services/BubbleService.cs:725-739</c>) — and for a CONTINUOUS module
     /// "release the work" and "take it off the screen" are the same act, which is why the withdraw is
     /// here rather than in <see cref="OwnedSessionEffect.OnDisarmed"/> and why the dial going off
     /// mid-session clears the desktop too.
@@ -268,16 +268,22 @@ public sealed class BubblePopEffect : OwnedSessionEffect
     /// <para><b>Thread.</b> Called from a teardown thread as well as from a gesture, and a native
     /// window belongs to the thread that made it, so the withdraw is POSTED.</para>
     ///
-    /// <para><b>The <see cref="IBubblePopSurface.Showing"/> test in front of it IS only a cost
-    /// saving here, and that is a correction rather than a claim.</b> One
+    /// <para><b>The <see cref="IBubblePopSurface.Showing"/> pattern test does TWO jobs, and the
+    /// second one is the load-bearing one.</b> It is a cost saving — one
     /// <see cref="OwnedSessionEffect.Disarm"/> reaches this three times (directly, from the
-    /// generation's cancellation callback, and from the parked operation's tail), and Pink Filter's
-    /// identical guard is load-bearing for its surface. This presenter's <c>Withdraw</c> is
-    /// idempotent under its own gate — after the first call its target map is empty, both cadence
-    /// handles are null and <c>_engaged</c> is false — so a triple post produces one teardown and
-    /// two no-ops. The mutation that removes this guard SURVIVES the sweep for exactly that reason
-    /// (M-ch), and the record disposes of it as an equivalent mutant with that proof rather than
-    /// inventing a fact to pin a difference nobody can observe.</para>
+    /// generation's cancellation callback, and from the parked operation's tail), and this
+    /// presenter's <c>Withdraw</c> is idempotent, so the extra posts would be no-ops. <b>But it is
+    /// also the NULL guard.</b> <c>_surface</c> is nullable and a composition with no pointer
+    /// surface at all is a real construction, and <see cref="OwnedSessionEffect"/> reaches
+    /// <c>ReleaseWork</c> without screening — unconditionally from <c>Disarm</c> BEFORE its own
+    /// <c>wasArmed</c> return, and from the eligibility gate on the dial-off and dead-generation
+    /// paths. Without the pattern test, <c>Signal.Post(_surface.Withdraw)</c> dereferences null and
+    /// a module composed with no surface throws on disarm.
+    /// <c>RELEASINGAModuleWithNoSurfaceDoesNothing_RatherThanDereferencingOne</c> pins exactly
+    /// that, and the mutation that removes the guard (M-ch) is caught by it. <b>An earlier draft of
+    /// this comment called the guard "only a cost saving" and the record discharged M-ch as an
+    /// equivalent mutant on that basis; both were wrong, and both are corrected rather than
+    /// defended.</b></para>
     /// </summary>
     protected override void ReleaseWork()
     {

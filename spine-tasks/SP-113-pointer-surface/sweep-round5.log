@@ -1,0 +1,8 @@
+SP-113 mutation sweep — 2026-08-19T19:12:17.601Z
+filter: FullyQualifiedName~BubblePopModuleTests|FullyQualifiedName~PointerCapabilityTests|FullyQualifiedName~PointerCoexistenceTests|FullyQualifiedName~SecondEffectSpineTests|FullyQualifiedName~ContinuousEffectSpineTests|FullyQualifiedName~AudioModuleSpineTests
+
+M-aq  CAUGHT  three of the four ink control points
+M-au  CAUGHT  the disc's inset away from the control points
+
+caught=2 survived=0 not-patched=0 total=2
+elapsed=53s

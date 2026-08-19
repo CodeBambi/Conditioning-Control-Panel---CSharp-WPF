@@ -121,7 +121,7 @@ the click.
 window manager, at the instant of the click, over the position the OS itself holds.** Nothing in the
 product hit-tests and then acts on the answer. `WindowFromPoint` appears only in the CONFIRMATION
 path — earning `Available` — and never in the pop decision. That is upstream's own per-window path
-(`MouseLeftButtonDown` on the bubble's own window, `:3113`), whose cap is 3 (`MAX_BUBBLES`, `:25`)
+(`MouseLeftButtonDown` on the bubble's own window, `:3113`), whose cap is 3 (`MAX_BUBBLES`, `:26`)
 for exactly the reason it is a `SetWindowPos` per move; I take the cap with the mechanism.
 
 ### 3b. The residue, and its arithmetic bound from upstream's own constants
@@ -129,17 +129,17 @@ for exactly the reason it is a `SetWindowPos` per move; I take the cap with the 
 What remains is that `Open`/`Move` return `Available` on a P4 answer that can be up to **one
 animation step** old.
 
-- step: `STEP_MS = 30` ms (`BubbleService.cs:53`).
-- vertical: `_posY -= _speed` with `_speed = 1.0 + rand*1.0` DIP/step (`:2825`), multiplied by up to
-  6 by the dashboard speed slider, 0..500 % (`:2831-2836`) → **≤ 12 DIP/step**.
-- horizontal: `_posX = _startX + offset` (`:3496`) with `offset` one of four wobbles (`:3458-3464`)
+- step: `STEP_MS = 30` ms (`BubbleService.cs:54`).
+- vertical: `_posY -= _speed` with `_speed = 1.0 + rand*1.0` DIP/step (`:2823`), multiplied by up to
+  6 by the dashboard speed slider, 0..500 % (`:2831-2834`) → **≤ 12 DIP/step**.
+- horizontal: `_posX = _startX + offset` (`:3496`) with `offset` one of four wobbles (`:3460-3463`)
   over `_timeAlive += 0.02` per step (`:3399`). The largest per-step derivative is case 1,
   `30·sin(7.5·t)` → `30 × 7.5 × 0.02` = **4.5 DIP/step**. (Case 3 gives `(30×3 + 15×6)×0.02 = 3.6`;
   case 0 `3.0`; case 2 `2.7`.)
 - worst-case step displacement `sqrt(12² + 4.5²)` = **12.81 DIP**; unboosted, `sqrt(2² + 4.5²)` =
   **4.92 DIP**.
 - smallest legal radius: `BubbleSizing.ClickableFloorDip = 60` DIP (`Services/BubbleSizing.cs:70`) →
-  **30 DIP**. The ordinary band is 150..250 DIP (`:41`, `:48`) → 75..125 DIP.
+  **30 DIP**. The ordinary band is 150..250 DIP (`:40`, `:47`) → 75..125 DIP.
 
 **Bound: one step's displacement (≤ 12.81 DIP) is strictly less than the smallest radius any legal
 bubble can have (30 DIP), by a factor of 2.34.** So a point the OS answered with a target at step N

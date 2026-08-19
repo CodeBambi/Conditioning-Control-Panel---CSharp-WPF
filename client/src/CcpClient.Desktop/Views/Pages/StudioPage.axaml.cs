@@ -970,7 +970,7 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>The extra-speed slider. Applied at the next spawn, where upstream applies it — in
-    /// the bubble's own constructor (<c>Services/BubbleService.cs:2831-2836</c>).</summary>
+    /// the bubble's own constructor (<c>Services/BubbleService.cs:2831-2834</c>).</summary>
     private void OnBubblePopSpeedMoved()
     {
         if (_syncing)

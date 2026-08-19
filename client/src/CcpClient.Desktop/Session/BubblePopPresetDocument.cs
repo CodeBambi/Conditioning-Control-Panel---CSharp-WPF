@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Session;
 /// <summary>
 /// SP-113: the Bubble Pop module's persisted dials — the port's counterpart of WPF's
 /// <c>BubblesEnabled</c> / <c>BubblesFrequency</c> / <c>BubblesSize</c> / <c>BubbleSpeedBoost</c>
-/// (<c>Models/AppSettings.cs</c> <c>#region Bubbles</c> at <c>:2202</c>).
+/// (<c>CCP.Core/Models/AppSettings.cs</c> <c>#region Bubbles</c> at <c>:2736</c>).
 ///
 /// <para><b>One document per module</b>, on the precedent SP-101 set and every module since has
 /// applied (D71/D80): the store's Degraded load path takes the WHOLE document to defaults, so one
@@ -40,7 +40,7 @@ public sealed class BubblePopPresetDocument
     private int _speedBoostPercent = BubblePopField.MinSpeedBoostPercent;
 
     /// <summary>
-    /// The module's own on/off dial — WPF's <c>BubblesEnabled</c> (<c>Models/AppSettings.cs:2204</c>),
+    /// The module's own on/off dial — WPF's <c>BubblesEnabled</c> (<c>CCP.Core/Models/AppSettings.cs:2737-2738</c>),
     /// which ships OFF and is level-gated upstream at Lv.20. The port has no progression system, so
     /// the level gate is absent rather than a check that always passes.
     /// </summary>
@@ -48,8 +48,8 @@ public sealed class BubblePopPresetDocument
 
     /// <summary>
     /// Spawns a minute — WPF's <c>BubblesFrequency</c>, clamped 1..60
-    /// (<c>Models/AppSettings.cs:2210</c>), fed straight to <c>60000.0 / frequency</c>
-    /// (<c>Services/BubbleService.cs:189</c>).
+    /// (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>), fed straight to <c>60000.0 / frequency</c>
+    /// (<c>Services/BubbleService.cs:188</c>).
     /// </summary>
     public int PerMinute
     {
@@ -59,7 +59,7 @@ public sealed class BubblePopPresetDocument
 
     /// <summary>
     /// The user's bubble-size dial as a percentage — WPF's <c>BubblesSize</c>, clamped 50..150
-    /// (<c>Services/BubbleSizing.cs:52,59</c>). The absolute pixel rails live in
+    /// (<c>Services/BubbleSizing.cs:50,57</c>). The absolute pixel rails live in
     /// <see cref="BubblePopField.SizeFor"/>, exactly as upstream keeps them in
     /// <c>BubbleSizing.Scale</c> rather than in the setting.
     /// </summary>
@@ -71,8 +71,8 @@ public sealed class BubblePopPresetDocument
 
     /// <summary>
     /// Extra travel speed as a percentage — WPF's <c>BubbleSpeedBoost</c>, clamped 0..500 and applied
-    /// as <c>speed × (1 + boost/100)</c> (<c>Models/AppSettings.cs:2262</c>,
-    /// <c>Services/BubbleService.cs:2831-2836</c>).
+    /// as <c>speed × (1 + boost/100)</c> (<c>CCP.Core/Models/AppSettings.cs:2814-2818</c>,
+    /// <c>Services/BubbleService.cs:2831-2834</c>).
     /// </summary>
     public int SpeedBoostPercent
     {

@@ -21,7 +21,7 @@ public readonly record struct PointerNativeHandles(nint Window);
 /// gap, because the arbiter is the window manager at the instant of the click, over the position the
 /// operating system itself holds. <b>This port takes the per-window path and takes its cost with
 /// it</b>: upstream caps it at three concurrent bubbles because each move is a <c>SetWindowPos</c>
-/// (<c>:25</c>), and so does <see cref="MaxConcurrentTargets"/>.</para>
+/// (<c>:26</c>), and so does <see cref="MaxConcurrentTargets"/>.</para>
 ///
 /// <para><b>What that buys, stated exactly.</b> Nothing in this file hit-tests and then acts on the
 /// answer. <c>WindowFromPoint</c> appears only where <see cref="CapabilityState.Available"/> is
@@ -39,7 +39,7 @@ public sealed class Win32PointerSurface : IPointerSurface
     ///
     /// <para>Upstream's own per-window cap, and its own reason: <c>MAX_BUBBLES = 3</c>, commented
     /// <i>"per-window fallback cap (SetWindowPos-bound — keep small)"</i>
-    /// (<c>Services/BubbleService.cs:25</c>), with the gotcha behind it spelled out at
+    /// (<c>Services/BubbleService.cs:26</c>), with the gotcha behind it spelled out at
     /// <c>docs/primers/BUBBLE_POP_PRIMER.md</c> §9.1 — creating and closing layered windows per
     /// bubble caused a 2 GB+ OOM with no managed exception, and resizing a rented shell triggers a
     /// synchronous <c>CompleteRender</c> UI-thread deadlock. This port keeps the cap and sidesteps
@@ -178,7 +178,7 @@ public sealed class Win32PointerSurface : IPointerSurface
             return LastPlacement = Unavailable(PointerReasonCodes.PointerTargetLimitReached,
                 $"this surface already holds {_targets.Count} of {MaxConcurrentTargets} targets; upstream's own "
                 + "per-window cap is three and its reason is that every move is a SetWindowPos "
-                + "(Services/BubbleService.cs:25). Nothing was placed");
+                + "(Services/BubbleService.cs:26). Nothing was placed");
         }
 
         // The necessary condition, asked BEFORE a window exists: a process with no interactive

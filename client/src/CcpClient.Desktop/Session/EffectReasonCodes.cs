@@ -292,7 +292,7 @@ public static class EffectReasonCodes
     ///
     /// <para>Upstream pays every pop with a pooled-device sound, an XP grant with a lucky roll, an
     /// achievement tick, a haptic pulse and a Discord presence update
-    /// (<c>Services/BubbleService.cs:941-968</c>, <c>:1839-1905</c>). This port has no progression,
+    /// (<c>Services/BubbleService.cs:951-980</c>, <c>:1971-2016</c>). This port has no progression,
     /// no achievements, no haptics and no Discord at all, and its audio capability is a separate
     /// module's — so a pop here is a pop, and nothing else happens.</para>
     ///

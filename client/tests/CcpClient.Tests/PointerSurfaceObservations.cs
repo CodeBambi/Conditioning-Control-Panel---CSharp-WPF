@@ -114,6 +114,17 @@ internal static class PointerSurfaceObservations
     /// landed. <b>Without this the negative leg is satisfied by an injection that never occurred.</b></param>
     /// <param name="PressesAfterNegativeClick">The surface's count after the closed target's point was
     /// clicked again. It must equal <paramref name="PressesAfterClick"/>.</param>
+    /// <param name="ObservedSampledPixels">How many pixels the capability's own ink read SAMPLED,
+    /// through the public <see cref="IPointerSurface.Observe"/>. It is a function of the DISC's box
+    /// and of the stride derived from that box, so it is the observable consequence of the disc's
+    /// inset — the second consumer of <c>DiscBox</c> that an earlier equivalence proof missed.</param>
+    /// <param name="ObservedInkedPixels">How many of them differed from the fill.</param>
+    /// <param name="ObservedBackgroundHeld">All four corner control points read back exactly the
+    /// fill, on a target nothing outside has touched.</param>
+    /// <param name="FarCornerDirtied">The harness wrote one foreign pixel into the target's own DC
+    /// at the FAR corner control point — the one a single-corner check would never look at.</param>
+    /// <param name="BackgroundHeldAfterFarCornerDirtied">And what the capability said afterwards.
+    /// <b>This is what makes four control points four rather than one.</b></param>
     /// <param name="UnlistenedClickInjected">A click was injected with NO press listener attached.</param>
     /// <param name="PressesAfterUnlistenedClick">The delivered-message count after it — the OS still
     /// delivered, so the count still moved.</param>
@@ -165,6 +176,11 @@ internal static class PointerSurfaceObservations
         bool NegativeClickInjected,
         bool DecoySawDown,
         int PressesAfterNegativeClick,
+        int ObservedSampledPixels,
+        int ObservedInkedPixels,
+        bool ObservedBackgroundHeld,
+        bool FarCornerDirtied,
+        bool BackgroundHeldAfterFarCornerDirtied,
         bool UnlistenedClickInjected,
         int PressesAfterUnlistenedClick,
         int PressesDropped,
@@ -220,6 +236,11 @@ internal static class PointerSurfaceObservations
         var osHoldsNonActivating = PointerWindowProbe.NonActivatingStyleHeld(window);
         var osHoldsClickThrough = PointerWindowProbe.ClickThroughStyleHeld(window);
 
+        // The capability's OWN public observation, taken through Observe while the target is up.
+        // SampledPixels is a function of the disc's box AND of the stride derived from it, so it is
+        // where the disc geometry becomes visible from outside.
+        var cleanObservation = surface.Observe(target);
+
         var pressesBefore = surface.PressesSeen;
         var refusedBefore = surface.MouseActivateRefusals;
         var foregroundBeforeClick = PointerWindowProbe.Foreground();
@@ -255,6 +276,14 @@ internal static class PointerSurfaceObservations
 
         var pressesAfterUnlistened = surface.PressesSeen;
         var pressesDropped = surface.PressesDropped;
+
+        // ---- one FOREIGN pixel at the FAR corner, which only a four-point check can see ----
+        // ControlMargin is 3, so the far corner control point is (width - 3, height - 3).
+        var farX = askedBounds.Width - Win32PointerSurface.ControlMargin;
+        var farY = askedBounds.Height - Win32PointerSurface.ControlMargin;
+        var farCornerDirtied = window != 0
+            && PointerWindowProbe.DirtyPixel(window, farX, farY, 0x0000FF00);
+        var afterDirty = surface.Observe(target);
 
         // ---- the style the OS holds is CLEARED from outside, and the next Move must catch it ----
         var styleCleared = PointerWindowProbe.ClearNonActivatingStyle(window);
@@ -319,6 +348,11 @@ internal static class PointerSurfaceObservations
             NegativeClickInjected: negativeInjected,
             DecoySawDown: (decoy?.Downs ?? 0) > 0,
             PressesAfterNegativeClick: pressesAfterNegative,
+            ObservedSampledPixels: cleanObservation.SampledPixels,
+            ObservedInkedPixels: cleanObservation.InkedPixels,
+            ObservedBackgroundHeld: cleanObservation.BackgroundHeld,
+            FarCornerDirtied: farCornerDirtied,
+            BackgroundHeldAfterFarCornerDirtied: afterDirty.BackgroundHeld,
             UnlistenedClickInjected: unlistenedInjected,
             PressesAfterUnlistenedClick: pressesAfterUnlistened,
             PressesDropped: pressesDropped,

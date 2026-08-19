@@ -9,9 +9,9 @@ namespace CcpClient.Desktop.Effects;
 /// <param name="Y">Top edge, same space.</param>
 /// <param name="Size">The side of the bubble's square, in physical pixels.</param>
 /// <param name="Speed">Upward travel per logical step, in pixels
-/// (<c>Services/BubbleService.cs:2825</c>: <c>1.0 + random × 1.0</c>, then the speed boost).</param>
+/// (<c>Services/BubbleService.cs:2823</c>: <c>1.0 + random × 1.0</c>, then the speed boost).</param>
 /// <param name="AnimType">Which of upstream's four horizontal wobbles this bubble drifts on
-/// (<c>:2836</c>, applied at <c>:3458-3464</c>).</param>
+/// (<c>:2836</c>, applied at <c>:3460-3463</c>).</param>
 /// <param name="WobbleOffset">Unused by the wobble itself upstream (it feeds the breathe phase at
 /// <c>:3644</c>) and kept here so a field can be reproduced exactly from its seed.</param>
 /// <param name="StartX">The x the wobble oscillates around — upstream re-bases <c>_posX</c> from
@@ -20,7 +20,7 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>:3399</c>).</param>
 /// <param name="Popping">True once the bubble has been hit and is playing its pop.</param>
 /// <param name="FadeAlpha">The pop animation's remaining opacity; the bubble is destroyed when it
-/// reaches zero (<c>:3226-3231</c>, <c>:3260</c>).</param>
+/// reaches zero (<c>:3225-3231</c>, <c>:3259</c>).</param>
 public readonly record struct BubblePopBubble(
     int Id,
     double X,
@@ -75,18 +75,18 @@ public enum BubblePopExit
 public sealed class BubblePopField
 {
     /// <summary>The logical animation step. Upstream's <c>STEP_MS = 30.0</c>
-    /// (<c>Services/BubbleService.cs:53</c>), gated off the composition clock so a busy frame is
+    /// (<c>Services/BubbleService.cs:54</c>), gated off the composition clock so a busy frame is
     /// DROPPED rather than replayed as a backlog (<c>:44-52</c>).</summary>
     public static readonly TimeSpan StepInterval = TimeSpan.FromMilliseconds(30);
 
-    /// <summary>Slowest upward travel, pixels per step (<c>Services/BubbleService.cs:2825</c>).</summary>
+    /// <summary>Slowest upward travel, pixels per step (<c>Services/BubbleService.cs:2823</c>).</summary>
     public const double MinSpeed = 1.0;
 
-    /// <summary>Fastest before the boost, pixels per step (<c>:2825</c>: <c>1.0 + rand × 1.0</c>).</summary>
+    /// <summary>Fastest before the boost, pixels per step (<c>:2823</c>: <c>1.0 + rand × 1.0</c>).</summary>
     public const double MaxSpeed = 2.0;
 
     /// <summary>The dashboard's travel-speed boost, in percent. Upstream clamps 0..500 and
-    /// multiplies by <c>1 + boost/100</c> (<c>:2831-2836</c>), so the ceiling is 6x.</summary>
+    /// multiplies by <c>1 + boost/100</c> (<c>:2831-2834</c>), so the ceiling is 6x.</summary>
     public const int MinSpeedBoostPercent = 0;
 
     /// <summary>See <see cref="MinSpeedBoostPercent"/>.</summary>
@@ -98,17 +98,17 @@ public sealed class BubblePopField
     /// (<c>Services/BubbleSizing.cs:70</c>).</summary>
     public const int MinSize = 60;
 
-    /// <summary>Bottom of upstream's untouched size band (<c>Services/BubbleSizing.cs:41</c>).</summary>
+    /// <summary>Bottom of upstream's untouched size band (<c>Services/BubbleSizing.cs:40</c>).</summary>
     public const int BaseMinSize = 150;
 
     /// <summary>EXCLUSIVE top of it, named to match the <c>Random.Next(min, max)</c> it is fed to
-    /// (<c>Services/BubbleSizing.cs:48</c>).</summary>
+    /// (<c>Services/BubbleSizing.cs:47</c>).</summary>
     public const int BaseMaxSize = 250;
 
-    /// <summary>Ceiling on the drawn size (<c>Services/BubbleSizing.cs:82</c>).</summary>
+    /// <summary>Ceiling on the drawn size (<c>Services/BubbleSizing.cs:81</c>).</summary>
     public const int MaxSize = 500;
 
-    /// <summary>The user's size dial, in percent (<c>Services/BubbleSizing.cs:52,59,64</c>).</summary>
+    /// <summary>The user's size dial, in percent (<c>Services/BubbleSizing.cs:50,57,60</c>).</summary>
     public const int MinSizePercent = 50;
 
     /// <summary>See <see cref="MinSizePercent"/>.</summary>
@@ -117,53 +117,53 @@ public sealed class BubblePopField
     /// <summary>See <see cref="MinSizePercent"/>.</summary>
     public const int DefaultSizePercent = 100;
 
-    /// <summary>Spawns a minute at the bottom of the dial (<c>Models/AppSettings.cs:2210</c>, clamped
+    /// <summary>Spawns a minute at the bottom of the dial (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>, clamped
     /// 1..60; the spawn timer is <c>60000 / frequency</c> ms at
-    /// <c>Services/BubbleService.cs:189</c>).</summary>
+    /// <c>Services/BubbleService.cs:188</c>).</summary>
     public const int MinPerMinute = 1;
 
-    /// <summary>Spawns a minute at the top of the dial (<c>Models/AppSettings.cs:2210</c>).</summary>
+    /// <summary>Spawns a minute at the top of the dial (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>).</summary>
     public const int MaxPerMinute = 60;
 
-    /// <summary>Upstream's default frequency (<c>Models/AppSettings.cs:2210</c>).</summary>
+    /// <summary>Upstream's default frequency (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>).</summary>
     public const int DefaultPerMinute = 5;
 
     /// <summary>
     /// Concurrent bubbles. <b>Upstream's PER-WINDOW cap, taken with the mechanism</b>:
     /// <c>MAX_BUBBLES = 3</c>, commented <i>"per-window fallback cap (SetWindowPos-bound — keep
-    /// small)"</i> (<c>Services/BubbleService.cs:25</c>). Upstream's shared-host cap of 40 (<c>:26</c>)
+    /// small)"</i> (<c>Services/BubbleService.cs:26</c>). Upstream's shared-host cap of 40 (<c>:27</c>)
     /// belongs to the render path this port did not take, and taking the number without the path
     /// would be forty <c>SetWindowPos</c> calls per 30 ms step.
     /// </summary>
     public const int MaxConcurrent = 3;
 
-    /// <summary>Pop animation growth per step (<c>Services/BubbleService.cs:3227</c>).</summary>
+    /// <summary>Pop animation growth per step (<c>Services/BubbleService.cs:3228</c>).</summary>
     public const double PopScaleGrowth = 0.04;
 
     /// <summary>Pop animation fade per step for an ordinary (non-lucky) pop
-    /// (<c>Services/BubbleService.cs:3228</c>). Lucky pops fade at 0.044 and are not ported: the
+    /// (<c>Services/BubbleService.cs:3229</c>). Lucky pops fade at 0.044 and are not ported: the
     /// lucky roll is the skill tree's (<c>:944</c>), a subsystem this port does not have.</summary>
     public const double PopFadePerStep = 0.066;
 
     /// <summary>Upstream's own vertical margin above the play area before a bubble counts as gone
-    /// (<c>Services/BubbleService.cs:2846</c>: <c>_screenTop = area.Y/dpi - _size - 50</c>).</summary>
+    /// (<c>Services/BubbleService.cs:2847</c>: <c>_screenTop = area.Y/dpi - _size - 50</c>).</summary>
     public const int ExitMargin = 50;
 
     /// <summary>
     /// <b>The race bound.</b> The furthest a bubble can travel in one logical step, in pixels:
     /// vertical at the boosted ceiling, horizontal at the steepest wobble.
     ///
-    /// <para>Vertical is <see cref="MaxSpeed"/> × 6 = 12 (<c>Services/BubbleService.cs:2825</c>,
-    /// <c>:2831-2836</c>). Horizontal is the largest per-step derivative of upstream's four wobbles,
+    /// <para>Vertical is <see cref="MaxSpeed"/> × 6 = 12 (<c>Services/BubbleService.cs:2823</c>,
+    /// <c>:2831-2834</c>). Horizontal is the largest per-step derivative of upstream's four wobbles,
     /// which is case 1's <c>30 × sin(7.5 t)</c> at <c>30 × 7.5 × 0.02 = 4.5</c>
-    /// (<c>:3458-3464</c> over <c>:3399</c>); case 3 gives <c>(30×3 + 15×6) × 0.02 = 3.6</c>, case 0
+    /// (<c>:3460-3463</c> over <c>:3399</c>); case 3 gives <c>(30×3 + 15×6) × 0.02 = 3.6</c>, case 0
     /// <c>3.0</c>, case 2 <c>2.7</c>.</para>
     /// </summary>
     public static double MaxStepDisplacement =>
         Math.Sqrt(Math.Pow(MaxSpeed * (1 + (MaxSpeedBoostPercent / 100.0)), 2) + Math.Pow(MaxWobbleStep, 2));
 
     /// <summary>The steepest per-step horizontal travel any of upstream's four wobbles produces
-    /// (<c>Services/BubbleService.cs:3458-3464</c>, over <c>_timeAlive += 0.02</c> at <c>:3399</c>).</summary>
+    /// (<c>Services/BubbleService.cs:3460-3463</c>, over <c>_timeAlive += 0.02</c> at <c>:3399</c>).</summary>
     public const double MaxWobbleStep = 30 * 7.5 * TimeAlivePerStep;
 
     /// <summary>Upstream's own logical time increment per step (<c>Services/BubbleService.cs:3399</c>).</summary>
@@ -211,8 +211,8 @@ public sealed class BubblePopField
 
     /// <summary>
     /// The spawn interval for a frequency, in the port's own words: WPF's
-    /// <c>60000.0 / Math.Max(1, frequency)</c> (<c>Services/BubbleService.cs:189</c>) with the
-    /// dial's own 1..60 clamp applied first (<c>Models/AppSettings.cs:2210</c>).
+    /// <c>60000.0 / Math.Max(1, frequency)</c> (<c>Services/BubbleService.cs:188</c>) with the
+    /// dial's own 1..60 clamp applied first (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>).
     /// </summary>
     public static TimeSpan SpawnInterval(int perMinute) =>
         TimeSpan.FromMilliseconds(60000.0 / Math.Clamp(perMinute, MinPerMinute, MaxPerMinute));
@@ -220,7 +220,7 @@ public sealed class BubblePopField
     /// <summary>
     /// The drawn size for one bubble. Upstream's <c>BubbleSizing.Scale</c>: a draw from the
     /// 150..250 band scaled by the user's percentage, then railed into 60..500
-    /// (<c>Services/BubbleSizing.cs:41,48,70,82</c>, and its own remarks on why the factors multiply
+    /// (<c>Services/BubbleSizing.cs:40,47,70,81</c>, and its own remarks on why the factors multiply
     /// freely rather than being clamped as a product).
     /// </summary>
     public static int SizeFor(int baseDip, int userPercent) =>
@@ -232,7 +232,7 @@ public sealed class BubblePopField
     /// <summary>
     /// Add one bubble at the bottom of the play area, or return null when the field is already at
     /// <see cref="MaxConcurrent"/>. Upstream's own refusal: <c>if (_bubbles.Count &gt;=
-    /// MaxAmbientBubbles) return;</c> with a log and no spawn (<c>Services/BubbleService.cs:850-854</c>).
+    /// MaxAmbientBubbles) return;</c> with a log and no spawn (<c>Services/BubbleService.cs:862-866</c>).
     /// </summary>
     public BubblePopBubble? Spawn(int userSizePercent, int speedBoostPercent)
     {
@@ -244,7 +244,7 @@ public sealed class BubblePopField
         var size = SizeFor(_random.Next(BaseMinSize, BaseMaxSize), userSizePercent);
 
         // Upstream's own horizontal spawn band, in its own shape:
-        // _startX = area.X + random.Next(50, max(100, area.Width - _size - 50))  (:2853)
+        // _startX = area.X + random.Next(50, max(100, area.Width - _size - 50))  (:2852)
         var span = Math.Max(100, _playWidth - size - 50);
         var startX = _playX + _random.Next(50, span);
 
@@ -307,7 +307,7 @@ public sealed class BubblePopField
             var y = bubble.Y - bubble.Speed;
             var x = bubble.StartX + Wobble(bubble.AnimType, timeAlive);
 
-            // _screenTop = area.Y - _size - ExitMargin (:2846); exit at _posY < _screenTop (:3497).
+            // _screenTop = area.Y - _size - ExitMargin (:2847); exit at _posY < _screenTop (:3497).
             if (y < _playY - bubble.Size - ExitMargin)
             {
                 _bubbles.RemoveAt(i);
@@ -323,7 +323,7 @@ public sealed class BubblePopField
     }
 
     /// <summary>
-    /// Upstream's four horizontal wobbles, verbatim (<c>Services/BubbleService.cs:3458-3464</c>).
+    /// Upstream's four horizontal wobbles, verbatim (<c>Services/BubbleService.cs:3460-3463</c>).
     /// The <c>_angle</c> spin each case also carries is a visual this port does not draw and is not
     /// ported as an inert field.
     /// </summary>
@@ -363,7 +363,7 @@ public sealed class BubblePopField
     }
 
     /// <summary>Drop every bubble without counting a pop or a miss — upstream's
-    /// <c>PopAllBubbles()</c> on <c>Stop</c> (<c>Services/BubbleService.cs:715-736</c>), which ends a
+    /// <c>PopAllBubbles()</c> on <c>Stop</c> (<c>Services/BubbleService.cs:725-739</c>), which ends a
     /// run rather than resolving one.</summary>
     public IReadOnlyList<BubblePopBubble> Clear()
     {

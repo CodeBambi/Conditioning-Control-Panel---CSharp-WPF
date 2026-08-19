@@ -5,9 +5,9 @@ using CcpClient.Desktop.Session;
 namespace CcpClient.Desktop.Effects;
 
 /// <summary>The dials a running field needs. A value, so the presenter never reads a store.</summary>
-/// <param name="PerMinute">Spawn frequency (<c>Models/AppSettings.cs:2210</c>).</param>
-/// <param name="SizePercent">The user's size dial (<c>Services/BubbleSizing.cs:52-64</c>).</param>
-/// <param name="SpeedBoostPercent">The travel-speed boost (<c>Models/AppSettings.cs:2262</c>).</param>
+/// <param name="PerMinute">Spawn frequency (<c>CCP.Core/Models/AppSettings.cs:2743-2747</c>).</param>
+/// <param name="SizePercent">The user's size dial (<c>Services/BubbleSizing.cs:50-60</c>).</param>
+/// <param name="SpeedBoostPercent">The travel-speed boost (<c>CCP.Core/Models/AppSettings.cs:2814-2818</c>).</param>
 public readonly record struct BubblePopSettings(int PerMinute, int SizePercent, int SpeedBoostPercent);
 
 /// <summary>Where Bubble Pop's clickable targets go when they have somewhere to go.</summary>
@@ -19,7 +19,7 @@ public interface IBubblePopSurface
 
     /// <summary>Take every target off the desktop now and stop both cadences — upstream's
     /// <c>Stop()</c>, which stops the spawn timer, stops the animation driver and calls
-    /// <c>PopAllBubbles()</c> (<c>Services/BubbleService.cs:715-736</c>).</summary>
+    /// <c>PopAllBubbles()</c> (<c>Services/BubbleService.cs:725-739</c>).</summary>
     void Withdraw();
 
     /// <summary>True while this presenter has a field engaged.</summary>
@@ -64,7 +64,7 @@ public interface IBubblePopSurface
 /// ACT on rather than watch.
 ///
 /// <para><b>Where the cadences live, and why that is SP-106's answer applied again.</b> There are
-/// two: the spawn timer (<c>60000/frequency</c> ms, <c>Services/BubbleService.cs:189</c>) and the
+/// two: the spawn timer (<c>60000/frequency</c> ms, <c>Services/BubbleService.cs:188</c>) and the
 /// animation step (<c>STEP_MS = 30</c>, <c>:53</c>). Both are here, in the presenter, on the injected
 /// <see cref="ISessionClock"/>, and <see cref="BubblePopEffect"/> takes no clock at all — the same
 /// split <see cref="SpiralSurfacePresenter"/> and <see cref="PinkFilterSurfacePresenter"/> already
@@ -79,13 +79,13 @@ public interface IBubblePopSurface
 /// all — SP-112's census, re-verified in this packet's plan.</para>
 ///
 /// <para><b>What is NOT ported</b>, declared rather than stubbed: the pop SOUND and its pooled
-/// <c>WaveOutEvent</c> devices (<c>:1839-1905</c>); XP, the lucky roll, achievements, haptics and
-/// Discord presence — the whole <c>AwardAmbientPop</c> reward chain (<c>:941-968</c>) — because this
+/// <c>WaveOutEvent</c> devices (<c>:1971-2016</c>); XP, the lucky roll, achievements, haptics and
+/// Discord presence — the whole <c>AwardAmbientPop</c> reward chain (<c>:951-980</c>) — because this
 /// port has no progression subsystem at all; Trigger Bubbles and the payloads a pop fires
-/// (<c>:973-1053</c>); the entire Chaos Mode API this service is 90 % of (<c>:1096-1675</c>); the
-/// gaze-pop targets (<c>:81</c>); the companion easter egg (<c>:592-680</c>); the shared-host and
+/// (<c>:1021-1076</c>); the entire Chaos Mode API this service is 90 % of (<c>:1228-1807</c>); the
+/// gaze-pop targets (<c>:82</c>); the companion easter egg (<c>:599-632</c>); the shared-host and
 /// compositor render paths and their global mouse hook (primer §5), whose absence is the divergence
-/// this packet exists to make honest; the multi-monitor spawn (<c>:851-857</c>, D66's single-display
+/// this packet exists to make honest; the multi-monitor spawn (<c>:877-881</c>, D66's single-display
 /// limit); and the sprite art, because this port bundles none (D86's rule).</para>
 /// </summary>
 public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
@@ -173,13 +173,13 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     ///
     /// <para><b>Why a disjunction and not a bare "something routes".</b> Between two spawns there
     /// is legitimately nothing on the desktop — at the bottom of the dial that is fifty-nine seconds
-    /// out of every sixty (<c>60000/1</c> ms, <c>Services/BubbleService.cs:189</c>) — and a dot that
+    /// out of every sixty (<c>60000/1</c> ms, <c>Services/BubbleService.cs:188</c>) — and a dot that
     /// went dark there would report the module broken for almost the whole session. The clause
     /// darkens for the state that is really wrong: targets ARE up and the window manager routes
     /// none of them here, which is a field the user can see and cannot play.</para>
     ///
     /// <para><b>Why "at least one" and not "all".</b> Upstream's own targets overlap freely — the
-    /// spawn band is a random x per bubble with no separation rule (<c>:2853</c>) — so one bubble
+    /// spawn band is a random x per bubble with no separation rule (<c>:2852</c>) — so one bubble
     /// covering another's centre is an ordinary state of the game and not a failure of the channel.
     /// A field with one hittable bubble in it is a game.</para>
     /// </summary>
@@ -307,7 +307,7 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
             _stepTimer = _clock.Schedule(BubblePopField.StepInterval, () => _dispatch(StepOnce));
 
             // Upstream spawns one immediately rather than waiting out the first interval
-            // (Services/BubbleService.cs:199, "Spawn first bubble immediately").
+            // (Services/BubbleService.cs:200, "Spawn first bubble immediately").
             SpawnOnceLocked();
             return Placed();
         }
