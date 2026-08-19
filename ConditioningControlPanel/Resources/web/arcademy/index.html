@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>The Arcademy</title>
+    <!-- The in-app "Arcademy" page (T2 mini-game hub). Served by the WebView2
+         ArcademyHostService from https://ccp.game/arcademy/. One document, ES
+         modules, NO build step, NO frameworks, NO remote fonts (the webview is
+         offline; the mockup's Google faces degrade to the system stacks in
+         styles.css). The host owns consent and settings; the page owns the
+         shell (timetable -> class -> report card) and asks for everything else
+         over bridge.js. Portable to a phone/web host later: only bridge.js's
+         transport changes. -->
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <!-- Chrome: title, grade_tier chip, attendance chip, settings gear.
+         Built by shell/shell.js; empty until init lands. -->
+    <header id="arc-topbar" class="arc-topbar" hidden></header>
+
+    <!-- The one screen mount: split-flap board, class runner, report card and
+         the settings page all render here, one at a time (screen router). -->
+    <main id="arc-screen" class="arc-screen" role="main"></main>
+
+    <!-- Distraction Engine mount. Fixed, pointer-events:none by default so an
+         effect can never steal a click from a precision board (input-trust law);
+         an effect that WANTS clicks re-enables pointer events on its own node. -->
+    <div id="arc-fx" class="arc-fx" aria-hidden="true"></div>
+
+    <!-- Ceremony layer (stamps, streak meter, reward beats). Above the fx layer
+         so a stamp is never washed out by its own celebration. -->
+    <div id="arc-ceremony" class="arc-ceremony" aria-hidden="true"></div>
+
+    <!-- Transient shell chatter: Esc-ladder hints, "copied", suspend notices. -->
+    <div id="arc-toast" class="arc-toast" role="status" aria-live="polite"></div>
+
+    <!-- Loader: covers the page until init arrives and the board is dealt. -->
+    <div id="arc-loader" class="arc-loader">
+        <div class="arc-loader-ring" aria-hidden="true"></div>
+        <p>Opening <span class="arc-loader-name">The Arcademy</span>&#8230;</p>
+    </div>
+
+    <!-- Boot failure fallback (boot-error was posted; the host closes us). -->
+    <div id="arc-nope" class="arc-nope" hidden>
+        <h1>The Arcademy is closed</h1>
+        <p id="arc-nope-msg">Something went wrong opening the school.</p>
+        <p class="arc-nope-hint">Hold <kbd>Esc</kbd> to go back.</p>
+    </div>
+
+    <script type="module" src="./boot.js"></script>
+</body>
+</html>

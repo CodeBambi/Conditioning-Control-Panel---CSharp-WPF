@@ -1,0 +1,165 @@
+/* ============================================================================
+ * engine/style.js — the engine injects its OWN stylesheet from JS.
+ *
+ * The engine does not own styles.css (the shell agent does), so every class it
+ * needs ships here, namespaced `.ae-*` (arcademy engine). Injected exactly once
+ * per document, lazily, on the first createEngine() call.
+ *
+ * Colour tokens read from the shell's CSS variables when present and fall back
+ * to the mockup palette, so a mod palette skins the effects for free.
+ * `prefers-reduced-motion` is respected IN CSS as well as in JS: the media query
+ * below neutralises every animation, so even a stray node cannot strobe.
+ * ==========================================================================*/
+
+import { hasDom } from './util.js';
+
+const STYLE_ID = 'ae-engine-style';
+
+export const STYLE_TEXT = `
+.ae-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:40;
+  --ae-pink:var(--ac-pink,#FF69B4);--ae-lav:var(--ac-lavender,#B8A6E8);
+  --ae-gold:var(--ac-gold,#F0C24B);--ae-ink:var(--ac-ink,#F2EBDD);--ae-ground:var(--ac-ground,#14142B)}
+.ae-layer.ae-suspended{display:none !important}
+.ae-back,.ae-mid,.ae-front{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.ae-back{z-index:1}.ae-mid{z-index:2}.ae-front{z-index:3}
+
+/* ---- washes: ONE reused element per kind, opacity-toggled ---------------- */
+.ae-wash{position:absolute;inset:0;opacity:0;transition:opacity .45s ease;will-change:opacity;
+  background-repeat:no-repeat;background-position:center;background-size:cover}
+.ae-wash-pink{background:radial-gradient(circle at 50% 55%,rgba(255,105,180,.55),rgba(255,105,180,.12) 60%,transparent 78%);
+  mix-blend-mode:screen}
+.ae-wash-spiral{mix-blend-mode:screen;background-image:conic-gradient(from 0deg,rgba(255,105,180,.55),rgba(20,20,43,0) 25%,rgba(184,166,232,.5) 50%,rgba(20,20,43,0) 75%,rgba(255,105,180,.55));
+  animation:ae-spin 9s linear infinite}
+.ae-wash-drain{background:radial-gradient(circle at 50% 50%,rgba(0,0,0,.15),rgba(0,0,0,.72) 85%);
+  backdrop-filter:blur(6px) saturate(.75);-webkit-backdrop-filter:blur(6px) saturate(.75)}
+.ae-wash-sublim{background:linear-gradient(0deg,rgba(184,166,232,.28),rgba(255,105,180,.18));mix-blend-mode:screen}
+.ae-wash-static{animation:none !important}
+@keyframes ae-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ---- crt / scanline / chroma dressing ------------------------------------ */
+.ae-crt{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;mix-blend-mode:overlay}
+.ae-crt-scanline{background:repeating-linear-gradient(180deg,rgba(0,0,0,.55) 0 1px,rgba(0,0,0,0) 1px 3px)}
+.ae-crt-chroma{background:linear-gradient(90deg,rgba(255,0,80,.18),rgba(0,255,220,.14));mix-blend-mode:screen}
+.ae-crt-bloom{background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.14),transparent 70%)}
+.ae-crt-live{animation:ae-crt-roll 6.5s linear infinite}
+@keyframes ae-crt-roll{0%{background-position-y:0}100%{background-position-y:120px}}
+
+/* ---- sub_flash ----------------------------------------------------------- */
+.ae-sub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);opacity:0;
+  animation:ae-sub-blip var(--ae-dur,420ms) ease-out forwards;max-width:44vw;max-height:44vh}
+.ae-sub-word{font-family:Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:.06em;
+  color:var(--ae-ink);text-shadow:0 0 18px var(--ae-pink);font-size:clamp(28px,6vw,64px);white-space:nowrap}
+.ae-sub-scatter{left:var(--ae-x,50%);top:var(--ae-y,50%)}
+.ae-sub-stamp{border:2px solid var(--ae-pink);padding:.15em .5em;border-radius:4px}
+@keyframes ae-sub-blip{0%{opacity:0;transform:translate(-50%,-50%) scale(.94)}
+  22%{opacity:var(--ae-alpha,.6)}70%{opacity:var(--ae-alpha,.6)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.03)}}
+
+/* ---- flash_burst / gif_burst nodes -------------------------------------- */
+.ae-burst{position:absolute;left:var(--ae-x,50%);top:var(--ae-y,50%);width:var(--ae-size,180px);
+  transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg));opacity:0;border-radius:10px;
+  box-shadow:0 0 22px rgba(255,105,180,.35);animation:ae-burst-in var(--ae-dur,900ms) ease-out forwards;
+  object-fit:cover;background:rgba(255,105,180,.10)}
+.ae-burst-clickable{pointer-events:auto;cursor:pointer}
+.ae-burst-double{filter:saturate(1.3) contrast(1.1)}
+.ae-burst-ring{border:2px solid var(--ae-pink)}
+@keyframes ae-burst-in{0%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg)) scale(.72)}
+  18%{opacity:var(--ae-alpha,.75)}72%{opacity:var(--ae-alpha,.75)}
+  100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg)) scale(1.06)}}
+
+/* ---- gif_rain ----------------------------------------------------------- */
+.ae-rain{position:absolute;top:-22vh;left:var(--ae-x,10%);width:var(--ae-size,140px);border-radius:8px;
+  animation:ae-fall var(--ae-fall,3s) linear forwards;opacity:var(--ae-alpha,.8);object-fit:cover}
+@keyframes ae-fall{from{transform:translateY(0) rotate(var(--ae-rot,0deg))}
+  to{transform:translateY(128vh) rotate(calc(var(--ae-rot,0deg) * 3))}}
+
+/* ---- bubble_field ------------------------------------------------------- */
+.ae-bubble{position:absolute;left:var(--ae-x,50%);bottom:-12vh;width:var(--ae-size,72px);height:var(--ae-size,72px);
+  border-radius:50%;background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.75),rgba(255,105,180,.30) 45%,rgba(184,166,232,.18) 70%,transparent 74%);
+  border:1px solid rgba(255,255,255,.35);opacity:var(--ae-alpha,.4);
+  animation:ae-rise var(--ae-dur,7s) linear forwards}
+.ae-bubble-clickable{pointer-events:auto;cursor:pointer}
+.ae-bubble-pop{animation:ae-pop 260ms ease-out forwards}
+@keyframes ae-rise{from{transform:translate(-50%,0)}to{transform:translate(calc(-50% + var(--ae-sway,20px)),-118vh)}}
+@keyframes ae-pop{to{transform:translate(-50%,0) scale(1.6);opacity:0}}
+
+/* ---- ambient_field (DOM particles, no canvas) --------------------------- */
+.ae-mote{position:absolute;left:var(--ae-x,50%);top:var(--ae-y,50%);width:var(--ae-size,4px);height:var(--ae-size,4px);
+  border-radius:50%;background:var(--ae-col,var(--ae-lav));opacity:var(--ae-alpha,.25);
+  animation:ae-float var(--ae-dur,14s) linear infinite;animation-delay:var(--ae-delay,0s)}
+.ae-mote-fleck{border-radius:1px;width:calc(var(--ae-size,4px) * .7);height:calc(var(--ae-size,4px) * 1.8)}
+.ae-mote-star{border-radius:0;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+@keyframes ae-float{from{transform:translate(0,0)}
+  50%{transform:translate(var(--ae-dx,12px),calc(var(--ae-dy,-40px) * .5))}
+  to{transform:translate(0,var(--ae-dy,-40px))}}
+
+/* ---- glitch_swap transitions -------------------------------------------- */
+.ae-glitch{position:relative;animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+.ae-glitch-rgbsplit{text-shadow:2px 0 rgba(255,0,80,.9),-2px 0 rgba(0,255,220,.9);filter:contrast(1.15)}
+.ae-glitch-vhsroll{animation:ae-vhs var(--ae-dur,600ms) linear 1}
+.ae-glitch-datamosh{filter:url(#none) saturate(1.6) hue-rotate(18deg);animation:ae-mosh var(--ae-dur,600ms) steps(3,end) 1}
+.ae-glitch-crossfade{transition:opacity var(--ae-dur,600ms) ease}
+@keyframes ae-shudder{0%,100%{transform:translate(0,0)}25%{transform:translate(-2px,1px)}
+  50%{transform:translate(2px,-1px)}75%{transform:translate(-1px,-2px)}}
+@keyframes ae-vhs{0%{clip-path:inset(0 0 0 0)}30%{clip-path:inset(18% 0 42% 0);transform:translateX(6px)}
+  60%{clip-path:inset(52% 0 12% 0);transform:translateX(-5px)}100%{clip-path:inset(0 0 0 0);transform:none}}
+@keyframes ae-mosh{0%{filter:saturate(1.6) hue-rotate(0)}50%{filter:saturate(2.2) hue-rotate(40deg) blur(1px)}
+  100%{filter:none}}
+
+/* ---- row_drift ---------------------------------------------------------- */
+.ae-drift{will-change:transform}
+.ae-drift-breathe{animation:ae-breathe 5.5s ease-in-out infinite}
+@keyframes ae-breathe{0%,100%{opacity:1}50%{opacity:.72}}
+
+/* ---- ceremonies --------------------------------------------------------- */
+.ae-stamp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-9deg) scale(1.6);
+  padding:.18em .6em;border:4px solid var(--ae-pink);border-radius:6px;color:var(--ae-ink);
+  font-family:Georgia,'Times New Roman',serif;font-weight:800;letter-spacing:.10em;text-transform:uppercase;
+  font-size:clamp(22px,5vw,54px);opacity:0;animation:ae-stamp-in 900ms cubic-bezier(.2,1.4,.3,1) forwards;
+  text-shadow:0 2px 0 rgba(0,0,0,.45)}
+.ae-stamp-bad{border-color:var(--ae-lav);color:var(--ae-lav)}
+.ae-stamp-gild{border-color:var(--ae-gold);color:var(--ae-gold);box-shadow:0 0 28px rgba(240,194,75,.5)}
+@keyframes ae-stamp-in{0%{opacity:0;transform:translate(-50%,-50%) rotate(-9deg) scale(1.8)}
+  35%{opacity:1;transform:translate(-50%,-50%) rotate(-9deg) scale(.96)}
+  55%{transform:translate(-50%,-50%) rotate(-9deg) scale(1.02)}
+  80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) rotate(-9deg) scale(1.04)}}
+
+.ae-meter{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);display:flex;gap:4px;
+  padding:5px 8px;border-radius:999px;background:rgba(20,20,43,.55);opacity:0;transition:opacity .3s ease}
+.ae-meter-on{opacity:1}
+.ae-seg{width:12px;height:6px;border-radius:3px;background:rgba(242,235,221,.18)}
+.ae-seg-lit{background:var(--ae-pink);box-shadow:0 0 calc(4px + var(--ae-glow,0) * 12px) var(--ae-pink)}
+
+.ae-jackpot{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 50% 50%,rgba(240,194,75,.30),transparent 68%);
+  animation:ae-jack 2s ease-out forwards;mix-blend-mode:screen}
+@keyframes ae-jack{0%{opacity:0}12%{opacity:1}70%{opacity:.7}100%{opacity:0}}
+.ae-dim{position:absolute;inset:0;background:#000;opacity:0;animation:ae-dim 250ms ease-out forwards}
+@keyframes ae-dim{0%{opacity:0}60%{opacity:.5}100%{opacity:0}}
+.ae-spark{position:absolute;left:var(--ae-x,50%);top:var(--ae-y,50%);width:8px;height:8px;border-radius:50%;
+  background:var(--ae-col,var(--ae-gold));opacity:.9;animation:ae-spark var(--ae-dur,900ms) ease-out forwards}
+@keyframes ae-spark{from{transform:translate(-50%,-50%) scale(.4)}
+  to{transform:translate(calc(-50% + var(--ae-dx,0px)),calc(-50% + var(--ae-dy,0px))) scale(1.1);opacity:0}}
+.ae-nearmiss{position:absolute;inset:0;background:linear-gradient(0deg,rgba(255,105,180,.5),transparent);
+  opacity:0;animation:ae-near 400ms ease-out forwards}
+@keyframes ae-near{0%{opacity:0}40%{opacity:var(--ae-alpha,.1)}100%{opacity:0}}
+
+/* ---- reduced motion: neutralise EVERY animation -------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .ae-layer *{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.12s !important}
+  .ae-wash-spiral,.ae-crt-live,.ae-mote,.ae-drift-breathe{animation:none !important}
+  .ae-sub,.ae-burst,.ae-rain,.ae-bubble,.ae-stamp{animation:none !important;opacity:var(--ae-alpha,.5) !important}
+}
+`;
+
+/** Inject the engine stylesheet once per document. No-op headless. */
+export function injectStyle() {
+  if (!hasDom()) return false;
+  if (document.getElementById(STYLE_ID)) return false;
+  const tag = document.createElement('style');
+  tag.id = STYLE_ID;
+  tag.textContent = STYLE_TEXT;
+  (document.head || document.documentElement).appendChild(tag);
+  return true;
+}
+
+export default injectStyle;
