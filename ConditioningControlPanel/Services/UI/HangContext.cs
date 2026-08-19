@@ -134,6 +134,10 @@ public static class HangContext
             sb.Append("uptime=").Append((UptimeMs / 1000.0).ToString("F0", CultureInfo.InvariantCulture)).AppendLine("s");
             sb.Append("lastUiMark=").AppendLine(Safe(() => VideoDiag.UiMarkDescription));
             sb.Append("uiStallMs=").AppendLine(Safe(() => VideoDiag.UiStallMs.ToString(CultureInfo.InvariantCulture)));
+            // Input starved while uiStallMs stays small = the thread is BUSY above Input priority,
+            // not blocked. That distinction is the whole diagnosis for a "frozen but still
+            // repainting" report (ccp-bugs #984/#993/#996/#1001).
+            sb.Append("uiInputStallMs=").AppendLine(Safe(() => VideoDiag.UiInputStallMs.ToString(CultureInfo.InvariantCulture)));
             sb.AppendLine("state:");
             foreach (var line in DescribeServices()) sb.Append("  ").AppendLine(line);
             sb.Append("activeFeatures: ").AppendLine(DescribeActive());

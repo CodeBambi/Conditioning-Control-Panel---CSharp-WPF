@@ -60,12 +60,38 @@ namespace ConditioningControlPanel.Services
         private static long _lastUiBeatTicks;
         private static volatile bool _uiBeatSeen;
 
+        // The SECOND heartbeat, posted at Input priority. A Normal-priority beat is blind to the
+        // freeze the Programs rail comet caused (ccp-bugs #984/#993/#996/#1001): a callback that
+        // re-posts itself at Loaded (6) or Render (7) starves everything at Input (5) and below,
+        // which is every click and keystroke the user has - while the Normal beat, being queued
+        // below the loop, is starved too but the render thread keeps compositing, so the app looks
+        // alive and logs nothing. Watching Input separately is what lets a trace say "input is
+        // starved by higher-priority work" instead of the generic "dispatcher unresponsive", and
+        // the two ages read together name the whole class from the first log.
+        private static long _lastUiInputBeatTicks;
+
         /// <summary>Milliseconds since the UI thread last ran a posted callback (0 if never started).</summary>
         public static long UiStallMs
         {
             get
             {
                 var last = Interlocked.Read(ref _lastUiBeatTicks);
+                if (last == 0) return 0;
+                return (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
+            }
+        }
+
+        /// <summary>
+        /// Milliseconds since the UI thread last ran a callback posted at INPUT priority (0 if
+        /// never started). Large while <see cref="UiStallMs"/> stays small means the dispatcher is
+        /// busy, not blocked: something above Input is looping, and the window will ignore the
+        /// mouse while still repainting.
+        /// </summary>
+        public static long UiInputStallMs
+        {
+            get
+            {
+                var last = Interlocked.Read(ref _lastUiInputBeatTicks);
                 if (last == 0) return 0;
                 return (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
             }
@@ -271,16 +297,36 @@ namespace ConditioningControlPanel.Services
         /// thresholds keep the file quiet during normal use (one line per minute) while giving a
         /// second-resolution picture of a freeze: when it began, how deep it got, whether it ever
         /// came back.
+        ///
+        /// <para>TWO stamps go out each tick, at Normal and at Input priority, because the two
+        /// failures they detect are different and only one of them was ever visible here. A UI
+        /// thread stuck inside a native call stops running both. A UI thread being starved from
+        /// ABOVE - a callback that keeps re-posting itself at Loaded or Render - also stops running
+        /// both, but the render thread keeps compositing, so the window paints, ignores every
+        /// click, and never writes a crash log. That is the shape of the Programs rail comet freeze
+        /// (ccp-bugs #984/#993/#996/#1001), and the Input beat is what lets the trace name it
+        /// rather than describe it.</para>
         /// </summary>
         private static void HeartbeatLoop(Dispatcher dispatcher)
         {
             long lastReported = 0;
+            long inputLastReported = 0;
             long aliveMarkerTicks = 0;
 
             // Escalating stall thresholds (ms). One line each, so a 10-minute freeze costs 6 lines.
             var thresholds = new long[] { 3_000, 10_000, 30_000, 60_000, 300_000, 900_000 };
 
+            // Allocated once, not per tick: this loop runs for the life of the process.
+            var normalBeat = new Action(() =>
+            {
+                Interlocked.Exchange(ref _lastUiBeatTicks, DateTime.UtcNow.Ticks);
+                _uiBeatSeen = true;
+            });
+            var inputBeat = new Action(() =>
+                Interlocked.Exchange(ref _lastUiInputBeatTicks, DateTime.UtcNow.Ticks));
+
             Interlocked.Exchange(ref _lastUiBeatTicks, DateTime.UtcNow.Ticks);
+            Interlocked.Exchange(ref _lastUiInputBeatTicks, DateTime.UtcNow.Ticks);
 
             while (true)
             {
@@ -289,13 +335,34 @@ namespace ConditioningControlPanel.Services
                     Thread.Sleep(1000);
                     if (dispatcher.HasShutdownStarted) return;
 
-                    dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-                    {
-                        Interlocked.Exchange(ref _lastUiBeatTicks, DateTime.UtcNow.Ticks);
-                        _uiBeatSeen = true;
-                    }));
+                    dispatcher.BeginInvoke(DispatcherPriority.Normal, normalBeat);
+                    dispatcher.BeginInvoke(DispatcherPriority.Input, inputBeat);
 
                     long stall = UiStallMs;
+                    long inputStall = UiInputStallMs;
+
+                    // Input starved while Normal still runs cannot happen by blocking - the queue is
+                    // ordered, so Normal drains only after Input. It means the reverse: work ABOVE
+                    // Input is looping and eating the thread. Reported on its own line and its own
+                    // ladder, because "the app repaints but nothing is clickable" is a distinct bug
+                    // report from "the app is frozen".
+                    if (inputStall >= 3000 && stall < 2000)
+                    {
+                        foreach (var t in thresholds)
+                        {
+                            if (inputStall >= t && inputLastReported < t)
+                            {
+                                inputLastReported = t;
+                                Log("UI", $"dispatcher STARVED at INPUT priority for {inputStall}ms while Normal still runs (ui+{stall}ms) - something above Input is re-posting itself; the window will repaint but ignore clicks - last UI mark: {UiMarkDescription}");
+                                break;
+                            }
+                        }
+                    }
+                    else if (inputStall < 2000 && inputLastReported > 0)
+                    {
+                        Log("UI", $"input priority RECOVERED after {inputLastReported}ms+ of starvation");
+                        inputLastReported = 0;
+                    }
 
                     if (stall < 2000)
                     {
@@ -323,7 +390,11 @@ namespace ConditioningControlPanel.Services
                             // "last UI mark: Compositor.Present" reads completely differently from
                             // one with "(idle)" (nothing instrumented was running - look at the
                             // slow-op tracer instead).
-                            Log("UI", $"dispatcher UNRESPONSIVE for {stall}ms (no posted callback has run) - last UI mark: {UiMarkDescription}");
+                            // The input age is carried alongside deliberately: input starved
+                            // MEASURABLY LONGER than Normal says the thread was being outranked
+                            // before it went quiet (a priority-inversion freeze), while the two
+                            // ages moving together says it is simply blocked inside a call.
+                            Log("UI", $"dispatcher UNRESPONSIVE for {stall}ms (input+{inputStall}ms, no posted callback has run) - last UI mark: {UiMarkDescription}");
                             break;
                         }
                     }
