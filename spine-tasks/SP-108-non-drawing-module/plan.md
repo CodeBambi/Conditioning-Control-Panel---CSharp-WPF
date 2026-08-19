@@ -106,7 +106,11 @@ Why not the other candidates:
 - `Write(value)` — the persisted dial only, thread-safe by `PersistenceStore.Mutate`, run SYNCHRONOUSLY on the caller's thread.
 - `Reapply()` — the owning module's `Refresh()`, which touches a native surface, run through an injected dispatch (WPF's own `Dispatcher.Invoke` at `MainWindow.StartStop.cs:504`, decomposed).
 
-This deliberately closes an upstream residue: WPF's window-close path stops the ramp timer WITHOUT restoring (`MainWindow/MainWindow.WindowChrome.cs:167` is a bare `_rampTimer?.Stop()`) and `SaveSettings()` runs five lines earlier at `:162`, so quitting mid-ramp persists the RAMPED opacity. The port restores the values synchronously on every release, so the flush can never write a ramped dial. Recorded as a divergence.
+> ~~This deliberately closes an upstream residue: WPF's window-close path stops the ramp timer WITHOUT restoring (`MainWindow/MainWindow.WindowChrome.cs:167` is a bare `_rampTimer?.Stop()`) and `SaveSettings()` runs five lines earlier at `:162`, so quitting mid-ramp persists the RAMPED opacity.~~
+>
+> **STRUCK — THIS CLAIM IS FALSE.** Annotated in place at the final review rather than rewritten, so the checkpoint still shows what was planned and on what (mistaken) premise. `:167` runs only inside `if (_exitRequested)` (`MainWindow/MainWindow.WindowChrome.cs:137`) and every writer of that flag calls `StopEngine` first, which restores via `StopRampTimer`. The two numbers are wrong as well: `SaveSettings()` is at `:163` and `_rampTimer?.Stop()` is at `:167`, **four lines later, not five earlier**, over a timer already nulled at `MainWindow.StartStop.cs:440`. **See `record.md` §9.1** for the full source reading and for what the error was in method.
+
+The rest of this paragraph stands, and the split write is correct for a PORT-SIDE reason that needs no claim about WPF: the port restores the values synchronously on every release, so a teardown whose dispatcher is already down can never leave the flush a ramped dial to write. Recorded as a divergence (D95).
 
 **Also deliberately divergent, and recorded:** the ramp re-applies a dial only when the integer actually CHANGES. WPF writes and reconciles every 2 s; in this port `OverlaySurfaceSet.Place` calls `Present`, which walks the OS z-order and toggles click-through in both polarities (SP-106, `Overlay/Win32OverlayPresence.cs:547-576`) — the cost that made a 60 Hz module unportable (D84). Same user-visible outcome, roughly 20 re-places per hour instead of 1800.
 

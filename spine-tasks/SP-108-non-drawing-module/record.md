@@ -174,9 +174,10 @@ Three typed reason codes carry the difference: `ramp-no-dial`, `ramp-no-linked-d
    `ramp-no-linked-dial` is the first one a user will hit by default rather than by misconfiguration.
    Still the highest-value next UI row.
 3. **The port's rack is 2 groups / 5 rows against WPF's 4 / 15.** The two groups it has not opened are
-   GAMES & CARDS (every row needs input-capturing windows or video) and IMMERSION (two paced audio
-   modules and one device backend). **The next module is a capability question, not a spine question**
-   — see §7.
+   GAMES & CARDS (every row needs input-capturing windows or video) and IMMERSION — where Mind Wipe is
+   paced audio outright, **Brain Drain is paced audio plus a desktop-wide blur the port cannot draw**,
+   and Haptics is a device backend. **The next module is a capability question, not a spine question**
+   — see §7, which also names the two unported EFFECTS rows this record does not survey.
 4. **`Lifecycle/OperationRegistry.Cancel`/`Begin` still cancel inside their own lock**, which is
    SP-106 §4.2's unfixed root cause. This packet stayed clear of it by construction (§4) rather than
    by luck, and the follow-up is unchanged.
@@ -226,24 +227,46 @@ independent pins, because one of them is only a claim about a constructor:
 ## 4. Threading — the SP-106 §4.2 hazard, avoided by construction rather than by luck
 
 This module writes into two OTHER modules' state from a clock callback and from a teardown thread,
-which is exactly the shape that produced SP-106's reverted lock-order inversion. Three properties
-keep it acyclic, and they are written at the members rather than assumed:
+which is the shape that produced SP-106's reverted lock-order inversion.
 
-1. **Each `AsyncOperationOwner` owns its own lock** (`Lifecycle/OperationRegistry.cs:122`), so the
-   ramp's owner lock and a target module's are different objects.
-2. **The dial adapters are strictly one-directional.** The ramp calls the target; no target ever calls
-   the ramp. So the only chain the ramp can produce is
-   `rampGate → targetStore.mutationGate → targetEffect.Gate → targetOwner.Gate`, and the only other
-   thread in the picture (a UI dot repaint) takes a **suffix** of that chain.
-3. **`_hold` is a LEAF lock.** Nothing in the class calls out of it while holding it — every external
-   call (reading a dial, writing a dial, scheduling a tick) runs on a snapshot taken and released
-   first — and nothing takes `OwnedSessionEffect.Gate` while holding it. The one order this class ever
-   produces is `Gate → _hold`, which is the order `Dot` already produces.
+**CORRECTED at final review: an earlier draft of this section OVERSTATED the exposure.** It described
+the chain `rampGate → targetStore.mutationGate → targetEffect.Gate → targetOwner.Gate` and said the
+lock order was kept acyclic. **That four-deep chain cannot form**, because its third edge does not
+exist: `Reapply` — the only thing that reaches `targetEffect.Gate` — is always DISPATCHED, never
+called under a ramp lock (`Effects/IntensityRampEffect.cs`, both call sites in `Advance` and
+`ReleaseWork`). What the ramp can actually hold at once is **two** locks, and the second is a leaf:
 
-**What this does NOT prove.** No test in this packet drives the ramp's tick and a dot repaint on two
+1. **`rampGate → targetStore._mutationGate`, and that is the whole chain.**
+   `IIntensityDial.Write` is a bare `PersistenceStore.Mutate` (`Persistence/PersistenceStore.cs:220-228`),
+   which takes one lock, runs the caller's pure lambda inside it, and **raises nothing**. It calls
+   out to nothing that could take a third lock.
+2. **`_hold` is a LEAF lock.** Nothing in this class calls out of it while holding it — every
+   external call (reading a dial, writing a dial, scheduling a tick) runs on a snapshot taken and
+   released first — and nothing takes `OwnedSessionEffect.Gate` while holding it. The one order this
+   class produces is `Gate → _hold`, which is the order `Dot` already produces.
+3. **Each `AsyncOperationOwner` owns its own lock** (`Lifecycle/OperationRegistry.cs:122`), so the
+   ramp's owner lock and a target's are different objects — and the ramp never reaches a target's
+   owner lock at all, per (1).
+
+**So no cycle is constructible, and a pin here would assert a property with no counter-shape to
+catch.** The concurrency residual is a follow-up row rather than a missing fact, and this section no
+longer claims otherwise.
+
+**THE TRIP-WIRE, so the next author knows when that stops being true.** Any ONE of these supplies the
+missing second edge and the pin becomes required:
+
+- a `SettingsReplaced` subscriber on the Spiral or Pink Filter store — that event is raised INSIDE
+  `_mutationGate` (`Persistence/PersistenceStore.cs:243`) and today has **zero** subscribers anywhere
+  in `client/src`, which is what makes `Mutate` a leaf;
+- an `IIntensityDial.Write` that becomes more than a bare `Mutate` (anything that raises, notifies, or
+  touches its owning effect);
+- a synchronous `Reapply` — i.e. removing the dispatch, which would put `targetEffect.Gate` under a
+  ramp lock and rebuild the four-deep chain this note exists to say does not exist.
+
+**What is still not proven.** No test in this packet drives the ramp's tick and a dot repaint on two
 real threads at once: every fact here is single-threaded by construction, exactly as SP-106 recorded
-of its own suite. The argument above is a reading of the lock graph, not a measurement, and it is
-recorded as such.
+of its own suite. The reasoning above is a reading of the lock graph, not a measurement — the
+correction narrows what is claimed, it does not turn the reading into evidence.
 
 ---
 
@@ -372,14 +395,27 @@ if the next packet wants a module from GAMES & CARDS or IMMERSION, this is what 
 | | Lock Card | `LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest, voice)` (`Services/LockCard/LockCardService.cs:299`) — an input-capturing modal on every monitor |
 | | Bouncing Text | already refused with evidence at SP-106 (D83/D84) |
 | IMMERSION | Mind Wipe | **reachable**, and the runner-up. NAudio one-shots at random intervals (`Services/LockCard/MindWipeService.cs:18-30`) — a PACED module `PacedSessionEffect<TFiring>` fits, so it tests the audio capability rather than the spine |
-| | Brain Drain | same paced-audio shape (`Services/LockCard/BrainDrainService.cs:13-30`), plus a screen-capture compositor layer that exists only in the `CCP.*` tree |
+| | Brain Drain | **HALF reachable, and the halves must not be conflated.** Its AUDIO half is the same paced-NAudio shape as Mind Wipe (`Services/LockCard/BrainDrainService.cs:13-30`; `DispatcherTimer` + `WaveOutEvent`, no window, no capture), engine-started at `MainWindow.StartStop.cs:243` and stopped at `:342` exactly as Mind Wipe is — **so its audio half is reachable today.** Its VISUAL half is not: the SAME `BrainDrainEnabled` flag also starts a desktop-wide blur/melt overlay (`Services/Notifications/OverlayService.cs:382-386`), whose strength dial the shipping panel itself labels the "VISUAL half" (`Views/Controls/Studio/BrainDrainFeatureControl.xaml.cs:170-174`). Both of its routes are out of this port's reach: the compositor route (`Services/Compositor/BrainDrainCapturePump.cs`, `Services/Compositor/BrainDrainLayer.cs` — **shipping tree**, not `CCP.*`) and the fallback, which runs a **30-60 FPS screen-capture timer** feeding per-screen blur windows (`OverlayService.cs:1965-1995`). Blurring what is BEHIND an overlay needs a desktop read-back this port has no capability for at all, and doing it per frame is D84's class on top |
 | | Haptics | device backends — Buttplug/Intiface and Lovense (`Services/Haptics/ButtplugProvider.cs`, `LovenseProvider.cs`). A capability the port does not have, and the rack's one paid row (`StudioTabView.xaml.cs:528`, `tier: 1`) |
 | TIMING | Scheduler | structurally outside the spine: it starts the engine from OUTSIDE a session (`MainWindow.StartStop.cs:562-620`), needs tray minimize plus notification, and runs when nothing is running. D92 |
 
-**The honest summary for the board:** of the eight unported rows in the other three groups, **one**
-(Mind Wipe) is reachable today and is a repeat of a proven shape; three need input-capturing windows,
-one needs video, one needs a device stack, one needs a per-pixel-alpha overlay, and one is not a
-session module at all. **The port's next gap after this packet really is a capability, not a module.**
+**The honest summary for the board, and its SCOPE is the other three groups only.** This table covers
+the **eight** unported rows in GAMES & CARDS, IMMERSION and TIMING. It is **not** a whole-rack claim:
+WPF's EFFECTS group has two further unported rows the port has never surveyed here — **Mandatory
+Video** (`StudioTabView.xaml.cs:486`) and **Visuals** (`:496`, which upstream itself gives no dot
+because it has no single master toggle, `:494-496`). Ten rows are unported in all; eight are in
+scope below.
+
+Of those eight: **one (Mind Wipe) is reachable today** and is a repeat of a proven shape;
+**one (Brain Drain) is HALF reachable** — its paced-audio half is, its desktop-blur half is not;
+three need input-capturing windows, one needs video, one needs a device stack, one needs a
+per-pixel-alpha overlay, and one is not a session module at all.
+
+**What a board should act on.** An audio-capability packet closes **one row outright and the audio
+half of a second**, and would have to name Brain Drain's desktop blur as a separate, still-open
+capability gap rather than land the row as complete. That is the honest arithmetic, and it is neither
+the "one row" this record first claimed nor the "two rows" the final review proposed.
+**The port's next gap after this packet really is a capability, not a module.**
 
 ---
 
@@ -497,12 +533,63 @@ property inside it, all six panel handlers, the combo default `:53`->`:54` and t
 `:135`->`:133`. D96's `AppSettings.cs:2469` was the `SchedulerMultiplier` getter and is replaced by
 the two setters the row is actually about (`:2675`, `:3737`).
 
-`plan.md`'s citations were corrected too. Its content, predictions and refusals are unchanged — it
-remains the pre-edit checkpoint it was written as, with the same numbers pointing at the right lines.
+**`plan.md` — what was actually done to it, stated narrowly.** Its line-number citations were
+corrected, and its predictions and refusals are untouched. It is **not** true that every number in it
+now points at the right line by correction alone: `plan.md:109` carried the refuted D95 claim and
+both of its wrong numbers, and the first revision edited the paragraph directly above it without
+touching it. That line is now **ANNOTATED IN PLACE** — the sentence struck, the false premise named,
+and a pointer to §9.1 — rather than rewritten, so the checkpoint still shows what was planned and on
+what mistaken premise. An earlier draft of this paragraph claimed the file had simply been corrected;
+that was false and is narrowed here.
 
-### 9.5 Not a blocker, and not changed
+### 9.5 THE FINAL REVIEW, and the same class a THIRD and FOURTH time
 
-The §4 concurrency residual stands as recorded: `_hold` is a genuine leaf lock and the ramp never
-takes another module's lock while holding its own, but no test in this packet drives two real threads,
-so §4's lock-graph argument remains a reading and not a measurement. The review accepted it as
-honestly recorded and it becomes a follow-up row at land.
+Two more documentation blockers, neither in product code, neither able to move the floor. Both are
+§5.2's rule — *an expected value produced by a collaborator that was not allowed to produce it* —
+applied outside the test suite, which is where I had stopped looking.
+
+**Third occurrence: a refusal sourced from a forbidden tree.** §7's Brain Drain row rested its
+blocker on `CCP.Avalonia/Compositor/BrainDrainScreenCapture.cs`, and my own row admitted the file
+"exists only in the `CCP.*` tree". `docs/constitution.md` makes `CCP.*` failure-and-lessons evidence
+only, so **it cannot establish a requirement for `client/`**. The requirement was produced by a
+collaborator with no standing — exactly the §5.2 shape, one level up from an assertion.
+
+**But re-deriving it from the SHIPPING tree did not vindicate the review's proposed fix either**, and
+this is why the rule is "re-derive", not "accept the correction". The final review concluded Brain
+Drain is fully reachable and the count should go one → two. Source says otherwise: the same
+`BrainDrainEnabled` flag that starts the audio service also starts a **desktop-wide blur/melt
+overlay** (`Services/Notifications/OverlayService.cs:382-386`), the shipping panel labels its dial the
+"VISUAL half" in as many words (`Views/Controls/Studio/BrainDrainFeatureControl.xaml.cs:170-174`), the
+compositor files are in the **shipping** tree after all (`Services/Compositor/BrainDrainCapturePump.cs`,
+`Services/Compositor/BrainDrainLayer.cs`), and the non-compositor fallback runs a **30-60 FPS
+screen-capture timer** feeding per-screen blur windows (`OverlayService.cs:1965-1995`). So the row is
+**half** reachable, the count is one row plus one half, and §7 now says so. The strategic conclusion —
+audio is the next gate — survives all three versions of the arithmetic.
+
+**Fourth occurrence: six named sites corrected, the class not swept.** §9.1 corrected the false D95
+claim everywhere the review named it and nowhere else. `plan.md:109` carried the same sentence and
+both wrong numbers, and the first revision edited the paragraph immediately above it — so the file was
+open and the false line was stepped over. It is now annotated in place (§9.4).
+
+**The lesson, stated once for the packet.** §5.1 found a hole and I did not sweep. §5.2 found the same
+class and I swept the test suite — only the test suite. §9.6 found it twice more, in a refusal's
+evidence and in prose. **A sweep bounded by where the last instance was found is not a sweep.** The
+rule generalises past assertions to any claim: *when what justifies a statement could have been
+produced by something not entitled to produce it, the statement is unproven* — whether that something
+is a test double's clamp, a forbidden source tree, or an earlier draft of my own document.
+
+### 9.6 The concurrency residual — NOT a blocker, and §4 CORRECTED rather than pinned
+
+**No pin is added, and §4 is corrected instead.** The final review verified the lock graph
+independently and found the code **safer than §4 claimed**: `PersistenceStore.Mutate`
+(`Persistence/PersistenceStore.cs:220-228`) is a leaf that raises nothing, `Reapply` is always
+dispatched so `targetEffect.Gate` is never reached under a ramp lock, `_hold` is a verified leaf, and
+`SettingsReplaced` (`PersistenceStore.cs:243`) has **zero** subscribers in `client/src`. The
+four-deep chain §4 described therefore **cannot form**, and a pin would assert a property with no
+counter-shape to catch.
+
+§4 now says that, names the two-deep chain that really exists, and carries the **trip-wire** that
+turns the follow-up back into a required pin: a `SettingsReplaced` subscriber on either target store,
+an `IIntensityDial.Write` that grows past a bare `Mutate`, or a synchronous `Reapply`. It remains a
+follow-up row at land, and it remains a reading of the graph rather than a measurement — correcting
+an overstatement does not upgrade the evidence class.
