@@ -1,0 +1,7 @@
+SP-115 sweep, 4 mutation(s)
+M-af2  SURVIVED  client/src/CcpClient.Desktop/Glyph/GlyphSurfaceFactory.cs  Passed!  - Failed:     0, Passed:   242, Skipped:     0, Total:   242, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bp  CAUGHT  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Failed!  - Failed:     6, Passed:   236, Skipped:     0, Total:   242, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bq  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   242, Skipped:     0, Total:   242, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bs  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   242, Skipped:     0, Total:   242, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+
+TOTAL 4: caught 1, survived 3, not-patched 0
