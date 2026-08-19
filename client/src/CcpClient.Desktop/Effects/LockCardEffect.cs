@@ -571,32 +571,18 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     /// </summary>
     private static InputBounds DefaultPlacement()
     {
-        var displays = OverlayDisplays.Enumerate();
-        if (displays.Count == 0)
+        // SP-112 extracted the display walk and the centring into PrimaryDisplayPlacement, which
+        // three modules now share. What stays HERE is what is genuinely this module's: its own
+        // fractions (D110) and its own answer to "no display at all" — a minimum legal rectangle
+        // rather than the video surface's null, because Compose refuses first on the station read
+        // and a zero-size request would throw at the boundary rather than refuse.
+        if (PrimaryDisplayPlacement.PrimaryBounds() is not { } bounds)
         {
-            // No display: the placement is never reached in practice because Compose refuses first
-            // on the station read, and a zero-size request would throw at the boundary. A minimum
-            // legal rectangle keeps that boundary a refusal rather than an exception.
             return new InputBounds(0, 0, 1, 1);
         }
 
-        var chosen = 0;
-        for (var i = 0; i < displays.Count; i++)
-        {
-            if (displays[i].IsPrimary)
-            {
-                chosen = i;
-                break;
-            }
-        }
-
-        var bounds = displays[chosen].Bounds;
-        var width = Math.Max(1, (int)(bounds.Width * CardWidthFraction));
-        var height = Math.Max(1, (int)(bounds.Height * CardHeightFraction));
-        return new InputBounds(
-            bounds.X + ((bounds.Width - width) / 2),
-            bounds.Y + ((bounds.Height - height) / 2),
-            width,
-            height);
+        var (x, y, width, height) = PrimaryDisplayPlacement.Centred(
+            bounds, CardWidthFraction, CardHeightFraction);
+        return new InputBounds(x, y, width, height);
     }
 }

@@ -38,6 +38,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<BrainDrainPresetDocument> _brainDrainPreset;
     private readonly PersistenceStore<LockCardPresetDocument> _lockCardPreset;
     private readonly PersistenceStore<MandatoryVideoPresetDocument> _videoPreset;
+    private readonly PersistenceStore<BubbleCountPresetDocument> _bubbleCountPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -71,7 +72,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Func<InputBounds>? lockCardPlacement = null,
         IVideoSurface? videoSurface = null,
         IVideoClipPool? videoClips = null,
-        Random? videoRandom = null)
+        Random? videoRandom = null,
+        IVideoClipPool? bubbleCountClips = null,
+        Random? bubbleCountRandom = null,
+        Func<InputBounds>? bubbleCountPlacement = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -138,6 +142,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("MandatoryVideoPreset"), infra.Log,
             Path.Combine(dataDirectory, MandatoryVideoPresetDocument.FileName),
             MandatoryVideoPresetDocument.CurrentSchemaVersion);
+
+        // SP-112: the second consumer's own document, same per-module precedent again (D71/D80).
+        _bubbleCountPreset = new PersistenceStore<BubbleCountPresetDocument>(
+            infra.OwnerFor("BubbleCountPreset"), infra.Log,
+            Path.Combine(dataDirectory, BubbleCountPresetDocument.FileName),
+            BubbleCountPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -348,6 +358,30 @@ public sealed class SessionParticipant : IBackgroundParticipant
             lockCardRandom,
             lockCardPlacement);
 
+        // SP-112: THE SECOND CONSUMER, and the wiring is the whole point of the packet. It takes the
+        // SAME video surface Mandatory Video plays on and the SAME input presence the Lock Card asks
+        // through — one instance of each, shared, which is the arrangement SP-109 established for the
+        // audio presence and for the same reason: a second video surface would be a second window
+        // contesting the same rectangle, and a second input presence would be a second window
+        // contesting the one foreground the OS lends. Sharing is also what makes the two video-class
+        // rows mutually exclusive without this port having upstream's interaction queue
+        // (Services/BubbleCountService.cs:169-186).
+        //
+        // Its clip POOL is its own instance over the same folder, because upstream's two services
+        // keep their own lists over the same directory (BubbleCountService.cs:63 and
+        // Services/Video/VideoService.cs:1212 both compose <assets>/videos) — one shared bag would
+        // make one row's draw remove a clip from the other's.
+        BubbleCount = new BubbleCountEffect(
+            infra.OwnerFor("BubbleCount"),
+            signal,
+            sessionClock,
+            _bubbleCountPreset,
+            bubbleCountClips ?? new VideoClipPool(AssetsRootFor(dataDirectory)),
+            _videoSurface,
+            _input,
+            bubbleCountRandom,
+            bubbleCountPlacement);
+
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
         // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
@@ -384,7 +418,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // flash service (:180-181), the video service (:183-184) and subliminals (:186-187) in that
         // order.
         Engine = new SessionEngine(
-            [Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, LockCard, MindWipe, BrainDrain, Ramp],
+            [
+                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubbleCount, LockCard, MindWipe,
+                BrainDrain, Ramp,
+            ],
             _preset, signal);
 
         // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:547-555
@@ -425,6 +462,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>Lock Card, the first module that ASKS the user something (SP-110).</summary>
     public LockCardEffect LockCard { get; }
+
+    /// <summary>Bubble Count, the first module that consumes capabilities it did not shape — the
+    /// video surface AND the input presence, in one firing (SP-112).</summary>
+    public BubbleCountEffect BubbleCount { get; }
 
     /// <summary>Mandatory Video's VIDEO half — the first module that plays a FILE, and half a row
     /// permanently because the clip's sound is not ported (SP-111).</summary>
@@ -493,6 +534,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Lock Card module's persisted store, same reason.</summary>
     public PersistenceStore<LockCardPresetDocument> LockCardPreset => _lockCardPreset;
 
+    /// <summary>The Bubble Count module's persisted store, same reason.</summary>
+    public PersistenceStore<BubbleCountPresetDocument> BubbleCountPreset => _bubbleCountPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -515,6 +559,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _brainDrainPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _lockCardPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _videoPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _bubbleCountPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -530,6 +575,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("braindrain-preset", _brainDrainPreset.LastLoadOutcome);
         LogIfDegraded("lockcard-preset", _lockCardPreset.LastLoadOutcome);
         LogIfDegraded("video-preset", _videoPreset.LastLoadOutcome);
+        LogIfDegraded("bubblecount-preset", _bubbleCountPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -585,7 +631,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
             _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _videoPreset.StopAsync(),
-            _assetSelection.StopAsync());
+            _bubbleCountPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -601,7 +647,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _rampPreset.FlushAsync(boundedWait),
             _mindWipePreset.FlushAsync(boundedWait),
             _brainDrainPreset.FlushAsync(boundedWait),
-            _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait));
+            _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait),
+            _bubbleCountPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

@@ -571,11 +571,17 @@ public class MandatoryVideoModuleTests
 
         public VideoSurfaceObservation LastObservation { get; set; } = VideoSurfaceObservation.NotAsked;
 
-        public CapabilityState Begin(string clipPath, TimeSpan maxLength, Action onEnded)
+        /// <summary>The painter the last Begin was handed, or null. SP-112 added the seam; this
+        /// module never uses it, and the double records it so a fact can assert that.</summary>
+        public IVideoFramePainter? LastPainter { get; private set; }
+
+        public CapabilityState Begin(
+            string clipPath, TimeSpan maxLength, Action onEnded, IVideoFramePainter? painter = null)
         {
             Begun.Add(clipPath);
             LastMaxLength = maxLength;
             _onEnded = onEnded;
+            LastPainter = painter;
             LastPlacement = BeginResult;
             if (BeginResult is CapabilityState.Available)
             {

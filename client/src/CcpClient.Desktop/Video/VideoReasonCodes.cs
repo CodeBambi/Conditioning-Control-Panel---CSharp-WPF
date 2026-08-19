@@ -67,6 +67,21 @@ public static class VideoReasonCodes
     /// nothing on screen.</summary>
     public const string VideoNothingPresented = "video-nothing-presented";
 
+    /// <summary>
+    /// A clip is already playing on this surface, so a second one was not opened (SP-112).
+    ///
+    /// <para><b>Added by the video capability's SECOND consumer, for a collision the FIRST one
+    /// already tried to prevent and could not.</b> <c>MandatoryVideoEffect.Compose</c>'s first guard
+    /// is "a clip is already on screen — drop the firing" and it runs on the CLOCK thread while the
+    /// playback starts on the SURFACE thread, so it cannot close the window between the two. Before
+    /// this code existed, a second start in that window silently overwrote the first clip's handle
+    /// and its end-callback — leaking an open decoder and leaving the first module believing it was
+    /// still playing. Upstream refuses the same collision at the same granularity: its interaction
+    /// queue drops or defers a video-class interaction that arrives while another is live
+    /// (<c>Services/BubbleCountService.cs:169-186</c>).</para>
+    /// </summary>
+    public const string VideoAlreadyPlaying = "video-already-playing";
+
     /// <summary>The presence was disposed; its window is gone and it will never present again.</summary>
     public const string VideoPresenceDisposed = "video-presence-disposed";
 }

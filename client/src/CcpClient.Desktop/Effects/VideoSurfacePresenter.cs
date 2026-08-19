@@ -4,7 +4,51 @@ using CcpClient.Desktop.Video;
 
 namespace CcpClient.Desktop.Effects;
 
-/// <summary>Where the Mandatory Video module's pictures go when they have somewhere to go.</summary>
+/// <summary>
+/// Something that draws ON a clip's pictures, one picture at a time, before they go to the
+/// operating system.
+///
+/// <para><b>Added at SP-112 for the video capability's SECOND consumer, and it is justified by what
+/// the FIRST consumer already needs rather than by what the second one wants.</b> Upstream's
+/// Mandatory Video draws over its own video in two places this port has not ported and has already
+/// declared: the blurred-background composite (<c>Services/Video/VideoService.cs:3436</c>) and the
+/// attention-check prompt drawn over a playing clip (<c>:4846</c>) — both named in
+/// <see cref="VideoSurfacePresenter"/>'s own remarks before this seam existed. A clip you cannot
+/// draw on can never grow either of them.</para>
+///
+/// <para><b>What it deliberately does NOT do.</b> It cannot change the picture's SIZE or replace it
+/// with a different one: it is handed the decoded frame and paints into it. Upstream's blur
+/// composite is the harder shape (the picture is drawn INTO a larger blurred background) and this
+/// seam does not reach it; that is stated rather than implied.</para>
+///
+/// <para><b>Threading.</b> Called on the surface thread, inline with the frame advance, so it must
+/// be cheap and must not throw — a painter that threw would take the cadence down with it.</para>
+/// </summary>
+public interface IVideoFramePainter
+{
+    /// <summary>
+    /// What the operating system said about the clip that is about to play — its picture size, its
+    /// frame period and its LENGTH — handed over once, before the first picture.
+    ///
+    /// <para><b>Why a painter is told rather than left to ask.</b> Nothing else can tell it: the
+    /// clip is opened inside the presenter and closed there, and <see cref="IVideoSurface"/>
+    /// deliberately reports what the OS is HOLDING rather than what the file says. A painter whose
+    /// output depends on the clip's length — a counting game's bubble pacing, upstream's own
+    /// duration-scaled work (<c>Services/BubbleCountService.cs:274-281</c>) — would otherwise have to
+    /// open the file a second time, with a second decoder, to learn a number the first one already
+    /// read.</para>
+    /// </summary>
+    void Opening(VideoClipInfo clip);
+
+    /// <summary>
+    /// Paint on one decoded picture, in place. <paramref name="elapsed"/> is how far into the clip
+    /// this picture is, on the presenter's own injected clock — so a painter is driven by the same
+    /// clock every fact in this port drives, and never by wall time.
+    /// </summary>
+    void Paint(VideoFrame frame, TimeSpan elapsed);
+}
+
+/// <summary>Where a module's clip pictures go when they have somewhere to go.</summary>
 public interface IVideoSurface
 {
     /// <summary>
@@ -16,7 +60,10 @@ public interface IVideoSurface
     /// (<c>Services/Video/VideoService.cs:5509-5510</c>: the setting defaults to 0 and 0 means off).</param>
     /// <param name="onEnded">Raised on the surface thread when the clip finishes, is capped, or the
     /// surface stops holding it. Never raised from inside <see cref="Begin"/> itself.</param>
-    CapabilityState Begin(string clipPath, TimeSpan maxLength, Action onEnded);
+    /// <param name="painter">Optional: something that draws on every picture before it is shown.
+    /// Null for a clip that is played as it was decoded.</param>
+    CapabilityState Begin(
+        string clipPath, TimeSpan maxLength, Action onEnded, IVideoFramePainter? painter = null);
 
     /// <summary>Take the picture off the screen now and close the clip.</summary>
     void End();
@@ -65,9 +112,14 @@ public interface IVideoSurface
 }
 
 /// <summary>
-/// Mandatory Video, drawn on a real video surface — the port's SECOND module whose picture has to
-/// keep changing while it is on, and the first whose frames come from a file rather than from
-/// arithmetic.
+/// A real video surface with a clip on it — the port's SECOND kind of picture that has to keep
+/// changing while it is on, and the first whose frames come from a file rather than from arithmetic.
+///
+/// <para><b>Two modules play through ONE instance of this</b> (SP-112): Mandatory Video, which
+/// introduced it, and Bubble Count, which paints bubbles onto its pictures. Sharing is what makes
+/// the two video-class rows mutually exclusive without this port having upstream's interaction
+/// queue, and it is why <see cref="Begin"/> refuses in type while a clip is already playing rather
+/// than quietly replacing it.</para>
 ///
 /// <para><b>Where the cadence lives, and why.</b> In the PRESENTER, on the injected
 /// <see cref="ISessionClock"/>, exactly as <see cref="SpiralSurfacePresenter"/> puts it — SP-105's
@@ -114,6 +166,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     private IVideoClip? _clip;
     private IDisposable? _advance;
     private Action? _onEnded;
+    private IVideoFramePainter? _painter;
     private DateTimeOffset _startedAt;
     private TimeSpan _maxLength;
     private TimeSpan _frameInterval = FallbackFrameInterval;
@@ -279,7 +332,8 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     }
 
     /// <inheritdoc/>
-    public CapabilityState Begin(string clipPath, TimeSpan maxLength, Action onEnded)
+    public CapabilityState Begin(
+        string clipPath, TimeSpan maxLength, Action onEnded, IVideoFramePainter? painter = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(clipPath);
         ArgumentNullException.ThrowIfNull(onEnded);
@@ -287,6 +341,28 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
         {
             return Record(new CapabilityState.Unavailable(new CapabilityReason(
                 VideoReasonCodes.VideoPresenceDisposed, "this video surface was disposed")));
+        }
+
+        // ONE CLIP AT A TIME, AND IT IS THE CAPABILITY THAT SAYS SO — added at SP-112, when this
+        // surface acquired a second module. Both consumers already refuse a firing while a clip is
+        // up (MandatoryVideoEffect.Compose's first guard, BubbleCountEffect's), but Compose runs on
+        // the CLOCK thread and Begin runs on the SURFACE thread, so a module can pass its own guard
+        // and still arrive here after another module has started playing. What used to happen then
+        // is not a refusal: the second Begin overwrote _clip and _onEnded, LEAKING the first
+        // module's open decoder and leaving it believing it was still playing for ever. Refusing in
+        // type is upstream's own answer to the same collision — its interaction queue drops a
+        // video-class interaction that arrives while another is live
+        // (Services/BubbleCountService.cs:169-186) — and the FIRST consumer wanted it before the
+        // second one existed.
+        lock (_gate)
+        {
+            if (_clip is not null)
+            {
+                return Record(new CapabilityState.Unavailable(new CapabilityReason(
+                    VideoReasonCodes.VideoAlreadyPlaying,
+                    $"a clip is already playing on this surface ('{Path.GetFileName(PlayingClip)}'), so "
+                    + "nothing was opened; one video-class interaction at a time")));
+            }
         }
 
         var bounds = _display();
@@ -303,6 +379,11 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
             clip?.Dispose();
             return Record(open);
         }
+
+        // The painter is told what it is about to paint on — once, before the first picture, and
+        // only for a clip the OS really opened. A painter that had to guess the clip's length would
+        // be a second decoder on the same file.
+        painter?.Opening(clip.Info);
 
         lock (_gate)
         {
@@ -329,6 +410,11 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
                 $"the operating system opened '{Path.GetFileName(clipPath)}' and produced no picture from it")));
         }
 
+        // The FIRST picture is painted too. A painter that only reached frames 1..n would leave the
+        // clip's opening frame bare, which for a counting game is a picture the user is asked about
+        // and never saw drawn on.
+        painter?.Paint(first, TimeSpan.Zero);
+
         var shown = _presence.Show(first);
         if (shown is not CapabilityState.Available)
         {
@@ -341,6 +427,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
         {
             _clip = clip;
             _onEnded = onEnded;
+            _painter = painter;
             _startedAt = _clock.UtcNow;
             _maxLength = maxLength;
             _frameInterval = clip.Info.FrameInterval > TimeSpan.Zero
@@ -366,6 +453,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
             clip = _clip;
             _clip = null;
             _onEnded = null;
+            _painter = null;
             presence = _presence;
         }
 
@@ -407,33 +495,19 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     /// </summary>
     private static VideoBounds? DefaultPlacement()
     {
-        var displays = Overlay.OverlayDisplays.Enumerate();
-        if (displays.Count == 0)
+        // SP-112 extracted the display walk and the centring into PrimaryDisplayPlacement, which
+        // three modules now share. What stays HERE is what is genuinely this surface's: its own
+        // fractions (D123) and its own answer to "no display at all" — NULL rather than the card's
+        // minimum rectangle, because the module's dot and its arm result both read
+        // CanReachADisplay, and a one-pixel surface would be a picture nobody could see reported as
+        // a picture.
+        if (PrimaryDisplayPlacement.PrimaryBounds() is not { } bounds)
         {
-            // No display at all. Null rather than a minimum rectangle: the module's own dot and its
-            // arm result both read CanReachADisplay, and a one-pixel surface would be a picture
-            // nobody could see reported as a picture.
             return null;
         }
 
-        var chosen = 0;
-        for (var i = 0; i < displays.Count; i++)
-        {
-            if (displays[i].IsPrimary)
-            {
-                chosen = i;
-                break;
-            }
-        }
-
-        var bounds = displays[chosen].Bounds;
-        var width = Math.Max(1, (int)(bounds.Width * WidthFraction));
-        var height = Math.Max(1, (int)(bounds.Height * HeightFraction));
-        return new VideoBounds(
-            bounds.X + ((bounds.Width - width) / 2),
-            bounds.Y + ((bounds.Height - height) / 2),
-            width,
-            height);
+        var (x, y, width, height) = PrimaryDisplayPlacement.Centred(bounds, WidthFraction, HeightFraction);
+        return new VideoBounds(x, y, width, height);
     }
 
     private CapabilityState Record(CapabilityState state)
@@ -463,7 +537,9 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     {
         IVideoClip? clip;
         IVideoPresence? presence;
+        IVideoFramePainter? painter;
         Action? ended;
+        TimeSpan elapsed;
         bool capped;
         lock (_gate)
         {
@@ -474,8 +550,10 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
 
             clip = _clip;
             presence = _presence;
+            painter = _painter;
             ended = _onEnded;
-            capped = _maxLength > TimeSpan.Zero && _clock.UtcNow - _startedAt >= _maxLength;
+            elapsed = _clock.UtcNow - _startedAt;
+            capped = _maxLength > TimeSpan.Zero && elapsed >= _maxLength;
         }
 
         if (capped || presence is null)
@@ -498,6 +576,8 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
             ScheduleAdvance();
             return;
         }
+
+        painter?.Paint(frame, elapsed);
 
         var shown = presence.Show(frame);
         Record(shown);

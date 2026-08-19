@@ -72,6 +72,7 @@ public partial class StudioPage : UserControl
     private readonly BrainDrainEffect _brainDrain;
     private readonly LockCardEffect _lockCard;
     private readonly MandatoryVideoEffect _mandatoryVideo;
+    private readonly BubbleCountEffect _bubbleCount;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -90,6 +91,7 @@ public partial class StudioPage : UserControl
         _brainDrain = session.BrainDrain;
         _lockCard = session.LockCard;
         _mandatoryVideo = session.MandatoryVideo;
+        _bubbleCount = session.BubbleCount;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -104,6 +106,7 @@ public partial class StudioPage : UserControl
         RowBrainDrain.IsCheckedChanged += (_, _) => ApplySelection();
         RowLockCard.IsCheckedChanged += (_, _) => ApplySelection();
         RowMandatoryVideo.IsCheckedChanged += (_, _) => ApplySelection();
+        RowBubbleCount.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -119,6 +122,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId);
         AddQuickToggle(RowLockCard, LockCardEffect.EffectId);
         AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId);
+        AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -138,6 +142,8 @@ public partial class StudioPage : UserControl
             OnEnableToggled(LockCardEnableToggle, _lockCard, LockCardEffect.EffectId);
         MandatoryVideoEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(MandatoryVideoEnableToggle, _mandatoryVideo, MandatoryVideoEffect.EffectId);
+        BubbleCountEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(BubbleCountEnableToggle, _bubbleCount, BubbleCountEffect.EffectId);
 
         // Strict is one of the module's own dials, not its enable, so it writes through the module
         // the way the ramp's switches do rather than through the rack's quick-toggle.
@@ -177,6 +183,8 @@ public partial class StudioPage : UserControl
         OnSliderMoved(LockCardRepeatsSlider, OnLockCardRepeatsMoved);
         OnSliderMoved(MandatoryVideoFrequencySlider, OnMandatoryVideoFrequencyMoved);
         OnSliderMoved(MandatoryVideoMaxLengthSlider, OnMandatoryVideoMaxLengthMoved);
+        OnSliderMoved(BubbleCountFrequencySlider, OnBubbleCountFrequencyMoved);
+        OnSliderMoved(BubbleCountDifficultySlider, OnBubbleCountDifficultyMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -190,6 +198,14 @@ public partial class StudioPage : UserControl
         _lockCard.Shown += _ => Refresh();
         _lockCard.Resolved += _ => Refresh();
         _mandatoryVideo.Fired += _ => Refresh();
+
+        // ALL THREE of this module's signals, and each is a different moment the panel must repaint
+        // at: a clip going up, the question going up, and the game ending however it ended. A page
+        // that only repainted on the first would leave "counting now" on screen through the whole
+        // question and after the game was over.
+        _bubbleCount.Started += _ => Refresh();
+        _bubbleCount.Asked += _ => Refresh();
+        _bubbleCount.Resolved += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -242,6 +258,11 @@ public partial class StudioPage : UserControl
     /// seven that can be false while every call this process made succeeded (SP-111,
     /// <see cref="MandatoryVideoEffect.WorkIsRunning"/>).</summary>
     public EffectDotState RenderedMandatoryVideoDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Bubble Count row's dot state, as the row is currently painting it. It carries
+    /// TWO of the dot's landed meanings, one per phase of a game (see
+    /// <see cref="BubbleCountEffect.WorkIsRunning"/>).</summary>
+    public EffectDotState RenderedBubbleCountDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -304,7 +325,9 @@ public partial class StudioPage : UserControl
         var brainDrainOpen = RowBrainDrain.IsChecked == true;
         var lockCardOpen = RowLockCard.IsChecked == true;
         var videoOpen = RowMandatoryVideo.IsChecked == true;
+        var bubbleCountOpen = RowBubbleCount.IsChecked == true;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
+        BubbleCountModulePanel.IsVisible = bubbleCountOpen;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
@@ -314,7 +337,7 @@ public partial class StudioPage : UserControl
         BrainDrainModulePanel.IsVisible = brainDrainOpen;
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
-            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen;
+            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen;
     }
 
     /// <summary>
@@ -709,6 +732,11 @@ public partial class StudioPage : UserControl
             MandatoryVideoEnableToggle.IsChecked = video.Enabled;
             MandatoryVideoFrequencySlider.Value = video.PerHour;
             MandatoryVideoMaxLengthSlider.Value = video.MaxSeconds;
+
+            var bubbleCount = _session.BubbleCountPreset.Current;
+            BubbleCountEnableToggle.IsChecked = bubbleCount.Enabled;
+            BubbleCountFrequencySlider.Value = bubbleCount.PerHour;
+            BubbleCountDifficultySlider.Value = (int)bubbleCount.Difficulty;
         }
         finally
         {
@@ -842,6 +870,61 @@ public partial class StudioPage : UserControl
             VideoPanelNotices.DescribeClipPool(_mandatoryVideo.ClipCount, _mandatoryVideo.ClipFolder);
         MandatoryVideoSurfaceState.Text = VideoPanelNotices.DescribeVideoCapability(
             _session.VideoSurface.LastPlacement, _session.VideoSurface.LastObservation);
+
+        // The one row that needs TWO capabilities. Its closing line quotes both of them, because
+        // either can refuse on its own and a single sentence would be false for one of the two.
+        var bubbleCount = _bubbleCount.Preset;
+        BubbleCountFrequencyValue.Text =
+            bubbleCount.PerHour.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        BubbleCountDifficultyValue.Text = bubbleCount.Difficulty.ToString();
+        BubbleCountInterruptionNotice.Text = BubbleCountPanelNotices.InterruptionNotice;
+        BubbleCountScopeNotice.Text = BubbleCountPanelNotices.ScopeNotice;
+        RenderedBubbleCountDot = PaintDot(BubbleCountRowDot, _bubbleCount);
+        BubbleCountLiveState.Text = BubbleCountPanelNotices.DescribeGameState(
+            RenderedBubbleCountDot, _bubbleCount.PlayedCount, _bubbleCount.Last, _session.Engine.Running,
+            _session.VideoSurface.CanReachADisplay, _bubbleCount.Presence.CanReachAUser,
+            _bubbleCount.Playing, _bubbleCount.Asking, _bubbleCount.LastResolution);
+        BubbleCountDifficultyState.Text =
+            BubbleCountPanelNotices.DescribeDifficulty(bubbleCount.Difficulty);
+        BubbleCountClipState.Text =
+            BubbleCountPanelNotices.DescribeClipPool(_bubbleCount.ClipCount, _bubbleCount.ClipFolder);
+        BubbleCountCapabilityState.Text = BubbleCountPanelNotices.DescribeBothCapabilities(
+            _bubbleCount.LastPlayback, _bubbleCount.LastPrompt);
+    }
+
+    /// <summary>
+    /// The games-per-hour slider writes the dial and re-paces the live schedule, the port's standing
+    /// convention since SP-105 and upstream's own <c>RefreshSchedule</c>
+    /// (<c>Services/BubbleCountService.cs:735-739</c>).
+    /// </summary>
+    private void OnBubbleCountFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bubbleCount.SetPerHour((int)Math.Round(BubbleCountFrequencySlider.Value));
+        _ = _session.BubbleCountPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The difficulty slider. It changes the NEXT game, never the one on screen: upstream reads the
+    /// setting once, at trigger time (<c>Services/BubbleCountService.cs:243</c>), and a target that
+    /// moved under a user mid-clip would be a count nobody could get right.
+    /// </summary>
+    private void OnBubbleCountDifficultyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(BubbleCountDifficultySlider.Value);
+        _bubbleCount.SetDifficulty((BubbleCountDifficulty)value);
+        _ = _session.BubbleCountPreset.Save();
+        Refresh();
     }
 
     /// <summary>

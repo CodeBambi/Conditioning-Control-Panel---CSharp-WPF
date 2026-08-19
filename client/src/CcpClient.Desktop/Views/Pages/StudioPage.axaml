@@ -4,11 +4,11 @@
   <!--
     The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
     down the left, one panel on the right, left-click a row to open its panel. WPF has four
-    groups and fifteen rows; the port now has ALL FOUR GROUPS and NINE rows, and all nine are
-    real effects. Six of WPF's rows are still unported — Visuals, Bubble Pop, Bubble Count,
-    Bouncing Text, Haptics and Scheduler (StudioTabView.xaml.cs:496, :499, :501, :505, :519, :535)
-    — and none of them has a row here, which is WPF's own rule for a row that cannot be wired
-    honestly (:494-496).
+    groups and fifteen rows; the port now has ALL FOUR GROUPS and TEN rows, and all ten are
+    real effects. Five of WPF's rows are still unported — Visuals, Bubble Pop, Bouncing Text,
+    Haptics and Scheduler (StudioTabView.xaml.cs:496, :499, :505, :519, :535) — and none of them
+    has a row here, which is WPF's own rule for a row that cannot be wired honestly (:494-496).
+    SP-112 lands Bubble Count, the first row that consumes capabilities it did not shape.
 
     Rack ORDER is WPF's own (StudioTabView.xaml.cs:483-541): within EFFECTS, flash, video,
     subliminal, spiral, pinkfilter. SP-111 landed Mandatory Video in its own upstream position,
@@ -137,6 +137,31 @@
                this one takes the keyboard away from it and waits. Its dot therefore means
                something no earlier dot has meant — see LockCardEffect. -->
           <TextBlock Classes="rack-group" Text="GAMES &amp; CARDS" />
+
+          <!-- SP-112 — and it goes ABOVE Lock Card because the RACK's order is the one the port
+               takes when the two upstream orders disagree, which they do here: the rack is Bubble
+               Pop, Bubble Count, Lock Card, Bouncing Text (StudioTabView.xaml.cs:499-505) while
+               StartEngine starts the lock card first and the bubble count second (:206-215). D90
+               settled that question for Spiral/Pink Filter and the same answer applies: the rack is
+               the order the user has learned. Bubble Pop is still unported and has no row.
+
+               THIS ROW IS THE FIRST THAT USES TWO CAPABILITIES. It plays a clip on the same video
+               surface Mandatory Video plays on and asks its question through the same input
+               presence the Lock Card asks through, and its dot therefore means BOTH of the two
+               things those rows' dots mean, one at a time — see BubbleCountEffect. -->
+          <RadioButton x:Name="RowBubbleCount"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowBubbleCount"
+                       AutomationProperties.Name="Bubble Count rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Bubble Count" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="BubbleCountRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="BubbleCountRowDot" />
+            </Grid>
+          </RadioButton>
 
           <RadioButton x:Name="RowLockCard"
                        Classes="rack-row"
@@ -597,6 +622,105 @@
              quoting what was asked of the operating system and what came back, including the peak
              level Windows measured on this process's own stream. -->
         <!-- ================= Lock Card ================= -->
+        <!-- ================= Bubble Count ================= -->
+        <StackPanel x:Name="BubbleCountModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Bubble Count" />
+          <TextBlock Classes="page-blurb"
+                     Text="Plays one of your clips with bubbles on it, then asks how many there were." />
+
+          <!-- THE INTERRUPTION WARNING LEADS, above the dials, as the Lock Card's does — and it
+               names BOTH interruptions, because this row covers part of the screen and then takes
+               the keyboard. Constants in BubbleCountPanelNotices rather than inline prose so a fact
+               can pin the exact words. -->
+          <Border Classes="notice">
+            <TextBlock x:Name="BubbleCountInterruptionNotice"
+                       AutomationProperties.AutomationId="BubbleCountInterruptionNotice"
+                       TextWrapping="Wrap"
+                       Text="" />
+          </Border>
+
+          <!-- TWO dials, and both are read by the running module. WPF's panel also carries a strict
+               lock; this build has neither of the two things strict mode does (no retry loop, and
+               Esc is always live — D112), so it is ABSENT rather than greyed. A disabled dial
+               swallows the gesture and tells the user nothing (§9 D7). -->
+          <CheckBox x:Name="BubbleCountEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="BubbleCountEnableToggle"
+                    AutomationProperties.Name="Bubble Count enabled"
+                    Content="Enable Bubble Count" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Games per hour" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="BubbleCountFrequencySlider"
+                    Minimum="1" Maximum="10"
+                    SmallChange="1" LargeChange="1"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BubbleCountFrequencySlider"
+                    AutomationProperties.Name="Bubble Count games per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="BubbleCountFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BubbleCountFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Difficulty" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="BubbleCountDifficultySlider"
+                    Minimum="0" Maximum="2"
+                    SmallChange="1" LargeChange="1"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BubbleCountDifficultySlider"
+                    AutomationProperties.Name="Bubble Count difficulty" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="BubbleCountDifficultyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BubbleCountDifficultyValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="BubbleCountLiveState"
+                         AutomationProperties.AutomationId="BubbleCountLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="BubbleCountDifficultyState"
+                         AutomationProperties.AutomationId="BubbleCountDifficultyState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="BubbleCountClipState"
+                         AutomationProperties.AutomationId="BubbleCountClipState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BubbleCountScopeNotice"
+                       AutomationProperties.AutomationId="BubbleCountScopeNotice"
+                       Text="" />
+          </Border>
+
+          <!-- BOTH capabilities' own answers, verbatim and side by side. This is the only panel on
+               the page that quotes two, because it is the only row that needs two. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BubbleCountCapabilityState"
+                       AutomationProperties.AutomationId="BubbleCountCapabilityState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
         <StackPanel x:Name="LockCardModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Lock Card" />
           <TextBlock Classes="page-blurb"
