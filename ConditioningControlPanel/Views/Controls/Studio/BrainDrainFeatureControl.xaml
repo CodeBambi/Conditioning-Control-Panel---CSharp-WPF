@@ -242,13 +242,15 @@
                     </Grid>
                 </Border>
 
-                <!-- CLIP LIBRARY. The audio half reads Resources/sounds/braindrain under the
-                     INSTALL directory - NOT the user assets folder every other droppable asset
-                     lives in - and it ships containing only a .gitkeep. Nobody found it: four
-                     users asked where it was inside 24 hours and the community moderator did not
-                     know either. So the folder gets a front door here, plus the Refresh that makes
-                     a dropped-in clip work without an app restart (BrainDrainService.
-                     ReloadAudioFiles existed for that the whole time and nothing ever called it).
+                <!-- CLIP LIBRARY. The audio half reads <assets>/braindrain - the SAME assets
+                     folder as images/videos, created on first scan so it is there to be found.
+                     It used to read Resources/sounds/braindrain under the install directory
+                     instead, which nobody found (five-plus users in two nights, the community
+                     moderator included) and which a reinstall or a portable copy wipes. That
+                     legacy folder is still scanned so existing clips keep working; it is just no
+                     longer where this card sends people. Plus the Refresh that makes a dropped-in
+                     clip work without an app restart (BrainDrainService.ReloadAudioFiles existed
+                     for that the whole time and nothing ever called it).
                      Same shape as the Spiral card's library header. -->
                 <Border Style="{StaticResource SettingCardStyle}" Margin="0,10,0,0">
                     <Grid>
@@ -306,11 +308,28 @@
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontFamily="Consolas, Courier New" FontSize="10.5"
                                        Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                            <!-- Shown ONLY when the old install-directory folder still holds clips.
+                                 Those files keep playing (both folders are scanned and merged), but
+                                 that folder does not survive a reinstall or a portable copy, so the
+                                 note tells the user to move them across. A clean install never sees
+                                 this line at all. Nothing is migrated automatically - moving a
+                                 user's files without asking is not this card's call. -->
+                            <TextBlock x:Name="TxtLegacyFolderNote" x:FieldModifier="internal"
+                                       Text="{loc:Str st4_braindrain_legacy_folder_note}"
+                                       Foreground="#FFA500"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Visibility="Collapsed"/>
+                            <TextBlock x:Name="TxtLegacyFolderPath" x:FieldModifier="internal"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5"
+                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       Visibility="Collapsed"/>
                         </StackPanel>
                     </Grid>
                 </Border>
 
-                <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
+                <!-- Shown only when BOTH clip folders are empty. Without it the
                      feature is a completely silent no-op with no way to tell why: the
                      service logs a warning and returns, and the UI would look armed.
                      It carries its OWN copy of the Open Folder button (same handler, no second

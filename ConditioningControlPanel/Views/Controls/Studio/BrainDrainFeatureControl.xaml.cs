@@ -107,11 +107,12 @@ namespace ConditioningControlPanel.Views.Controls.Studio
         }
 
         /// <summary>
-        /// Repaint the clip-library readout. An empty Resources/sounds/braindrain folder makes the
-        /// whole audio half a silent no-op (the service warns to the log and returns), so the count
-        /// is shown even when it is fine - "0 clips" is the answer to "why is nothing happening?"
-        /// and it is the number the user watches change after dropping a file in and hitting
-        /// Refresh.
+        /// Repaint the clip-library readout. An empty clip pool makes the whole audio half a silent
+        /// no-op (the service warns to the log and returns), so the count is shown even when it is
+        /// fine - "0 clips" is the answer to "why is nothing happening?" and it is the number the
+        /// user watches change after dropping a file in and hitting Refresh.
+        /// <para>The count is the MERGED pool: the assets folder plus whatever is still sitting in
+        /// the old install-directory folder, de-duped by file name.</para>
         /// </summary>
         private void RefreshClipCount()
         {
@@ -120,16 +121,34 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             NoAudioHint.Visibility = clips == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             // The literal path, straight off the service. Read here rather than hardcoded in XAML
-            // because BrainDrainService.AudioFolderPath is the ONLY definition of it, and it is
-            // AppDomain.BaseDirectory-relative: a per-user install, a machine-wide install and a
-            // dev `dotnet run` all resolve somewhere different, and a wrong path printed in the UI
-            // is worse than none (support would be chasing a folder that does not exist).
+            // because BrainDrainService.AudioFolderPath is the ONLY definition of it, and it moves
+            // with AppSettings.CustomAssetsPath - a wrong path printed in the UI is worse than none
+            // (support would be chasing a folder that does not exist).
             try { TxtAudioFolderPath.Text = Services.BrainDrainService.AudioFolderPath; }
             catch { TxtAudioFolderPath.Text = string.Empty; }
+
+            // The legacy install-directory folder gets a line ONLY while it still holds clips.
+            // They keep playing (the service merges both folders), but that folder is wiped by a
+            // reinstall and does not travel with a portable copy, so the honest thing is to say
+            // "these still work, move them across". Nothing is migrated for the user.
+            try
+            {
+                var legacy = Services.BrainDrainService.LegacyAudioFileCount();
+                var show = legacy > 0 ? Visibility.Visible : Visibility.Collapsed;
+                TxtLegacyFolderNote.Visibility = show;
+                TxtLegacyFolderPath.Visibility = show;
+                if (legacy > 0)
+                    TxtLegacyFolderPath.Text = Services.BrainDrainService.LegacyAudioFolderPath;
+            }
+            catch
+            {
+                TxtLegacyFolderNote.Visibility = Visibility.Collapsed;
+                TxtLegacyFolderPath.Visibility = Visibility.Collapsed;
+            }
         }
 
         /// <summary>
-        /// Open the clip folder in Explorer, creating it first. Same shape as
+        /// Open the PRIMARY (assets) clip folder in Explorer, creating it first. Same shape as
         /// <c>SpiralFeatureControl.BtnOpenSpiralFolder_Click</c> (ProcessStartInfo with
         /// UseShellExecute, after a CreateDirectory) so Explorer never opens onto nothing.
         /// <para>Wired from BOTH the library header button and the empty-state banner's copy of
