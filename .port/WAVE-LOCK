@@ -1,6 +1,0 @@
-WAVE: 52
-PACKETS: SP-112-second-consumer
-LANES: 1
-BASE: 74c31da6
-GATE: validate-wave.mjs WAVE OK; floor 1742/107
-OPENED: 2026-08-19T12:26:27Z
