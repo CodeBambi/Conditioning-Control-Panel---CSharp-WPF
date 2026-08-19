@@ -250,3 +250,44 @@ The manifest is the shared contract between deterministic assertion and model re
 ## Tier-4 milestone hook
 
 Matrices (five themes, languages, scaling levels, platform pairs) run ONLY when a task-board row names a milestone/release. The hook: `capture.ps1`/`capture-wslg.sh` take `-Surface`/`-State`; a milestone row adds its matrix as a list of surface/state invocations plus matching manifest entries. No matrix automation exists beyond this hook (A-014); do not run matrices outside a named milestone.
+
+## Video evidence class (SP-111)
+
+Video needs its own class for the sharpest version of a hazard this repository has recorded four
+times: **"frames decoded" is not "frames displayed."** A decoder that returns bytes proves a FILE is
+readable and nothing more — the same grade of evidence as a tray method returning, an overlay flag
+being set, `Play()` returning, and a fake dial re-imposing its own clamp under test. The class exists
+so a claim about video has to say WHICH of the four steps below it reached.
+
+| class | what it means | how it is earned | who may claim it |
+|---|---|---|---|
+| **`clip-decodable`** | the operating system opened the container, reported a video stream and its native frame size, and handed pictures back | `MFStartup` / `MFCreateSourceReaderFromURL` / `GetNativeMediaType` / `SetCurrentMediaType(RGB32)` / `IMFSourceReader::ReadSample` | tier 1, `VideoCapabilityTests`. **On its own it is the TRAP level and no caller may report a module as working on it** |
+| **`frame-on-surface`** | the operating system's own copy of the surface carries the decoded picture, over a bar the painter filled that reads back exactly its own colour, and it CHANGED when a different picture was handed over | `GetDC(hwnd)` + `GetPixel` differential inside the product; cross-checked by `PrintWindow` into a bitmap of the harness's, a path the product never takes | tier 1, `VideoCapabilityTests`. This is what `IVideoPresence` returns `Available` for |
+| **`desktop-composited`** | the picture is in the COMPOSITED DESKTOP at the surface's own screen rectangle, and it changes frame by frame | `BitBlt(SRCCOPY \| CAPTUREBLT)` from the screen device context, mapped through the OS's own physical/virtual ratio (`FlashPixelProbe`) | tier 1, **machine-conditional** — see below |
+| **`watched-verified`** | a human watched the clip and says it played | a person, looking at a screen | **nobody automatically. A NAMED MANUAL GATE, and no automated step on any platform discharges it, Windows included** |
+
+**Why `desktop-composited` is machine-conditional and never a skip.** A FOREIGN topmost window can
+own the point a surface is at, and no in-process mechanism can exclude one — `RealDesktopCollection`
+already names that residue. It is not hypothetical: while SP-111 was being written the SHIPPING WPF
+product was running on the same desktop and `WindowFromPoint` at the surface's own centre answered
+`HwndWrapper[ConditioningControlPanel;;…]`. So the harness measures the machine first, with a LANDED
+capability as its control (a click-through overlay at a disjoint rectangle painted a known colour),
+and asserts the desktop leg only where that control is visible in the same capture. Where it is not,
+the window-level leg is asserted instead and the failure text carries both numbers. **The expectation
+flips with the machine; nothing is skipped and no assertion is relaxed.**
+
+**Three things tier 1 cannot cover for video, and they are not defects in the suite:**
+
+1. **That a human watched anything.** `watched-verified` is undischarged and undischargeable here.
+2. **Cadence, order and timing.** Every fact drives the frame advance by hand on the injected clock.
+   Nothing measures that frames arrive at the right RATE, in the right ORDER, or in time — and a
+   clip that played at half speed, or backwards, satisfies every automated check in this packet.
+3. **Sound.** The port's video capability has none at all (D121), so there is no A/V synchronisation
+   to measure and no fact that could measure one.
+
+**One DWM read is used and one is deliberately refused.** `DwmIsCompositionEnabled` is a documented
+`BOOL*` out-parameter and is part of the display observation. `DwmGetCompositionTimingInfo` is NOT
+read: measured on the machine this was written on, the shipping `dwmapi.dll` accepts `cbSize = 292`
+where `dwmapi.h:168-339` declares 320 and returns `MILERR_MISMATCHED_SIZE` for the header's layout,
+so any offset into it would be a guess — and its counters are SYSTEM-WIDE, so they can never be a
+fact about this process's frames. Recorded as D132 rather than left as an absence.

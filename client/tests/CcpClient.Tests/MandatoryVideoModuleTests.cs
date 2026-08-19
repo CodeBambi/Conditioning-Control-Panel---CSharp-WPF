@@ -150,6 +150,19 @@ public class MandatoryVideoModuleTests
         // ActiveCount reports what the FOLDER holds, not what is left in the bag — a user with six
         // clips who has seen five must not be told the pool has one.
         Assert.Equal(6, pool.ActiveCount);
+
+        // AND THE BAG IS REALLY SHUFFLED. Distinctness alone does not say that: an unshuffled queue
+        // over the same enumeration is distinct too, and it would hand every session the same clip
+        // first, for ever. Two pools with different seeds must not deal the same order.
+        var seedA = Enumerable.Range(0, 6).Select(_ => new VideoClipPool(scratch.Path, new Random(3)).Draw()).ToList();
+        var byThree = new VideoClipPool(scratch.Path, new Random(3));
+        var byNine = new VideoClipPool(scratch.Path, new Random(9));
+        var orderA = Enumerable.Range(0, 6).Select(_ => byThree.Draw()).ToList();
+        var orderB = Enumerable.Range(0, 6).Select(_ => byNine.Draw()).ToList();
+        Assert.NotEqual(orderA, orderB);
+
+        // Same seed, same order — so the difference above is the SHUFFLE and not the filesystem.
+        Assert.Equal(orderA[0], seedA[0]);
     }
 
     [Fact]
@@ -162,8 +175,9 @@ public class MandatoryVideoModuleTests
         Assert.EndsWith(VideoClipPool.VideosFolderName, pool.Folder, StringComparison.Ordinal);
 
         // Upstream CREATES its videos folder (VideoService.cs:1213); the port does not. A folder the
-        // user never asked for is a folder they cannot find, and the panel names the path instead.
-        Assert.False(Directory.Exists(pool.Folder));
+        // user never asked for is a folder they cannot find, and the panel names the path instead —
+        // so nothing at all appears under the assets root just because a pool was built and drawn from.
+        Assert.Empty(Directory.GetFileSystemEntries(scratch.Path));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -267,6 +281,14 @@ public class MandatoryVideoModuleTests
         Assert.Equal(EffectDotState.Armed, rig.Effect.Dot);
 
         rig.Surface.Running = true;
+        Assert.Equal(EffectDotState.Live, rig.Effect.Dot);
+
+        // AND the third clause is a DISJUNCTION, which is its own claim: with NOTHING playing the dot
+        // stays Live even though the surface is not advancing, because a session spends almost all of
+        // its time between clips. Requiring motion unconditionally would darken the dot for 95 % of a
+        // session, which is the opposite lie from the one the clause prevents.
+        rig.Surface.Showing = false;
+        rig.Surface.Running = false;
         Assert.Equal(EffectDotState.Live, rig.Effect.Dot);
     }
 

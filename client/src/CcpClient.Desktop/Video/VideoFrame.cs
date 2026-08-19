@@ -115,9 +115,17 @@ public sealed class VideoFrame
         return new VideoFrame(width, height, pixels);
     }
 
-    /// <summary>Nine asymmetric fractions. Asymmetric on purpose: a symmetric grid cannot tell a
-    /// picture from its own vertical mirror, which is precisely the bug a negative stride
-    /// produces.</summary>
+    /// <summary>
+    /// Nine fractions, spread over the picture and deliberately not on a lattice.
+    ///
+    /// <para><b>Their ASYMMETRY is not what makes the fingerprint tell a picture from its own
+    /// mirror, and the mutation sweep is what established that</b> (SP-111 record §4, M-av). The
+    /// fold above is ORDER-dependent, so a mirrored picture yields a different SEQUENCE of colours
+    /// and therefore a different value even from a mirror-invariant point set. An earlier version of
+    /// this comment claimed the asymmetry was load-bearing; a mutation that made the set exactly
+    /// mirror-invariant survived, which disproves it. The fractions are kept because spreading the
+    /// samples is still worth having, and the claim is corrected rather than the code.</para>
+    /// </summary>
     private static readonly (double X, double Y)[] SamplePoints =
     [
         (0.11, 0.13), (0.50, 0.09), (0.87, 0.17),

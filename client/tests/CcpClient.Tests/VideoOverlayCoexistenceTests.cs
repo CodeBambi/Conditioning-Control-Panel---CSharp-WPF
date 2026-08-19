@@ -69,6 +69,7 @@ public class VideoOverlayCoexistenceTests
     public void TheOverlayIsStillAboveEveryOrdinaryWindow_AndStillNotTheForeground_AtAllThreeMoments()
     {
         var run = Run;
+        Assert.Equal(3, Moments(run).Count());
         foreach (var (moment, reading) in Moments(run))
         {
             Assert.Equal(run.MachineHasInteractiveDesktop, reading.AboveEveryOrdinaryWindow);

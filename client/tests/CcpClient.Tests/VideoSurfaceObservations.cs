@@ -213,6 +213,85 @@ internal static class VideoSurfaceObservations
     }
 
     // ---------------------------------------------------------------------------------------
+    //  THE EDGES: a surface something is COVERING, and a surface no monitor covers
+    // ---------------------------------------------------------------------------------------
+
+    private static readonly Lazy<EdgeRun> LazyEdges = new(RunEdges, isThreadSafe: true);
+
+    /// <summary>The edge run. Cached: it puts two more real windows on the real desktop.</summary>
+    internal static EdgeRun Edges => LazyEdges.Value;
+
+    /// <param name="MachineHasInteractiveDesktop">The machine fact.</param>
+    /// <param name="OccludedPresentCode">The refusal code for a surface another window is covering.</param>
+    /// <param name="OccludedHitTestWinner">Who the window manager routes the point to instead.</param>
+    /// <param name="OccludedIsTheThief">That winner is the covering window, not something else.</param>
+    /// <param name="OffScreenShowCode">The refusal code for a surface at a rectangle no monitor covers.</param>
+    /// <param name="OffScreenFrameHeld">Whether the OS's copy carried the picture there.</param>
+    /// <param name="OffScreenLetterboxHeld">Whether the bar control point came back the bar colour there.</param>
+    /// <param name="AudioOnlyOpenCode">The refusal code for a file with no video stream.</param>
+    /// <param name="AudioOnlyOpenDetail">Its detail, which must name the missing VIDEO STREAM rather
+    /// than blaming the pixel format — two different causes reach one code.</param>
+    internal sealed record EdgeRun(
+        bool MachineHasInteractiveDesktop,
+        string OccludedPresentCode,
+        nint OccludedHitTestWinner,
+        bool OccludedIsTheThief,
+        string OffScreenShowCode,
+        bool OffScreenFrameHeld,
+        bool OffScreenLetterboxHeld,
+        string AudioOnlyOpenCode,
+        string AudioOnlyOpenDetail);
+
+    private static EdgeRun RunEdges()
+    {
+        var (screenWidth, screenHeight) = OverlayWindowProbe.PrimarySize;
+        var source = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows);
+
+        // ---- a file with no video stream in it -------------------------------------------
+        Directory.CreateDirectory(MediaFolder);
+        var wavPath = TestWav.Write(Path.Combine(MediaFolder, "audio-only.wav"), seconds: 0.05);
+        var audioOnly = source.Open(wavPath, out var audioClip);
+        audioClip?.Dispose();
+
+        // ---- a surface something is COVERING ---------------------------------------------
+        var occludedBounds = new VideoBounds(
+            Math.Max(0, (screenWidth / 2) + 40),
+            Math.Max(0, (screenHeight / 2) - 420),
+            SurfaceWidth,
+            SurfaceHeight);
+        var (thiefX, thiefY) = occludedBounds.Centre;
+
+        using var occluded = new Win32VideoPresence(source);
+        occluded.Present(new VideoSurfaceRequest(occludedBounds, Letterbox));
+
+        // An OPAQUE topmost scratch window placed over the surface's own centre, raised AFTER it —
+        // the exact situation the shipping WPF product produced on this machine unaided.
+        using var thief = OverlayWindowProbe.ScratchWindow.Create(
+            "ccp.sp111.thief", 0x00000080 | 0x08000000, thiefX - 40, thiefY - 40, 120, 120, null);
+        OverlayWindowProbe.RaiseTopmost(thief.Handle);
+        var occludedState = occluded.Present(new VideoSurfaceRequest(occludedBounds, Letterbox));
+        var occludedObservation = occluded.LastObservation;
+
+        // ---- a surface at a rectangle NO MONITOR COVERS ----------------------------------
+        var offScreenBounds = new VideoBounds(-8000, -8000, SurfaceWidth, SurfaceHeight);
+        using var offScreen = new Win32VideoPresence(source);
+        offScreen.Present(new VideoSurfaceRequest(offScreenBounds, Letterbox));
+        var offScreenShow = offScreen.Show(VideoFrame.Solid(ClipWidth, ClipHeight, 0x11, 0x22, 0x33));
+        var offScreenObservation = offScreen.LastObservation;
+
+        return new EdgeRun(
+            MachineHasInteractiveDesktop: OverlayWindowProbe.MachineHasInteractiveDesktop,
+            OccludedPresentCode: CodeOf(occludedState),
+            OccludedHitTestWinner: occludedObservation.HitTestWinner,
+            OccludedIsTheThief: occludedObservation.HitTestWinner == thief.Handle,
+            OffScreenShowCode: CodeOf(offScreenShow),
+            OffScreenFrameHeld: offScreenObservation.FrameHeld,
+            OffScreenLetterboxHeld: offScreenObservation.LetterboxHeld,
+            AudioOnlyOpenCode: CodeOf(audioOnly),
+            AudioOnlyOpenDetail: audioOnly is CapabilityState.Unavailable u ? u.Reason.Detail : "(not a refusal)");
+    }
+
+    // ---------------------------------------------------------------------------------------
     //  TRAP 1: the overlay AND the card must both survive a video surface
     // ---------------------------------------------------------------------------------------
 

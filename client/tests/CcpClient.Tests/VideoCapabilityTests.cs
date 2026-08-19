@@ -357,6 +357,66 @@ public class VideoCapabilityTests
         var lying = Confirmable() with { Asked = false };
         Assert.False(lying.Confirmed);
         Assert.False(lying.FrameHeld);
+
+        // And the ADVANCE clause carries its own Asked, which is not redundant with the others: two
+        // remembered sample values that happen to differ must not be reported as an advance nobody
+        // measured.
+        Assert.False((Confirmable() with { Asked = false, SurfaceSample = 9, PreviousSurfaceSample = 4 }).SurfaceAdvanced);
+        Assert.True((Confirmable() with { SurfaceSample = 9, PreviousSurfaceSample = 4 }).SurfaceAdvanced);
+    }
+
+    [Fact]
+    public void ASurfaceTAKESItsOwnPointBackFromAWindowPlacedOverIt_AndThatIsWhyOcclusionCannotBeStaged()
+    {
+        var edges = VideoSurfaceObservations.Edges;
+
+        // MEASURED, and it is the reason this packet's occlusion refusal has no positive fact behind
+        // it. An OPAQUE topmost window was placed over the surface's own centre and raised after it;
+        // the surface's next Present re-asserted the topmost band (MaxBandAttempts) and WON THE POINT
+        // BACK. That is the product behaving as designed — upstream re-asserts HWND_TOPMOST on a
+        // cadence for exactly this reason (Services/Flash/FlashService.cs:206-243) — and it means a
+        // STATIC thief cannot stage an occlusion, while a thief that kept re-asserting would be a
+        // race by construction rather than a fact. So `video-surface-occluded` is reachable in the
+        // wild (it happened unaided on this machine while the packet was written, plan.md §0 Q4) and
+        // is NOT covered by an assertion. Recorded, not papered over.
+        Assert.Equal(
+            edges.MachineHasInteractiveDesktop ? "(not a refusal)" : VideoReasonCodes.VideoNoDisplay,
+            edges.OccludedPresentCode);
+        Assert.False(
+            edges.OccludedIsTheThief,
+            "after the band was re-asserted the window manager must route the surface's centre back to "
+            + $"the SURFACE; it answered {OverlayWindowProbe.DescribeWindow(edges.OccludedHitTestWinner)}");
+    }
+
+    [Fact]
+    public void AWindowREADBACKIsAboutTheOperatingSystemsCopy_NOTAboutAnyMonitor_AndThatLimitIsMeasured()
+    {
+        var edges = VideoSurfaceObservations.Edges;
+
+        // A surface at (-8000,-8000) — a rectangle NO MONITOR COVERS — still passes every window
+        // check AND still reads back the decoded picture, because `GetDC(hwnd)` answers about the
+        // copy the operating system holds FOR THE WINDOW rather than about anything on a screen.
+        //
+        // THIS IS THE CEILING OF THE `frame-on-surface` CLASS AND IT IS ASSERTED RATHER THAN
+        // CONFESSED IN PROSE: a fact that claimed a window read-back proves a user could see
+        // something would be false, and the class that does reach a screen is
+        // `desktop-composited`, which is machine-conditional and covered separately.
+        Assert.Equal("(not a refusal)", edges.OffScreenShowCode);
+        Assert.True(edges.OffScreenFrameHeld);
+        Assert.True(edges.OffScreenLetterboxHeld);
+    }
+
+    [Fact]
+    public void AFileWithNoVIDEOSTREAMSaysSO_RatherThanBlamingThePixelFormat()
+    {
+        var edges = VideoSurfaceObservations.Edges;
+        Assert.Equal(VideoReasonCodes.VideoClipUnreadable, edges.AudioOnlyOpenCode);
+
+        // ONE code is reached by several causes, so the DETAIL has to separate them: an audio-only
+        // file and a container whose video track this machine cannot convert are different problems
+        // and a bug report that cannot tell them apart sends the reader after the wrong one.
+        Assert.Contains("reports NO video stream in it", edges.AudioOnlyOpenDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("RGB32", edges.AudioOnlyOpenDetail, StringComparison.Ordinal);
     }
 
     [Fact]

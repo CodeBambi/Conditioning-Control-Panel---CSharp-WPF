@@ -126,16 +126,23 @@ public class VideoLetterboxTests
     }
 
     [Fact]
-    public void TheSurfacesSamplePointsAreASYMMETRIC_ForTheSameReason()
+    public void TheSurfacesSamplePointsSpreadOverTheWholePicture_AndAreEmptyForNoPicture()
     {
         var box = new PictureBox(0, 0, 100, 100);
         var points = VideoLetterbox.SamplePoints(box);
         Assert.Equal(9, points.Count);
 
-        // If the point set were symmetric about the horizontal midline, a mirrored picture would
-        // sample to the same multiset of colours and the read-back could not tell them apart.
-        var mirrored = points.Select(p => (p.X, Y: box.Height - 1 - p.Y)).ToHashSet();
-        Assert.NotEqual(points.ToHashSet(), mirrored);
+        // Coverage is what the points are for — a blit that landed only part of a frame must be
+        // seen. (Their ASYMMETRY is not load-bearing: the read-back's fold is order-dependent, so a
+        // mirrored picture differs even from a mirror-invariant set. A mutation that made the set
+        // exactly mirror-invariant survived the sweep, which is why that claim is not asserted here.)
+        Assert.Equal(9, points.Distinct().Count());
+        Assert.Contains(points, p => p.X < 34 && p.Y < 34);
+        Assert.Contains(points, p => p.X > 66 && p.Y < 34);
+        Assert.Contains(points, p => p.X < 34 && p.Y > 66);
+        Assert.Contains(points, p => p.X > 66 && p.Y > 66);
+        Assert.Contains(points, p => p.X is > 33 and < 67 && p.Y is > 33 and < 67);
+
         Assert.Empty(VideoLetterbox.SamplePoints(default));
     }
 

@@ -140,10 +140,14 @@ public static class VideoLetterbox
     }
 
     /// <summary>
-    /// The points a read-back samples inside the picture, in surface client coordinates. Nine
-    /// asymmetric fractions of the picture box — asymmetric for the same reason
-    /// <see cref="VideoFrame.Sample"/>'s are: a symmetric grid cannot tell a picture from its own
-    /// vertical mirror, which is exactly what a mishandled negative stride produces.
+    /// The points a read-back samples inside the picture, in surface client coordinates: nine
+    /// fractions of the picture box, spread rather than on a lattice.
+    ///
+    /// <para><b>Their asymmetry is NOT load-bearing and the sweep proved it</b> (SP-111 record §4,
+    /// M-au): the read-back's fold is order-dependent, so a mirrored picture differs even from a
+    /// mirror-invariant point set, and a mutation making the set exactly mirror-invariant survived.
+    /// The claim is corrected here rather than defended. What the points ARE for is coverage — nine
+    /// places spread across the picture, so a blit that landed only part of a frame is seen.</para>
     /// </summary>
     public static IReadOnlyList<(int X, int Y)> SamplePoints(PictureBox box)
     {

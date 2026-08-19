@@ -1097,3 +1097,56 @@ it, the OS's z-order still puts it above every ordinary window, it still holds i
 before a card exists, while a card holds the foreground, and after the card is dismissed and its
 presence disposed. The differential is re-run on the overlay itself, so "the point went elsewhere"
 cannot be satisfied by an overlay that quietly stopped existing. `Overlay/**` was not edited.
+
+---
+
+## SP-111 — video, the last big capability; Mandatory Video as its VIDEO half
+
+Video blocked three rows (Bubble Count, Mandatory Video, Visuals). This packet builds the capability
+and lands the first module that plays a file. **The trap it was written against is the port's oldest
+one under a new name: "frames decoded" is not "frames displayed."** A decoder that returns bytes
+proves a FILE is readable, which is the same grade of evidence as a tray method returning, an overlay
+flag being set, `Play()` returning, and a fake dial re-imposing its own clamp. So the decoded count
+is measured and REPORTED here, and never asserted as success.
+
+**What `Available` rests on** is a read-back of the operating system's own copy of the surface,
+compared pixel for pixel against the picture handed over, above a bar the painter filled that must
+come back exactly its own colour — plus, where the machine allows it, the same picture read out of
+the COMPOSITED DESKTOP through `BitBlt(SRCCOPY|CAPTUREBLT)`. Details, and the stopping point, in
+`spine-tasks/SP-111-video-capability/record.md` and `client/docs/verification-harness.md`.
+
+| # | v6.8.x fact | Port at SP-111 | Reason |
+|---|---|---|---|
+| **D121** | Mandatory Video plays the clip's SOUNDTRACK through the same player that draws the picture, at the app's video volume and through the user's chosen output device (`Services/Video/VideoService.cs:1245-1260`, `:1300-1322`) | The row ships as its **VIDEO half**: the clips play **silently** | This port's video capability is a GDI surface fed decoded pictures and has no audio path at all; wiring one means an audio/video synchronisation subsystem, not a setting. Made LOUD in three places, on SP-109's Brain Drain precedent: the row is titled `Mandatory Video (silent half)`, the panel LEADS with the absence in the module's own constant, and `Ready()` returns **`Degraded` on every run however healthy** carrying `video-silent-half-absent` — because the absence is a property of the BUILD, not of the run |
+| **D122** | The primary video window ACTIVATES: `ShowActivated = withAudio` (`VideoService.cs:2621`) | The port's video surface carries `WS_EX_NOACTIVATE` and **never becomes the foreground** | Trap 1. The foreground is LENT by the OS and Lock Card's entire capability is holding it; a video that took it would end a question the user was being asked. Proven rather than asserted: `VideoOverlayCoexistenceTests` measures the card still holding the foreground AND the system keyboard focus while a video surface is up and after it comes down |
+| **D123** | The video window is sized to the **full screen bounds of every screen** (`VideoService.cs:2631-2635`, `:2040-2045`) | One bounded rectangle, 55 % x 42 % of the **primary** display, centred | The same two reasons SP-110's card took (D110): five other modules draw through a click-through overlay a fullscreen cover would blank, and a fullscreen topmost surface the user cannot dismiss is the one shape this port must not ship while it has no panic key |
+| **D124** | Decoding is **LibVLC** plus roughly a hundred megabytes of native libraries, with a quarantine, a poisoning cooldown and a wedge watchdog around it (`VideoService.cs:308-316`, `:790`, `:819`, `:1031`, `:5541`) | Decoding is **the operating system's own Media Foundation source reader** | It is already on every target machine, its refusals are typed HRESULTs, and — the part that matters for this packet — "the operating system decoded this file" is itself an OS-level fact rather than a claim about a library this process shipped. **The cost is named:** the playable set becomes what Windows can open rather than what LibVLC can, so a container Windows has no decoder for refuses with `video-clip-unreadable` where the shipping app would play it |
+| **D125** | Frame timing is LibVLC's own clock | The frame advance is the container's `MF_MT_FRAME_RATE` on the injected session clock, falling back to **80 ms** when the container reports no rate | A rate-less container must not be able to spin the clock. Not upstream's number, because upstream never has to choose one |
+| **D126** | `VideoMaxDurationSeconds` has no ceiling; 0 means off (`VideoService.cs:5509-5510`) | Same encoding, plus a **one-hour ceiling** | A persisted value with no upper bound is a way to wedge a surface on the screen for the rest of a session |
+| **D127** | Clips come from `<EffectiveAssetsPath>/videos`, and the folder is CREATED if missing (`VideoService.cs:1212-1213`) | `<dataDir>/assets/videos`, and it is **not created** | Same choice and same reason as the audio pool (D104): a folder the user never asked for is a folder they cannot find, and the panel names the path instead. **Enumeration is RECURSIVE**, matching upstream's video walk (`:6944`, "Scan subfolders to support user-organized categories") and deliberately unlike the audio pools' top-level-only one. The draw is upstream's **shuffled bag** (`:7042-7044`, `:7073-7079`, `:6684`, refilled at `:6611-6614`), not the audio pool's uniform-with-replacement: every clip plays once before any plays twice, and a user sees the difference |
+| **D128** | Scaling happens in LibVLC/WPF's compositor | The bars and the scaled picture are composed **in managed code, nearest-neighbour, into one buffer** and blitted 1:1 | The read-back this capability rests on compares the OS's copy against the pixels handed over; an interpolating stretch blends, so a sampled point is no longer any source pixel and the comparison would need a TOLERANCE — which is how a read-back stops being able to tell a picture from a smear. It also makes the whole frame arrive in one blit, so no frame is ever half-painted |
+| **D129** | The letterbox is whatever `FitToAspect` produces, and can be zero when the aspects match (`VideoService.cs:3193-3211`) | The picture is inset by **at least three pixels** on every side | A structural guarantee, not an aesthetic one: the read-back's control point must be a pixel the painter FILLS and never draws picture into, and a clip whose aspect matched the surface exactly would otherwise have no bar at all. SP-110 made the same call for the same reason after a mutation showed an ink check that was structurally blind |
+| **D130** | Linux is not a target of the shipping app at all | The video capability **refuses typed on Linux** with `video-mechanism-absent`, and BOTH halves refuse — the surface AND the decoder | The refusal is not "Linux cannot play video". What is missing is the PROOF, and video needs two independent things proven. The decode half has no Media Foundation there at all, and which formats a distribution can open is a packaging question rather than a code question. The display half is harder: `Available` here is a READ-BACK of the OS's own copy of the surface, and **under Wayland a client cannot read its own composited window** — the compositor owns it and the protocol offers no equivalent of `GetDC(hwnd)`. So the honest Wayland expectation is that the PROOF is unavailable even where the picture works, which is a different answer from "it does not work". The six-step gate in `Video/VideoPresenceFactory.LinuxManualGate` says so in its own text. **Closes when the gate runs on real Linux hardware** |
+| **D131** | Mandatory Video is a large subsystem: attention checks and the strict/retry/mercy apparatus, the blurred-background composite, dual-monitor mirroring, the browser engine, remote clips and content packs, the vout watchdog and native quarantine, seek/pause/random-segment, the duration filter and its metadata cache, and XP scaling | **None of it is ported**, and none of it is present as a dead control | Each is a subsystem this port does not have. They are named in `VideoSurfacePresenter`'s and `MandatoryVideoPresetDocument`'s own remarks with their upstream citations, so a reader finds the list where the code is rather than only here |
+| **D132** | — (port-internal, and it is a MEASUREMENT rather than a choice) | `DwmGetCompositionTimingInfo` is **deliberately not read**, while `DwmIsCompositionEnabled` is | Measured on the machine this was written on: the shipping `dwmapi.dll` accepts `cbSize = 292` where `dwmapi.h:168-339` declares a 320-byte struct, and the call returns `MILERR_MISMATCHED_SIZE` (`winerror.h:60848`) for the header's own layout. Reading a frame counter at a header-derived offset out of a struct the runtime declares to be a different size would be a guess dressed as a measurement — and the counters are SYSTEM-WIDE anyway, so any other window animating advances them and they can never be a fact about this process's frames |
+
+**The composited-desktop leg is machine-conditional and the condition is MEASURED.** A foreign
+topmost window can own the point a surface is at — while this packet was being written the shipping
+WPF product's own window did exactly that, and `WindowFromPoint` at the surface's centre answered
+`HwndWrapper[ConditioningControlPanel;;…]`. `RealDesktopCollection`'s own doc already names that
+residue as one no in-process mechanism can exclude. So the harness uses a LANDED capability as its
+control (a click-through overlay at a disjoint rectangle, painted a known colour) and the desktop
+leg is asserted only where that control is visible in the same capture — never a skip, and the
+numbers travel in the failure message either way.
+
+**The overlay AND the card were proven UNHARMED rather than assumed to be**
+(`VideoOverlayCoexistenceTests`): with a real `Win32OverlayPresence` up and a real
+`Win32InputPresence` holding the foreground, the window manager still routes the overlay's own
+centre PAST it, the OS's z-order still puts it above every ordinary window, it still holds its
+`LWA_ALPHA` and its `WS_EX_TRANSPARENT`, it never becomes the foreground, and its own `Present`
+still earns `Available` — while the card keeps both the foreground and the system keyboard focus
+throughout. `Overlay/**`, `Input/**` and `Audio/**` were not edited.
+
+**One survey citation re-confirmed rather than re-corrected.** `Services/BubbleCountService.cs:30`
+is `private string _videosPath = "";` and `:29` is `private bool _isBusy;`, so SP-108 §7's citation
+was exact and SP-110's withdrawal of its own "correction" stands.
