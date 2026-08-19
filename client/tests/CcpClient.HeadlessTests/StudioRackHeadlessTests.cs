@@ -82,6 +82,13 @@ public class StudioRackHeadlessTests
 
     private static void Click(MainWindow window, Control control, MouseButton button = MouseButton.Left)
     {
+        // SP-112: bring it into view FIRST. The rack scrolls now (ten rows are taller than the
+        // window), and a row scrolled out of the viewport is clipped and not hit-testable — a real
+        // click at its own centre selects nothing, which is what a user with a mouse wheel does
+        // before clicking. Measured rather than assumed: the ramp row's own centre stopped
+        // selecting it the moment a tenth row landed.
+        control.BringIntoView();
+        window.UpdateLayout();
         var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)
             ?? throw new InvalidOperationException("control is not in the window's visual tree");
         window.MouseDown(center, button, RawInputModifiers.None);
@@ -449,7 +456,7 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -577,7 +584,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);
 
@@ -589,7 +596,7 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -782,7 +789,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);
 
@@ -1395,6 +1402,137 @@ public class StudioRackHeadlessTests
             surfaceLine.Text!,
             StringComparison.Ordinal);
         Assert.Contains("nobody asked", surfaceLine.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    // =====================================================================================
+    //  SP-112 - the row that consumes TWO capabilities, and the group order the rack decides
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheBubbleCountRowOpensGAMESANDCARDS_BecauseTheRACKSOrderIsTheOneThePortTakes()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        // The two upstream orders DISAGREE here: the rack is Bubble Pop, Bubble Count, Lock Card,
+        // Bouncing Text (StudioTabView.xaml.cs:499-505) while StartEngine starts the lock card
+        // first and the bubble count second (MainWindow.StartStop.cs:206-215). D90 settled which
+        // one this port takes for Spiral/Pink Filter, and this row follows it: the RACK's, because
+        // the rack is the order the user has learned. Asserted on the RENDERED rack rather than on
+        // a list, so a reordered panel reds here.
+        var rows = window.GetVisualDescendants().OfType<RadioButton>()
+            .Where(r => r.Classes.Contains("rack-row"))
+            .Select(r => r.Name)
+            .ToList();
+        var bubbleIndex = rows.IndexOf("RowBubbleCount");
+        var lockIndex = rows.IndexOf("RowLockCard");
+        var pinkIndex = rows.IndexOf("RowPinkFilter");
+        Assert.True(bubbleIndex >= 0 && lockIndex >= 0);
+        Assert.True(
+            pinkIndex < bubbleIndex && bubbleIndex < lockIndex,
+            $"the rack renders pinkfilter at {pinkIndex}, bubblecount at {bubbleIndex} and lockcard at "
+            + $"{lockIndex}; GAMES and CARDS must open with Bubble Count");
+
+        // The label is the row's own, minus the emoji this rack does not render.
+        var label = Descendant<RadioButton>(window, "RowBubbleCount")
+            .GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal(BubbleCountEffect.DisplayTitle, label.Text);
+        Assert.Equal("Bubble Count", label.Text);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubbleCountRowCarriesTheWholeRackGrammar_AndItsPanelLEADSWithTheInterruption()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowBubbleCount").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        // The right-click quick-toggle reaches this row like any other. The rack grammar needed
+        // nothing new for a module that uses two capabilities.
+        Assert.False(boot.Session.BubbleCountPreset.Current.Enabled);
+        Click(window, Descendant<RadioButton>(window, "RowBubbleCount"), MouseButton.Right);
+        Assert.True(boot.Session.BubbleCountPreset.Current.Enabled);
+
+        Click(window, Descendant<RadioButton>(window, "RowBubbleCount"));
+
+        // The interruption warning LEADS, above the dials - a POSITIONAL claim, pinned
+        // positionally, exactly as the Lock Card's and Mandatory Video's are. This row interrupts
+        // TWICE and a user is entitled to read that before ticking the box.
+        var panel = Descendant<StackPanel>(window, "BubbleCountModulePanel");
+        var children = panel.Children.ToList();
+        var noticeIndex = children.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "BubbleCountInterruptionNotice"));
+        var enableIndex = children.FindIndex(c => c.Name == "BubbleCountEnableToggle");
+        Assert.True(noticeIndex >= 0 && enableIndex >= 0);
+        Assert.True(
+            noticeIndex < enableIndex,
+            $"the interruption notice is at index {noticeIndex} and the enable at {enableIndex}");
+
+        var notice = Descendant<TextBlock>(window, "BubbleCountInterruptionNotice");
+        Assert.Equal(BubbleCountPanelNotices.InterruptionNotice, notice.Text);
+        Assert.Contains("INTERRUPTS you twice", notice.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubbleCountPanelQuotesBOTHCapabilities_BecauseEitherCanRefuseOnItsOwn()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBubbleCount"));
+
+        // THE ONLY PANEL ON THIS PAGE THAT QUOTES TWO CAPABILITIES, because it is the only row that
+        // needs two. Before anything has been asked each half says "nobody asked" - a different
+        // fact from "the answer was no", and one sentence covering both channels would be false
+        // about one of them.
+        var line = Descendant<TextBlock>(window, "BubbleCountCapabilityState");
+        Assert.Contains("Video: nothing has been asked", line.Text!, StringComparison.Ordinal);
+        Assert.Contains("Question: nothing has been asked", line.Text!, StringComparison.Ordinal);
+
+        // And no strict switch exists on this panel. Upstream has one; this build has neither of the
+        // two things it does, so it is absent rather than greyed (D93).
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("BubbleCountStrictToggle", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubbleCountPanelsDialsAreUpstreamsOwnBounds_AndDifficultyReadsAsAWord()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBubbleCount"));
+
+        var frequency = Descendant<Slider>(window, "BubbleCountFrequencySlider");
+        Assert.Equal(BubbleCountSchedule.MinPerHour, frequency.Minimum);
+
+        // TEN, not the video row's twenty: upstream clamps this dial at the point of use with its
+        // own comment, "Frequency is games per hour (1-10)" (Services/BubbleCountService.cs:88).
+        Assert.Equal(BubbleCountSchedule.MaxPerHour, frequency.Maximum);
+        Assert.Equal(10, frequency.Maximum);
+        Assert.Equal(BubbleCountSchedule.DefaultPerHour, frequency.Value);
+
+        // The difficulty is a WORD on the panel, never the raw enum ordinal a user would have to
+        // decode.
+        Assert.Equal("Medium", Descendant<TextBlock>(window, "BubbleCountDifficultyValue").Text);
+        var difficulty = Descendant<Slider>(window, "BubbleCountDifficultySlider");
+        difficulty.Value = 2;
+        Assert.Equal(BubbleCountDifficulty.Hard, boot.Session.BubbleCountPreset.Current.Difficulty);
+        Assert.Equal("Hard", Descendant<TextBlock>(window, "BubbleCountDifficultyValue").Text);
 
         await boot.Host.ShutdownAsync();
     }

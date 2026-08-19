@@ -31,7 +31,16 @@
     simply none of them on this page any more.
   -->
   <Grid ColumnDefinitions="248,*" Margin="20">
-    <StackPanel Grid.Column="0" Spacing="4">
+    <!-- SP-112: THE RACK SCROLLS, and it is a defect fix rather than a flourish. At ten rows the
+         column is taller than the window's 760 px, so the LAST row was clipped out of the visible
+         region and could not be clicked at all — measured, not supposed: a headless click at the
+         row's own centre did not select it. WPF's own rack lives in a scrollable tab body for the
+         same reason at fifteen rows. Auto, so nothing changes for a rack that fits. -->
+    <ScrollViewer Grid.Column="0"
+                  x:Name="RackScroll"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="4">
       <TextBlock Classes="page-title" Text="Studio" />
       <TextBlock Classes="page-blurb" Text="Every effect, one rack. Pick a module on the left." />
       <!-- The grammar, said out loud. WPF surfaces it in a rail chip tooltip (§2,
@@ -248,6 +257,7 @@
         </StackPanel>
       </Border>
     </StackPanel>
+    </ScrollViewer>
 
     <Border Grid.Column="1" Classes="module" Margin="20,0,0,0">
       <Panel>
