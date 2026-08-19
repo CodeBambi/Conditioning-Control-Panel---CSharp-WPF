@@ -518,3 +518,10 @@ Floor pin **1742 unit / 107 headless**. Next task ID **SP-112**. **NINE modules 
 **Standing evidence lesson:** a window read-back is NOT a monitor - a surface at (-8000,-8000) reads back a perfect picture. Assert that limit, never just note it.
 **`Z:\CCP Vids` does not exist on this machine.** All video evidence is against a synthesised uncompressed AVI. Sound for the display half (a surface cannot tell a picture's provenance); the cost falls entirely on `clip-decodable`. ONE compressed fixture closes both open survivors.
 **Worktree hygiene:** a lane's sweep driver wrote three levels ABOVE its worktree into the shared checkout. Nothing enforces worktree isolation - P2 row filed. During a parallel wave another lane's `git add -A` would have swept it into an unrelated commit.
+
+## 2026-08-20 - wave 52 landed
+Floor pin **1830 unit / 112 headless**. Next task ID **SP-113**. **TEN modules of fifteen.**
+**Capabilities generalise:** a second consumer needed nothing from `Input/**` and one interface + one constant from `Video/**`, both justified by the first consumer's own unmet needs.
+**Bubble Pop needs a SECOND input capability, not a second consumer** - the existing one has no mouse surface (five message types, none mouse), one window, no move seam, and requires foreground+keyboard focus, the inverse of a floating bubble. Scoped, not guessed.
+**Standing lesson - the equivalence column is the softest part of any sweep record.** SP-112's M-s was marked an equivalent mutant on a proof that was false; the disproof is two lines of geometry. Four waves have marked 3-4 'equivalent' survivors each and this is the first one anybody checked. **Check them.**
+**Standing lesson - interleave base and lane runs in the same minute** when attributing a red gate. It is the only design that separates 'the tree changed' from 'the desktop drifted', and it overturned a wrong attribution here (base 14/14 green with the shipping app running).
