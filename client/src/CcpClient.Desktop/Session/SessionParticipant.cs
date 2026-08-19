@@ -40,6 +40,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<MandatoryVideoPresetDocument> _videoPreset;
     private readonly PersistenceStore<BubbleCountPresetDocument> _bubbleCountPreset;
     private readonly PersistenceStore<BubblePopPresetDocument> _bubblePopPreset;
+    private readonly PersistenceStore<BouncingTextPresetDocument> _bouncingTextPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -50,6 +51,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly IInputPresence _input;
     private readonly IVideoSurface _videoSurface;
     private readonly IBubblePopSurface _bubblePopSurface;
+    private readonly IBouncingTextSurface _bouncingTextSurface;
     private readonly UiDispatchBoundary _uiDispatch;
     private readonly string _dataDirectory;
 
@@ -78,7 +80,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IVideoClipPool? bubbleCountClips = null,
         Random? bubbleCountRandom = null,
         Func<InputBounds>? bubbleCountPlacement = null,
-        IBubblePopSurface? bubblePopSurface = null)
+        IBubblePopSurface? bubblePopSurface = null,
+        IBouncingTextSurface? bouncingTextSurface = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -158,6 +161,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, BubblePopPresetDocument.FileName),
             BubblePopPresetDocument.CurrentSchemaVersion);
 
+        // SP-115. Its own document, on SP-101's precedent: the store's Degraded load path takes the
+        // WHOLE document to defaults, so a shared file would let one broken value reset every other
+        // module's dials.
+        _bouncingTextPreset = new PersistenceStore<BouncingTextPresetDocument>(
+            infra.OwnerFor("BouncingTextPreset"), infra.Log,
+            Path.Combine(dataDirectory, BouncingTextPresetDocument.FileName),
+            BouncingTextPresetDocument.CurrentSchemaVersion);
+
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
@@ -226,6 +237,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // second consumer of Input/**: that presence handles no mouse message, owns one window and
         // places it once (SP-112 §1, re-verified in SP-113's plan §1).
         _bubblePopSurface = bubblePopSurface ?? BubblePopSurfacePresenter.ForProduct(sessionClock, Dispatch);
+
+        // SP-115: the per-pixel-alpha surface. Its cadence lives in the presenter for SP-106's
+        // reason - a cadence that keeps a SURFACE correct is the surface's - and the module itself
+        // takes no clock at all.
+        _bouncingTextSurface = bouncingTextSurface ?? BouncingTextSurfacePresenter.Product(sessionClock, Dispatch);
 
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
@@ -414,6 +430,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _bubblePopPreset,
             _bubblePopSurface);
 
+        // SP-115. The module blocked since wave 46, on a capability whose transparent pixels are
+        // measured on the composited desktop rather than assumed.
+        BouncingText = new BouncingTextEffect(
+            infra.OwnerFor("BouncingText"),
+            signal,
+            _bouncingTextPreset,
+            _bouncingTextSurface);
+
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
         // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
@@ -451,8 +475,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // order.
         Engine = new SessionEngine(
             [
-                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubblePop, BubbleCount, LockCard,
-                MindWipe, BrainDrain, Ramp,
+                Flash, MandatoryVideo, Subliminals, Spiral, BouncingText, PinkFilter, BubblePop, BubbleCount,
+                LockCard, MindWipe, BrainDrain, Ramp,
             ],
             _preset, signal);
 
@@ -481,6 +505,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>Spiral Overlay, the first MOVING module (SP-106). Public for the same reason.</summary>
     public SpiralOverlayEffect Spiral { get; }
+
+    /// <summary>Bouncing Text, the module per-pixel alpha unblocked (SP-115). Public for the same
+    /// reason.</summary>
+    public BouncingTextEffect BouncingText { get; }
 
     /// <summary>Intensity Ramp, the first module that draws NOTHING (SP-108). Public for the same
     /// reason, and it has no surface property beside it because it has no surface.</summary>
@@ -564,6 +592,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>The Spiral Overlay module's persisted store, same reason.</summary>
     public PersistenceStore<SpiralPresetDocument> SpiralPreset => _spiralPreset;
+
+    /// <summary>The Bouncing Text module's persisted store, same reason.</summary>
+    public PersistenceStore<BouncingTextPresetDocument> BouncingTextPreset => _bouncingTextPreset;
+
+    /// <summary>The Bouncing Text module's surface, so the panel can report what the OS said.</summary>
+    public IBouncingTextSurface BouncingTextSurface => _bouncingTextSurface;
 
     /// <summary>The Intensity Ramp module's persisted store, same reason.</summary>
     public PersistenceStore<IntensityRampPresetDocument> RampPreset => _rampPreset;

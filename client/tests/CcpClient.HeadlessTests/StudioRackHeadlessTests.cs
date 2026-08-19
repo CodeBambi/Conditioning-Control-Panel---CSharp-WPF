@@ -455,7 +455,8 @@ public class StudioRackHeadlessTests
         // which SP-108's fifth row (from a different rack GROUP) had to keep true rather than dent.
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
+            "RowBouncingText", "RowPinkFilter",
             "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
             "RowIntensityRamp",
         })
@@ -472,6 +473,119 @@ public class StudioRackHeadlessTests
         Assert.Null(spiral.ContextMenu);
         Assert.Empty(window.GetVisualDescendants().OfType<ContextMenu>());
         Assert.False(spiral.IsChecked);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBouncingTextRow_LandsAfterSpiral_CarriesTheGrammar_AndItsTitleNamesThePortedHalf()
+    {
+        // SP-115. The row that was ABSENT for nine waves, because its window is transparency-backed
+        // glyphs and this port's overlay refused per-pixel alpha by design (D83). The title names
+        // the ported half beside the dot it justifies, on the precedent SP-109/SP-111/SP-113 set.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        var row = Descendant<RadioButton>(window, "RowBouncingText");
+        Assert.Contains(
+            row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        var title = row.GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal(CcpClient.Desktop.Effects.BouncingTextEffect.DisplayTitle, title.Text);
+        Assert.Contains("motion half", title.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBouncingTextPanel_LEADSWithWhatIsMissing_PositionallyNotOnlyInText()
+    {
+        // The panel's FIRST child is the absence notice, and it renders the module's own constant
+        // verbatim - the same string the arm result's Degraded reason carries, so the two cannot
+        // drift into two accounts of one absence. Pinned POSITIONALLY, because a notice below three
+        // sliders is a footnote.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBouncingText"));
+
+        var panel = Descendant<StackPanel>(window, "BouncingTextModulePanel");
+        Assert.True(panel.IsVisible);
+
+        var notice = Descendant<TextBlock>(window, "BouncingTextAbsentNotice");
+        Assert.Equal(CcpClient.Desktop.Effects.BouncingTextEffect.TransformsAbsentNotice, notice.Text);
+
+        // Positional: the notice's Border is the first element of the panel after the title and the
+        // blurb, and it sits ABOVE the enable checkbox.
+        var order = panel.Children.ToList();
+        var noticeIndex = order.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "BouncingTextAbsentNotice"));
+        var checkIndex = order.FindIndex(c => c.Name == "BouncingTextEnableToggle");
+        Assert.True(noticeIndex >= 0 && checkIndex >= 0);
+        Assert.True(noticeIndex < checkIndex,
+            "the missing-transforms notice is below the enable checkbox, so a user can turn the module on "
+            + "before reading what it does not do");
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task RightClickOnTheBouncingTextRow_ReallyFlipsTheModule_AndTheDotFollowsBothWays()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        var row = Descendant<RadioButton>(window, "RowBouncingText");
+        var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
+
+        // Ships OFF (CCP.Core/Models/AppSettings.cs:3598), so the row starts dark.
+        Assert.False(window.Session.BouncingText.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedBouncingTextDot);
+
+        Click(window, row, MouseButton.Right);
+
+        Assert.True(window.Session.BouncingText.Enabled);
+        Assert.True(window.Session.BouncingTextPreset.Current.Enabled);
+        Assert.Equal(EffectDotState.Armed, page.RenderedBouncingTextDot);
+
+        Click(window, row, MouseButton.Right);
+        Assert.False(window.Session.BouncingText.Enabled);
+        Assert.Equal(EffectDotState.Off, page.RenderedBouncingTextDot);
+
+        // NEVER Live from a gesture alone, and for THIS module Live additionally requires the
+        // operating system's own copy of the surface to still carry the frame's ink.
+        Assert.NotEqual(EffectDotState.Live, page.RenderedBouncingTextDot);
+        Assert.False(window.Session.BouncingTextSurface.Showing);
+        Assert.False(row.IsChecked);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBouncingTextPanelsThreeDials_AreTheModulesRealPersistedOnes()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBouncingText"));
+
+        var preset = window.Session.BouncingTextPreset.Current;
+        Assert.Equal(preset.Speed, (int)Math.Round(Descendant<Slider>(window, "BouncingTextSpeedSlider").Value));
+        Assert.Equal(preset.SizePercent, (int)Math.Round(Descendant<Slider>(window, "BouncingTextSizeSlider").Value));
+        Assert.Equal(
+            preset.OpacityPercent,
+            (int)Math.Round(Descendant<Slider>(window, "BouncingTextOpacitySlider").Value));
+
+        // The shipped default opacity is 100, and that number is the one that made this module
+        // unportable before: at 100 % on the old surface it was a black screen with a word on it.
+        Assert.Equal(100, preset.OpacityPercent);
+
+        var check = Descendant<CheckBox>(window, "BouncingTextEnableToggle");
+        Assert.False(check.IsChecked);
+        check.IsChecked = true;
+        Assert.True(window.Session.BouncingText.Enabled);
 
         await boot.Host.ShutdownAsync();
     }
@@ -584,7 +698,8 @@ public class StudioRackHeadlessTests
             .ToList();
         Assert.Equal(
             [
-                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
+                "RowBouncingText", "RowPinkFilter",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
                 "RowIntensityRamp",
             ],
@@ -597,7 +712,8 @@ public class StudioRackHeadlessTests
         // exactly as upstream orders its groups (StudioTabView.xaml.cs:482-541).
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
+            "RowBouncingText", "RowPinkFilter",
             "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
             "RowIntensityRamp",
         })
@@ -791,7 +907,8 @@ public class StudioRackHeadlessTests
             .ToList();
         Assert.Equal(
             [
-                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
+                "RowBouncingText", "RowPinkFilter",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
                 "RowIntensityRamp",
             ],

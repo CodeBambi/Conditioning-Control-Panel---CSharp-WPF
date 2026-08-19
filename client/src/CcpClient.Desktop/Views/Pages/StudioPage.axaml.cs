@@ -67,6 +67,7 @@ public partial class StudioPage : UserControl
     private readonly SubliminalsEffect _subliminals;
     private readonly PinkFilterEffect _pinkFilter;
     private readonly SpiralOverlayEffect _spiral;
+    private readonly BouncingTextEffect _bouncingText;
     private readonly IntensityRampEffect _ramp;
     private readonly MindWipeEffect _mindWipe;
     private readonly BrainDrainEffect _brainDrain;
@@ -87,6 +88,7 @@ public partial class StudioPage : UserControl
         _subliminals = session.Subliminals;
         _pinkFilter = session.PinkFilter;
         _spiral = session.Spiral;
+        _bouncingText = session.BouncingText;
         _ramp = session.Ramp;
         _mindWipe = session.MindWipe;
         _brainDrain = session.BrainDrain;
@@ -102,6 +104,7 @@ public partial class StudioPage : UserControl
         RowFlashImages.IsCheckedChanged += (_, _) => ApplySelection();
         RowSubliminals.IsCheckedChanged += (_, _) => ApplySelection();
         RowSpiralOverlay.IsCheckedChanged += (_, _) => ApplySelection();
+        RowBouncingText.IsCheckedChanged += (_, _) => ApplySelection();
         RowPinkFilter.IsCheckedChanged += (_, _) => ApplySelection();
         RowIntensityRamp.IsCheckedChanged += (_, _) => ApplySelection();
         RowMindWipe.IsCheckedChanged += (_, _) => ApplySelection();
@@ -119,6 +122,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowFlashImages, FlashImagesEffect.EffectId);
         AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId);
         AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId);
+        AddQuickToggle(RowBouncingText, BouncingTextEffect.EffectId);
         AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
         AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId);
         AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId);
@@ -136,6 +140,9 @@ public partial class StudioPage : UserControl
             OnEnableToggled(PinkFilterEnableToggle, _pinkFilter, PinkFilterEffect.EffectId);
         SpiralEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(SpiralEnableToggle, _spiral, SpiralOverlayEffect.EffectId);
+
+        BouncingTextEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(BouncingTextEnableToggle, _bouncingText, BouncingTextEffect.EffectId);
         RampEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(RampEnableToggle, _ramp, IntensityRampEffect.EffectId);
         MindWipeEnableToggle.IsCheckedChanged += (_, _) =>
@@ -179,6 +186,9 @@ public partial class StudioPage : UserControl
         OnSliderMoved(SubliminalFrequencySlider, OnSubliminalFrequencyMoved);
         OnSliderMoved(PinkFilterOpacitySlider, OnPinkFilterOpacityMoved);
         OnSliderMoved(SpiralOpacitySlider, OnSpiralOpacityMoved);
+        OnSliderMoved(BouncingTextSpeedSlider, OnBouncingTextSpeedMoved);
+        OnSliderMoved(BouncingTextSizeSlider, OnBouncingTextSizeMoved);
+        OnSliderMoved(BouncingTextOpacitySlider, OnBouncingTextOpacityMoved);
         OnSliderMoved(RampDurationSlider, OnRampDurationMoved);
         OnSliderMoved(RampMultiplierSlider, OnRampMultiplierMoved);
         OnSliderMoved(MindWipeFrequencySlider, OnMindWipeFrequencyMoved);
@@ -237,6 +247,11 @@ public partial class StudioPage : UserControl
     /// behind it: a MOVING module is <c>Live</c> only while its surface is up AND still changing
     /// (SP-106, <see cref="SpiralSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedSpiralDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Bouncing Text row's dot (SP-115), and the one with the NEWEST rule: Live means
+    /// the operating system's own copy of the surface still carries the frame's opaque ink
+    /// (<see cref="BouncingTextSurfacePresenter.Running"/>).</summary>
+    public EffectDotState RenderedBouncingTextDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Intensity Ramp row's dot, same reason — and the one whose <c>Live</c> is a claim
     /// about neither a clock nor a screen but about CUSTODY: the module is running exactly while it
@@ -309,6 +324,48 @@ public partial class StudioPage : UserControl
             (_, e) => OnRowPointerReleased(e, effectId),
             RoutingStrategies.Tunnel);
 
+    /// <summary>The Bouncing Text speed dial. WPF's slider writes the setting and the next start
+    /// reads it; here a live run picks it up through the module's own Refresh.</summary>
+    private void OnBouncingTextSpeedMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bouncingText.SetSpeed((int)Math.Round(BouncingTextSpeedSlider.Value));
+        _ = _session.BouncingTextPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>The size dial, same route.</summary>
+    private void OnBouncingTextSizeMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bouncingText.SetSizePercent((int)Math.Round(BouncingTextSizeSlider.Value));
+        _ = _session.BouncingTextPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>The opacity dial. This one reaches a LIVE surface: it is the uniform multiplier over
+    /// the glyph's own per-pixel alpha, which is WPF's own structure (the text element's
+    /// <c>Opacity</c>, <c>BouncingTextService.cs:975</c>).</summary>
+    private void OnBouncingTextOpacityMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bouncingText.SetOpacityPercent((int)Math.Round(BouncingTextOpacitySlider.Value));
+        _ = _session.BouncingTextPreset.Save();
+        Refresh();
+    }
+
     /// <summary>
     /// The Spiral Overlay opacity slider writes the setting, re-applies it to whatever is already on
     /// screen and saves — the same order the pink slider above it uses, and WPF's own for this
@@ -334,6 +391,7 @@ public partial class StudioPage : UserControl
         var flashOpen = RowFlashImages.IsChecked == true;
         var subliminalOpen = RowSubliminals.IsChecked == true;
         var spiralOpen = RowSpiralOverlay.IsChecked == true;
+        var bouncingTextOpen = RowBouncingText.IsChecked == true;
         var pinkOpen = RowPinkFilter.IsChecked == true;
         var rampOpen = RowIntensityRamp.IsChecked == true;
         var mindWipeOpen = RowMindWipe.IsChecked == true;
@@ -348,6 +406,7 @@ public partial class StudioPage : UserControl
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
+        BouncingTextModulePanel.IsVisible = bouncingTextOpen;
         PinkFilterModulePanel.IsVisible = pinkOpen;
         RampModulePanel.IsVisible = rampOpen;
         MindWipeModulePanel.IsVisible = mindWipeOpen;
@@ -355,7 +414,7 @@ public partial class StudioPage : UserControl
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
-            && !bubblePopOpen;
+            && !bubblePopOpen && !bouncingTextOpen;
     }
 
     /// <summary>
@@ -713,6 +772,12 @@ public partial class StudioPage : UserControl
             SpiralEnableToggle.IsChecked = spiral.Enabled;
             SpiralOpacitySlider.Value = spiral.OpacityPercent;
 
+            var bouncing = _session.BouncingTextPreset.Current;
+            BouncingTextEnableToggle.IsChecked = bouncing.Enabled;
+            BouncingTextSpeedSlider.Value = bouncing.Speed;
+            BouncingTextSizeSlider.Value = bouncing.SizePercent;
+            BouncingTextOpacitySlider.Value = bouncing.OpacityPercent;
+
             var ramp = _session.RampPreset.Current;
             RampEnableToggle.IsChecked = ramp.Enabled;
             RampDurationSlider.Value = ramp.DurationMinutes;
@@ -811,6 +876,18 @@ public partial class StudioPage : UserControl
             _spiral.FrameCount, _session.Engine.Running, _spiral.LastPlacement);
         SpiralLibraryState.Text = DescribeSpiralLibrary(_spiral.SpiralPath, _session.SpiralsFolder);
         SpiralSurfaceState.Text = DescribeSpiralSurface(_spiral.LastPlacement);
+
+        var bouncing = _session.BouncingTextPreset.Current;
+        BouncingTextSpeedValue.Text = bouncing.Speed.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        BouncingTextSizeValue.Text = $"{bouncing.SizePercent}%";
+        BouncingTextOpacityValue.Text = $"{bouncing.OpacityPercent}%";
+        BouncingTextAbsentNotice.Text = BouncingTextEffect.TransformsAbsentNotice;
+        RenderedBouncingTextDot = PaintDot(BouncingTextRowDot, _bouncingText);
+        BouncingTextLiveState.Text = DescribeBouncingTextState(
+            RenderedBouncingTextDot, _bouncingText.Presentation, _bouncingText.Showing,
+            _bouncingText.Bounces, _session.Engine.Running);
+        BouncingTextPoolState.Text = DescribeBouncingTextPool(bouncing.Phrases);
+        BouncingTextSurfaceState.Text = DescribeBouncingTextSurface(_bouncingText.LastPlacement);
 
         var ramp = _ramp.Preset;
         RampDurationValue.Text = $"{ramp.DurationMinutes} min";
@@ -1265,6 +1342,74 @@ public partial class StudioPage : UserControl
         EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
         _ => "Switched off. Nothing will happen, session or no session.",
     };
+
+    /// <summary>
+    /// What the operating system last said about the bouncing logo's surface, in the user's terms.
+    ///
+    /// <para>It says <b>per-pixel</b> on purpose. Every other drawing module in this port composites
+    /// at one uniform opacity over an opaque rectangle, and the difference is the entire reason this
+    /// row exists at all - a reader who saw "always-on-top overlay" here would reasonably assume the
+    /// same mechanism.</para>
+    /// </summary>
+    public static string DescribeBouncingTextSurface(CapabilityState? placement) => placement switch
+    {
+        null => "The words are composited with per-pixel transparency on an always-on-top, "
+            + "click-through surface: the desktop shows through everywhere the letters are not. "
+            + "Nothing has been drawn yet.",
+        CapabilityState.Available => "The words are on an always-on-top, click-through surface with "
+            + "per-pixel transparency, above your other windows.",
+        CapabilityState.Unavailable u => $"Nothing is drawn on screen: {u.Reason.Detail}",
+        CapabilityState.Degraded d => $"Partly drawn: {d.SurvivingSemantics}. {d.Reason.Detail}",
+        CapabilityState.PermissionRequired p => $"Nothing is drawn on screen: {p.Reason.Detail}",
+        CapabilityState.DependencyMissing m => $"Nothing is drawn on screen: {m.Reason.Detail}",
+        CapabilityState.Faulted f => $"Nothing is drawn on screen: {f.Reason.Detail}",
+        _ => placement.ToString() ?? string.Empty,
+    };
+
+    /// <summary>Which words this module may show. The pool line's job, as the flash and subliminal
+    /// panels already do it.</summary>
+    public static string DescribeBouncingTextPool(IReadOnlyList<string> phrases)
+    {
+        ArgumentNullException.ThrowIfNull(phrases);
+        return phrases.Count == 0
+            ? $"No words are enabled, so the logo falls back to '{BouncingTextField.FallbackText}'."
+            : $"{phrases.Count} word(s) in the pool; one is picked at random and re-rolled on about "
+                + "one bounce in ten.";
+    }
+
+    /// <summary>
+    /// The live line for the bouncing logo. Its Live clause is the strictest in the port: the dot is
+    /// lit only while the operating system's own copy of the surface still carries the frame.
+    /// </summary>
+    /// <param name="dot">What the dot is showing.</param>
+    /// <param name="presentation">The dials as they stand.</param>
+    /// <param name="showing">Whether a surface is up at all, which is NOT the same as the dot.</param>
+    /// <param name="bounces">How many wall bounces this run has taken.</param>
+    /// <param name="sessionRunning">Whether a session is running at all.</param>
+    public static string DescribeBouncingTextState(
+        EffectDotState dot,
+        BouncingTextPresentation presentation,
+        bool showing,
+        int bounces,
+        bool sessionRunning)
+    {
+        ArgumentNullException.ThrowIfNull(presentation);
+        return dot switch
+        {
+            EffectDotState.Live =>
+                $"Bouncing at speed {presentation.SpeedSetting}, {presentation.FontSize} px, "
+                + $"{presentation.OpacityPercent}% opacity. {bounces} bounce(s) so far.",
+            EffectDotState.Armed when presentation.IsInvisible =>
+                "Armed, and the opacity dial is at 0%, so nothing would be drawn even during a session.",
+            EffectDotState.Armed when sessionRunning && showing =>
+                "The surface is up and the operating system no longer returns its content, so nothing "
+                + "is on screen.",
+            EffectDotState.Armed when sessionRunning =>
+                "Armed and nothing is on screen.",
+            EffectDotState.Armed => "Armed. Nothing is drawn until the session starts.",
+            _ => "Switched off. Nothing will happen, session or no session.",
+        };
+    }
 
     /// <summary>
     /// The same rule again for the spiral. Its tense is the tint's — the layer stays, so the line is

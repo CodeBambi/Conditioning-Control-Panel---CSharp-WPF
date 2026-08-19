@@ -121,6 +121,24 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-115. WPF's EFFECTS group carries Bouncing Text after Spiral Overlay; the row was
+               absent from this port for nine waves because its window is transparency-backed glyphs
+               (D83) and this port's overlay refused per-pixel alpha by design. The title names the
+               ported half, on the precedent SP-109/SP-111/SP-113 set. -->
+          <RadioButton x:Name="RowBouncingText"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowBouncingText"
+                       AutomationProperties.Name="Bouncing Text rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Bouncing Text (motion half)" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="BouncingTextRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="BouncingTextRowDot" />
+            </Grid>
+          </RadioButton>
+
           <RadioButton x:Name="RowPinkFilter"
                        Classes="rack-row"
                        GroupName="rack"
@@ -511,6 +529,98 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="SubliminalSurfaceState"
                        AutomationProperties.AutomationId="SubliminalSurfaceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Bouncing Text ================= -->
+        <StackPanel x:Name="BouncingTextModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Bouncing Text (motion half)" />
+          <TextBlock Classes="page-blurb" Text="DVD-style bouncing words across the screen" />
+
+          <!-- The panel LEADS with what is missing, positionally and not only in text: the six
+               per-frame transform effects are not ported and TWO of them ship ON upstream, so a
+               user who never reads a record still learns the scope before enabling anything. Same
+               shape and same reason as the video row's silent-half notice (SP-111). -->
+          <Border Classes="notice">
+            <TextBlock x:Name="BouncingTextAbsentNotice"
+                       AutomationProperties.AutomationId="BouncingTextAbsentNotice"
+                       TextWrapping="Wrap"
+                       Text="" />
+          </Border>
+
+          <CheckBox x:Name="BouncingTextEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="BouncingTextEnableToggle"
+                    AutomationProperties.Name="Bouncing Text enabled"
+                    Content="Enable Bouncing Text" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Speed" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="BouncingTextSpeedSlider"
+                    Minimum="1" Maximum="10"
+                    SmallChange="1" LargeChange="2"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BouncingTextSpeedSlider"
+                    AutomationProperties.Name="Bouncing Text speed" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="BouncingTextSpeedValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BouncingTextSpeedValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Size" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="BouncingTextSizeSlider"
+                    Minimum="50" Maximum="300"
+                    SmallChange="5" LargeChange="25"
+                    IsSnapToTickEnabled="True" TickFrequency="5"
+                    AutomationProperties.AutomationId="BouncingTextSizeSlider"
+                    AutomationProperties.Name="Bouncing Text size" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="BouncingTextSizeValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BouncingTextSizeValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="dial-label" Text="Opacity" />
+            <Slider Grid.Row="2" Grid.Column="1"
+                    x:Name="BouncingTextOpacitySlider"
+                    Minimum="0" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BouncingTextOpacitySlider"
+                    AutomationProperties.Name="Bouncing Text opacity" />
+            <TextBlock Grid.Row="2" Grid.Column="2"
+                       x:Name="BouncingTextOpacityValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BouncingTextOpacityValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="BouncingTextLiveState"
+                         AutomationProperties.AutomationId="BouncingTextLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="BouncingTextPoolState"
+                         AutomationProperties.AutomationId="BouncingTextPoolState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BouncingTextSurfaceState"
+                       AutomationProperties.AutomationId="BouncingTextSurfaceState"
                        Text="" />
           </Border>
         </StackPanel>

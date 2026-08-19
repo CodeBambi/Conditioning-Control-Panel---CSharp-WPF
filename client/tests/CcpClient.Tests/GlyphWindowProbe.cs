@@ -352,7 +352,22 @@ internal static class GlyphWindowProbe
         bool StyleToggleClearsUniformAlpha,
         bool ToggleThenPerPixelSucceeds,
         int UniformAlphaAfterToggle,
-        bool ScratchWindowsGoneAfterTeardown);
+        bool ScratchWindowsGoneAfterTeardown)
+    {
+        /// <summary>
+        /// The ghost's whole verdict as ONE boolean: something really was sampled AND none of it is
+        /// non-zero. Exposed so a fact can assert it at statement depth 0 against
+        /// <see cref="MachineHasInteractiveDesktop"/> instead of returning early on a machine with no
+        /// desktop - which is the shape SP-066's ledger exists to catch, and it is avoidable here.
+        /// </summary>
+        internal bool GhostReadBackIsEmpty => GhostSampledPixels > 0 && GhostNonZeroPixels == 0;
+
+        /// <summary>The other half of the same differential: after ONE composite the same window
+        /// reads back non-zero, and every opaque ink point is exactly its own colour.</summary>
+        internal bool CompositedReadBackCarriesTheFrame =>
+            CompositedNonZeroPixels > 0 && CompositedInkPoints > 0
+            && CompositedInkMatches == CompositedInkPoints;
+    }
 
     /// <summary>
     /// Builds the states this capability's claims depend on and measures every one, on every suite

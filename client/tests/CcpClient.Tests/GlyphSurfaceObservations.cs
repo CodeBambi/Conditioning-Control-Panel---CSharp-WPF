@@ -49,6 +49,15 @@ internal static class GlyphSurfaceObservations
     /// <summary>The opaque ink colour: magenta, B=255 G=0 R=255.</summary>
     internal const uint InkColour = 0x00FF00FF;
 
+    /// <summary>
+    /// How many times the differential re-raises its pair before giving up on owning the sampled
+    /// region. A bounded COUNT, never a wall-clock wait - the same ceiling and the same reason as
+    /// <c>Win32GlyphSurface.MaxRaiseAttempts</c>: the topmost band is contested on this machine by
+    /// the shipping WPF product, which re-asserts it on a cadence
+    /// (<c>Services/Flash/FlashService.cs:206-243</c>).
+    /// </summary>
+    internal const int ArbitrationAttempts = 32;
+
     private static readonly Lazy<LifecycleRun> LazyLifecycle =
         new(RunLifecycle, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -207,7 +216,41 @@ internal static class GlyphSurfaceObservations
         bool ContentSurvivedTheWithdraw,
         CapabilityState PaintAfterWithdrawState,
         bool ExistsAfterDispose,
-        string? TeardownDiagnostic);
+        string? TeardownDiagnostic)
+    {
+        /// <summary>The OS holds exactly the rectangle that was asked for. As ONE boolean so a fact
+        /// can assert it at statement depth 0 against
+        /// <see cref="MachineHasInteractiveDesktop"/> rather than returning early on a machine with
+        /// no desktop.</summary>
+        internal bool RectMatchesRequest => RectAfterPresent == RequestedRect;
+
+        /// <summary>Same, for the rectangle after a move.</summary>
+        internal bool MoveRectMatches => RectAfterMove == RequestedRectAfterMove;
+
+        /// <summary>The extended-style read-back carries every bit that was written.</summary>
+        internal bool ExStyleCarriesEveryBit =>
+            (ExStyleAfterPresent & 0x08080008u) == 0x08080008u
+            && (ExStyleAfterPresent & 0x000000A0u) == 0x000000A0u;
+
+        /// <summary>The OS's own copy of the surface carries the frame: something was sampled, some
+        /// of it is non-zero, and every opaque ink point is exactly its own colour.</summary>
+        internal bool SurfaceCarriesTheFrame =>
+            SurfaceSampledPixels > 0 && SurfaceNonZeroPixels > 0 && InkPoints > 0
+            && InkMatchesAfterPresent == InkPoints;
+
+        /// <summary>A DIFFERENT frame was composited onto the live surface, every one of ITS ink
+        /// points reads back exactly, and the OS's bytes really changed.</summary>
+        internal bool SecondFrameHeldAndChanged =>
+            SecondInkPoints > 0 && SecondInkMatches == SecondInkPoints && SurfaceChangedBetweenFrames;
+
+        /// <summary>The Present claim's own words, or empty when nothing was claimed.</summary>
+        internal string PresentDetail =>
+            PresentState is CapabilityState.Available available ? available.Detail : string.Empty;
+
+        /// <summary>The move claim's own words, or empty.</summary>
+        internal string MoveDetail =>
+            MoveState is CapabilityState.Available available ? available.Detail : string.Empty;
+    }
 
     private static LifecycleRun RunLifecycle()
     {
@@ -393,6 +436,46 @@ internal static class GlyphSurfaceObservations
             MachineHasInteractiveDesktop && BackdropPresented && BackdropPainted && GlyphPresented
             && CaptureTaken && Intruders.Count == 0;
 
+        /// <summary>The margin outside the surface reads the background's own colour in BOTH
+        /// captures, which is what proves the capture is live and the background reached the
+        /// screen.</summary>
+        internal bool MarginIsBackgroundBothTimes =>
+            ArbitrationHeld && WithGlyph[0] == BackdropColour && WithoutGlyph[0] == BackdropColour;
+
+        /// <summary>With the surface hidden, all four covered points read the background. The
+        /// CONTROL half of the differential.</summary>
+        internal bool ControlReadsBackgroundEverywhere =>
+            ArbitrationHeld && WithoutGlyph.Skip(1).All(pixel => pixel == BackdropColour);
+
+        /// <summary>A fully transparent pixel shows the background BEHIND it.</summary>
+        internal bool TransparentShowsBackground => ArbitrationHeld && WithGlyph[1] == BackdropColour;
+
+        /// <summary>An opaque BLACK pixel is not transparent: it reads black, it differs from the
+        /// transparent point in the SAME capture, and it changed when the surface came up.</summary>
+        internal bool OpaqueBlackIsNotTransparent =>
+            ArbitrationHeld && WithGlyph[2] == 0x000000u && WithGlyph[2] != WithGlyph[1]
+            && WithGlyph[2] != WithoutGlyph[2];
+
+        /// <summary>A glyph pixel is distinguished from the background behind it.</summary>
+        internal bool InkIsDistinguishedFromBackground =>
+            ArbitrationHeld && WithGlyph[3] == InkColour && WithGlyph[3] != BackdropColour;
+
+        /// <summary>A half-alpha pixel reads exactly premultiplied source-over of the frame over the
+        /// measured background - neither the frame's colour nor the background's.</summary>
+        internal bool BlendIsPerPixel =>
+            ArbitrationHeld && WithGlyph[4] == ExpectedWithGlyph[4]
+            && WithGlyph[4] != BackdropColour && WithGlyph[4] != 0x00FFFFFFu;
+
+        /// <summary>One window, one capture, four sample points, four DISTINCT values - which a
+        /// surface composited at one uniform alpha over an opaque frame cannot produce.</summary>
+        internal bool AllFourQuadrantsDiffer =>
+            ArbitrationHeld && WithGlyph.Skip(1).Distinct().Count() == 4;
+
+        /// <summary>Every sampled point equals the predicted composite, not just the ones chosen to
+        /// be easy.</summary>
+        internal bool EveryPointMatchesThePrediction =>
+            ArbitrationHeld && WithGlyph.SequenceEqual(ExpectedWithGlyph);
+
         internal string Why =>
             $"desktop={MachineHasInteractiveDesktop} backdropPresented={BackdropPresented} "
             + $"backdropPainted={BackdropPainted} glyphPresented={GlyphPresented} capture={CaptureTaken} "
@@ -431,10 +514,22 @@ internal static class GlyphSurfaceObservations
         // ordinary interval between the two raises the shipping WPF product sat in the gap and the
         // sampled "background" pixels were its own. This is not helping the fact pass — it is the
         // same bounded re-raise the product itself does — and whether it WORKED is measured next.
-        GlyphWindowProbe.RaiseTopmost(backdropWindow);
-        GlyphWindowProbe.RaiseTopmost(glyphWindow);
-        var intruders = GlyphWindowProbe.Intruders(
-            glyphWindow, backdropWindow, backdropX, backdropY, BackdropWidth, BackdropHeight);
+        // Bounded by a COUNT and never by a wall-clock wait, exactly as the product's own
+        // raise-and-ask loop is: raising removes contention and cannot manufacture an answer,
+        // because the z-order walk is still the only thing that produces one. A run that never wins
+        // reports WHO owns the region rather than reading its pixels.
+        IReadOnlyList<string> intruders = [];
+        for (var attempt = 0; attempt < ArbitrationAttempts; attempt++)
+        {
+            GlyphWindowProbe.RaiseTopmost(backdropWindow);
+            GlyphWindowProbe.RaiseTopmost(glyphWindow);
+            intruders = GlyphWindowProbe.Intruders(
+                glyphWindow, backdropWindow, backdropX, backdropY, BackdropWidth, BackdropHeight);
+            if (intruders.Count == 0)
+            {
+                break;
+            }
+        }
 
         var points = SamplePoints(offsetX, offsetY, SurfaceSide);
         var withGlyph = SampleDesktop(backdropX, backdropY, points);

@@ -59,7 +59,7 @@ public class AudioModuleSpineTests
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
-                SpiralOverlayEffect.EffectId,
+                SpiralOverlayEffect.EffectId, BouncingTextEffect.EffectId,
                 PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
                 LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,

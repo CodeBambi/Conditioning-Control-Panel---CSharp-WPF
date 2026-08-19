@@ -301,4 +301,46 @@ public static class EffectReasonCodes
     /// run.</para>
     /// </summary>
     public const string PointerRewardChainAbsent = "pointer-reward-chain-absent";
+
+    /// <summary>
+    /// Bouncing Text: the opacity dial is at zero, so the module is engaged and there is nothing to
+    /// composite (SP-115). WPF's clamp lets the dial reach zero
+    /// (<c>CCP.Core/Models/AppSettings.cs:3624</c>) and WPF at zero still creates an always-on-top
+    /// window holding fully transparent text - the exact ghost this port refuses to construct.
+    /// <b>Degraded</b>, because the module really did take the session and really will show nothing;
+    /// its dot then reads Armed.
+    /// </summary>
+    public const string BouncingTextTransparent = "bouncing-text-transparent";
+
+    /// <summary>
+    /// Bouncing Text: this build could not turn the word into pixels, so there is nothing whose
+    /// composite could be confirmed (SP-115). The <see cref="SpiralNotDecoded"/> shape for a
+    /// rasteriser rather than a decoder: the channel is fine and the CONTENT never arrived.
+    /// </summary>
+    public const string BouncingTextNoRaster = "bouncing-text-no-raster";
+
+    /// <summary>
+    /// Bouncing Text: the operating system reports no display this process may put a surface on, so
+    /// the logo has nowhere to bounce (SP-115). <b>Unavailable</b>, not Degraded - this is the whole
+    /// channel being gone, which is the Pink Filter answer.
+    /// </summary>
+    public const string BouncingTextNoDisplay = "bouncing-text-no-display";
+
+    /// <summary>
+    /// Bouncing Text ships as its MOTION half: <b>the six per-frame transform effects, the XP award
+    /// and the second logo are not ported</b> (SP-115).
+    ///
+    /// <para>Upstream combines breathing, wobble, spin, velocity tilt, squash-and-stretch and a
+    /// corner burst into one scale/rotation applied to a live WPF visual every frame
+    /// (<c>Services/Subliminal/BouncingTextService.cs:558-600</c>), and TWO of them ship ON
+    /// (<c>AppSettings.cs:3695-3707</c>). In this port a surface's content IS a rasterised bitmap, so
+    /// a rotation or a scale means re-rastering and re-compositing every frame - which is a different
+    /// cost class from the move this module is built on, and it would put the read-back that earns
+    /// the surface's Available on the per-frame path.</para>
+    ///
+    /// <para><b>Always present, never conditional</b> - the same rule and the same reason as
+    /// <see cref="VideoSilentHalfAbsent"/> and <see cref="PointerRewardChainAbsent"/>: the absence is
+    /// a property of the BUILD rather than of the run.</para>
+    /// </summary>
+    public const string BouncingTextTransformsAbsent = "bouncing-text-transforms-absent";
 }

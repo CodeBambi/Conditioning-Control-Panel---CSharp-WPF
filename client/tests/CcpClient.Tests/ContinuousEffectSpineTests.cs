@@ -215,11 +215,13 @@ public class ContinuousEffectSpineTests
         // adds a fifth that ships off (Bubble Pop, CCP.Core/Models/AppSettings.cs:2737-2738's BubblesEnabled default),
         // and it lands FIRST in GAMES & CARDS because that is the rack's order
         // (StudioTabView.xaml.cs:499).
+        // SP-115 adds a sixth that ships off (Bouncing Text,
+        // CCP.Core/Models/AppSettings.cs:3598), and it lands after Spiral Overlay in the rack's order.
         Assert.Equal(
             [
-                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BubblePopEffect.EffectId,
-                BubbleCountEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
-                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BouncingTextEffect.EffectId,
+                BubblePopEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }
@@ -260,7 +262,7 @@ public class ContinuousEffectSpineTests
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
-                SpiralOverlayEffect.EffectId,
+                SpiralOverlayEffect.EffectId, BouncingTextEffect.EffectId,
                 PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
                 LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,

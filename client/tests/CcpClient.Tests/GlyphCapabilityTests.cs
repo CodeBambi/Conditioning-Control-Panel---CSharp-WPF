@@ -34,14 +34,11 @@ public class GlyphCapabilityTests
             "the ghost was given uniform layered attributes, which makes it the OVERLAY's shape rather than the "
             + "never-composited window this control exists to build");
 
-        if (!control.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.True(control.GhostSampledPixels > 0,
-            "the read-back returned NOTHING, so 'zero non-zero pixels' would be a fact about an empty array "
-            + "rather than about a window");
+        // Asserted at statement depth 0 against the machine class rather than behind an early
+        // return: the boolean carries BOTH clauses, so a machine with no desktop cannot make the
+        // fact pass by never reaching it. GhostReadBackIsEmpty requires that something really was
+        // sampled AND that none of it is non-zero.
+        Assert.Equal(control.MachineHasInteractiveDesktop, control.GhostReadBackIsEmpty);
         Assert.Equal(0, control.GhostNonZeroPixels);
     }
 
@@ -51,16 +48,12 @@ public class GlyphCapabilityTests
         // The other half of the differential, on the SAME handle: one call is the entire difference
         // between the two readings, so nothing else about the window can explain it.
         var control = GlyphSurfaceObservations.Control;
-        if (!control.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
 
-        Assert.True(control.CompositedNonZeroPixels > 0,
-            $"after one UpdateLayeredWindow the surface still reads back {control.CompositedNonZeroPixels} "
-            + "non-zero pixels, which is what the ghost reads; the instrument cannot tell the two apart and no "
-            + "fact below means anything");
-        Assert.True(control.CompositedInkPoints > 0);
+        Assert.True(control.CompositedReadBackCarriesTheFrame == control.MachineHasInteractiveDesktop,
+            $"after one UpdateLayeredWindow the surface reads back {control.CompositedNonZeroPixels} non-zero "
+            + $"pixels and matches {control.CompositedInkMatches} of {control.CompositedInkPoints} ink points. "
+            + "If that is not distinguishable from the ghost above, the instrument cannot tell the two apart "
+            + "and no fact below means anything");
         Assert.Equal(control.CompositedInkPoints, control.CompositedInkMatches);
     }
 
@@ -74,22 +67,19 @@ public class GlyphCapabilityTests
         // converted by a stray call; the toggle is why the capability must never touch a window it
         // did not create, which is a STRUCTURAL property of Glyph/** and not a discipline.
         var control = GlyphSurfaceObservations.Control;
-        if (!control.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
+        var machine = control.MachineHasInteractiveDesktop;
 
-        Assert.True(control.UniformModeRefusesPerPixel,
+        Assert.True(control.UniformModeRefusesPerPixel == machine,
             "UpdateLayeredWindow SUCCEEDED on a window holding uniform layered attributes. If that is true on "
             + "this machine then an overlay surface could be converted to per-pixel mode by one call, and this "
             + "capability's isolation argument needs re-deriving");
-        Assert.Equal(87, control.UniformModeRefusalError);
-        Assert.Equal(153, control.UniformAlphaSurvivedTheRefusal);
+        Assert.Equal(machine ? 87 : 0, control.UniformModeRefusalError);
+        Assert.Equal(machine ? 153 : -1, control.UniformAlphaSurvivedTheRefusal);
 
-        Assert.True(control.StyleToggleClearsUniformAlpha,
+        Assert.True(control.StyleToggleClearsUniformAlpha == machine,
             "clearing WS_EX_LAYERED did NOT wipe the uniform alpha, so SP-099's first line does not reproduce "
             + "here and the hazard this design avoids is a different one than recorded");
-        Assert.True(control.ToggleThenPerPixelSucceeds);
+        Assert.Equal(machine, control.ToggleThenPerPixelSucceeds);
         Assert.Equal(-1, control.UniformAlphaAfterToggle);
     }
 
@@ -121,13 +111,8 @@ public class GlyphCapabilityTests
 
         Assert.Equal(run.MachineHasInteractiveDesktop, run.ExistsAfterPresent);
         Assert.Equal(run.MachineHasInteractiveDesktop, run.VisibleAfterPresent);
-
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.Equal(run.RequestedRect, run.RectAfterPresent);
+        Assert.True(run.RectMatchesRequest == run.MachineHasInteractiveDesktop,
+            $"the OS holds {run.RectAfterPresent} where {run.RequestedRect} was asked for");
     }
 
     [Fact]
@@ -138,35 +123,20 @@ public class GlyphCapabilityTests
         // the other way round. Asserting it pins that these two capabilities really are driving
         // different, mutually exclusive mechanisms, and that a future edit cannot quietly make the
         // glyph surface uniform.
-        var run = GlyphSurfaceObservations.Lifecycle;
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.Equal(-1, run.UniformAlphaAfterPresent);
+        // -1 on EVERY machine class, which is why this one needs no conditioning at all: a machine
+        // with no desktop has no window and reads -1 too.
+        Assert.Equal(-1, GlyphSurfaceObservations.Lifecycle.UniformAlphaAfterPresent);
     }
 
     [Fact]
     public void TheExtendedStyleReadBackCarriesEveryBitThatWasWritten()
     {
         var run = GlyphSurfaceObservations.Lifecycle;
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
 
-        const uint layered = 0x00080000;
-        const uint transparent = 0x00000020;
-        const uint toolWindow = 0x00000080;
-        const uint noActivate = 0x08000000;
-        const uint topmost = 0x00000008;
-
-        Assert.Equal(layered, run.ExStyleAfterPresent & layered);
-        Assert.Equal(transparent, run.ExStyleAfterPresent & transparent);
-        Assert.Equal(toolWindow, run.ExStyleAfterPresent & toolWindow);
-        Assert.Equal(noActivate, run.ExStyleAfterPresent & noActivate);
-        Assert.Equal(topmost, run.ExStyleAfterPresent & topmost);
+        // WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOPMOST, then WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT.
+        Assert.True(run.ExStyleCarriesEveryBit == run.MachineHasInteractiveDesktop,
+            $"the extended-style read-back is 0x{run.ExStyleAfterPresent:X}, which is missing a bit that was "
+            + "written; the window is not the window that was asked for, whatever the write calls returned");
     }
 
     [Fact]
@@ -201,16 +171,12 @@ public class GlyphCapabilityTests
         // The capability's Available cannot be reached without this, and the ghost control above is
         // what makes it a fact rather than a formality.
         var run = GlyphSurfaceObservations.Lifecycle;
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
 
-        Assert.True(run.SurfaceSampledPixels > 0);
-        Assert.True(run.SurfaceNonZeroPixels > 0,
-            "the OS returned an entirely black surface for a window that was just composited with an opaque "
-            + "magenta quadrant, which is exactly what a window compositing nothing returns");
-        Assert.True(run.InkPoints > 0);
+        Assert.True(run.SurfaceCarriesTheFrame == run.MachineHasInteractiveDesktop,
+            $"the OS returned {run.SurfaceNonZeroPixels} non-zero of {run.SurfaceSampledPixels} sampled pixels "
+            + $"and matched {run.InkMatchesAfterPresent} of {run.InkPoints} ink points for a window that was "
+            + "just composited with an opaque magenta quadrant. An entirely black answer is exactly what a "
+            + "window compositing nothing returns");
         Assert.Equal(run.InkPoints, run.InkMatchesAfterPresent);
     }
 
@@ -220,13 +186,9 @@ public class GlyphCapabilityTests
         // Asserted so the limit is pinned rather than confessed in prose: a fully transparent pixel
         // and an opaque BLACK pixel are the SAME value here. Nothing in a window read-back can
         // separate them; that separation is the differential run's, over a known background.
-        var run = GlyphSurfaceObservations.Lifecycle;
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.True(run.TransparentReadsZero);
+        Assert.Equal(
+            GlyphSurfaceObservations.Lifecycle.MachineHasInteractiveDesktop,
+            GlyphSurfaceObservations.Lifecycle.TransparentReadsZero);
     }
 
     [Fact]
@@ -240,15 +202,11 @@ public class GlyphCapabilityTests
                 : run.PaintState is CapabilityState.Unavailable,
             GlyphSurfaceObservations.Describe(run.PaintState));
 
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
+        Assert.True(run.SecondFrameHeldAndChanged == run.MachineHasInteractiveDesktop,
+            $"the second frame matched {run.SecondInkMatches} of {run.SecondInkPoints} ink points and the OS's "
+            + $"bytes changed = {run.SurfaceChangedBetweenFrames}. Without BOTH, nothing proves the second "
+            + "composite arrived");
         Assert.Equal(run.SecondInkPoints, run.SecondInkMatches);
-        Assert.True(run.SurfaceChangedBetweenFrames,
-            "the OS returns the same bytes for the surface before and after a DIFFERENT frame was composited "
-            + "onto it, so nothing proves the second composite arrived");
     }
 
     [Fact]
@@ -263,15 +221,9 @@ public class GlyphCapabilityTests
                 : run.MoveState is CapabilityState.Unavailable,
             GlyphSurfaceObservations.Describe(run.MoveState));
 
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.Equal(run.RequestedRectAfterMove, run.RectAfterMove);
-        Assert.True(run.ContentSurvivedTheMove,
-            "the surface stopped holding its frame after a move, so a moving module would be dragging an empty "
-            + "window around the desktop");
+        Assert.True(run.MoveRectMatches == run.MachineHasInteractiveDesktop,
+            $"the OS holds {run.RectAfterMove} where {run.RequestedRectAfterMove} was asked for");
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.ContentSurvivedTheMove);
     }
 
     [Fact]
@@ -314,13 +266,7 @@ public class GlyphCapabilityTests
 
         Assert.False(run.VisibleAfterWithdraw);
         Assert.True(run.PointRoutesAwayAfterWithdraw);
-
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
-
-        Assert.True(run.ContentSurvivedTheWithdraw,
+        Assert.True(run.ContentSurvivedTheWithdraw == run.MachineHasInteractiveDesktop,
             "the composited surface was lost by a withdraw, so the next Present would have to re-composite "
             + "before anything could be claimed - which is a different contract from the one the interface states");
     }
@@ -477,9 +423,15 @@ public class GlyphCapabilityTests
     {
         Assert.IsType<Win32GlyphSurface>(GlyphSurfaceFactory.CreateFor(GlyphHostPlatform.Windows));
         Assert.IsType<UnsupportedGlyphSurface>(GlyphSurfaceFactory.CreateFor(GlyphHostPlatform.Linux));
-        Assert.Equal(
-            OperatingSystem.IsWindows() ? GlyphHostPlatform.Windows : GlyphHostPlatform.Linux,
-            GlyphSurfaceFactory.CurrentPlatform());
+        Assert.IsType<UnsupportedGlyphSurface>(GlyphSurfaceFactory.CreateFor(GlyphHostPlatform.MacOs));
+        Assert.IsType<UnsupportedGlyphSurface>(GlyphSurfaceFactory.CreateFor(GlyphHostPlatform.Unknown));
+
+        // The parameterless factory is the named one applied to this process's platform, and that
+        // is asserted WITHOUT a platform predicate of the test's own: an OS check here would be a
+        // second, independent opinion about which platform this is, and the two could drift.
+        using var byName = GlyphSurfaceFactory.CreateFor(GlyphSurfaceFactory.CurrentPlatform());
+        using var byDefault = GlyphSurfaceFactory.Create();
+        Assert.Equal(byName.GetType(), byDefault.GetType());
     }
 
     [Fact]
@@ -489,13 +441,17 @@ public class GlyphCapabilityTests
         surface.Dispose();
 
         var frame = GlyphFrame.Solid(8, 8, 10, 20, 30, 255);
-        foreach (var state in new[]
-                 {
-                     surface.Present(new GlyphSurfaceRequest(new GlyphBounds(0, 0, 8, 8), 1.0, true), frame),
-                     surface.Paint(frame),
-                     surface.MoveTo(new GlyphBounds(0, 0, 8, 8)),
-                     surface.Withdraw(),
-                 })
+        var states = new[]
+        {
+            surface.Present(new GlyphSurfaceRequest(new GlyphBounds(0, 0, 8, 8), 1.0, true), frame),
+            surface.Paint(frame),
+            surface.MoveTo(new GlyphBounds(0, 0, 8, 8)),
+            surface.Withdraw(),
+        };
+
+        // Pinned at statement depth 0 so an emptied array cannot make the loop below assert nothing.
+        Assert.Equal(4, states.Length);
+        foreach (var state in states)
         {
             var refusal = Assert.IsType<CapabilityState.Unavailable>(state);
             Assert.Equal(GlyphReasonCodes.GlyphSurfaceDisposed, refusal.Reason.Code);
@@ -506,12 +462,15 @@ public class GlyphCapabilityTests
     public void AnUnpresentedSurfaceRefusesPaintMoveAndWithdraw()
     {
         using var surface = new Win32GlyphSurface();
-        foreach (var state in new[]
-                 {
-                     surface.Paint(GlyphFrame.Solid(8, 8, 10, 20, 30, 255)),
-                     surface.MoveTo(new GlyphBounds(0, 0, 8, 8)),
-                     surface.Withdraw(),
-                 })
+        var states = new[]
+        {
+            surface.Paint(GlyphFrame.Solid(8, 8, 10, 20, 30, 255)),
+            surface.MoveTo(new GlyphBounds(0, 0, 8, 8)),
+            surface.Withdraw(),
+        };
+
+        Assert.Equal(3, states.Length);
+        foreach (var state in states)
         {
             var refusal = Assert.IsType<CapabilityState.Unavailable>(state);
             Assert.Equal(GlyphReasonCodes.GlyphNothingPresented, refusal.Reason.Code);
@@ -524,25 +483,25 @@ public class GlyphCapabilityTests
         // The Available detail is read by the module panel and by a bug report. A claim that did not
         // carry its own limits would be the thing the packet calls the most easily faked property.
         var run = GlyphSurfaceObservations.Lifecycle;
-        if (run.PresentState is not CapabilityState.Available available)
-        {
-            return;
-        }
 
-        Assert.Contains("TRANSPARENT", available.Detail, StringComparison.Ordinal);
-        Assert.Contains("headed claim", available.Detail, StringComparison.Ordinal);
+        Assert.Equal(
+            run.MachineHasInteractiveDesktop,
+            run.PresentDetail.Contains("TRANSPARENT", StringComparison.Ordinal));
+        Assert.Equal(
+            run.MachineHasInteractiveDesktop,
+            run.PresentDetail.Contains("headed claim", StringComparison.Ordinal));
     }
 
     [Fact]
     public void AndTheMOVEsAvailableSaysExactlyWhatItDidNotReask()
     {
         var run = GlyphSurfaceObservations.Lifecycle;
-        if (run.MoveState is not CapabilityState.Available available)
-        {
-            return;
-        }
 
-        Assert.Contains("NO z-order was walked", available.Detail, StringComparison.Ordinal);
-        Assert.Contains("NO hit test", available.Detail, StringComparison.Ordinal);
+        Assert.Equal(
+            run.MachineHasInteractiveDesktop,
+            run.MoveDetail.Contains("NO z-order was walked", StringComparison.Ordinal));
+        Assert.Equal(
+            run.MachineHasInteractiveDesktop,
+            run.MoveDetail.Contains("NO hit test", StringComparison.Ordinal));
     }
 }

@@ -23,11 +23,12 @@ namespace CcpClient.Tests;
 /// SP-113's review recorded that the four-disjoint-rectangles argument does not scale past four
 /// surfaces; this capability's evidence cannot use disjointness AT ALL, because the overlap IS the
 /// evidence. So ownership is measured, not assumed: every visible window strictly between the two in
-/// the OS's own z-order is fetched and tested for intersection with the sampled area, and every
-/// claim below is conditioned on that list being empty. Both arms were observed while this packet
-/// was written — with the pair raised back to back the list is empty, and with an ordinary interval
-/// between the raises the shipping WPF product sat in the gap and the "background" pixels were its
-/// own.</para>
+/// the OS's own z-order is fetched and tested for intersection with the sampled area, and the pair
+/// is re-raised a bounded number of times until nobody is between them. Both arms were observed
+/// while this packet was written — with the pair raised back to back the list is empty, and with an
+/// ordinary interval between the raises the shipping WPF product sat in the gap and the "background"
+/// pixels were its own. <b>Every fact below asserts unconditionally</b>: a desktop this run cannot
+/// win is a red fact naming the intruder, not a silently skipped one.</para>
 ///
 /// <para><b>What this still is not.</b> A human. A composited desktop read from inside the process
 /// is the strongest evidence a process can produce about its own pixels and it is still not a headed
@@ -37,12 +38,6 @@ namespace CcpClient.Tests;
 [Collection(nameof(RealDesktopCollection))]
 public class GlyphAlphaDifferentialTests
 {
-    private const int Margin = 0;
-    private const int Transparent = 1;
-    private const int OpaqueBlack = 2;
-    private const int OpaqueInk = 3;
-    private const int HalfAlpha = 4;
-
     [Fact]
     public void BOTHSURFACESREALLYREACHEDTHEDESKTOP_OrEveryPixelBelowIsAReadingOfSomethingElse()
     {
@@ -62,16 +57,13 @@ public class GlyphAlphaDifferentialTests
         // Not "the rectangles are disjoint" - they are deliberately NOT, because the overlap is the
         // evidence. This is the replacement argument, and it is a measurement.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.MachineHasInteractiveDesktop)
-        {
-            return;
-        }
 
-        Assert.True(run.Intruders.Count == 0,
-            "a foreign window owns part of the sampled area, so the pixels below belong to it rather than to "
-            + $"this run's two surfaces: {string.Join(" | ", run.Intruders)}. This is NOT a flake to be retried: "
-            + "it is the residue the port has recorded since SP-099, and on this machine the intruder is usually "
-            + "the shipping WPF product re-asserting HWND_TOPMOST on a cadence "
+        Assert.True(run.ArbitrationHeld == run.MachineHasInteractiveDesktop,
+            "a foreign window owns part of the sampled area after "
+            + $"{GlyphSurfaceObservations.ArbitrationAttempts} bounded re-raises, so the pixels this run reads "
+            + $"belong to it rather than to the two surfaces this run put there. {run.Why}. This is NOT a flake "
+            + "to be retried away: it is the residue the port has recorded since SP-099, and on this machine "
+            + "the intruder is usually the shipping WPF product re-asserting HWND_TOPMOST on a cadence "
             + "(Services/Flash/FlashService.cs:206-243)");
     }
 
@@ -83,15 +75,8 @@ public class GlyphAlphaDifferentialTests
         // margin is inside the same capture and outside the glyph surface, so it must read the
         // background exactly - with the surface up AND with it hidden.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            Assert.False(run.MachineHasInteractiveDesktop && run.Intruders.Count == 0,
-                $"the differential run did not establish its own preconditions: {run.Why}");
-            return;
-        }
 
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithGlyph[Margin]);
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithoutGlyph[Margin]);
+        Assert.True(run.MarginIsBackgroundBothTimes == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -101,15 +86,8 @@ public class GlyphAlphaDifferentialTests
         // is what makes the four readings below CHANGES rather than coincidences, and it is the
         // half that a black-plate surface would also satisfy - which is why it is only half.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithoutGlyph[Transparent]);
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithoutGlyph[OpaqueBlack]);
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithoutGlyph[OpaqueInk]);
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithoutGlyph[HalfAlpha]);
+        Assert.True(run.ControlReadsBackgroundEverywhere == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -119,12 +97,8 @@ public class GlyphAlphaDifferentialTests
         // frame whose top-left quadrant has alpha zero - and the desktop there is the background's
         // own colour, byte for byte.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(GlyphSurfaceObservations.BackdropColour, run.WithGlyph[Transparent]);
+        Assert.True(run.TransparentShowsBackground == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -135,27 +109,16 @@ public class GlyphAlphaDifferentialTests
         // the transparent one is the background and this one is black. A surface compositing an
         // opaque black plate would fail HERE and nowhere else.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(0x000000u, run.WithGlyph[OpaqueBlack]);
-        Assert.NotEqual(run.WithGlyph[Transparent], run.WithGlyph[OpaqueBlack]);
-        Assert.NotEqual(run.WithoutGlyph[OpaqueBlack], run.WithGlyph[OpaqueBlack]);
+        Assert.True(run.OpaqueBlackIsNotTransparent == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
     public void AGLYPHPIXELISDISTINGUISHEDFROMTHEBACKGROUND()
     {
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(GlyphSurfaceObservations.InkColour, run.WithGlyph[OpaqueInk]);
-        Assert.NotEqual(GlyphSurfaceObservations.BackdropColour, run.WithGlyph[OpaqueInk]);
+        Assert.True(run.InkIsDistinguishedFromBackground == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -167,14 +130,8 @@ public class GlyphAlphaDifferentialTests
         // produce, because that mechanism has one alpha for the whole rectangle and this frame has
         // four different ones.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(run.ExpectedWithGlyph[HalfAlpha], run.WithGlyph[HalfAlpha]);
-        Assert.NotEqual(GlyphSurfaceObservations.BackdropColour, run.WithGlyph[HalfAlpha]);
-        Assert.NotEqual(0x00FFFFFFu, run.WithGlyph[HalfAlpha]);
+        Assert.True(run.BlendIsPerPixel == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -185,18 +142,8 @@ public class GlyphAlphaDifferentialTests
         // one uniform alpha over an opaque frame - the overlay's mechanism, and the one this port
         // had before - can produce at most one.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        var values = new[]
-        {
-            run.WithGlyph[Transparent], run.WithGlyph[OpaqueBlack],
-            run.WithGlyph[OpaqueInk], run.WithGlyph[HalfAlpha],
-        };
-
-        Assert.Equal(4, values.Distinct().Count());
+        Assert.True(run.AllFourQuadrantsDiffer == run.MachineHasInteractiveDesktop, run.Why);
     }
 
     [Fact]
@@ -206,11 +153,9 @@ public class GlyphAlphaDifferentialTests
         // accident cannot pass. The prediction comes from GlyphFrame.CompositeOver, which is pure
         // arithmetic pinned separately against the raw probe measurement.
         var run = GlyphSurfaceObservations.Differential;
-        if (!run.ArbitrationHeld)
-        {
-            return;
-        }
 
-        Assert.Equal(run.ExpectedWithGlyph, run.WithGlyph);
+        Assert.True(run.EveryPointMatchesThePrediction == run.MachineHasInteractiveDesktop,
+            $"predicted [{string.Join(", ", run.ExpectedWithGlyph.Select(v => $"0x{v:X6}"))}] and the screen "
+            + $"holds [{string.Join(", ", run.WithGlyph.Select(v => $"0x{v:X6}"))}]. {run.Why}");
     }
 }

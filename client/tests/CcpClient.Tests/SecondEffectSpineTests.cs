@@ -146,11 +146,15 @@ public class SecondEffectSpineTests
         // named, which is the whole point of a typed arm. SP-113 adds a ninth (Bubble Pop, whose
         // BubblesEnabled ships false at CCP.Core/Models/AppSettings.cs:2737-2738) and it lands at the HEAD of GAMES &
         // CARDS, which is the rack's order (StudioTabView.xaml.cs:499).
+        // SP-115 adds a TENTH (Bouncing Text, whose BouncingTextEnabled ships false at
+        // CCP.Core/Models/AppSettings.cs:3598) and it lands after Spiral Overlay, which is the
+        // rack's order.
         Assert.Equal(
             [
-                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, PinkFilterEffect.EffectId,
-                BubblePopEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
-                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BouncingTextEffect.EffectId,
+                PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
+                LockCardEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
+                IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }
