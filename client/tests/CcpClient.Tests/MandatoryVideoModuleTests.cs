@@ -327,6 +327,11 @@ public class MandatoryVideoModuleTests
 
         Assert.Equal(["only.mp4"], rig.Surface.Begun);
         Assert.Equal(TimeSpan.FromSeconds(42), rig.Surface.LastMaxLength);
+
+        // SP-112 added an optional PAINTER to this seam for a second module. THIS module passes
+        // none, and the double records that so the claim is asserted rather than promised: the
+        // capability's second consumer must not have changed what the first one does.
+        Assert.Null(rig.Surface.LastPainter);
         Assert.Equal(1, rig.Effect.PlayedCount);
         Assert.NotNull(fired);
         Assert.Equal(1, fired!.Value.Ordinal);

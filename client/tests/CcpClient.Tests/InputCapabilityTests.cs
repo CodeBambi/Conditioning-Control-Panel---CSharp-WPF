@@ -96,6 +96,49 @@ public class InputCapabilityTests
     }
 
     [Fact]
+    public void THENEGATIVECONTROLIsIDEMPOTENT_BecauseASecondCallInOneProcessUsedToDestroyItsOwnTrap()
+    {
+        // SP-112 found this by landing a module that changed nothing in this file and reddened it
+        // anyway: adding test classes moved this class's cases in xunit's within-class order, and
+        // the ORDER is the determinant. RunNegativeControl was not idempotent — the SECOND call in
+        // a process reported ThreadLocalFocusClaimsTheParkedWindow = FALSE.
+        //
+        // The mechanism, measured rather than supposed: SetFocus ACTIVATES the top-level window it
+        // focuses, so the parked rig took the foreground as soon as this process had the rights to
+        // do it (which it does not on the first call and does on every one after). The catcher then
+        // took the foreground back, the parked thread was DEACTIVATED, and the system cleared its
+        // focus — so the clause the trap turns on failed for a reason that has nothing to do with
+        // the trap. The parked rig now carries WS_EX_NOACTIVATE (ScratchWindow.Create's
+        // `activatable`), which is the same flag and the same reason as the port's own video
+        // surface (D122).
+        //
+        // Two consecutive calls, in one process, asserting the SAME thing both times. Without this
+        // the suite can only find the defect by re-ordering itself, which is how it was found.
+        var first = InputWindowProbe.RunNegativeControl();
+        var second = InputWindowProbe.RunNegativeControl();
+
+        Assert.Equal(InputWindowProbe.MachineHasInteractiveDesktop, first.ParkedWindowCreated);
+        Assert.Equal(InputWindowProbe.MachineHasInteractiveDesktop, second.ParkedWindowCreated);
+
+        Assert.True(
+            first.ThreadLocalFocusClaimsTheParkedWindow == first.MachineHasInteractiveDesktop,
+            "the FIRST negative control lost its own parked focus");
+        Assert.True(
+            second.ThreadLocalFocusClaimsTheParkedWindow == second.MachineHasInteractiveDesktop,
+            "the SECOND negative control lost its parked focus, so this instrument's answer depends "
+            + "on how many times it has already run in this process — which makes every fact built "
+            + "on it order-dependent");
+
+        // And the other half of the trap survives the repeat too: the SYSTEM read must go on
+        // rejecting the parked window on both calls, or the two reads have stopped disagreeing and
+        // there is no trap left to measure.
+        Assert.True(
+            first.SystemFocusRejectsTheParkedWindow == first.MachineHasInteractiveDesktop);
+        Assert.True(
+            second.SystemFocusRejectsTheParkedWindow == second.MachineHasInteractiveDesktop);
+    }
+
+    [Fact]
     public void ThePromptIsOnScreen_AboveEveryOrdinaryWindow_ConfirmedByTheOperatingSystem()
     {
         var run = InputCaptureObservations.Lifecycle;

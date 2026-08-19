@@ -1,9 +1,10 @@
 # SP-112 — record
 
 Branch `lane/SP-112-second-consumer`, base `7a35f6d8`.
-Floor: pin **1742 unit / 107 headless**; observed **1829 unit / 111 headless**; declared **+87 unit /
-+4 headless** — see §8, which also carries the ONE named failure that is not this packet's. Build: 0
-errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
+Floor: pin **1742 unit / 107 headless**; observed **1830 unit / 112 headless with zero failures**;
+declared **+88 unit / +5 headless** — see §8, which also records the red gate this packet first
+reported as somebody else's and the review correctly attributed to this diff. Build: 0 errors, 0
+warnings. `client/tests/floor/floor.json` was never opened.
 
 > **This document's real subject is not the module.** It is the answer to one question asked of two
 > capabilities that had exactly one consumer each: **did they fit, or did I have to reach around
@@ -23,7 +24,7 @@ invited an evidence-backed refusal. **I read `Input/**` before choosing, and the
 | a hit test per bubble | `InputCaptureObservation.HitTestWinner` is read at ONE point — the single card's centre |
 | MANY windows at once | `Win32InputPresence` owns one `nint _window`, one `_content`, one `_onKeystroke` |
 | windows that MOVE while visible | `Prompt` places once; there is no move seam |
-| windows that must NOT take the foreground — upstream's bubbles are `ShowActivated=false` with `WM_MOUSEACTIVATE` answering `MA_NOACTIVATE` (`Windows/BubbleCountWindow.xaml.cs:1822-1830`, `Services/BubbleService.cs:2960/2988/3103`) | `Prompt` ESCALATES for the foreground (D115) and `Confirmed` **requires** `IsForegroundWindow && SystemKeyboardFocusIsThisWindow` |
+| windows that must NOT take the foreground — upstream's bubbles are `ShowActivated=false` (`Services/BubbleService.cs:2158`; `:2960/2988/3103` are the per-bubble `IsHitTestVisible`, which is the OTHER half of what Bubble Pop needs) with `WM_MOUSEACTIVATE` answering `MA_NOACTIVATE` (`Windows/BubbleCountWindow.xaml.cs:1822-1830`) | `Prompt` ESCALATES for the foreground (D115) and `Confirmed` **requires** `IsForegroundWindow && SystemKeyboardFocusIsThisWindow` |
 
 Consuming this capability for Bubble Pop would mean adding a pointer route, a multi-window
 collection, a non-activating window class, a move seam, and a **second, inverted definition of
@@ -66,13 +67,23 @@ was added to `Input/**`.**
 **(a) `IVideoFramePainter` — a per-frame paint seam on `VideoSurfacePresenter` (`Effects/`).**
 The capability could play a clip and could not let anything draw ON it. This is the one thing the
 module genuinely could not do without. **The first-consumer justification is upstream's own
-Mandatory Video, which draws over its own video in two places this port had already declared
-unported before SP-112 existed:** the blurred-background composite
-(`Services/Video/VideoService.cs:3436`) and the attention-check prompt drawn over a playing clip
-(`:4846`), both listed in `VideoSurfacePresenter`'s own remarks at SP-111. A clip you cannot draw on
-can never grow either. The seam's limit is stated in its own doc: it paints on the decoded picture
-and cannot resize or replace it, so upstream's blur composite (picture drawn INTO a larger blurred
-background) is still out of reach.
+Mandatory Video, which does not hand the decoder's output straight to a surface: its
+blurred-background composite draws the picture into something else**
+(`Services/Video/VideoService.cs:3436`), listed in `VideoSurfacePresenter`'s own remarks at SP-111 as
+unported. A clip nothing can draw on can never grow it.
+
+**And the limit is on the record because the review caught me overclaiming it.** An earlier draft
+cited `VideoService.cs:4846` as "the attention-check prompt drawn over a playing clip"; `:4846` is
+the strict/retry path picking a fresh clip, and the base wording this port inherited
+(`VideoSurfacePresenter.cs:135`) says only "attention checks and the whole strict/retry apparatus".
+The citation is corrected here and in the interface's own doc rather than defended. What remains is
+narrower and still sufficient: the blur composite is a first-consumer case where the picture reaching
+the surface is not verbatim the decoder's — and this seam covers the *draw on the picture* half of it
+and **not** the *compose the picture into something larger* half, which is stated in the interface's
+own remarks. **The seam also has no CLOSE**: a painter told `Opening` is never told the clip ended,
+and `Begin` can refuse after `Opening` has run. SP-112's painter holds nothing but arithmetic, so it
+did not need one; the first painter that holds a resource will, and the gap is named in the interface
+rather than discovered by it.
 
 Its `Opening(VideoClipInfo)` half exists for a reason worth naming: the clip is opened and closed
 inside the presenter, and `IVideoSurface` deliberately reports what the OS is HOLDING rather than
@@ -224,7 +235,16 @@ suites plus `LockCardModuleTests`, `MandatoryVideoModuleTests`, `VideoSurfacePre
 `StudioSurfaceNoticeTests` and the three spine suites; the driver restores each file byte-identically
 and asserts `git status --porcelain client/src` is empty at the end, which it was on every round.
 
-**The books:** 75 distinct mutations; 39 + 1 + 25 + 2 = **67 caught**; **8 survive**; 67 + 8 = 75.
+**The books:** 75 distinct mutations; 39 (round 1) + 25 (round 2) + 2 (round 3) + 1 (round 4) =
+**67 caught**; **8 survive**; 67 + 8 = 75. Every one of the 67 has a line in a log beside this
+record.
+
+> **The review had to correct these books once, and the correction is the point rather than a
+> footnote.** An earlier draft wrote the same total as `39 + 1 + 25 + 2`, where the `+1` was M-al
+> run as an ad-hoc smoke test whose log I then DELETED. A run with no surviving evidence is
+> indistinguishable from a run that never happened, and counting it is exactly the failure §"Round
+> 1" below calls disqualifying — reproduced inside the correction of that failure. M-al is now run
+> as round 4, with a durable log.
 
 ### Round 1 — 39 caught, 9 survived, **27 NOT PATCHED, and that was the driver's own defect**
 
@@ -233,19 +253,28 @@ are written with LF, so 27 of the most interesting predicates — every `Compose
 teardown guard, two of the dot's clauses — were reported as *not patched* rather than as caught.
 **A sweep that silently skips its own hardest cases is worse than no sweep**, so it is recorded here
 rather than quietly re-run: the driver now normalises for matching and writes the mutant back in the
-file's own line endings, and round 2 re-ran all 27.
+file's own line endings, and round 2 re-ran **26 of the 27** — the twenty-seventh, M-al, is round 4
+below.
 
 ### Round 2 — the 27 plus the 9 survivors: **25 caught, 10 survived**
 
 Eleven of round 1's survivors-and-skips were real holes and are closed by facts that isolate the
 clause: the 30 s fallback in `Target`, the 0.7 spacing factor, `Recompute`'s own fallback, the
-lifetime's random span, the pop's fade and growth, the module's own pacing interval, and the four
-`Compose` guards.
+lifetime's random span, the pop's fade and growth, the module's own pacing interval, and **three** of
+the four `Compose` guards (M-am, M-an, M-ao; the already-showing guard M-al is round 4).
 
 ### Round 3 — the two real holes round 2 found: **2 caught, 0 survived**
 
 `M-ap` (a clip the surface refused outright leaves the run unresolved, so the panel tells the user
 nothing at all) and `M-aw` (a keystroke for a question the module has already finished with).
+
+### Round 4 — the mutation the books had counted without a log: **1 caught, 0 survived**
+
+`M-al`, `Compose`'s already-showing guard (`sweep-round4.log`). It is caught by the
+`"a clip is already showing"` row of
+`AGameThatCanRunNOTHINGCountsNothing_AndKeepsTheScheduleRunning`, whose surface double records
+`Begun` unconditionally — so a module that stopped refusing a firing while a clip is up shows up as
+a clip that was begun.
 
 ### The eight survivors, each with the evidence that disposes of it
 
@@ -333,10 +362,11 @@ landed assertion was relaxed, reworded to be weaker, or deleted.
 
 ---
 
-## 8. THE FLOOR, and the one failure that is NOT this packet's
+## 8. THE FLOOR — green, and the red one it took first was MINE
 
-Pin **1742 unit / 107 headless**; observed **1829 unit / 111 headless**; declared
-**+87 unit / +4 headless** (`floor-delta.json`). 1742 + 87 = 1829 and 107 + 4 = 111, confirmed by
+Pin **1742 unit / 107 headless**; observed **1830 unit / 112 headless**, **0 failures in either
+suite**; declared **+88 unit / +5 headless** (`floor-delta.json`). 1742 + 88 = 1830 and
+107 + 5 = 112, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-112-second-consumer`. The floor run
 therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator sums the
 deltas and applies one bump. Two skips, both pre-existing
@@ -344,30 +374,52 @@ deltas and applies one bump. Two skips, both pre-existing
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); none added, none widened.
 Build: 0 errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
 
-**The floor run also reports ONE named failure, and it is a landed fact this packet did not touch:**
-`InputCapabilityTests.TheThreadLocalFocusRead_ClaimsAWindowThatReceivesNothing_WhichIsWhyTheSystemReadIsTheOneUsed`.
-It is reported rather than quarantined, and here is the evidence trail rather than an assertion:
+### The failure this packet first reported as somebody else's, and the review inverted
 
-* `client/src/CcpClient.Desktop/Input/**`, `InputCapabilityTests.cs`, `InputWindowProbe.cs` and
-  `InputCaptureObservations.cs` are **byte-identical to base** (`git diff 7a35f6d8` is empty for all
-  four).
-* The test **passes in isolation**, repeatedly, and **fails when its own class siblings run first**,
-  repeatedly.
-* **With the entire `client/` tree reverted to base inside this worktree** — product files restored,
-  every changed test file restored, every new file moved aside — **it still failed.** The same code
-  fails here, so the cause is not this packet's code.
-* The failing clause is the trap's own positive control: `GetGUIThreadInfo(thread).hwndFocus` did not
-  name the parked window. It is a Win32 focus question whose answer depends on which process owns the
-  foreground at that instant, and **the shipping WPF product v6.8.1 is running on this desktop** with
-  its own topmost windows — the exact machine-state residue `RealDesktopCollection`'s own doc names
-  and that SP-111 already recorded biting this suite (its plan.md §0 Q4 found the same application
-  owning a surface's point).
+The first floor run reddened on
+`InputCapabilityTests.TheThreadLocalFocusRead_ClaimsAWindowThatReceivesNothing_WhichIsWhyTheSystemReadIsTheOneUsed`,
+and **this record claimed it was not this packet's. That was wrong, and the three claims are
+withdrawn:**
 
-**Nothing was added to `allowedSkips` and the pin was not widened.** A landed fact that is
-machine-state sensitive is a finding for the packet that owns it, not a line for this one to
-quarantine.
+* "a landed fact this packet did not touch" — **true of the code and false of the GATE.**
+  `Input/**` and the three input test files are byte-identical to base, and the gate was still red
+  *because of this diff*: adding test classes changed xunit's within-class ORDER (the failing case
+  moved from position 9 at base to 14 at lane), and the order is the determinant.
+* "with the entire `client/` tree reverted it still failed" — **it does not reproduce.** The reviewer
+  ran base 4/4 green on the full suite and 10/10 green on the class filter, interleaved with lane
+  runs in the same minute; my own reverted-tree run was not the control I took it for.
+* "the shipping WPF product v6.8.1 owning the foreground" — **unsupported, and backwards.** A foreign
+  process owning the foreground PREVENTS the merge; it was running in all 14 green base runs.
 
----
+### The real mechanism, measured
+
+`InputWindowProbe.RunNegativeControl()` was **not idempotent across two calls in one process**. Two
+consecutive calls, instrumented, returned `threadLocal=True` then `threadLocal=False`.
+
+`SetFocus` ACTIVATES the top-level window it focuses — SP-110's own record says so (§4, M-m/M-p) —
+so the parked rig, whose entire purpose is to hold a THREAD-LOCAL focus while something else owns the
+foreground, took the foreground itself as soon as the process had the rights to do it. It does not on
+the first call, which is why the trap reproduced; it does on every call after the catcher has taken
+the foreground once. The catcher then takes the foreground back, the parked thread is DEACTIVATED,
+and the system clears its focus — so the clause fails for a reason that has nothing to do with the
+trap it measures.
+
+**The fix is one flag**: the parked rig is created `WS_EX_NOACTIVATE` (`ScratchWindow.Create`'s new
+`activatable` parameter), which is the same flag and the same reason as this port's own video surface
+(D122) — on screen, in the z-order, never taking the foreground from anybody. Two other candidate
+fixes were tried and REVERTED because measurement refused them: `SWP_NOACTIVATE` on the show (the
+`SetFocus` that follows activates anyway) and a same-process guard on `TakeForeground`'s
+`AttachThreadInput` (the merge was not the mechanism). Neither is in the diff.
+
+**And it is pinned so the suite can find it without re-ordering itself:**
+`THENEGATIVECONTROLIsIDEMPOTENT_BecauseASecondCallInOneProcessUsedToDestroyItsOwnTrap` calls
+`RunNegativeControl` twice and asserts both halves of the trap on both calls. The reviewer's decisive
+control — `--filter "~TheThreadLocalFocusRead|~TheDeliveryOracle"`, which fails 3/3 at base — passes
+here, and the class passes 3/3.
+
+**The underlying fragility is landed SP-110 code and belongs on the board as SP-110's row**; what
+this packet owed was the corrected attribution and a green gate, and both are here. Nothing was added
+to `allowedSkips` and the pin was not widened.
 
 ## 9. Files changed
 
@@ -401,10 +453,19 @@ painter — **0 count change**), `RealDesktopCollectionGuardTests.cs` (the helpe
 `BubbleCountObservations` — a STRENGTHENING, **0 count change**), `AudioModuleSpineTests.cs`,
 `ContinuousEffectSpineTests.cs`, `SecondEffectSpineTests.cs` (rack-order and refusal lists grow by
 one — **0 count change**), `StudioRackHeadlessTests.cs` (the rack lists grow by one; **+4** new
-cases, which is the whole declared headless delta, and its `Click` helper now scrolls the target into
-view — see D140).
+cases plus the rack-scroller fact = **+5**, the whole declared headless delta; its `Click` helper now
+scrolls the target into view, and because that means no other rack fact can notice a clipped row
+again, `RackScroll` is pinned EXPLICITLY — the scroller's two visibility modes, that the extent
+really exceeds the viewport at ten rows, and that the last row selects and opens its panel — see
+D140).
 
-72 + 6 + 4 + 5 = **87**, which is the declared unit delta.
+**Tests — changed (SP-110's instrument, for §8's gate fix):** `InputWindowProbe.cs`
+(`ScratchWindow.Create` gains `activatable`, and the parked rig takes `WS_EX_NOACTIVATE`),
+`InputCapabilityTests.cs` (**+1** — the idempotency pin).
+
+72 + 6 + 4 + 5 + 1 = **88**, which is the declared unit delta — the last one being the idempotency
+pin in `InputCapabilityTests.cs` (§8). The headless delta is 4 rack/panel/dial facts plus the
+rack-scroller fact = **5**.
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-112, D133–D140).
 

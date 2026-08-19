@@ -41,6 +41,10 @@ internal static class InputWindowProbe
 {
     private const uint WsPopup = 0x80000000;
     private const uint WsExToolwindow = 0x00000080;
+
+    /// <summary>SP-112: a window the OS refuses to ACTIVATE. See <c>ScratchWindow.Create</c>'s
+    /// <c>activatable</c> parameter.</summary>
+    private const uint WsExNoactivate = 0x08000000;
     private const uint WsExTopmost = 0x00000008;
     private const int GwlExstyle = -20;
     private const uint SwpShowwindow = 0x0040;
@@ -461,7 +465,28 @@ internal static class InputWindowProbe
 
         internal int KeyDownCount(ushort virtualKey) => _keyDowns.TryGetValue(virtualKey, out var n) ? n : 0;
 
-        internal static ScratchWindow Create(string tag, int x, int y, int width, int height, bool show)
+        /// <param name="activatable">
+        /// Whether the operating system may make this window the FOREGROUND. <b>False for the
+        /// parked rig, and that is a defect fix (SP-112).</b>
+        ///
+        /// <para><c>SetFocus</c> ACTIVATES the top-level window it focuses (SP-110 record §4,
+        /// M-m/M-p), so the parked rig — whose whole purpose is to hold a THREAD-LOCAL focus while
+        /// something else owns the foreground — became the foreground itself as soon as this
+        /// process had the rights to do it. On the FIRST invocation in a process it has no such
+        /// rights and the activation is refused, which is why the trap reproduced; on the SECOND,
+        /// after the catcher has already taken the foreground once, it succeeds — and when the
+        /// catcher then takes the foreground back, the parked thread is DEACTIVATED and the system
+        /// clears its focus. The clause
+        /// <c>TheThreadLocalFocusRead_ClaimsAWindowThatReceivesNothing…</c> asserts then fails, for
+        /// a reason that has nothing to do with the trap it is measuring. Measured, not supposed:
+        /// two consecutive calls returned <c>threadLocal=True</c> then <c>threadLocal=False</c>.</para>
+        ///
+        /// <para><c>WS_EX_NOACTIVATE</c> is the OS's own answer, and it is the same flag this
+        /// port's video surface carries for the same reason (D122): the window is on screen and in
+        /// the z-order, and the foreground is never taken from anybody.</para>
+        /// </param>
+        internal static ScratchWindow Create(
+            string tag, int x, int y, int width, int height, bool show, bool activatable = true)
         {
             var className = tag + "." + Guid.NewGuid().ToString("N");
             ScratchWindow? instance = null;
@@ -497,7 +522,9 @@ internal static class InputWindowProbe
 
             var handle = RegisterClassExW(ref cls) == 0
                 ? 0
-                : CreateWindowExW(WsExToolwindow, className, "ccp input probe", WsPopup, x, y, width, height, 0, 0, module, 0);
+                : CreateWindowExW(
+                    activatable ? WsExToolwindow : WsExToolwindow | WsExNoactivate,
+                    className, "ccp input probe", WsPopup, x, y, width, height, 0, 0, module, 0);
 
             instance = new ScratchWindow(className, proc, module, handle);
             if (handle != 0 && show)
@@ -559,7 +586,8 @@ internal static class InputWindowProbe
             {
                 var self = parked!;
                 self._threadId = GetCurrentThreadId();
-                self._window = ScratchWindow.Create("CcpInputProbeParked", x, y, width, height, show: true);
+                self._window = ScratchWindow.Create(
+                    "CcpInputProbeParked", x, y, width, height, show: true, activatable: false);
                 if (self._window.Handle != 0)
                 {
                     SetFocus(self._window.Handle);

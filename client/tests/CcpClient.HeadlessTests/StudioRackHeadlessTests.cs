@@ -1446,6 +1446,40 @@ public class StudioRackHeadlessTests
     }
 
     [AvaloniaFact]
+    public async Task THERACKSCROLLS_AndTheLastRowIsReachableOnlyBecauseItDoes()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        // D140, pinned EXPLICITLY rather than transitively. The Click helper now brings its target
+        // into view, which is what a user's mouse wheel does — but it also means no other rack fact
+        // can ever again notice a clipped row, so the scrolling itself needs its own assertion.
+        var scroll = Descendant<ScrollViewer>(window, "RackScroll");
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
+        Assert.Equal(
+            Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, scroll.HorizontalScrollBarVisibility);
+
+        // AND THE RACK REALLY OVERFLOWS at ten rows, which is why this matters: the extent is taller
+        // than the viewport, so the last row is off-screen until something scrolls. A rack that fit
+        // would make this fact vacuous, so the overflow is asserted rather than assumed.
+        window.UpdateLayout();
+        Assert.True(
+            scroll.Extent.Height > scroll.Viewport.Height,
+            $"the rack's extent is {scroll.Extent.Height} and its viewport {scroll.Viewport.Height}: the "
+            + "rack now fits, so this fact no longer proves the scrolling is load-bearing");
+
+        // The last row is reachable through the scroller, and selecting it really opens its panel -
+        // the outcome the clipping took away.
+        var ramp = Descendant<RadioButton>(window, "RowIntensityRamp");
+        Click(window, ramp);
+        Assert.True(ramp.IsChecked);
+        Assert.True(Descendant<StackPanel>(window, "RampModulePanel").IsVisible);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
     public async Task TheBubbleCountRowCarriesTheWholeRackGrammar_AndItsPanelLEADSWithTheInterruption()
     {
         var boot = await BootAsync();

@@ -10,16 +10,27 @@ namespace CcpClient.Desktop.Effects;
 ///
 /// <para><b>Added at SP-112 for the video capability's SECOND consumer, and it is justified by what
 /// the FIRST consumer already needs rather than by what the second one wants.</b> Upstream's
-/// Mandatory Video draws over its own video in two places this port has not ported and has already
-/// declared: the blurred-background composite (<c>Services/Video/VideoService.cs:3436</c>) and the
-/// attention-check prompt drawn over a playing clip (<c>:4846</c>) — both named in
-/// <see cref="VideoSurfacePresenter"/>'s own remarks before this seam existed. A clip you cannot
-/// draw on can never grow either of them.</para>
+/// Mandatory Video does not hand the decoder's own output straight to a surface: its
+/// blurred-background composite draws the picture into something else
+/// (<c>Services/Video/VideoService.cs:3436</c>), which this port has not ported and had already
+/// declared in <see cref="VideoSurfacePresenter"/>'s own remarks before this seam existed. A clip
+/// nothing can draw on can never grow it.</para>
 ///
-/// <para><b>What it deliberately does NOT do.</b> It cannot change the picture's SIZE or replace it
-/// with a different one: it is handed the decoded frame and paints into it. Upstream's blur
-/// composite is the harder shape (the picture is drawn INTO a larger blurred background) and this
-/// seam does not reach it; that is stated rather than implied.</para>
+/// <para><b>What it deliberately does NOT do, and the blur composite is on the wrong side of the
+/// line.</b> It cannot change the picture's SIZE or replace it with a different one: it is handed
+/// the decoded frame and paints INTO it. Upstream's composite is the harder shape — the picture is
+/// drawn into a LARGER blurred background — so this seam covers the "draw on the picture" half of
+/// that need and not the "compose the picture into something bigger" half. Stated rather than
+/// implied, because a seam that is described as covering a case it does not cover is how a later
+/// packet discovers it has to widen one.</para>
+///
+/// <para><b>There is no CLOSE, and that is a gap rather than a decision.</b> A painter told
+/// <see cref="Opening"/> is not told when the clip ends, and <see cref="VideoSurfacePresenter.Begin"/>
+/// can refuse AFTER <see cref="Opening"/> has been called (the surface may refuse the placement, the
+/// clip may decode nothing, the first picture may not be held) — so a painter that acquired anything
+/// in <see cref="Opening"/> would have to release it on a signal this interface does not give it.
+/// SP-112's own painter holds nothing but its own arithmetic and is discarded with the firing, which
+/// is why it did not need one; the first painter that holds a resource will.</para>
 ///
 /// <para><b>Threading.</b> Called on the surface thread, inline with the frame advance, so it must
 /// be cheap and must not throw — a painter that threw would take the cadence down with it.</para>
