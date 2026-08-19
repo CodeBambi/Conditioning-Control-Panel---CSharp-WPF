@@ -20,44 +20,53 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.2";
+        public const string AppVersion = "6.8.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8.2 - Relapse
+        public const string CurrentPatchNotes = @"v6.8.3 - Relapse
 
-STABILITY HOTFIX - ALL REPAIRS, STRAIGHT FROM YOUR REPORTS
+Round two of repairs under the same banner. Everything below comes from your reports since 6.8.2 dropped.
 
-FREE TODAY, FOR REAL
-- The daily free feature now actually opens: 15 gates still asked for Patreon, and the midnight rollover left stale padlocks behind. Fixed everywhere, timezones included.
+THE PROGRAM FREEZES, FOUND AND FIXED
+- Switching to the Programs tab could hard-freeze the whole app when a program was running hot. A decorative animation kept retrying at a priority that outranks your mouse and keyboard, forever. It now gives up after 3 tries like a polite guest.
+- The corner GIFs a session spawns never received the freeze fix from two updates ago - only the settings-preview path did. Long program days (Firmware Install day 14) could still lock up because of it. Now both paths share the fix.
+- The lock card's dead-man's switch was disarmed for the FIRST card of a run, which is exactly the card that froze for some of you on program day 2. It now arms from card one.
+- If the app ever does freeze and you task-kill it, it now leaves behind a note saying exactly what it was doing, and reports it on the next launch. Freezes can no longer die anonymously.
 
-BRAIN DRAIN, REPAIRED
-- The blur could go silently dead with nothing in the log. It now reports which render path it takes and why, heals itself if a start is dropped, and survives a cloud restore.
-- The strength dial only moved the blur radius on the classic path. Both halves of the dial now work on both paths, so 5% finally feels like 5% everywhere.
-- Audio clips load without restarting the app: the folder re-scans on every start and the settings card shows a live clip count with Refresh and Open Folder.
-- A clip plays to its end instead of getting cut off by the next trigger. Long tracks stop rebooting mid-play.
+BRAIN DRAIN, VISIBLE ON EVERY MACHINE
+- Found it. On some graphics drivers the screen capture comes back with a blank transparency byte, and the blur drew itself fully invisible. Same app, same settings, nothing on screen. The capture is now read in a way that cannot be transparent, so the blur and melt render on every machine. If Brain Drain never showed anything for you, this was why.
+- Audio clips now also load from a braindrain folder inside your assets folder, where you actually looked for it. The old location still works; the folder card shows you both.
+- New opt-in in Settings: allow Brain Drain to appear in screenshots and recordings. Off by default, streamers stay safe.
 
-SIGN-IN COULD DIE TO A GLOW EFFECT
-- Re-linking Patreon could fail with a cryptic Bd error. A cosmetic focus-glow animation was crashing the login. Rebuilt so it cannot, and sign-in now shrugs off any cosmetic failure. Your account was never the problem.
+WINDOWS THAT BEHAVE
+- At 300 percent display scaling the window taller than your screen dropped its bottom bar below the taskbar. It now clamps itself to the monitor it is actually on.
+- The Audio Layers window crashed in its own constructor and had NEVER successfully opened, for anyone, since the feature shipped. It opens now. It also politely appears on-screen instead of wherever it last imagined itself.
+- Pink Rush, achievement and item popups no longer steal focus from your fullscreen game. They announce, they do not interrupt.
+- Starting the tutorial while minimized to tray no longer plays to an empty room; the main window comes back first.
+- Reveal in Explorer now highlights the actual file instead of dumping you on the Desktop.
 
-JUST DROP UNFREEZES
-- With Windows animation effects switched off, drops arrived as still images. The window now keeps the page moving regardless. In-app Motion: Off is still respected.
+MOD CREATOR CATCHES UP
+- The achievement art list showed 29 slots while the app has 69 achievements. All are now offered, and loading an existing mod no longer silently drops half its badges on export.
+- 30 achievements had no translation keys at all, so non-English users always saw English. All 9 languages now cover the full set.
 
-SPEECH THAT TELLS THE TRUTH
-- Recent installers had quietly shipped without the bundled voice model - that is why some could not find the vosk folder at all. It is back in the package.
-- The app claimed speech was not available while the bundled voice model sat right there, and a bigger community-downloaded model silently won and broke recognition. The shipped model now wins, and the status says exactly what is wrong when something is.
+IN CASE YOU MISSED 6.8 ENTIRELY
+The 6.8 line landed fast, three updates inside a week, so if you have not opened CCP since 6.7 here is what is waiting for you:
+- A whole new layout. The tab strip is gone; six doors live on a rail down the left edge with Settings pinned at the bottom. Ctrl+K opens a command palette that jumps you to any setting by name.
+- One account across desktop, web and phone. XP earned on app.cclabs.app or on your phone lands in your level here automatically.
+- Online media everywhere, strictly opt-in. The For You feed goes endless, and flashes, mandatory videos and subliminals can pull fresh content too. Local files stay the default.
+- Just Drop is open to everyone, in its own window, signed in as you, wallet live.
+- One premium feature is FREE every single day: the ? box on your dashboard. No trial, no nag, different feature tomorrow.
+- Sessions rebuilt into a color-coded rack with sort, filter and search. Programs got honest day crediting, feasible tasks and graduation badges.
+- Brain Drain is live on the rack, and mods now repaint the entire app the instant you switch.
+- Plus the 6.8.1 and 6.8.2 hotfix rounds: 50+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, and sign-in can no longer die to a cosmetic glow.
 
-AND THE REST
-- The Handy trim slider stops snapping to 0 mid-drag, and Test now moves position-only toys.
-- The Asset Preset dropdown names your preset again instead of reciting code.
-- Blink Trainer opens on every monitor for dual-monitor setups.
-- Split cards keep a visible, clickable corner of both halves.
-- Settings > Notifications: mute the XP perk, Pink Rush and quest popups if you prefer quiet.
-- Audio Layers warns you when the master switch is on with no layers added.
+Season: Airhead August (The last season!)
 
-Season: Spiral September";
+Something new is coming on September 1. 🌀
+Stay tuned... :3";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
