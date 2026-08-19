@@ -1,0 +1,6 @@
+WAVE: 53
+PACKETS: SP-113-pointer-surface
+LANES: 1
+BASE: cc3244f3
+GATE: validate-wave.mjs WAVE OK; floor 1830/112
+OPENED: 2026-08-19T16:16:32Z
