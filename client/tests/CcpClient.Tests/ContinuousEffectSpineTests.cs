@@ -211,11 +211,14 @@ public class ContinuousEffectSpineTests
         // SP-109 adds two more modules that ship off — Mind Wipe and Brain Drain's audio half — and
         // SP-110 a third, Lock Card (AppSettings.cs:3331), and SP-112 a fourth, Bubble Count, so
         // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
-        // six modules declined the same session for the same reason and all six are named.
+        // six modules declined the same session for the same reason and all six are named. SP-113
+        // adds a fifth that ships off (Bubble Pop, AppSettings.cs:2204's BubblesEnabled default),
+        // and it lands FIRST in GAMES & CARDS because that is the rack's order
+        // (StudioTabView.xaml.cs:499).
         Assert.Equal(
             [
-                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BubbleCountEffect.EffectId,
-                LockCardEffect.EffectId, MindWipeEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BubblePopEffect.EffectId,
+                BubbleCountEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
                 BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
@@ -250,11 +253,16 @@ public class ContinuousEffectSpineTests
         // the IMMERSION pair for the same reason: that is the rack's group order
         // (StudioTabView.xaml.cs:483/498/508/530) AND StartEngine's own (:206-209 comes after the
         // overlay service and before Mind Wipe at :229-230).
+        //
+        // SP-113 puts Bubble Pop at the HEAD of that group, which is upstream's own rack order
+        // (Add("bubbles", ...) at :499, before bubblecount at :501 and lockcard at :503) and is
+        // uncontested by StartEngine, which never starts the ambient bubble game at all.
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
+                LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));

@@ -143,11 +143,13 @@ public class SecondEffectSpineTests
         // BubbleCountEnabled default), and it lands BEFORE the lock card because that is the rack's
         // order (StudioTabView.xaml.cs:499-505). The FACT is unchanged and the assertion is stronger
         // each time: SEVEN modules declined the same session for the same reason and all seven are
-        // named, which is the whole point of a typed arm.
+        // named, which is the whole point of a typed arm. SP-113 adds a ninth (Bubble Pop, whose
+        // BubblesEnabled ships false at AppSettings.cs:2204) and it lands at the HEAD of GAMES &
+        // CARDS, which is the rack's order (StudioTabView.xaml.cs:499).
         Assert.Equal(
             [
                 MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, PinkFilterEffect.EffectId,
-                BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                BubblePopEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));

@@ -399,7 +399,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             bubbleCountRandom,
             bubbleCountPlacement);
 
-        // SP-113: the eleventh module, and the first the user is expected to ACT on. Its surface is
+        // SP-113: the eleventh module, and the first the user is expected to ACT on. It goes FIRST
+        // in GAMES & CARDS because that is where the rack puts it — Bubble Pop, Bubble Count, Lock
+        // Card, Bouncing Text (StudioTabView.xaml.cs:499-505) — and upstream's StartEngine offers no
+        // competing order for it: the ambient game is started by the dashboard card's own toggle and
+        // by SessionEngine (Services/SessionEngine.cs:444), not from StartEngine's effect sequence.
+        // So there is no D90-style disagreement here and the rack's order stands unopposed. Its surface is
         // its OWN — no other row places a clickable target — and that is not the single-tenancy
         // shortcut SP-112 §2.3 F5 warned about: the capability is keyed from birth, every operation
         // names a target, so a second consumer inherits ownership rather than having to guard for it.
@@ -446,7 +451,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // order.
         Engine = new SessionEngine(
             [
-                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubbleCount, BubblePop, LockCard,
+                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubblePop, BubbleCount, LockCard,
                 MindWipe, BrainDrain, Ramp,
             ],
             _preset, signal);

@@ -456,7 +456,8 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+            "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -584,7 +585,8 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                "RowIntensityRamp",
             ],
             rows);
 
@@ -596,7 +598,8 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+            "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -789,7 +792,8 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                "RowIntensityRamp",
             ],
             rows);
 
@@ -1423,18 +1427,23 @@ public class StudioRackHeadlessTests
         // one this port takes for Spiral/Pink Filter, and this row follows it: the RACK's, because
         // the rack is the order the user has learned. Asserted on the RENDERED rack rather than on
         // a list, so a reordered panel reds here.
+        //
+        // SP-113 lands Bubble Pop at the head of the group — Add("bubbles", ...) at :499 — so the
+        // whole of upstream's GAMES & CARDS order that this port has rows for is now pinned here.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
             .Where(r => r.Classes.Contains("rack-row"))
             .Select(r => r.Name)
             .ToList();
+        var popIndex = rows.IndexOf("RowBubblePop");
         var bubbleIndex = rows.IndexOf("RowBubbleCount");
         var lockIndex = rows.IndexOf("RowLockCard");
         var pinkIndex = rows.IndexOf("RowPinkFilter");
-        Assert.True(bubbleIndex >= 0 && lockIndex >= 0);
+        Assert.True(popIndex >= 0 && bubbleIndex >= 0 && lockIndex >= 0);
         Assert.True(
-            pinkIndex < bubbleIndex && bubbleIndex < lockIndex,
-            $"the rack renders pinkfilter at {pinkIndex}, bubblecount at {bubbleIndex} and lockcard at "
-            + $"{lockIndex}; GAMES and CARDS must open with Bubble Count");
+            pinkIndex < popIndex && popIndex < bubbleIndex && bubbleIndex < lockIndex,
+            $"the rack renders pinkfilter at {pinkIndex}, bubblepop at {popIndex}, bubblecount at "
+            + $"{bubbleIndex} and lockcard at {lockIndex}; GAMES and CARDS must open with Bubble Pop, "
+            + "which is where StudioTabView.xaml.cs:499 puts it");
 
         // The label is the row's own, minus the emoji this rack does not render.
         var label = Descendant<RadioButton>(window, "RowBubbleCount")
@@ -1592,6 +1601,167 @@ public class StudioRackHeadlessTests
         cap.Value = 120;
         Assert.Equal(120, boot.Session.MandatoryVideoPreset.Current.MaxSeconds);
         Assert.Equal("120s", Descendant<TextBlock>(window, "MandatoryVideoMaxLengthValue").Text);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    // ---------------------------------------------------------------------------------
+    //  SP-113 — the row the user ACTS on
+    // ---------------------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task TheBubblePopRowCarriesTheWholeRackGrammar_AndItsPanelLEADSWithTheInterruption()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowBubblePop").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+
+        // The label is upstream's own, and it is NOT the dispatch key: the key is "bubbles"
+        // (StudioTabView.xaml.cs:499) and the label is "Bubble Pop".
+        var label = Descendant<RadioButton>(window, "RowBubblePop")
+            .GetVisualDescendants().OfType<TextBlock>().First();
+        Assert.Equal(BubblePopEffect.DisplayTitle, label.Text);
+        Assert.Equal("Bubble Pop", label.Text);
+        Assert.Equal("bubbles", BubblePopEffect.EffectId);
+
+        // The right-click quick-toggle reaches this row like any other. The rack grammar needed
+        // nothing new for a module the user clicks back at.
+        Assert.False(boot.Session.BubblePopPreset.Current.Enabled);
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"), MouseButton.Right);
+        Assert.True(boot.Session.BubblePopPreset.Current.Enabled);
+
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
+
+        // The interruption warning LEADS, above the dials — a POSITIONAL claim, pinned
+        // positionally, exactly as the Lock Card's, Mandatory Video's and Bubble Count's are. This
+        // row's warning is the inverse of theirs and a user is entitled to read it before ticking
+        // the box: these windows cover points and take clicks, and take nothing else.
+        var panel = Descendant<StackPanel>(window, "BubblePopModulePanel");
+        var children = panel.Children.ToList();
+        var noticeIndex = children.FindIndex(c => c.GetVisualDescendants().OfType<TextBlock>()
+            .Any(t => t.Name == "BubblePopInterruptionNotice"));
+        var enableIndex = children.FindIndex(c => c.Name == "BubblePopEnableToggle");
+        Assert.True(noticeIndex >= 0 && enableIndex >= 0);
+        Assert.True(
+            noticeIndex < enableIndex,
+            $"the interruption notice is at index {noticeIndex} and the enable at {enableIndex}");
+
+        var notice = Descendant<TextBlock>(window, "BubblePopInterruptionNotice");
+        Assert.Equal(PointerPanelNotices.InterruptionNotice, notice.Text);
+        Assert.Contains("never take the keyboard or the foreground", notice.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubblePopPanelCarriesAnEVIDENCENotice_WhichNoOtherPanelOnThisPageNeeds()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
+
+        // Everything else on this page is something the user can SEE happening. "A click would
+        // reach this window" is a question only the operating system can answer, so the panel says
+        // what was asked AND, in the same breath, what no automated check can ever show.
+        var evidence = Descendant<TextBlock>(window, "BubblePopEvidenceNotice");
+        Assert.Equal(PointerPanelNotices.EvidenceNotice, evidence.Text);
+        Assert.Contains("manual step", evidence.Text!, StringComparison.Ordinal);
+
+        // The delivery line reads as evidence and not as a fault before anything has been clicked.
+        var delivery = Descendant<TextBlock>(window, "BubblePopDeliveryState");
+        Assert.Contains("not a fault", delivery.Text!, StringComparison.Ordinal);
+
+        // The capability's own answer, verbatim, and "nobody asked" before anything was asked —
+        // which is a different fact from "the answer was no".
+        var capability = Descendant<TextBlock>(window, "BubblePopCapabilityState");
+        Assert.Contains("has not been asked for anything yet", capability.Text!, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubblePopPanelsDialsAreUpstreamsOwnBounds_AndEachOneReadsInItsOwnUnits()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
+
+        // Spawns per MINUTE, 1..60 (Models/AppSettings.cs:2210) — not per hour, which is what every
+        // other paced row on this page uses and what a reader would otherwise assume.
+        var frequency = Descendant<Slider>(window, "BubblePopFrequencySlider");
+        Assert.Equal(BubblePopField.MinPerMinute, frequency.Minimum);
+        Assert.Equal(BubblePopField.MaxPerMinute, frequency.Maximum);
+        Assert.Equal(BubblePopField.DefaultPerMinute, frequency.Value);
+        Assert.Contains("one every 12 s", Descendant<TextBlock>(window, "BubblePopFrequencyValue").Text!,
+            StringComparison.Ordinal);
+
+        // Size, 50..150 % (Services/BubbleSizing.cs:52,59), shown in the PIXELS the user will see.
+        var size = Descendant<Slider>(window, "BubblePopSizeSlider");
+        Assert.Equal(BubblePopField.MinSizePercent, size.Minimum);
+        Assert.Equal(BubblePopField.MaxSizePercent, size.Maximum);
+        size.Value = 50;
+        Assert.Equal(50, boot.Session.BubblePopPreset.Current.SizePercent);
+        Assert.Contains("75 to", Descendant<TextBlock>(window, "BubblePopSizeValue").Text!,
+            StringComparison.Ordinal);
+
+        // Extra speed, 0..500 % (Models/AppSettings.cs:2262), shown WITH the race bound, because
+        // they are the same number.
+        var speed = Descendant<Slider>(window, "BubblePopSpeedSlider");
+        Assert.Equal(BubblePopField.MinSpeedBoostPercent, speed.Minimum);
+        Assert.Equal(BubblePopField.MaxSpeedBoostPercent, speed.Maximum);
+        speed.Value = 500;
+        Assert.Equal(500, boot.Session.BubblePopPreset.Current.SpeedBoostPercent);
+        Assert.Contains("12 px", Descendant<TextBlock>(window, "BubblePopSpeedValue").Text!,
+            StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheBubblePopPanelHasNONEOfUpstreamsFiveUnportedDials_AbsentRatherThanGreyed()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
+
+        // D93's rule: a dial that moves nothing is ABSENT, never present-and-disabled. Upstream's
+        // card carries Solid mode (AppSettings.cs:2224), a pop-volume slider (:2230), a ramp link
+        // (:2236), a session-clickable switch (:2242) and the Trigger Bubbles block (:2250-2280);
+        // BubblePopPresetDocument says why each one is gone.
+        var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("BubblePopSolidModeToggle", names);
+        Assert.DoesNotContain("BubblePopVolumeSlider", names);
+        Assert.DoesNotContain("BubblePopLinkRampToggle", names);
+        Assert.DoesNotContain("BubblePopClickableToggle", names);
+        Assert.DoesNotContain("BubblePopTriggersToggle", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task SelectingTheBubblePopRowClosesEveryOtherPanel_AndTheRackHintStaysHidden()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+
+        Click(window, Descendant<RadioButton>(window, "RowBubbleCount"));
+        Assert.True(Descendant<StackPanel>(window, "BubbleCountModulePanel").IsVisible);
+
+        Click(window, Descendant<RadioButton>(window, "RowBubblePop"));
+
+        Assert.True(Descendant<StackPanel>(window, "BubblePopModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "BubbleCountModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "LockCardModulePanel").IsVisible);
+        Assert.False(Descendant<TextBlock>(window, "RackHint").IsVisible);
 
         await boot.Host.ShutdownAsync();
     }

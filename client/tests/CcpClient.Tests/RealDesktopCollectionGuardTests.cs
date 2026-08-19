@@ -90,6 +90,15 @@ public class RealDesktopCollectionGuardTests
         // foreground after it — so it contends for everything the three lines above contend for,
         // and it must join the same collection for the same reasons.
         "BubbleCountObservations",
+
+        // SP-113. A pointer target is the most invasive thing this suite has put on the desktop yet
+        // and it is invasive in a NEW way: the runs behind these helpers SYNTHESISE MOUSE CLICKS at
+        // points on the one machine-global screen. Two of them running concurrently would not merely
+        // contest a rectangle — one run's click would land in the other run's window, or in whatever
+        // the other run had just moved out of the way.
+        "PointerWindowProbe",
+        "PointerSurfaceObservations",
+        "Win32PointerSurface",
     ];
 
     /// <summary>
@@ -125,6 +134,8 @@ public class RealDesktopCollectionGuardTests
         "InputOverlayCoexistenceTests.cs",
         "VideoCapabilityTests.cs",
         "VideoOverlayCoexistenceTests.cs",
+        "PointerCapabilityTests.cs",
+        "PointerCoexistenceTests.cs",
     ];
 
     [Fact]

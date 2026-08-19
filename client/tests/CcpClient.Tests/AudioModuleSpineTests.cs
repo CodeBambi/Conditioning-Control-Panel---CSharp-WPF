@@ -50,11 +50,18 @@ public class AudioModuleSpineTests
         // upstream orders disagree here, exactly as they do for Spiral Overlay and Pink Filter, and
         // D90 already settled which one this port takes: the rack's, because the rack is the order
         // the user has learned.
+        //
+        // SP-113 adds Bubble Pop and it goes FIRST in that group, which is where the rack puts it
+        // (Add("bubbles", ...) at StudioTabView.xaml.cs:499, before bubblecount at :501 and lockcard
+        // at :503). Nothing in StartEngine competes for its position: the ambient game is started
+        // from the dashboard card and from SessionEngine.cs:444, not from StartEngine's effect
+        // sequence, so the rack's order stands unopposed here.
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
+                LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));

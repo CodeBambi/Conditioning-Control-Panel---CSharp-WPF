@@ -40,13 +40,18 @@ namespace CcpClient.Desktop.Effects;
 /// </summary>
 public sealed class BubblePopEffect : OwnedSessionEffect
 {
-    /// <summary>This module's rack key. WPF has no Studio rack row for Bubble Pop — it is a
-    /// dashboard CARD (<c>Features/BubblePopFeatureControl.xaml</c>) whose enable toggle live-starts
-    /// and live-stops the service (<c>:99-105</c>) — so the port gives it a rack row on the same
-    /// terms as every other module and takes the service's own name for the key.</summary>
-    public const string EffectId = "bubblepop";
+    /// <summary>
+    /// WPF's own rack key for this module, and it is <c>"bubbles"</c> rather than anything spelled
+    /// like the row's title: <c>Add("bubbles", "🫧", "Bubble_pop.png", "Bubble Pop", …)</c>
+    /// (<c>Views/Tabs/StudioTabView.xaml.cs:499-500</c>), and it is the same key the quick-toggle
+    /// switches on (<c>MainWindow/MainWindow.Presets.cs:1256</c>). A-004's rule is that the dispatch
+    /// identity is upstream's key and never a display string, so it is taken verbatim even though it
+    /// does not match the class name.
+    /// </summary>
+    public const string EffectId = "bubbles";
 
-    /// <summary>The row's label, taken from the dashboard card the shipping app shows.</summary>
+    /// <summary>The row's label as the shipping app shows it
+    /// (<c>Views/Tabs/StudioTabView.xaml.cs:499</c>).</summary>
     public const string DisplayTitle = "Bubble Pop";
 
     private readonly PersistenceStore<BubblePopPresetDocument> _preset;
@@ -221,11 +226,23 @@ public sealed class BubblePopEffect : OwnedSessionEffect
     /// </summary>
     protected override CapabilityState Ready(CapabilityState engaged)
     {
-        if (_surface is null || engaged is CapabilityState.Unavailable)
+        if (_surface is null)
         {
             return engaged;
         }
 
+        // The CHANNEL being gone beats everything: no window station, no display, or a platform this
+        // build cannot earn. That is the Pink Filter answer and it is not narrowed here.
+        if (engaged is CapabilityState.Unavailable channel
+            && channel.Reason.Code == EffectReasonCodes.PointerSurfaceUnavailable)
+        {
+            return engaged;
+        }
+
+        // Everything else is narrowed by what is ACTUALLY on the desktop, including a placement the
+        // capability itself refused: a target the window manager routes nothing to is still a window
+        // the field is holding, and the module — not the capability — is the thing that knows a game
+        // is running with nobody able to play it.
         var (up, routable) = Targets;
         if (up > 0 && routable == 0)
         {
