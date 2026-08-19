@@ -73,6 +73,7 @@ public partial class StudioPage : UserControl
     private readonly LockCardEffect _lockCard;
     private readonly MandatoryVideoEffect _mandatoryVideo;
     private readonly BubbleCountEffect _bubbleCount;
+    private readonly BubblePopEffect _bubblePop;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -92,6 +93,7 @@ public partial class StudioPage : UserControl
         _lockCard = session.LockCard;
         _mandatoryVideo = session.MandatoryVideo;
         _bubbleCount = session.BubbleCount;
+        _bubblePop = session.BubblePop;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -107,6 +109,7 @@ public partial class StudioPage : UserControl
         RowLockCard.IsCheckedChanged += (_, _) => ApplySelection();
         RowMandatoryVideo.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubbleCount.IsCheckedChanged += (_, _) => ApplySelection();
+        RowBubblePop.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -123,6 +126,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowLockCard, LockCardEffect.EffectId);
         AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId);
         AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId);
+        AddQuickToggle(RowBubblePop, BubblePopEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -144,6 +148,8 @@ public partial class StudioPage : UserControl
             OnEnableToggled(MandatoryVideoEnableToggle, _mandatoryVideo, MandatoryVideoEffect.EffectId);
         BubbleCountEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(BubbleCountEnableToggle, _bubbleCount, BubbleCountEffect.EffectId);
+        BubblePopEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(BubblePopEnableToggle, _bubblePop, BubblePopEffect.EffectId);
 
         // Strict is one of the module's own dials, not its enable, so it writes through the module
         // the way the ramp's switches do rather than through the rack's quick-toggle.
@@ -185,6 +191,9 @@ public partial class StudioPage : UserControl
         OnSliderMoved(MandatoryVideoMaxLengthSlider, OnMandatoryVideoMaxLengthMoved);
         OnSliderMoved(BubbleCountFrequencySlider, OnBubbleCountFrequencyMoved);
         OnSliderMoved(BubbleCountDifficultySlider, OnBubbleCountDifficultyMoved);
+        OnSliderMoved(BubblePopFrequencySlider, OnBubblePopFrequencyMoved);
+        OnSliderMoved(BubblePopSizeSlider, OnBubblePopSizeMoved);
+        OnSliderMoved(BubblePopSpeedSlider, OnBubblePopSpeedMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -264,6 +273,12 @@ public partial class StudioPage : UserControl
     /// <see cref="BubbleCountEffect.WorkIsRunning"/>).</summary>
     public EffectDotState RenderedBubbleCountDot { get; private set; } = EffectDotState.Off;
 
+    /// <summary>The Bubble Pop row's dot (SP-113). <c>Live</c> means the field is running AND
+    /// either nothing of its own is on screen yet or the operating system says it routes a click
+    /// at one of its bubbles TO this app — SP-110's DEMAND with the hit test in place of the
+    /// foreground (<see cref="BubblePopSurfacePresenter.Running"/>).</summary>
+    public EffectDotState RenderedBubblePopDot { get; private set; } = EffectDotState.Off;
+
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
     ///
@@ -326,8 +341,10 @@ public partial class StudioPage : UserControl
         var lockCardOpen = RowLockCard.IsChecked == true;
         var videoOpen = RowMandatoryVideo.IsChecked == true;
         var bubbleCountOpen = RowBubbleCount.IsChecked == true;
+        var bubblePopOpen = RowBubblePop.IsChecked == true;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
+        BubblePopModulePanel.IsVisible = bubblePopOpen;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
@@ -337,7 +354,8 @@ public partial class StudioPage : UserControl
         BrainDrainModulePanel.IsVisible = brainDrainOpen;
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
-            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen;
+            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
+            && !bubblePopOpen;
     }
 
     /// <summary>
@@ -737,6 +755,12 @@ public partial class StudioPage : UserControl
             BubbleCountEnableToggle.IsChecked = bubbleCount.Enabled;
             BubbleCountFrequencySlider.Value = bubbleCount.PerHour;
             BubbleCountDifficultySlider.Value = (int)bubbleCount.Difficulty;
+
+            var bubblePop = _session.BubblePopPreset.Current;
+            BubblePopEnableToggle.IsChecked = bubblePop.Enabled;
+            BubblePopFrequencySlider.Value = bubblePop.PerMinute;
+            BubblePopSizeSlider.Value = bubblePop.SizePercent;
+            BubblePopSpeedSlider.Value = bubblePop.SpeedBoostPercent;
         }
         finally
         {
@@ -890,6 +914,73 @@ public partial class StudioPage : UserControl
             BubbleCountPanelNotices.DescribeClipPool(_bubbleCount.ClipCount, _bubbleCount.ClipFolder);
         BubbleCountCapabilityState.Text = BubbleCountPanelNotices.DescribeBothCapabilities(
             _bubbleCount.LastPlayback, _bubbleCount.LastPrompt);
+
+        // The one row the user ACTS on. Its live line has a clause no other row's has — targets are
+        // up and the window manager routes clicks at none of them — because that is a state only
+        // this row can be in and it is invisible from anywhere else.
+        var bubblePop = _bubblePop.Settings;
+        BubblePopFrequencyValue.Text = PointerPanelNotices.DescribeSpawnRate(bubblePop.PerMinute);
+        BubblePopSizeValue.Text = PointerPanelNotices.DescribeSize(bubblePop.SizePercent);
+        BubblePopSpeedValue.Text = PointerPanelNotices.DescribeSpeed(bubblePop.SpeedBoostPercent);
+        BubblePopInterruptionNotice.Text = PointerPanelNotices.InterruptionNotice;
+        BubblePopScopeNotice.Text = PointerPanelNotices.ScopeNotice;
+        BubblePopEvidenceNotice.Text = PointerPanelNotices.EvidenceNotice;
+        RenderedBubblePopDot = PaintDot(BubblePopRowDot, _bubblePop);
+        var (targetsUp, routable) = _bubblePop.Targets;
+        BubblePopLiveState.Text = PointerPanelNotices.DescribeFieldState(
+            RenderedBubblePopDot, _session.Engine.Running, _session.BubblePopSurface.CanReachAPointer,
+            targetsUp, routable, _bubblePop.Popped, _bubblePop.Missed);
+        var (presses, refused) = _bubblePop.Delivery;
+        BubblePopDeliveryState.Text = PointerPanelNotices.DescribeDelivery(presses, refused);
+        BubblePopCapabilityState.Text = PointerPanelNotices.DescribeCapability(_bubblePop.LastPlacement);
+    }
+
+    /// <summary>
+    /// The bubbles-per-minute slider writes the dial and re-times the live spawn timer — the port's
+    /// standing convention since SP-105, and upstream's own <c>RefreshFrequency()</c> on the same
+    /// gesture (<c>Features/BubblePopFeatureControl.xaml.cs:116</c>).
+    /// </summary>
+    private void OnBubblePopFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bubblePop.SetPerMinute((int)Math.Round(BubblePopFrequencySlider.Value));
+        _ = _session.BubblePopPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The size slider. It changes the NEXT bubble, never one already on screen: this port's pointer
+    /// surface refuses to resize a placed window, which is upstream's own #494 deadlock
+    /// (<c>docs/primers/BUBBLE_POP_PRIMER.md</c> §9.1) turned into a rule rather than a comment.
+    /// </summary>
+    private void OnBubblePopSizeMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bubblePop.SetSizePercent((int)Math.Round(BubblePopSizeSlider.Value));
+        _ = _session.BubblePopPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>The extra-speed slider. Applied at the next spawn, where upstream applies it — in
+    /// the bubble's own constructor (<c>Services/BubbleService.cs:2831-2836</c>).</summary>
+    private void OnBubblePopSpeedMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _bubblePop.SetSpeedBoostPercent((int)Math.Round(BubblePopSpeedSlider.Value));
+        _ = _session.BubblePopPreset.Save();
+        Refresh();
     }
 
     /// <summary>

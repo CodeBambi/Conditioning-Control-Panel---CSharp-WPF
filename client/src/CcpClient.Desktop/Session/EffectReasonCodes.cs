@@ -260,4 +260,45 @@ public static class EffectReasonCodes
     /// would be exactly the silently-missing half this code exists to prevent.</para>
     /// </summary>
     public const string VideoSilentHalfAbsent = "video-silent-half-absent";
+
+    /// <summary>
+    /// A POINTER module is armed and this process cannot put a clickable target on a desktop at all
+    /// (SP-113): no interactive window station, no display, no desktop, or a platform whose
+    /// non-activating routing this build cannot earn — the Linux and macOS branches of
+    /// <c>Pointer.PointerSurfaceFactory</c>.
+    ///
+    /// <para><b>It takes the Pink Filter answer</b> — <c>Unavailable</c> in the arm result and
+    /// <c>Armed</c> in the dot — because the whole CHANNEL is gone. Not one bubble can be placed, so
+    /// there is no surviving half to name, and a lit dot would claim a game the user could be playing.</para>
+    /// </summary>
+    public const string PointerSurfaceUnavailable = "pointer-surface-unavailable";
+
+    /// <summary>
+    /// A POINTER module's field is on the desktop and the window manager routes a click at NONE of
+    /// its targets to them (SP-113): they are covered, or something above them owns those points.
+    ///
+    /// <para><b>Degraded in the arm result, and Armed in the dot</b> — which is a THIRD answer, not
+    /// either of the two the port already had. It is not the Pink Filter answer, because the channel
+    /// is intact and the very next step may route again; and it is not the Subliminals answer, because
+    /// this is not missing CONTENT — the bubbles are there and drawn, and the user simply cannot hit
+    /// any of them. A field nobody can click is a picture of a game, so the dot goes dark while the
+    /// module keeps running and keeps trying.</para>
+    /// </summary>
+    public const string PointerFieldNotRoutable = "pointer-field-not-routable";
+
+    /// <summary>
+    /// Bubble Pop ships as its CLICKABLE half only: <b>the pop SOUND and the whole reward chain are
+    /// not ported</b> (SP-113).
+    ///
+    /// <para>Upstream pays every pop with a pooled-device sound, an XP grant with a lucky roll, an
+    /// achievement tick, a haptic pulse and a Discord presence update
+    /// (<c>Services/BubbleService.cs:941-968</c>, <c>:1839-1905</c>). This port has no progression,
+    /// no achievements, no haptics and no Discord at all, and its audio capability is a separate
+    /// module's — so a pop here is a pop, and nothing else happens.</para>
+    ///
+    /// <para><b>Always present, never conditional</b> — the same rule and the same reason as
+    /// <see cref="VideoSilentHalfAbsent"/>: the absence is a property of the BUILD rather than of the
+    /// run.</para>
+    /// </summary>
+    public const string PointerRewardChainAbsent = "pointer-reward-chain-absent";
 }

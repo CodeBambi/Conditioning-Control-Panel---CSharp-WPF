@@ -147,12 +147,37 @@
                something no earlier dot has meant — see LockCardEffect. -->
           <TextBlock Classes="rack-group" Text="GAMES &amp; CARDS" />
 
+          <!-- SP-113 — and it goes FIRST in this group because that is where the rack puts it:
+               Bubble Pop, Bubble Count, Lock Card, Bouncing Text (StudioTabView.xaml.cs:499-505).
+               SP-112's own comment below already named this position as Bubble Pop's and said the
+               row was unported; it is ported now and takes the place that was held for it.
+
+               THIS ROW IS THE FIRST THE USER ACTS ON. Every module before it did something TO
+               them. Its dot therefore means something no earlier dot has meant: not that a
+               picture is on the screen or that a question is in front of them, but that the
+               OPERATING SYSTEM will route a click at one of these windows to this app — a claim
+               on attention the OS grants and can revoke, which is SP-110's DEMAND with the hit
+               test in place of the foreground. See BubblePopEffect. -->
+          <RadioButton x:Name="RowBubblePop"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowBubblePop"
+                       AutomationProperties.Name="Bubble Pop rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Bubble Pop" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="BubblePopRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="BubblePopRowDot" />
+            </Grid>
+          </RadioButton>
+
           <!-- SP-112 — and it goes ABOVE Lock Card because the RACK's order is the one the port
                takes when the two upstream orders disagree, which they do here: the rack is Bubble
                Pop, Bubble Count, Lock Card, Bouncing Text (StudioTabView.xaml.cs:499-505) while
                StartEngine starts the lock card first and the bubble count second (:206-215). D90
                settled that question for Spiral/Pink Filter and the same answer applies: the rack is
-               the order the user has learned. Bubble Pop is still unported and has no row.
+               the order the user has learned. Bubble Pop is the row directly above (SP-113).
 
                THIS ROW IS THE FIRST THAT USES TWO CAPABILITIES. It plays a clip on the same video
                surface Mandatory Video plays on and asks its question through the same input
@@ -632,6 +657,122 @@
              quoting what was asked of the operating system and what came back, including the peak
              level Windows measured on this process's own stream. -->
         <!-- ================= Lock Card ================= -->
+        <!-- ================= Bubble Pop ================= -->
+        <StackPanel x:Name="BubblePopModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Bubble Pop" />
+          <TextBlock Classes="page-blurb"
+                     Text="Floats small bubbles up your screen. Click one to pop it." />
+
+          <!-- THE INTERRUPTION WARNING LEADS, above the dials, as the Lock Card's and Bubble
+               Count's do — and this one has the OPPOSITE thing to promise: these windows are
+               always on top and they take clicks, and they take NOTHING ELSE. Constants in
+               PointerPanelNotices rather than inline prose so a fact can pin the exact words. -->
+          <Border Classes="notice">
+            <TextBlock x:Name="BubblePopInterruptionNotice"
+                       AutomationProperties.AutomationId="BubblePopInterruptionNotice"
+                       TextWrapping="Wrap"
+                       Text="" />
+          </Border>
+
+          <!-- THREE dials, all three read by the running field. Upstream's card also carries a
+               Solid-mode switch, a pop-volume slider, a ramp link, a session-clickable switch and
+               the whole Trigger Bubbles block; every one of them is ABSENT rather than greyed, and
+               BubblePopPresetDocument says why for each (D7 — a disabled dial swallows the
+               gesture and tells the user nothing). -->
+          <CheckBox x:Name="BubblePopEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="BubblePopEnableToggle"
+                    AutomationProperties.Name="Bubble Pop enabled"
+                    Content="Enable Bubble Pop" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Bubbles per minute" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="BubblePopFrequencySlider"
+                    Minimum="1" Maximum="60"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BubblePopFrequencySlider"
+                    AutomationProperties.Name="Bubble Pop bubbles per minute" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="BubblePopFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BubblePopFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Size" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="BubblePopSizeSlider"
+                    Minimum="50" Maximum="150"
+                    SmallChange="5" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="5"
+                    AutomationProperties.AutomationId="BubblePopSizeSlider"
+                    AutomationProperties.Name="Bubble Pop size" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="BubblePopSizeValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BubblePopSizeValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="dial-label" Text="Extra speed" />
+            <Slider Grid.Row="2" Grid.Column="1"
+                    x:Name="BubblePopSpeedSlider"
+                    Minimum="0" Maximum="500"
+                    SmallChange="10" LargeChange="50"
+                    IsSnapToTickEnabled="True" TickFrequency="10"
+                    AutomationProperties.AutomationId="BubblePopSpeedSlider"
+                    AutomationProperties.Name="Bubble Pop extra speed" />
+            <TextBlock Grid.Row="2" Grid.Column="2"
+                       x:Name="BubblePopSpeedValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BubblePopSpeedValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="BubblePopLiveState"
+                         AutomationProperties.AutomationId="BubblePopLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="BubblePopDeliveryState"
+                         AutomationProperties.AutomationId="BubblePopDeliveryState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BubblePopScopeNotice"
+                       AutomationProperties.AutomationId="BubblePopScopeNotice"
+                       Text="" />
+          </Border>
+
+          <!-- THE EVIDENCE NOTICE. No other panel has one, and this row needs it: everything else
+               on this page is something the user can SEE happening, while "a click would reach
+               this window" is a question only the operating system can answer. The notice says
+               what was asked and, in the same breath, what no automated check can ever show. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BubblePopEvidenceNotice"
+                       AutomationProperties.AutomationId="BubblePopEvidenceNotice"
+                       Text="" />
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BubblePopCapabilityState"
+                       AutomationProperties.AutomationId="BubblePopCapabilityState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
         <!-- ================= Bubble Count ================= -->
         <StackPanel x:Name="BubbleCountModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Bubble Count" />

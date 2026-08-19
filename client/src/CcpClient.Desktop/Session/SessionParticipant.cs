@@ -39,6 +39,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<LockCardPresetDocument> _lockCardPreset;
     private readonly PersistenceStore<MandatoryVideoPresetDocument> _videoPreset;
     private readonly PersistenceStore<BubbleCountPresetDocument> _bubbleCountPreset;
+    private readonly PersistenceStore<BubblePopPresetDocument> _bubblePopPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -48,6 +49,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly IAudioPresence _audio;
     private readonly IInputPresence _input;
     private readonly IVideoSurface _videoSurface;
+    private readonly IBubblePopSurface _bubblePopSurface;
     private readonly UiDispatchBoundary _uiDispatch;
     private readonly string _dataDirectory;
 
@@ -75,7 +77,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Random? videoRandom = null,
         IVideoClipPool? bubbleCountClips = null,
         Random? bubbleCountRandom = null,
-        Func<InputBounds>? bubbleCountPlacement = null)
+        Func<InputBounds>? bubbleCountPlacement = null,
+        IBubblePopSurface? bubblePopSurface = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -149,6 +152,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, BubbleCountPresetDocument.FileName),
             BubbleCountPresetDocument.CurrentSchemaVersion);
 
+        // SP-113: the pointer module's own document, same per-module precedent again.
+        _bubblePopPreset = new PersistenceStore<BubblePopPresetDocument>(
+            infra.OwnerFor("BubblePopPreset"), infra.Log,
+            Path.Combine(dataDirectory, BubblePopPresetDocument.FileName),
+            BubblePopPresetDocument.CurrentSchemaVersion);
+
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
@@ -209,6 +218,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // frames on THAT surface, and IOverlayPresence cannot be asked it. Overlay/** is CONSUMED
         // (its display enumeration) and never edited.
         _videoSurface = videoSurface ?? VideoSurfacePresenter.Product(sessionClock, Dispatch);
+
+        // SP-113: the pointer surface. It takes the same clock as the other presenters and carries
+        // BOTH of its module's cadences — the spawn interval and the 30 ms animation step — because
+        // both keep a SURFACE correct rather than deciding when a module is due, so the module takes
+        // no clock at all (SP-106's rule, fourth application). It is a NEW capability rather than a
+        // second consumer of Input/**: that presence handles no mouse message, owns one window and
+        // places it once (SP-112 §1, re-verified in SP-113's plan §1).
+        _bubblePopSurface = bubblePopSurface ?? BubblePopSurfacePresenter.ForProduct(sessionClock, Dispatch);
 
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
@@ -382,6 +399,16 @@ public sealed class SessionParticipant : IBackgroundParticipant
             bubbleCountRandom,
             bubbleCountPlacement);
 
+        // SP-113: the eleventh module, and the first the user is expected to ACT on. Its surface is
+        // its OWN — no other row places a clickable target — and that is not the single-tenancy
+        // shortcut SP-112 §2.3 F5 warned about: the capability is keyed from birth, every operation
+        // names a target, so a second consumer inherits ownership rather than having to guard for it.
+        BubblePop = new BubblePopEffect(
+            infra.OwnerFor("BubblePop"),
+            signal,
+            _bubblePopPreset,
+            _bubblePopSurface);
+
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
         // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
@@ -419,8 +446,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // order.
         Engine = new SessionEngine(
             [
-                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubbleCount, LockCard, MindWipe,
-                BrainDrain, Ramp,
+                Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, BubbleCount, BubblePop, LockCard,
+                MindWipe, BrainDrain, Ramp,
             ],
             _preset, signal);
 
@@ -466,6 +493,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Bubble Count, the first module that consumes capabilities it did not shape — the
     /// video surface AND the input presence, in one firing (SP-112).</summary>
     public BubbleCountEffect BubbleCount { get; }
+
+    /// <summary>Bubble Pop, the first module the user ACTS on rather than watches (SP-113).</summary>
+    public BubblePopEffect BubblePop { get; }
+
+    /// <summary>
+    /// The pointer surface Bubble Pop places its targets on. Public for the same reason every other
+    /// capability is: a capability nobody can reach is a capability nobody can interrogate — and this
+    /// is the one whose <c>Available</c> is earned from the window manager's own routing answer while
+    /// the foreground stays exactly where it was.
+    /// </summary>
+    public IBubblePopSurface BubblePopSurface => _bubblePopSurface;
 
     /// <summary>Mandatory Video's VIDEO half — the first module that plays a FILE, and half a row
     /// permanently because the clip's sound is not ported (SP-111).</summary>
@@ -537,6 +575,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Bubble Count module's persisted store, same reason.</summary>
     public PersistenceStore<BubbleCountPresetDocument> BubbleCountPreset => _bubbleCountPreset;
 
+    /// <summary>The Bubble Pop module's persisted store, same reason as the others.</summary>
+    public PersistenceStore<BubblePopPresetDocument> BubblePopPreset => _bubblePopPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -560,6 +601,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _lockCardPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _videoPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubbleCountPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _bubblePopPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -576,6 +618,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("lockcard-preset", _lockCardPreset.LastLoadOutcome);
         LogIfDegraded("video-preset", _videoPreset.LastLoadOutcome);
         LogIfDegraded("bubblecount-preset", _bubbleCountPreset.LastLoadOutcome);
+        LogIfDegraded("bubblepop-preset", _bubblePopPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -612,6 +655,13 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // screen before this line, and this line reclaims the window and the source reader.
         DisposeSurface(_videoSurface);
 
+        // The pointer surface owns up to three native windows and a registered window class, so it
+        // takes the same dispatched route. Engine.Stop above already disarmed the module, and the
+        // module's ReleaseWork posts a Withdraw that closes every target from the UI thread the user
+        // pressed STOP on — so the desktop is clear before this line, and this line reclaims the
+        // windows and unregisters the class.
+        DisposeSurface(_bubblePopSurface);
+
         // The audio presence goes down HERE, inline, and not through the dispatch boundary the
         // surfaces use. A native window belongs to the thread that made it; an audio device does not
         // — upstream says the same of NAudio and deliberately tears audio down inline from its panic
@@ -631,7 +681,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
             _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _videoPreset.StopAsync(),
-            _bubbleCountPreset.StopAsync(), _assetSelection.StopAsync());
+            _bubbleCountPreset.StopAsync(), _bubblePopPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -648,7 +698,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _mindWipePreset.FlushAsync(boundedWait),
             _brainDrainPreset.FlushAsync(boundedWait),
             _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait),
-            _bubbleCountPreset.FlushAsync(boundedWait));
+            _bubbleCountPreset.FlushAsync(boundedWait),
+            _bubblePopPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {
