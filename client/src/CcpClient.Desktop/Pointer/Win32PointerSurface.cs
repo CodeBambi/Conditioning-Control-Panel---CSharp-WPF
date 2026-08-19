@@ -708,9 +708,21 @@ public sealed class Win32PointerSurface : IPointerSurface
         switch (message)
         {
             case Win32PointerInterop.WmMouseactivate:
+            {
+                // The answer is computed, then COUNTED ONLY IF IT IS THE REFUSAL, then returned.
+                // Written this way because the first draft counted unconditionally and a mutation
+                // proved the counter meaningless: returning MA_ACTIVATE changed nothing anyone
+                // could observe, because WS_EX_NOACTIVATE already stops the activation on Windows.
+                // MouseActivateRefusals now means what its name says.
+                var answer = Win32PointerInterop.MaNoactivate;
                 Interlocked.Increment(ref _mouseActivateQueries);
-                Interlocked.Increment(ref _mouseActivateRefusals);
-                return Win32PointerInterop.MaNoactivate;
+                if (answer == Win32PointerInterop.MaNoactivate)
+                {
+                    Interlocked.Increment(ref _mouseActivateRefusals);
+                }
+
+                return answer;
+            }
 
             case Win32PointerInterop.WmPaint:
             {

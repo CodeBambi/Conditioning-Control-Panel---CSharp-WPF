@@ -120,6 +120,23 @@ public class BubblePopModuleTests
     }
 
     [Fact]
+    public void BUBBLESSpawnAcrossTheWidthOfThePlayArea_AtUpstreamsOwnBand()
+    {
+        // _startX = area.X + random.Next(50, max(100, area.Width - _size - 50)) (:2853). A field
+        // whose bubbles all appeared at the same x would be a column, not a game.
+        var field = new BubblePopField(0, 0, 1920, 1080, new Random(29));
+        var xs = new List<double>();
+        for (var i = 0; i < BubblePopField.MaxConcurrent; i++)
+        {
+            xs.Add(field.Spawn(100, 0)!.Value.StartX);
+        }
+
+        Assert.All(xs, x => Assert.True(x >= 50, $"a bubble spawned at x={x}, inside the 50 px inset"));
+        Assert.True(xs.Distinct().Count() > 1,
+            "every bubble spawned at the same x; the horizontal band is not being drawn from");
+    }
+
+    [Fact]
     public void ABubbleThatFloatsOffTheTopIsMISSED_AtUpstreamsOwnMargin()
     {
         // _screenTop = area.Y - _size - 50 (:2846); exit at _posY < _screenTop (:3497-3499); OnMiss
@@ -305,6 +322,28 @@ public class BubblePopModuleTests
     }
 
     [Fact]
+    public void APRESSREACHESTHEFIELDOnlyBecauseTheStepPUMPSItFirst()
+    {
+        // The OS delivers a press into a message queue; nothing in the module runs until something
+        // drains it. StepOnce pumps BEFORE it moves anything, so a click that arrived since the last
+        // step belongs to the position the bubble was at when the OS routed it — not to the one it
+        // is about to move to.
+        using var lab = new Lab();
+        lab.Presenter.Engage(new BubblePopSettings(1, 100, 0));
+        lab.Surface.DeliverPress(lab.Surface.Opened[0].Handle, PointerPressKind.Down);
+
+        // Exactly the pop animation's own length: 1.0 falling by 0.066 a step reaches zero on the
+        // sixteenth. One step later than that and the count would move for the wrong reason.
+        var steps = (int)Math.Ceiling(1.0 / BubblePopField.PopFadePerStep);
+        for (var i = 0; i < steps; i++)
+        {
+            lab.Clock.Advance(BubblePopField.StepInterval);
+        }
+
+        Assert.Equal(1, lab.Presenter.Popped);
+    }
+
+    [Fact]
     public void THEUPHALFOfAClickPopsNothing_BecauseUpstreamPopsOnTheDOWN()
     {
         // Upstream's handler is MouseLeftButtonDown (Services/BubbleService.cs:3113), so a press that
@@ -331,6 +370,12 @@ public class BubblePopModuleTests
 
         lab.Presenter.Withdraw();
         var movesAfterWithdraw = lab.Surface.Moves.Count;
+
+        // Asserted HERE, before anything is advanced. A cadence that was CANCELLED leaves no timer;
+        // one that was merely dropped on the floor leaves its handle alive for ever, and advancing
+        // first would hide that by letting the orphan fire and retire itself.
+        Assert.Equal(0, lab.Clock.PendingCount);
+
         lab.Clock.Advance(TimeSpan.FromMinutes(5));
 
         Assert.Equal(openedBefore, lab.Surface.Closed.Count);
@@ -378,6 +423,12 @@ public class BubblePopModuleTests
 
         Assert.True(lab.Presenter.Showing);
         Assert.Equal(1, lab.Presenter.TargetsUp);
+        Assert.Equal(0, lab.Presenter.RoutableTargets);
+        Assert.False(lab.Presenter.Running);
+
+        // And it stays false ACROSS A STEP: the routable count is re-derived from every Move's own
+        // typed answer, not carried forward from the placement.
+        lab.Clock.Advance(BubblePopField.StepInterval);
         Assert.Equal(0, lab.Presenter.RoutableTargets);
         Assert.False(lab.Presenter.Running);
     }
@@ -574,6 +625,28 @@ public class BubblePopModuleTests
         using var lab = new Lab();
         lab.Effect.SetPerMinute(asked);
         Assert.Equal(expected, lab.Effect.Settings.PerMinute);
+    }
+
+    [Fact]
+    public void DRAGGINGTHEDIALPASTITSOWNCEILINGDoesNotRetimeTheLiveField()
+    {
+        // The setter clamps BEFORE comparing, so a drag past the end is a no-op rather than a
+        // re-engage. Without that the spawn timer would restart on every pixel of a drag the dial
+        // cannot honour, and the next bubble would keep receding.
+        using var lab = new Lab();
+        lab.Effect.SetEnabled(true);
+        lab.Effect.SetPerMinute(BubblePopField.MaxPerMinute);
+        lab.Effect.Arm();
+        var afterArm = lab.Surface.Opened.Count;
+
+        lab.Clock.Advance(TimeSpan.FromMilliseconds(600));
+        lab.Effect.SetPerMinute(600);
+        lab.Clock.Advance(TimeSpan.FromMilliseconds(400));
+
+        Assert.Equal(BubblePopField.MaxPerMinute, lab.Effect.Settings.PerMinute);
+        Assert.True(lab.Surface.Opened.Count > afterArm,
+            "the spawn due at one second never came: dragging the dial past its own ceiling re-timed the live "
+            + "field, so the next bubble recedes for as long as the user keeps dragging");
     }
 
     [Theory]
@@ -875,6 +948,8 @@ public class BubblePopModuleTests
     /// </summary>
     private sealed class RecordingPointerSurface : IPointerSurface
     {
+        private readonly Queue<PointerPress> _queued = new();
+
         private int _next = 1;
 
         public List<(int Handle, PointerBounds Bounds)> Opened { get; } = [];
@@ -938,19 +1013,38 @@ public class BubblePopModuleTests
 
         public PointerTargetObservation Observe(int target) => PointerTargetObservation.NotAsked;
 
-        public int Pump(int max) => 0;
+        public int Pump(int max)
+        {
+            var dispatched = 0;
+            while (dispatched < max && _queued.TryDequeue(out var press))
+            {
+                OnPress?.Invoke(press);
+                dispatched++;
+            }
+
+            return dispatched;
+        }
 
         public void Dispose()
         {
         }
 
-        /// <summary>Hand the caller a press the way the OS would: naming the target IT chose.</summary>
+        /// <summary>
+        /// Hand the surface a press the way the OS would: naming the target IT chose, and leaving it
+        /// in a QUEUE until somebody pumps.
+        ///
+        /// <para><b>The queue mirrors the product rather than being convenient.</b> A real press
+        /// arrives in a message queue and nothing in the module runs until the surface's own pump
+        /// drains it; a double that invoked the callback inline would make the presenter's
+        /// pump-before-you-move ordering invisible, which is exactly the blindness SP-110 §8b
+        /// found in a double that diverged from the product where the bug lived.</para>
+        /// </summary>
         public void DeliverPress(int target, PointerPressKind kind)
         {
             PressesSeen++;
             MouseActivateQueries++;
             MouseActivateRefusals++;
-            OnPress?.Invoke(new PointerPress(target, kind, 4, 4));
+            _queued.Enqueue(new PointerPress(target, kind, 4, 4));
         }
 
         private CapabilityState Result(int target) =>
@@ -971,6 +1065,19 @@ public class BubblePopModuleTests
         private readonly List<Entry> _timers = [];
 
         public DateTimeOffset UtcNow { get; private set; } = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+
+        /// <summary>How many live timers are on this clock. A cadence that was cancelled leaves
+        /// none; one that was merely dropped on the floor leaves its handle behind for ever.</summary>
+        public int PendingCount
+        {
+            get
+            {
+                lock (_timers)
+                {
+                    return _timers.Count(t => !t.Cancelled);
+                }
+            }
+        }
 
         public IDisposable Schedule(TimeSpan due, Action fire)
         {

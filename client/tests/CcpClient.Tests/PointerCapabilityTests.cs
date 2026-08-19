@@ -174,7 +174,9 @@ public class PointerCapabilityTests
         Assert.True(run.DecoySawDown == run.MachineHasInteractiveDesktop,
             "the probe's decoy did not catch the negative click. Without it, the assertion below is satisfied by "
             + "an injection the OS refused");
-        Assert.Equal(run.PressesAfterClick, run.PressesAfterNegativeClick);
+        // Compared against the count AFTER the unlistened click above, which is the last thing that
+        // legitimately moved it.
+        Assert.Equal(run.PressesAfterUnlistenedClick, run.PressesAfterNegativeClick);
     }
 
     [Fact]
@@ -415,6 +417,89 @@ public class PointerCapabilityTests
     {
         Assert.Throws<ArgumentException>(() =>
             new PointerTargetRequest(new PointerBounds(0, 0, 120, 120), 0x00201020, 0x00201020));
+    }
+
+    [Fact]
+    public void APRESSNOBODYISLISTENINGFORIsCOUNTED_NeverQueuedAndNeverSilentlyDiscarded()
+    {
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.True(run.UnlistenedClickInjected == run.MachineHasInteractiveDesktop,
+            "the unlistened click was not injected, so nothing below is claimed");
+        Assert.True(
+            run.PressesAfterUnlistenedClick - run.PressesAfterClick
+                == (run.MachineHasInteractiveDesktop ? 2 : 0),
+            "the operating system still delivered both halves of a click to a window with no listener "
+            + "attached, and the surface did not count them");
+        Assert.True(run.PressesDropped == (run.MachineHasInteractiveDesktop ? 2 : 0),
+            $"the surface counted {run.PressesDropped} dropped presses. A press is an event in time and "
+            + "replaying it later would be a lie about when it happened, so it is counted rather than queued — "
+            + "and a press that is neither delivered nor counted is a defect nobody can see");
+    }
+
+    [Fact]
+    public void ASTYLESOMETHINGELSECLEAREDIsCaughtOnTheNextMove_WhichIsWhyTheReadBackIsAReadBack()
+    {
+        // The capability reads WS_EX_NOACTIVATE back OUT of the operating system rather than
+        // remembering that it wrote it, and this is the state that makes the difference: something
+        // with the handle cleared it. Upstream met exactly this with recycled pooled shells and
+        // answered it with a comment (Services/BubbleService.cs:4880-4884); here it is a typed
+        // refusal with its own code.
+        var run = PointerSurfaceObservations.Delivery;
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.StyleWasCleared);
+        Assert.True(
+            run.MachineHasInteractiveDesktop
+                ? run.MoveAfterStyleCleared is CapabilityState.Unavailable
+                : run.MoveAfterStyleCleared is CapabilityState.Unavailable,
+            $"a move on a target the OS no longer holds WS_EX_NOACTIVATE for returned "
+            + $"{PointerSurfaceObservations.Describe(run.MoveAfterStyleCleared)}");
+        Assert.Equal(
+            run.MachineHasInteractiveDesktop
+                ? PointerReasonCodes.PointerTargetStyleWrong
+                : PointerReasonCodes.PointerMechanismAbsent,
+            Assert.IsType<CapabilityState.Unavailable>(run.MoveAfterStyleCleared).Reason.Code);
+    }
+
+    [Fact]
+    public void ANotAskedObservationClaimsNOTHING_NotEvenARoutingAnswerAboutAWindowItDoesNotHave()
+    {
+        // 0 == 0 is the trap: an observation with no window and no hit-test winner would satisfy
+        // "the winner IS the window" without the non-zero guard, and Confirmed would follow it.
+        // Same shape and same lesson as SP-110's own M-l.
+        var nothing = PointerTargetObservation.NotAsked;
+        Assert.False(nothing.HitTestRoutesHere);
+        Assert.False(nothing.Confirmed);
+        Assert.False(nothing.Inked);
+
+        var windowless = Full() with { Window = 0, HitTestWinner = 0 };
+        Assert.False(windowless.HitTestRoutesHere);
+        Assert.False(windowless.Confirmed);
+    }
+
+    [Fact]
+    public void EveryClauseOfTheSTATIONObservationIsLoadBearing_BecauseEachOneAloneReachesNobody()
+    {
+        var whole = new PointerStationObservation(
+            Asked: true, WindowStationVisible: true, DisplayCount: 2, DesktopReachable: true);
+
+        Assert.True(whole.Confirmed);
+        Assert.False((whole with { Asked = false }).Confirmed);
+        Assert.False((whole with { WindowStationVisible = false }).Confirmed);
+        Assert.False((whole with { DisplayCount = 0 }).Confirmed);
+        Assert.False((whole with { DesktopReachable = false }).Confirmed);
+        Assert.False(PointerStationObservation.NotAsked.Confirmed);
+    }
+
+    [Fact]
+    public void ATargetsRadiusIsHalfItsSHORTERSide_BecauseThatIsTheSideAMoveCanCrossFirst()
+    {
+        // The race bound compares a displacement against the distance from the centre to the
+        // NEAREST edge. A square target hides the distinction; an oblong one does not.
+        Assert.Equal(40, new PointerBounds(0, 0, 200, 80).Radius);
+        Assert.Equal(40, new PointerBounds(0, 0, 80, 200).Radius);
+        Assert.Equal(60, new PointerBounds(10, 10, 120, 120).Radius);
+        Assert.Equal((110, 50), new PointerBounds(10, 10, 200, 80).Centre);
     }
 
     [Fact]

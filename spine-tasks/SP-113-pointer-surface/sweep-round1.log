@@ -1,0 +1,105 @@
+SP-113 mutation sweep — 2026-08-19T17:59:11.457Z
+filter: FullyQualifiedName~BubblePopModuleTests|FullyQualifiedName~PointerCapabilityTests|FullyQualifiedName~PointerCoexistenceTests|FullyQualifiedName~SecondEffectSpineTests|FullyQualifiedName~ContinuousEffectSpineTests|FullyQualifiedName~AudioModuleSpineTests
+
+M-a  CAUGHT  Confirmed drops Asked
+M-b  SURVIVED  Confirmed drops the non-zero window
+M-c  CAUGHT  Confirmed drops WindowExists
+M-d  CAUGHT  Confirmed drops WindowVisible
+M-e  CAUGHT  Confirmed drops WS_EX_NOACTIVATE
+M-f  CAUGHT  Confirmed drops the WS_EX_TRANSPARENT ban
+M-g  CAUGHT  Confirmed drops the z-order
+M-h  CAUGHT  Confirmed drops the routing answer
+M-i  CAUGHT  Confirmed drops the non-activation claim
+M-j  SURVIVED  the routing answer's non-zero guard
+M-k  CAUGHT  the 'and it is not us' half
+M-l  CAUGHT  the 'and it did not move' half
+M-m  CAUGHT  the ink differential's control point
+M-n  CAUGHT  the ink count itself
+M-o  SURVIVED  the station's WSF_VISIBLE
+M-p  SURVIVED  the station's display count
+M-q  SURVIVED  the station's desktop
+M-r  CAUGHT  the clickable floor on a request
+M-s  CAUGHT  the ink-differs-from-fill rule
+M-t  SURVIVED  the radius taking the SHORTER side
+M-u  CAUGHT  the concurrent-target cap
+M-v  SURVIVED  Open's station gate
+M-w  CAUGHT  Move's resize refusal
+M-x  CAUGHT  Move's unknown-handle refusal
+M-y  CAUGHT  Close's unknown-handle refusal
+M-z  CAUGHT  Open's disposed refusal
+M-aa  CAUGHT  SWP_NOACTIVATE on every placement
+M-ab  CAUGHT  painting the target at all
+M-ac  CAUGHT  sampling the foreground BEFORE the placement
+M-ad  SURVIVED  Classify's on-screen gate
+M-ae  SURVIVED  Classify's exact-rectangle gate
+M-af  SURVIVED  Classify's non-activation gate
+M-ag  SURVIVED  Classify's style gate
+M-ah  SURVIVED  Classify's z-order gate
+M-ai  SURVIVED  Classify's routing gate
+M-aj  SURVIVED  the blank-target Degraded
+M-ak  CAUGHT  creating the window WS_EX_NOACTIVATE
+M-al  CAUGHT  leaving the target click-THROUGH
+M-am  SURVIVED  answering MA_NOACTIVATE rather than MA_ACTIVATE
+M-an  CAUGHT  raising the DOWN half of a click
+M-ao  CAUGHT  raising the UP half of a click
+M-ap  SURVIVED  the raise loop's own re-ask
+M-aq  SURVIVED  three of the four ink control points
+M-ar  CAUGHT  hiding the window on Close
+M-as  SURVIVED  Close's own confirmation
+M-at  SURVIVED  Close's non-activation check
+M-au  SURVIVED  the disc's inset away from the control points
+M-av  SURVIVED  counting a press nobody listened for
+M-aw  CAUGHT  naming WHICH target the OS chose
+M-ax  CAUGHT  the spawn dial's upper clamp
+M-ay  CAUGHT  the clickable floor on the drawn size
+M-az  CAUGHT  the playfield ceiling
+M-ba  CAUGHT  the field's concurrent cap
+M-bb  CAUGHT  the speed boost
+M-bc  CAUGHT  the boost's own clamp
+M-bd  CAUGHT  floating UP rather than down
+M-be  CAUGHT  the horizontal wobble
+M-bf  CAUGHT  the exit at the top of the play area
+M-bg  CAUGHT  the pop animation's own length
+M-bh  CAUGHT  a second hit scoring twice
+M-bi  CAUGHT  Clear counting neither a pop nor a miss
+M-bj  CAUGHT  wobble 0's amplitude
+M-bk  CAUGHT  wobble 1's rate — the one that bounds the race
+M-bl  CAUGHT  wobble 2 being a COSINE
+M-bm  CAUGHT  the logical time increment
+M-bn  SURVIVED  the race bound being an inequality at all
+M-bo  SURVIVED  the horizontal spawn band
+M-bp  CAUGHT  Engage's pointer-channel gate
+M-bq  CAUGHT  Engage's display gate
+M-br  CAUGHT  the immediate first spawn
+M-bs  SURVIVED  pumping presses before the field moves
+M-bt  SURVIVED  counting only the targets the OS routes to
+M-bu  CAUGHT  the dot's routing clause
+M-bv  CAUGHT  the empty-field disjunction
+M-bw  CAUGHT  popping on the DOWN only
+M-bx  CAUGHT  closing a target whose bubble left
+M-by  CAUGHT  re-timing a live field when the dial moves
+M-bz  CAUGHT  Withdraw taking every target down
+M-ca  SURVIVED  Withdraw stopping both cadences
+M-cb  CAUGHT  the unbound-UI-thread refusal
+M-cc  CAUGHT  the no-surface refusal
+M-cd  CAUGHT  the unplayable-field Degraded
+M-ce  CAUGHT  the up>0 half of it
+M-cf  CAUGHT  narrowing only the CHANNEL refusal
+M-cg  CAUGHT  the dot reading Running rather than Showing
+M-ch  SURVIVED  the showing guard in front of the withdraw
+M-ci  SURVIVED  the frequency setter's clamp
+M-cj  CAUGHT  the re-pace after the frequency dial
+M-ck  CAUGHT  the rack key being upstream's
+M-cl  CAUGHT  the document's frequency clamp
+M-cm  CAUGHT  the document's size clamp
+M-cn  CAUGHT  the document's speed clamp
+M-co  CAUGHT  the unplayable-field sentence
+M-cp  CAUGHT  the between-spawns sentence
+M-cq  CAUGHT  the no-channel sentence
+M-cr  CAUGHT  the delivery line reading as evidence
+M-cs  CAUGHT  Linux refusing rather than claiming the Win32 backend
+M-ct  CAUGHT  macOS refusing
+M-cu  CAUGHT  the manual gate travelling WITH the refusal
+
+caught=71 survived=28 not-patched=0 total=99
+elapsed=2608s

@@ -114,6 +114,16 @@ internal static class PointerSurfaceObservations
     /// landed. <b>Without this the negative leg is satisfied by an injection that never occurred.</b></param>
     /// <param name="PressesAfterNegativeClick">The surface's count after the closed target's point was
     /// clicked again. It must equal <paramref name="PressesAfterClick"/>.</param>
+    /// <param name="UnlistenedClickInjected">A click was injected with NO press listener attached.</param>
+    /// <param name="PressesAfterUnlistenedClick">The delivered-message count after it — the OS still
+    /// delivered, so the count still moved.</param>
+    /// <param name="PressesDropped">And how many the surface COUNTED as dropped. A press is an event
+    /// in time; replaying it later would be a lie about when it happened, so it is counted rather
+    /// than queued, and a silently discarded press is the other way to lose a defect.</param>
+    /// <param name="StyleWasCleared">The harness cleared <c>WS_EX_NOACTIVATE</c> on the target's own
+    /// window from OUTSIDE the capability — the only way to construct that state deterministically.</param>
+    /// <param name="MoveAfterStyleCleared">What the next <c>Move</c> returned once the OS no longer
+    /// held the style. <b>This is the branch that proves the read-back is a read-back.</b></param>
     /// <param name="CloseState">What <see cref="IPointerSurface.Close"/> returned.</param>
     /// <param name="HitTestAfterClose">Where the OS routes the old point once the target is gone.</param>
     /// <param name="ForegroundAfterClose">The foreground after the take-down.</param>
@@ -155,6 +165,11 @@ internal static class PointerSurfaceObservations
         bool NegativeClickInjected,
         bool DecoySawDown,
         int PressesAfterNegativeClick,
+        bool UnlistenedClickInjected,
+        int PressesAfterUnlistenedClick,
+        int PressesDropped,
+        bool StyleWasCleared,
+        CapabilityState MoveAfterStyleCleared,
         CapabilityState CloseState,
         nint HitTestAfterClose,
         nint ForegroundAfterClose,
@@ -226,6 +241,25 @@ internal static class PointerSurfaceObservations
         var pressesAfter = surface.PressesSeen;
         var refusedAfter = surface.MouseActivateRefusals;
 
+        // ---- a press nobody is listening for is still COUNTED ----
+        surface.OnPress = null;
+        var unlistenedInjected = window != 0
+            && PointerWindowProbe.HitTestAfterRaising(window, centreX, centreY) == window
+            && PointerWindowProbe.InjectClickAt(centreX, centreY);
+        surface.Pump(256);
+        PointerWindowProbe.PumpUntil(() =>
+        {
+            surface.Pump(64);
+            return surface.PressesSeen >= pressesAfter + 2;
+        });
+
+        var pressesAfterUnlistened = surface.PressesSeen;
+        var pressesDropped = surface.PressesDropped;
+
+        // ---- the style the OS holds is CLEARED from outside, and the next Move must catch it ----
+        var styleCleared = PointerWindowProbe.ClearNonActivatingStyle(window);
+        var moveAfterStyleCleared = surface.Move(target, askedBounds);
+
         // ---- the negative leg: a DECOY under the point, so the click lands somewhere we own ----
         var closeState = surface.Close(target);
         var hitAfterClose = PointerWindowProbe.HitTest(centreX, centreY);
@@ -285,6 +319,11 @@ internal static class PointerSurfaceObservations
             NegativeClickInjected: negativeInjected,
             DecoySawDown: (decoy?.Downs ?? 0) > 0,
             PressesAfterNegativeClick: pressesAfterNegative,
+            UnlistenedClickInjected: unlistenedInjected,
+            PressesAfterUnlistenedClick: pressesAfterUnlistened,
+            PressesDropped: pressesDropped,
+            StyleWasCleared: styleCleared,
+            MoveAfterStyleCleared: moveAfterStyleCleared,
             CloseState: closeState,
             HitTestAfterClose: hitAfterClose,
             ForegroundAfterClose: foregroundAfterClose,

@@ -124,6 +124,29 @@ internal static class PointerWindowProbe
 
     internal static bool NonActivatingStyleHeld(nint window) => (ExStyleOf(window) & WsExNoactivate) != 0;
 
+    /// <summary>
+    /// Clear <c>WS_EX_NOACTIVATE</c> on a window this process owns, from OUTSIDE the capability.
+    ///
+    /// <para><b>Why the harness is allowed to do this.</b> The whole reason the capability READS the
+    /// style back rather than remembering that it wrote it is that a style is a property of the
+    /// operating system's window, and anything with the handle can change it — upstream met exactly
+    /// that with recycled pooled shells and said so in its own comment
+    /// (<c>Services/BubbleService.cs:4880-4884</c>). This is the only way to construct that state
+    /// deterministically on a healthy machine, and without it the capability's style gate is a
+    /// branch no fact can reach.</para>
+    /// </summary>
+    internal static bool ClearNonActivatingStyle(nint window)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return false;
+        }
+
+        var style = (uint)GetWindowLongPtrW(window, GwlExstyle);
+        SetWindowLongPtrW(window, GwlExstyle, (nint)(style & ~WsExNoactivate));
+        return (ExStyleOf(window) & WsExNoactivate) == 0;
+    }
+
     internal static bool ClickThroughStyleHeld(nint window) => (ExStyleOf(window) & WsExTransparent) != 0;
 
     internal static (int X, int Y, int Width, int Height) BoundsOf(nint window)
@@ -588,6 +611,8 @@ internal static class PointerWindowProbe
     private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", SetLastError = true, EntryPoint = "GetWindowLongPtrW")]
     private static extern nint GetWindowLongPtrW(nint window, int index);
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLongPtrW")]
+    private static extern nint SetWindowLongPtrW(nint window, int index, nint value);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetWindowRect(nint window, out RectNative rect);
     [DllImport("user32.dll")] private static extern nint WindowFromPoint(Point point);

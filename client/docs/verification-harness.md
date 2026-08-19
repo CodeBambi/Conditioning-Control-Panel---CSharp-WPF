@@ -313,3 +313,97 @@ read: measured on the machine this was written on, the shipping `dwmapi.dll` acc
 where `dwmapi.h:168-339` declares 320 and returns `MILERR_MISMATCHED_SIZE` for the header's layout,
 so any offset into it would be a guess — and its counters are SYSTEM-WIDE, so they can never be a
 fact about this process's frames. Recorded as D132 rather than left as an absence.
+
+## Pointer evidence class (SP-113)
+
+A pointer target needs its own class because it is the **third** thing this port has had to prove
+about a window, and it is the inverse of both earlier ones at once. SP-099 proved a surface is
+click-**through** and its review recorded that as the property most easily faked. SP-110 proved a
+window **takes** the keyboard, and its chain rested on `GetForegroundWindow` and
+`GetGUIThreadInfo(0)`. **This class is for a window that must take a CLICK and must NOT take the
+foreground** — so every fact SP-110's chain leaned on is one this class must assert the negation of,
+and "we are the foreground" is a BUG rather than a success.
+
+> **The measurement that shaped the instrument.** On this machine, while `PointerWindowProbe` was
+> being written: a scratch target was visible, held its exact rectangle, and sat at z-index 6 with
+> the first ordinary window at 7 — and `WindowFromPoint` at its own centre still answered
+> `HwndWrapper[ConditioningControlPanel;...]`, **the shipping WPF product**, which is topmost too and
+> re-asserts `HWND_TOPMOST` on a cadence (`Services/Flash/FlashService.cs:206-243`). Being above
+> every ORDINARY window is not the same as owning a point. The instrument therefore re-asserts the
+> band before it takes a routing answer — which is what the product does, what the overlay does, and
+> what upstream's own bubbles do (`Services/BubbleService.cs:4778-4787`) — and the foreign-topmost
+> residue below is the part that stays.
+
+- **`pointer-routed`** — the check asserts that the operating system reports the window on screen at
+  the exact rectangle asked for, holds `WS_EX_NOACTIVATE` and **not** `WS_EX_TRANSPARENT` for it,
+  places it above every ordinary window in its own z-order walk, routes a hit test at the target's
+  own centre **to** it (`WindowFromPoint` — the exact inverse of SP-099), and reports the SAME
+  foreground window before and after the operation, which is never the target. All six are read back
+  through an instrument INDEPENDENT of the code that created the window. Satisfiable inside
+  `dotnet test` on a Windows box with an interactive desktop (`PointerCapabilityTests`); on a box
+  without one every leg goes false together and the assertions still bite. **This is what the
+  product's `Available` rests on and it is the whole of it.**
+- **`click-delivered`** — the strongest automated pointer claim this port can make, and it is three
+  measurements taken together: a click **synthesised at OS level** (`SendInput`, absolute,
+  virtual-desktop normalised) arrived as **`WM_LBUTTONDOWN` and `WM_LBUTTONUP` in that target's own
+  window procedure**; that procedure received **`WM_MOUSEACTIVATE` and answered `MA_NOACTIVATE`**
+  during the same click; and `GetForegroundWindow()` is **byte-identical either side of it**. The
+  negative leg is what stops the first from passing vacuously, and it is deliberately not "the count
+  did not move": a probe-owned decoy is placed under the point and asserted to have CAUGHT the click,
+  so "it did not arrive here" cannot be satisfied by an injection the OS refused.
+- **`popped-verified`** — **a human clicked a bubble.** NOT satisfiable by any automated step on any
+  platform, Windows included. It is a manual gate and it is the only thing that closes the last link.
+
+**A `click-delivered` green is never a `popped-verified` green,** and it is not even a claim about
+what the OS will do next. It proves the operating system routed one click to this window at one
+instant while leaving the foreground alone. It says nothing about a person: every click in the suite
+is injected, and injection is refused outright by UIPI against a higher-integrity window, by the
+secure desktop, and by a locked workstation, all of which the fixture detects rather than skips. It
+also says nothing about whether a bubble is **visible or aimable**: the ink read-back is the OS's own
+`GetPixel` over the target's client area against a control point in a margin the painter fills, which
+proves the OS holds a drawn disc — not that it is on a screen anybody is looking at, at a size anybody
+could hit. That remains `presentation-verified` and is undischarged for this surface.
+
+**What tier 1 cannot cover for a pointer target**, as its own list:
+
+1. **Nobody clicked anything.** No tier discharges `popped-verified`.
+2. **`Available` cannot include the activation refusal, and that is the chain's sharpest stopping
+   point.** `WM_MOUSEACTIVATE` exists only when a click really happens, and the product must never
+   synthesise a click — a capability that pressed the mouse to check it could receive presses would
+   be clicking whatever the user really had under the cursor. So the product claims the STYLE
+   (`WS_EX_NOACTIVATE`, read back out of the OS) plus "the foreground is not me and did not move",
+   and the message-level refusal is evidence a FACT reads, never an input to a claim.
+3. **The routing answer is momentary, and a FOREIGN topmost window can own the point.** The
+   shipping WPF product was measured doing exactly that on this machine. Re-asserting the band is
+   bounded and then *asked about*; it is never trusted, and it cannot exclude a screen locker, a
+   full-screen game or a magnifier.
+4. **The MOVING-TARGET race is bounded rather than eliminated, and the bound is arithmetic.** The
+   product never hit-tests and then acts on the answer — each target is its own top-level window, so
+   the arbiter at click time is the window manager over the position the OS itself holds — but a
+   caller's belief about routing can be one animation step old. One step moves a bubble at most
+   `sqrt(12² + 4.5²) = 12.81` px (`BubbleService.cs:53`, `:2825`, `:2831-2836`, `:3458-3464`) against
+   a smallest legal radius of 30 px (`BubbleSizing.cs:70`), so the target's own centre never leaves
+   the target in one step. Both directions are MEASURED with real windows and real clicks
+   (`PointerCapabilityTests`: one step later the click still arrives; more than a side later it does
+   not, and the decoy proves it went elsewhere). **What is NOT covered: a move interleaved with the
+   OS's own delivery of a click already in flight.** The delivery facts hold the field still between
+   the injection and the pump, which is stated plainly rather than hidden; no fixture can pin that
+   window without a wall-clock wait, which is banned.
+5. **The host's own message loop is not proven to deliver mouse messages for this window.** The
+   product's pump is Avalonia's; the evidence here is taken on the surface's own bounded pump. Same
+   residue, same shape, as the input class's item 3.
+
+**Linux pointer targets are `pointer-routed`-INCAPABLE in this build**, and refuse in type rather
+than claiming anything: `PointerSurfaceFactory` returns a typed refusal carrying its own five-step
+manual gate (`Pointer/PointerSurfaceFactory.LinuxManualGate`), run separately on X11 and on Wayland
+because they answer differently. **The Linux route is not the overlay's route with the polarity
+flipped.** X11 gives a client one direct mechanism for click-*through* (an empty
+`XFixesSetWindowShapeRegion` on `ShapeInput`) and NO single mechanism for "receive the button press
+without the click raising or focusing me": that is the window manager's click-to-focus policy, and
+the nearest a client gets is `_NET_WM_WINDOW_TYPE_DOCK` plus `WM_HINTS.input = False` plus
+override-redirect — three hints, honoured differently by Mutter, KWin and wlroots. The gate names
+`_NET_ACTIVE_WINDOW` being unchanged across a click as the step most likely to fail. Under a native
+Wayland compositor the non-activation half is the one part the protocol gets right by default (a
+client cannot take activation at all without an `xdg-activation-v1` token minted from real user
+interaction) and that is precisely why the rest is unavailable: the compositor owns placement,
+stacking and focus policy together.
