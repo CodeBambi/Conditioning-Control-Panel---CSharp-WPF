@@ -209,13 +209,13 @@ public class ContinuousEffectSpineTests
         // (CCP.Core/Models/AppSettings.cs:2574-2579); the continuous module took the session.
         //
         // SP-109 adds two more modules that ship off — Mind Wipe and Brain Drain's audio half — and
-        // SP-110 a third, Lock Card (AppSettings.cs:3331), so this list grows again in rack order.
-        // The FACT is unchanged and the assertion is stronger: five modules declined the same session
-        // for the same reason and all five are named.
+        // SP-110 a third, Lock Card (AppSettings.cs:3331), and SP-112 a fourth, Bubble Count, so
+        // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
+        // six modules declined the same session for the same reason and all six are named.
         Assert.Equal(
             [
-                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, LockCardEffect.EffectId,
-                MindWipeEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BubbleCountEffect.EffectId,
+                LockCardEffect.EffectId, MindWipeEffect.EffectId,
                 BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
@@ -254,8 +254,8 @@ public class ContinuousEffectSpineTests
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
-                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                PinkFilterEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

@@ -34,7 +34,7 @@ public class AudioModuleSpineTests
     // =================================================================================
 
     [Fact]
-    public async Task PressingStartArmsAllNine_InWpfsOwnRackOrder()
+    public async Task PressingStartArmsAllTen_InWpfsOwnRackOrder()
     {
         await using var rig = await Rig.StartAsync();
 
@@ -43,12 +43,19 @@ public class AudioModuleSpineTests
         // between the effects and the two IMMERSION rows — which is also StartEngine's own order
         // (the lock card at :206-209, then Mind Wipe :229-230 and Brain Drain :241-244, then the
         // ramp timer :265-269).
+        //
+        // SP-112 adds Bubble Count to that group and puts it FIRST in it, which is where the RACK
+        // puts it (Bubble Pop, Bubble Count, Lock Card, Bouncing Text — :499-505) and NOT where
+        // StartEngine does (the lock card at :206-209, then the bubble count at :212-215). The two
+        // upstream orders disagree here, exactly as they do for Spiral Overlay and Pink Filter, and
+        // D90 already settled which one this port takes: the rack's, because the rack is the order
+        // the user has learned.
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
-                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                PinkFilterEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

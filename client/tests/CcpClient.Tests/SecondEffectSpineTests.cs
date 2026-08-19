@@ -138,13 +138,16 @@ public class SecondEffectSpineTests
         // SP-105 added a third module that also ships off (Pink Filter,
         // CCP.Core/Models/AppSettings.cs:3726), SP-108 a fourth (Intensity Ramp, :2575-2580) and
         // SP-109 a fifth and sixth (both audio modules), and SP-110 a seventh (Lock Card, which ships
-        // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. The FACT
-        // is unchanged and the assertion is stronger each time: SIX modules declined the same session
-        // for the same reason and all six are named, which is the whole point of a typed arm.
+        // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. SP-112
+        // adds an eighth module that ships off (Bubble Count, AppSettings.cs's own
+        // BubbleCountEnabled default), and it lands BEFORE the lock card because that is the rack's
+        // order (StudioTabView.xaml.cs:499-505). The FACT is unchanged and the assertion is stronger
+        // each time: SEVEN modules declined the same session for the same reason and all seven are
+        // named, which is the whole point of a typed arm.
         Assert.Equal(
             [
                 MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, PinkFilterEffect.EffectId,
-                LockCardEffect.EffectId,
+                BubbleCountEffect.EffectId, LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
