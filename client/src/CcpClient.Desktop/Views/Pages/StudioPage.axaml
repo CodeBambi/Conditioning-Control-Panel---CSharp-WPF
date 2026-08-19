@@ -4,11 +4,17 @@
   <!--
     The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
     down the left, one panel on the right, left-click a row to open its panel. WPF has four
-    groups and fifteen rows; the port now has FOUR rows, and ALL FOUR are real effects.
+    groups and fifteen rows; the port now has ALL FOUR GROUPS and NINE rows, and all nine are
+    real effects. Six of WPF's rows are still unported — Visuals, Bubble Pop, Bubble Count,
+    Bouncing Text, Haptics and Scheduler (StudioTabView.xaml.cs:496, :499, :501, :505, :519, :535)
+    — and none of them has a row here, which is WPF's own rule for a row that cannot be wired
+    honestly (:494-496).
 
-    Rack ORDER is WPF's own (StudioTabView.xaml.cs:483-493): flash, [video], subliminal, spiral,
-    pinkfilter. Mandatory Video is not ported, so the ported rows close up around it without
-    reordering the ones that are here.
+    Rack ORDER is WPF's own (StudioTabView.xaml.cs:483-541): within EFFECTS, flash, video,
+    subliminal, spiral, pinkfilter. SP-111 landed Mandatory Video in its own upstream position,
+    SECOND, so the rows no longer close up around it. Where a row IS still unported the ported
+    ones close up around it without reordering the ones that are here, which is why the order of
+    what is present is upstream's rather than the order the modules happened to land in.
 
     SP-098 landed Flash Images with the two things §9 D5/D6 recorded as missing "because the port
     has nothing to wire yet" — a LIVE STATE DOT and a RIGHT-CLICK QUICK-TOGGLE. SP-105 adds the

@@ -276,7 +276,7 @@ and asserts the desktop leg only where that control is visible in the same captu
 the window-level leg is asserted instead and the failure text carries both numbers. **The expectation
 flips with the machine; nothing is skipped and no assertion is relaxed.**
 
-**Three things tier 1 cannot cover for video, and they are not defects in the suite:**
+**Four things tier 1 cannot cover for video, and they are not defects in the suite:**
 
 1. **That a human watched anything.** `watched-verified` is undischarged and undischargeable here.
 2. **Cadence, order and timing.** Every fact drives the frame advance by hand on the injected clock.
@@ -284,6 +284,28 @@ flips with the machine; nothing is skipped and no assertion is relaxed.**
    clip that played at half speed, or backwards, satisfies every automated check in this packet.
 3. **Sound.** The port's video capability has none at all (D121), so there is no A/V synchronisation
    to measure and no fact that could measure one.
+4. **REAL MEDIA. Every clip in this suite is SYNTHESISED**, and a later author must know that
+   before designing anything on top of it. The owner's library (`Z:\CCP Vids`) did not exist on
+   the machine SP-111 was written on — neither did the `Z:` volume — so `TestAvi` writes an
+   uncompressed 32bpp AVI in pure managed code and Media Foundation opens it as
+   `MFVideoFormat_RGB32`.
+
+   **The substitution is BOUNDED, and the boundary is the useful part.** The DISPLAY half is fed
+   pictures and cannot tell where they came from, so `frame-on-surface` and `desktop-composited`
+   are unaffected: a synthetic frame exercises the surface exactly as a decoded one does. **The
+   cost falls entirely on `clip-decodable`**, and it is precisely two things — the source
+   reader's video PROCESSOR is never exercised (the fixture is natively RGB32, so no conversion
+   is ever required), and the format set the port can actually open is untested against anything
+   a user owns (D124: the playable set becomes what Windows can open rather than what LibVLC
+   can). Both are carried as NAMED uncovered mutation survivors, `M-y` and `M-w`, in
+   `spine-tasks/SP-111-video-capability/record.md` §4.
+
+   **One real clip closes both.** A packet that gains access to real media should add one
+   COMPRESSED fixture before adding anything else, and must not assume the synthetic path proved
+   the decoder. The fixture is deliberately non-degenerate in the one way that matters for the
+   display half: `TestAvi.VerticalSplit` makes a picture whose halves differ, which is what
+   catches a mishandled negative stride — a solid-colour fixture would have passed while showing
+   every video upside down.
 
 **One DWM read is used and one is deliberately refused.** `DwmIsCompositionEnabled` is a documented
 `BOOL*` out-parameter and is part of the display observation. `DwmGetCompositionTimingInfo` is NOT
