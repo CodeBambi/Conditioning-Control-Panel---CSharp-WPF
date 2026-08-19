@@ -511,3 +511,10 @@ Floor pin **1648 unit / 104 headless**. Next task ID **SP-111**. **EIGHT modules
 **Standing safety rule (D112): this port never ships a window the user cannot dismiss, even where upstream's behaviour is ambiguous.** The Lock Card always closes on Escape.
 **The dot has now meant six things:** clock (paced), screen (continuous), change (moving), custody (non-drawing), reach (audio), DEMAND (input - Live while a prompt is up and unanswered).
 **Review lesson:** a test double that cannot exhibit the state under test is the session's most repeated defect - a fake dial re-imposing its own clamp, a stub pool with a constant count, and here a recording presence that set `IsPrompting` only for `Available`, hiding a card left on screen with Escape dead.
+
+## 2026-08-19 - wave 51 landed
+Floor pin **1742 unit / 107 headless**. Next task ID **SP-112**. **NINE modules of fifteen.** Video landed; Bubble Count unblocked.
+**The dot has now meant seven things:** clock (paced), screen (continuous), change (moving), custody (non-drawing), reach (audio), demand (input), MOTION (video - can be false while every call succeeded).
+**Standing evidence lesson:** a window read-back is NOT a monitor - a surface at (-8000,-8000) reads back a perfect picture. Assert that limit, never just note it.
+**`Z:\CCP Vids` does not exist on this machine.** All video evidence is against a synthesised uncompressed AVI. Sound for the display half (a surface cannot tell a picture's provenance); the cost falls entirely on `clip-decodable`. ONE compressed fixture closes both open survivors.
+**Worktree hygiene:** a lane's sweep driver wrote three levels ABOVE its worktree into the shared checkout. Nothing enforces worktree isolation - P2 row filed. During a parallel wave another lane's `git add -A` would have swept it into an unrelated commit.

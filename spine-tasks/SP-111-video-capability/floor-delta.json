@@ -1,6 +1,0 @@
-{
-  "packet": "SP-111-video-capability",
-  "unit": 94,
-  "headless": 3,
-  "reason": "the video capability's OS read-backs, the letterbox/compose arithmetic, the presenter's cadence and teardown, the Mandatory Video module and its seventh dot meaning, and the overlay + lock-card coexistence run"
-}
