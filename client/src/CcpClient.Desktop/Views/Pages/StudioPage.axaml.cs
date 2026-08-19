@@ -762,7 +762,7 @@ public partial class StudioPage : UserControl
         LockCardLiveState.Text = InputPanelNotices.DescribeCardState(
             RenderedLockCardDot, _lockCard.CardCount, _lockCard.Last, _session.Engine.Running,
             _lockCard.Presence.CanReachAUser, _lockCard.Presence.IsPrompting,
-            _lockCard.Presence.HoldsTheInput, _lockCard.LastResolution);
+            _lockCard.Presence.HoldsTheInput, _lockCard.LastResolution, _lockCard.LastPrompt);
         LockCardDemandState.Text = InputPanelNotices.DescribeDemand(lockCard.Repeats, lockCard.Strict);
         LockCardPhraseState.Text = InputPanelNotices.DescribePhrasePool(
             _lockCard.PhraseCount, lockCard.EnabledPhrases());

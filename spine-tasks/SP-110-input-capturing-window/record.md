@@ -1,8 +1,8 @@
 # SP-110 — record
 
 Branch `lane/SP-110-input-capturing-window`, base `b8187eb4`.
-Floor: pin **1589 unit / 100 headless**; observed **1647 unit / 104 headless**; declared delta
-**+58 unit / +4 headless** (`floor-delta.json`). 1589 + 58 = 1647 and 100 + 4 = 104, confirmed by
+Floor: pin **1589 unit / 100 headless**; observed **1648 unit / 104 headless**; declared delta
+**+59 unit / +4 headless** (`floor-delta.json`). 1589 + 59 = 1648 and 100 + 4 = 104, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-110-input-capturing-window`. The floor
 run therefore REPORTS a violation against the pin, and that is the expected shape: the orchestrator
 sums the deltas and applies one bump. Two skips, both pre-existing
@@ -170,7 +170,7 @@ opposite lie.
 
 ## 4. PROVING IT BITES — the mutation sweep
 
-**66 mutations, FOUR rounds, 57 caught, 7 survivors — and round 1 found nine real holes, round 4 the review's.** Every
+**68 mutations, FOUR rounds, 59 caught, 7 survivors — and round 1 found nine real holes, round 4 the reviews'.** Every
 conjunct of every predicate this packet added was mutated one at a time, the WHOLE unit suite was run
 against each, and each file was restored byte-identically afterwards (verified by `git status` and by
 grepping the three key predicates back out). The sweep is not bounded by where the last hole was
@@ -248,7 +248,7 @@ The schedule arithmetic (M-ak…M-ap), every typing rule (M-aq…M-aw), the phra
 assertion. The sweep driver bounds each run so a wedge is reported rather than stalling it, and that
 outcome is recorded as what it is rather than dressed up as a failing assertion.
 
-### Round 4 — the code review's own fixes, mutated in turn: 3 caught, 1 uncovered
+### Round 4 — the two reviews' own fixes, mutated in turn: 5 caught, 1 uncovered
 
 | # | mutation | verdict |
 |---|---|---|
@@ -256,16 +256,22 @@ outcome is recorded as what it is rather than dressed up as a failing assertion.
 | M-al | `OnDisarmed` never resets the schedule counter | **caught** by `ARE_ArmedRunGetsItsFirstCardOffsetBACK...`, which did not exist before the review said this clause had no coverage |
 | M-bh | the ink control point is never read (re-run against its new call site) | caught |
 | M-bj | a painted band may reach the card's edge, where the control point is read | **SURVIVED** → uncovered, named below |
+| M-bk | the `Refused` sentence stops naming the ink cause and claims the OS refused the keyboard | caught |
+| M-bl | the count claims cards were SHOWN when refused ones never stayed on screen | caught |
 
-**M-bj is a structural guarantee replacing an incidental one, and no reachable card size makes its
-absence observable.** Without the floor the first band's inset is `width / 12`, which only reaches the
-control point's column for a card narrower than ~24 px — and the product's own placement is 55 % of a
-display, while every fixture uses hundreds of pixels. Writing a 12-pixel card to reach it would be
-asserting against `DrawText`'s behaviour in a one-pixel-tall rectangle, which is not a fact about this
-capability. The floor stays because it makes the invariant a property of the painter rather than an
-accident of one inset; it is reported here rather than covered by a fact that would prove nothing.
+**M-bj is a structural guarantee replacing an incidental one, and it is UNCOVERED — deliberately,
+and the honest reason is narrower than "unreachable".** Without the floor the first band's inset is
+`width / 12`, which only reaches the control point's column on a card narrower than ~24 px. No
+PRODUCT path produces one — `DefaultPlacement` is 55 % of a display and every fixture uses hundreds
+of pixels — but a fact COULD construct one, because `InputPromptRequest` validates nothing beyond
+width and height being positive. So the accurate statement is not that it cannot be reached; it is
+that reaching it would mean asserting against `DrawText`'s behaviour in a one-pixel-tall rectangle,
+which is a fact about GDI rather than about this capability, and buying it would pin the painter's
+band geometry against every future change to the card's layout. **The floor stays because it turns an
+incidental safety into a property of the painter; the gap is reported rather than closed by a test
+that would prove the wrong thing.**
 
-### The six survivors, and not one of them is papered over with a fact that asserts shape
+### The seven survivors, and not one of them is papered over with a fact that asserts shape
 
 **Three are EQUIVALENT MUTANTS**, and the middle one is this packet's most interesting finding:
 
@@ -285,7 +291,7 @@ accident of one inset; it is reported here rather than covered by a fact that wo
   the port's own `Dismiss` asserts exactly that — so the visibility conjunct cannot be false while the
   foreground conjunct is true. Redundant, not unpinned.
 
-**Three are UNCOVERED, and each names why:**
+**Four are UNCOVERED, and each names why:**
 
 - **M-w** (`Dismiss` re-checking the hit test). After `ShowWindow(SW_HIDE)` the OS never routes to the
   window again, so no reachable state makes this clause false. The OUTCOME it guards is pinned
@@ -303,6 +309,11 @@ accident of one inset; it is reported here rather than covered by a fact that wo
   the same problem for the audio pair with a probe subclass of the shared base, and the clause is
   pinned THERE (`BOTHClausesOfTheFifthDotMeaningAreLoadBearing...`) for that module's override.
   **Unsealing a product class purely to reach it was rejected**; the remedy is named instead.
+- **M-bj** (the painted bands' `ControlMargin` floor). Reachable in principle — `InputPromptRequest`
+  validates only that width and height are positive — but no product path makes a card narrow enough,
+  and a fact that built one would be asserting against `DrawText` in a one-pixel-tall rectangle and
+  pinning the painter's band geometry. See the Round 4 note above: the floor is kept as a structural
+  guarantee and the gap is reported rather than closed by a test that would prove the wrong thing.
 
 
 ---
@@ -433,6 +444,17 @@ prompt keeps its window ON PURPOSE, because the operating system has given it th
 it down is the MODULE's job. The corrected doc says so, and the assertion is what keeps the
 module-side fact testing something real rather than a window that was never up.
 
+**And the review found a stronger reason for that answer than the one I gave, which belongs here
+because it settles the design question rather than merely describing it.** `Update` exists to repaint
+a LIVE card — a new answer echo, a new progress counter — and it returns `Degraded` on exactly the
+same condition (`Win32InputPresence.cs:349-357`: a repaint that leaves the card blank). So a presence
+that withdrew on `Degraded` would tear the card down the first time a repaint came back un-inked,
+**destroying the only recovery path `Update` was written for**. `Degraded` is the state where the
+capability still holds everything it claimed and one non-fatal check failed; withdrawing there would
+make the whole repaint seam unusable. That is why the presence keeps the window and the module
+decides — and it is a better justification than "the OS gave it the input", which is true but does
+not explain why the two paths must agree.
+
 **Four smaller corrections in the same pass:**
 
 * **My "survey correction" was itself wrong and is withdrawn.** `BubbleCountService.cs:30` really is
@@ -447,11 +469,24 @@ module-side fact testing something real rather than a window that was never up.
   interval).
 * The ink control point was read at a fixed `(2, 2)`, which falls inside a text band on a card
   narrow enough that the proportional inset collapses. Every band is now floored at
-  `ControlMargin = 3`, so the outermost rows and columns are always background at any size, and the
-  mutation that removes the floor (M-bj) is caught.
+  `ControlMargin = 3`, so the outermost rows and columns are always background at any size.
+  **This hardening is NOT covered by a fact** — M-bj survives, and §4's Round 4 table is the
+  authority on that. An earlier draft of this bullet claimed the opposite; a sweep record that says
+  both is worse than one that admits a gap, because a later reader cites whichever half suits them.
 * `CoexistenceRun.CardTookTheInput` was sourced from the product's own `HoldsTheInput` while every
   other leg was probe-sourced. It now comes from the probe, so the "during" leg cannot be softened by
   the thing under test.
+* **The panel told a user the wrong thing about half the refusals it reports.**
+  `LockCardResolution.Refused` is reached by TWO opposite causes — the OS would not give the card the
+  keyboard, and the OS DID and only the ink read-back refused — and one sentence named the first.
+  That is the same defect class SP-105 and SP-109 each shipped once: a sentence true for one branch
+  and false for another that reaches it, and here the false branch is the very state the first review
+  found being left on screen. The two causes now read differently, decided by the CAPABILITY's own
+  typed outcome rather than by a guess, and `ARefusedCardSaysWHICHRefusalItWas_BecauseOneValueIsReachedByTwoOppositeCauses`
+  pins both (M-bk, M-bl caught) — including that the three unambiguous endings kept their own words,
+  so the split was not bought by making every ending say the same thing.
+* The same line said "*n* cards shown so far" over a count that includes cards asked for and refused,
+  which never stayed on a screen. It now says "asked for", the same line `CardCount`'s doc draws.
 * `CardCount`'s doc claimed a refused card is not counted; the code counts every firing that got as
   far as calling the capability. **The doc was corrected, not the counter** — what the user did with
   a card is `LastResolution`/`SolvedCount`/`DismissedCount`, which is where that question belongs.

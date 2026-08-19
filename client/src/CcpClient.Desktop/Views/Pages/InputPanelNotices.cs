@@ -64,7 +64,8 @@ public static class InputPanelNotices
         bool canReachAUser,
         bool prompting,
         bool holdsTheInput,
-        LockCardResolution lastResolution)
+        LockCardResolution lastResolution,
+        CapabilityState? lastPrompt)
     {
         if (dot == EffectDotState.Off)
         {
@@ -114,12 +115,26 @@ public static class InputPanelNotices
             LockCardResolution.Solved => " You typed the last one out in full.",
             LockCardResolution.Dismissed => " You closed the last one with Esc.",
             LockCardResolution.Withdrawn => " The last one was taken down when the session stopped.",
-            LockCardResolution.Refused => " The last one was taken straight back down: the operating "
-                + "system would not give it the keyboard.",
+            // ONE resolution value, TWO causes — and a single sentence covering both was false for
+            // one of them. `Refused` is reached when the OS would not give the card the keyboard AND
+            // when it did and only the ink read-back refused; those are opposite facts about the
+            // operating system, and telling a user the first when the second happened is exactly the
+            // panel defect SP-105 and SP-109 each shipped once — a sentence true for one branch and
+            // false for another that reaches it. The capability's own typed outcome is what tells
+            // them apart, so it is what decides the words.
+            LockCardResolution.Refused when lastPrompt is CapabilityState.Degraded =>
+                " The last one was taken straight back down: the operating system gave it the "
+                + "keyboard, but nothing legible reached the card, so there was no question to answer.",
+            LockCardResolution.Refused =>
+                " The last one was taken straight back down: the operating system would not give it "
+                + "the keyboard.",
             _ => string.Empty,
         };
 
-        return $"{head} {cardCount} card{(cardCount == 1 ? string.Empty : "s")} shown so far.{ordinal}{ending}";
+        // "asked for", not "shown": the count includes cards this module asked the capability for
+        // and was refused, which never stayed on the user's screen. The sentence above says which,
+        // and LockCardEffect.CardCount's own doc draws the line in the same place.
+        return $"{head} {cardCount} card{(cardCount == 1 ? string.Empty : "s")} asked for so far.{ordinal}{ending}";
     }
 
     /// <summary>What will be asked, and where it is edited. The port's standing answer to "where do I

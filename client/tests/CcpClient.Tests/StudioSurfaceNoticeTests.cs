@@ -1,6 +1,7 @@
 using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
+using CcpClient.Desktop.Input;
 using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Session;
 using CcpClient.Desktop.Views.Pages;
@@ -784,5 +785,63 @@ public class StudioSurfaceNoticeTests
             new CapabilityState.Available("OS-DETAIL-VERBATIM"),
             new AudioRenderObservation(true, "Speakers", true, true, false, 0f, 6));
         Assert.DoesNotContain("metered", noMeter, StringComparison.Ordinal);
+    }
+
+    // =================================================================================
+    //  SP-110 — the one resolution value that is reached by TWO opposite causes
+    // =================================================================================
+
+    [Fact]
+    public void ARefusedCardSaysWHICHRefusalItWas_BecauseOneValueIsReachedByTwoOppositeCauses()
+    {
+        // THE DEFECT CLASS SP-105 AND SP-109 EACH SHIPPED ONCE: a sentence true for one branch and
+        // false for another that reaches it. LockCardResolution.Refused is reached BOTH when the
+        // operating system would not give the card the keyboard AND when it did and only the ink
+        // read-back refused. A single sentence naming the first is a lie about the second — and the
+        // second is the state a code review found this packet leaving on screen, so it is the one a
+        // user is most likely to be reading about.
+        //
+        // The capability's own typed outcome is what tells them apart, so it is what decides the
+        // words: this is the same rule the audio panel follows when it quotes the OS rather than
+        // composing a sentence about a platform.
+        var refusedForFocus = InputPanelNotices.DescribeCardState(
+            EffectDotState.Live, cardCount: 1, last: null, sessionRunning: true, canReachAUser: true,
+            prompting: false, holdsTheInput: false, LockCardResolution.Refused,
+            new CapabilityState.Unavailable(new CapabilityReason(
+                InputReasonCodes.InputNotCaptured, "the OS kept the foreground")));
+
+        var refusedForInk = InputPanelNotices.DescribeCardState(
+            EffectDotState.Live, cardCount: 1, last: null, sessionRunning: true, canReachAUser: true,
+            prompting: false, holdsTheInput: false, LockCardResolution.Refused,
+            new CapabilityState.Degraded("the card holds the keyboard", new CapabilityReason(
+                InputReasonCodes.InputPromptNotInked, "no ink")));
+
+        Assert.Contains("would not give it the keyboard", refusedForFocus, StringComparison.Ordinal);
+        Assert.DoesNotContain("gave it the keyboard", refusedForFocus, StringComparison.Ordinal);
+
+        Assert.Contains("gave it the keyboard", refusedForInk, StringComparison.Ordinal);
+        Assert.DoesNotContain("would not give it the keyboard", refusedForInk,
+            StringComparison.Ordinal);
+        Assert.NotEqual(refusedForFocus, refusedForInk);
+
+        // And the COUNT does not overclaim either: a card that was asked for and refused never
+        // stayed on the user's screen, so the sentence says "asked for" rather than "shown" — the
+        // same line LockCardEffect.CardCount's own doc draws.
+        Assert.Contains("asked for so far", refusedForFocus, StringComparison.Ordinal);
+        Assert.DoesNotContain("shown so far", refusedForFocus, StringComparison.Ordinal);
+
+        // The three endings that are NOT ambiguous keep their own words, so this split cannot have
+        // been bought by making every ending say the same thing.
+        var solved = InputPanelNotices.DescribeCardState(
+            EffectDotState.Live, 1, null, true, true, false, false, LockCardResolution.Solved, null);
+        var dismissed = InputPanelNotices.DescribeCardState(
+            EffectDotState.Live, 1, null, true, true, false, false, LockCardResolution.Dismissed, null);
+        var withdrawn = InputPanelNotices.DescribeCardState(
+            EffectDotState.Live, 1, null, true, true, false, false, LockCardResolution.Withdrawn, null);
+
+        Assert.Contains("typed the last one out in full", solved, StringComparison.Ordinal);
+        Assert.Contains("closed the last one with Esc", dismissed, StringComparison.Ordinal);
+        Assert.Contains("taken down when the session stopped", withdrawn, StringComparison.Ordinal);
+        Assert.Equal(4, new[] { solved, dismissed, withdrawn, refusedForInk }.Distinct().Count());
     }
 }
