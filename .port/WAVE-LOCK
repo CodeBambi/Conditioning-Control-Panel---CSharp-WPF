@@ -1,6 +1,0 @@
-WAVE: 49
-PACKETS: SP-109-audio-capability
-LANES: 1
-BASE: b2a7670b
-GATE: validate-wave.mjs WAVE OK; floor 1527/95
-OPENED: 2026-08-19T02:27:05Z
