@@ -503,10 +503,18 @@ not explain why the two paths must agree.
 - **Linux input capture is unproven**, refuses in type, and the five-step gate in
   `InputPresenceFactory.LinuxManualGate` is undischarged. WSLg cannot discharge it, and **Wayland may
   never be able to**: unprompted activation is not offered by the protocol.
-- **The foreground escalation is a real intervention.** `AttachThreadInput` briefly shares input
-  state with another process's thread. It is bounded and detached in a `finally`, and it was measured
-  necessary — but it is a divergence from WPF (D115) and it has not been exercised against a hung
-  foreground thread.
+- **The foreground escalation is a real intervention, and its BLAST RADIUS is named rather than
+  left as "untested".** `AttachThreadInput` briefly shares input state with another process's thread.
+  It is bounded, and detached in a `finally` on every path — but it has not been exercised against a
+  hung foreground thread, and **the place that would land is the worst one available**: `Escalate`
+  runs on the CALLER's thread, and `IInputPresence`'s own affinity rule makes that the UI thread in
+  the product (a native window belongs to the thread that made it). So the failure mode is not "the
+  grab did not work" — a refusal this capability reports honestly — it is **the app freezes**, with
+  a card half-way up, while another process's wedged input queue holds ours. Nothing here measures
+  that, no fixture can construct a hung foreign thread safely, and it is the single most valuable
+  thing a future packet could measure about D115. Two things bound it in the meantime: the attach is
+  attempted only when the foreground belongs to a DIFFERENT thread, and the whole ladder is capped at
+  `MaxForegroundAttempts`.
 - **Avalonia's own message loop is not proven to translate keystrokes for this window.** Every
   delivery fact here rides the presence's own `Pump`.
 - **Nothing proves the card is the RIGHT card.** The phrase the OS is holding ink for is not compared

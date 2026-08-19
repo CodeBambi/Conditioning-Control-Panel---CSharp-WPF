@@ -623,9 +623,25 @@ public class LockCardModuleTests
     [Fact]
     public async Task WithNoFiringOnTheClock_TheModuleIsARMED_HoweverHealthyEverythingElseIs()
     {
-        // Clause 1, the inherited one. Pinned here as well as in the paced base's own facts, because
-        // the override could have dropped it — and the base's contract says an override may only
-        // NARROW, never widen.
+        // Clause 1, the inherited one — and this fact pins the OUTCOME, not the clause.
+        //
+        // SAID PLAINLY BECAUSE AN EARLIER VERSION OF THIS COMMENT CLAIMED OTHERWISE: the dot is
+        // Armed once the schedule is down, which is what a user sees and what this asserts. It does
+        // NOT pin the `ScheduleArmed &&` conjunct of LockCardEffect.WorkIsRunning. It cannot:
+        // Engine.Stop() disarms, and OwnedSessionEffect.Dot short-circuits on `_armed` before it
+        // ever evaluates WorkIsRunning (Session/OwnedSessionEffect.cs:149), so deleting the conjunct
+        // leaves this fact green.
+        //
+        // That conjunct is an ADMITTED SWEEP SURVIVOR — M-aa, recorded as uncovered in
+        // spine-tasks/SP-110-input-capturing-window/record.md section 4, with the reason: isolating
+        // it needs ScheduleArmed false while the module is still armed, enabled and live, which only
+        // ReleaseWork produces, and that is `protected sealed` on PacedSessionEffect with
+        // LockCardEffect sealed. Unsealing a product class purely to reach it was rejected. The
+        // analogous clause IS pinned directly for the audio pair, on a probe subclass of the shared
+        // base: AudioModuleSpineTests.BOTHClausesOfTheFifthDotMeaningAreLoadBearing_PinnedOnThePredicateItself.
+        //
+        // The base's contract still binds the override — it may only NARROW, never widen — and the
+        // two clauses this module ADDS are pinned by the three facts above.
         await using var rig = await Rig.StartAsync();
         rig.EnableLockCard(perHour: 10);
         rig.Engine.Start();

@@ -62,7 +62,7 @@ public sealed class LockCardPresetDocument
 
     /// <summary>
     /// The module's own on/off dial — WPF's <c>LockCardEnabled</c>, the flag its rack row binds its
-    /// dot to (<c>Views/Tabs/StudioTabView.xaml.cs:504-505</c>) and the one <c>StartEngine</c> gates
+    /// dot to (<c>Views/Tabs/StudioTabView.xaml.cs:503-504</c>) and the one <c>StartEngine</c> gates
     /// on (<c>MainWindow/MainWindow.StartStop.cs:206</c>). Ships OFF
     /// (<c>AppSettings.cs:3331</c>).
     /// </summary>

@@ -47,7 +47,7 @@ public enum LockCardResolution
 
 /// <summary>
 /// <b>Lock Card</b> — WPF's GAMES &amp; CARDS rack row
-/// (<c>Views/Tabs/StudioTabView.xaml.cs:504-505</c>), started by <c>StartEngine</c> at
+/// (<c>Views/Tabs/StudioTabView.xaml.cs:503-504</c>), started by <c>StartEngine</c> at
 /// <c>MainWindow/MainWindow.StartStop.cs:206-209</c> and stopped by <c>StopEngineCore</c> at
 /// <c>:339</c> with its visible card dropped at <c>:367</c>.
 ///
@@ -91,11 +91,11 @@ public enum LockCardResolution
 /// </summary>
 public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
 {
-    /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:504</c>).</summary>
+    /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:503</c>).</summary>
     public const string EffectId = "lockcard";
 
     /// <summary>The row's label as the shipping app shows it, minus the emoji the port's rack does
-    /// not render (<c>StudioTabView.xaml.cs:504</c> — "📐 Lock Card").</summary>
+    /// not render (<c>StudioTabView.xaml.cs:503</c> — "📐 Lock Card").</summary>
     public const string DisplayTitle = "Lock Card";
 
     /// <summary>How much of the primary display the card covers. <b>A divergence, and a deliberate

@@ -247,7 +247,7 @@ public class ContinuousEffectSpineTests
         //
         // SP-110 opens the GAMES & CARDS group with Lock Card, and it lands between the effects and
         // the IMMERSION pair for the same reason: that is the rack's group order
-        // (StudioTabView.xaml.cs:482/498/508/530) AND StartEngine's own (:206-209 comes after the
+        // (StudioTabView.xaml.cs:483/498/508/530) AND StartEngine's own (:206-209 comes after the
         // overlay service and before Mind Wipe at :229-230).
         Assert.Equal(
             [

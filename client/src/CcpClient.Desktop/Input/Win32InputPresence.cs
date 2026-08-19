@@ -531,7 +531,18 @@ public sealed class Win32InputPresence : IInputPresence
     /// TRUE and handing over both the foreground and the system keyboard focus.</para>
     ///
     /// <para>The attach is held for the three calls it takes and detached immediately, including on
-    /// the failure path. It is a DIVERGENCE from WPF and it is recorded as one.</para>
+    /// the failure path. It is a DIVERGENCE from WPF and it is recorded as one (D115).</para>
+    ///
+    /// <para><b>And the risk it carries is stated here rather than only in a record file, because
+    /// this is where somebody would change it.</b> <see cref="Escalate"/> runs on the CALLER's
+    /// thread, and this interface's affinity rule makes that the UI thread in the product. Attaching
+    /// to a foreign thread's input queue therefore couples the app's UI thread to another process's
+    /// for the duration — so the failure mode of a WEDGED foreground thread is not a refused grab,
+    /// which this capability would report honestly, but a FROZEN APP with a card half-way up. It is
+    /// bounded three ways and none of them is a proof: the attach is attempted only when the
+    /// foreground belongs to a different thread, it is released in a <c>finally</c>, and the ladder
+    /// is capped at <see cref="MaxForegroundAttempts"/>. Nothing in the suite exercises it against a
+    /// hung foreign thread, and no fixture can construct one safely.</para>
     /// </summary>
     private int TakeForeground(nint window)
     {

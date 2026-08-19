@@ -338,7 +338,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         //
         // SP-110 inserts Lock Card BETWEEN the effects and the IMMERSION pair, which is where both
         // orders that matter put it and they agree: upstream's rack puts GAMES & CARDS after EFFECTS
-        // and before IMMERSION (StudioTabView.xaml.cs:482/498/508/530), and StartEngine starts the
+        // and before IMMERSION (StudioTabView.xaml.cs:483/498/508/530), and StartEngine starts the
         // lock card (:206-209) after the overlay service and before Mind Wipe (:229-230). It is the
         // port's first GAMES & CARDS row, so the group opens with it.
         Engine = new SessionEngine(
