@@ -78,8 +78,10 @@ Checks packet parse, the `testCommand` row and its floor-wrapper routing, the `f
 
 Gate every build and test run through the slot semaphore so model concurrency and build concurrency stay different numbers:
 ```bash
-node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-warnings.mjs
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
 ```
+**The first command IS the build** (SP-114 — see "The warning gate" under Verification floor, below): a plain `dotnet build` here is the incremental build whose output a human reads by eye, which reports `0 Warning(s)` over a tree that still holds live warnings. `client/tools/wave/port-wave.workflow.mjs` issues exactly this pair into every lane and into the code-review prompt, and `WarningGateGuardTests` fails if it stops doing so. Never run the two concurrently in the same worktree.
 It passes the child's exit code through unchanged — a wrapper that swallowed a red gate would be the worst thing in this repo — holds one lock file per slot in the OS temp dir, and reaps locks whose owning pid is provably gone on this host, with a hard age ceiling as the backstop for a recycled pid. Default slots come from `CCP_GATE_SLOTS`, else 3. Set `MSBUILDDISABLENODEREUSE=1` so parallel worktrees do not accumulate msbuild nodes holding file locks.
 
 **Named limit:** the semaphore is verified on Windows only. There is no WSL distro on this machine, so its Linux behaviour is an API audit, not a test. Two Linux caveats are recorded in the file: a shared `/tmp` with the sticky bit can refuse another user's lock unlink (it logs and keeps waiting rather than crashing), and `O_EXCL` is unreliable on old NFS.

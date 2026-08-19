@@ -49,8 +49,9 @@ forces `--no-incremental`, and why a warning gate without that flag would be vac
 | gates that observe build warnings | **0** | **1** (`client/tests/floor/check-warnings.mjs`) |
 | occurrences of the string `warning` (any case) in `check-floor.mjs` | **0** | **0** — the floor was not touched |
 | projects whose warnings are mechanically observed | **0** | **4 of 4** in `client/CcpClient.sln`, discovered from the sln, missing-project = red |
-| `0 warnings` claims in the owner-facing digest, none mechanically checked | **31** | 31 historical + every future one gated |
-| `0 warnings` claims across `spine-tasks/` (files / occurrences) | **53 / 63** | same history, gated forward |
+| `0 warnings` claims in the owner-facing digest, none mechanically checked | **31** | unchanged history; future claims gated **only where the gate is invoked** (§11.2) |
+| `0 warnings` claims across `spine-tasks/` (files / occurrences) | **49 / 58** | same history, same qualifier |
+| sites that mechanically ISSUE the gate command to a lane | **0** | **3 in scope** (wave RULES, code-review prompt, auditor prompt); **1 out of scope and open** (§11.2) |
 | pinned facts about warning handling | **0** | **8** |
 | pinned warning-suppression sites under `client/` | **0** | **10** (by file and code) |
 | induced real warnings the mandated command reported | 1 of 3 (only the compile that produced it) | — |
@@ -376,3 +377,136 @@ are closed and that the pattern is checked against its own claimed coverage on e
 `CodeAnalysisRuleSet`, a downgraded analyzer package, or a suppression shape nobody has thought of
 remains invisible to both instruments, and the honest posture is that the boundary list is
 maintained, not derived.
+
+## 11. SECOND REVISION, AFTER FINAL REVIEW (REVISE → addressed)
+
+The reviewer drove the shipped `evaluate()` over all 14 committed build logs and reproduced every
+claimed verdict, including `bite-09` against its `bite-10` control. Four blockers followed. The first
+is the packet's actual outcome; the rest are claims that outran their evidence.
+
+### 11.1 BLOCKER 1 — the gate existed and nothing invoked it
+
+`client/tools/wave/port-wave.workflow.mjs` is the file that MECHANICALLY ISSUES the gate commands:
+the `RULES` string injected into **every lane of every future wave**, and the same command pair
+inside the **code-review prompt**. Both still prescribed
+
+```
+node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+```
+
+— the plain incremental build whose output a human reads by eye, which is the exact false green
+`measure-02` documents. **So the first half of the packet's mission was delivered and the second half
+("so no future claim depends on a lane's grep") was not**, at the one place that decides it. Both
+files were inside the May-change scope the whole time.
+
+Fixed: both strings now issue
+
+```
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-warnings.mjs
+node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+```
+
+with the bare build REPLACED rather than kept alongside (the gate performs that build), plus the two
+measured reasons, the `--cold` trigger, and the same-worktree concurrency hazard sentence carried
+into both. The "Build first because…" rule line now says the warning gate IS the build.
+
+`WarningGateGuardTests.TheGateIsNamedInTheWorkflowTheHarnessAndTheAuditorPrompt` was **extended, not
+duplicated** (no new `[Fact]`; the delta stays +8/+0) to bind that file three ways: the gate is
+named; it is issued **at least twice**, because the lane RULES and the code-review prompt each carry
+their own copy and a fix applied to one reads as done; and the bare build command no longer appears
+as a command (matched with its line terminator, so the gate's own prose quoting it does not read as
+an instruction). **Bite proven** by restoring the pre-fix file and running the fact —
+`Not found: "node client/tests/floor/check-warnings.mjs"`
+(`evidence/bite-14-naming-pin-reds-on-wave-workflow.txt`) — then restoring the fix and re-running
+green. Cross-referenced from `client/docs/port-workflow.md`.
+
+**OPEN, OUT OF SCOPE, AND THE HANDOFF I CANNOT CLOSE:** `.claude/agents/port-slice-executor.md:40`
+carries the same plain `dotnet build` line. `.claude/**` is in this packet's
+`fileScopeMustNotChange` and in the wave RULES' own never-edit list. Until that line is changed, a
+lane driven through that agent definition rather than through the wave workflow still builds plainly
+and reads the output by eye. **That is the one remaining path by which a future "0 warnings" claim
+can still be made the old way.**
+
+### 11.2 BLOCKER 2 — the record upgraded a claim it had not earned
+
+"31 historical + every future one gated" was false while the issuing files prescribed a plain build.
+Withdrawn. The §1 table now reads: history unchanged, and **future claims are gated only where the
+gate is invoked** — three in-scope issuing sites now do (wave RULES, code-review prompt, auditor
+prompt), one out-of-scope site does not (§11.1). A gate is worth exactly the set of places that run
+it, and that set is now a row in the table rather than an implication.
+
+### 11.3 BLOCKER 3 — the withdrawn claim survived inside the instruments
+
+§10.3 withdrew "a new suppression cannot be added silently" from the record and left the same claim
+standing in the two files a future reader actually opens: `WarningSuppressionCensusTests`'s class
+comment ("impossible to do quietly" — contradicting its own enumerated-shapes paragraph nine lines
+later) and `check-warnings.mjs`'s header ("That hole is covered by a different instrument"). Both are
+now bounded to enumerated shapes, both state that the census's failure mode is SILENCE, and the gate
+header adds the measured `.globalconfig` figure plus an explicit instruction not to read gate-green
++ census-green as "no warning was suppressed" — only as "no suppression of a shape we enumerate was
+added". A withdrawal that lives only in the record is a withdrawal the next reader never sees.
+
+### 11.4 BLOCKER 4 — a count that did not reproduce
+
+`53 / 63` was wrong. **Correct figures, at base `4332b8b9`, tracked files only, with the exact
+commands:**
+
+```
+git grep -l -F "0 warnings" 4332b8b9 -- spine-tasks/ | wc -l               ->  49
+git grep -o -F "0 warnings" 4332b8b9 -- spine-tasks/ | wc -l               ->  58
+git grep -o -F "0 warnings" 4332b8b9 -- client/docs/port-digest.md | wc -l ->  31
+```
+
+The reviewer's independent 49/58 reproduces exactly, and the digest's 31 was already right.
+
+**The cause is worth naming, because it is this record's own thesis turned on itself:** the original
+figure came from a recursive `grep -r ... spine-tasks/` over the WORKING DIRECTORY, which by then
+already held this packet's own uncommitted `plan.md` and gate-output evidence — 4 extra files and 5
+extra occurrences, every one of them mine. **A number whose provenance is unstated is a number that
+can quietly include the measurer.** The same packet folder now matches 12 files / 22 occurrences,
+which is exactly why the command, the revision and the scope are stated here instead of the figure
+alone.
+
+### 11.5 THE RETROACTIVE QUESTION, SETTLED
+
+Historical "0 warnings" claims are **unproven, not false**, and re-verifying them per wave is
+worthless: those trees no longer exist as build states, and an incremental rebuild of an old checkout
+would answer a different question than the one that was asked at the time.
+
+**One bounding fact was already in this packet's evidence and was left unconnected.**
+`evidence/build-01-cold.log` is a genuine COLD build of `4332b8b9`: no `bin/` existed in the fresh
+worktree, all four projects restored and compiled from scratch, and the whole 15-line log was read
+unfiltered. It reports `0 Warning(s)` and `0 Error(s)`. So whatever any individual historical claim
+asserted about its own moment, **no live warning survived into the base of this work.** The open
+question is about the honesty of past *evidence*, not about the state of the tree, and the tree is
+clean. Annotating `client/docs/port-digest.md` is the orchestrator's job, not this lane's.
+
+### 11.6 TWO RESIDUALS, RECORDED AND DELIBERATELY NOT BUILT HERE
+
+Named for a successor packet, with the mechanism, because both are real and neither belongs in a
+revision pass.
+
+**R1 — replace the census's maintained list with a derived one.** The census's failure mode is
+silence, and a hand-written enumeration of file shapes cannot carry that weight indefinitely; it has
+already been wrong twice inside one packet. The derived replacement: read the EFFECTIVE `NoWarn`,
+`WarningLevel`, `TreatWarningsAsErrors` and the `EditorConfigFiles` item set out of an MSBuild binary
+log (`-bl`) — i.e. **what the compiler was actually told**, which catches any file shape, any import
+path, an SDK default, and a file above the repository root, closing every gap §5 currently names.
+Pair it with a canary project that deliberately emits one known `CS` warning and one known analyzer
+warning, so the gate reds when it stops SEEING warnings at all. That turns "no suppression was added"
+from remembered into measured.
+
+**R2 — make `--cold`'s trigger derivable instead of remembered.** Opt-in currently recreates exactly
+one discipline dependency: somebody must notice that the diff touched a `*.csproj`, `*.props`,
+`*.targets` or lock file. That is mechanically decidable — compare those files' mtimes against
+`obj/project.assets.json` and **fail closed**, telling the operator to re-run with `--cold`. No
+network cost, no default cost, no judgement call, and it removes the last "the lane must remember"
+step from this gate.
+
+### 11.7 What the second revision does NOT change
+
+The gate's own behaviour is untouched: same flags, same two readings, same fail-closed set, and the
+14 committed build logs still reproduce against the shipped `evaluate()`. Nothing was silenced,
+`check-floor.mjs` remains byte-identical to base, no `[Fact]` was added, and the declared delta stays
+**+8 unit / +0 headless**.

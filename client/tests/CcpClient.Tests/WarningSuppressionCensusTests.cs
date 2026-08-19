@@ -14,10 +14,14 @@ namespace CcpClient.Tests;
 /// nothing again.</para>
 ///
 /// <para>This is the second instrument, and it is LEXICAL, not behavioural: it pins the suppression
-/// sites that exist under <c>client/</c> by file and code. A new suppression fails here with
-/// file:line and has to be declared deliberately, in the same commit, with a reason — the same
-/// admission discipline <c>allowedSkips</c> uses. It does not judge whether a pinned suppression is
-/// justified, it only makes adding one impossible to do quietly.</para>
+/// sites that exist under <c>client/</c> by file and code. A new suppression <b>of an enumerated
+/// shape</b> fails here with file:line and has to be declared deliberately, in the same commit,
+/// with a reason — the same admission discipline <c>allowedSkips</c> uses. It does not judge whether
+/// a pinned suppression is justified. <b>And it does NOT make adding a suppression impossible to do
+/// quietly</b>, which an earlier draft of this comment claimed: a shape outside the enumeration
+/// below is silent, and two shapes were outside it until a reviewer executed the pattern. The
+/// census's failure mode is SILENCE, and its completeness is a property of a hand-maintained list,
+/// not of the compiler.</para>
 ///
 /// <para>ENUMERATED SHAPES — the census binds exactly these, and claims nothing else: inline
 /// pragma disables in <c>*.cs</c>; <c>NoWarn</c> in <c>*.csproj</c>, <c>*.props</c> and

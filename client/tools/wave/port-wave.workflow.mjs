@@ -65,10 +65,12 @@ const RULES = `
 Operational rules for this repository, learned the hard way — follow them exactly:
 - Run plain, SEPARATE shell commands. The worktree isolation guard refuses compound commands ("cd X && ..."). Chain nothing.
 - BUILD IMMEDIATELY BEFORE THE GATE, in your own tree, and run BOTH through the slot semaphore, as two separate commands:
-    node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+    node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-warnings.mjs
     node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
+  The FIRST command IS the build (SP-114). It runs "dotnet build client/CcpClient.sln -c Debug --nologo --no-incremental", captures the WHOLE unfiltered output, and exits non-zero unless it positively observes 0 warnings and 0 errors across all four solution projects. Do NOT substitute a plain "dotnet build" and read the output yourself: that reading produced four false "0 warnings" claims. Two measured reasons. SP-113 read its builds through grep -E "error|warning CS|Build succ", which cannot match "warning xUnit2013". And an incremental build reports only the compilations it actually ran, so the same mandated command printed "1 Warning(s)" and then "0 Warning(s)" over an UNCHANGED tree still holding a live CS0219. Add --cold when your diff touches a *.csproj, *.props, *.targets or a lock file; restore is otherwise a no-op and NU* warnings are not re-evaluated, which the gate states on every run where it happens.
+  HAZARD: never run the warning gate concurrently with check-floor.mjs IN THE SAME WORKTREE — it rebuilds the shared bin/obj while the floor's --no-build runner is loading those assemblies. Across worktrees the semaphore already bounds it.
   The semaphore is not optional at wave scale: you are one of up to eight concurrent lanes on an 8-core / 31GB machine, and ungated parallel builds thrash CPU, RAM and the msbuild/NuGet file locks. It passes the child's exit code through unchanged, so a red gate stays red.
-  Build first because the wrapper runs "dotnet test --no-build": a stale bin/ makes it report a count that has nothing to do with your source. At the wave-30 close this reported 1022 against a tree containing 1018.
+  Warning gate first because it IS the build, and the floor wrapper runs "dotnet test --no-build": a stale bin/ makes the floor report a count that has nothing to do with your source. At the wave-30 close this reported 1022 against a tree containing 1018.
 - NEVER edit client/tests/floor/floor.json. Declare spine-tasks/<packet>/floor-delta.json = {packet, unit, headless, reason}. Your gate WILL report a pin mismatch; that is the designed state. Confirm observed == pin + your declared delta and report both numbers.
 - Never edit client/docs/task-board.md, docs/constitution.md, ConditioningControlPanel/**, .spine/**, .pi/**, or .claude/**.
 - No new wall-clock waits. Only client/tests/CcpClient.Tests/TestWait.cs is approved; TestTimingGuardTests enforces it mechanically.
@@ -231,9 +233,9 @@ EXPECTED, NOT A DEFECT: the lane is forbidden to edit client/tests/floor/floor.j
 CRITICAL for a multi-lane wave: the pin you compare against is the pin ON DISK, which does NOT yet include any other lane's delta — the orchestrator sums every lane's declaration in ONE commit at land. So verify observed == pin + THIS lane's declared delta, and nothing else. Do not add another lane's numbers, and do not "reconcile" the pin. Treat any other number, any failure, or an unexpected skip as blocking.
 
 Build and gate through the semaphore, as separate commands, because up to eight lanes are running:
-    node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo
+    node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-warnings.mjs
     node client/tools/gate/with-slot.mjs --slots 3 -- node client/tests/floor/check-floor.mjs
-BUILD FIRST — the wrapper is --no-build and a stale bin/ will lie about the source.
+WARNING GATE FIRST — it IS the build (SP-114), and it exits non-zero unless it positively reads 0 warnings and 0 errors across all four solution projects; the floor wrapper is --no-build and a stale bin/ will lie about the source. Do not replace it with a plain "dotnet build" read by eye: an incremental build prints "0 Warning(s)" over a tree that still holds live warnings, and SP-113's reading filter could not match "warning xUnit2013" at all. Never run the two concurrently in one worktree.
 
 Judge whether the new tests pin the claimed semantics or merely execute the code; treat them as vacuous until shown otherwise. Return APPROVE or REVISE in your documented contract form.
 

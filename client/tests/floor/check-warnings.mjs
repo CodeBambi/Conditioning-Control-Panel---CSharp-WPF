@@ -40,10 +40,17 @@
 // WHAT IT CANNOT SEE (the boundary; the long version is in client/docs/verification-harness.md)
 //   - Only client/CcpClient.sln, only Debug|Any CPU, only net10.0. Not the Release/RID publish
 //     path, not ConditioningControlPanel/, not CCP.*.
-//   - A SUPPRESSED warning, by construction: NoWarn, #pragma warning disable, [SuppressMessage],
-//     an .editorconfig severity of `none`, a lowered WarningLevel — all of them act before MSBuild
-//     prints anything, so no output-reading gate can ever observe them. That hole is covered by a
-//     different instrument, the lexical census in WarningSuppressionCensusTests.
+//   - A SUPPRESSED warning, by construction: NoWarn, an inline pragma disable, a suppression
+//     attribute (including the [assembly:] / [module:] forms), an .editorconfig OR .globalconfig
+//     severity of `none`, a lowered WarningLevel — all of them act before MSBuild prints anything,
+//     so no output-reading gate can ever observe them. Measured: a two-line .globalconfig with
+//     dotnet_diagnostic.CS0219.severity = none, and ZERO csproj references, turns this gate's own
+//     forced-full build from "1 Warning(s)" naming a real CS0219 into "0 Warning(s)".
+//     That hole is only PARTLY covered, by a different instrument: the lexical census in
+//     WarningSuppressionCensusTests binds an ENUMERATED list of file shapes. A suppression in a
+//     shape outside that list, or in a file above the repository root, is silent to both. Do not
+//     read a green gate plus a green census as "no warning was suppressed"; read it as "no
+//     suppression of a shape we enumerate was added".
 //   - Whatever THIS SDK and THESE analyzer versions emit. A different SDK can emit more or fewer.
 //   - Restore-time (NU*) warnings are re-evaluated only on a run where restore actually runs;
 //     `--no-incremental` forces compilation, not restore. The gate REPORTS whether restore
