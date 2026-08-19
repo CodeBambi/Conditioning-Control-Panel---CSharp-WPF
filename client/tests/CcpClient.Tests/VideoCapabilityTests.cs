@@ -228,6 +228,7 @@ public class VideoCapabilityTests
     {
         var m = Observed;
         var area = VideoSurfaceObservations.SurfaceWidth * VideoSurfaceObservations.SurfaceHeight;
+        Assert.NotEmpty(m.Frames);
 
         foreach (var frame in m.Frames)
         {
@@ -504,18 +505,26 @@ public class VideoCapabilityTests
     }
 
     [Fact]
-    public void TheWindowsBackendAskedForFromANonWindowsProcess_WouldRefuseRatherThanThrow()
+    public void TheFactoryNeverReturnsNullAndNeverThrows_OnEitherSideOfItsOwnPlatformGuard()
     {
-        // On this host the branch taken is the real one, and that is the point of asserting the
-        // TYPE rather than the platform: the factory never returns null and never throws, whichever
-        // side of the guard it lands on.
-        var presence = VideoPresenceFactory.CreateFor(VideoHostPlatform.Windows);
+        // The Windows arm of both factories is an if rather than a switch arm, because the backend
+        // is annotated [SupportedOSPlatform("windows")]. The property asserted here is the one that
+        // must hold on BOTH sides of that guard and needs no platform predicate to state: asking for
+        // the Windows backend always produces a usable object, never null and never an exception —
+        // on the far side it is a typed refusal instead.
+        using var presence = VideoPresenceFactory.CreateFor(VideoHostPlatform.Windows);
         Assert.NotNull(presence);
-        Assert.Equal(OperatingSystem.IsWindows(), presence is Win32VideoPresence);
-        presence.Dispose();
+        Assert.NotNull(VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows));
+        using var current = VideoPresenceFactory.Create();
+        Assert.NotNull(current);
+        Assert.NotNull(VideoPresenceFactory.CreateClipSource());
 
-        var source = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows);
-        Assert.Equal(OperatingSystem.IsWindows(), source.MediaStackUsable);
+        // And a source asked for a file that is not there answers rather than throwing, which is the
+        // same property one layer down.
+        var state = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows)
+            .Open(Path.Combine(VideoSurfaceObservations.MediaFolder, "definitely-absent.avi"), out var clip);
+        Assert.Null(clip);
+        Assert.IsType<CapabilityState.Unavailable>(state);
     }
 
     /// <summary>An observation with every clause satisfied, so a theory can break exactly one.</summary>

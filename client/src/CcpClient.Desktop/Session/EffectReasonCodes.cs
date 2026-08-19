@@ -219,4 +219,45 @@ public static class EffectReasonCodes
     /// re-arm.</para>
     /// </summary>
     public const string InputNoPhrase = "input-no-phrase";
+
+    /// <summary>
+    /// A VIDEO module is armed and this process cannot put a moving picture in front of a human at
+    /// all (SP-111): no interactive window station, no display, no desktop compositor, no usable
+    /// media stack, or a platform whose read-back this build cannot earn — the Linux and macOS
+    /// branches of <c>Video.VideoPresenceFactory</c>.
+    ///
+    /// <para><b>It takes the Pink Filter answer</b> — <c>Unavailable</c> in the arm result and
+    /// <c>Armed</c> in the dot — because the whole CHANNEL is gone. Not one frame can be shown, so
+    /// there is no surviving half to name.</para>
+    /// </summary>
+    public const string VideoSurfaceUnavailable = "video-surface-unavailable";
+
+    /// <summary>
+    /// A VIDEO module's clip folder is empty, so the schedule runs and every firing that comes due
+    /// has nothing to play. Upstream's own outcome: its trigger path logs "No videos found", resumes
+    /// and completes without showing anything (<c>Services/BubbleCountService.cs:210-217</c>,
+    /// <c>Services/Video/VideoService.cs:6647-6650</c>), while the scheduler keeps running.
+    ///
+    /// <para><b>The Subliminals answer</b> — <c>Degraded</c> in the arm result and <c>Live</c> in the
+    /// dot — because a pool is CONTENT, not a channel: dropping a clip in mid-session is picked up at
+    /// the next firing with no re-arm.</para>
+    /// </summary>
+    public const string VideoNoClip = "video-no-clip";
+
+    /// <summary>
+    /// Mandatory Video ships as its VIDEO half only: <b>the clip's SOUND is not ported</b> (SP-111).
+    ///
+    /// <para>Upstream plays the soundtrack through the same LibVLC player that draws the picture, at
+    /// the app's video volume and through the user's chosen output device
+    /// (<c>Services/Video/VideoService.cs:1245-1260</c>, <c>:1300-1322</c>). This port's video
+    /// capability is a GDI surface fed decoded pictures; it has no audio path at all, and wiring one
+    /// would mean an audio/video synchronisation subsystem rather than a line of code. So the row is
+    /// SILENT, and it says so where the user reads it.</para>
+    ///
+    /// <para><b>Always present, never conditional</b> — the same rule and the same reason as
+    /// <see cref="BrainDrainVisualHalfAbsent"/>: the absence is a property of the BUILD rather than
+    /// of the run, and a row that only admitted to being half a row when something else went wrong
+    /// would be exactly the silently-missing half this code exists to prevent.</para>
+    /// </summary>
+    public const string VideoSilentHalfAbsent = "video-silent-half-absent";
 }

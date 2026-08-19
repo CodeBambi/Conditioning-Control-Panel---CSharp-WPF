@@ -448,7 +448,7 @@ public class StudioRackHeadlessTests
         // which SP-108's fifth row (from a different rack GROUP) had to keep true rather than dent.
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
             "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
@@ -565,17 +565,18 @@ public class StudioRackHeadlessTests
         var window = boot.Window;
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
 
-        // WPF's EFFECTS group is flash, video, subliminal, spiral, pinkfilter
-        // (StudioTabView.xaml.cs:483-493). Mandatory Video is not ported, so the ported rows close
-        // up around it — the ORDER of the ones that are here is upstream's and is asserted, because
-        // a rack that reorders itself as modules land stops being the rack the user learned.
+        // WPF's EFFECTS group is flash, video, subliminal, spiral, pinkfilter, visuals
+        // (StudioTabView.xaml.cs:483-497). SP-111 lands Mandatory Video SECOND, where upstream puts
+        // it; the two still-unported rows (Magenta Filter, Visuals) are the ones the ported rows
+        // close up around. The ORDER is upstream.s and is asserted, because a rack that reorders
+        // itself as modules land stops being the rack the user learned.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
             .Where(r => r.Classes.Contains("rack-row"))
             .Select(r => r.Name)
             .ToList();
         Assert.Equal(
             [
-                "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
                 "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);
@@ -587,7 +588,7 @@ public class StudioRackHeadlessTests
         // exactly as upstream orders its groups (StudioTabView.xaml.cs:482-541).
         foreach (var name in new[]
         {
-            "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+            "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
             "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
@@ -780,7 +781,7 @@ public class StudioRackHeadlessTests
             .ToList();
         Assert.Equal(
             [
-                "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
+                "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
                 "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);

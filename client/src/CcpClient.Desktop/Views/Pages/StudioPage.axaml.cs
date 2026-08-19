@@ -71,6 +71,7 @@ public partial class StudioPage : UserControl
     private readonly MindWipeEffect _mindWipe;
     private readonly BrainDrainEffect _brainDrain;
     private readonly LockCardEffect _lockCard;
+    private readonly MandatoryVideoEffect _mandatoryVideo;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -88,6 +89,7 @@ public partial class StudioPage : UserControl
         _mindWipe = session.MindWipe;
         _brainDrain = session.BrainDrain;
         _lockCard = session.LockCard;
+        _mandatoryVideo = session.MandatoryVideo;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -101,6 +103,7 @@ public partial class StudioPage : UserControl
         RowMindWipe.IsCheckedChanged += (_, _) => ApplySelection();
         RowBrainDrain.IsCheckedChanged += (_, _) => ApplySelection();
         RowLockCard.IsCheckedChanged += (_, _) => ApplySelection();
+        RowMandatoryVideo.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -115,6 +118,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId);
         AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId);
         AddQuickToggle(RowLockCard, LockCardEffect.EffectId);
+        AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -132,6 +136,8 @@ public partial class StudioPage : UserControl
             OnEnableToggled(BrainDrainEnableToggle, _brainDrain, BrainDrainEffect.EffectId);
         LockCardEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(LockCardEnableToggle, _lockCard, LockCardEffect.EffectId);
+        MandatoryVideoEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(MandatoryVideoEnableToggle, _mandatoryVideo, MandatoryVideoEffect.EffectId);
 
         // Strict is one of the module's own dials, not its enable, so it writes through the module
         // the way the ramp's switches do rather than through the rack's quick-toggle.
@@ -169,6 +175,8 @@ public partial class StudioPage : UserControl
         OnSliderMoved(BrainDrainVolumeSlider, OnBrainDrainVolumeMoved);
         OnSliderMoved(LockCardFrequencySlider, OnLockCardFrequencyMoved);
         OnSliderMoved(LockCardRepeatsSlider, OnLockCardRepeatsMoved);
+        OnSliderMoved(MandatoryVideoFrequencySlider, OnMandatoryVideoFrequencyMoved);
+        OnSliderMoved(MandatoryVideoMaxLengthSlider, OnMandatoryVideoMaxLengthMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -181,6 +189,7 @@ public partial class StudioPage : UserControl
         // leave "asking you now" on screen after the card was gone.
         _lockCard.Shown += _ => Refresh();
         _lockCard.Resolved += _ => Refresh();
+        _mandatoryVideo.Fired += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -226,6 +235,13 @@ public partial class StudioPage : UserControl
     /// card holds the foreground and the keyboard focus (SP-110,
     /// <see cref="LockCardEffect"/>).</summary>
     public EffectDotState RenderedLockCardDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Mandatory Video row's dot — the SEVENTH meaning, MOTION: a firing on the clock, a
+    /// display the operating system confirms, AND, while a clip is up, the operating system's own
+    /// copy of the surface having CHANGED when a different picture was handed over. The first of the
+    /// seven that can be false while every call this process made succeeded (SP-111,
+    /// <see cref="MandatoryVideoEffect.WorkIsRunning"/>).</summary>
+    public EffectDotState RenderedMandatoryVideoDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -287,6 +303,8 @@ public partial class StudioPage : UserControl
         var mindWipeOpen = RowMindWipe.IsChecked == true;
         var brainDrainOpen = RowBrainDrain.IsChecked == true;
         var lockCardOpen = RowLockCard.IsChecked == true;
+        var videoOpen = RowMandatoryVideo.IsChecked == true;
+        MandatoryVideoModulePanel.IsVisible = videoOpen;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
@@ -296,7 +314,7 @@ public partial class StudioPage : UserControl
         BrainDrainModulePanel.IsVisible = brainDrainOpen;
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
-            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen;
+            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen;
     }
 
     /// <summary>
@@ -518,6 +536,35 @@ public partial class StudioPage : UserControl
         Refresh();
     }
 
+    /// <summary>Mandatory Video's frequency dial. It RE-PACES rather than waiting: upstream's own
+    /// frequency slider changes the next scheduled firing, not the one already on the clock.</summary>
+    private void OnMandatoryVideoFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _mandatoryVideo.SetPerHour((int)Math.Round(MandatoryVideoFrequencySlider.Value));
+        _ = _session.MandatoryVideoPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Mandatory Video's max-length cap. Zero is upstream's own "no cap"
+    /// (<c>Services/Video/VideoService.cs:5509-5510</c>) and it applies to the NEXT clip, because
+    /// upstream arms its cap timer when playback starts (<c>:2440</c>) and never re-arms it.</summary>
+    private void OnMandatoryVideoMaxLengthMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _mandatoryVideo.SetMaxSeconds((int)Math.Round(MandatoryVideoMaxLengthSlider.Value));
+        _ = _session.MandatoryVideoPreset.Save();
+        Refresh();
+    }
+
     /// <summary>Brain Drain's intensity dial — the AUDIO half's, which upstream's own comment insists
     /// is not the blur's (<c>MainWindow/MainWindow.StartStop.cs:239-241</c>).</summary>
     private void OnBrainDrainIntensityMoved()
@@ -657,6 +704,11 @@ public partial class StudioPage : UserControl
             LockCardFrequencySlider.Value = lockCard.PerHour;
             LockCardRepeatsSlider.Value = lockCard.Repeats;
             LockCardStrictToggle.IsChecked = lockCard.Strict;
+
+            var video = _session.MandatoryVideoPreset.Current;
+            MandatoryVideoEnableToggle.IsChecked = video.Enabled;
+            MandatoryVideoFrequencySlider.Value = video.PerHour;
+            MandatoryVideoMaxLengthSlider.Value = video.MaxSeconds;
         }
         finally
         {
@@ -768,6 +820,28 @@ public partial class StudioPage : UserControl
             _lockCard.PhraseCount, lockCard.EnabledPhrases());
         LockCardCaptureState.Text = InputPanelNotices.DescribeInputCapability(
             _lockCard.Presence.LastPrompt, _lockCard.Presence.LastObservation);
+
+        // The one row that plays a FILE. Its closing line is the video capability's own typed
+        // outcome plus the OS's own last read-back, on the same rule the audio and input rows
+        // follow: what the user reads about a resource this process does not own is QUOTED.
+        var video = _session.MandatoryVideoPreset.Current;
+        MandatoryVideoFrequencyValue.Text =
+            video.PerHour.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        MandatoryVideoMaxLengthValue.Text = video.MaxSeconds == 0
+            ? "no cap"
+            : $"{video.MaxSeconds}s";
+        // The module's own constant, rendered verbatim. The same string the arm result's reason
+        // carries, so the panel and the typed outcome are one account of the absence rather than two.
+        MandatoryVideoSilentHalfState.Text = MandatoryVideoEffect.VideoPanelNoticeText;
+        RenderedMandatoryVideoDot = PaintDot(MandatoryVideoRowDot, _mandatoryVideo);
+        MandatoryVideoLiveState.Text = VideoPanelNotices.DescribeVideoState(
+            RenderedMandatoryVideoDot, _mandatoryVideo.PlayedCount, _mandatoryVideo.Last,
+            _session.Engine.Running, _session.VideoSurface.CanReachADisplay, _mandatoryVideo.Playing,
+            _mandatoryVideo.FramesDecoded, _mandatoryVideo.FramesHeld, _mandatoryVideo.FramesAdvanced);
+        MandatoryVideoClipState.Text =
+            VideoPanelNotices.DescribeClipPool(_mandatoryVideo.ClipCount, _mandatoryVideo.ClipFolder);
+        MandatoryVideoSurfaceState.Text = VideoPanelNotices.DescribeVideoCapability(
+            _session.VideoSurface.LastPlacement, _session.VideoSurface.LastObservation);
     }
 
     /// <summary>

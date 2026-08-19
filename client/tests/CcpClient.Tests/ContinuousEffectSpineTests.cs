@@ -214,7 +214,8 @@ public class ContinuousEffectSpineTests
         // for the same reason and all five are named.
         Assert.Equal(
             [
-                SubliminalsEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, LockCardEffect.EffectId,
+                MindWipeEffect.EffectId,
                 BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
@@ -251,7 +252,8 @@ public class ContinuousEffectSpineTests
         // overlay service and before Mind Wipe at :229-230).
         Assert.Equal(
             [
-                FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
+                FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
+                SpiralOverlayEffect.EffectId,
                 PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
                 BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],

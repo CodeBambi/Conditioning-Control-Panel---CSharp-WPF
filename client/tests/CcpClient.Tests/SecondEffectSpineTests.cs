@@ -143,7 +143,8 @@ public class SecondEffectSpineTests
         // for the same reason and all six are named, which is the whole point of a typed arm.
         Assert.Equal(
             [
-                SubliminalsEffect.EffectId, PinkFilterEffect.EffectId, LockCardEffect.EffectId,
+                MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, PinkFilterEffect.EffectId,
+                LockCardEffect.EffectId,
                 MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));

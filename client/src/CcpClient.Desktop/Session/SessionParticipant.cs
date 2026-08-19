@@ -37,6 +37,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<MindWipePresetDocument> _mindWipePreset;
     private readonly PersistenceStore<BrainDrainPresetDocument> _brainDrainPreset;
     private readonly PersistenceStore<LockCardPresetDocument> _lockCardPreset;
+    private readonly PersistenceStore<MandatoryVideoPresetDocument> _videoPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -45,6 +46,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly ISpiralSurface _spiralSurface;
     private readonly IAudioPresence _audio;
     private readonly IInputPresence _input;
+    private readonly IVideoSurface _videoSurface;
     private readonly UiDispatchBoundary _uiDispatch;
     private readonly string _dataDirectory;
 
@@ -66,7 +68,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IInputPresence? input = null,
         ILockCardPhrasePool? lockCardPhrases = null,
         Random? lockCardRandom = null,
-        Func<InputBounds>? lockCardPlacement = null)
+        Func<InputBounds>? lockCardPlacement = null,
+        IVideoSurface? videoSurface = null,
+        IVideoClipPool? videoClips = null,
+        Random? videoRandom = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -129,6 +134,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, LockCardPresetDocument.FileName),
             LockCardPresetDocument.CurrentSchemaVersion);
 
+        _videoPreset = new PersistenceStore<MandatoryVideoPresetDocument>(
+            infra.OwnerFor("MandatoryVideoPreset"), infra.Log,
+            Path.Combine(dataDirectory, MandatoryVideoPresetDocument.FileName),
+            MandatoryVideoPresetDocument.CurrentSchemaVersion);
+
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
@@ -181,6 +191,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // SpiralSurfacePresenter's remarks.
         _spiralSurface = spiralSurface ?? SpiralSurfacePresenter.Product(sessionClock, Dispatch);
 
+        // SP-111: the video surface. It takes the same clock as the other presenters, and for the
+        // same kind of reason — a cadence that keeps a SURFACE correct is the surface's — but this
+        // is the first module in the port that needs BOTH clocks: the FRAME advance lives here and
+        // the FIRING interval lives on the module. It owns its own hwnd rather than drawing through
+        // the overlay, because the capability's whole content is the operating system's answer about
+        // frames on THAT surface, and IOverlayPresence cannot be asked it. Overlay/** is CONSUMED
+        // (its display enumeration) and never edited.
+        _videoSurface = videoSurface ?? VideoSurfacePresenter.Product(sessionClock, Dispatch);
+
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
             signal,
@@ -191,6 +210,24 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset,
             random: null,
             surface: _surface);
+
+        // SP-111: the first module that plays a FILE. It sits between Flash Images and Subliminals
+        // because both orders that matter agree — WPF's rack is Flash Images, Mandatory Video,
+        // Subliminals (StudioTabView.xaml.cs:483-488) and StartEngine starts the flash service
+        // (MainWindow.StartStop.cs:180-181), then the video service (:183-184), then subliminals
+        // (:186-187). It ships as its VIDEO half: the clip's sound is not ported, and the row title,
+        // the panel and its arm result all say so.
+        MandatoryVideo = new MandatoryVideoEffect(
+            infra.OwnerFor("MandatoryVideo"),
+            signal,
+            sessionClock,
+            _videoPreset,
+            videoClips ?? new VideoClipPool(AssetsRootFor(dataDirectory)),
+            _videoSurface,
+            // Injectable for the same reason every other module's Random is: the SPACING is what a
+            // fact has to make deterministic, and the arithmetic it is fed into must stay the
+            // module's own rather than a number a test double re-derives.
+            videoRandom);
 
         Subliminals = new SubliminalsEffect(
             infra.OwnerFor("Subliminals"),
@@ -341,8 +378,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // and before IMMERSION (StudioTabView.xaml.cs:483/498/508/530), and StartEngine starts the
         // lock card (:206-209) after the overlay service and before Mind Wipe (:229-230). It is the
         // port's first GAMES & CARDS row, so the group opens with it.
+        // SP-111 inserts Mandatory Video BETWEEN Flash Images and Subliminals, which is where both
+        // orders that matter put it and they agree: WPF's rack is Flash Images, Mandatory Video,
+        // Subliminals, Spiral Overlay (StudioTabView.xaml.cs:483-491) and StartEngine starts the
+        // flash service (:180-181), the video service (:183-184) and subliminals (:186-187) in that
+        // order.
         Engine = new SessionEngine(
-            [Flash, Subliminals, Spiral, PinkFilter, LockCard, MindWipe, BrainDrain, Ramp], _preset, signal);
+            [Flash, MandatoryVideo, Subliminals, Spiral, PinkFilter, LockCard, MindWipe, BrainDrain, Ramp],
+            _preset, signal);
 
         // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:547-555
         // calls StopEngine()). A module cannot call the engine that owns it without closing the cycle,
@@ -382,6 +425,21 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>Lock Card, the first module that ASKS the user something (SP-110).</summary>
     public LockCardEffect LockCard { get; }
+
+    /// <summary>Mandatory Video's VIDEO half — the first module that plays a FILE, and half a row
+    /// permanently because the clip's sound is not ported (SP-111).</summary>
+    public MandatoryVideoEffect MandatoryVideo { get; }
+
+    /// <summary>
+    /// The video surface the module plays through. Public for the same reason every surface and the
+    /// audio and input presences are: a capability nobody can reach is a capability nobody can
+    /// interrogate — and this is the one whose <c>Available</c> is earned from the operating system's
+    /// own copy of the surface rather than from a decoder having produced bytes.
+    /// </summary>
+    public IVideoSurface VideoSurface => _videoSurface;
+
+    /// <summary>The Mandatory Video module's persisted store, same reason as the others.</summary>
+    public PersistenceStore<MandatoryVideoPresetDocument> MandatoryVideoPreset => _videoPreset;
 
     /// <summary>
     /// The audio capability both audio modules play through. Public for the same reason every surface
@@ -456,6 +514,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _mindWipePreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _brainDrainPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _lockCardPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _videoPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -470,6 +529,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("mindwipe-preset", _mindWipePreset.LastLoadOutcome);
         LogIfDegraded("braindrain-preset", _brainDrainPreset.LastLoadOutcome);
         LogIfDegraded("lockcard-preset", _lockCardPreset.LastLoadOutcome);
+        LogIfDegraded("video-preset", _videoPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -500,6 +560,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
         DisposeSurface(_pinkFilterSurface);
         DisposeSurface(_spiralSurface);
 
+        // The video surface owns a native window AND an open decoder, so it goes down the same
+        // dispatched route the drawing surfaces take. Engine.Stop above already disarmed the module,
+        // which calls End() on the UI thread the user pressed STOP on — so the picture is off the
+        // screen before this line, and this line reclaims the window and the source reader.
+        DisposeSurface(_videoSurface);
+
         // The audio presence goes down HERE, inline, and not through the dispatch boundary the
         // surfaces use. A native window belongs to the thread that made it; an audio device does not
         // — upstream says the same of NAudio and deliberately tears audio down inline from its panic
@@ -518,7 +584,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         return Task.WhenAll(
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
-            _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _assetSelection.StopAsync());
+            _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _videoPreset.StopAsync(),
+            _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -534,7 +601,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _rampPreset.FlushAsync(boundedWait),
             _mindWipePreset.FlushAsync(boundedWait),
             _brainDrainPreset.FlushAsync(boundedWait),
-            _lockCardPreset.FlushAsync(boundedWait));
+            _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

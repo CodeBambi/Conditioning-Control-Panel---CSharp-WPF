@@ -93,6 +93,9 @@ public class VideoLetterboxTests
         var composed = VideoLetterbox.Compose(picture, 60, 60, box, 0x000000);
 
         var allowed = new[] { 0x102030u, 0xA0B0C0u, 0x000000u };
+        Assert.Equal(0x102030u, ColourAt(composed, 60, box.X + (box.Width / 2), box.Y + (box.Height / 4)));
+        Assert.Equal(0xA0B0C0u, ColourAt(composed, 60, box.X + (box.Width / 2), box.Y + (box.Height * 3 / 4)));
+
         for (var y = 0; y < 60; y++)
         {
             for (var x = 0; x < 60; x++)

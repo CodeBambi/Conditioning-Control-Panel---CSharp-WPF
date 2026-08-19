@@ -59,6 +59,25 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-111. WPF's EFFECTS group is Flash Images, Mandatory Video, Subliminals, Spiral
+               Overlay, Magenta Filter, Visuals (StudioTabView.xaml.cs:483-497), so this row sits
+               SECOND. Its label says "(silent half)" and that string is load-bearing rather than
+               cosmetic: the dot on this row goes Live while the picture moves, and that is only
+               honest because the row names its own scope where the user reads it. -->
+          <RadioButton x:Name="RowMandatoryVideo"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowMandatoryVideo"
+                       AutomationProperties.Name="Mandatory Video rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Mandatory Video (silent half)" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="MandatoryVideoRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="MandatoryVideoRowDot" />
+            </Grid>
+          </RadioButton>
+
           <RadioButton x:Name="RowSubliminals"
                        Classes="rack-row"
                        GroupName="rack"
@@ -292,6 +311,85 @@
         </StackPanel>
 
         <!-- ================= Subliminals ================= -->
+        <StackPanel x:Name="MandatoryVideoModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Mandatory Video (silent half)" />
+          <TextBlock Classes="page-blurb" Text="Plays one of your own clips, now and then, while the session runs." />
+
+          <!-- THE MISSING HALF, first thing on the panel and not buried at the bottom. Its text is
+               the module's own constant (MandatoryVideoEffect.VideoPanelNoticeText), which is the
+               same string the arm result carries, so the panel and the typed outcome cannot drift
+               into two different accounts of one absence. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="MandatoryVideoSilentHalfState"
+                       AutomationProperties.AutomationId="MandatoryVideoSilentHalfState"
+                       Text="" />
+          </Border>
+
+          <CheckBox x:Name="MandatoryVideoEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="MandatoryVideoEnableToggle"
+                    AutomationProperties.Name="Mandatory Video enabled"
+                    Content="Enable Mandatory Video (silent half)" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Clips per hour" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="MandatoryVideoFrequencySlider"
+                    Minimum="1" Maximum="20"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="MandatoryVideoFrequencySlider"
+                    AutomationProperties.Name="Mandatory Video clips per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="MandatoryVideoFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="MandatoryVideoFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Max length (s)" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="MandatoryVideoMaxLengthSlider"
+                    Minimum="0" Maximum="600"
+                    SmallChange="5" LargeChange="30"
+                    IsSnapToTickEnabled="True" TickFrequency="5"
+                    AutomationProperties.AutomationId="MandatoryVideoMaxLengthSlider"
+                    AutomationProperties.Name="Mandatory Video max length" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="MandatoryVideoMaxLengthValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="MandatoryVideoMaxLengthValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="MandatoryVideoLiveState"
+                         AutomationProperties.AutomationId="MandatoryVideoLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="MandatoryVideoClipState"
+                         AutomationProperties.AutomationId="MandatoryVideoClipState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <!-- The capability's own answer, verbatim: what the OPERATING SYSTEM said about the last
+               picture this module put on a surface. Never a sentence about a platform. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="MandatoryVideoSurfaceState"
+                       AutomationProperties.AutomationId="MandatoryVideoSurfaceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
         <StackPanel x:Name="SubliminalModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Subliminals" />
           <TextBlock Classes="page-blurb" Text="A phrase flashes over your screen on a schedule while the session runs." />

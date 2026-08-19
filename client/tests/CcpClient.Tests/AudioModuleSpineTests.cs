@@ -34,7 +34,7 @@ public class AudioModuleSpineTests
     // =================================================================================
 
     [Fact]
-    public async Task PressingStartArmsAllEight_InWpfsOwnRackOrder()
+    public async Task PressingStartArmsAllNine_InWpfsOwnRackOrder()
     {
         await using var rig = await Rig.StartAsync();
 
@@ -45,7 +45,8 @@ public class AudioModuleSpineTests
         // ramp timer :265-269).
         Assert.Equal(
             [
-                FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
+                FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
+                SpiralOverlayEffect.EffectId,
                 PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
                 BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
