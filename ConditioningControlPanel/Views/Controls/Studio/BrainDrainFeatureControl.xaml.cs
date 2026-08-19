@@ -99,6 +99,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 SliderBlurStrength.Value = s.BrainDrainBlurStrength;
                 TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";
                 ChkMelt.IsChecked = s.BrainDrainMeltEnabled;
+                ChkAllowCapture.IsChecked = s.AllowOverlayCapture;
 
                 RefreshClipCount();
             }
@@ -106,11 +107,12 @@ namespace ConditioningControlPanel.Views.Controls.Studio
         }
 
         /// <summary>
-        /// Repaint the clip-library readout. An empty Resources/sounds/braindrain folder makes the
-        /// whole audio half a silent no-op (the service warns to the log and returns), so the count
-        /// is shown even when it is fine - "0 clips" is the answer to "why is nothing happening?"
-        /// and it is the number the user watches change after dropping a file in and hitting
-        /// Refresh.
+        /// Repaint the clip-library readout. An empty clip pool makes the whole audio half a silent
+        /// no-op (the service warns to the log and returns), so the count is shown even when it is
+        /// fine - "0 clips" is the answer to "why is nothing happening?" and it is the number the
+        /// user watches change after dropping a file in and hitting Refresh.
+        /// <para>The count is the MERGED pool: the assets folder plus whatever is still sitting in
+        /// the old install-directory folder, de-duped by file name.</para>
         /// </summary>
         private void RefreshClipCount()
         {
@@ -119,16 +121,34 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             NoAudioHint.Visibility = clips == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             // The literal path, straight off the service. Read here rather than hardcoded in XAML
-            // because BrainDrainService.AudioFolderPath is the ONLY definition of it, and it is
-            // AppDomain.BaseDirectory-relative: a per-user install, a machine-wide install and a
-            // dev `dotnet run` all resolve somewhere different, and a wrong path printed in the UI
-            // is worse than none (support would be chasing a folder that does not exist).
+            // because BrainDrainService.AudioFolderPath is the ONLY definition of it, and it moves
+            // with AppSettings.CustomAssetsPath - a wrong path printed in the UI is worse than none
+            // (support would be chasing a folder that does not exist).
             try { TxtAudioFolderPath.Text = Services.BrainDrainService.AudioFolderPath; }
             catch { TxtAudioFolderPath.Text = string.Empty; }
+
+            // The legacy install-directory folder gets a line ONLY while it still holds clips.
+            // They keep playing (the service merges both folders), but that folder is wiped by a
+            // reinstall and does not travel with a portable copy, so the honest thing is to say
+            // "these still work, move them across". Nothing is migrated for the user.
+            try
+            {
+                var legacy = Services.BrainDrainService.LegacyAudioFileCount();
+                var show = legacy > 0 ? Visibility.Visible : Visibility.Collapsed;
+                TxtLegacyFolderNote.Visibility = show;
+                TxtLegacyFolderPath.Visibility = show;
+                if (legacy > 0)
+                    TxtLegacyFolderPath.Text = Services.BrainDrainService.LegacyAudioFolderPath;
+            }
+            catch
+            {
+                TxtLegacyFolderNote.Visibility = Visibility.Collapsed;
+                TxtLegacyFolderPath.Visibility = Visibility.Collapsed;
+            }
         }
 
         /// <summary>
-        /// Open the clip folder in Explorer, creating it first. Same shape as
+        /// Open the PRIMARY (assets) clip folder in Explorer, creating it first. Same shape as
         /// <c>SpiralFeatureControl.BtnOpenSpiralFolder_Click</c> (ProcessStartInfo with
         /// UseShellExecute, after a CreateDirectory) so Explorer never opens onto nothing.
         /// <para>Wired from BOTH the library header button and the empty-state banner's copy of
@@ -186,7 +206,8 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainIntensity) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainHighRefresh) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainBlurStrength) ||
-                e.PropertyName == nameof(Models.AppSettings.BrainDrainMeltEnabled))
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainMeltEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.AllowOverlayCapture))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -269,6 +290,26 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             s.BrainDrainMeltEnabled = ChkMelt.IsChecked ?? false;
 
             App.Logger?.Information("Brain Drain melt toggled: {Enabled}", s.BrainDrainMeltEnabled);
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// VISUAL half: let the Brain Drain overlay appear in screenshots / recordings / screen
+        /// shares (AllowOverlayCapture). Default off keeps the historical privacy behaviour; users
+        /// asked for this because the effect was invisible in every screenshot they tried to share.
+        /// <para>No explicit apply call needed here - OverlayService's settings hook owns the live
+        /// apply for BOTH render paths (compositor hosts and the legacy per-screen windows), so
+        /// writing the setting IS the live update, exactly like the blur-strength slider.</para>
+        /// </summary>
+        private void ChkAllowCapture_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.AllowOverlayCapture = ChkAllowCapture.IsChecked ?? false;
+
+            App.Logger?.Information("Brain Drain capture visibility toggled: {Allow}", s.AllowOverlayCapture);
             App.Settings?.Save();
         }
 

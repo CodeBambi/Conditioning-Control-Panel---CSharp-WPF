@@ -2537,8 +2537,13 @@ public class OverlayService : IDisposable
                 var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
 
-                // Exclude from capture so we don't capture ourselves
-                SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                // Exclude from capture so we don't capture ourselves - unless the user opted in
+                // via AppSettings.AllowOverlayCapture, in which case this window goes to WDA_NONE
+                // and shows up in screenshots/OBS like everything else. Safe: the capture side of
+                // brain drain grabs the desktop DC with SRCCOPY and no CAPTUREBLT, which already
+                // excludes layered windows, so the affinity was belt-and-braces (see
+                // Services/Compositor/OverlayCaptureAffinity).
+                Compositor.OverlayCaptureAffinity.Apply(hwnd);
 
                 // Use SetWindowPos with physical pixel coordinates for exact positioning
                 // This bypasses WPF's DPI virtualization which causes offset issues on mixed-DPI setups
@@ -3068,12 +3073,6 @@ public class OverlayService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
-
-    private const uint WDA_NONE = 0x0;
-    private const uint WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
-
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
@@ -3219,6 +3218,17 @@ public class OverlayService : IDisposable
                 }
                 RefreshBrainDrainState();
             }
+            else if (e.PropertyName == nameof(App.Settings.Current.AllowOverlayCapture))
+            {
+                // Live apply, both render paths. Compositor hosts are created once and reused for
+                // the whole app lifetime, so re-poking them here is what makes the toggle land
+                // mid-effect instead of "next time you start Brain Drain".
+                App.Logger?.Information("Brain Drain capture visibility toggled: allow={Allow}",
+                    App.Settings.Current.AllowOverlayCapture);
+                try { App.Compositor?.RefreshCaptureAffinity(); }
+                catch (Exception ex) { App.Logger?.Debug("Compositor capture affinity refresh failed: {E}", ex.Message); }
+                RefreshLegacyBrainDrainCaptureAffinity();
+            }
             // Add other property names for PinkFilter, Spiral, etc. here if needed
             // else if (e.PropertyName == nameof(App.Settings.Current.PinkFilterEnabled) ||
             //          e.PropertyName == nameof(App.Settings.Current.PinkFilterOpacity))
@@ -3231,6 +3241,28 @@ public class OverlayService : IDisposable
             //      RefreshSpiralState();
             // }
         });
+    }
+
+    /// <summary>
+    /// Re-poke the capture affinity on the LEGACY (pre-compositor) per-screen Brain Drain windows.
+    /// The compositor path has its own equivalent (<c>CompositorEngine.RefreshCaptureAffinity</c>);
+    /// this covers the machines still on the legacy renderer, which build their own WPF windows in
+    /// <c>CreateBrainDrainWindow</c>. UI thread (the caller marshals).
+    /// </summary>
+    private void RefreshLegacyBrainDrainCaptureAffinity()
+    {
+        foreach (var window in _brainDrainImages.Keys.ToList())
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                Compositor.OverlayCaptureAffinity.Apply(hwnd);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Legacy Brain Drain capture affinity refresh failed: {E}", ex.Message);
+            }
+        }
     }
 
     // New method to encapsulate Brain Drain specific refresh logic
