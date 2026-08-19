@@ -339,7 +339,7 @@ internal static class DtrhHostService
                 var path = DtrhLoomStore.GifPathFor((string?)o["slug"]);
                 if (path != null)
                 {
-                    try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+                    try { Helpers.ExplorerLauncher.RevealInExplorer(path); }
                     catch (Exception ex) { App.Logger?.Debug("DtrhHost: reveal failed: {E}", ex.Message); }
                 }
                 break;

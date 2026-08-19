@@ -2428,16 +2428,7 @@ namespace ConditioningControlPanel.Services
                     {
                         try
                         {
-                            var path = TutorialEventBus.LastSavedEnhancementPath;
-                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                            {
-                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                                {
-                                    FileName = "explorer.exe",
-                                    Arguments = $"/select,\"{path}\"",
-                                    UseShellExecute = true
-                                });
-                            }
+                            Helpers.ExplorerLauncher.RevealInExplorer(TutorialEventBus.LastSavedEnhancementPath);
                         }
                         catch { }
                         try { App.Tutorial?.Skip(); } catch { }
@@ -2893,16 +2884,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var path = TutorialEventBus.LastSavedEnhancementPath;
-                        if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                        {
-                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = "explorer.exe",
-                                Arguments = $"/select,\"{path}\"",
-                                UseShellExecute = true
-                            });
-                        }
+                        Helpers.ExplorerLauncher.RevealInExplorer(TutorialEventBus.LastSavedEnhancementPath);
                     }
                     catch { }
                     try { App.Tutorial?.Skip(); } catch { }
