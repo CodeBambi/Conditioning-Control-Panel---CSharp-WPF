@@ -278,7 +278,7 @@ a clip that was begun.
 
 ### The eight survivors, each with the evidence that disposes of it
 
-**Four are EQUIVALENT MUTANTS, and two of them are findings about my own code:**
+**Three are EQUIVALENT MUTANTS, and two of them are findings about my own code:**
 
 - **M-m — the lead-in tick's unconditional spawn.** Removing it makes the first tick apply
   upstream's `roll < 0.7 || shown < target/2` rule — and at `shown == 0` with a target floored at
@@ -288,15 +288,12 @@ a clip that was begun.
 - **M-p — a bubble's END of life in `Paint`.** `Draw` returns immediately when the animation's
   opacity is zero, and `Animation` clamps the pop's progress to 1, so a bubble past `GoneAt` draws
   nothing whichever guard is removed. Redundant, not unpinned.
-- **M-s — the sub-pixel radius guard.** With the guard widened, a radius under one pixel still
-  paints nothing: every pixel centre inside the loop's bounding box is further from the bubble's
-  centre than the radius. The guard makes that explicit rather than incidental.
 - **M-q — both ends of a bubble's life.** It additionally allows drawing a bubble BEFORE it is born,
   which no caller can reach: a bubble's `BornAt` is the tick that spawned it, the presenter's
   elapsed time is monotonic, and a bubble is therefore never in the list at a time before its own
   birth.
 
-**Four are UNCOVERED, and each names why:**
+**Five are UNCOVERED, and each names why:**
 
 - **M-c — the sixty-second interval floor.** Unreachable through the dial's own clamp: at ten games
   an hour with the jitter at its minimum the interval is `3600/10*0.8 = 288 s`. **Upstream has the
@@ -305,10 +302,35 @@ a clip that was begun.
   upstream's line and it sits where a later dial change would meet it, and the fact now asserts the
   STRUCTURAL property — *the clamp keeps the interval above the floor* — rather than reaching the
   branch by a route no caller has.
-- **M-t — the left clamp on the painted disc.** Also arithmetically unreachable: the placement
-  offset is `0.15 * width` and the largest radius is `0.0586 * width`, so the disc's left edge is
-  never negative. Kept as a structural guarantee; reaching it would mean asserting against a
-  placement no product path produces.
+- **M-s — the sub-pixel radius guard, and the final review caught this record proving the wrong
+  thing.** An earlier draft called it an EQUIVALENT MUTANT on the claim that "every pixel centre
+  inside the loop's bounding box is further from the bubble's centre than the radius". **That is
+  false, and it is false geometrically rather than marginally.** The nearest pixel centre to any
+  point is at most `sqrt(0.5) ≈ 0.7071` away, and the bounding box is built from
+  `floor(centre − radius)` to `ceil(centre + radius)` (`BubbleCountGame.cs:341-355`), so it always
+  contains that pixel: **for every radius above ≈ 0.708 the widened guard paints at least one pixel
+  where `:333` paints none.** The band is reachable from this module's own constants — at
+  `MinDiameterFraction` and `BirthScale` the radius is `0.003125 × width`, which lands in
+  `[0.708, 1.0)` for pictures **227 to 319 pixels wide** (0.8 at 256, 0.75 at 240) — so the mutation
+  is behaviourally live, not inert. The radius also GROWS, so a picture narrow enough to start below
+  the band still passes through it on the way up; the birth figures above are the clearest way to
+  see the band, not its only entrance.
+  **The correct disposition is UNCOVERED for a narrower reason:** no fact and no ordinary clip is
+  ever in it. This suite's pictures are 320 and 400 wide, where the radius starts at 1.0 and 1.25 and
+  only grows, so it is never inside the band at any moment; and 8 wide, where it never exceeds 0.43
+  even at full pop, so nothing is painted either way — which is exactly why the tiny-frame fact could
+  never have caught this. The guard is kept because it is the property the painter wants —
+  *a disc under a pixel across is not something anybody could count, so it is not scribbled on* —
+  and closing it is a six-line fact at a 256-wide frame that a later packet should simply take.
+  **An equivalent-mutant claim is a proof obligation and this one did not discharge it; the claim is
+  withdrawn rather than repaired.**
+- **M-t — the left clamp on the painted disc.** Genuinely unreachable, and the figure is corrected:
+  the placement offset is `0.15 × width` and the largest radius is **`0.1008 × width`** — the widest
+  bubble at the END of its pop, `(225/1920) × 1.72 / 2`, not the `0.0586 × width` an earlier draft
+  gave by ignoring `PopScaleGrowth` (`BubbleCountGame.cs:150`). The conclusion is unchanged because
+  `0.15 − 0.1008 = 0.049` of the width still keeps the disc's left edge positive, but the figure was
+  wrong by 1.7× and a later packet reusing it would have been. Kept as a structural guarantee;
+  reaching it would mean asserting against a placement no product path produces.
 - **M-bd — the dot's CLOCK clause.** The same residue SP-110 named as its own `M-aa` and SP-111 as
   its `M-be`: `OwnedSessionEffect.Dot` returns `Armed` before consulting `WorkIsRunning` when the
   module is disarmed, so isolating this clause needs `ScheduleArmed == false` while armed — which
