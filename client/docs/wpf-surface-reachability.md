@@ -923,3 +923,55 @@ design and this module therefore arms, reports its refusal verbatim and shows no
 D91's remaining read-then-release window, which is open by decision and not by oversight (record
 §4.2); and one unexplained 3-failure run whose test names were lost and which has not recurred in
 eleven clean suites since (record §6).
+
+---
+
+## SP-108 — Intensity Ramp, the fifth module, and the first one that DRAWS NOTHING
+
+**Why this module.** Four modules ran under the port's spine and every one of them was from WPF's
+EFFECTS group and painted an overlay, so every seam the port had proven had only ever been proven
+against pixel-pushing. WPF's rack has four groups (§8.3) and this is the first port row from another
+one: TIMING, rack key `ramp` (`Views/Tabs/StudioTabView.xaml.cs:538-541`). It changes state the user
+observes **without any surface**, it is driven by **session progress** rather than a repaint cadence,
+and it **interacts with modules the port has already landed** rather than running beside them — the
+three distance criteria at once. The per-candidate refusals for every other row in the other three
+groups are in `spine-tasks/SP-108-non-drawing-module/plan.md`, written before the first product edit;
+the packet's "no candidate is reachable" escape was **not** taken, because one is.
+
+**What the ramp is, upstream.** `StartEngine` captures the current value of every linkable dial and
+starts a 2-second timer (`MainWindow/MainWindow.StartStop.cs:265-269` -> `:413-435`). Each tick works
+out how far through the ramp the session is, shapes that by the chosen curve, and writes each linked
+dial to `(int)min(base × currentMultiplier, cap)` (`:481-539`). The stop restores every captured base
+(`:437-479`). Upstream states the whole feature in its own words at `:513-517`: "the settings write is
+the whole job now".
+
+**Where the port and v6.8.1 differ for this module:**
+
+| # | v6.8.1 fact | Port at SP-108 | Reason |
+|---|---|---|---|
+| **D92** | The rack's **TIMING** group holds two rows: **Scheduler** and **Intensity Ramp** (`StudioTabView.xaml.cs:533-541`) | The group exists and holds **one** row. **Scheduler is not ported** and is not a session module at all | `CheckSchedulerOnStartup` / `SchedulerTimer_Tick` start the ENGINE from outside a session, when nothing is running, and minimize to the tray with a notification on the way (`MainWindow.StartStop.cs:562-620`). It is not an `ISessionEffect` in any shape: a module the spine arms cannot be the thing that presses START. **Closes with a scheduler participant, which is a different seam from this one** |
+| **D93** | The ramp links **five** dials — flash opacity, spiral opacity, pink-filter opacity, master volume, subliminal volume (`CCP.Core/Models/AppSettings.cs:2590-2622`; written by one handler, `Features/IntensityRampFeatureControl.xaml.cs:139-150`) | It links **two**: Spiral Overlay opacity and Pink Filter opacity. The other three switches are **absent from the panel and from the document** | Flash opacity is one of the dozen draw dials the port's flash panel deliberately omits because the port draws none of them, and neither volume has a dial on any ported panel. A persisted flag with no dial behind it is a switch that quietly does nothing, which is exactly the greyed control §9 D7 refuses. **Closes per dial, as each one is ported** |
+| **D94** | The ramp's rack quick-toggle is **INERT mid-session**. It flips `IntensityRampEnabled` and saves (`StudioTabView.xaml.cs:539-541` -> `IntensityRampFeatureControl.xaml.cs:83-90`) and touches no timer, so upstream's dot goes dark while the ramp keeps ramping and the restore still happens only at stop | The dial is the authority the spine already gives every module: switching it off mid-session **releases the work**, which for this module means handing the dials straight back, and switching it on takes custody again | This is the port's own spine behaviour (`OwnedSessionEffect.EngageIfEligible`), and it is what the Studio onboarding card promises — "right-click to flip that effect on or off". Upstream's version makes the dot say one thing while the module does another, which is the exact half-truth `EffectDotState` exists to refuse. The cost is that switching it off and on again **restarts the climb from zero** rather than resuming it |
+| **D95** | Closing the window stops the ramp timer with a bare `_rampTimer?.Stop()` and **does not restore** the captured base values (`MainWindow/MainWindow.WindowChrome.cs:167`) — five lines after `SaveSettings()` at `:162`. Quitting mid-ramp therefore persists the RAMPED opacity as if the user had chosen it | The restore is split: the persisted **value** is written back **synchronously** on the caller's thread, and only the **re-apply** to a live surface goes through the UI dispatch | On the teardown path a post is never delivered, so a single combined operation would leave the ramped value in the document for the persistence flush to write. The split means the user's number always comes back and only a re-tint of a window that is being destroyed anyway can be dropped. The port therefore **fixes an upstream data-loss bug**, and it is recorded here rather than presented as parity |
+| **D96** | The tick writes and reconciles every linked dial **every 2 seconds**, whether or not the value changed — the setter raises `PropertyChanged` unconditionally (`AppSettings.cs:2469`) and the panels repaint off it | A dial is written and re-applied **only when its integer really moves** | Upstream's reconcile changes a brush's opacity on a live WPF window. In this port a re-apply reaches `OverlaySurfaceSet.Place` -> `Present`, which walks the OS's whole top-level z-order and asks the hit test in both polarities, momentarily clearing click-through (SP-106, `Overlay/Win32OverlayPresence.cs:547-576`). That is the same cost that makes a 60 Hz module unportable (D84). The user-visible outcome is identical; the port does it about twenty times an hour instead of eighteen hundred |
+| **D97** | All five base values are captured **once**, in `StartRampTimer` (`MainWindow.StartStop.cs:417-421`), regardless of which links are ticked. A dial the user then moves by hand mid-session and afterwards links is ramped from — and restored to — the value from **before** they moved it | A dial's base is captured the first time it is **linked**, and never dropped until the release | At session start the two rules give the same number, because nothing is writing an unlinked dial. Afterwards the port's is the truer one: it restores what the user last chose rather than clobbering it. Unlinking mid-ramp is upstream's shape and is kept — the dial stays where the ramp left it and the stop still puts it back |
+| **D98** | The ramp's own dials (duration, multiplier, curve, links) are written and saved by the panel, and the running tick picks them up at its next 2-second sample (`IntensityRampFeatureControl.xaml.cs:89-150`) | The panel writes through the module, which re-evaluates **at once** | The port's own convention for every module's dial since SP-105 (`SetOpacityPercent` = write, then `Refresh()`), and indistinguishable from upstream's to a human — the difference is at most two seconds. It matters for the multiplier, the one dial on this panel a user moves mid-session and expects to feel |
+| **D99** | The tick's three visual links stand down while a **scripted preset session** is running, so the two ramp systems cannot fight — `sessionActive` guards each of them (`MainWindow.StartStop.cs:489,505,512,520`, and the same guard on the auto-stop branch at `:546`, added for issue #444) | The links are **always live**, and the auto-stop branch is always reachable | The port has exactly one session, the ENGINE. The scripted preset session (`Services/Session/SessionEngine.cs`, with phases, XP and a stop-confirmation dialog) is not ported and is explicitly out of scope for this spine, so upstream's `sessionActive` is constantly false in port terms. Nothing is dropped: the guard has nothing to guard against here. **Re-opens the moment a scripted session is ported, and the guard must come with it** |
+| **D100** | The ramp's auto-stop shows a tray notification — "Session Complete" / "Intensity ramp finished. Stopping..." — before calling `StopEngine()` (`MainWindow.StartStop.cs:550-552`) | The session **is** stopped; **no notification is raised** | The port has a tray (SP-096) but `Notifications/**` is outside this packet's File Scope, so the notification is recorded rather than half-wired. The stop itself is not silent to a user watching the shell: the START button changes state and every module's dot goes dark. **Closes with one line in a packet that owns the tray** |
+
+**What SP-108 proves, and where it stops.** Proven with no screen involved anywhere: a module from a
+DIFFERENT rack group runs under the same `ISessionEffect`, the same `OwnedSessionEffect`, the same
+`SessionEngine`, the same operation registry and the same stop as four modules that draw — while
+holding **no surface at all**, and while its own output is a number on two other modules' panels. Its
+2-second cadence lives in the module rather than in a presenter, because there is no presenter to put
+one in, and it is still a CADENCE and not a schedule: the ramp is never due. Its dot is `Live` only
+while it holds a dial it has taken from another module and owes back. It is also the first module
+that can END a session. The four landed modules' facts pass unchanged, and the rack gains its second
+group — 2 groups / 5 rows against WPF's 4 / 15.
+
+**Undischarged, and named:** no headed capture is taken and `presentation-verified` remains the
+orchestrator's; nothing here proves a human sees an opacity climb on a real screen; the re-tint of a
+live overlay is asserted as a request to a recording presence, never as composited pixels; Linux is
+unproven for the two modules the ramp drives, exactly as it was before, and the ramp itself is
+platform-neutral only because it touches no surface; and D92's Scheduler, D93's three unported links,
+D99's scripted-session guard and D100's notification are all recorded rather than built.
