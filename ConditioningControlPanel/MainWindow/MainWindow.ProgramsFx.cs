@@ -793,6 +793,10 @@ namespace ConditioningControlPanel
                 var canvas = new AmbientFxCanvas { IsHitTestVisible = false };
                 tab.TodayFxLayer.Children.Add(canvas);
                 _programParticles = canvas;
+                // Every other tab's ambient canvas is registered here; this one was not, so it sat
+                // outside the tab-switch park/resume governor and leaned on its own visibility
+                // watch alone. Registration is idempotent, and a Stop()ped canvas ignores Resume().
+                RegisterTabFx("programs", canvas);
                 return canvas;
             }
             catch (Exception ex)
