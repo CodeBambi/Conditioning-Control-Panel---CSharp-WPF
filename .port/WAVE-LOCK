@@ -1,6 +1,0 @@
-WAVE: 51
-PACKETS: SP-111-video-capability
-LANES: 1
-BASE: 8a18632b
-GATE: validate-wave.mjs WAVE OK; floor 1648/104
-OPENED: 2026-08-19T09:19:45Z
