@@ -4923,6 +4923,8 @@
   "st4_braindrain_melt_hint": "Adds a slow liquid warp on top of the blur, like the screen is turning to melting glass. Slightly more CPU.",
   "st4_braindrain_high_refresh": "High refresh",
   "st4_braindrain_high_refresh_hint": "Checks twice a second instead of every five seconds. Smoother, slightly more CPU.",
+  "st4_braindrain_allow_capture": "Show in screenshots",
+  "st4_braindrain_allow_capture_hint": "Off by default, the Brain Drain haze is hidden from screenshots, recordings and screen shares - it is the one overlay the app keeps out of capture. Turn this on to let it show up so you can share what it looks like. Applies instantly.",
   "st4_braindrain_no_audio_hint": "No brain-drain tracks are installed, so nothing will play. Hit Open Folder and drop in full-length hypno or subliminal audio (.mp3 / .wav / .ogg).",
   "st4_braindrain_clip_library": "CLIP LIBRARY",
   "st4_braindrain_clips_loaded_0": "{0} clips loaded",

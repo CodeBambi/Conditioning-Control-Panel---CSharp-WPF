@@ -4376,6 +4376,8 @@
   "st4_braindrain_melt_hint": "블러 위에 천천히 흐르는 액체 같은 일렁임을 더해. 화면이 녹아내리는 유리가 된 것처럼. CPU를 조금 더 써.",
   "st4_braindrain_high_refresh": "빠른 갱신",
   "st4_braindrain_high_refresh_hint": "5초마다 대신 1초에 두 번 확인해. 더 부드럽지만 CPU를 조금 더 써.",
+  "st4_braindrain_allow_capture": "스크린샷에 보이게",
+  "st4_braindrain_allow_capture_hint": "기본값에선 브레인 드레인 흐림 효과가 스크린샷, 녹화, 화면 공유에 안 나와. 앱이 캐포에서 숨기는 유일한 오버레이거든. 이걸 켜면 화면에 나와서 어떤 느낌인지 보여줄 수 있어. 바로 적용돼.",
   "st4_braindrain_no_audio_hint": "브레인 드레인 트랙이 없어서 아무 소리도 나지 않아. 폴더 열기를 눌러서 풀 길이 히프노나 서브리미널 오디오(.mp3 / .wav / .ogg)를 넣어줘.",
   "st4_braindrain_clip_library": "클립 라이브러리",
   "st4_braindrain_clips_loaded_0": "클립 {0}개 불러옴",

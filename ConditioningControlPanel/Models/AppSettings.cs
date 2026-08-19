@@ -3903,6 +3903,27 @@ namespace ConditioningControlPanel.Models
             get => _brainDrainMeltEnabled;
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
+
+        private bool _allowOverlayCapture = false;
+        /// <summary>
+        /// Opt-in: let the Brain Drain screen effect appear in screenshots, recordings and screen
+        /// shares. FALSE (the default) keeps the historical behaviour - the brain-drain overlay
+        /// surface is the app's only <c>WDA_EXCLUDEFROMCAPTURE</c> compositor surface, so a
+        /// screenshot came back with the effect simply missing and nobody could show it off.
+        /// TRUE flips that surface to <c>WDA_NONE</c>.
+        /// <para>Scope is Brain Drain ONLY: every other overlay (subliminals, flashes, spiral) is
+        /// already visible in captures by design, and the keyword-highlight reader's own exclusion
+        /// is a separate feature that this flag deliberately does not touch.</para>
+        /// <para>Applied live by <c>OverlayService</c>'s settings hook -
+        /// <c>CompositorEngine.RefreshCaptureAffinity()</c> re-pokes the existing excluded hosts,
+        /// so the toggle takes effect mid-effect without a restart.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AllowOverlayCapture
+        {
+            get => _allowOverlayCapture;
+            set { _allowOverlayCapture = value; OnPropertyChanged(); }
+        }
         #endregion
 
         #region Performance

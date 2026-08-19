@@ -4378,6 +4378,8 @@
   "st4_braindrain_melt_hint": "Ajoute une lente déformation liquide par-dessus le flou, comme si l'écran devenait du verre en fusion. Un peu plus de CPU.",
   "st4_braindrain_high_refresh": "Rafraîchissement rapide",
   "st4_braindrain_high_refresh_hint": "Vérifie deux fois par seconde au lieu de toutes les cinq secondes. Plus fluide, un peu plus de CPU.",
+  "st4_braindrain_allow_capture": "Afficher dans les captures",
+  "st4_braindrain_allow_capture_hint": "Par défaut, le voile Brain Drain reste invisible dans les captures d'écran, les enregistrements et le partage d'écran : c'est le seul overlay que l'appli cache à la capture. Active ceci pour qu'il apparaisse et que tu puisses montrer le rendu. S'applique immédiatement.",
   "st4_braindrain_no_audio_hint": "Aucune piste de drainage cérébral n'est installée, donc rien ne sera joué. Clique sur Ouvrir le Dossier et dépose de l'audio hypno ou subliminal complet (.mp3 / .wav / .ogg).",
   "st4_braindrain_clip_library": "BIBLIOTHÈQUE DE CLIPS",
   "st4_braindrain_clips_loaded_0": "{0} clips chargés",

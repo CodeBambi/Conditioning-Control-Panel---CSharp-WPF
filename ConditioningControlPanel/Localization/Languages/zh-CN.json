@@ -4836,6 +4836,8 @@
   "st4_braindrain_melt_hint": "在模糊之上叠加缓慢流动的液态扭曲，就像屏幕变成了正在融化的玻璃。会稍微多用一点 CPU。",
   "st4_braindrain_high_refresh": "高频刷新",
   "st4_braindrain_high_refresh_hint": "每秒检查两次，而不是每五秒一次。更顺滑，但会多用一点 CPU。",
+  "st4_braindrain_allow_capture": "在截图中显示",
+  "st4_braindrain_allow_capture_hint": "默认情况下，脑力流失的模糊不会出现在截图、录屏和屏幕共享里，它是应用唯一会对捕获隐藏的叠加层。打开这个就能让它显示出来，方便你分享效果。立即生效。",
   "st4_braindrain_no_audio_hint": "没有安装脑力流失音轨，所以不会有声音。点“打开文件夹”，把完整的催眠或潜意识音频（.mp3 / .wav / .ogg）放进去。",
   "st4_braindrain_clip_library": "片段库",
   "st4_braindrain_clips_loaded_0": "已加载 {0} 个片段",

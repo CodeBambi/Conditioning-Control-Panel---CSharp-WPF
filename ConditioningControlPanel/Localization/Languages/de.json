@@ -4378,6 +4378,8 @@
   "st4_braindrain_melt_hint": "Legt eine langsame, flüssige Verzerrung über die Unschärfe, als würde der Bildschirm zu schmelzendem Glas. Etwas mehr CPU.",
   "st4_braindrain_high_refresh": "Hohe Aktualisierungsrate",
   "st4_braindrain_high_refresh_hint": "Prüft zweimal pro Sekunde statt alle fünf Sekunden. Flüssiger, etwas mehr CPU.",
+  "st4_braindrain_allow_capture": "In Screenshots zeigen",
+  "st4_braindrain_allow_capture_hint": "Standardmäßig bleibt der Brain-Drain-Schleier aus Screenshots, Aufnahmen und Bildschirmfreigaben heraus - er ist das einzige Overlay, das die App vor der Aufnahme versteckt. Schalte das ein, damit er sichtbar wird und du zeigen kannst, wie es aussieht. Gilt sofort.",
   "st4_braindrain_no_audio_hint": "Es sind keine Brain-Drain-Tracks installiert, also passiert nichts. Klick auf Ordner öffnen und leg vollständige Hypno- oder Subliminal-Audios rein (.mp3 / .wav / .ogg).",
   "st4_braindrain_clip_library": "CLIP-BIBLIOTHEK",
   "st4_braindrain_clips_loaded_0": "{0} Clips geladen",

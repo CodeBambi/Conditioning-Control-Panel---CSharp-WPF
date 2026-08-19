@@ -42,4 +42,12 @@ internal interface ICompositorHost
 
     /// <summary>Re-target the host after a display-topology change. UI thread.</summary>
     void UpdateScreenBounds(System.Windows.Forms.Screen screen);
+
+    /// <summary>
+    /// Re-apply this host's screen-capture affinity from the current setting
+    /// (<c>AppSettings.AllowOverlayCapture</c>). No-op on the main surface, which is never
+    /// capture-excluded. Called at window creation and again on every live toggle so the change
+    /// lands mid-effect instead of on the next overlay start. UI thread.
+    /// </summary>
+    void ApplyCaptureAffinity();
 }

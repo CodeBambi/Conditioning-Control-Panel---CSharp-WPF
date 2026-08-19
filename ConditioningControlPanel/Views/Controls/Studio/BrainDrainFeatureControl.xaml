@@ -218,6 +218,26 @@
                                           Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
                             </Grid>
 
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Show in screenshots (AllowOverlayCapture). The brain-drain surface
+                                 is the app's ONLY capture-excluded overlay, so screenshots and OBS
+                                 came back with the effect simply missing and nobody could show it
+                                 off. Privacy stays the default (unchecked); this is the opt-out.
+                                 Comfort/privacy knob, NOT prescribed dose - deliberately unmarked
+                                 so it stays editable mid-session, like High refresh above. -->
+                            <Grid Height="34" ToolTip="{loc:Str st4_braindrain_allow_capture_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_allow_capture}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkAllowCapture" x:FieldModifier="internal"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkAllowCapture_Changed" Unchecked="ChkAllowCapture_Changed"/>
+                            </Grid>
+
                         </StackPanel>
                     </Grid>
                 </Border>

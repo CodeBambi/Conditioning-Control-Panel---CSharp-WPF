@@ -4369,6 +4369,8 @@
   "st4_braindrain_melt_hint": "ぼかしの上にゆっくり流れる液状の歪みを重ねるよ。画面が溶けたガラスになったみたいに。CPUを少しだけ多く使うよ。",
   "st4_braindrain_high_refresh": "高頻度チェック",
   "st4_braindrain_high_refresh_hint": "5秒ごとではなく1秒に2回チェックするよ。なめらかになるけどCPUを少し使うよ。",
+  "st4_braindrain_allow_capture": "スクリーンショットに映す",
+  "st4_braindrain_allow_capture_hint": "初期設定だとブレインドレインのボカしはスクリーンショットや録画、画面共有には映らないよ。アプリがキャプチャから隠してる唯一のオーバーレイなの。オンにすると映るようになるから、どんな見た目か見せられるよ。すぐに反映されるよ。",
   "st4_braindrain_no_audio_hint": "ブレインドレインの音源が入ってないから何も鳴らないよ。「フォルダを開く」を押して、フルサイズのヒプノ音源やサブリミナル音源（.mp3 / .wav / .ogg）を入れてね。",
   "st4_braindrain_clip_library": "クリップライブラリ",
   "st4_braindrain_clips_loaded_0": "{0} 個のクリップを読み込み済み",
