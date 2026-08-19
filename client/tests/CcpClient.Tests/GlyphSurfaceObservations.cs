@@ -1,0 +1,724 @@
+using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Glyph;
+using CcpClient.Desktop.Input;
+using CcpClient.Desktop.Overlay;
+using CcpClient.Desktop.Pointer;
+using CcpClient.Desktop.Video;
+
+namespace CcpClient.Tests;
+
+/// <summary>
+/// SP-115's real-desktop runs. Three of them, each executed ONCE per suite and cached, in the shape
+/// <see cref="OverlayObservations"/> and <see cref="VideoSurfaceObservations"/> established: a real
+/// window on the real desktop is expensive and machine-global, so it is created once and every fact
+/// reads the recorded run.
+///
+/// <list type="number">
+/// <item><b>Lifecycle</b> — one glyph surface presented, painted, moved, withdrawn and disposed,
+/// read at every step through <see cref="GlyphWindowProbe"/>.</item>
+/// <item><b>Differential</b> — THE PACKET'S CENTRAL EVIDENCE. The surface composited over a KNOWN
+/// background supplied by the landed overlay capability, read back off the COMPOSITED DESKTOP, with
+/// a control capture taken with the surface hidden and an occlusion arbitration deciding who owns
+/// each sample point.</item>
+/// <item><b>Coexistence</b> — the four surfaces that landed before this one, measured through their
+/// OWN instruments while a glyph surface is up beside them.</item>
+/// </list>
+/// </summary>
+internal static class GlyphSurfaceObservations
+{
+    /// <summary>The composited surface's side. Big enough that a quadrant is unambiguous at any
+    /// DPI mapping, small enough not to cover the machine.</summary>
+    internal const int SurfaceSide = 200;
+
+    /// <summary>The backdrop's size. Deliberately LARGER than the surface on every side, so a
+    /// margin of pure background exists inside the same capture — that margin is what proves the
+    /// capture is live and the background really reached the screen.</summary>
+    internal const int BackdropWidth = 400;
+
+    internal const int BackdropHeight = 300;
+
+    /// <summary>
+    /// The background colour, as a <c>COLORREF</c> (<c>0x00BBGGRR</c>): B=200, G=40, R=10.
+    ///
+    /// <para><b>Chosen so that no channel is 0 and none is 255.</b> A background with a zero channel
+    /// could not distinguish "the surface composited black here" from "the background shows
+    /// through", which is the exact distinction this run exists to make.</para>
+    /// </summary>
+    internal const uint BackdropColour = 0x00C8280A;
+
+    /// <summary>The opaque ink colour: magenta, B=255 G=0 R=255.</summary>
+    internal const uint InkColour = 0x00FF00FF;
+
+    private static readonly Lazy<LifecycleRun> LazyLifecycle =
+        new(RunLifecycle, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<DifferentialRun> LazyDifferential =
+        new(RunDifferential, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<CoexistenceRun> LazyCoexistence =
+        new(RunCoexistence, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<GlyphWindowProbe.NegativeControl> LazyControl =
+        new(GlyphWindowProbe.RunNegativeControl, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    internal static LifecycleRun Lifecycle => LazyLifecycle.Value;
+
+    internal static DifferentialRun Differential => LazyDifferential.Value;
+
+    internal static CoexistenceRun Coexistence => LazyCoexistence.Value;
+
+    /// <summary>The instrument's own negative control, re-run on every suite execution.</summary>
+    internal static GlyphWindowProbe.NegativeControl Control => LazyControl.Value;
+
+    internal static string Describe(CapabilityState? state) => state switch
+    {
+        null => "(nothing was attempted)",
+        CapabilityState.Available available => $"Available({available.Detail})",
+        CapabilityState.Unavailable unavailable =>
+            $"Unavailable({unavailable.Reason.Code}: {unavailable.Reason.Detail})",
+        CapabilityState.Degraded degraded => $"Degraded({degraded.Reason.Code}: {degraded.Reason.Detail})",
+        _ => state.ToString() ?? "(unprintable)",
+    };
+
+    /// <summary>
+    /// The four-quadrant test frame. Every quadrant answers a different question and the four
+    /// together are the packet's central trap in one bitmap:
+    /// <list type="bullet">
+    /// <item>top-left FULLY TRANSPARENT — must show the background behind it;</item>
+    /// <item>top-right OPAQUE BLACK — must NOT show the background, which is what separates it from
+    /// the transparent quadrant;</item>
+    /// <item>bottom-left OPAQUE MAGENTA — a glyph pixel, distinguished from the background;</item>
+    /// <item>bottom-right HALF-ALPHA WHITE — the blend, which is what makes the alpha per-PIXEL
+    /// rather than uniform.</item>
+    /// </list>
+    /// </summary>
+    internal static GlyphFrame Quadrants(int side)
+    {
+        var pixels = new byte[side * side * GlyphFrame.BytesPerPixel];
+        for (var y = 0; y < side; y++)
+        {
+            for (var x = 0; x < side; x++)
+            {
+                var offset = ((y * side) + x) * GlyphFrame.BytesPerPixel;
+                var right = x >= side / 2;
+                var bottom = y >= side / 2;
+
+                (byte B, byte G, byte R, byte A) pixel = (right, bottom) switch
+                {
+                    (false, false) => (0, 0, 0, 0),
+                    (true, false) => (0, 0, 0, 255),
+                    (false, true) => (255, 0, 255, 255),
+                    (true, true) => (128, 128, 128, 128),
+                };
+
+                pixels[offset] = pixel.B;
+                pixels[offset + 1] = pixel.G;
+                pixels[offset + 2] = pixel.R;
+                pixels[offset + 3] = pixel.A;
+            }
+        }
+
+        return new GlyphFrame(side, side, pixels);
+    }
+
+    /// <summary>The five sample points inside the BACKDROP's coordinate space, in the order the
+    /// facts read them: the pure-background margin, then one point in each quadrant.</summary>
+    internal static (int X, int Y)[] SamplePoints(int offsetX, int offsetY, int side) =>
+    [
+        (8, 8),
+        (offsetX + (side / 4), offsetY + (side / 4)),
+        (offsetX + (3 * side / 4), offsetY + (side / 4)),
+        (offsetX + (side / 4), offsetY + (3 * side / 4)),
+        (offsetX + (3 * side / 4), offsetY + (3 * side / 4)),
+    ];
+
+    // ---------------------------------------------------------------- lifecycle
+
+    /// <param name="MachineHasInteractiveDesktop">Whether there was anywhere for a surface to go.</param>
+    /// <param name="PresentState">What the capability said when asked to composite.</param>
+    /// <param name="Window">The handle, for the probe.</param>
+    /// <param name="ExistsAfterPresent">The OS recognises it.</param>
+    /// <param name="VisibleAfterPresent">The OS reports it visible.</param>
+    /// <param name="RectAfterPresent">The rectangle the OS holds.</param>
+    /// <param name="RequestedRect">The rectangle that was asked for.</param>
+    /// <param name="ExStyleAfterPresent">The extended-style read-back.</param>
+    /// <param name="UniformAlphaAfterPresent">-1 is the CORRECT answer: a per-pixel surface holds no
+    /// uniform alpha, and asserting the -1 is what pins that this is not the overlay's mechanism.</param>
+    /// <param name="ZOrderAfterPresent">Where the OS puts it.</param>
+    /// <param name="ForegroundAfterPresent">Whether it stole the foreground.</param>
+    /// <param name="PointPassesThroughWhileClickThrough">The hit test in the requested polarity.</param>
+    /// <param name="CatchesItsOwnPointWhenOpaque">The hit test in the other one — the differential.</param>
+    /// <param name="SurfaceNonZeroPixels">Non-zero pixels the OS returns for the surface.</param>
+    /// <param name="SurfaceSampledPixels">How many were read.</param>
+    /// <param name="InkMatchesAfterPresent">Ink points that read back their exact colour.</param>
+    /// <param name="InkPoints">How many ink points the frame carries.</param>
+    /// <param name="TransparentReadsZero">Whether the transparent quadrant reads back as nothing.</param>
+    /// <param name="PaintState">A second, different frame composited onto the live surface.</param>
+    /// <param name="SecondInkMatches">Ink points of the SECOND frame that read back exactly.</param>
+    /// <param name="SecondInkPoints">How many the second frame carries.</param>
+    /// <param name="SurfaceChangedBetweenFrames">Whether the OS's copy actually CHANGED.</param>
+    /// <param name="MoveState">What a move said.</param>
+    /// <param name="RectAfterMove">Where the OS put it.</param>
+    /// <param name="RequestedRectAfterMove">Where it was asked to go.</param>
+    /// <param name="ContentSurvivedTheMove">Whether the composite is still there afterwards.</param>
+    /// <param name="ResizingMoveState">A move that also resizes must be refused.</param>
+    /// <param name="InklessPaintState">An all-transparent frame must be refused.</param>
+    /// <param name="MismatchedFrameState">A wrong-sized frame must be refused.</param>
+    /// <param name="WithdrawState">What withdrawal said.</param>
+    /// <param name="VisibleAfterWithdraw">The OS no longer reports it visible.</param>
+    /// <param name="PointRoutesAwayAfterWithdraw">The hit test no longer routes to it.</param>
+    /// <param name="ContentSurvivedTheWithdraw">The composite is kept for the next Present.</param>
+    /// <param name="PaintAfterWithdrawState">Painting a withdrawn surface must be refused.</param>
+    /// <param name="ExistsAfterDispose">No top-level window is left behind.</param>
+    /// <param name="TeardownDiagnostic">Null after a clean teardown.</param>
+    internal sealed record LifecycleRun(
+        bool MachineHasInteractiveDesktop,
+        CapabilityState PresentState,
+        nint Window,
+        bool ExistsAfterPresent,
+        bool VisibleAfterPresent,
+        (int X, int Y, int Width, int Height) RectAfterPresent,
+        (int X, int Y, int Width, int Height) RequestedRect,
+        uint ExStyleAfterPresent,
+        int UniformAlphaAfterPresent,
+        GlyphWindowProbe.ZOrderReading ZOrderAfterPresent,
+        bool ForegroundAfterPresent,
+        bool PointPassesThroughWhileClickThrough,
+        bool CatchesItsOwnPointWhenOpaque,
+        int SurfaceNonZeroPixels,
+        int SurfaceSampledPixels,
+        int InkMatchesAfterPresent,
+        int InkPoints,
+        bool TransparentReadsZero,
+        CapabilityState PaintState,
+        int SecondInkMatches,
+        int SecondInkPoints,
+        bool SurfaceChangedBetweenFrames,
+        CapabilityState MoveState,
+        (int X, int Y, int Width, int Height) RectAfterMove,
+        (int X, int Y, int Width, int Height) RequestedRectAfterMove,
+        bool ContentSurvivedTheMove,
+        CapabilityState ResizingMoveState,
+        CapabilityState InklessPaintState,
+        CapabilityState MismatchedFrameState,
+        CapabilityState WithdrawState,
+        bool VisibleAfterWithdraw,
+        bool PointRoutesAwayAfterWithdraw,
+        bool ContentSurvivedTheWithdraw,
+        CapabilityState PaintAfterWithdrawState,
+        bool ExistsAfterDispose,
+        string? TeardownDiagnostic);
+
+    private static LifecycleRun RunLifecycle()
+    {
+        var (screenWidth, screenHeight) = GlyphWindowProbe.PrimarySize;
+        var bounds = new GlyphBounds(
+            Math.Max(0, (screenWidth / 2) - 620),
+            Math.Max(0, (screenHeight / 2) + 60),
+            SurfaceSide,
+            SurfaceSide);
+
+        var frame = Quadrants(SurfaceSide);
+        var second = GlyphFrame.Solid(SurfaceSide, SurfaceSide, 0x10, 0xE0, 0x40, 0xFF);
+
+        var surface = new Win32GlyphSurface();
+        var request = new GlyphSurfaceRequest(bounds, 1.0, ClickThrough: true);
+        var presentState = surface.Present(request, frame);
+        var window = surface.NativeHandles.Window;
+
+        var existsAfterPresent = GlyphWindowProbe.WindowExists(window);
+        var visibleAfterPresent = GlyphWindowProbe.WindowIsVisible(window);
+        var rectAfterPresent = GlyphWindowProbe.RectOf(window);
+        var exStyle = GlyphWindowProbe.ExStyleOf(window);
+        var uniformAlpha = GlyphWindowProbe.LayeredAlphaOf(window);
+        var zOrder = GlyphWindowProbe.ReadZOrder(window);
+        var foreground = GlyphWindowProbe.IsForeground(window);
+
+        var (centreX, centreY) = bounds.Centre;
+        GlyphWindowProbe.HitTestExpecting(centreX, centreY, window, expectSurface: false, out _);
+        var passesThrough = GlyphWindowProbe.HitTest(centreX, centreY) != window;
+
+        // The differential leg, taken HERE and not in the record's argument list: the arguments are
+        // evaluated after Dispose, and a destroyed window wins no hit test. The first draft made
+        // exactly that mistake and the fact caught it.
+        var catchesItsOwnPoint = CatchesOwnPoint(window, centreX, centreY);
+
+        var firstSurface = GlyphWindowProbe.ReadSurface(window, SurfaceSide, SurfaceSide);
+        var nonZero = GlyphWindowProbe.NonZero(firstSurface);
+        var inkMatches = CountInkMatches(firstSurface, frame);
+        var transparentReadsZero = firstSurface.Length == SurfaceSide * SurfaceSide
+            && firstSurface[((SurfaceSide / 4) * SurfaceSide) + (SurfaceSide / 4)] == 0;
+
+        var paintState = surface.Paint(second);
+        var secondSurface = GlyphWindowProbe.ReadSurface(window, SurfaceSide, SurfaceSide);
+        var secondInkMatches = CountInkMatches(secondSurface, second);
+        var changed = firstSurface.Length > 0 && secondSurface.Length == firstSurface.Length
+            && !firstSurface.AsSpan().SequenceEqual(secondSurface);
+
+        var moved = new GlyphBounds(bounds.X + 24, bounds.Y + 16, bounds.Width, bounds.Height);
+        var moveState = surface.MoveTo(moved);
+        var rectAfterMove = GlyphWindowProbe.RectOf(window);
+        var afterMoveSurface = GlyphWindowProbe.ReadSurface(window, SurfaceSide, SurfaceSide);
+        var contentSurvivedMove = CountInkMatches(afterMoveSurface, second) == second.ProvableInk.Count
+            && second.ProvableInk.Count > 0;
+
+        var resizingMoveState = surface.MoveTo(new GlyphBounds(moved.X, moved.Y, moved.Width + 10, moved.Height));
+        var inklessPaintState = surface.Paint(GlyphFrame.Solid(SurfaceSide, SurfaceSide, 255, 255, 255, 0));
+        var mismatchedFrameState = surface.Paint(GlyphFrame.Solid(SurfaceSide - 4, SurfaceSide, 10, 20, 30, 255));
+
+        var withdrawState = surface.Withdraw();
+        var visibleAfterWithdraw = GlyphWindowProbe.WindowIsVisible(window);
+        var (movedCentreX, movedCentreY) = moved.Centre;
+        var routesAway = GlyphWindowProbe.HitTest(movedCentreX, movedCentreY) != window;
+        var withdrawnSurface = GlyphWindowProbe.ReadSurface(window, SurfaceSide, SurfaceSide);
+        var contentSurvivedWithdraw = CountInkMatches(withdrawnSurface, second) == second.ProvableInk.Count
+            && second.ProvableInk.Count > 0;
+        var paintAfterWithdrawState = surface.Paint(second);
+
+        surface.Dispose();
+        var existsAfterDispose = GlyphWindowProbe.WindowExists(window);
+
+        return new LifecycleRun(
+            MachineHasInteractiveDesktop: GlyphWindowProbe.MachineHasInteractiveDesktop,
+            PresentState: presentState,
+            Window: window,
+            ExistsAfterPresent: existsAfterPresent,
+            VisibleAfterPresent: visibleAfterPresent,
+            RectAfterPresent: rectAfterPresent,
+            RequestedRect: (bounds.X, bounds.Y, bounds.Width, bounds.Height),
+            ExStyleAfterPresent: exStyle,
+            UniformAlphaAfterPresent: uniformAlpha,
+            ZOrderAfterPresent: zOrder,
+            ForegroundAfterPresent: foreground,
+            PointPassesThroughWhileClickThrough: passesThrough,
+            CatchesItsOwnPointWhenOpaque: catchesItsOwnPoint,
+            SurfaceNonZeroPixels: nonZero,
+            SurfaceSampledPixels: firstSurface.Length,
+            InkMatchesAfterPresent: inkMatches,
+            InkPoints: frame.ProvableInk.Count,
+            TransparentReadsZero: transparentReadsZero,
+            PaintState: paintState,
+            SecondInkMatches: secondInkMatches,
+            SecondInkPoints: second.ProvableInk.Count,
+            SurfaceChangedBetweenFrames: changed,
+            MoveState: moveState,
+            RectAfterMove: rectAfterMove,
+            RequestedRectAfterMove: (moved.X, moved.Y, moved.Width, moved.Height),
+            ContentSurvivedTheMove: contentSurvivedMove,
+            ResizingMoveState: resizingMoveState,
+            InklessPaintState: inklessPaintState,
+            MismatchedFrameState: mismatchedFrameState,
+            WithdrawState: withdrawState,
+            VisibleAfterWithdraw: visibleAfterWithdraw,
+            PointRoutesAwayAfterWithdraw: routesAway,
+            ContentSurvivedTheWithdraw: contentSurvivedWithdraw,
+            PaintAfterWithdrawState: paintAfterWithdrawState,
+            ExistsAfterDispose: existsAfterDispose,
+            TeardownDiagnostic: surface.TeardownDiagnostic);
+    }
+
+    /// <summary>
+    /// The differential leg of the input fact, taken with the probe's OWN style write so the
+    /// capability is never asked to certify itself: clear <c>WS_EX_TRANSPARENT</c>, ask the window
+    /// manager, restore it. Without this leg "the point went elsewhere" would be equally true of a
+    /// surface that was never created.
+    /// </summary>
+    private static bool CatchesOwnPoint(nint surfaceWindow, int x, int y)
+    {
+        if (!GlyphWindowProbe.WindowExists(surfaceWindow))
+        {
+            return false;
+        }
+
+        var style = GlyphWindowProbe.ExStyleOf(surfaceWindow);
+        GlyphWindowProbe.SetExStyle(surfaceWindow, style & ~0x00000020u);
+        var winner = GlyphWindowProbe.HitTestExpecting(x, y, surfaceWindow, expectSurface: true, out _);
+        GlyphWindowProbe.SetExStyle(surfaceWindow, style);
+        return winner == surfaceWindow;
+    }
+
+    private static int CountInkMatches(uint[] surface, GlyphFrame frame)
+    {
+        if (surface.Length != frame.Width * frame.Height)
+        {
+            return -1;
+        }
+
+        var matches = 0;
+        foreach (var (x, y) in frame.ProvableInk)
+        {
+            if (surface[(y * frame.Width) + x] == frame.PremultipliedColourAt(x, y))
+            {
+                matches++;
+            }
+        }
+
+        return matches;
+    }
+
+    // ---------------------------------------------------------------- differential
+
+    /// <param name="MachineHasInteractiveDesktop">Whether there was anywhere for a surface to go.</param>
+    /// <param name="BackdropPresented">The landed overlay really put the known background up.</param>
+    /// <param name="BackdropPainted">And really holds the known colour, by its own read-back.</param>
+    /// <param name="BackdropState">That state, for failure messages.</param>
+    /// <param name="GlyphPresented">The glyph surface really earned Available over it.</param>
+    /// <param name="GlyphState">That state, for failure messages.</param>
+    /// <param name="Intruders">
+    /// THE ARBITRATION. Visible windows strictly between the glyph surface and the backdrop whose
+    /// own rectangles intersect the sampled area. Empty means every sample point below belongs to
+    /// exactly the two windows this run put there; non-empty NAMES whoever else owns it, and every
+    /// pixel claim is conditioned on emptiness rather than assumed.
+    /// </param>
+    /// <param name="CaptureTaken">Whether the composited-desktop read returned anything at all.</param>
+    /// <param name="WithGlyph">The five sample points with the surface up.</param>
+    /// <param name="WithoutGlyph">The same five with it hidden. The control.</param>
+    /// <param name="ExpectedWithGlyph">What premultiplied source-over predicts for those points.</param>
+    internal sealed record DifferentialRun(
+        bool MachineHasInteractiveDesktop,
+        bool BackdropPresented,
+        bool BackdropPainted,
+        CapabilityState BackdropState,
+        bool GlyphPresented,
+        CapabilityState GlyphState,
+        IReadOnlyList<string> Intruders,
+        bool CaptureTaken,
+        uint[] WithGlyph,
+        uint[] WithoutGlyph,
+        uint[] ExpectedWithGlyph)
+    {
+        /// <summary>True when the machine really hosted the run: a desktop, both surfaces up, a
+        /// capture taken, and NOBODY between them over the sampled area.</summary>
+        internal bool ArbitrationHeld =>
+            MachineHasInteractiveDesktop && BackdropPresented && BackdropPainted && GlyphPresented
+            && CaptureTaken && Intruders.Count == 0;
+
+        internal string Why =>
+            $"desktop={MachineHasInteractiveDesktop} backdropPresented={BackdropPresented} "
+            + $"backdropPainted={BackdropPainted} glyphPresented={GlyphPresented} capture={CaptureTaken} "
+            + $"intruders=[{string.Join(" | ", Intruders)}] backdrop={Describe(BackdropState)} "
+            + $"glyph={Describe(GlyphState)}";
+    }
+
+    private static DifferentialRun RunDifferential()
+    {
+        var (screenWidth, screenHeight) = GlyphWindowProbe.PrimarySize;
+        var backdropX = Math.Max(0, (screenWidth / 2) - 200);
+        var backdropY = Math.Max(0, (screenHeight / 2) - 150);
+        var offsetX = (BackdropWidth - SurfaceSide) / 2;
+        var offsetY = (BackdropHeight - SurfaceSide) / 2;
+
+        var frame = Quadrants(SurfaceSide);
+
+        // The background is the LANDED overlay capability, consumed unmodified: a full-opacity
+        // layered window holding one known colour, confirmed by the overlay's own Paint read-back.
+        // Using a landed capability rather than a scratch window is deliberate — it makes the
+        // control a thing the suite already proves, and it is what makes the intruder walk
+        // meaningful (both windows are topmost, so the ONLY thing that can come between them is a
+        // third topmost window).
+        using var backdrop = new Win32OverlayPresence();
+        var backdropBounds = new OverlayBounds(backdropX, backdropY, BackdropWidth, BackdropHeight);
+        var backdropState = backdrop.Present(new OverlaySurfaceRequest(backdropBounds, 1.0, ClickThrough: true));
+        var backdropPaint = backdrop.Paint(OverlayFrame.Solid(BackdropWidth, BackdropHeight, 200, 40, 10));
+        var backdropWindow = backdrop.NativeHandles.Window;
+
+        var glyphBounds = new GlyphBounds(backdropX + offsetX, backdropY + offsetY, SurfaceSide, SurfaceSide);
+        using var glyph = new Win32GlyphSurface();
+        var glyphState = glyph.Present(new GlyphSurfaceRequest(glyphBounds, 1.0, ClickThrough: true), frame);
+        var glyphWindow = glyph.NativeHandles.Window;
+
+        // Raise the pair back to back so nothing foreign can slip between them. Measured: with an
+        // ordinary interval between the two raises the shipping WPF product sat in the gap and the
+        // sampled "background" pixels were its own. This is not helping the fact pass — it is the
+        // same bounded re-raise the product itself does — and whether it WORKED is measured next.
+        GlyphWindowProbe.RaiseTopmost(backdropWindow);
+        GlyphWindowProbe.RaiseTopmost(glyphWindow);
+        var intruders = GlyphWindowProbe.Intruders(
+            glyphWindow, backdropWindow, backdropX, backdropY, BackdropWidth, BackdropHeight);
+
+        var points = SamplePoints(offsetX, offsetY, SurfaceSide);
+        var withGlyph = SampleDesktop(backdropX, backdropY, points);
+
+        glyph.Withdraw();
+        var withoutGlyph = SampleDesktop(backdropX, backdropY, points);
+
+        var expected = new uint[points.Length];
+        expected[0] = BackdropColour;
+        for (var i = 1; i < points.Length; i++)
+        {
+            var (x, y) = points[i];
+            expected[i] = frame.CompositeOver(x - offsetX, y - offsetY, BackdropColour, 255);
+        }
+
+        return new DifferentialRun(
+            MachineHasInteractiveDesktop: GlyphWindowProbe.MachineHasInteractiveDesktop,
+            BackdropPresented: backdropState is CapabilityState.Available,
+            BackdropPainted: backdropPaint is CapabilityState.Available,
+            BackdropState: backdropState,
+            GlyphPresented: glyphState is CapabilityState.Available,
+            GlyphState: glyphState,
+            Intruders: intruders,
+            CaptureTaken: withGlyph.Length == points.Length && withoutGlyph.Length == points.Length,
+            WithGlyph: withGlyph,
+            WithoutGlyph: withoutGlyph,
+            ExpectedWithGlyph: expected);
+    }
+
+    /// <summary>
+    /// Reads the composited desktop over the backdrop and returns the sample points.
+    ///
+    /// <para>The capture goes through <see cref="FlashPixelProbe.CaptureDesktop"/>, which is SP-100's
+    /// instrument and carries the DPI mapping this test host needs: USER32 virtualises window
+    /// coordinates while the screen device context is physical, so reading the desktop at a window's
+    /// own coordinates samples the WRONG POINT. The mapping is derived from the OS itself.</para>
+    /// </summary>
+    private static uint[] SampleDesktop(int originX, int originY, (int X, int Y)[] points)
+    {
+        var pixels = FlashPixelProbe.CaptureDesktop(originX, originY, BackdropWidth, BackdropHeight);
+        if (pixels.Length == 0)
+        {
+            return [];
+        }
+
+        var (virtualWidth, physicalWidth) = FlashPixelProbe.HorizontalResolutions;
+        var (virtualHeight, physicalHeight) = FlashPixelProbe.VerticalResolutions;
+        if (virtualWidth <= 0 || virtualHeight <= 0)
+        {
+            return [];
+        }
+
+        var scaleX = physicalWidth / (double)virtualWidth;
+        var scaleY = physicalHeight / (double)virtualHeight;
+        var width = Math.Max(1, (int)Math.Round(BackdropWidth * scaleX));
+        var height = Math.Max(1, (int)Math.Round(BackdropHeight * scaleY));
+        if (pixels.Length < width * height)
+        {
+            return [];
+        }
+
+        var sampled = new uint[points.Length];
+        for (var i = 0; i < points.Length; i++)
+        {
+            var x = Math.Clamp((int)Math.Round(points[i].X * scaleX), 0, width - 1);
+            var y = Math.Clamp((int)Math.Round(points[i].Y * scaleY), 0, height - 1);
+            sampled[i] = pixels[(y * width) + x];
+        }
+
+        return sampled;
+    }
+
+    // ---------------------------------------------------------------- coexistence
+
+    /// <param name="PointPassesThrough">The overlay's own centre still routes past it.</param>
+    /// <param name="AboveEveryOrdinaryWindow">The overlay is still above every ordinary window.</param>
+    /// <param name="Alpha">The overlay's UNIFORM alpha, which a glyph surface must never have.</param>
+    /// <param name="TransparentStyleHeld">WS_EX_TRANSPARENT survived.</param>
+    /// <param name="IsForeground">The overlay never becomes the foreground.</param>
+    internal readonly record struct OverlayReading(
+        bool PointPassesThrough,
+        bool AboveEveryOrdinaryWindow,
+        int Alpha,
+        bool TransparentStyleHeld,
+        bool IsForeground);
+
+    /// <param name="Visible">The card is on screen.</param>
+    /// <param name="IsForeground">It holds the foreground.</param>
+    /// <param name="HoldsSystemKeyboardFocus">And the system keyboard focus.</param>
+    internal readonly record struct CardReading(bool Visible, bool IsForeground, bool HoldsSystemKeyboardFocus);
+
+    /// <param name="MachineHasInteractiveDesktop">Whether there was anywhere for anything to go.</param>
+    /// <param name="OverlayPresented">The overlay really reached the desktop.</param>
+    /// <param name="CardTookTheInput">The card really took the foreground and the keyboard.</param>
+    /// <param name="VideoShowedAPicture">The video surface really held a decoded picture.</param>
+    /// <param name="PointerOpened">The pointer target really opened.</param>
+    /// <param name="GlyphEarnedAvailableBesideThem">And the glyph surface really composited beside them.</param>
+    /// <param name="GlyphState">That state, for failure messages.</param>
+    /// <param name="OverlayBefore">The overlay before the glyph surface existed.</param>
+    /// <param name="OverlayDuringPresent">While it was up.</param>
+    /// <param name="OverlayDuringMove">While it was being moved.</param>
+    /// <param name="OverlayAfter">After it was gone.</param>
+    /// <param name="CardBefore">The card, same four moments.</param>
+    /// <param name="CardDuringPresent">…</param>
+    /// <param name="CardDuringMove">…</param>
+    /// <param name="CardAfter">…</param>
+    /// <param name="VideoHeldPictureDuring">The video capability's own oracle, re-asked.</param>
+    /// <param name="VideoShowStateDuring">That state.</param>
+    /// <param name="PointerStillOwnsItsPoint">The pointer target's own point still routes to it.</param>
+    /// <param name="GlyphMoveState">The move, taken beside all four.</param>
+    /// <param name="OverlayCatchesItsOwnPointWhenMadeOpaque">The overlay's own differential, after.</param>
+    /// <param name="OverlayStillEarnsAvailable">The overlay's own oracle, re-asked.</param>
+    /// <param name="OverlayRePresentState">That state.</param>
+    /// <param name="GlyphSurfaceSharesNoRectangle">
+    /// Whether the glyph surface's rectangle is disjoint from all four landed ones. It IS, and the
+    /// value is recorded rather than assumed — the deliberate overlap this capability's evidence
+    /// needs lives in the differential run, over a background this run does not contain.
+    /// </param>
+    internal sealed record CoexistenceRun(
+        bool MachineHasInteractiveDesktop,
+        bool OverlayPresented,
+        bool CardTookTheInput,
+        bool VideoShowedAPicture,
+        bool PointerOpened,
+        bool GlyphEarnedAvailableBesideThem,
+        CapabilityState GlyphState,
+        OverlayReading OverlayBefore,
+        OverlayReading OverlayDuringPresent,
+        OverlayReading OverlayDuringMove,
+        OverlayReading OverlayAfter,
+        CardReading CardBefore,
+        CardReading CardDuringPresent,
+        CardReading CardDuringMove,
+        CardReading CardAfter,
+        bool VideoHeldPictureDuring,
+        CapabilityState VideoShowStateDuring,
+        bool PointerStillOwnsItsPoint,
+        CapabilityState GlyphMoveState,
+        bool OverlayCatchesItsOwnPointWhenMadeOpaque,
+        bool OverlayStillEarnsAvailable,
+        CapabilityState OverlayRePresentState,
+        bool GlyphSurfaceSharesNoRectangle);
+
+    private static CoexistenceRun RunCoexistence()
+    {
+        var (screenWidth, screenHeight) = GlyphWindowProbe.PrimarySize;
+
+        // The four landed rectangles keep SP-113's own positions, so this run is a strict extension
+        // of the arrangement that packet proved rather than a rearrangement of it.
+        var overlayBounds = new OverlayBounds(
+            Math.Max(0, (screenWidth / 2) - 660), Math.Max(0, (screenHeight / 2) - 150), 200, 150);
+        var (overlayX, overlayY) = overlayBounds.Centre;
+
+        using var overlay = new Win32OverlayPresence();
+        var presented = overlay.Present(new OverlaySurfaceRequest(overlayBounds, 0.6, ClickThrough: true));
+        var overlayWindow = overlay.NativeHandles.Window;
+
+        OverlayReading ReadOverlay() => new(
+            PointPassesThrough: OverlayWindowProbe.HitTest(overlayX, overlayY) != overlayWindow,
+            AboveEveryOrdinaryWindow: OverlayWindowProbe.ReadZOrder(overlayWindow).AboveEveryOrdinaryWindow,
+            Alpha: OverlayWindowProbe.LayeredAlphaOf(overlayWindow),
+            TransparentStyleHeld: (OverlayWindowProbe.ExStyleOf(overlayWindow) & 0x00000020) != 0,
+            IsForeground: OverlayWindowProbe.IsForeground(overlayWindow));
+
+        var cardBounds = new InputBounds(
+            Math.Max(0, (screenWidth / 2) + 200), Math.Max(0, (screenHeight / 2) + 160), 360, 180);
+        using var card = new Win32InputPresence();
+        card.Prompt(new InputPromptRequest(
+            cardBounds,
+            new InputPromptContent("say this", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+        var cardWindow = card.NativeHandles.Window;
+
+        CardReading ReadCard() => new(
+            Visible: InputWindowProbe.WindowIsVisible(cardWindow),
+            IsForeground: InputWindowProbe.Foreground() == cardWindow,
+            HoldsSystemKeyboardFocus: InputWindowProbe.SystemKeyboardFocus() == cardWindow);
+
+        var cardTookTheInput = ReadCard() is { Visible: true, IsForeground: true, HoldsSystemKeyboardFocus: true };
+
+        var path = VideoSurfaceObservations.WriteFixtureClip("glyph-coexistence.avi");
+        var source = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows);
+        source.Open(path, out var clip);
+        var videoFrame = clip?.ReadFrame();
+        var videoBounds = new VideoBounds(
+            Math.Max(0, (screenWidth / 2) - 200), Math.Max(0, (screenHeight / 2) - 340),
+            VideoSurfaceObservations.SurfaceWidth, VideoSurfaceObservations.SurfaceHeight);
+        var video = new Win32VideoPresence(source);
+        video.Present(new VideoSurfaceRequest(videoBounds, VideoSurfaceObservations.Letterbox));
+        var firstShow = videoFrame is null
+            ? new CapabilityState.Unavailable(new CapabilityReason("(no frame)", "nothing decoded"))
+            : video.Show(videoFrame);
+
+        var pointerBounds = new PointerBounds(
+            Math.Max(0, (screenWidth / 2) + 260), Math.Max(0, (screenHeight / 2) - 320),
+            PointerSurfaceObservations.TargetSide, PointerSurfaceObservations.TargetSide);
+        var pointer = new Win32PointerSurface();
+        var pointerOpen = pointer.Open(new PointerTargetRequest(pointerBounds, 0x00201020, 0x00E0C0FF), out var target);
+
+        var overlayBefore = ReadOverlay();
+        var cardBefore = ReadCard();
+
+        // THE FIFTH SURFACE. Its rectangle is disjoint from all four above — the deliberate overlap
+        // this capability's evidence needs is in the DIFFERENTIAL run, over a background this run
+        // does not contain, so nothing here is contending for another surface's hit-test point.
+        var glyphBounds = new GlyphBounds(
+            Math.Max(0, (screenWidth / 2) - 660), Math.Max(0, (screenHeight / 2) + 60), SurfaceSide, SurfaceSide);
+        var glyph = new Win32GlyphSurface();
+        var glyphState = glyph.Present(
+            new GlyphSurfaceRequest(glyphBounds, 1.0, ClickThrough: true), Quadrants(SurfaceSide));
+
+        var overlayDuringPresent = ReadOverlay();
+        var cardDuringPresent = ReadCard();
+
+        var glyphMoveState = glyph.MoveTo(new GlyphBounds(
+            glyphBounds.X, glyphBounds.Y + 18, glyphBounds.Width, glyphBounds.Height));
+        var overlayDuringMove = ReadOverlay();
+        var cardDuringMove = ReadCard();
+
+        var showDuring = videoFrame is null
+            ? new CapabilityState.Unavailable(new CapabilityReason("(no frame)", "nothing decoded"))
+            : video.Show(videoFrame);
+
+        var pointerWindow = pointer.NativeHandlesFor(target).Window;
+        var pointerCentreX = pointerBounds.X + (pointerBounds.Width / 2);
+        var pointerCentreY = pointerBounds.Y + (pointerBounds.Height / 2);
+        var pointerOwnsItsPoint =
+            PointerWindowProbe.HitTestAfterRaising(pointerWindow, pointerCentreX, pointerCentreY) == pointerWindow;
+
+        glyph.Withdraw();
+        glyph.Dispose();
+
+        pointer.Close(target);
+        pointer.Dispose();
+        video.Withdraw();
+        video.Dispose();
+        clip?.Dispose();
+
+        overlay.Reassert();
+        var overlayAfter = ReadOverlay();
+        var cardAfter = ReadCard();
+
+        card.Dismiss();
+
+        overlay.SetClickThrough(false);
+        var overlayCatchesItsOwnPoint = OverlayWindowProbe.HitTest(overlayX, overlayY) == overlayWindow;
+        overlay.SetClickThrough(true);
+
+        var rePresent = overlay.Present(new OverlaySurfaceRequest(overlayBounds, 0.6, ClickThrough: true));
+
+        var glyphRect = new GlyphBounds(glyphBounds.X, glyphBounds.Y, glyphBounds.Width, glyphBounds.Height);
+        var disjoint =
+            !glyphRect.Intersects(new GlyphBounds(
+                overlayBounds.X, overlayBounds.Y, overlayBounds.Width, overlayBounds.Height))
+            && !glyphRect.Intersects(new GlyphBounds(
+                cardBounds.X, cardBounds.Y, cardBounds.Width, cardBounds.Height))
+            && !glyphRect.Intersects(new GlyphBounds(
+                videoBounds.X, videoBounds.Y, videoBounds.Width, videoBounds.Height))
+            && !glyphRect.Intersects(new GlyphBounds(
+                pointerBounds.X, pointerBounds.Y, pointerBounds.Width, pointerBounds.Height));
+
+        return new CoexistenceRun(
+            MachineHasInteractiveDesktop: GlyphWindowProbe.MachineHasInteractiveDesktop,
+            OverlayPresented: presented is CapabilityState.Available,
+            CardTookTheInput: cardTookTheInput,
+            VideoShowedAPicture: firstShow is CapabilityState.Available,
+            PointerOpened: pointerOpen is CapabilityState.Available,
+            GlyphEarnedAvailableBesideThem: glyphState is CapabilityState.Available,
+            GlyphState: glyphState,
+            OverlayBefore: overlayBefore,
+            OverlayDuringPresent: overlayDuringPresent,
+            OverlayDuringMove: overlayDuringMove,
+            OverlayAfter: overlayAfter,
+            CardBefore: cardBefore,
+            CardDuringPresent: cardDuringPresent,
+            CardDuringMove: cardDuringMove,
+            CardAfter: cardAfter,
+            VideoHeldPictureDuring: showDuring is CapabilityState.Available,
+            VideoShowStateDuring: showDuring,
+            PointerStillOwnsItsPoint: pointerOwnsItsPoint,
+            GlyphMoveState: glyphMoveState,
+            OverlayCatchesItsOwnPointWhenMadeOpaque: overlayCatchesItsOwnPoint,
+            OverlayStillEarnsAvailable: rePresent is CapabilityState.Available,
+            OverlayRePresentState: rePresent,
+            GlyphSurfaceSharesNoRectangle: disjoint);
+    }
+}

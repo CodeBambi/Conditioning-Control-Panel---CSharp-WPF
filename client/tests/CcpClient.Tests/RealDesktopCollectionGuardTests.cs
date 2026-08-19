@@ -99,6 +99,15 @@ public class RealDesktopCollectionGuardTests
         "PointerWindowProbe",
         "PointerSurfaceObservations",
         "Win32PointerSurface",
+
+        // SP-115. A per-pixel-alpha surface is a layered topmost window this process composites and
+        // then reads back, and its central fact reads the COMPOSITED DESKTOP over a known
+        // background. Two runs sharing the machine would each be reading the other's background,
+        // and the run's own occlusion arbitration would name the peer's window as the intruder --
+        // which is a true report of a contended desktop and a useless one for the fact.
+        "GlyphWindowProbe",
+        "GlyphSurfaceObservations",
+        "Win32GlyphSurface",
     ];
 
     /// <summary>
@@ -136,6 +145,9 @@ public class RealDesktopCollectionGuardTests
         "VideoOverlayCoexistenceTests.cs",
         "PointerCapabilityTests.cs",
         "PointerCoexistenceTests.cs",
+        "GlyphCapabilityTests.cs",
+        "GlyphAlphaDifferentialTests.cs",
+        "GlyphCoexistenceTests.cs",
     ];
 
     [Fact]
