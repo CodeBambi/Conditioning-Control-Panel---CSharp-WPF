@@ -933,6 +933,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         if (active) showClassScreen(); else showBoard();
         return true;
       }
+      // A host suspend owns the screen. The panic ladder's second press (host
+      // side) is the exit, and walking to the board here would destroy the
+      // Resume card ~60ms after it appeared (both ladders fire on one Esc -
+      // verified live 3/3). Consume the press and change nothing; the overlay's
+      // own Resume / Leave class buttons remain the page-side way out.
+      if (active && active.suspendEl) return true;
       if (active && !active.paused) { pauseClass(true); return true; }
       if (active && active.paused) { showBoard(); return true; }
       return false;

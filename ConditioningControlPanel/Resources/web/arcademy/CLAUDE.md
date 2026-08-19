@@ -259,6 +259,11 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     The host refuses that while a video or an audio-only session still owns the screen, and neither
     `OnVideoEnded` nor the audio-only watch may lift a panic suspend. Trap 19 still holds
     separately: `init.panicKey` is a launch-time snapshot the page only uses to refuse a rebind.
+    COROLLARY (live-verified 3/3): one physical Esc press reaches BOTH ladders - the host suspends,
+    then the page's own tap ladder fires on keyup and used to walk the suspended class to the board,
+    destroying the Resume card ~60ms after it appeared. `escapeStep()` therefore consumes the press
+    and does NOTHING while `active.suspendEl` is up (any suspend reason): the overlay's Resume /
+    Leave class buttons are the page-side way out, the host's press-2 is the fast exit.
 30. **`class-started` has a closing bracket now: `class-left`.** Leaving a class with Esc ends no
     class, so `class-ended` was never sent and the host's `_classActive` stayed true for the rest
     of the session - which kept the tighter mid-class heartbeat limit (12s vs 20s) armed and made
