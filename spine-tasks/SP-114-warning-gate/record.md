@@ -236,8 +236,18 @@ Also written into `client/docs/verification-harness.md`.
   discharges none of them, and a headless frame still discharges no headed gate.
 - **The bite demonstrations were single runs each**, not a rate measurement. They establish that the
   gate CAN fail on each shape, not a frequency.
-- **The floor number reported here is this machine's, measured twice** (`evidence/floor-01.txt`,
-  `evidence/floor-02.txt`), both 1938/117 with the same two pinned skips.
+- **The floor number reported here is this machine's, measured three times** (`evidence/floor-01.txt`,
+  `floor-02.txt`, `floor-03.txt`), all 1938/117 with the same two pinned skips.
+
+**Line endings, re-verified rather than assumed.** The three new files were authored LF while every
+tracked file in this repo checks out CRLF (`core.autocrlf=true`, no `.gitattributes` rule for `.cs`
+or `.mjs`). Since all three guards parse file TEXT with regexes, a gate that passed only on LF would
+red on the next fresh checkout. So the working copies were converted to CRLF — `git diff` and
+`git diff --cached` empty afterwards, blob hash unchanged (`300148dd…` before and after), so the
+commit is byte-identical — and the whole chain re-run on the CRLF tree: `--self-test` OK, build 0/0,
+16 guard facts green (the 8 new ones plus `VacuousShapeGuardTests`, `FloorWrapperGuardTests`,
+`AllowedSkipsBanGuardTests`), warning gate OK, floor 1938/117 (`evidence/gate-04-crlf-final.txt`,
+`floor-03.txt`).
 
 ## 8. FILES CHANGED
 
