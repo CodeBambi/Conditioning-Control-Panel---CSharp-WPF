@@ -20,6 +20,10 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 const SRC = path.join(REPO, "client", "src", "CcpClient.Desktop");
 
+// Built from char codes so this file itself can be stored with either line ending.
+const LF = String.fromCharCode(10);
+const CRLF = String.fromCharCode(13, 10);
+
 const FILTER = [
   "FullyQualifiedName~BubbleCountModuleTests",
   "FullyQualifiedName~BubbleCountCapabilityTests",
@@ -161,11 +165,8 @@ function run() {
     // file's OWN line endings. A sweep whose multi-line needles silently never match would report
     // "not patched" for every interesting predicate — which is exactly what round 1 did.
     const original = fs.readFileSync(file, "utf8");
-    const crlf = original.includes("
-");
-    const normalised = crlf ? original.replace(/
-/g, "
-") : original;
+    const crlf = original.includes(CRLF);
+    const normalised = crlf ? original.split(CRLF).join(LF) : original;
     if (!normalised.includes(needle)) {
       notPatched++;
       lines.push(`${id}  NOT-PATCHED  ${what}  (needle no longer matches ${path.basename(file)})`);
@@ -173,9 +174,7 @@ function run() {
     }
 
     const mutated = normalised.replace(needle, replacement);
-    fs.writeFileSync(file, crlf ? mutated.replace(/
-/g, "
-") : mutated, "utf8");
+    fs.writeFileSync(file, crlf ? mutated.split(LF).join(CRLF) : mutated, "utf8");
     let verdict;
     try {
       const result = spawnSync(

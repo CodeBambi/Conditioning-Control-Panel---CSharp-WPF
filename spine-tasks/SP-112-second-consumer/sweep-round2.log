@@ -1,0 +1,41 @@
+SP-112 mutation sweep — 2026-08-19T14:46:02.603Z
+filter: FullyQualifiedName~BubbleCountModuleTests|FullyQualifiedName~BubbleCountCapabilityTests|FullyQualifiedName~StudioSurfaceNoticeTests|FullyQualifiedName~VideoSurfacePresenterTests|FullyQualifiedName~MandatoryVideoModuleTests|FullyQualifiedName~LockCardModuleTests|FullyQualifiedName~SecondEffectSpineTests|FullyQualifiedName~ContinuousEffectSpineTests|FullyQualifiedName~AudioModuleSpineTests
+
+M-c  SURVIVED  the sixty-second floor
+M-i  CAUGHT  the 30 s fallback in Target
+M-j  CAUGHT  the 0.7 spacing factor
+M-m  SURVIVED  the unconditional lead-in spawn
+M-p  SURVIVED  the bubble's END of life
+M-q  SURVIVED  both ends of a bubble's life
+M-s  SURVIVED  the sub-pixel guard
+M-t  SURVIVED  the left clamp into the picture
+M-v  CAUGHT  Recompute's own fallback
+M-y  CAUGHT  the lifetime's random span
+M-z  CAUGHT  the pop fade
+M-ad  CAUGHT  an empty Enter costing nothing
+M-ae  CAUGHT  the attempt counter
+M-ah  CAUGHT  backspace editing
+M-ai  CAUGHT  Escape ending the card
+M-aj  CAUGHT  the folded feedback line
+M-am  CAUGHT  Compose's already-prompting guard
+M-an  CAUGHT  Compose's display guard
+M-ao  CAUGHT  Compose's desktop guard
+M-ap  SURVIVED  the refused clip's resolution
+M-ar  CAUGHT  cancelling the safety on a clean end
+M-as  CAUGHT  abandoning a clip the surface stopped holding
+M-au  CAUGHT  standing down rather than stealing another card
+M-av  CAUGHT  the load-bearing dismiss on a refusal
+M-aw  SURVIVED  the keystroke identity guard
+M-ax  CAUGHT  the guarded End on disarm
+M-ay  CAUGHT  the guarded Dismiss on disarm
+M-bb  CAUGHT  the dot's display channel
+M-bc  CAUGHT  the dot's desktop channel
+M-bd  SURVIVED  the dot's CLOCK clause
+M-bi  CAUGHT  the module's own pacing
+M-bj  CAUGHT  the re-pace from the END of a game
+M-bk  CAUGHT  the already-playing refusal
+M-bp  SURVIVED  picking the PRIMARY display
+M-bt  CAUGHT  abandoned not being reported as failed
+
+caught=25 survived=10 not-patched=0 total=35
+elapsed=889s

@@ -757,6 +757,71 @@ public class BubbleCountModuleTests
     }
 
     [Fact]
+    public void ACLIPTheSURFACEREFUSEDOutrightIsABANDONEDToo_AndTheUserIsToldSomethingHappened()
+    {
+        // Found by the mutation sweep: nothing pinned the resolution on Deliver's OWN refusal path.
+        // Without it the run is orphaned - LastResolution stays None, AbandonedCount never moves,
+        // and the panel tells a user nothing at all about a game that came due and could not play.
+        using var rig = new Rig();
+        rig.Pool.Clips.Add("only.mp4");
+        rig.Enable();
+        rig.Effect.Arm();
+        rig.Surface.BeginResult = new CapabilityState.Unavailable(new CapabilityReason(
+            VideoReasonCodes.VideoClipUnreadable, "the operating system would not open it"));
+
+        var resolutions = new List<BubbleCountResolution>();
+        rig.Effect.Resolved += resolutions.Add;
+        rig.Clock.AdvanceToNextDue();
+
+        Assert.Equal([BubbleCountResolution.Abandoned], resolutions);
+        Assert.Equal(BubbleCountResolution.Abandoned, rig.Effect.LastResolution);
+        Assert.Equal(1, rig.Effect.AbandonedCount);
+
+        // The capability's own typed outcome is REMEMBERED verbatim, which is the only place a user
+        // or a bug report learns WHICH refusal it was.
+        var remembered = Assert.IsType<CapabilityState.Unavailable>(rig.Effect.LastPlayback);
+        Assert.Equal(VideoReasonCodes.VideoClipUnreadable, remembered.Reason.Code);
+
+        // Nothing was asked, and the schedule keeps running.
+        Assert.Empty(rig.Presence.Prompts);
+        Assert.True(rig.Effect.ScheduleArmed);
+    }
+
+    [Fact]
+    public void AKeystrokeForAQuestionTHISMODULEHasFinishedWith_IsDiscarded()
+    {
+        // Found by the mutation sweep: the identity guard had no fact, because the double stops
+        // feeding the callback the moment it is dismissed. The OS does not: it delivers what was
+        // already in its queue, and SP-110 found the same hazard from the other side - a stale
+        // keystroke applied to a finished attempt would count a guess nobody made.
+        using var rig = new Rig();
+        rig.Pool.Clips.Add("only.mp4");
+        rig.Enable();
+        rig.Effect.Arm();
+        rig.Clock.AdvanceToNextDue();
+        rig.Surface.PaintFrames(TimeSpan.FromSeconds(12), TimeSpan.FromMilliseconds(100));
+        rig.Surface.RaiseEnded();
+
+        // Keep the capability's own callback, exactly as a message already in the OS's queue is
+        // kept, then end the game.
+        var stillQueued = rig.Presence.Prompts[0].OnKeystroke;
+        rig.Presence.PressEscape();
+        Assert.Equal(BubbleCountResolution.Dismissed, rig.Effect.LastResolution);
+        var dismissals = rig.Presence.Dismissals;
+
+        // The late keystroke must do nothing at all: no repaint, no second resolution, no counter.
+        var updates = rig.Presence.Updates.Count;
+        stillQueued(new InputKeystroke(InputKeystrokeKind.Character, '5', '5'));
+        stillQueued(new InputKeystroke(InputKeystrokeKind.Key, '\0', BubbleCountAnswer.SubmitVirtualKey));
+
+        Assert.Equal(updates, rig.Presence.Updates.Count);
+        Assert.Equal(dismissals, rig.Presence.Dismissals);
+        Assert.Equal(BubbleCountResolution.Dismissed, rig.Effect.LastResolution);
+        Assert.Equal(0, rig.Effect.CountedCount);
+        Assert.Equal(0, rig.Effect.MissedCount);
+    }
+
+    [Fact]
     public void ASurfaceThatSTOPPEDHoldingThePictureABANDONSTheGame_AndAsksNOTHING()
     {
         using var rig = new Rig();
