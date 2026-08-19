@@ -17,7 +17,7 @@ namespace CcpClient.Tests;
 ///
 /// <para><b>Why the video surface is NOT the foreground.</b> It carries
 /// <c>WS_EX_NOACTIVATE</c>, which is a deliberate divergence from upstream's own video window
-/// (<c>Services/Video/VideoService.cs:2621</c>, <c>ShowActivated = withAudio</c>): the foreground is
+/// (<c>Services/Video/VideoService.cs:2624</c>, <c>ShowActivated = withAudio</c>): the foreground is
 /// LENT by the OS and Lock Card's entire capability is holding it. A video that took it would end a
 /// question the user was being asked.</para>
 /// </summary>

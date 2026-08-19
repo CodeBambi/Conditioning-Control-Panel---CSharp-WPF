@@ -19,7 +19,7 @@ public readonly record struct VideoBounds(int X, int Y, int Width, int Height)
 /// <param name="Bounds">Where the surface goes, in physical pixels.</param>
 /// <param name="Letterbox">The bar colour, as a <c>COLORREF</c> (<c>0x00BBGGRR</c>). Upstream's own
 /// video window is <c>Background = Brushes.Black</c>
-/// (<c>Services/Video/VideoService.cs:2622</c>), and black is this type's default for that reason.
+/// (<c>Services/Video/VideoService.cs:2626</c>), and black is this type's default for that reason.
 /// <b>It is also the read-back's own control</b>: a point in the bar must come back EXACTLY this
 /// colour, which is what proves the fill happened at all.</param>
 public sealed record VideoSurfaceRequest(VideoBounds Bounds, uint Letterbox = 0x000000)
@@ -162,7 +162,7 @@ public sealed record VideoSurfaceObservation(
     ///
     /// <para><b>Why this is not "the decoder is fed".</b> Upstream's own worst failure is a window
     /// that stays white while the decoder runs and <c>MediaEnded</c> never fires
-    /// (<c>Services/Video/VideoService.cs:2680-2688</c>), and a frozen final frame after a
+    /// (<c>Services/Video/VideoService.cs:2677-2678</c>), and a frozen final frame after a
     /// suspend (<c>:1394-1397</c>) — in both, every call this process makes still succeeds. Upstream
     /// watches the same thing from the other side (<c>_voutLostSinceTicks</c> <c>:104</c>,
     /// <c>_frameReady</c> <c>:3788</c>, <c>StartBlurFrameWatchdog</c> <c>:3265</c>).</para>

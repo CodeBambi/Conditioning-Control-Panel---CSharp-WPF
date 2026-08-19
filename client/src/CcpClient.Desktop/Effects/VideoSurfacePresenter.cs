@@ -28,7 +28,7 @@ public interface IVideoSurface
     /// True while this module's work is genuinely running — <b>the property the dot's third input
     /// reads</b>. It is not <see cref="Showing"/>: a video surface that is up and has stopped
     /// advancing is a frozen picture, and upstream's own worst failure is exactly that state with
-    /// every call still returning success (<c>VideoService.cs:2680-2688</c>).
+    /// every call still returning success (<c>VideoService.cs:2677-2678</c>).
     /// </summary>
     bool Running { get; }
 
@@ -157,7 +157,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     ///
     /// <para><b>The divergence from upstream's fullscreen-per-monitor cover lives here</b>, and it
     /// is deliberate. Upstream sizes its video window to the FULL screen bounds of every screen
-    /// (<c>Services/Video/VideoService.cs:2631-2635</c>, <c>:2040-2045</c>). This port places one
+    /// (<c>Services/Video/VideoService.cs:2633-2636</c>, <c>:2040-2045</c>). This port places one
     /// bounded rectangle on the primary display, for the same two reasons SP-110's card did
     /// (D110): five other modules draw through a click-through overlay that a fullscreen cover
     /// would blank, and a fullscreen topmost surface the user cannot dismiss is the one shape this

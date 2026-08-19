@@ -19,7 +19,7 @@ namespace CcpClient.Desktop.Video;
 /// uniform alpha to hold for the window and it is the shape a <c>CAPTUREBLT</c> screen read can
 /// see, which is what makes the harness's composited-desktop leg possible at all.
 /// <see cref="WsExNoactivate"/> is set — upstream's mandatory-video window ACTIVATES
-/// (<c>Services/Video/VideoService.cs:2621</c>, <c>ShowActivated = withAudio</c>) — because a video
+/// (<c>Services/Video/VideoService.cs:2624</c>, <c>ShowActivated = withAudio</c>) — because a video
 /// surface that took the foreground would fight Lock Card for it and could take it away from a
 /// question the user is being asked. <see cref="WsExTransparent"/> is deliberately NOT set: this is
 /// not a click-through overlay, and a video the pointer falls straight through would be a lie about
@@ -28,14 +28,14 @@ namespace CcpClient.Desktop.Video;
 internal static class Win32VideoInterop
 {
     /// <summary>A real top-level window with no frame, caption or menu — WPF reaches the same shape
-    /// with <c>WindowStyle.None</c> (<c>Services/Video/VideoService.cs:2618</c>).</summary>
+    /// with <c>WindowStyle.None</c> (<c>Services/Video/VideoService.cs:2621</c>).</summary>
     public const uint WsPopup = 0x80000000;
 
     /// <summary>Composited by the OS at one uniform alpha.</summary>
     public const uint WsExLayered = 0x00080000;
 
     /// <summary>Off the taskbar and out of Alt+Tab. Upstream's video window sets
-    /// <c>ShowInTaskbar = false</c> (<c>VideoService.cs:2620</c>).</summary>
+    /// <c>ShowInTaskbar = false</c> (<c>VideoService.cs:2623</c>).</summary>
     public const uint WsExToolwindow = 0x00000080;
 
     /// <summary>Never takes the foreground. See the type remarks — this is a divergence and it is
@@ -62,7 +62,7 @@ internal static class Win32VideoInterop
     public const int SmCmonitors = 80;
 
     /// <summary><c>LWA_ALPHA</c>: the window's uniform opacity. Upstream's video window is opaque
-    /// (<c>Background = Brushes.Black</c>, <c>VideoService.cs:2622</c>), so this is always 255 —
+    /// (<c>Background = Brushes.Black</c>, <c>VideoService.cs:2626</c>), so this is always 255 —
     /// but it is SET rather than assumed, because a layered window with no attributes is not drawn
     /// at all.</summary>
     public const uint LwaAlpha = 0x00000002;

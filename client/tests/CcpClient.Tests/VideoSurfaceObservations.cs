@@ -44,7 +44,7 @@ internal static class VideoSurfaceObservations
     internal const int SurfaceHeight = 240;
 
     /// <summary>The bar colour. Upstream's video window is black
-    /// (<c>Services/Video/VideoService.cs:2622</c>) and so is this.</summary>
+    /// (<c>Services/Video/VideoService.cs:2626</c>) and so is this.</summary>
     internal const uint Letterbox = 0x000000;
 
     /// <summary>Three frames, each a vertical split, each different from the last. The split is what

@@ -207,11 +207,11 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     ///
     /// <para><b>Not "the decoder is fed."</b> That is this packet's central trap in dot form, and
     /// upstream's own worst failure is exactly the state it would light for: "the window stays white
-    /// and MediaEnded never fires, wedging cleanup" (<c>VideoService.cs:2680-2688</c>), and a frozen
+    /// and MediaEnded never fires, wedging cleanup" (<c>VideoService.cs:2677-2678</c>), and a frozen
     /// final frame after a suspend (<c>:1394-1397</c>). Upstream watches the same thing from the
     /// other side (<c>_voutLostSinceTicks</c> <c>:104</c>, <c>_frameReady</c> <c>:3788</c>,
     /// <c>StartBlurFrameWatchdog</c> <c>:3265</c>) — its own comment on the vout watchdog is that
-    /// "decode-side health signals (TimeChanged, EndReached) are useless here" (<c>:5537-5540</c>),
+    /// "decode-side health signals (TimeChanged, EndReached) are useless here" (<c>:5538-5540</c>),
     /// which is this rule in upstream's own words.</para>
     ///
     /// <para><b>Why the third clause is a DISJUNCTION.</b> A session spends almost all of its time

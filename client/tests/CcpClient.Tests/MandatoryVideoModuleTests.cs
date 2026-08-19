@@ -275,7 +275,7 @@ public class MandatoryVideoModuleTests
 
         // Clause 3 — WHILE A CLIP IS UP, the OS's own copy of the surface must have advanced. A
         // frozen picture is upstream's own worst failure and every call still succeeds
-        // (VideoService.cs:2680-2688).
+        // (VideoService.cs:2677-2678).
         rig.Surface.Showing = true;
         rig.Surface.Running = false;
         Assert.Equal(EffectDotState.Armed, rig.Effect.Dot);

@@ -147,7 +147,7 @@ public class VideoCapabilityTests
 
         // THE TRAP-1 FACT. Five modules draw through a click-through overlay and Lock Card takes the
         // foreground; a video surface that took it would take it from a question the user is being
-        // asked. Upstream's own video window DOES activate (VideoService.cs:2621) and this port's
+        // asked. Upstream's own video window DOES activate (VideoService.cs:2624) and this port's
         // deliberately does not — divergence D122.
         Assert.False(
             m.SurfaceIsForeground,
@@ -189,8 +189,12 @@ public class VideoCapabilityTests
         var m = Observed;
         Assert.True(m.Frames.Count >= 3, $"the fixture must present at least three frames; it presented {m.Frames.Count}");
 
-        // The FIRST frame advances too: the surface was filled with the bar colour at placement, so
-        // a picture arriving over it is a change. Every later frame differs from the one before it.
+        // FRAME 0 CARRIES NO EVIDENCE HERE, and saying so is the whole point of this comment.
+        // Win32VideoPresence.Present resets BOTH sample slots to zero, so the first Show compares its
+        // read-back against a SENTINEL rather than against a fold taken after the letterbox fill: any
+        // non-zero fold "advances". The LOAD-BEARING advances are frames 1 and 2, each measured
+        // against the fold of the frame really before it, plus the still-frame control below, which is
+        // the negative half of the same differential. Frame 0 is asserted for uniformity, not for proof.
         for (var i = 0; i < m.Frames.Count; i++)
         {
             Assert.True(
@@ -455,7 +459,7 @@ public class VideoCapabilityTests
             frozen.PictureIsMoving,
             "THE SEVENTH MEANING: a DIFFERENT picture was handed over and the operating system's copy did not "
             + "change. Every call succeeded, the decoder is running, and the screen is frozen — which is "
-            + "upstream's own worst failure (VideoService.cs:2680-2688) and the exact state a decoded-frame "
+            + "upstream's own worst failure (VideoService.cs:2677-2678) and the exact state a decoded-frame "
             + "count reports as healthy");
 
         var blank = Confirmable() with { LetterboxHeld = false, FrameDiffersFromPrevious = true, SurfaceSample = 7, PreviousSurfaceSample = 6 };

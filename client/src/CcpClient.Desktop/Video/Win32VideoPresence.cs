@@ -147,6 +147,11 @@ public sealed class Win32VideoPresence : IVideoPresence
         _letterbox = request.Letterbox;
         _box = default;
         _composed = null;
+        // Both sample slots go to zero, which is a SENTINEL and not a fold of the freshly filled
+        // surface. The consequence is worth naming where it lives: the FIRST Show after a Present
+        // compares its read-back against 0, so its SurfaceAdvanced is true for any non-zero fold and
+        // carries no evidence. Every later frame compares against the fold of the frame really
+        // before it, which is where the differential does its work.
         _lastSurfaceSample = 0;
         _previousSurfaceSample = 0;
         _lastFrameSample = 0;

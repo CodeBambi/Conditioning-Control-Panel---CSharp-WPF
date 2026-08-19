@@ -158,7 +158,7 @@ Live = a firing is on the clock
 
 Not "the decoder is fed" — that is the packet's central trap in dot form. Not merely "a frame is on
 screen" — upstream's own worst bug is exactly that state: "the window stays white and MediaEnded
-never fires, wedging cleanup" (`VideoService.cs:2680-2688`) and a frozen final frame after wake
+never fires, wedging cleanup" (`VideoService.cs:2677-2678`) and a frozen final frame after wake
 (`:1394-1397`), with every call still returning success. Upstream watches the same thing from the
 other side (`_voutLostSinceTicks` `:104`, `_frameReady` `:3788`, `StartBlurFrameWatchdog` `:3265`).
 
@@ -185,5 +185,5 @@ Coexistence is proven with SP-099's own `OverlayWindowProbe` and SP-110's own `I
 both unmodified, around a real video surface opening and closing.
 
 **The surface does NOT take the foreground** (`WS_EX_NOACTIVATE`) and is **not fullscreen**, both
-divergences from `VideoService.cs:2617-2636` (`ShowActivated`, `Topmost`, full screen bounds), for
+divergences from `VideoService.cs:2619-2637` (`ShowActivated`, `Topmost`, full screen bounds), for
 trap 1 and on SP-110's own D110 precedent.

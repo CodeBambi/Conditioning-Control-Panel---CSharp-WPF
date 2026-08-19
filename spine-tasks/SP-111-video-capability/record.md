@@ -10,6 +10,13 @@ the deltas and applies one bump. Two skips, both pre-existing
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); none added, none widened.
 Build: 0 errors, 0 warnings. `client/tests/floor/floor.json` was never opened.
 
+**A process defect, recorded rather than only fixed.** The round-1 sweep driver wrote its summary to
+`sweep-results.txt` in the SHARED CHECKOUT ROOT rather than inside this worktree. It was never
+committed and the coordinator deleted it, but during a parallel wave another lane's `git add -A`
+would have swept it into an unrelated commit. **Every artifact belongs inside the lane's worktree.**
+The three sweep logs now live beside this record as `sweep-round1.log`, `sweep-round2.log` and
+`sweep-round3.log`, which is where §4's counts are checkable from.
+
 ---
 
 ## 0. THE HEADLINE — the chain, and it stops one step short of a screen
@@ -131,11 +138,11 @@ claim about what the OS is HOLDING, read back.
 
 **It is deliberately not "the decoder is fed."** That is this packet's central trap in dot form, and
 upstream's own worst failure is exactly the state it would light for: "the window stays white and
-MediaEnded never fires, wedging cleanup" (`VideoService.cs:2680-2688`), and a frozen final frame
+MediaEnded never fires, wedging cleanup" (`VideoService.cs:2677-2678`), and a frozen final frame
 after a suspend (`:1394-1397`). Upstream watches the same thing from the other side, and says so:
 its vout watchdog's comment is that **"decode-side health signals (TimeChanged, EndReached) are
 useless here — on the white-screen machines the clip 'plays' fine, there is just nothing on screen"**
-(`:5537-5540`). That is this rule in upstream's own words.
+(`:5538-5540`). That is this rule in upstream's own words.
 
 **The third clause is a DISJUNCTION and that is its own claim.** A session spends almost all of its
 time between clips; a bare motion conjunct would darken the dot for 95 % of it, which is the opposite
@@ -150,10 +157,12 @@ lie. `M-bh` (requiring motion unconditionally) survived round 1 and is now caugh
 
 ---
 
-## 4. PROVING IT BITES — 77 mutations, two rounds, **15 survivors**
+## 4. PROVING IT BITES — 78 mutations, three rounds, **14 survivors**
 
 Every conjunct and predicate this packet added was mutated one at a time, each file restored
-byte-identically afterwards (verified by `git status` after each round). The sweep covers the two
+byte-identically afterwards (verified by `git status` after each round). The raw logs are beside
+this record: `sweep-round1.log`, `sweep-round2.log`, `sweep-round3.log`, and every count below is
+taken from them. The sweep covers the two
 observation records, the display observation, the clip info, the decoder's five gates and its stride
 flip, the presence's ten gates and its band re-assertion, the letterbox arithmetic and composition,
 both fingerprints, the schedule's three clauses, the pool's five, the module's dot, its three
@@ -166,11 +175,27 @@ is one this packet created or a module only these suites reach. **That is narrow
 whole-suite discipline**, and the mitigation is that the full unit suite (1742), the full headless
 suite (107) and the floor were all run green afterwards on the restored tree.
 
-### Round 1 — 74 mutations, 49 caught, 23 survived, 2 did not apply
+### Round 1 — 75 mutations applied, 2 did not patch, **73 evaluated: 50 caught, 23 survived**
 
-### Round 2 — the 23 survivors re-run against the closed suite, plus 3 new mutations on the clauses round 2 added
+The two that did not patch (`M-d`, `M-bs`) had needles that no longer matched the file after an
+earlier edit. Both were re-patched with corrected needles in round 2 rather than dropped.
 
-**Eleven were real holes and are now closed**, each by a fact that isolates the clause:
+### Round 2 — **28 run: 13 caught, 15 survived**
+
+The 23 round-1 survivors re-run against the closed suite, the 2 that had not patched, and 3 NEW
+mutations on clauses this round's own fixes added (`M-bw`, `M-bx`, `M-by`).
+
+### Round 3 — **1 run: 1 caught, 0 survived**
+
+**The books, so a reader need not add up:** 78 distinct mutations; 50 + 13 + 1 = **64 caught**;
+**14 survive** (3 equivalent + 11 uncovered); 64 + 14 = 78. Twelve of the round-1 survivors were
+real holes and are closed by the facts in the table below.
+
+`M-bw` was the one round-2 survivor a new fact closed inside the same round, so it needed a
+re-run to prove the closure rather than assert it. It is caught.
+
+**Twelve were real holes and are now closed** (eleven in round 2, `M-bw` in round 3), each by a
+fact that isolates the clause:
 
 | # | mutation | closed by |
 |---|---|---|
@@ -186,8 +211,8 @@ suite (107) and the floor were all run green afterwards on the restored tree.
 | M-bu / M-bv | `Running` drops either clause | `BOTHClausesOfRUNNINGAreLoadBearing` |
 | M-bw | *(new)* `Begin` leaves the surface up when the FIRST picture is refused | `AFirstPictureTheSurfaceREFUSES_AlsoTakesTheSurfaceBackDown` |
 
-Two further new mutations were added and both are caught: **M-bx** (the letterbox inner box ignores
-the margin) and **M-by** (the pool's bag is never filled).
+Two further new mutations were added and both are caught in round 2: **M-bx** (the letterbox inner
+box ignores the margin) and **M-by** (the pool's bag is never filled).
 
 ### THE SHARPEST FINDING — M-au / M-av, and it disproved my own comment
 
@@ -215,7 +240,7 @@ the capability usable at all. A thief that kept re-asserting would be a race rat
 So `M-ac` is **UNCOVERED and named**, and the measurement that explains why is itself asserted:
 `ASurfaceTAKESItsOwnPointBackFromAWindowPlacedOverIt_AndThatIsWhyOcclusionCannotBeStaged`.
 
-### The fifteen survivors, and not one is papered over with a fact that asserts shape
+### The fourteen survivors — 3 equivalent + 11 uncovered — and not one is papered over
 
 **Three are EQUIVALENT MUTANTS:**
 
@@ -225,7 +250,7 @@ So `M-ac` is **UNCOVERED and named**, and the measurement that explains why is i
 - **M-au / M-av** — the sample points' asymmetry. See above: the fold's ORDER does the work, the
   comments were wrong, and both are now corrected.
 
-**Twelve are UNCOVERED, and each names why:**
+**Eleven are UNCOVERED, and each names why:**
 
 - **M-y** — `MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING` turned off. The fixture is natively RGB32 so
   the video processor is never needed. **The single sharpest cost of `Z:\CCP Vids` being absent**; one
@@ -290,6 +315,14 @@ The three rectangles are disjoint, so no surface's hit-test point is occluded by
   composited-desktop leg is a screen read from inside the process, not a photograph.
 - **Nothing was run against the owner's real media.** `Z:\CCP Vids` does not exist here.
 - **Nothing measures cadence, order or timing.** Every frame advance in every fact is driven by hand.
+- **FRAME 0's `SurfaceAdvanced` carries no evidence**, and the code review found the comment that
+  said otherwise. `Win32VideoPresence.Present` resets BOTH sample slots to zero, so the first
+  `Show` after a placement compares its read-back against a SENTINEL rather than against a fold
+  taken after the letterbox fill — any non-zero fold advances. The load-bearing advances are
+  frames 1 and 2, each measured against the fold of the frame really before it, plus the
+  still-frame control, which is the negative half of the same differential. **Behaviour was not
+  changed**; the comment at the reset site and the comment on the fact now both say what frame 0
+  actually compares.
 - **Nothing proves the picture is the RIGHT picture over time.** Each frame is compared against the
   bytes handed over for THAT frame; nothing compares the sequence against the file.
 - **Linux video is unproven** on both halves, refuses in type, and the six-step gate in
@@ -329,16 +362,25 @@ every slot cited), `MediaFoundationClipSource.cs`, `IVideoPresence.cs` (+ `Video
 
 **`Overlay/**`, `Input/**` and `Audio/**` are byte-identical to base.**
 
-**Tests — new:** `TestAvi.cs` (the synthesised media writer, pure managed),
-`VideoSurfaceObservations.cs` (the three real-desktop runs), `VideoCapabilityTests.cs` (**29**),
-`VideoLetterboxTests.cs` (**15**), `VideoSurfacePresenterTests.cs` (**10**),
-`MandatoryVideoModuleTests.cs` (**25**), `VideoOverlayCoexistenceTests.cs` (**5**).
+**Tests — new.** Counts below are TEST CASES — each `[Theory]` row counted individually, which is
+the unit `check-floor.mjs` counts and the unit `floor-delta.json` declares. They sum to the
+declared **+94**: 41 + 14 + 10 + 24 + 5 = 94.
+
+| file | cases | what it is |
+|---|---|---|
+| `TestAvi.cs` | — | the synthesised media writer, pure managed: no encoder, no codec, no interop |
+| `VideoSurfaceObservations.cs` | — | the three real-desktop runs (frames, edges, coexistence) |
+| `VideoCapabilityTests.cs` | **41** | the OS read-backs, the predicate isolation theories, the Linux refusals |
+| `VideoLetterboxTests.cs` | **14** | the letterbox arithmetic and the composition, pure |
+| `VideoSurfacePresenterTests.cs` | **10** | the frame cadence, the cap, the endings, the teardown |
+| `MandatoryVideoModuleTests.cs` | **24** | the pacing law, the pool, the three arm outcomes, the dot |
+| `VideoOverlayCoexistenceTests.cs` | **5** | trap 1: the overlay and the card, across the surface's whole lifetime |
 
 **Tests — changed:** `RealDesktopCollectionGuardTests.cs` (the helper census gains the two video
 helpers and the bound controls gain the two new real-desktop classes — a STRENGTHENING),
 `AudioModuleSpineTests.cs`, `ContinuousEffectSpineTests.cs`, `SecondEffectSpineTests.cs` (rack-order
 and refusal lists grow by one — **0 count change**), `StudioRackHeadlessTests.cs` (the rack list grows
-by one; **+3** new facts).
+by one; **+3** new cases, which is the whole declared headless delta).
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-111, D121–D132),
 `client/docs/verification-harness.md` (the video evidence class).
