@@ -47,12 +47,14 @@
 //   - Whatever THIS SDK and THESE analyzer versions emit. A different SDK can emit more or fewer.
 //   - Restore-time (NU*) warnings are re-evaluated only on a run where restore actually runs;
 //     `--no-incremental` forces compilation, not restore. The gate REPORTS whether restore
-//     no-opped so the reader knows which reading they hold.
+//     no-opped so the reader knows which reading they hold, and `--cold` (opt-in) forces the
+//     re-resolve when the diff touches a *.csproj, *.props, *.targets or a lock file.
 //   - It observes a build. It proves nothing about behaviour, rendering, timing or interaction.
 //
 // USAGE
 //   node client/tests/floor/check-warnings.mjs            build + observe; exit 0 only if 0/0
 //   node client/tests/floor/check-warnings.mjs --self-test  parser corpus only, no build
+//   node client/tests/floor/check-warnings.mjs --cold       also force a full NuGet re-resolve
 //   node client/tests/floor/check-warnings.mjs --log-dir D  put the full build log in D
 // Exit 0 = zero warnings and zero errors, positively observed. Exit 1 = anything else, including
 // every "I could not tell" case: this gate never reports a count it did not read.
@@ -79,6 +81,15 @@ const CONFIGURATION = "Debug";
 export const BUILD_ARGS = [
   "build", SLN_PATH, "-c", CONFIGURATION, "--nologo", "--no-incremental", "-tl:off",
 ];
+
+// OPT-IN, appended by --cold. `--no-incremental` forces COMPILATION, not RESTORE: NuGet no-ops with
+// "All projects are up-to-date for restore", so restore-time (NU*) warnings are not re-evaluated on
+// an ordinary run and the gate says so in its own output rather than hiding it. `--force` resolves
+// every dependency again, which is what makes those warnings reappear. It is opt-in and not the
+// default because it costs a full re-resolve and can touch the network; use it when the diff
+// touches a *.csproj, *.props, *.targets or a lock file. It weakens nothing: it only makes MORE
+// of the build speak.
+export const COLD_ARGS = ["--force"];
 
 export class WarningGateError extends Error {}
 
@@ -437,9 +448,10 @@ export function runSelfTest(log = console.log) {
 // The gate.
 // ---------------------------------------------------------------------------
 
-function runBuild() {
+function runBuild(cold) {
+  const args = cold ? [...BUILD_ARGS, ...COLD_ARGS] : BUILD_ARGS;
   return new Promise((resolve) => {
-    const child = spawn("dotnet", BUILD_ARGS, {
+    const child = spawn("dotnet", args, {
       cwd: CLIENT,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
@@ -473,8 +485,10 @@ export async function main(argv = []) {
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, "build.log");
 
-  console.log(`warning gate: dotnet ${BUILD_ARGS.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
-  const { exitCode, output } = await runBuild();
+  const cold = argv.includes("--cold");
+  const shown = cold ? [...BUILD_ARGS, ...COLD_ARGS] : BUILD_ARGS;
+  console.log(`warning gate: dotnet ${shown.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
+  const { exitCode, output } = await runBuild(cold);
   // The COMPLETE, unfiltered stream, on disk, before anything is read out of it.
   fs.writeFileSync(logPath, output, "utf8");
 
@@ -494,7 +508,8 @@ export async function main(argv = []) {
     `[${verdict.builtProjects.join(", ")}] in ${CONFIGURATION}, forced non-incremental.`
   );
   if (verdict.restoreNoOp) {
-    console.log("  note: NuGet restore was a no-op this run, so restore-time (NU*) warnings were not re-evaluated.");
+    console.log("  note: NuGet restore was a no-op this run, so restore-time (NU*) warnings were not re-evaluated." +
+      (cold ? "" : " Re-run with --cold when the diff touches a *.csproj, *.props, *.targets or a lock file."));
   }
   console.log(`  full unfiltered build log: ${logPath}`);
   return 0;

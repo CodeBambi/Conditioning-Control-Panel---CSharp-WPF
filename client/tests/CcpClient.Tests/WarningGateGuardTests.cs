@@ -53,8 +53,18 @@ public partial class WarningGateGuardTests
     [GeneratedRegex(@"""dotnet""\s*,\s*\[\s*""(\w+)""")]
     private static partial Regex DotnetInvocation();
 
+    /// <summary>Every <c>"dotnet"</c> token in the file, with whatever follows the comma. Needed
+    /// because <see cref="DotnetInvocation"/> only binds the LITERAL argument-array shape: a build
+    /// smuggled in as <c>execFileSync("dotnet", buildArgs)</c> leaves the literal verb set
+    /// <c>[test]</c> intact and would pass the verb check. Found at the SP-114 code review.</summary>
+    [GeneratedRegex(@"""dotnet""\s*,\s*(\S)")]
+    private static partial Regex DotnetArgumentHead();
+
     [GeneratedRegex(@"export const BUILD_ARGS = \[(?<body>[\s\S]*?)\];")]
     private static partial Regex BuildArgsArray();
+
+    [GeneratedRegex(@"export const COLD_ARGS = \[(?<body>[^\]]*)\];")]
+    private static partial Regex ColdArgsArray();
 
     [GeneratedRegex(@"const WARNING_WITH_CODE = /(?<pattern>.+)/;")]
     private static partial Regex WarningPatternLiteral();
@@ -80,6 +90,18 @@ public partial class WarningGateGuardTests
             + "only ever run `dotnet test`. SP-114 added a SEPARATE warning gate precisely so the floor "
             + "would not become a builder: making it build deletes the signal assertBuildIsFresh exists "
             + "to raise (client/docs/port-lessons.md:204).");
+        // The verb check alone binds only the literal `"dotnet", ["verb"` shape, so a build passed
+        // as a VARIABLE (`execFileSync("dotnet", buildArgs)`) would slip past it with the verb set
+        // still reading [test]. Require every dotnet invocation's argument list to be a literal
+        // array, so the verb check above can actually see all of them.
+        var argumentHeads = DotnetArgumentHead().Matches(floor).Select(m => m.Groups[1].Value).ToArray();
+        var nonLiteral = argumentHeads.Where(h => h != "[").ToArray();
+        Assert.True(argumentHeads.Length > 0 && nonLiteral.Length == 0,
+            $"check-floor.mjs passes a NON-LITERAL argument list to dotnet (heads: [{string.Join(", ", argumentHeads)}]). "
+            + "The verb check above can only read literal arrays, so a build hidden behind a variable "
+            + "would leave the verb set reading [test] and this pin would pass. Keep the floor's dotnet "
+            + "invocations literal, or this guard is decorative.");
+
         Assert.Contains("--no-build", floor, StringComparison.Ordinal);
         Assert.Contains("assertBuildIsFresh", floor, StringComparison.Ordinal);
         Assert.Contains("STALE BUILD", floor, StringComparison.Ordinal);
@@ -115,12 +137,17 @@ public partial class WarningGateGuardTests
         // gate that quietly builds with NoWarn or a lowered WarningLevel would report a clean tree
         // for the same reason the filtered greps did.
         var gate = File.ReadAllText(Path.Combine([FindRepoRoot(), .. GateParts]));
-        var body = BuildArgsArray().Match(gate).Groups["body"].Value;
+        var buildArgs = BuildArgsArray().Match(gate);
+        var coldArgs = ColdArgsArray().Match(gate);
+        Assert.True(coldArgs.Success,
+            "check-warnings.mjs no longer exports a parseable COLD_ARGS array — the opt-in --cold mode "
+            + "appends arguments to the build, so it is bound by exactly the same no-weakening rule");
+        var body = buildArgs.Groups["body"].Value + "\n" + coldArgs.Groups["body"].Value;
 
         string[] banned = ["nowarn", "warnaserror", "warninglevel", "runanalyzers", "-p:", "/p:", "noanalyzers"];
         var found = banned.Where(b => body.Contains(b, StringComparison.OrdinalIgnoreCase)).ToArray();
         Assert.True(found.Length == 0,
-            $"check-warnings.mjs BUILD_ARGS carries warning-weakening switch(es): {string.Join(", ", found)}. "
+            $"check-warnings.mjs BUILD_ARGS/COLD_ARGS carry warning-weakening switch(es): {string.Join(", ", found)}. "
             + "The gate must observe the warnings the mandated build emits, never a quieter build.");
     }
 

@@ -30,7 +30,10 @@ loop or lane logs.
    mandated build command printed `1 Warning(s)` and then `0 Warning(s)` over an UNCHANGED tree
    holding a live `CS0219`, because MSBuild skipped CoreCompile. A non-zero exit is an audit
    FAIL — name the gate's reason verbatim. It also leaves a fresh full build behind, which is
-   exactly what the second command needs.
+   exactly what the second command needs. **If the wave's diff touches a `*.csproj`, `*.props`,
+   `*.targets` or a lock file, run it as `node client/tests/floor/check-warnings.mjs --cold`**:
+   `--no-incremental` forces compilation, not restore, so restore-time `NU*` warnings are
+   otherwise not re-evaluated. The gate prints which of the two readings you are holding.
 
    The second command is the test-floor wrapper (SP-065/SP-066): it runs BOTH test
    projects with TRX loggers and fails closed on any red, any count drift in either

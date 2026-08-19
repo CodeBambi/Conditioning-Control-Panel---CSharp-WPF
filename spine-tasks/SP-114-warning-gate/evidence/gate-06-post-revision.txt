@@ -1,0 +1,4 @@
+warning gate: dotnet build C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\CcpClient.sln -c Debug --nologo --no-incremental -tl:off
+WARNING GATE OK (SP-114): 0 warnings, 0 errors across 4 project(s) [CcpClient.Desktop, CcpClient.HeadlessTests, CcpClient.Tests, CcpVerify] in Debug, forced non-incremental.
+  note: NuGet restore was a no-op this run, so restore-time (NU*) warnings were not re-evaluated. Re-run with --cold when the diff touches a *.csproj, *.props, *.targets or a lock file.
+  full unfiltered build log: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\spine-tasks\SP-114-warning-gate\evidence\gate-final\build.log

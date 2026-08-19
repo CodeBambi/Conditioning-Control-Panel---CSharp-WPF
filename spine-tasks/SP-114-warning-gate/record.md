@@ -177,18 +177,25 @@ executable exhibit and fails if that filter ever matches the xUnit2013 line.
 Also written into `client/docs/verification-harness.md`.
 
 1. **A suppressed warning, by construction.** `NoWarn`, an inline pragma disable, a code-analysis
-   suppression attribute, an `.editorconfig` severity of `none`, a lowered `WarningLevel` — all act
-   before MSBuild prints anything. **Demonstrated** in B6: the gate ran green over a live `CS0219`.
-   The mitigation is a second, lexical instrument, `WarningSuppressionCensusTests`, pinning the
-   census measured at base: **1 `NoWarn` (`CcpClient.Desktop.csproj` → `AVLN3001`, deliberate per
+   suppression attribute (including the `[assembly:]` / `[module:]` targeted forms), an
+   `.editorconfig` **or `.globalconfig`** severity of `none`, a lowered `WarningLevel` — all act
+   before MSBuild prints anything. **Demonstrated twice**: B6 (pragma) and B9/B10 (`.globalconfig`,
+   with the control run, §10).
+   The mitigation is a second, lexical instrument, `WarningSuppressionCensusTests`, which enumerates
+   EXACTLY these shapes and claims nothing beyond them: inline pragma disables in `*.cs`; `NoWarn` in
+   `*.csproj`, `*.props`, `*.targets`; suppression attributes including the targeted forms;
+   `GlobalSuppressions.cs`; `.editorconfig` and `.globalconfig`/`*.globalconfig` under `client/` and
+   on the walk up to the repository root; the project-level warning-policy properties. Census
+   measured at base: **1 `NoWarn` (`CcpClient.Desktop.csproj` → `AVLN3001`, deliberate per
    `CLAUDE.md`), 9 inline `CS0067` pragma sites, 0 suppression attributes, 0 `GlobalSuppressions.cs`,
-   0 `.editorconfig` from `client/` up to the repository root, 0 project-level warning policy
+   0 analyzer-config files from `client/` up to the repository root, 0 project-level warning policy
    (`TreatWarningsAsErrors`, `WarningLevel`, `AnalysisLevel`, `EnableNETAnalyzers`, `RunAnalyzers`)**.
-   It is lexical and it judges nothing about whether a pinned suppression is justified; it only makes
-   adding one impossible to do quietly.
-2. **An `.editorconfig` ABOVE the repository root.** Roslyn's discovery walks to the drive root; the
-   census stops at the repository root, deliberately, because a file outside the repository is not
-   something an in-tree red could act on. Named in the test's own source and in the harness doc.
+   It is lexical, it judges nothing about whether a pinned suppression is justified, and **its
+   enumeration is a list that has already been wrong once** — see §10.
+2. **An analyzer config file (`.editorconfig` or `.globalconfig`) ABOVE the repository root.**
+   Roslyn's discovery walks to the drive root; the census stops at the repository root,
+   deliberately, because a file outside the repository is not something an in-tree red could act on.
+   Named in the test's own source and in the harness doc.
 3. **Only `client/CcpClient.sln`, only `Debug|Any CPU`, only `net10.0`.** The Release/RID publish
    path (`client/tools/publish/publish.ps1`) is NOT covered, and neither legacy tree
    (`ConditioningControlPanel/`, `CCP.*`) is in scope.
@@ -230,8 +237,11 @@ Also written into `client/docs/verification-harness.md`.
   about whether those particular trees were clean.
 - **It proves nothing about the Release or publish configuration**, about the two legacy trees, or
   about another machine's SDK.
-- **It proves nothing about a suppressed warning's justification** — only that a new suppression
-  cannot be added silently.
+- **It proves nothing about a suppressed warning's justification**, and — narrowed after the code
+  review — it does not establish that "a new suppression cannot be added silently" in general. What
+  is true is bounded: a new suppression **of an enumerated shape** fails the census with file and
+  code. A shape absent from that enumeration is silent, and two were, until review found them (§10).
+  The census's completeness is a claim about a hand-written list, not a property of the compiler.
 - **No headed, rendering, audio, input, focus, animation or window claim is touched.** A build gate
   discharges none of them, and a headless frame still discharges no headed gate.
 - **The bite demonstrations were single runs each**, not a rate measurement. They establish that the
@@ -276,3 +286,93 @@ commit is byte-identical — and the whole chain re-run on the CRLF tree: `--sel
 3. **That the bite reds are real diagnostics, not fixtures.** Every red in `evidence/bite-*` names a
    real file, line and code produced by an actual `dotnet build`, and each probe file is gone from
    the tree.
+
+## 10. REVISION AFTER CODE REVIEW (REVISE → addressed)
+
+The headline of §0 was **independently reproduced by the reviewer** on SDK 10.0.303 in an unrelated
+scratchpad project (plain build `1 Warning(s)`, next run `0`, `--no-incremental` `1`, plain `0`), so
+the incremental false-green is confirmed outside this tree. Two blockers were raised, both against
+`WarningSuppressionCensusTests` — the packet's only mitigation for the gate's largest structural
+blind spot. Both are fixed and both fixes are demonstrated.
+
+### 10.1 BLOCKER 1 — `.globalconfig` defeated both instruments, and the census did not look for one
+
+The first draft enumerated only `.editorconfig`. **Reproduced in this lane, with a control**, using
+the gate's own flags:
+
+| # | tree | gate | evidence |
+|---|---|---|---|
+| B9 | `Sp114GlobalConfigProbe.cs` (a live `CS0219`, no pragma, no `NoWarn`) **+ a two-line `client/tests/CcpClient.Tests/.globalconfig`** carrying `is_global = true` / `dotnet_diagnostic.CS0219.severity = none` | **OK: 0 warnings, 0 errors** | `bite-09-gate-blind-to-globalconfig.txt` |
+| B10 | **the same probe, `.globalconfig` deleted, nothing else changed** | **FAILED: `[CS0219] …Sp114GlobalConfigProbe.cs(9,13)`** | `bite-10-control-same-probe-no-globalconfig.txt` |
+
+One added file, **zero csproj references** (the SDK auto-includes `.globalconfig` from the project
+directory), and the gate's forced-full compilation goes silent. B10 is what makes B9 mean something:
+without the control, "0 warnings" could have meant the probe was never compiled.
+
+**Fix.** `AnalyzerConfigPatterns = [".editorconfig", ".globalconfig", "*.globalconfig"]`, applied to
+both the recursive scan under `client/` and the upward walk to the repository root — the same
+enumeration the `.editorconfig` check already used. **Bite proven:** `bite-11-census-reds-on-globalconfig.txt`
+reds with `an analyzer configuration file now applies to the client tree:
+client/tests/CcpClient.Tests/.globalconfig`.
+
+**The tree was clean throughout: no `.globalconfig` exists anywhere in the repository, so no claim
+made before the review was false.** What was missing was the guard against future rot, and that gap
+was in the one instrument the boundary section leans on.
+
+### 10.2 BLOCKER 2 — the suppression-attribute pattern missed the assembly- and module-targeted forms
+
+Executing the shipped pattern showed it saw `[SuppressMessage(...)]` and the fully-qualified form and
+**missed `[assembly: SuppressMessage(...)]`, `[assembly:SuppressMessage(...)]` and
+`[module: SuppressMessage(...)]`** — the forms that suppress for the WHOLE assembly from any file,
+and precisely the analyzer-diagnostic class (`xUnit2013`) this packet was written over. The
+`GlobalSuppressions.cs` check catches only that filename, so the same attribute in any other `.cs`
+was invisible to both instruments.
+
+**Fix.** The pattern gained an optional `(?:assembly|module)\s*:\s*` target, and — more importantly —
+**the pattern is now EXECUTED against all five shapes inside the fact, before it is used to assert an
+absence**, plus three negatives. An absence reported by a pattern that cannot see the shape is not
+evidence, and that is exactly what the first draft published. The five probes are assembled from
+string fragments deliberately: written as contiguous literals they would be found by the scan they
+feed and would red the fact. **Bite proven:** `bite-12-census-reds-on-assembly-suppression.txt` reds
+on `[assembly: SuppressMessage("xUnit", "xUnit2013", …)]` in a new file.
+
+### 10.3 The two documents that overclaimed, narrowed in the same pass
+
+- `client/docs/verification-harness.md` — the "what it cannot see" bullet now names `.globalconfig`
+  (with the measured before/after), the targeted attribute forms, and the exact list of shapes the
+  census enumerates; and it states plainly that the list has already been wrong once and was
+  corrected by review rather than by the instrument.
+- `record.md` §5.1 and §7 — "a new suppression cannot be added silently" is withdrawn as stated and
+  replaced by the bounded claim: a new suppression **of an enumerated shape** fails with file and
+  code; a shape outside the enumeration is silent.
+
+### 10.4 Same-pass items
+
+- **`DotnetInvocation()` bound only the literal `"dotnet", ["verb"` shape.** A build smuggled in as
+  `execFileSync("dotnet", buildArgs)` left the verb set reading `[test]` and the pin PASSED. Added:
+  every `dotnet` invocation in `check-floor.mjs` must have a literal array as its argument list.
+  **Bite proven** with exactly that mutation: `bite-13-floor-pin-reds-on-variable-args.txt` —
+  `check-floor.mjs passes a NON-LITERAL argument list to dotnet (heads: [[, s])`, where the older
+  verb assertion alone would have been satisfied.
+- **`*.targets` added** to both project-file enumerations (`NoWarn` and warning policy). None exists
+  under `client/` today; a `Directory.Build.targets` would previously have been missed.
+- **`--cold` implemented as opt-in**, appending `--force`. `--no-incremental` forces compilation, not
+  restore, so `NU*` warnings are otherwise not re-evaluated. Measured: an ordinary run prints the
+  restore no-op note and now names the fix in the same line; `--cold` shows all four projects
+  actually restored and the note correctly disappears (`gate-05-cold-mode.txt`,
+  `gate-cold/build.log`). It is not the default because it costs a full re-resolve and can touch the
+  network. `WarningGateGuardTests` binds `COLD_ARGS` under the same no-weakening rule as `BUILD_ARGS`.
+
+**No new `[Fact]` was added by this revision** — every fix extends an existing fact — so the declared
+floor delta is unchanged at **+8 unit / +0 headless**, and the observed floor is unchanged at
+**1938 / 117**.
+
+### 10.5 What the revision still does not prove
+
+The census is a **hand-written enumeration of file shapes**, and two of its entries exist because a
+reviewer executed the pattern rather than reading it. Nothing here establishes that the list is now
+complete; it establishes that three specific holes (globalconfig, targeted attributes, `*.targets`)
+are closed and that the pattern is checked against its own claimed coverage on every run. A
+`CodeAnalysisRuleSet`, a downgraded analyzer package, or a suppression shape nobody has thought of
+remains invisible to both instruments, and the honest posture is that the boundary list is
+maintained, not derived.

@@ -19,11 +19,22 @@ namespace CcpClient.Tests;
 /// admission discipline <c>allowedSkips</c> uses. It does not judge whether a pinned suppression is
 /// justified, it only makes adding one impossible to do quietly.</para>
 ///
-/// <para>WHAT IT STILL CANNOT SEE. A suppression that lives outside <c>client/</c> but affects it
-/// (there is none today: <see cref="NoRepositoryWideAnalyzerConfigurationCanReachTheClientTree"/>
-/// pins the absence of every <c>.editorconfig</c> on the path), an analyzer package removed
-/// entirely, a severity lowered by a package's own default, and any suppression expressed in a file
-/// shape not enumerated below.</para>
+/// <para>ENUMERATED SHAPES — the census binds exactly these, and claims nothing else: inline
+/// pragma disables in <c>*.cs</c>; <c>NoWarn</c> in <c>*.csproj</c>, <c>*.props</c> and
+/// <c>*.targets</c>; code-analysis suppression attributes INCLUDING the <c>[assembly:]</c> and
+/// <c>[module:]</c> targeted forms; <c>GlobalSuppressions.cs</c>; <c>.editorconfig</c> AND
+/// <c>.globalconfig</c>/<c>*.globalconfig</c>, both under <c>client/</c> and on the directory walk
+/// up to the repository root; and the project-level warning-policy properties.</para>
+///
+/// <para>WHAT IT STILL CANNOT SEE. An analyzer config file placed ABOVE the repository root
+/// (Roslyn keeps walking to the drive root; this census stops at the repo root, deliberately); an
+/// analyzer package removed entirely or downgraded; a severity lowered by a package's own default
+/// or by a legacy ruleset; and any suppression expressed in a file shape not in the list above.
+/// <c>.globalconfig</c> and the targeted attribute forms are in that list only because the SP-114
+/// CODE REVIEW found the first draft missing both — a two-line <c>.globalconfig</c> carrying
+/// <c>dotnet_diagnostic.CS0219.severity = none</c> is auto-included by the SDK with ZERO csproj
+/// references and silences a real warning under the gate's own forced-full build. Adding a shape
+/// to this list is cheap; assuming the list is complete is how the hole reopens.</para>
 ///
 /// <para>NEVER-SKIP SHAPE. These facts enumerate directories and read files with no existence
 /// predicate: a missing tree throws and the fact FAILS.</para>
@@ -59,8 +70,17 @@ public partial class WarningSuppressionCensusTests
     [GeneratedRegex(@"<NoWarn>([^<]*)</NoWarn>")]
     private static partial Regex NoWarnElement();
 
-    [GeneratedRegex(@"\[\s*(?:System\.Diagnostics\.CodeAnalysis\.)?SuppressMessage\b")]
+    // The (?:assembly|module) target is not decoration. An assembly-level suppression in ANY .cs
+    // file suppresses a diagnostic for the WHOLE assembly, and the first draft of this pattern
+    // missed exactly that form — for the analyzer class (xUnit2013) this packet was written over.
+    // Found at the SP-114 code review by executing the pattern against the five shapes; that
+    // comparison now runs on every suite run instead of being trusted.
+    [GeneratedRegex(@"\[\s*(?:(?:assembly|module)\s*:\s*)?(?:System\.Diagnostics\.CodeAnalysis\.)?SuppressMessage\b")]
     private static partial Regex SuppressionAttribute();
+
+    // Analyzer configuration file shapes. BOTH are applied by the compiler before MSBuild prints
+    // anything, and a .globalconfig needs no csproj reference at all — the SDK auto-includes it.
+    private static readonly string[] AnalyzerConfigPatterns = [".editorconfig", ".globalconfig", "*.globalconfig"];
 
     [GeneratedRegex(@"<(TreatWarningsAsErrors|WarningsNotAsErrors|WarningLevel|AnalysisLevel|EnableNETAnalyzers|RunAnalyzers|RunAnalyzersDuringBuild)>([^<]*)</\1>")]
     private static partial Regex WarningPolicyElement();
@@ -85,7 +105,7 @@ public partial class WarningSuppressionCensusTests
             }
         }
 
-        foreach (var file in EnumerateSources(client, "*.csproj").Concat(EnumerateSources(client, "*.props")))
+        foreach (var file in EnumerateSources(client, "*.csproj").Concat(EnumerateSources(client, "*.props")).Concat(EnumerateSources(client, "*.targets")))
         {
             var relative = Relative(root, file);
             var text = File.ReadAllText(file);
@@ -128,10 +148,17 @@ public partial class WarningSuppressionCensusTests
     [Fact]
     public void NoRepositoryWideAnalyzerConfigurationCanReachTheClientTree()
     {
-        // .editorconfig discovery is a DIRECTORY WALK and does not stop at Directory.Build.props,
+        // Analyzer-config discovery is a DIRECTORY WALK and does not stop at Directory.Build.props,
         // so a file added anywhere from client/ up to the drive root could lower a diagnostic to
         // `none` and the build-output gate would never see the warning it silenced. Today there is
         // no such file at any level, and that absence is worth pinning because it is invisible.
+        //
+        // BOTH SHAPES, and the second was missed by this census's first draft (SP-114 code review):
+        // a .globalconfig is auto-included by the SDK with NO csproj reference, so two lines
+        //     is_global = true
+        //     dotnet_diagnostic.CS0219.severity = none
+        // are enough to silence a warning the gate's own forced-full build otherwise prints. That
+        // was measured at review and reproduced in this lane: gate GREEN over a live CS0219.
         var root = FindRepoRoot();
         var client = Path.Combine(root, "client");
 
@@ -141,26 +168,57 @@ public partial class WarningSuppressionCensusTests
         // repository's control, so a red there would be un-actionable in-tree. The gap is recorded
         // in client/docs/verification-harness.md rather than papered over.
         var found = new List<string>();
-        found.AddRange(EnumerateSources(client, ".editorconfig").Select(f => Relative(root, f)));
-        for (var dir = new DirectoryInfo(client); dir is not null; dir = dir.Parent)
+        foreach (var pattern in AnalyzerConfigPatterns)
         {
-            found.AddRange(Directory.EnumerateFiles(dir.FullName, ".editorconfig", SearchOption.TopDirectoryOnly)
-                .Select(f => Relative(root, f)));
-            if (string.Equals(dir.FullName.TrimEnd(Path.DirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            found.AddRange(EnumerateSources(client, pattern).Select(f => Relative(root, f)));
+            for (var dir = new DirectoryInfo(client); dir is not null; dir = dir.Parent)
             {
-                break;
+                found.AddRange(Directory.EnumerateFiles(dir.FullName, pattern, SearchOption.TopDirectoryOnly)
+                    .Select(f => Relative(root, f)));
+                if (string.Equals(dir.FullName.TrimEnd(Path.DirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
             }
         }
 
         var configs = found.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(f => f, StringComparer.Ordinal).ToArray();
         Assert.True(configs.Length == 0,
-            "an .editorconfig now applies to the client tree: " + string.Join(", ", configs)
-            + ". Analyzer severities set there (especially `= none`) are applied before MSBuild prints "
-            + "anything, so client/tests/floor/check-warnings.mjs is structurally blind to them. If the "
-            + "file is wanted, extend this census to read its dotnet_diagnostic severities in the same "
-            + "commit; do not simply delete this fact.");
+            "an analyzer configuration file now applies to the client tree: " + string.Join(", ", configs)
+            + ". Severities set there (especially `= none`) are applied before MSBuild prints anything, "
+            + "so client/tests/floor/check-warnings.mjs is structurally blind to them — and a "
+            + ".globalconfig takes effect with no csproj reference at all. If the file is wanted, extend "
+            + "this census to read its dotnet_diagnostic severities in the same commit; do not simply "
+            + "delete this fact.");
 
         // Code-analysis suppression attributes and the global suppressions file: neither exists today.
+        //
+        // The pattern is EXECUTED against every targeted form before it is used to assert an absence,
+        // because an absence reported by a pattern that cannot see the shape is not evidence — which
+        // is precisely what the SP-114 review found in the first draft. The probes are assembled from
+        // fragments deliberately: written as contiguous literals they would be found by the scan
+        // below and would red this fact. Do not "tidy" them into single strings.
+        const string attr = "Suppress" + "Message";
+        string[] mustMatch =
+        [
+            "[" + attr + "(\"a\",\"b\")]",
+            "[System.Diagnostics.CodeAnalysis." + attr + "(\"a\",\"b\")]",
+            "[assembly: " + attr + "(\"xUnit\",\"xUnit2013\")]",
+            "[assembly:" + attr + "(\"xUnit\",\"xUnit2013\")]",
+            "[module: " + attr + "(\"a\",\"b\")]",
+        ];
+        var unseen = mustMatch.Where(s => !SuppressionAttribute().IsMatch(s)).ToArray();
+        Assert.True(unseen.Length == 0,
+            "the suppression-attribute pattern cannot see: " + string.Join(" | ", unseen)
+            + ". Every absence this fact reports is worthless for the forms it cannot match. The first "
+            + "SP-114 draft saw the bare and fully-qualified forms and missed [assembly:] and [module:], "
+            + "which suppress for the WHOLE assembly from any file.");
+
+        string[] mustNotMatch = ["[Fact]", "[GeneratedRegex(\"x\")]", "[assembly: AvaloniaTestApplication(typeof(X))]"];
+        var falsePositives = mustNotMatch.Where(s => SuppressionAttribute().IsMatch(s)).ToArray();
+        Assert.True(falsePositives.Length == 0,
+            "the suppression-attribute pattern matched a non-suppression: " + string.Join(" | ", falsePositives));
+
         var attributes = EnumerateSources(client, "*.cs")
             .Where(f => SuppressionAttribute().IsMatch(File.ReadAllText(f)))
             .Select(f => Relative(root, f))
@@ -176,7 +234,7 @@ public partial class WarningSuppressionCensusTests
         // Project-level warning policy: nothing under client/ sets one today, so every warning the
         // compiler raises is printed at its natural severity and the gate can see all of it.
         var policies = new List<string>();
-        foreach (var file in EnumerateSources(client, "*.csproj").Concat(EnumerateSources(client, "*.props")))
+        foreach (var file in EnumerateSources(client, "*.csproj").Concat(EnumerateSources(client, "*.props")).Concat(EnumerateSources(client, "*.targets")))
         {
             foreach (Match m in WarningPolicyElement().Matches(File.ReadAllText(file)))
             {
