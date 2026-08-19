@@ -17,6 +17,140 @@ namespace CcpClient.Tests;
 /// </summary>
 public class VideoSurfacePresenterTests
 {
+    // ---------------------------------------------------------------------------------------
+    //  SP-112 — the seam the SECOND consumer needed, and the refusal the FIRST one wanted
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void APAINTERSeesEVERYPictureIncludingTheFIRST_AndIsToldWhatTheOSSaidAboutTheClip()
+    {
+        using var rig = new Rig();
+        rig.Clips.FrameInterval = TimeSpan.FromMilliseconds(50);
+        var painter = new RecordingPainter();
+
+        Assert.IsType<CapabilityState.Available>(
+            rig.Presenter.Begin("clip.mp4", TimeSpan.Zero, () => { }, painter));
+
+        // THE FIRST PICTURE IS PAINTED TOO. Begin shows frame 0 itself, so a seam that only reached
+        // the cadence would leave a clip's opening frame bare — and for a counting game that is a
+        // picture the user is asked about and never saw drawn on.
+        Assert.Equal(1, painter.Paints);
+        Assert.Equal([TimeSpan.Zero], painter.Elapsed);
+
+        // And the painter is told what the OS said about the clip, ONCE, before the first picture.
+        // Nothing else can tell it: the clip is opened and closed inside this presenter.
+        Assert.Equal(1, painter.Openings);
+        Assert.Equal(TimeSpan.FromSeconds(1), painter.LastInfo.Duration);
+        Assert.Equal(320, painter.LastInfo.Width);
+
+        rig.Clock.AdvanceToNextDue();
+        rig.Clock.AdvanceToNextDue();
+        Assert.Equal(3, painter.Paints);
+
+        // The elapsed time it is handed is the presenter's own INJECTED clock, one frame interval
+        // per picture — never wall time.
+        Assert.Equal(
+            [TimeSpan.Zero, TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100)],
+            painter.Elapsed);
+
+        // The paint really reaches the picture the capability is handed: the presence saw a frame
+        // whose pixels the painter had already changed.
+        Assert.True(painter.LastPaintedFrameWasShown);
+    }
+
+    [Fact]
+    public void APAINTERIsOPTIONAL_AndTheFIRSTConsumerStillPassesNone()
+    {
+        using var rig = new Rig();
+
+        // The seam SP-112 added must not have changed what the first consumer does. Begin with no
+        // painter plays exactly as it did before, and nothing in the presenter requires one.
+        Assert.IsType<CapabilityState.Available>(rig.Presenter.Begin("clip.mp4", TimeSpan.Zero, () => { }));
+        rig.Clock.AdvanceToNextDue();
+        Assert.Equal(2, rig.Presence.Shows);
+    }
+
+    [Fact]
+    public void ASECONDBeginWhileAClipPlaysIsREFUSEDInType_RatherThanLEAKINGTheFirstClipsDecoder()
+    {
+        using var rig = new Rig();
+        var firstEnded = 0;
+        Assert.IsType<CapabilityState.Available>(
+            rig.Presenter.Begin("first.mp4", TimeSpan.Zero, () => firstEnded++));
+        Assert.Equal(1, rig.Clips.Opens);
+
+        // THE COLLISION THE SECOND CONSUMER REVEALED. Both modules guard with "a clip is already
+        // showing" in Compose, which runs on the CLOCK thread while this runs on the SURFACE
+        // thread — so the guard cannot close the window between them. Before SP-112 this call
+        // overwrote the first clip's handle and its end-callback: an open decoder leaked and the
+        // first module believed it was still playing for ever.
+        var second = rig.Presenter.Begin("second.mp4", TimeSpan.Zero, () => { });
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(second);
+        Assert.Equal(VideoReasonCodes.VideoAlreadyPlaying, unavailable.Reason.Code);
+        Assert.Contains("first.mp4", unavailable.Reason.Detail, StringComparison.Ordinal);
+
+        // NOTHING was opened for the refused call, and the first clip is untouched: still playing,
+        // still cadencing, still owning its own end-callback.
+        Assert.Equal(1, rig.Clips.Opens);
+        Assert.Equal("first.mp4", rig.Presenter.PlayingClip);
+        rig.Clock.AdvanceToNextDue();
+        Assert.Equal(2, rig.Presence.Shows);
+
+        // And the first clip's ending still reaches the first caller, not the second.
+        rig.Clock.AdvanceToNextDue();
+        rig.Clock.AdvanceToNextDue();
+        Assert.Equal(1, firstEnded);
+    }
+
+    [Fact]
+    public void AfterAClipENDSTheSurfaceTakesTheNextOne_SoTheRefusalIsBUSYRatherThanBROKEN()
+    {
+        using var rig = new Rig();
+        Assert.IsType<CapabilityState.Available>(rig.Presenter.Begin("first.mp4", TimeSpan.Zero, () => { }));
+        rig.Presenter.End();
+
+        // The positive control for the fact above: the refusal is about a clip being IN PROGRESS,
+        // not about the surface having been used once. Without this, a Begin that always refused
+        // would satisfy the previous fact perfectly.
+        Assert.IsType<CapabilityState.Available>(rig.Presenter.Begin("second.mp4", TimeSpan.Zero, () => { }));
+        Assert.Equal("second.mp4", rig.Presenter.PlayingClip);
+    }
+
+    /// <summary>A painter that records what it was shown and marks the picture, so a fact can prove
+    /// the paint reached the frame the capability was afterwards handed.</summary>
+    private sealed class RecordingPainter : IVideoFramePainter
+    {
+        public int Openings { get; private set; }
+
+        public int Paints { get; private set; }
+
+        public VideoClipInfo LastInfo { get; private set; }
+
+        public List<TimeSpan> Elapsed { get; } = [];
+
+        public bool LastPaintedFrameWasShown { get; private set; }
+
+        public void Opening(VideoClipInfo clip)
+        {
+            Openings++;
+            LastInfo = clip;
+        }
+
+        public void Paint(VideoFrame frame, TimeSpan elapsed)
+        {
+            Paints++;
+            Elapsed.Add(elapsed);
+
+            // Write a value the decoder never produces, then read it back through the frame's own
+            // accessor — the same route the capability's blit takes.
+            frame.Pixels[0] = 0xAB;
+            frame.Pixels[1] = 0xCD;
+            frame.Pixels[2] = 0xEF;
+            LastPaintedFrameWasShown = frame.ColourAt(0, 0) == 0xABCDEF;
+        }
+    }
+
     [Fact]
     public void AClipThatDecodesNOTHING_TakesTheSurfaceStraightBackDOWN()
     {
