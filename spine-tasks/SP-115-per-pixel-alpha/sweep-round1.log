@@ -1,0 +1,82 @@
+SP-115 sweep, 70 mutation(s)
+M-a  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphFrame.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-b  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphFrame.cs  Failed!  - Failed:     4, Passed:   227, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-c  SURVIVED  client/src/CcpClient.Desktop/Glyph/GlyphFrame.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-d  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphFrame.cs  Failed!  - Failed:     3, Passed:   228, Skipped:     0, Total:   231, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-e  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphFrame.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-f  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphSurfaceRequest.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-f  !! RESTORE DRIFT !!
+M-g  SURVIVED  client/src/CcpClient.Desktop/Glyph/GlyphSurfaceRequest.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-h  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-h  !! RESTORE DRIFT !!
+M-i  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-j  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-k  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-l  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-m  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-n  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-o  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-p  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-q  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-r  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-s  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:    21, Passed:   210, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-t  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-u  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-v  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-w  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-x  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-y  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-z  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-aa  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:     7, Passed:   224, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ab  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:     5, Passed:   226, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ac  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ad  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs
+M-ae  SURVIVED  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-af  CAUGHT  client/src/CcpClient.Desktop/Glyph/GlyphSurfaceFactory.cs  compile error
+M-af  !! RESTORE DRIFT !!
+M-ag  CAUGHT  client/src/CcpClient.Desktop/Glyph/UnsupportedGlyphSurface.cs  Failed!  - Failed:     3, Passed:   228, Skipped:     0, Total:   231, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-ag  !! RESTORE DRIFT !!
+M-ah  CAUGHT  client/src/CcpClient.Desktop/Glyph/UnsupportedGlyphSurface.cs  Failed!  - Failed:     3, Passed:   228, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ai  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ai  !! RESTORE DRIFT !!
+M-aj  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ak  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     3, Passed:   228, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-al  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextField.cs
+M-am  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextField.cs
+M-an  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextField.cs
+M-ao  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ap  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextField.cs
+M-aq  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ar  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-as  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-at  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextField.cs
+M-au  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextField.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-av  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextPresentation.cs  Failed!  - Failed:     2, Passed:   229, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-av  !! RESTORE DRIFT !!
+M-aw  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextPresentation.cs  Failed!  - Failed:     2, Passed:   229, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ax  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ax  !! RESTORE DRIFT !!
+M-ay  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs
+M-az  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ba  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs
+M-bb  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs
+M-bc  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs
+M-bd  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs
+M-be  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bf  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs  Failed!  - Failed:     1, Passed:   230, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bg  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bg  !! RESTORE DRIFT !!
+M-bh  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs
+M-bi  NOT-PATCHED (needle absent) client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs
+M-bj  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bk  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bl  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bm  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bn  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bn  !! RESTORE DRIFT !!
+M-bo  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bp  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bq  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-br  SURVIVED  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Passed!  - Failed:     0, Passed:   231, Skipped:     0, Total:   231, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+
+TOTAL 70: caught 25, survived 23, not-patched 22

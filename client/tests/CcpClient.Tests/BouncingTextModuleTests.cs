@@ -89,21 +89,36 @@ public class BouncingTextModuleTests
     {
         // The snap (:416-431) is what stops overshoot accumulating. Two thousand frames at the
         // fastest speed is the test: without the snap the logo drifts out of the field.
+        // TWELVE seeded starts, because the sweep proved one is not enough: with a single seed, the
+        // snap on the wall that trajectory happens to reach first is the only one under test, and
+        // deleting either of the other two cost nothing. Each seed starts in a different place and
+        // with a different signed velocity pair, so all four walls are reached across the set.
         var bounds = (X: 0, Y: 0, Width: 800, Height: 600);
-        var field = Field(Dials(speed: 10), bounds);
-        field.Advance(0.016);
+        var totalBounces = 0;
 
-        for (var i = 0; i < 2000; i++)
+        for (var seed = 0; seed < 12; seed++)
         {
+            var field = Field(Dials(speed: 10), bounds, seed: seed);
             field.Advance(0.016);
-            var (x, y, width, height) = field.Rectangle;
-            Assert.True(x >= bounds.X, $"left edge {x} escaped at frame {i}");
-            Assert.True(y >= bounds.Y, $"top edge {y} escaped at frame {i}");
-            Assert.True(x + width <= bounds.X + bounds.Width, $"right edge {x + width} escaped at frame {i}");
-            Assert.True(y + height <= bounds.Y + bounds.Height, $"bottom edge {y + height} escaped at frame {i}");
+
+            for (var i = 0; i < 2000; i++)
+            {
+                field.Advance(0.016);
+                var (x, y, width, height) = field.Rectangle;
+                Assert.True(x >= bounds.X, $"seed {seed}: left edge {x} escaped at frame {i}");
+                Assert.True(y >= bounds.Y, $"seed {seed}: top edge {y} escaped at frame {i}");
+                Assert.True(x + width <= bounds.X + bounds.Width,
+                    $"seed {seed}: right edge {x + width} escaped at frame {i}");
+                Assert.True(y + height <= bounds.Y + bounds.Height,
+                    $"seed {seed}: bottom edge {y + height} escaped at frame {i}");
+            }
+
+            Assert.True(field.Bounces > 0, $"seed {seed}: two thousand frames at the fastest speed produced no "
+                + "bounce at all");
+            totalBounces += field.Bounces;
         }
 
-        Assert.True(field.Bounces > 0, "two thousand frames at the fastest speed produced no bounce at all");
+        Assert.True(totalBounces > 0, "twelve seeded runs produced no bounce at all");
     }
 
     [Fact]

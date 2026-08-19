@@ -246,6 +246,26 @@ public class GlyphCapabilityTests
     }
 
     [Fact]
+    public void PRESENTALSOREFUSESANINKLESSFRAME_NotOnlyPaint()
+    {
+        // A round-1 sweep survivor: the refusal existed on both entry points and only ONE of them
+        // was asked, so deleting the guard from Present cost nothing. A window that is shown before
+        // anything provable was composited into it is the exact ghost this capability exists to
+        // make unreachable, and Present is the call that shows it.
+        using var surface = new Win32GlyphSurface();
+        var state = surface.Present(
+            new GlyphSurfaceRequest(new GlyphBounds(0, 0, 16, 16), 1.0, ClickThrough: true),
+            GlyphFrame.Solid(16, 16, 255, 255, 255, 0));
+
+        var refusal = Assert.IsType<CapabilityState.Unavailable>(state);
+        Assert.Equal(GlyphReasonCodes.GlyphFrameCarriesNoProvableInk, refusal.Reason.Code);
+
+        // And nothing was created: the refusal happens BEFORE any window exists.
+        Assert.Equal(0, surface.NativeHandles.Window);
+        Assert.False(surface.IsPresenting);
+    }
+
+    [Fact]
     public void AMismatchedFrameIsRefusedRatherThanStretched()
     {
         var run = GlyphSurfaceObservations.Lifecycle;
@@ -359,6 +379,7 @@ public class GlyphCapabilityTests
     [InlineData(1.0, 255)]
     [InlineData(0.5, 128)]
     [InlineData(0.004, 1)]
+    [InlineData(0.0005, 1)]
     public void TheOpacityDialBecomesTheConstantAlphaByte_FlooredSoItCanNeverRoundToInvisible(
         double opacity, byte expected)
     {

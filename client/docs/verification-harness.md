@@ -442,3 +442,75 @@ Wayland compositor the non-activation half is the one part the protocol gets rig
 client cannot take activation at all without an `xdg-activation-v1` token minted from real user
 interaction) and that is precisely why the rest is unavailable: the compositor owns placement,
 stacking and focus policy together.
+
+## Glyph evidence class (SP-115) — per-pixel alpha
+
+The port's other drawing capabilities composite at ONE uniform opacity over an opaque frame. This one
+composites **per-pixel alpha**, and alpha is the property most easily faked: a window can be layered,
+present, topmost and composite **nothing** — or composite a black rectangle over the user's desktop,
+which is worse than absent. So this capability's evidence is classed more finely than the others'.
+
+| class | what it claims | instrument | conditional on |
+|---|---|---|---|
+| `glyph-surface-held` | the OS holds the window: it exists, is visible, carries exactly the requested rectangle and every extended style, sits above every ordinary window in the OS's own z-order, routes its own centre point the way the request asked in BOTH polarities, and never took the foreground | `IsWindow` / `IsWindowVisible` / `GetWindowRect` / `GetWindowLongPtr` / `GetTopWindow`+`GetWindow` / `WindowFromPoint` / `GetForegroundWindow` | an interactive desktop |
+| `glyph-composited` | **the operating system's own copy of the surface carries the frame**: every fully-opaque ink point reads back exactly its own colour and every fully-transparent sample reads back nothing | `PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT)` into a bitmap the caller owns | an interactive desktop |
+| `glyph-desktop-composited` | **a fully transparent pixel shows the background BEHIND it, an opaque black pixel does NOT, a glyph pixel is its own colour, and a partial alpha is exact premultiplied source-over** | `BitBlt(SRCCOPY \| CAPTUREBLT)` from the screen DC over a known background, DPI-mapped, with a control capture taken with the surface hidden | an interactive desktop **and** the occlusion arbitration winning |
+| `watched-verified` | a human saw a word bounce | a person | **undischarged, and no automated step on any platform discharges it** |
+
+### The negative control is the class, not a footnote
+
+`glyph-composited` is worth nothing unless a window that composites NOTHING answers the same question
+differently, so the instrument builds that window on **every suite run** and measures both arms:
+
+- layered, shown, `UpdateLayeredWindow` never called: **0 non-zero pixels of 14400**;
+- the same handle after ONE composite: **0 mismatches over 10 colours**, on the first call after the
+  show and on every call after it.
+
+The same control re-measures SP-099's recorded hazard rather than quoting it: a window holding uniform
+layered attributes REFUSES a per-pixel composite (`FALSE`, last-error 87, uniform alpha intact), and
+clearing `WS_EX_LAYERED` and restoring it lets one through and destroys the uniform read-back for good.
+
+### The boundary `glyph-composited` cannot cross, measured
+
+A window read-back flattens the surface onto black, so **a fully transparent pixel and an opaque BLACK
+pixel are the same value there**. No reading of it can separate them. That separation is
+`glyph-desktop-composited`'s alone, and it is why this capability has a fourth class where the others
+have three.
+
+Partial-alpha values are **not** asserted in `glyph-composited`. They were measured stable across
+repeated calls and ALSO measured once at half the expected value on a window whose device context had
+been read with `GetDC` + `BitBlt` first, so the product anchors on alpha 255 and alpha 0 only and
+never calls `GetDC` on its own surface. Partial alpha is asserted in `glyph-desktop-composited`, where
+the arithmetic is exact and reproduced against the frame.
+
+### Occlusion arbitration — what replaces "the rectangles are disjoint"
+
+SP-113's final review recorded that the coexistence argument does not scale past four disjoint
+rectangles. It does not apply to this capability AT ALL: proving that a transparent pixel shows the
+background behind it requires the surface to be placed OVER that background, so **the overlap IS the
+evidence**.
+
+Ownership of a sampled point is therefore DECIDED rather than assumed. The z-order is walked from the
+top; every visible window strictly between the surface and its background is fetched with
+`GetWindowRect` and tested for intersection with the sampled area; the pair is re-raised a bounded
+number of times (a COUNT, never a wall-clock wait) until nobody is between them. A run that never wins
+reports **who** owns the region, by class name and rectangle, instead of reading a pixel that belongs
+to somebody else.
+
+Both arms were observed while the capability was built: with the two raises adjacent the list is
+empty, and with an ordinary interval between them the shipping WPF product sat in the gap and the
+sampled "background" pixels were its own.
+
+### What this class does NOT cover
+
+- **Any human.** `watched-verified` is undischarged and is not dischargeable by this suite.
+- **A monitor.** `glyph-composited` is an OS query about pixels the OS holds FOR A WINDOW, measured by
+  SP-111 not to be monitor-aware; `glyph-desktop-composited` is a screen read from inside the process,
+  not a photograph, and cannot see a Magnifier, a mirror driver, an exclusive-fullscreen swap chain or
+  a physically dark monitor.
+- **Cadence, order or timing.** Every frame advance in every fact is driven by hand on the injected
+  clock. A logo that moved at half speed, or backwards, satisfies every check.
+- **Anything on Linux.** The five-step gate in `GlyphSurfaceFactory.LinuxManualGate` is undischarged,
+  and its step 5 is expected to be impossible under Wayland, where a client cannot read back the
+  composited output at all — so the honest Wayland outcome is that the PROOF is unavailable even where
+  the picture works.

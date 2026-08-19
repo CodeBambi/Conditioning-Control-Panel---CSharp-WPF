@@ -148,8 +148,19 @@ public sealed class GdiPlusGlyphTextSource : IGlyphTextSource
 
         // GDI+ is asked for premultiplied output and gives it, but the frame type is the ONLY place
         // the invariant is checked at all (the operating system accepts a wrong buffer silently), so
-        // a rounding artefact is repaired here rather than thrown at a caller who cannot act on it.
-        Clamp(pixels);
+        // a ROUNDING artefact is repaired here rather than thrown at a caller who cannot act on it.
+        //
+        // The repair is bounded at ONE, and the bound is the whole point. The sweep that produced
+        // this file's facts found that an UNBOUNDED clamp silently converts a straight-alpha buffer
+        // into a wrong-but-legal premultiplied one: changing the pixel-format constant to
+        // PixelFormat32bppARGB was undetectable, because every over-bright pixel was simply clamped
+        // down and the frame constructed fine. A one-unit repair fixes what a premultiplying
+        // rasteriser's own rounding can produce and REFUSES anything larger, which is the only
+        // difference between repairing a rounding error and hiding a format error.
+        if (!TryRepairRounding(pixels))
+        {
+            return null;
+        }
 
         var frame = new GlyphFrame(width, height, pixels);
 
@@ -304,34 +315,49 @@ public sealed class GdiPlusGlyphTextSource : IGlyphTextSource
         ((uint)alpha << 24) | ((colourRef & 0xFF) << 16) | (colourRef & 0xFF00) | ((colourRef >> 16) & 0xFF);
 
     /// <summary>
-    /// Repairs a colour channel that rounded one above its own alpha.
+    /// The largest overage this repairs. One unit is what a premultiplying rasteriser's own rounding
+    /// can produce on an antialiased edge pixel; anything larger is a different bug and is refused.
+    /// </summary>
+    public const int MaxRoundingOverage = 1;
+
+    /// <summary>
+    /// Repairs a colour channel that rounded up to <see cref="MaxRoundingOverage"/> above its own
+    /// alpha, and returns FALSE when any channel is further over than that.
     ///
     /// <para>GDI+ produces premultiplied output for a PARGB bitmap, and its own rounding can leave a
     /// channel one over on an antialiased edge pixel. <see cref="GlyphFrame"/> treats that as a
     /// caller bug and throws, correctly — the invariant exists because the operating system will not
     /// check it — so the one place that knows the bytes came from a premultiplying rasteriser is the
-    /// one place allowed to clamp them.</para>
+    /// one place allowed to repair them.</para>
+    ///
+    /// <para><b>And it is the one place that must NOT hide a format error.</b> An unbounded clamp
+    /// turns a straight-alpha buffer into a wrong-but-legal premultiplied one, silently: the sweep
+    /// proved it by changing the pixel-format constant and watching nothing fail. The bound is what
+    /// separates the two cases.</para>
     /// </summary>
-    private static void Clamp(byte[] pixels)
+    private static bool TryRepairRounding(byte[] pixels)
     {
         for (var i = 0; i + 3 < pixels.Length; i += GlyphFrame.BytesPerPixel)
         {
             var alpha = pixels[i + 3];
-            if (pixels[i] > alpha)
+            for (var channel = 0; channel < 3; channel++)
             {
-                pixels[i] = alpha;
-            }
+                var value = pixels[i + channel];
+                if (value <= alpha)
+                {
+                    continue;
+                }
 
-            if (pixels[i + 1] > alpha)
-            {
-                pixels[i + 1] = alpha;
-            }
+                if (value - alpha > MaxRoundingOverage)
+                {
+                    return false;
+                }
 
-            if (pixels[i + 2] > alpha)
-            {
-                pixels[i + 2] = alpha;
+                pixels[i + channel] = alpha;
             }
         }
+
+        return true;
     }
 
     private static (int Width, int Height)? MeasureCore(string text, int fontSize)
