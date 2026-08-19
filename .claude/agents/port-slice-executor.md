@@ -37,7 +37,7 @@ Paths are repository-relative; this repo lives at a different absolute path on e
 Read the spec, read the cited WPF lines, read the client-side target files, implement, then run the fast gate from the repo root and fix until it passes:
 
 ```
-dotnet build client/CcpClient.sln -c Debug --nologo
+node client/tests/floor/check-warnings.mjs   # SP-114: forces --no-incremental and OBSERVES warnings; a plain `dotnet build` skips CoreCompile on a rebuild and prints 0 Warning(s) over a tree that still holds one
 ```
 ```
 node client/tests/floor/check-floor.mjs

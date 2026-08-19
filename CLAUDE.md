@@ -65,7 +65,7 @@ Linux bring-up runs `ConditioningControlPanel/build-linux.sh` on a Linux box (it
 
 Tier 1, runs on every iteration:
 ```bash
-dotnet build client/CcpClient.sln -c Debug --nologo
+node client/tests/floor/check-warnings.mjs
 ```
 ```bash
 dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo

@@ -218,3 +218,17 @@ Format:
 - **LANDED (wave 53, SP-113): Bubble Pop — ELEVEN of the fifteen modules.** Bubbles float and pop when you click them. This was the hardest thing the port has had to prove: **a window that takes your click but must never steal your keyboard.** Every earlier proof leaned on "our window is in front and has focus" -- this one cannot, because a bubble that stole focus would interrupt whatever you were doing. So it proves the click arrived at that exact bubble while the foreground window **did not change at all**, and it proves it the honest way: a decoy window is put in the click's path, and when the bubble moves away the decoy catches it. A test that can only ever pass proves nothing; this one can fail. **Floor 1830 -> 1930 unit and 112 -> 117 headless, 0 warnings, 0 errors.**
 - **DOES NOT PROVE.** **No human has clicked anything.** Every click is injected by software, which Windows itself treats differently from a real one. Nothing proves a bubble is big enough or visible enough to actually aim at. **Four modules still do not exist**, and there is no webcam and still no headed capture.
 - **OWNER: two process gaps found, and they are worth more than the module.** First: **nothing in this port ever checked compiler warnings mechanically.** Every wave has reported "0 warnings" based on a lane reading its own output -- and this one discovered its own filter was silently hiding warnings, so four of those reports were filtered rather than observed. Now filed. Second, and the reason to trust the rest: a sweep technique that had quietly approved **four wrong conclusions across three waves** was diagnosed and a rule adopted to stop it. Both are recorded rather than patched over. Your two decisions are still open: the login token, and Subliminals' separate settings file.
+
+> **RETROACTIVE NOTE, added 2026-08-20 at the SP-114 land.** Every 0-warnings claim in the
+> entries **above this line** (31 occurrences) was made before any gate existed, and **two
+> independent mechanisms are now proven that could each have produced a false green**: a lane
+> filter that could not match the warning class it was hiding, and MSBuild skipping `CoreCompile`
+> on a rebuild so a plain `dotnet build` prints 0 warnings over a tree that still holds one. The
+> second means those claims were **unobservable by construction on any rebuild**, however
+> carefully anyone read the output.
+>
+> **Treat them as UNPROVEN rather than false.** Re-running them proves nothing, because those
+> trees no longer exist as build states. **What IS proven:** a genuine cold build of the tree at
+> `4332b8b9` - real restore, all four projects, log read whole - reports **0 warnings / 0 errors**,
+> so no live warning survived into the current tree. The doubt is about the honesty of the past
+> evidence, not the state of the code. Entries below this line are gated mechanically.
