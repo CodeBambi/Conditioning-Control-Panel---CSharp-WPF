@@ -51,6 +51,21 @@
 
 * { box-sizing:border-box; }
 
+/* THE [hidden] RESET - do not delete, and never write a bare `display:` on a
+   node the shell toggles with the hidden attribute without re-checking this.
+   `[hidden] { display:none }` lives in the USER-AGENT sheet, so ANY author
+   `display:flex|block|grid` beats it (origin outranks specificity). The loader
+   and the boot-failure card are `position:fixed; inset:0; display:flex`, so
+   without this rule `dom.loader.hidden = true` / `nope.hidden` did nothing and
+   the closed-school card sat over the live shell eating every click - the whole
+   Arcademy rendered unusable (playtest 2026-08-19, shots 01/02/12/13). The DTRH
+   sibling learned the same lesson: dtrh/styles.css has `.sf-drop[hidden],
+   .sf-nope[hidden] { display:none }`.
+   Global rather than per-class on purpose: `engine/style.js` never styles
+   `[hidden]` (checked), no game does either, and a global reset also covers the
+   next element someone toggles this way. */
+[hidden] { display:none !important; }
+
 html, body { height:100%; }
 
 body {

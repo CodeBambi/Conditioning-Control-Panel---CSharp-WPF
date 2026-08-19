@@ -54,6 +54,27 @@ internal sealed class ArcademyMetaStore
     private const int MaxKeyLength = 128;
     private const int MaxBlobChars = 512 * 1024;   // a meta file this big is a bug, not a save
 
+    /// <summary>Serialized ceiling for ONE key's value. The page authors per-game meta freely
+    /// (SYNTHESIS-NOTES #15), so nothing page-side bounds what it stores; without a write-side cap a
+    /// single runaway game could inflate the blob past <see cref="MaxBlobChars"/> and the NEXT launch
+    /// would read it as corrupt. Refusing one write is recoverable; losing the file is not.</summary>
+    private const int MaxValueChars = 32 * 1024;
+
+    /// <summary>Top-level keys the page may own. Four host-owned regions plus the page's own
+    /// <c>days</c>/<c>games</c>/flags - 64 is roomy and still a bound.</summary>
+    private const int MaxTopLevelKeys = 64;
+
+    /// <summary>Graded day rows kept. `days` is the only unbounded-by-construction region (one row
+    /// per calendar day, forever), and the shell only ever reads today plus a short recent window.
+    /// Trimmed on every write that touches it - same posture as the XP ledger's SkipLast.</summary>
+    private const int DayHistory = 40;
+
+    /// <summary>The page's graded day rows, keyed by LOCAL date (regression #978).</summary>
+    private const string DaysKey = "days";
+
+    /// <summary>Per-game tier/state, the second-largest region and the salvage step after `days`.</summary>
+    private const string GamesKey = "games";
+
     /// <summary>Keys the page may never write: the host mints attendance and the streak from
     /// <c>class-ended</c>, so a set/merge naming one is dropped (and logged) rather than applied.</summary>
     private static readonly HashSet<string> HostOwnedKeys = new(StringComparer.Ordinal)
@@ -116,10 +137,10 @@ internal sealed class ArcademyMetaStore
                 case "get":
                     break;   // the reply below IS the get
                 case "set":
-                    if (Guard(key)) Set(key, o["value"]);
+                    if (Guard(key) && SizeGuard(key, o["value"])) Set(key, o["value"]);
                     break;
                 case "merge":
-                    if (Guard(key)) Merge(key, o["value"]);
+                    if (Guard(key) && SizeGuard(key, o["value"])) Merge(key, o["value"]);
                     break;
                 default:
                     App.Logger?.Debug("ArcademyMetaStore: unknown op '{Op}' - ignored", op);
@@ -138,7 +159,9 @@ internal sealed class ArcademyMetaStore
     {
         lock (_lock)
         {
+            if (!AcceptNewKey(key)) return;
             _state[key] = value?.DeepClone() ?? JValue.CreateNull();
+            TrimDays();
             Touch();
         }
     }
@@ -149,6 +172,7 @@ internal sealed class ArcademyMetaStore
     {
         lock (_lock)
         {
+            if (!AcceptNewKey(key)) return;
             if (patch is JObject po)
             {
                 if (_state[key] is JObject existing)
@@ -158,6 +182,7 @@ internal sealed class ArcademyMetaStore
                 else _state[key] = po.DeepClone();
             }
             else _state[key] = patch?.DeepClone() ?? JValue.CreateNull();
+            TrimDays();
             Touch();
         }
     }
@@ -264,12 +289,7 @@ internal sealed class ArcademyMetaStore
             _dirty = false;
             snapshot = (JObject)_state.DeepClone();
         }
-        try
-        {
-            Directory.CreateDirectory(App.UserDataPath);
-            File.WriteAllText(_path, snapshot.ToString(Formatting.Indented));
-        }
-        catch (Exception ex) { App.Logger?.Warning("ArcademyMetaStore.FlushSave: {E}", ex.Message); }
+        WriteAtomic(snapshot);
     }
 
     // ============================ internals ============================
@@ -292,13 +312,7 @@ internal sealed class ArcademyMetaStore
             // silently dropping the mutation.
             _dirty = true;
             var snapshot = (JObject)_state.DeepClone();
-            try
-            {
-                Directory.CreateDirectory(App.UserDataPath);
-                File.WriteAllText(_path, snapshot.ToString(Formatting.Indented));
-                _dirty = false;
-            }
-            catch (Exception ex) { App.Logger?.Debug("ArcademyMetaStore.DebounceSave direct: {E}", ex.Message); }
+            if (WriteAtomic(snapshot)) _dirty = false;
             return;
         }
         disp.BeginInvoke(() =>
@@ -322,6 +336,52 @@ internal sealed class ArcademyMetaStore
         return false;
     }
 
+    /// <summary>False (and logged) for a value whose serialized form exceeds
+    /// <see cref="MaxValueChars"/>. The page still gets its reply, carrying the value that is
+    /// actually stored, so a refused write shows up as "it did not change" rather than as silence.
+    /// Bounded HERE rather than at load time because a blob that has already grown past
+    /// <see cref="MaxBlobChars"/> is a save the player has to lose.</summary>
+    private static bool SizeGuard(string key, JToken? value)
+    {
+        if (value == null) return true;
+        int len;
+        try { len = value.ToString(Formatting.None).Length; }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyMetaStore: could not size '{Key}' ({E}) - refused", key, ex.Message);
+            return false;
+        }
+        if (len <= MaxValueChars) return true;
+        App.Logger?.Warning("ArcademyMetaStore: '{Key}' is {N} chars (cap {Cap}) - refused", key, len, MaxValueChars);
+        return false;
+    }
+
+    /// <summary>Cap the number of top-level keys. Existing keys always pass (an update must never be
+    /// refused because the blob is wide); only a NEW key can be turned away. Called under the lock.</summary>
+    private bool AcceptNewKey(string key)
+    {
+        if (_state[key] != null || _state.Count < MaxTopLevelKeys) return true;
+        App.Logger?.Warning("ArcademyMetaStore: {N} top-level keys already - new key '{Key}' dropped",
+            _state.Count, key);
+        return false;
+    }
+
+    /// <summary>Keep the newest <see cref="DayHistory"/> day rows. `days` is keyed by yyyy-MM-dd, so
+    /// ordinal order IS chronological order and the same SkipLast shape the XP ledger uses works
+    /// here. Runs on every write that could have touched the region rather than on a schedule: the
+    /// store has no clock of its own, and an unbounded region only bites at the next load.
+    /// Called under the lock.</summary>
+    private void TrimDays()
+    {
+        if (_state[DaysKey] is not JObject days || days.Count <= DayHistory) return;
+        foreach (var stale in days.Properties().Select(p => p.Name)
+                     .OrderBy(n => n, StringComparer.Ordinal)
+                     .SkipLast(DayHistory).ToList())
+        {
+            days.Remove(stale);
+        }
+    }
+
     private static string? NormalizeKey(string? key)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
@@ -342,26 +402,137 @@ internal sealed class ArcademyMetaStore
         return (now.Date - prev.Date).TotalDays == 1;
     }
 
-    /// <summary>Read the blob, or an empty object on any failure. A corrupt meta file must not stop
-    /// the Arcademy opening: the shell degrades to a fresh transcript, which is recoverable, where a
-    /// throw here would be a door that never opens again.</summary>
-    private static JObject Load(string path)
+    /// <summary>
+    /// ATOMIC WRITE. A bare <c>WriteAllText</c> truncates the file first, so a crash, a power cut or
+    /// an OnExit TerminateProcess landing in that window leaves a HALF-WRITTEN meta blob — and the
+    /// next launch parses it, fails, and starts fresh: the streak, every grade and the XP ledger,
+    /// gone. Temp file → flush → <see cref="File.Replace(string,string,string)"/>, which also leaves
+    /// the previous good copy behind as <c>.bak</c> for <see cref="Load"/> to fall back on.
+    /// </summary>
+    /// <returns>True when the bytes are on disk.</returns>
+    private bool WriteAtomic(JObject snapshot)
     {
         try
         {
-            if (!File.Exists(path)) return new JObject();
+            Directory.CreateDirectory(App.UserDataPath);
+            var text = snapshot.ToString(Formatting.Indented);
+            var tmp = _path + ".tmp";
+            File.WriteAllText(tmp, text);
+            if (File.Exists(_path))
+            {
+                // One .bak generation, kept deliberately: the fallback is only useful for the write
+                // that just failed, and a deeper history of a save file nobody reads is just clutter.
+                File.Replace(tmp, _path, _path + ".bak", ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tmp, _path);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyMetaStore.WriteAtomic: {E}", ex.Message);
+            try { if (File.Exists(_path + ".tmp")) File.Delete(_path + ".tmp"); } catch { }
+            return false;
+        }
+    }
+
+    /// <summary>Read the blob, or an empty object once every recovery has been tried. A corrupt meta
+    /// file must not stop the Arcademy opening — but "start fresh" is the LAST resort, not the first:
+    /// it throws away the player's whole transcript, and the two failures we actually see (a blob
+    /// that outgrew the cap, and a truncated write) are both recoverable.
+    ///
+    /// <para>The ladder: parse the main file → parse the <c>.bak</c> the previous
+    /// <see cref="File.Replace(string,string,string)"/> left → empty. An over-cap blob is SALVAGED
+    /// rather than dropped (shed <c>days</c>, then the oldest <c>games</c> entries), and anything
+    /// destructive copies the original to a <c>.corrupt</c> sidecar first so the save is still
+    /// there to look at.</para></summary>
+    private static JObject Load(string path)
+    {
+        var main = TryLoadOne(path, salvage: true);
+        if (main != null) return main;
+
+        var bak = TryLoadOne(path + ".bak", salvage: true);
+        if (bak != null)
+        {
+            App.Logger?.Warning("ArcademyMetaStore: recovered from {Path}.bak - the main file was unreadable", path);
+            return bak;
+        }
+
+        App.Logger?.Warning("ArcademyMetaStore: no readable meta blob - starting fresh");
+        return new JObject();
+    }
+
+    private static JObject? TryLoadOne(string path, bool salvage)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
             var raw = File.ReadAllText(path);
             if (raw.Length > MaxBlobChars)
             {
-                App.Logger?.Warning("ArcademyMetaStore: {Path} is {N} chars - starting fresh", path, raw.Length);
-                return new JObject();
+                App.Logger?.Warning("ArcademyMetaStore: {Path} is {N} chars - attempting salvage", path, raw.Length);
+                PreserveCorrupt(path);
+                if (!salvage) return null;
+                JObject over;
+                try { over = JObject.Parse(raw); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("ArcademyMetaStore: over-cap blob does not parse either ({E})", ex.Message);
+                    return null;
+                }
+                return Salvage(over);
             }
             return JObject.Parse(raw);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("ArcademyMetaStore: load failed ({E}) - starting fresh", ex.Message);
-            return new JObject();
+            App.Logger?.Warning("ArcademyMetaStore: load of {Path} failed ({E})", path, ex.Message);
+            return null;
         }
+    }
+
+    /// <summary>Shed the big page-owned regions until the blob is back under the cap, newest-first.
+    /// Order matters: <c>days</c> is the graded transcript (nice to have), <c>games</c> carries tier
+    /// progression (worse to lose), and the host-owned streak/ledger keys are never touched — they
+    /// are tiny and they are the ones a player would actually mourn.</summary>
+    private static JObject Salvage(JObject over)
+    {
+        if (over[DaysKey] is JObject days && days.Count > 0)
+        {
+            days.RemoveAll();
+            App.Logger?.Warning("ArcademyMetaStore: salvage dropped the 'days' transcript");
+            if (over.ToString(Formatting.None).Length <= MaxBlobChars) return over;
+        }
+        if (over[GamesKey] is JObject games)
+        {
+            // Oldest first by key order - there is no timestamp in a per-game bag, and ordinal order
+            // is at least stable, so the same entries go each time rather than a random half.
+            foreach (var name in games.Properties().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList())
+            {
+                if (over.ToString(Formatting.None).Length <= MaxBlobChars) break;
+                games.Remove(name);
+                App.Logger?.Warning("ArcademyMetaStore: salvage dropped games['{Key}']", name);
+            }
+            if (over.ToString(Formatting.None).Length <= MaxBlobChars) return over;
+        }
+        // Still over: keep only what the host owns, which is all that cannot be re-earned.
+        var kept = new JObject();
+        foreach (var k in HostOwnedKeys)
+        {
+            if (over[k] != null) kept[k] = over[k]!.DeepClone();
+        }
+        App.Logger?.Warning("ArcademyMetaStore: salvage kept the host-owned keys only");
+        return kept;
+    }
+
+    /// <summary>Copy a file we are about to recover from (destructively) to a <c>.corrupt</c> sidecar.
+    /// One generation, overwritten: the point is that the bytes still exist to look at, not an
+    /// archive.</summary>
+    private static void PreserveCorrupt(string path)
+    {
+        try { File.Copy(path, path + ".corrupt", overwrite: true); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyMetaStore: .corrupt sidecar failed: {E}", ex.Message); }
     }
 }

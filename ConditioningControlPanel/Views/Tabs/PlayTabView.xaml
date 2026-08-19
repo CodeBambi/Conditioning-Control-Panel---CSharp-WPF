@@ -1311,6 +1311,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -1325,7 +1326,26 @@
                                     <TextBlock Text="three classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak."
                                                Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
                                 </StackPanel>
-                                <Button Grid.Column="1" x:Name="BtnPlayArcademy" x:FieldModifier="internal"
+                                <!-- PRIME SUBJECT sign in its OWN COLUMN, not as a corner overlay.
+                                     PlayTierBadge's corner posture (top-right, Margin 0,-24,-24,0)
+                                     is built for a CARD with a 138px art plate to hang over. On a
+                                     118px STRIP the badge is taller than the whole row, and its
+                                     width is measure-driven (0.45 of the available width, capped at
+                                     190), so on the wide wall it landed square on top of the
+                                     vertically-centred Attend button and ate the click - the same
+                                     collision the DtRH hero avoids by mirroring its sign to the
+                                     LEFT, which is not open here (the title block owns that corner).
+                                     Auto column instead: the badge cannot overlap anything, and the
+                                     strip stays one readable row.
+                                     NO explicit Width on purpose - an Auto column measures with an
+                                     infinite constraint, which is the branch TierBadge answers with
+                                     its FallbackWidth (140). Pinning Width instead would make the
+                                     control clamp 0.45 x 128 back down to its 88 minimum and leave
+                                     40px of dead space beside the sign. -->
+                                <fx:TierBadge Grid.Column="1" x:Name="PlayBadgeArcademy" x:FieldModifier="internal"
+                                              Tier="2" VerticalAlignment="Center"
+                                              Margin="0,0,18,0" Panel.ZIndex="9"/>
+                                <Button Grid.Column="2" x:Name="BtnPlayArcademy" x:FieldModifier="internal"
                                         Content="Attend" Cursor="Hand"
                                         VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
                                         Background="{DynamicResource PinkBrush}" Foreground="White"
@@ -1337,8 +1357,6 @@
                                     </Button.Resources>
                                 </Button>
                             </Grid>
-                            <fx:TierBadge x:Name="PlayBadgeArcademy" x:FieldModifier="internal"
-                                          Style="{StaticResource PlayTierBadge}" Tier="2"/>
                             <Border x:Name="PlayLockArcademy" x:FieldModifier="internal"
                                     Style="{StaticResource PlayLockBandT2}">
                                 <StackPanel VerticalAlignment="Center">

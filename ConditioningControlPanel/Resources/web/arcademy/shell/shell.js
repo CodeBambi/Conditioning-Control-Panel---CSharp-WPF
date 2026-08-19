@@ -797,15 +797,31 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
   }
 
-  function showSuspendedOverlay(note) {
+  function showSuspendedOverlay(note, opts) {
     if (!active || active.suspendEl) return;
     const overlay = el('div', 'arc-suspended');
     overlay.appendChild(el('h2', 'arc-h2', t('class_suspended', 'Class Suspended')));
     if (note) overlay.appendChild(el('p', 'arc-note', note));
+    const bar = el('div', 'arc-classbar');
+    // THE PANIC RUNG'S WAY BACK. A video suspend un-suspends itself when the video
+    // ends, and an audio-only suspend when the session does - but a PANIC suspend
+    // has no natural end, so the page has to ask for it. The host owns the answer
+    // (it replies with suspend:false, reason 'panic'), which keeps the one law that
+    // the host is the only thing that may un-freeze a class.
+    if (opts && opts.resumable) {
+      const resume = el('button', 'btn primary', 'Resume');   // literal, like pauseClass's
+      resume.type = 'button';
+      resume.addEventListener('click', () => {
+        try { bridge.send({ type: 'resume-request', reason: 'panic' }); }
+        catch (e) { say('resume-request send failed: ' + ((e && e.message) || e)); }
+      });
+      bar.appendChild(resume);
+    }
     const leave = el('button', 'btn ghost', t('leave_class', 'Leave class'));
     leave.type = 'button';
     leave.addEventListener('click', () => showBoard());
-    overlay.appendChild(leave);
+    bar.appendChild(leave);
+    overlay.appendChild(bar);
     active.root.appendChild(overlay);
     active.suspendEl = overlay;
   }
@@ -826,7 +842,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
           ? 'An audio-only session started. Your attendance is safe.'
-          : reason === 'panic' ? 'Stopped.' : 'Paused for a video.');
+          : reason === 'panic' ? 'Stopped. Press the panic key again to leave.' : 'Paused for a video.',
+          { resumable: reason === 'panic' });
       } else if (active.suspendEl) {
         active.suspendEl.remove();
         active.suspendEl = null;
@@ -840,6 +857,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!active) return;
     const a = active;
     active = null;
+    // TELL THE HOST THE CLASS IS OVER. `class-started` has a closing bracket now:
+    // without it the host's `_classActive` stayed true for the rest of the session
+    // once you left a class with Esc (only `class-ended` ever cleared it), which
+    // tightened the heartbeat watchdog to its mid-class 12s limit forever and made
+    // the log lie about where the page was. Idempotent host-side, and deliberately
+    // sent from the ONE funnel every leave path already goes through - including
+    // the finished-class path, where `class-ended` has just cleared it anyway.
+    try { bridge.send({ type: 'class-left', gameKey: a.cls && a.cls.gameKey }); }
+    catch (e) { say('class-left send failed: ' + ((e && e.message) || e)); }
     try { a.instance.destroy(); } catch (e) { say('game destroy threw: ' + ((e && e.message) || e)); }
     try { a.peek.destroy(); } catch (e) { /* noop */ }
     try { a.keys.destroy(); } catch (e) { /* noop */ }

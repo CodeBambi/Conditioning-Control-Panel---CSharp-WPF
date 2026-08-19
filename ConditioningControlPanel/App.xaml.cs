@@ -4483,8 +4483,11 @@ Application State:
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
 
             // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
-            // meta store has a debounced write that must be flushed before we go.
-            try { Services.Arcademy.ArcademyHostService.CloseActive(); } catch { }
+            // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
+            // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
+            // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
+            // never happened and the last class's grades/streak went with the process.
+            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

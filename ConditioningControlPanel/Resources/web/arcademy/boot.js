@@ -50,6 +50,7 @@ let initMsg = null;
 let bootSettled = false;      // shell live OR boot failed - stops the deadline
 let fullscreen = false;
 let starting = false;
+let pendingSuspend = null;    // a suspend frame that arrived before the shell existed
 
 /* ----------------------------------------------------------------------------
  * DIAGNOSTICS - the only channel without devtools.
@@ -141,6 +142,15 @@ async function start() {
     clearTimeout(deadlineTimer);
     if (dom.loader) dom.loader.hidden = true;
     log('shell live');
+    // Replay the native state that landed while we were importing (see the
+    // 'suspend' handler). After the shell exists so the class_suspended treatment
+    // has something to render into.
+    if (pendingSuspend) {
+      const m = pendingSuspend;
+      pendingSuspend = null;
+      try { shell.onSuspend(m); log('replayed buffered suspend (' + (m.reason || '?') + ')'); }
+      catch (e) { warn('buffered suspend replay threw: ' + ((e && e.message) || e)); }
+    }
   } catch (err) {
     starting = false;
     failBoot('shell boot failed: ' + ((err && (err.stack || err.message)) || err));
@@ -183,8 +193,16 @@ bridge.on('payout-result', guard('payout-result', (m) => {
   log('payout: ' + m.gameKey + ' +' + Math.round(Number(m.xp) || 0) + 'xp' + (m.levelUp ? ' (level up)' : ''));
 }));
 bridge.on('suspend', guard('suspend', (m) => {
-  if (shell) shell.onSuspend(m);
-  log('suspend ' + (m.on ? 'ON' : 'off') + ' (' + (m.reason || '?') + ')');
+  // PRE-SHELL SUSPEND REPLAY. The host seeds the current native state right after
+  // `init` (a mandatory video already playing, AudioOnlySession flipped between the
+  // launch gate and the first frame), and that lands while `shell` is still null
+  // because start() is async (two dynamic imports). Dropping it opened the class
+  // un-suspended over a running video. Buffer the LAST state only - suspend is a
+  // level, not an edge, so an on/off pair collapses to "off" correctly.
+  if (!shell) { pendingSuspend = m; }
+  else shell.onSuspend(m);
+  log('suspend ' + (m.on ? 'ON' : 'off') + ' (' + (m.reason || '?') + ')'
+    + (shell ? '' : ' [buffered until the shell exists]'));
 }));
 bridge.on('meta', guard('meta', (m) => { if (shell) shell.onMeta(m); }));
 bridge.on('fullscreen', guard('fullscreen', (m) => { fullscreen = !!m.on; }));
@@ -279,3 +297,6 @@ export { dom, toast };
 
 /** Test seam: the live sfx consumer (null until init). */
 export function audioConsumer() { return audio; }
+
+/** Test seam: the suspend frame buffered while the shell was still booting. */
+export function bufferedSuspend() { return pendingSuspend; }

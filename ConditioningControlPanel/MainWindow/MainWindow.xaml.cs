@@ -1082,6 +1082,20 @@ namespace ConditioningControlPanel
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
+            // The Arcademy (its own WebView2 window) owns the panic key while it's up, same shape as
+            // the DtRH hand-off above and for the same reason: without this rung, two Esc taps with
+            // no session running fell straight through to the "not running" branch below and EXITED
+            // THE WHOLE APP from inside a mini-game. Its own two-rung ladder is press 1 = suspend
+            // (every effect dropped, the class frozen behind a Resume card) and press 2 within 2s =
+            // close the Arcademy and restore the control panel, so the emergency stop still stops
+            // everything and nobody is trapped. Reactivates on its own once the window closes.
+            if (Services.Arcademy.ArcademyHostService.IsActive)
+            {
+                VideoDiag.Log("PANIC", "handed off to the Arcademy window (suspend, then close)");
+                Services.Arcademy.ArcademyHostService.HandlePanicPress();
+                return;
+            }
+
             // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
             // see-through mirror (otherwise the user is staring at a translucent pane they cannot
             // grab — the mouse passes straight through it, its own close button included), press 2

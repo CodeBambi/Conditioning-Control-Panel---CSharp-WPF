@@ -28,6 +28,13 @@ Screen router: **split-flap board → class → report card** (+ settings, which
 `boot.js` owns the bridge handshake and the Esc ladder's outer rungs; `shell.js` owns the
 inner rungs.
 
+**Two ladders, and they are different.** The ESC ladder is the page's (tap walks
+settings → pause → leave class, then unfullscreen; hold exits). The PANIC ladder is the
+HOST's: `MainWindow` hands the panic key to `ArcademyHostService.HandlePanicPress()` while
+the window is up, press 1 posts `suspend {on:true, reason:'panic'}` and press 2 within 2s
+calls `CloseActive()`. See trap 29 - without that hand-off two panic taps exited the whole
+app from inside a class.
+
 ## 2. Files
 
 ```
@@ -78,7 +85,10 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `settings.js` is load-bearing: a manifest declaring `flashRate` would otherwise write
     the global ceiling. `isGlobalSettingKey()` is the same fence on the echo path.
   - `keybinds` is sent as an **object**, not a JSON string - the host tests
-    `value is JObject` and silently drops a string, so a rebind would vanish.
+    `value is JObject`. A non-object is now REFUSED and the reply carries the value that is
+    still STORED (it used to store `""`, i.e. one malformed frame wiped every rebind the
+    player had made). The blob is also capped at 7000 chars, deliberately below
+    `AppSettings.ArcademyKeybindsJson`'s own 8192 wipe cap.
 - **Attendance is HOST-owned.** `ArcademyMetaStore` mints `streak`,
   `perfectAttendance`, `lastAttendanceLocalDate` and `todayClasses` from the `class-ended`
   frame (so a stale page cannot forge a streak) and **refuses** a page write to any of them.
@@ -219,6 +229,57 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     debrief rows (`ic_debrief_buzzer_body`, the `ic_slip_*` lines) always render English. If a
     mod must re-voice one, split it into two rows rather than raising the cap.
 
+27. **`[hidden]` IS A USER-AGENT RULE, SO ANY AUTHOR `display:` BEATS IT.** `.arc-loader,
+    .arc-nope { position:fixed; inset:0; display:flex }` meant `dom.loader.hidden = true` and
+    `#arc-nope[hidden]` did *nothing*: two opaque full-page overlays sat over the live shell at
+    z-index 70, the later one painting the "The Arcademy is closed" card, and every click on the
+    board landed on it. The whole page was unusable and the log said nothing was wrong (playtest
+    2026-08-19, shots 01/02/12/13). `styles.css` now opens with `[hidden] { display:none
+    !important; }`. **Never write a bare `display:` on a node the shell toggles with the hidden
+    attribute** (`#arc-loader`, `#arc-nope`, `#arc-topbar` today) without re-reading that rule, and
+    never add a competing `[hidden]` rule in a game or engine stylesheet - the `tt` suite
+    (`test-hostfixes.mjs`) parses styles.css and fails if either happens. dtrh/styles.css:400 has
+    the same reset for the same reason; that is where the lesson came from.
+28. **A suspend can arrive BEFORE the shell exists, and it is a LEVEL, not an edge.** The host
+    seeds current native state immediately after `init` (`ArcademyHostService.SeedNativeState`: a
+    mandatory video already playing, an `AudioOnlySession` flip that happened between the launch
+    gate and the first frame), and `start()` is async - two dynamic imports - so that frame lands
+    while `shell` is still null. `boot.js` buffers the LAST such frame and replays it once the
+    shell is live (`bufferedSuspend()` is the test seam). Dropping it dealt a board over a running
+    video. Buffering the last one and not a queue is deliberate: an on/off pair collapses to "off",
+    which is the correct answer for a video that ended during boot.
+29. **THE PANIC LADDER IS THE HOST'S, AND THE PAGE NEVER HANDLES THE PANIC KEY.**
+    `MainWindow.xaml.cs` hands the press to `ArcademyHostService.HandlePanicPress()` while
+    `IsActive` - a rung that must sit BEFORE the app-wide `_panicPressCount >= 2` branch, because
+    that branch calls `Application.Current.Shutdown()`: with no rung, two Esc taps inside the
+    Arcademy exited the whole app. Press 1 → `Suspend(true, "panic")`; press 2 within 2s →
+    `CloseActive()`. A panic suspend has **no natural end** (a video's ends with the video, an
+    audio-only one with the session), so the class_suspended treatment grows a Resume button that
+    posts `{type:'resume-request', reason:'panic'}` and the HOST answers with `suspend {on:false}`.
+    The host refuses that while a video or an audio-only session still owns the screen, and neither
+    `OnVideoEnded` nor the audio-only watch may lift a panic suspend. Trap 19 still holds
+    separately: `init.panicKey` is a launch-time snapshot the page only uses to refuse a rebind.
+30. **`class-started` has a closing bracket now: `class-left`.** Leaving a class with Esc ends no
+    class, so `class-ended` was never sent and the host's `_classActive` stayed true for the rest
+    of the session - which kept the tighter mid-class heartbeat limit (12s vs 20s) armed and made
+    every log line claim the page was still in a class. `shell.js teardownClass()` is the ONE
+    funnel every leave path already went through, so the message is sent from there; the host
+    handler is idempotent, and a finished class simply sends it right after `class-ended`.
+31. **The C# meta blob is bounded and its save is atomic - do not "simplify" either.**
+    `ArcademyMetaStore` caps one value at 32KB and the top level at 64 keys, trims `days` to the
+    newest 40 rows on every write that touches it (the same `SkipLast` shape `TryClaimXpDay` uses),
+    writes through a temp file + `File.Replace` (which leaves one `.bak` generation), and on load
+    walks main → `.bak` → empty, SALVAGING an over-cap blob (shed `days`, then the oldest `games`
+    entries, then keep the host-owned keys) and copying the original to a `.corrupt` sidecar before
+    anything destructive. A bare `WriteAllText` truncates the file first, so a crash in that window
+    left a half-written save that the next launch parsed, failed, and replaced with a fresh one:
+    the streak, every grade and the XP ledger, gone.
+32. **App exit must call `ShutdownFlush()`, never `CloseActive()`.** The graceful close posts
+    `end-run` and waits on a 1200ms `DispatcherTimer` for `exit-done` - and inside `App.OnExit`
+    that timer can never tick (the dispatcher is already shutting down and OnExit ends in
+    TerminateProcess), so the meta flush and the WebView2 disposal it guards never ran.
+    `ShutdownFlush` is the synchronous path: flush, dispose, no round trip.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -283,10 +344,21 @@ must never grow a test seam that ships. Cases opt in through an `overrideCalenda
 other case still sees the shipping four-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
-Last full run: **118 assertions, 0 failures** (timetable 27, grades 23, shell 41,
-bridge+boot 13, **e2e seams 14**), against the live `engine/` + `provider/` modules (the note
-line in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
-`games-ic`) drive the REAL games and run green alongside it.
+Last full run: **144 assertions, 0 failures** (timetable 27, grades 23, shell 45,
+bridge+boot 15, **e2e seams 14**, **host fixes 20**), against the live `engine/` + `provider/`
+modules (the note line in the shell run says which). The four game suites (`games-dt`,
+`games-lf`, `games-dv`, `games-ic`) drive the REAL games and run green alongside it.
+
+`test-hostfixes.mjs` covers the two seams that are not JavaScript. It **parses the real
+`styles.css`** and evaluates the `[hidden]` cascade for every element the shell toggles
+(trap 27) - the one assertion that would have caught the playtest blocker - and it **greps the
+C# host** for the shape of each host-side fix: the panic rung's position relative to the app's
+exit branch, the keybinds refusal, the meta store's day trim / atomic save / salvage ladder,
+`ShutdownFlush` in `App.OnExit`, the `CurrentReplaced` rebind and the remote-batch generation
+guard. A grep is a tripwire, not a unit test - it exists because `ArcademyHostService.cs` and
+`ArcademyMetaStore.cs` have no test host of their own, and the precedent is the lexicon-coverage
+check in `test-e2e.mjs`. **The atomic-save and salvage paths themselves are covered by source
+shape only; the .NET behaviour is unverified by machine and was reasoned through by hand.**
 
 `test-e2e.mjs` is the cross-agent one: a realistic C# init (with `settings.localAssets`) →
 board → class → `assets-request` → a host `assets` reply absorbed by reqId → `class-ended` →
@@ -326,6 +398,12 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   per game in meta. Simple by construction; nothing in the design pinned a curve.
 - **No entry point yet.** `Services/Arcademy/*` and the launch button are the C# agent's;
   nothing in this folder knows how it gets opened.
+- ~~`init.protectBrowserVideo` is projected but nothing acts on it.~~ **CLOSED** — the host hooks
+  `BrowserMediaService.PlayingChanged` and posts the same `suspend {reason:'video'}` a mandatory
+  video gets, gated on the LIVE `ProtectBrowserVideoPlayback` preference rather than the init
+  snapshot. The page still needs no new code: it already honours the frame. (The gate properties
+  themselves — `ShouldDeferInterruptions` / `ShouldDeferNewVideo` — are polls, and polling a
+  class's freeze state would be worse than not having it, which is why the event is the hook.)
 - **Nothing consumes `arcademy-fx`.** The engine narrates every primitive on that event and
   only `arcademy-log` is read (by `boot.js`). It is the obvious hook for a future telemetry
   or "what did the engine just do" debug overlay.

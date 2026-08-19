@@ -65,11 +65,24 @@ internal static class ArcademyHostService
     private static bool _disposing;          // reentrancy guard: Dispose closes the window -> Closed -> DisposeAll
     private static bool _initPosted;         // init is posted exactly once per boot
     private static bool _videoHooked;
-    private static bool _settingsHooked;
+    private static bool _browserVideoHooked;
+    private static bool _settingsReplaceHooked;
+    private static Models.AppSettings? _hookedSettings;   // the instance we are actually subscribed to
     private static bool _minimizedMainWindow;
     private static bool _suppressSettingEcho; // we are mid set-setting: the reply is the echo
-    private static bool _classActive;         // between class-started and class-ended
+    private static bool _classActive;         // between class-started and class-left/class-ended
     private static int _remoteFetchInFlight;  // 0/1 via Interlocked
+    private static bool _panicSuspended;      // press 1 of the panic ladder froze the page
+    private static DateTime _lastPanicPressUtc;
+
+    /// <summary>Bumped by <see cref="DisposeAll"/>. Every in-flight async continuation captures the
+    /// value it started with and drops itself when the two disagree, so a batch that comes back
+    /// after a relaunch cannot post into (or prewarm a buffer for) the NEW window.</summary>
+    private static int _generation;
+
+    /// <summary>The app-wide double-press convention (MainWindow's panic ladder): two presses inside
+    /// this window are a deliberate double-tap, anything slower re-arms rung 1.</summary>
+    private static readonly TimeSpan PanicDoublePressWindow = TimeSpan.FromSeconds(2);
 
     /// <summary>Prewarmed remote URLs per requested kind ("loop"/"still"), so an
     /// <c>assets-request</c> can be answered from memory instead of on the network's schedule.</summary>
@@ -116,6 +129,8 @@ internal static class ArcademyHostService
             _exiting = false;
             _initPosted = false;
             _classActive = false;
+            _panicSuspended = false;
+            _lastPanicPressUtc = DateTime.MinValue;
             _meta = new ArcademyMetaStore(msg => _host?.Post(msg));
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
@@ -156,13 +171,20 @@ internal static class ArcademyHostService
                 OnMessage = OnPageMessage,
                 OnProcessFailed = OnProcessFailed,
             });
+            // HOOK BEFORE SHOW. The AudioOnlySession gate above ran at the top of this method and
+            // Show() + navigation is the slowest thing here; a flip landing in that window used to
+            // be missed entirely (the watch did not exist yet) and the page opened classes during
+            // an audio-only session. Hooked first, the flip is caught, and OnPageReady re-reads the
+            // flag once more when init goes out so a flip DURING the navigation is seeded too.
+            HookVideoEvents(true);
+            HookSettingsWatch(true);
+            HookBrowserVideoEvents(true);
+
             _host.Show();
             // Title-bar X: tear down cleanly so the heartbeat watchdog cannot misread the
             // resulting silence as a wedge and relaunch a window the user just shut.
             if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
 
-            HookVideoEvents(true);
-            HookSettingsWatch(true);
             StartHeartbeatWatch();
             ArmBootDeadline();
 
@@ -210,6 +232,29 @@ internal static class ArcademyHostService
     }
 
     /// <summary>
+    /// APP EXIT ONLY. <see cref="CloseActive"/>'s graceful path posts <c>end-run</c> and waits on a
+    /// 1200ms <see cref="DispatcherTimer"/> for the page's <c>exit-done</c> — and inside
+    /// <c>App.OnExit</c> that timer NEVER TICKS (the dispatcher is already shutting down and OnExit
+    /// ends in TerminateProcess), so the meta flush and the WebView2 disposal it guards simply never
+    /// ran: the last class's grades, streak and XP ledger died with the process.
+    ///
+    /// <para>This is the synchronous path: flush the debounced meta write, dispose the host, no
+    /// watchdog and no round trip to the page. Idempotent, and it never throws.</para>
+    /// </summary>
+    public static void ShutdownFlush()
+    {
+        try
+        {
+            if (_meta == null && _host == null) return;
+            _exiting = true;
+            try { _meta?.FlushSave(); } catch (Exception ex) { App.Logger?.Warning("ArcademyHost.ShutdownFlush meta: {E}", ex.Message); }
+            DisposeAll();
+            App.Logger?.Information("ArcademyHostService: shutdown flush complete");
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHostService.ShutdownFlush: {E}", ex.Message); }
+    }
+
+    /// <summary>
     /// Push a suspend/resume to the page: the engine drops every effect NOW and the class pauses.
     /// Public so the panic path can reach it - a modal Arcademy surface must honour the emergency
     /// stop like every other conditioning surface (GROUND-RULES §5).
@@ -224,6 +269,73 @@ internal static class ArcademyHostService
             try { _host?.Post(new { type = "suspend", on, reason }); }
             catch (Exception ex) { App.Logger?.Debug("ArcademyHost.Suspend: {E}", ex.Message); }
         });
+    }
+
+    /// <summary>
+    /// THE PANIC LADDER, page-side. MainWindow's global hook hands the panic key here while the
+    /// Arcademy window is up (the same hand-off DtRH and the feed get), because the app-wide ladder
+    /// below it EXITS THE WHOLE APP on press 2 when no session is running — and a modal game window
+    /// must never be two taps from killing the app.
+    ///
+    /// <para>Rung 1 freezes everything: <c>suspend</c> drops every effect, pauses the class and
+    /// shows the class_suspended treatment with a Resume button (the page asks for the un-freeze
+    /// with <c>resume-request</c>, which only this host may grant). Rung 2, inside
+    /// <see cref="PanicDoublePressWindow"/>, closes the Arcademy gracefully and restores the control
+    /// panel. A slower second press is treated as a fresh rung 1, which is the forgiving reading:
+    /// the emergency stop must not become an accidental exit.</para>
+    ///
+    /// <para>Attendance is safe either way — the streak is written on <c>class-ended</c>, and a class
+    /// abandoned mid-panic simply never ended.</para>
+    /// </summary>
+    public static void HandlePanicPress()
+    {
+        if (_host == null) return;
+        var now = DateTime.UtcNow;
+        bool doubleTap = _panicSuspended && (now - _lastPanicPressUtc) <= PanicDoublePressWindow;
+        _lastPanicPressUtc = now;
+
+        if (doubleTap)
+        {
+            App.Logger?.Information("ArcademyHost: panic press 2 - closing the Arcademy");
+            _panicSuspended = false;
+            CloseActive();
+            return;
+        }
+
+        _panicSuspended = true;
+        App.Logger?.Information("ArcademyHost: panic press 1 - suspending{Mid} (press again to leave)",
+            _classActive ? " mid-class" : "");
+        Suspend(true, "panic");
+    }
+
+    /// <summary>The page asking to come back from a PANIC suspend (the only suspend with no natural
+    /// end — a video un-suspends when it ends, an audio-only session when it does). The host stays
+    /// the only thing that may un-freeze a class, which is why this is a request and not a page-side
+    /// resume.</summary>
+    private static void OnResumeRequest(JObject o)
+    {
+        var reason = ((string?)o["reason"] ?? "panic").Trim();
+        if (reason != "panic")
+        {
+            App.Logger?.Debug("ArcademyHost: resume-request for '{Reason}' refused - only panic resumes on request", reason);
+            return;
+        }
+        if (!_panicSuspended)
+        {
+            App.Logger?.Debug("ArcademyHost: resume-request with no panic suspend outstanding - ignored");
+            return;
+        }
+        // A mandatory video or an audio-only session outranks the panic resume: un-freezing here
+        // would drop a class back on top of a video the user is supposed to be watching.
+        if (App.Video?.IsPlaying == true || App.Settings?.Current?.AudioOnlySession == true)
+        {
+            App.Logger?.Information("ArcademyHost: resume-request held - a video / audio-only session still owns the screen");
+            return;
+        }
+        _panicSuspended = false;
+        _lastPanicPressUtc = DateTime.MinValue;   // the ladder re-arms at rung 1
+        App.Logger?.Information("ArcademyHost: panic resume granted");
+        Suspend(false, "panic");
     }
 
     /// <summary>The friendly refusal for an audio-only day. A toast, not a modal: the click that
@@ -255,9 +367,45 @@ internal static class ArcademyHostService
             _initPosted = true;
             _host?.Post(BuildInit());
             if (_host != null) _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });
+            SeedNativeState();
             App.Logger?.Information("ArcademyHostService: sent init (protocol {P})", Protocol);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHostService.OnPageReady: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// Seed the CURRENT native state onto a freshly-booted page. `init` is a snapshot of settings,
+    /// not of what is happening right now, and every suspend producer here is EDGE-driven (a video
+    /// STARTING, AudioOnlySession FLIPPING) — so a page that opened while a mandatory video was
+    /// already on screen never heard about it and dealt a board over the video. The page buffers a
+    /// suspend that lands before its shell exists (boot.js) and replays it, so posting this
+    /// immediately after init is safe.
+    /// </summary>
+    private static void SeedNativeState()
+    {
+        try
+        {
+            if (App.Video?.IsPlaying == true)
+            {
+                App.Logger?.Information("ArcademyHost: seeding suspend - a mandatory video is already playing");
+                Suspend(true, "video");
+                return;
+            }
+            // Re-read the gate's flag AT THIS MOMENT: Launch() checked it before Show(), and a flip
+            // during the navigation would otherwise be lost between the gate and the settings watch.
+            if (App.Settings?.Current?.AudioOnlySession == true)
+            {
+                App.Logger?.Information("ArcademyHost: seeding suspend - AudioOnlySession turned on during boot");
+                Suspend(true, "audio-only");
+                return;
+            }
+            if (App.Settings?.Current?.ProtectBrowserVideoPlayback == true && App.BrowserMedia?.IsPlaying == true)
+            {
+                App.Logger?.Information("ArcademyHost: seeding suspend - browser video is already playing");
+                Suspend(true, "video");
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.SeedNativeState: {E}", ex.Message); }
     }
 
     // ============================ page messages ============================
@@ -291,6 +439,16 @@ internal static class ArcademyHostService
                 break;
             case "class-ended":
                 OnClassEnded(o);
+                break;
+            case "class-left":
+                // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
+                // so without this the mid-class heartbeat limit (12s vs 20s) stayed armed for the
+                // rest of the session and every log line claimed we were still in one.
+                _classActive = false;
+                App.Logger?.Debug("ArcademyHost: class left ({Game})", (string?)o["gameKey"]);
+                break;
+            case "resume-request":
+                OnResumeRequest(o);
                 break;
             case "assets-request":
                 OnAssetsRequest(o);
@@ -909,7 +1067,24 @@ internal static class ArcademyHostService
                 return Math.Clamp(s.RemoteMediaRatio / 100.0, 0.0, 1.0);
 
             case "keybinds":
-                s.ArcademyKeybindsJson = value is JObject kb ? kb.ToString(Formatting.None) : "";
+                // REFUSE, never wipe. A non-object here used to store "" — one malformed frame
+                // (or a page that sent the blob as a JSON *string*, which is trap 3 in the web
+                // CLAUDE.md) and every rebind the player had made was gone. Echo what is STORED so
+                // the page's pending paint converges on the truth instead of on the refused value.
+                if (value is not JObject kb)
+                {
+                    App.Logger?.Warning("ArcademyHost: keybinds must be an object (got {Type}) - refused, existing binds kept",
+                        value?.Type.ToString() ?? "null");
+                    return ParseJsonObject(s.ArcademyKeybindsJson);
+                }
+                var kbJson = kb.ToString(Formatting.None);
+                if (kbJson.Length > MaxKeybindsJsonChars)
+                {
+                    App.Logger?.Warning("ArcademyHost: keybinds blob is {N} chars (cap {Cap}) - refused",
+                        kbJson.Length, MaxKeybindsJsonChars);
+                    return ParseJsonObject(s.ArcademyKeybindsJson);
+                }
+                s.ArcademyKeybindsJson = kbJson;
                 return ParseJsonObject(s.ArcademyKeybindsJson);
         }
 
@@ -952,12 +1127,37 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: per-game settings bag is full - '{Key}' dropped", key);
             return null;
         }
+        var previous = bag[key]?.DeepClone();
         bag[key] = value!.DeepClone();
         // localAssets is a host-built manifest riding this bag at init; it must never be persisted.
         bag.Remove("localAssets");
-        s.ArcademySettingsJson = bag.ToString(Formatting.None);
+
+        // THE ECHO MUST BE WHAT IS STORED. `ArcademySettingsJson`'s setter DISCARDS the whole bag
+        // (stores "") past its own 65536 cap, so a write that tipped it over used to answer with the
+        // value the page had asked for while every per-game knob on the machine was silently gone.
+        // Two guards: the effective budget here is BELOW the property's cap, so the two bounds
+        // (200 keys x 256-char strings = ~55KB worst case) can never meet it; and an over-budget
+        // write is refused outright and echoes the value that survived.
+        var json = bag.ToString(Formatting.None);
+        if (json.Length > MaxGameSettingsBagChars)
+        {
+            App.Logger?.Warning(
+                "ArcademyHost: per-game settings bag would be {N} chars (budget {Cap}) - '{Key}' refused, bag left intact",
+                json.Length, MaxGameSettingsBagChars, key);
+            return previous;   // null when the key was new, which reads page-side as "not stored"
+        }
+        s.ArcademySettingsJson = json;
         return bag[key];
     }
+
+    /// <summary>Effective budget for the flat per-game bag. Deliberately BELOW
+    /// <see cref="Models.AppSettings.ArcademySettingsJson"/>'s own 65536 cap, because that setter
+    /// answers an over-long value by throwing the entire bag away — a silent total loss we must
+    /// never be able to reach from here.</summary>
+    private const int MaxGameSettingsBagChars = 60000;
+
+    /// <summary>Same posture for the keybind blob against the property's 8192 cap.</summary>
+    private const int MaxKeybindsJsonChars = 7000;
 
     private static string Strip(string key, string prefix) =>
         key.StartsWith(prefix, StringComparison.Ordinal) ? key[prefix.Length..] : key;
@@ -997,13 +1197,20 @@ internal static class ArcademyHostService
         _classActive = false;
         try
         {
-            var gameKey = ((string?)o["gameKey"] ?? "").Trim();
+            // EVERY FIELD READ DEFENSIVELY, AND SEPARATELY. Newtonsoft throws on a cast it cannot
+            // make (`(int?)` over a JSON string, `(double?)` over an object), and a single throw here
+            // used to abort the whole handler BEFORE RecordAttendance - so one malformed field cost
+            // the player the day's attendance and their streak. Attendance is the thing we must not
+            // lose: a garbled grade degrades to C, a garbled flavour bonus to 0, and the credit is
+            // still written. gameKey is the only field with no sane default, and it is a plain
+            // string cast that cannot throw for any scalar.
+            var gameKey = (ReadString(o, "gameKey") ?? "").Trim();
             if (gameKey.Length > 64) gameKey = gameKey[..64];
-            int tier = Math.Clamp((int?)o["gradeTier"] ?? 1, 1, 4);
-            bool zen = (bool?)o["zen"] ?? false;
-            var grade = ((string?)o["grade"] ?? "").Trim();
+            int tier = Math.Clamp(ReadInt(o, "gradeTier", 1), 1, 4);
+            bool zen = ReadBool(o, "zen", false);
+            var grade = (ReadString(o, "grade") ?? "").Trim();
             if (zen || !XpGradeMult.ContainsKey(grade)) grade = zen ? "pass" : "C";
-            double flavor = Math.Clamp((double?)o["flavorXp"] ?? 0, 0, FlavorXpCap);
+            double flavor = Math.Clamp(ReadDouble(o, "flavorXp", 0), 0, FlavorXpCap);
 
             // THE FARM GUARD: one payout per class per UTC day. Replaying a class is a supported,
             // deliberately free thing to do (the day's seed makes it the same script), so the
@@ -1011,7 +1218,7 @@ internal static class ArcademyHostService
             // ledger is host-owned (ArcademyMetaStore.XpPaidKey) and the day is re-derived here
             // when the page's `dayUtc` is missing or malformed - otherwise dropping the field
             // would be the bypass.
-            var dayUtc = ((string?)o["dayUtc"] ?? "").Trim();
+            var dayUtc = (ReadString(o, "dayUtc") ?? "").Trim();
             if (!DateTime.TryParseExact(dayUtc, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                     DateTimeStyles.None, out _))
             {
@@ -1060,6 +1267,49 @@ internal static class ArcademyHostService
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
     }
+
+    // Field readers that degrade instead of throwing. Newtonsoft's explicit JToken casts throw an
+    // ArgumentException for a type it cannot convert, which is exactly the wrong failure mode inside
+    // a handler whose LAST act is the attendance write (see OnClassEnded).
+    private static string? ReadString(JObject o, string name) =>
+        o[name] is JValue { Type: JTokenType.String } v ? (string?)v.Value : null;
+
+    private static int ReadInt(JObject o, string name, int fallback)
+    {
+        try
+        {
+            return o[name] switch
+            {
+                JValue { Type: JTokenType.Integer or JTokenType.Float } v => Convert.ToInt32(v.Value, CultureInfo.InvariantCulture),
+                JValue { Type: JTokenType.String } s when int.TryParse((string?)s.Value, NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => fallback,
+            };
+        }
+        catch { return fallback; }
+    }
+
+    private static double ReadDouble(JObject o, string name, double fallback)
+    {
+        try
+        {
+            double d = o[name] switch
+            {
+                JValue { Type: JTokenType.Integer or JTokenType.Float } v => Convert.ToDouble(v.Value, CultureInfo.InvariantCulture),
+                JValue { Type: JTokenType.String } s when double.TryParse((string?)s.Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => fallback,
+            };
+            return double.IsFinite(d) ? d : fallback;
+        }
+        catch { return fallback; }
+    }
+
+    private static bool ReadBool(JObject o, string name, bool fallback) => o[name] switch
+    {
+        JValue { Type: JTokenType.Boolean } v => (bool)(v.Value ?? fallback),
+        _ => fallback,
+    };
 
     // ============================ assets-request (remote media) ============================
     //
@@ -1129,6 +1379,12 @@ internal static class ArcademyHostService
     /// and always posts a terminating message so the page's in-flight latch clears.</summary>
     private static async void ServeRemoteBatch(string reqId, string kind, int want)
     {
+        // The window this batch was asked for. A fetch can outlive its window (the provider is
+        // throttled ~1 req/s process-wide and a relaunch takes far less), and without this the
+        // continuation posted the old window's media into the NEW page under a reqId it never sent,
+        // and prewarmed RemoteBuffer that DisposeAll had just cleared.
+        int epoch = Volatile.Read(ref _generation);
+
         if (Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0)
         {
             // Another fetch owns the provider (throttled ~1 req/s process-wide). End THIS exchange
@@ -1158,9 +1414,10 @@ internal static class ArcademyHostService
 
             var win = _host?.Window;
             if (win == null) return;   // the Arcademy closed while fetching
+            if (Volatile.Read(ref _generation) != epoch) return;   // ...or closed and relaunched
             await win.Dispatcher.InvokeAsync(() =>
             {
-                if (_host == null) return;
+                if (_host == null || Volatile.Read(ref _generation) != epoch) return;
                 var send = fresh.Take(want).ToList();
                 lock (RemoteBuffer)
                 {
@@ -1182,7 +1439,10 @@ internal static class ArcademyHostService
         catch (Exception ex)
         {
             App.Logger?.Warning("ArcademyHost: remote batch failed: {E}", ex.Message);
-            try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch { }
+            if (Volatile.Read(ref _generation) == epoch)
+            {
+                try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch { }
+            }
         }
         finally { Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
     }
@@ -1230,6 +1490,11 @@ internal static class ArcademyHostService
     {
         try
         {
+            // Flag first, service second. The early return used to run BEFORE `_videoHooked = false`,
+            // so a teardown that found App.Video null (shutdown order) left the flag true and the NEXT
+            // launch's HookVideoEvents(true) refused to subscribe - the Arcademy then never suspended
+            // for a mandatory video for the rest of the app session.
+            if (!on) _videoHooked = false;
             if (App.Video == null) return;
             if (on && !_videoHooked)
             {
@@ -1237,14 +1502,54 @@ internal static class ArcademyHostService
                 App.Video.VideoEnded += OnVideoEnded;
                 _videoHooked = true;
             }
-            else if (!on && _videoHooked)
+            else if (!on)
             {
                 App.Video.VideoStarted -= OnVideoStarted;
                 App.Video.VideoEnded -= OnVideoEnded;
-                _videoHooked = false;
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// BROWSER VIDEO. <c>init.protectBrowserVideo</c> is a real promise, not a label: when the user
+    /// has ProtectBrowserVideoPlayback on, a web-video takeover covering the screen must freeze the
+    /// class exactly like a mandatory video does. <see cref="Services.Browser.BrowserMediaService"/>
+    /// raises <c>PlayingChanged</c> on the UI thread when its playback state flips, which is the one
+    /// signal this can honestly hang off — the gate itself
+    /// (<see cref="Services.Browser.BrowserMediaService.ResolveDeferInterruptions"/>) is a poll, and
+    /// polling a class's freeze state would be worse than not having it.
+    /// </summary>
+    private static void HookBrowserVideoEvents(bool on)
+    {
+        try
+        {
+            if (!on) _browserVideoHooked = false;
+            if (App.BrowserMedia == null) return;
+            if (on && !_browserVideoHooked)
+            {
+                App.BrowserMedia.PlayingChanged += OnBrowserVideoPlayingChanged;
+                _browserVideoHooked = true;
+            }
+            else if (!on)
+            {
+                App.BrowserMedia.PlayingChanged -= OnBrowserVideoPlayingChanged;
+            }
+        }
+        catch { }
+    }
+
+    private static void OnBrowserVideoPlayingChanged(object? sender, bool playing)
+    {
+        // Read the preference LIVE rather than caching the init snapshot: a user who turns the
+        // protection off mid-class expects the next clip not to freeze them.
+        if (App.Settings?.Current?.ProtectBrowserVideoPlayback != true) return;
+        if (playing) { Suspend(true, "video"); return; }
+        // Do not un-freeze over a mandatory video / audio-only session that is still running, and
+        // never un-freeze a PANIC suspend - that one only lifts on the user's own resume-request.
+        if (_panicSuspended || App.Video?.IsPlaying == true
+            || App.Settings?.Current?.AudioOnlySession == true) return;
+        Suspend(false, "video");
     }
 
     private static void OnVideoStarted(object? sender, EventArgs e) => Suspend(true, "video");
@@ -1253,6 +1558,10 @@ internal static class ArcademyHostService
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted || _host == null) return;
+        // A PANIC suspend outranks the video's own un-freeze: the user pressed the emergency stop,
+        // and a video ending is not them asking to be put back in a class. It lifts on their
+        // resume-request and nowhere else.
+        if (_panicSuspended) { App.Logger?.Debug("ArcademyHost: video ended but a panic suspend still stands"); return; }
         disp.BeginInvoke(() =>
         {
             _host?.Post(new { type = "suspend", on = false, reason = "video" });
@@ -1271,13 +1580,94 @@ internal static class ArcademyHostService
     {
         try
         {
+            // Unsubscribe from the instance we actually hooked, not from whatever App.Settings.Current
+            // happens to be NOW - a cloud restore or a factory Reset SWAPS the object (see
+            // CurrentReplaced below) and unhooking the new one would leave the old handler alive
+            // forever. Flags are cleared before any early return, same lesson as HookVideoEvents.
+            if (!on)
+            {
+                if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingChangedInApp;
+                _hookedSettings = null;
+                if (_settingsReplaceHooked && App.Settings != null)
+                    App.Settings.CurrentReplaced -= OnSettingsCurrentReplaced;
+                _settingsReplaceHooked = false;
+                return;
+            }
+
             var s = App.Settings?.Current;
-            if (s == null) return;
-            if (on && !_settingsHooked) { s.PropertyChanged += OnSettingChangedInApp; _settingsHooked = true; }
-            else if (!on && _settingsHooked) { s.PropertyChanged -= OnSettingChangedInApp; _settingsHooked = false; }
+            if (s != null && !ReferenceEquals(s, _hookedSettings))
+            {
+                if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingChangedInApp;
+                s.PropertyChanged += OnSettingChangedInApp;
+                _hookedSettings = s;
+            }
+            // ...and FOLLOW the instance. SettingsService.RestoreFrom / Reset do not mutate the
+            // settings object, they replace it and raise CurrentReplaced; without this the Arcademy
+            // spent the rest of its session listening to a discarded object, which silently killed
+            // BOTH jobs of this watch - the audio-only suspend and every live `setting` echo.
+            // OverlayService and ModService already follow the same event.
+            if (!_settingsReplaceHooked && App.Settings != null)
+            {
+                App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
+                _settingsReplaceHooked = true;
+            }
         }
         catch { }
     }
+
+    private static void OnSettingsCurrentReplaced()
+    {
+        if (_host == null) return;
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null || ReferenceEquals(s, _hookedSettings)) return;
+            if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingChangedInApp;
+            s.PropertyChanged += OnSettingChangedInApp;
+            _hookedSettings = s;
+            App.Logger?.Information("ArcademyHost: re-bound to the replaced AppSettings instance");
+            // The restored values may differ from what the page is painting; the page's model only
+            // ever moves on an echo, so push the whole projection's worth of keys once.
+            RepushProjectedSettings(s);
+            if (s.AudioOnlySession) Suspend(true, "audio-only");
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost: settings rebind failed: {E}", ex.Message); }
+    }
+
+    /// <summary>Re-echo every key the init projection carries. Used after the settings instance is
+    /// swapped underneath us, where no PropertyChanged fires for the values that moved.</summary>
+    private static void RepushProjectedSettings(Models.AppSettings s)
+    {
+        foreach (var prop in ProjectedProperties)
+        {
+            var (key, value) = ProjectedSetting(s, prop);
+            if (key == null) continue;
+            try { _host?.Post(new { type = "setting", key, value }); }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost: re-echo {Key} failed: {E}", key, ex.Message); }
+        }
+    }
+
+    private static readonly string[] ProjectedProperties =
+    {
+        nameof(Models.AppSettings.ArcademyMasterIntensity),
+        nameof(Models.AppSettings.ArcademyCapFlashRate),
+        nameof(Models.AppSettings.ArcademyCapFlashOpacity),
+        nameof(Models.AppSettings.ArcademyCapSubDensity),
+        nameof(Models.AppSettings.ArcademyCapDuckDepth),
+        nameof(Models.AppSettings.ArcademyCapBubbleRate),
+        nameof(Models.AppSettings.ArcademyCapBinauralDepth),
+        nameof(Models.AppSettings.ArcademyCapBgIntensity),
+        nameof(Models.AppSettings.ArcademyAudioMute),
+        nameof(Models.AppSettings.ArcademyHideTutorial),
+        nameof(Models.AppSettings.ArcademyAudioLevels),
+        nameof(Models.AppSettings.ChaosEffectIntensity),
+        nameof(Models.AppSettings.MasterVolume),
+        nameof(Models.AppSettings.RemoteMediaRatio),
+        nameof(Models.AppSettings.MediaSource),
+        nameof(Models.AppSettings.OfflineMode),
+        nameof(Models.AppSettings.MotionLevel),
+        nameof(Models.AppSettings.ProtectBrowserVideoPlayback),
+    };
 
     private static void OnSettingChangedInApp(object? sender, PropertyChangedEventArgs e)
     {
@@ -1293,6 +1683,10 @@ internal static class ArcademyHostService
                     App.Logger?.Information("ArcademyHost: audio-only session started{Mid} - suspending",
                         _classActive ? " mid-class" : "");
                     Suspend(true, "audio-only");
+                }
+                else if (_panicSuspended)
+                {
+                    App.Logger?.Debug("ArcademyHost: audio-only ended but a panic suspend still stands");
                 }
                 else Suspend(false, "audio-only");
                 return;
@@ -1452,14 +1846,20 @@ internal static class ArcademyHostService
         _disposing = true;
         try
         {
+            // Retire this window's generation FIRST: every async continuation still in the air
+            // (ServeRemoteBatch) checks it and drops itself rather than posting into the next window.
+            Interlocked.Increment(ref _generation);
             CancelExitWatchdog();
             CancelBootDeadline();
             StopHeartbeatWatch();
             HookVideoEvents(false);
             HookSettingsWatch(false);
+            HookBrowserVideoEvents(false);
             try { _meta?.FlushSave(); } catch { }
             _meta = null;
             _classActive = false;
+            _panicSuspended = false;
+            _lastPanicPressUtc = DateTime.MinValue;
             _initPosted = false;
             lock (RemoteBuffer) RemoteBuffer.Clear();
             try { _host?.Dispose(); } catch { }
