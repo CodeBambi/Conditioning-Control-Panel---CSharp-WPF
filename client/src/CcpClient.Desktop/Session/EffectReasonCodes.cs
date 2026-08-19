@@ -194,4 +194,29 @@ public static class EffectReasonCodes
     /// would be exactly the silently-missing half this code exists to prevent.</para>
     /// </summary>
     public const string BrainDrainVisualHalfAbsent = "braindrain-visual-half-absent";
+
+    /// <summary>
+    /// An INPUT module is armed and this process cannot put a window in front of a human at all
+    /// (SP-110): no interactive window station, no display, or a platform whose capture this build
+    /// cannot earn — the Linux and macOS branches of <c>Input.InputPresenceFactory</c>.
+    ///
+    /// <para><b>It takes the Pink Filter answer</b> — <c>Unavailable</c> in the arm result and
+    /// <c>Armed</c> in the dot — because the whole CHANNEL is gone. Not one card can be shown, so
+    /// there is no surviving half to name, and a lit dot would claim the module is waiting for an
+    /// answer from a user it has no way to ask.</para>
+    /// </summary>
+    public const string InputCaptureUnavailable = "input-capture-unavailable";
+
+    /// <summary>
+    /// An INPUT module's phrase pool is empty, so the schedule runs and every card that comes due has
+    /// nothing to ask (SP-110). Upstream's own outcome: its show path returns before showing anything
+    /// when no phrase is enabled (<c>Services/LockCard/LockCardService.cs:275-280</c>), while the
+    /// timer keeps running.
+    ///
+    /// <para><b>This one takes the Subliminals answer</b> — <c>Degraded</c> in the arm result and
+    /// <c>Live</c> in the dot — because a pool is CONTENT, not a channel: the module is running, the
+    /// desktop can take the input, and enabling a phrase mid-session starts producing cards with no
+    /// re-arm.</para>
+    /// </summary>
+    public const string InputNoPhrase = "input-no-phrase";
 }

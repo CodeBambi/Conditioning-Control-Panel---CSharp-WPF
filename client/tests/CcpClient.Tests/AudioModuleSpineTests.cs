@@ -34,19 +34,20 @@ public class AudioModuleSpineTests
     // =================================================================================
 
     [Fact]
-    public async Task PressingStartArmsAllSeven_InWpfsOwnRackOrder()
+    public async Task PressingStartArmsAllEight_InWpfsOwnRackOrder()
     {
         await using var rig = await Rig.StartAsync();
 
         // WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
-        // (StudioTabView.xaml.cs:482-541). The port has no GAMES & CARDS row, so the ported rows
-        // close up around it without reordering: the two IMMERSION rows sit between the effects and
-        // the ramp, which is also StartEngine's own order (:229-230, :241-244, then :265-269).
+        // (StudioTabView.xaml.cs:482-541). SP-110 opened GAMES & CARDS with Lock Card, so it sits
+        // between the effects and the two IMMERSION rows — which is also StartEngine's own order
+        // (the lock card at :206-209, then Mind Wipe :229-230 and Brain Drain :241-244, then the
+        // ramp timer :265-269).
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
-                IntensityRampEffect.EffectId,
+                PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
+                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

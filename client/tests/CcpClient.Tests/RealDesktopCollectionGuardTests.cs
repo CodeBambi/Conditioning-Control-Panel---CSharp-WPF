@@ -68,6 +68,15 @@ public class RealDesktopCollectionGuardTests
         "TrayObservations",
         "TrayShellProbe",
         "Win32OverlayPresence",
+        // SP-110. An input-capturing window is the most contended thing this suite puts on the
+        // desktop: it does not merely occupy a point in the z-order, it TAKES THE FOREGROUND and the
+        // keyboard focus away from whatever else is running — including another CcpClient.Tests
+        // process's own card, and including the scratch rigs the overlay and flash fixtures depend
+        // on. Two of these running concurrently would fight over one machine-wide resource that only
+        // one window can hold.
+        "InputWindowProbe",
+        "InputCaptureObservations",
+        "Win32InputPresence",
     ];
 
     /// <summary>
@@ -93,12 +102,14 @@ public class RealDesktopCollectionGuardTests
 
     private const string MessageOnlyToken = "HwndMessage";
 
-    /// <summary>Broken-detector controls: these three must always come out bound.</summary>
+    /// <summary>Broken-detector controls: these must always come out bound.</summary>
     private static readonly string[] BoundControls =
     [
         "OverlayCapabilityTests.cs",
         "FlashDrawTests.cs",
         "TrayCapabilityTests.cs",
+        "InputCapabilityTests.cs",
+        "InputOverlayCoexistenceTests.cs",
     ];
 
     [Fact]

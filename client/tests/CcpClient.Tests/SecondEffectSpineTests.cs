@@ -137,14 +137,15 @@ public class SecondEffectSpineTests
         // And the session can NAME the holes rather than merely having them, in rack order.
         // SP-105 added a third module that also ships off (Pink Filter,
         // CCP.Core/Models/AppSettings.cs:3726), SP-108 a fourth (Intensity Ramp, :2575-2580) and
-        // SP-109 a fifth and sixth (both audio modules), so this list has grown three times — the
-        // FACT is unchanged and the assertion is stronger each time: five modules declined the same
-        // session for the same reason and all five are named, which is the whole point of a typed
+        // SP-109 a fifth and sixth (both audio modules), and SP-110 a seventh (Lock Card, which ships
+        // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. The FACT
+        // is unchanged and the assertion is stronger each time: seven modules declined the same
+        // session for the same reason and all seven are named, which is the whole point of a typed
         // arm.
         Assert.Equal(
             [
-                SubliminalsEffect.EffectId, PinkFilterEffect.EffectId, MindWipeEffect.EffectId,
-                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                SubliminalsEffect.EffectId, PinkFilterEffect.EffectId, LockCardEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }

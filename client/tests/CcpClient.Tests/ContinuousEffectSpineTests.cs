@@ -209,12 +209,13 @@ public class ContinuousEffectSpineTests
         // (CCP.Core/Models/AppSettings.cs:2574-2579); the continuous module took the session.
         //
         // SP-109 adds two more modules that ship off — Mind Wipe and Brain Drain's audio half — and
-        // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
-        // four modules declined the same session for the same reason and all four are named.
+        // SP-110 a third, Lock Card (AppSettings.cs:3331), so this list grows again in rack order.
+        // The FACT is unchanged and the assertion is stronger: five modules declined the same session
+        // for the same reason and all five are named.
         Assert.Equal(
             [
-                SubliminalsEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
-                IntensityRampEffect.EffectId,
+                SubliminalsEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
+                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }
@@ -243,11 +244,16 @@ public class ContinuousEffectSpineTests
         // where both orders that matter put them, and they agree again: the rack's group order, and
         // StartEngine's own (Mind Wipe :229-230 and Brain Drain :241-244 come after every effect
         // service and before the ramp timer). Mind Wipe first, Brain Drain second, in both.
+        //
+        // SP-110 opens the GAMES & CARDS group with Lock Card, and it lands between the effects and
+        // the IMMERSION pair for the same reason: that is the rack's group order
+        // (StudioTabView.xaml.cs:482/498/508/530) AND StartEngine's own (:206-209 comes after the
+        // overlay service and before Mind Wipe at :229-230).
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, SubliminalsEffect.EffectId, SpiralOverlayEffect.EffectId,
-                PinkFilterEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
-                IntensityRampEffect.EffectId,
+                PinkFilterEffect.EffectId, LockCardEffect.EffectId, MindWipeEffect.EffectId,
+                BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

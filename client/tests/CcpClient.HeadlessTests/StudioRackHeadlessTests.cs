@@ -448,7 +448,7 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -575,7 +575,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);
 
@@ -587,7 +587,7 @@ public class StudioRackHeadlessTests
         foreach (var name in new[]
         {
             "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-            "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+            "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
         })
         {
             Assert.Contains(
@@ -765,10 +765,12 @@ public class StudioRackHeadlessTests
             .Where(t => t.Classes.Contains("rack-group"))
             .Select(t => t.Text)
             .ToList();
-        // SP-109 adds IMMERSION, and it goes BETWEEN them: upstream's group order is EFFECTS,
-        // GAMES & CARDS, IMMERSION, TIMING (StudioTabView.xaml.cs:483/498/508/530) and the port has
-        // no GAMES & CARDS row, so the ported groups close up without reordering.
-        Assert.Equal(["EFFECTS", "IMMERSION", "TIMING"], groups);
+        // SP-109 adds IMMERSION and SP-110 adds GAMES & CARDS, and each lands exactly where upstream
+        // puts it: the group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
+        // (StudioTabView.xaml.cs:483/498/508/530), so the port now has all four and NOTHING was
+        // reordered as they arrived. A rack that reshuffles itself as modules land stops being the
+        // rack the user learned.
+        Assert.Equal(["EFFECTS", "GAMES & CARDS", "IMMERSION", "TIMING"], groups);
 
         // And the row order is still upstream's, with the new group after the old one.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
@@ -778,7 +780,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowSubliminals", "RowSpiralOverlay", "RowPinkFilter",
-                "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
+                "RowLockCard", "RowMindWipe", "RowBrainDrain", "RowIntensityRamp",
             ],
             rows);
 

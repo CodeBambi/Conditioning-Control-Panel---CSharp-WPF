@@ -1,6 +1,7 @@
 using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Features.Dtrh;
+using CcpClient.Desktop.Input;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 
@@ -35,6 +36,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<IntensityRampPresetDocument> _rampPreset;
     private readonly PersistenceStore<MindWipePresetDocument> _mindWipePreset;
     private readonly PersistenceStore<BrainDrainPresetDocument> _brainDrainPreset;
+    private readonly PersistenceStore<LockCardPresetDocument> _lockCardPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -42,6 +44,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly IPinkFilterSurface _pinkFilterSurface;
     private readonly ISpiralSurface _spiralSurface;
     private readonly IAudioPresence _audio;
+    private readonly IInputPresence _input;
     private readonly UiDispatchBoundary _uiDispatch;
     private readonly string _dataDirectory;
 
@@ -59,7 +62,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IAudioCuePool? mindWipeClips = null,
         IAudioCuePool? brainDrainClips = null,
         Random? mindWipeRandom = null,
-        Random? brainDrainRandom = null)
+        Random? brainDrainRandom = null,
+        IInputPresence? input = null,
+        ILockCardPhrasePool? lockCardPhrases = null,
+        Random? lockCardRandom = null,
+        Func<InputBounds>? lockCardPlacement = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -112,6 +119,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("BrainDrainPreset"), infra.Log,
             Path.Combine(dataDirectory, BrainDrainPresetDocument.FileName),
             BrainDrainPresetDocument.CurrentSchemaVersion);
+
+        // SP-110: the first module that ASKS the user something, and its own document on the same
+        // precedent. It carries a phrase POOL as well as dials, which no earlier module's document
+        // does — and that is the whole reason it must not be merged into a shared file: a hand-broken
+        // phrase list would otherwise take five other modules' dials to defaults with it.
+        _lockCardPreset = new PersistenceStore<LockCardPresetDocument>(
+            infra.OwnerFor("LockCardPreset"), infra.Log,
+            Path.Combine(dataDirectory, LockCardPresetDocument.FileName),
+            LockCardPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -222,6 +238,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // (runtime-capability-contract §2 rule 2; Audio/AudioPresenceFactory.cs).
         _audio = audio ?? AudioPresenceFactory.Create(message => infra.Log.Log(message));
 
+        // SP-110: the INPUT capability. Built HERE, once, for the same reason the audio presence is:
+        // it owns a native window, and a second presence would be a second window competing for the
+        // one foreground the OS lends. Selection is by platform and selection is NEVER availability
+        // — on Linux the factory hands back a typed refusal naming the manual gate, and on Windows
+        // the presence still has to earn Available from the operating system's own foreground and
+        // keyboard focus before the module's dot may light (runtime-capability-contract §2 rule 2;
+        // Input/InputPresenceFactory.cs).
+        //
+        // Nothing is created on screen by this line: the presence builds its window lazily, on the
+        // first card, so a session that never asks anything — and every headless or unit run —
+        // creates no window at all. That is the same lazy-surface discipline the drawing modules'
+        // presenters already follow.
+        _input = input ?? InputPresenceFactory.Create();
+
         Ramp = new IntensityRampEffect(
             infra.OwnerFor("IntensityRamp"),
             signal,
@@ -263,6 +293,24 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _brainDrainPreset,
             brainDrainRandom);
 
+        // SP-110: the first module that asks the user something. It takes the ONE shared input
+        // presence and its own phrase pool, and no surface: what it puts on screen is the capability's
+        // window, not a drawing surface, and the distinction is why it consumes IInputPresence rather
+        // than IOverlayPresence — one of those exists to let clicks THROUGH and the other to catch
+        // them.
+        LockCard = new LockCardEffect(
+            infra.OwnerFor("LockCard"),
+            signal,
+            sessionClock,
+            lockCardPhrases ?? new LockCardPhrasePool(_lockCardPreset),
+            _input,
+            _lockCardPreset,
+            // Injectable for the same reason every other module's Random is: the SPACING is what a
+            // fact has to make deterministic, and the arithmetic it is fed into must stay the
+            // module's own rather than a number a test double re-derives.
+            lockCardRandom,
+            lockCardPlacement);
+
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
         // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
@@ -287,8 +335,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // and GAMES & CARDS and before TIMING (StudioTabView.xaml.cs:482-541), and StartEngine starts
         // Mind Wipe (:229-230) and Brain Drain (:241-244) after every effect service and before the
         // ramp timer (:265-269). Mind Wipe first, Brain Drain second, upstream's own order in both.
+        //
+        // SP-110 inserts Lock Card BETWEEN the effects and the IMMERSION pair, which is where both
+        // orders that matter put it and they agree: upstream's rack puts GAMES & CARDS after EFFECTS
+        // and before IMMERSION (StudioTabView.xaml.cs:482/498/508/530), and StartEngine starts the
+        // lock card (:206-209) after the overlay service and before Mind Wipe (:229-230). It is the
+        // port's first GAMES & CARDS row, so the group opens with it.
         Engine = new SessionEngine(
-            [Flash, Subliminals, Spiral, PinkFilter, MindWipe, BrainDrain, Ramp], _preset, signal);
+            [Flash, Subliminals, Spiral, PinkFilter, LockCard, MindWipe, BrainDrain, Ramp], _preset, signal);
 
         // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:547-555
         // calls StopEngine()). A module cannot call the engine that owns it without closing the cycle,
@@ -326,12 +380,23 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Brain Drain's AUDIO half — half a row, permanently, and it says so (SP-109).</summary>
     public BrainDrainEffect BrainDrain { get; }
 
+    /// <summary>Lock Card, the first module that ASKS the user something (SP-110).</summary>
+    public LockCardEffect LockCard { get; }
+
     /// <summary>
     /// The audio capability both audio modules play through. Public for the same reason every surface
     /// is: a capability nobody can reach is a capability nobody can interrogate — and this is the one
     /// whose <c>Available</c> is earned from the operating system rather than from a call returning.
     /// </summary>
     public IAudioPresence Audio => _audio;
+
+    /// <summary>
+    /// The input capability the lock card asks through. Public for the same reason every surface and
+    /// the audio presence are: a capability nobody can reach is a capability nobody can interrogate —
+    /// and this is the one whose <c>Available</c> is earned from the operating system's own
+    /// foreground and keyboard focus rather than from a handler having been attached.
+    /// </summary>
+    public IInputPresence Input => _input;
 
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
@@ -367,6 +432,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Brain Drain module's persisted store, same reason.</summary>
     public PersistenceStore<BrainDrainPresetDocument> BrainDrainPreset => _brainDrainPreset;
 
+    /// <summary>The Lock Card module's persisted store, same reason.</summary>
+    public PersistenceStore<LockCardPresetDocument> LockCardPreset => _lockCardPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -387,6 +455,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _rampPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _mindWipePreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _brainDrainPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _lockCardPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -400,6 +469,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("ramp-preset", _rampPreset.LastLoadOutcome);
         LogIfDegraded("mindwipe-preset", _mindWipePreset.LastLoadOutcome);
         LogIfDegraded("braindrain-preset", _brainDrainPreset.LastLoadOutcome);
+        LogIfDegraded("lockcard-preset", _lockCardPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -438,10 +508,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // OS-observable far end of the chain this capability claims.
         _audio.Dispose();
 
+        // The input presence's window DOES belong to the thread that made it, so it goes down the
+        // same route the drawing surfaces take rather than the audio device's inline one. Engine.Stop
+        // above has already disarmed the module, and disarm dismisses any card from the UI thread the
+        // user pressed STOP on — so the visible-stop guarantee rests on that, never on this post or
+        // on process death.
+        DisposeSurface(_input);
+
         return Task.WhenAll(
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
-            _brainDrainPreset.StopAsync(), _assetSelection.StopAsync());
+            _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -456,7 +533,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // Engine.Stop() above, so no flush here can ever write a ramped value over the user's.
             _rampPreset.FlushAsync(boundedWait),
             _mindWipePreset.FlushAsync(boundedWait),
-            _brainDrainPreset.FlushAsync(boundedWait));
+            _brainDrainPreset.FlushAsync(boundedWait),
+            _lockCardPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

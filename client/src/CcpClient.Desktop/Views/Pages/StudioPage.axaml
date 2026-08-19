@@ -101,11 +101,37 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-110 — GAMES & CARDS, and it is the group SP-109's comment said the port did
+               not have. WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
+               (StudioTabView.xaml.cs:483/498/508/530), so it opens here, between the two that
+               already exist, and nothing is reordered. The header is upstream's own string
+               (st4_studio_group_games, en.json).
+
+               ITS ONE ROW IS THE ONLY MODULE ON THIS PAGE THAT ASKS THE USER ANYTHING. Every
+               other row draws, tints, paces, ramps or plays over whatever the user is doing;
+               this one takes the keyboard away from it and waits. Its dot therefore means
+               something no earlier dot has meant — see LockCardEffect. -->
+          <TextBlock Classes="rack-group" Text="GAMES &amp; CARDS" />
+
+          <RadioButton x:Name="RowLockCard"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowLockCard"
+                       AutomationProperties.Name="Lock Card rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Lock Card" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="LockCardRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="LockCardRowDot" />
+            </Grid>
+          </RadioButton>
+
           <!-- SP-109 — THE RACK'S THIRD GROUP, and it sits HERE rather than at the end
                because WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
-               (StudioTabView.xaml.cs:483/498/508/530). The port has no GAMES & CARDS row (every
-               one of them needs an input-capturing window or video), so IMMERSION closes up
-               against EFFECTS without reordering anything. The header is upstream's own string
+               (StudioTabView.xaml.cs:483/498/508/530). SP-110 opened GAMES & CARDS above with
+               its one ported row; the rest of that group still needs video or a moving
+               clickable window. The header is upstream's own string
                (st4_studio_group_immersion = "IMMERSION", en.json:4818).
 
                BOTH ROWS ARE AUDIO, and they are the first rows on this page whose output nobody
@@ -466,6 +492,110 @@
              is not a sentence about a platform — it is the AUDIO CAPABILITY'S own typed outcome,
              quoting what was asked of the operating system and what came back, including the peak
              level Windows measured on this process's own stream. -->
+        <!-- ================= Lock Card ================= -->
+        <StackPanel x:Name="LockCardModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Lock Card" />
+          <TextBlock Classes="page-blurb"
+                     Text="Shows a card at random and asks you to type a phrase." />
+
+          <!-- THE INTERRUPTION WARNING LEADS, above the dials, and it is a constant in
+               InputPanelNotices rather than inline prose so a fact can pin the exact words. This
+               is the only module in the rack that takes the keyboard, and a user is entitled to
+               know that before they tick the box rather than the first time a card lands in the
+               middle of somebody else's chat window. -->
+          <Border Classes="notice">
+            <TextBlock x:Name="LockCardInterruptionNotice"
+                       AutomationProperties.AutomationId="LockCardInterruptionNotice"
+                       TextWrapping="Wrap"
+                       Text="" />
+          </Border>
+
+          <!-- THREE dials, and all three are read by the running module. WPF's panel also carries
+               a phrase editor dialog and a voice-solve switch
+               (Features/LockCardFeatureControl.xaml.cs:203-210, and LockCardVoiceMode). Neither is
+               ported, so both are ABSENT rather than greyed — a disabled dial swallows the gesture
+               and tells the user nothing (§9 D7). -->
+          <CheckBox x:Name="LockCardEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="LockCardEnableToggle"
+                    AutomationProperties.Name="Lock Card enabled"
+                    Content="Enable Lock Card" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Cards per hour" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="LockCardFrequencySlider"
+                    Minimum="1" Maximum="10"
+                    SmallChange="1" LargeChange="1"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="LockCardFrequencySlider"
+                    AutomationProperties.Name="Lock Card cards per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="LockCardFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="LockCardFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Repeats" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="LockCardRepeatsSlider"
+                    Minimum="1" Maximum="10"
+                    SmallChange="1" LargeChange="1"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="LockCardRepeatsSlider"
+                    AutomationProperties.Name="Lock Card repeats" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="LockCardRepeatsValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="LockCardRepeatsValue"
+                       Text="" />
+          </Grid>
+
+          <CheckBox x:Name="LockCardStrictToggle"
+                    AutomationProperties.AutomationId="LockCardStrictToggle"
+                    AutomationProperties.Name="Lock Card strict mode"
+                    Content="Strict (the card refuses Alt+F4; Esc still closes it)" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="LockCardLiveState"
+                         AutomationProperties.AutomationId="LockCardLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="LockCardDemandState"
+                         AutomationProperties.AutomationId="LockCardDemandState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="LockCardPhraseState"
+                         AutomationProperties.AutomationId="LockCardPhraseState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="LockCardScopeNotice"
+                       AutomationProperties.AutomationId="LockCardScopeNotice"
+                       Text="" />
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="LockCardCaptureState"
+                       AutomationProperties.AutomationId="LockCardCaptureState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
         <StackPanel x:Name="MindWipeModulePanel" IsVisible="False" Spacing="10">
           <TextBlock Classes="module-title" Text="Mind Wipe" />
           <TextBlock Classes="page-blurb" Text="Plays a short clip at random while the session runs." />

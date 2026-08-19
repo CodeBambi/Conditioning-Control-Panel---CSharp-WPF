@@ -70,6 +70,7 @@ public partial class StudioPage : UserControl
     private readonly IntensityRampEffect _ramp;
     private readonly MindWipeEffect _mindWipe;
     private readonly BrainDrainEffect _brainDrain;
+    private readonly LockCardEffect _lockCard;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -86,6 +87,7 @@ public partial class StudioPage : UserControl
         _ramp = session.Ramp;
         _mindWipe = session.MindWipe;
         _brainDrain = session.BrainDrain;
+        _lockCard = session.LockCard;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -98,6 +100,7 @@ public partial class StudioPage : UserControl
         RowIntensityRamp.IsCheckedChanged += (_, _) => ApplySelection();
         RowMindWipe.IsCheckedChanged += (_, _) => ApplySelection();
         RowBrainDrain.IsCheckedChanged += (_, _) => ApplySelection();
+        RowLockCard.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -111,6 +114,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId);
         AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId);
         AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId);
+        AddQuickToggle(RowLockCard, LockCardEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -126,6 +130,12 @@ public partial class StudioPage : UserControl
             OnEnableToggled(MindWipeEnableToggle, _mindWipe, MindWipeEffect.EffectId);
         BrainDrainEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(BrainDrainEnableToggle, _brainDrain, BrainDrainEffect.EffectId);
+        LockCardEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(LockCardEnableToggle, _lockCard, LockCardEffect.EffectId);
+
+        // Strict is one of the module's own dials, not its enable, so it writes through the module
+        // the way the ramp's switches do rather than through the rack's quick-toggle.
+        LockCardStrictToggle.IsCheckedChanged += (_, _) => OnLockCardStrictToggled();
 
         // Brain Drain's high-refresh switch is one of the module's own dials, not its enable, so it
         // writes through the module like the ramp's switches do rather than through the rack's
@@ -157,12 +167,20 @@ public partial class StudioPage : UserControl
         OnSliderMoved(MindWipeVolumeSlider, OnMindWipeVolumeMoved);
         OnSliderMoved(BrainDrainIntensitySlider, OnBrainDrainIntensityMoved);
         OnSliderMoved(BrainDrainVolumeSlider, OnBrainDrainVolumeMoved);
+        OnSliderMoved(LockCardFrequencySlider, OnLockCardFrequencyMoved);
+        OnSliderMoved(LockCardRepeatsSlider, OnLockCardRepeatsMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
         _subliminals.Fired += _ => Refresh();
         _mindWipe.Fired += _ => Refresh();
         _brainDrain.Fired += _ => Refresh();
+
+        // BOTH of this module's signals, and both matter: Shown is a card appearing, Resolved is the
+        // user answering it OR walking away from it. A page that only repainted on the first would
+        // leave "asking you now" on screen after the card was gone.
+        _lockCard.Shown += _ => Refresh();
+        _lockCard.Resolved += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -201,6 +219,13 @@ public partial class StudioPage : UserControl
     /// <see cref="EffectDotState.Live"/> while the audio half runs even though the row is half of its
     /// upstream: the dot is scoped to what the ROW is, and this row's title says what it is.</summary>
     public EffectDotState RenderedBrainDrainDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Lock Card row's dot — the sixth meaning, and the first that is a claim on the
+    /// USER rather than on anything this process owns: a firing on the clock, a desktop this process
+    /// can put a window on, AND, while a card is up, the operating system's own confirmation that the
+    /// card holds the foreground and the keyboard focus (SP-110,
+    /// <see cref="LockCardEffect"/>).</summary>
+    public EffectDotState RenderedLockCardDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -261,6 +286,7 @@ public partial class StudioPage : UserControl
         var rampOpen = RowIntensityRamp.IsChecked == true;
         var mindWipeOpen = RowMindWipe.IsChecked == true;
         var brainDrainOpen = RowBrainDrain.IsChecked == true;
+        var lockCardOpen = RowLockCard.IsChecked == true;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
@@ -268,8 +294,9 @@ public partial class StudioPage : UserControl
         RampModulePanel.IsVisible = rampOpen;
         MindWipeModulePanel.IsVisible = mindWipeOpen;
         BrainDrainModulePanel.IsVisible = brainDrainOpen;
+        LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
-            && !mindWipeOpen && !brainDrainOpen;
+            && !mindWipeOpen && !brainDrainOpen && !lockCardOpen;
     }
 
     /// <summary>
@@ -624,6 +651,12 @@ public partial class StudioPage : UserControl
             BrainDrainIntensitySlider.Value = brainDrain.IntensityPercent;
             BrainDrainVolumeSlider.Value = brainDrain.VolumePercent;
             BrainDrainHighRefreshToggle.IsChecked = brainDrain.HighRefresh;
+
+            var lockCard = _session.LockCardPreset.Current;
+            LockCardEnableToggle.IsChecked = lockCard.Enabled;
+            LockCardFrequencySlider.Value = lockCard.PerHour;
+            LockCardRepeatsSlider.Value = lockCard.Repeats;
+            LockCardStrictToggle.IsChecked = lockCard.Strict;
         }
         finally
         {
@@ -715,6 +748,82 @@ public partial class StudioPage : UserControl
         // The module's own constant, rendered verbatim. The same string the arm result's reason
         // carries, so the panel and the typed outcome are one account of the absence rather than two.
         BrainDrainVisualHalfState.Text = BrainDrainEffect.VisualHalfNotice;
+
+        // The one row that ASKS. Its closing line is the input capability's own typed outcome plus
+        // the OS's own last read-back, on the same rule the audio rows follow: what the user reads
+        // about a resource this process does not own is QUOTED, never composed here.
+        var lockCard = _lockCard.Preset;
+        LockCardFrequencyValue.Text =
+            lockCard.PerHour.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        LockCardRepeatsValue.Text = $"{lockCard.Repeats}x";
+        LockCardInterruptionNotice.Text = InputPanelNotices.InterruptionNotice;
+        LockCardScopeNotice.Text = InputPanelNotices.ScopeNotice;
+        RenderedLockCardDot = PaintDot(LockCardRowDot, _lockCard);
+        LockCardLiveState.Text = InputPanelNotices.DescribeCardState(
+            RenderedLockCardDot, _lockCard.CardCount, _lockCard.Last, _session.Engine.Running,
+            _lockCard.Presence.CanReachAUser, _lockCard.Presence.IsPrompting,
+            _lockCard.Presence.HoldsTheInput, _lockCard.LastResolution);
+        LockCardDemandState.Text = InputPanelNotices.DescribeDemand(lockCard.Repeats, lockCard.Strict);
+        LockCardPhraseState.Text = InputPanelNotices.DescribePhrasePool(
+            _lockCard.PhraseCount, lockCard.EnabledPhrases());
+        LockCardCaptureState.Text = InputPanelNotices.DescribeInputCapability(
+            _lockCard.Presence.LastPrompt, _lockCard.Presence.LastObservation);
+    }
+
+    /// <summary>
+    /// The cards-per-hour slider writes the dial and re-paces the live schedule — the same order the
+    /// flash frequency slider uses, and upstream writes then saves
+    /// (<c>Features/LockCardFeatureControl.xaml.cs:97-106</c>). The re-pace is this port's standing
+    /// convention since SP-105, so a raised frequency takes effect now rather than after the old
+    /// interval expires.
+    /// </summary>
+    private void OnLockCardFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _lockCard.SetPerHour((int)Math.Round(LockCardFrequencySlider.Value));
+        _ = _session.LockCardPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The repeats slider writes the dial and does NOT re-pace: the count is read at the moment a
+    /// card is shown (<c>Services/LockCard/LockCardService.cs:294</c>), and a card whose target moved
+    /// under the user mid-typing would be the cruellest live-apply on this page.
+    /// </summary>
+    private void OnLockCardRepeatsMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _lockCard.SetRepeats((int)Math.Round(LockCardRepeatsSlider.Value));
+        _ = _session.LockCardPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Strict mode, same rule as the repeats dial: read at show time
+    /// (<c>LockCardService.cs:295</c>), so it changes the next card and never the one on screen.</summary>
+    private void OnLockCardStrictToggled()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var target = LockCardStrictToggle.IsChecked == true;
+        if (target == _lockCard.Preset.Strict)
+        {
+            return;
+        }
+
+        _lockCard.SetStrict(target);
+        _ = _session.LockCardPreset.Save();
+        Refresh();
     }
 
     /// <summary>
