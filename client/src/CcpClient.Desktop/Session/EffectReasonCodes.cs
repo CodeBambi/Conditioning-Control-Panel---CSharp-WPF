@@ -138,4 +138,60 @@ public static class EffectReasonCodes
     /// <c>Degraded</c> and reads <c>Live</c>, exactly as a paced module over an empty pool is.</para>
     /// </summary>
     public const string RampMultiplierFlat = "ramp-multiplier-flat";
+
+    /// <summary>
+    /// An AUDIO module was armed and the audio capability itself is unavailable here — no render
+    /// endpoint, or a platform where this build cannot earn an audio claim at all (SP-109). Nothing
+    /// will be heard, so the module is <c>Unavailable</c> rather than <c>Degraded</c> and its dot
+    /// reads <c>Armed</c> rather than <c>Live</c>.
+    ///
+    /// <para><b>This takes the PINK FILTER answer, not the SUBLIMINALS answer, and the line between
+    /// them is the one SP-109 had to draw.</b> A subliminal over an empty phrase pool is
+    /// <c>Degraded</c>/<c>Live</c> because the module is genuinely running and only its CONTENT is
+    /// missing. A tint whose overlay was refused is <c>Degraded</c>/<c>Armed</c> because its whole
+    /// output CHANNEL is gone and the user can observe nothing by any means. Audio with no render
+    /// session is the second of those: the clip could be perfect and no part of it reaches
+    /// anybody.</para>
+    ///
+    /// <para>Upstream has the same gate in the same place — <c>if (App.Audio?.IsOutputSuppressed ==
+    /// true) return;</c> with the comment "endpoint down — stay quiet, don't spin"
+    /// (<c>Services/LockCard/MindWipeService.cs:770</c>,
+    /// <c>Services/LockCard/BrainDrainService.cs:211</c>).</para>
+    /// </summary>
+    public const string AudioRenderUnavailable = "audio-render-unavailable";
+
+    /// <summary>
+    /// An AUDIO module's clip folder is empty, so the schedule runs and every roll that comes up
+    /// plays nothing (SP-109). Upstream's own outcome: both services return before the roll when the
+    /// file array is empty (<c>MindWipeService.cs:706-710</c>, <c>BrainDrainService.cs:181</c>),
+    /// counting nothing and playing nothing while the timer keeps running.
+    ///
+    /// <para><b>This one DOES take the Subliminals answer</b> — <c>Degraded</c> in the arm result and
+    /// <c>Live</c> in the dot — because a pool is content, not a channel: the module is running,
+    /// the device is up, and dropping a clip into the folder mid-session starts producing sound with
+    /// no re-arm.</para>
+    /// </summary>
+    public const string AudioNoClip = "audio-no-clip";
+
+    /// <summary>
+    /// <b>Brain Drain is HALF this port, permanently, and this code is how the row says so on every
+    /// healthy run rather than only when something breaks (SP-109).</b>
+    ///
+    /// <para>Upstream's single <c>BrainDrainEnabled</c> flag drives two unrelated mechanisms. The
+    /// AUDIO half is the paced one-shot this port has ported
+    /// (<c>Services/LockCard/BrainDrainService.cs:13-30</c>). The VISUAL half — upstream's own words,
+    /// on its own panel: "VISUAL half: the screen blur's strength"
+    /// (<c>Views/Controls/Studio/BrainDrainFeatureControl.xaml.cs:170</c>) — is a desktop-wide
+    /// blur/melt started from the same flag
+    /// (<c>Services/Notifications/OverlayService.cs:382-386</c>), which runs a 30–60 FPS screen
+    /// CAPTURE pump feeding per-screen blur windows (<c>OverlayService.cs:1965-1995</c>). Blurring
+    /// what is BEHIND an overlay needs a desktop read-back this port has no capability for at all,
+    /// and doing it per frame is the same cost class that makes a 60 Hz module unportable (D84).</para>
+    ///
+    /// <para><b>Always present, never conditional.</b> The arm result carries this even when the
+    /// audio half is working perfectly, because the absence is a property of the BUILD rather than of
+    /// the run — and a row that only admitted to being half a row when something else went wrong
+    /// would be exactly the silently-missing half this code exists to prevent.</para>
+    /// </summary>
+    public const string BrainDrainVisualHalfAbsent = "braindrain-visual-half-absent";
 }

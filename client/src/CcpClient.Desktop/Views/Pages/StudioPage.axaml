@@ -101,6 +101,52 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-109 — THE RACK'S THIRD GROUP, and it sits HERE rather than at the end
+               because WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
+               (StudioTabView.xaml.cs:483/498/508/530). The port has no GAMES & CARDS row (every
+               one of them needs an input-capturing window or video), so IMMERSION closes up
+               against EFFECTS without reordering anything. The header is upstream's own string
+               (st4_studio_group_immersion = "IMMERSION", en.json:4818).
+
+               BOTH ROWS ARE AUDIO, and they are the first rows on this page whose output nobody
+               in this process can see. Their dots therefore mean something no earlier dot has
+               meant: a firing on the clock AND an audio render session the OPERATING SYSTEM
+               confirms belongs to this process. See AudioCueEffect. -->
+          <TextBlock Classes="rack-group" Text="IMMERSION" />
+
+          <RadioButton x:Name="RowMindWipe"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowMindWipe"
+                       AutomationProperties.Name="Mind Wipe rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Mind Wipe" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="MindWipeRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="MindWipeRowDot" />
+            </Grid>
+          </RadioButton>
+
+          <!-- THE LABEL IS LOAD-BEARING. Upstream's row is "Brain Drain" and drives two
+               mechanisms off one flag; this port has one of them. The suffix is what makes the
+               dot beside it honest, because the dot is scoped to what the row says it is —
+               rename this to plain "Brain Drain" and a truthful Live becomes a false one. -->
+          <RadioButton x:Name="RowBrainDrain"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowBrainDrain"
+                       AutomationProperties.Name="Brain Drain audio half rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Brain Drain (audio half)" VerticalAlignment="Center"
+                         TextWrapping="Wrap" />
+              <Ellipse Grid.Column="1"
+                       x:Name="BrainDrainRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="BrainDrainRowDot" />
+            </Grid>
+          </RadioButton>
+
           <!-- SP-108 — THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
                IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
@@ -409,6 +455,176 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="PinkFilterSurfaceState"
                        AutomationProperties.AutomationId="PinkFilterSurfaceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Mind Wipe ================= -->
+        <!-- THE FIRST PANEL ON THIS PAGE WHOSE MODULE THE USER HEARS. It has no surface line and
+             it is not like the ramp's absence either: the ramp genuinely has no output medium,
+             while this one has a medium nobody in the process can observe. So the closing notice
+             is not a sentence about a platform — it is the AUDIO CAPABILITY'S own typed outcome,
+             quoting what was asked of the operating system and what came back, including the peak
+             level Windows measured on this process's own stream. -->
+        <StackPanel x:Name="MindWipeModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Mind Wipe" />
+          <TextBlock Classes="page-blurb" Text="Plays a short clip at random while the session runs." />
+
+          <!-- TWO dials, and both are read by the running effect. WPF's panel also carries loop
+               mode with its A/B crossfade engine, a custom-clip file picker and a test button
+               (MindWipeService.cs:294-380, :139-146, :879-895). None is ported, so all three are
+               ABSENT rather than greyed — a disabled dial swallows the gesture and tells the user
+               nothing (§9 D7). -->
+          <CheckBox x:Name="MindWipeEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="MindWipeEnableToggle"
+                    AutomationProperties.Name="Mind Wipe enabled"
+                    Content="Enable Mind Wipe" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Clips per hour" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="MindWipeFrequencySlider"
+                    Minimum="1" Maximum="180"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="MindWipeFrequencySlider"
+                    AutomationProperties.Name="Mind Wipe clips per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="MindWipeFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="MindWipeFrequencyValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Volume" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="MindWipeVolumeSlider"
+                    Minimum="0" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="MindWipeVolumeSlider"
+                    AutomationProperties.Name="Mind Wipe volume" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="MindWipeVolumeValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="MindWipeVolumeValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="MindWipeLiveState"
+                         AutomationProperties.AutomationId="MindWipeLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="MindWipeClipState"
+                         AutomationProperties.AutomationId="MindWipeClipState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="MindWipeAudioState"
+                       AutomationProperties.AutomationId="MindWipeAudioState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Brain Drain (audio half) ================= -->
+        <!-- THE ONLY PANEL ON THIS PAGE FOR HALF A ROW. Its missing half is stated in three
+             places on purpose — the row's own title, the permanent notice below, and the arm
+             result's typed reason (braindrain-visual-half-absent, which this module returns on
+             EVERY run however healthy). A half-row whose absent half is only visible in a record
+             file is a half-row that looks complete. -->
+        <StackPanel x:Name="BrainDrainModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Brain Drain (audio half)" />
+          <TextBlock Classes="page-blurb" Text="Plays a short clip at random while the session runs." />
+
+          <!-- THE MISSING HALF, first thing on the panel and not buried at the bottom. Its text is
+               the module's own constant (BrainDrainEffect.VisualHalfNotice), which is the same
+               string the arm result carries, so the panel and the typed outcome cannot drift into
+               two different accounts of one absence. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BrainDrainVisualHalfState"
+                       AutomationProperties.AutomationId="BrainDrainVisualHalfState"
+                       Text="" />
+          </Border>
+
+          <CheckBox x:Name="BrainDrainEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="BrainDrainEnableToggle"
+                    AutomationProperties.Name="Brain Drain audio half enabled"
+                    Content="Enable Brain Drain (audio half)" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Intensity" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="BrainDrainIntensitySlider"
+                    Minimum="1" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BrainDrainIntensitySlider"
+                    AutomationProperties.Name="Brain Drain intensity" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="BrainDrainIntensityValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BrainDrainIntensityValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Volume" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="BrainDrainVolumeSlider"
+                    Minimum="0" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="BrainDrainVolumeSlider"
+                    AutomationProperties.Name="Brain Drain volume" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="BrainDrainVolumeValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="BrainDrainVolumeValue"
+                       Text="" />
+          </Grid>
+
+          <!-- Upstream's own switch (BrainDrainService.cs:60-69). Here it changes ONLY the audio
+               grain; upstream's same flag also doubles the blur's capture rate from 30 to 60 FPS
+               (OverlayService.cs:1986-1987), which is the half that is not here. -->
+          <CheckBox x:Name="BrainDrainHighRefreshToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="BrainDrainHighRefreshToggle"
+                    AutomationProperties.Name="Brain Drain high refresh"
+                    Content="High refresh (roll every 0.5s instead of every 5s)" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="BrainDrainLiveState"
+                         AutomationProperties.AutomationId="BrainDrainLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="BrainDrainClipState"
+                         AutomationProperties.AutomationId="BrainDrainClipState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="BrainDrainAudioState"
+                       AutomationProperties.AutomationId="BrainDrainAudioState"
                        Text="" />
           </Border>
         </StackPanel>

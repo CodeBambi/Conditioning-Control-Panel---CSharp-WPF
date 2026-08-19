@@ -1,107 +1,74 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace CcpClient.Tests;
+namespace CcpClient.Desktop.Audio;
 
 /// <summary>
-/// SP-109's independent effect instrument: it asks the WINDOWS AUDIO ENGINE what it believes is
-/// happening, without asking the product.
+/// The Windows audio-render READ-BACK: what the operating system says about this process's own
+/// output stream, asked directly rather than inferred from a call that returned.
 ///
-/// <para><b>Why it re-declares every COM interface instead of using the product's interop.</b>
-/// This is the packet's named trap, and it is the same trap <see cref="TrayShellProbe"/> was written
-/// for: an audio capability is trivial to fake because every failure mode is INAUDIBLE. A test that
-/// measured "a sound played" through the same code that performs the playback could be fooled by one
-/// edit to that code. These declarations are deliberately a second, independent copy, so "the
-/// product says it holds a render session" and "the OS says a render session belongs to this process
-/// id" are two different facts produced by two different code paths.</para>
+/// <para><b>Why this file exists at all.</b> A backend can always tell you it started. Nothing in
+/// <see cref="IAudioBackend"/>, and nothing in any audio library, can tell you the OS agrees — and
+/// for audio that gap is the whole problem, because every failure mode past the API boundary is
+/// silent from inside the process. This asks WASAPI three questions whose answers the process does
+/// not own:</para>
+/// <list type="number">
+/// <item><b>How many ACTIVE render endpoints exist</b>
+/// (<c>IMMDeviceEnumerator::EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)</c>). Zero is a real
+/// answer and it is what makes "audio is unavailable here" a measured fact rather than a platform
+/// guess.</item>
+/// <item><b>Does the default endpoint hold a session owned by THIS process</b>
+/// (<c>IAudioSessionManager2::GetSessionEnumerator</c> →
+/// <c>IAudioSessionControl2::GetProcessId</c>), and <b>is it Active</b>
+/// (<c>IAudioSessionControl::GetState</c>). This is the <c>Shell_NotifyIcon(NIM_MODIFY)</c>
+/// round-trip of audio: the OS, asked separately, reports our stream.</item>
+/// <item><b>What sample level did the OS METER on that stream</b>
+/// (<c>IAudioMeterInformation::GetPeakValue</c>). The strongest fact available: the number is
+/// produced by the Windows audio engine from the samples it consumed from us, and it reads ZERO on
+/// an open device with nothing playing — so it distinguishes "a device is open" from "audio is
+/// really being rendered".</item>
+/// </list>
 ///
-/// <para><b>Why the peak meter is a valid oracle, and MEASURED before it was relied on.</b>
-/// <c>IAudioMeterInformation::GetPeakValue</c> on this process's own session returns the sample level
-/// the Windows audio engine metered on the stream WE submitted. Measured on this machine (Windows 11)
-/// before any of this was written, with the negative control holding: <b>0 before any device was
-/// opened, 0 with the device open and started but nothing cued, 0.405 while a clip rendered, and 0
-/// again after teardown.</b> The zero-with-an-open-device reading is what makes the oracle bite — a
-/// product that opened a device and played nothing cannot pass a fact built on it.
-/// <see cref="SessionFact.MeterReadable"/> is reported separately from the value, so "no meter" can
-/// never masquerade as "a meter reading zero".</para>
+/// <para><b>Where it STOPS, and this is on the class rather than in a record file.</b> Every fact
+/// here is about the Windows audio ENGINE. None of them says the endpoint was unmuted, that a DAC
+/// converted anything, that speakers are attached, or that a person heard it. A virtual or RDP sink
+/// answers all three identically with no physical output at all — the port has recorded that class
+/// already (<c>client/docs/audio-backend-spike.md:24,88</c>, the WSLg "RDP Sink"). Audibility is a
+/// manual gate.</para>
 ///
-/// <para><b>Provenance of every constant below.</b> Read out of the Windows SDK headers on this
-/// machine (10.0.26100.0), not recalled: <c>um/mmdeviceapi.h:1538</c> (CLSID_MMDeviceEnumerator),
-/// <c>:754</c> / <c>:565</c> / <c>:424</c> (IMMDeviceEnumerator / IMMDeviceCollection / IMMDevice and
-/// their vtable order), <c>um/audiopolicy.h:1155</c> / <c>:762</c> / <c>:1058</c> / <c>:337</c> /
-/// <c>:545</c> (IAudioSessionManager2 over IAudioSessionManager, IAudioSessionEnumerator,
-/// IAudioSessionControl, IAudioSessionControl2), <c>um/endpointvolume.h:842</c>
-/// (IAudioMeterInformation), <c>um/audiosessiontypes.h:149-154</c> (AudioSessionState),
-/// <c>um/mmdeviceapi.h:149,194,203</c> (DEVICE_STATE_ACTIVE, eRender, eConsole).</para>
+/// <para><b>Provenance.</b> Every GUID and every vtable slot below was read out of the Windows SDK
+/// headers (10.0.26100.0) rather than recalled: <c>um/mmdeviceapi.h:1538</c> (CLSID),
+/// <c>:754</c>/<c>:565</c>/<c>:424</c>, <c>um/audiopolicy.h:1155</c> (IAudioSessionManager2 over
+/// IAudioSessionManager at <c>:762</c>), <c>:1058</c>, <c>:337</c>, <c>:545</c>,
+/// <c>um/endpointvolume.h:842</c>, <c>um/audiosessiontypes.h:149-154</c>,
+/// <c>um/mmdeviceapi.h:149,194,203</c>.</para>
 ///
-/// <para>Every native path is guarded by a platform check HERE, in the helper, so the fact bodies
-/// stay free of predicates and none of their assertions can be silenced.</para>
+/// <para><b>Never throws.</b> A read-back that faulted would be an unavailable capability reported
+/// as a crash; every path here answers with a record instead.</para>
 /// </summary>
-internal static class WasapiRenderProbe
+[SupportedOSPlatform("windows")]
+internal static class WasapiRenderReadback
 {
     private const int DeviceStateActive = 0x00000001; // mmdeviceapi.h:149
     private const int ERender = 0;                    // mmdeviceapi.h:194
     private const int EConsole = 0;                   // mmdeviceapi.h:203
-    private const uint ClsCtxAll = 23;                // CLSCTX_INPROC_SERVER|HANDLER|LOCAL_SERVER|REMOTE_SERVER
+    private const uint ClsCtxAll = 23;
+    private const uint AudioSessionStateActive = 1;   // audiosessiontypes.h:152
 
-    /// <summary>AudioSessionStateActive (audiosessiontypes.h:152).</summary>
-    internal const int StateActive = 1;
-
-    /// <summary>AudioSessionStateInactive (audiosessiontypes.h:151).</summary>
-    internal const int StateInactive = 0;
-
-    internal static bool WindowsHost => OperatingSystem.IsWindows();
+    private static readonly Guid MmDeviceEnumeratorClsid = new("BCDE0395-E52F-467C-8E3D-C4579291692E");
 
     /// <summary>
-    /// How many ACTIVE render endpoints the operating system reports. A property of the machine,
-    /// established by the test rather than taken from the product. Zero is a real answer (a headless
-    /// build agent, a box with every output disabled) and it is what flips the honest expectation,
-    /// exactly as <c>TrayShellProbe.MachineHasNotificationArea</c> does.
+    /// How many ACTIVE render endpoints the OS reports. Zero means there is nowhere to play, which
+    /// is WPF's own suppression precondition (<c>Services/AudioService.cs:163-166</c>).
     /// </summary>
-    internal static int ActiveRenderEndpointCount() =>
-        OperatingSystem.IsWindows() ? ActiveRenderEndpointCountCore() : 0;
-
-    /// <summary>True when this machine can render audio at all.</summary>
-    internal static bool MachineHasRenderEndpoint => ActiveRenderEndpointCount() > 0;
-
-    /// <summary>
-    /// Enumerate the default console render endpoint's sessions and report the one whose owning
-    /// process id is this process. Never throws: a machine with no endpoint answers
-    /// <see cref="SessionFact.None"/>.
-    /// </summary>
-    internal static SessionFact SessionForThisProcess() =>
-        OperatingSystem.IsWindows() ? SessionForThisProcessCore() : SessionFact.None;
-
-    /// <summary>
-    /// What the OS says about THIS process's render session.
-    /// <paramref name="SessionsOnEndpoint"/> is how many sessions the endpoint holds in total — the
-    /// negative control for the search, so a probe that degenerated into "found nothing, ever" is
-    /// visible rather than silently certifying an absence.
-    /// </summary>
-    internal sealed record SessionFact(
-        bool EndpointReachable,
-        int SessionsOnEndpoint,
-        bool SessionForThisProcess,
-        int State,
-        bool MeterReadable,
-        float Peak)
-    {
-        /// <summary>The OS is holding an ACTIVE render session for this process right now.</summary>
-        internal bool Active => SessionForThisProcess && State == StateActive;
-
-        internal static SessionFact None { get; } = new(false, 0, false, -1, false, 0f);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static int ActiveRenderEndpointCountCore()
+    internal static int ActiveRenderEndpointCount()
     {
         IMMDeviceEnumerator? enumerator = null;
         IMMDeviceCollection? collection = null;
         try
         {
             enumerator = CreateEnumerator();
-            if (enumerator is null
-                || enumerator.EnumAudioEndpoints(ERender, DeviceStateActive, out collection) != 0
+            if (enumerator is null || enumerator.EnumAudioEndpoints(ERender, DeviceStateActive, out collection) != 0
                 || collection is null)
             {
                 return 0;
@@ -124,8 +91,13 @@ internal static class WasapiRenderProbe
         }
     }
 
-    [SupportedOSPlatform("windows")]
-    private static SessionFact SessionForThisProcessCore()
+    /// <summary>
+    /// The session facts for this process on the default console render endpoint.
+    /// <paramref name="endpointName"/> is carried through unchanged — it is the BACKEND's name for
+    /// the device it opened, and this method does not second-guess it; what it adds is everything
+    /// the process cannot know about itself.
+    /// </summary>
+    internal static AudioRenderObservation Observe(string? endpointName)
     {
         IMMDeviceEnumerator? enumerator = null;
         IMMDevice? endpoint = null;
@@ -134,26 +106,25 @@ internal static class WasapiRenderProbe
         try
         {
             enumerator = CreateEnumerator();
-            if (enumerator is null
-                || enumerator.GetDefaultAudioEndpoint(ERender, EConsole, out endpoint) != 0
+            if (enumerator is null || enumerator.GetDefaultAudioEndpoint(ERender, EConsole, out endpoint) != 0
                 || endpoint is null)
             {
-                return SessionFact.None;
+                return new AudioRenderObservation(true, endpointName, false, false, false, 0f, 0);
             }
 
             var iid = typeof(IAudioSessionManager2).GUID;
             if (endpoint.Activate(ref iid, ClsCtxAll, IntPtr.Zero, out var raw) != 0 || raw == IntPtr.Zero)
             {
-                return SessionFact.None;
+                return new AudioRenderObservation(true, endpointName, false, false, false, 0f, 0);
             }
 
-            manager = (IAudioSessionManager2)ObjectFor(raw);
-            ReleasePointer(raw);
+            manager = (IAudioSessionManager2)Marshal.GetObjectForIUnknown(raw);
+            Marshal.Release(raw);
 
             if (manager.GetSessionEnumerator(out sessions) != 0 || sessions is null
                 || sessions.GetCount(out var count) != 0)
             {
-                return new SessionFact(true, 0, false, -1, false, 0f);
+                return new AudioRenderObservation(true, endpointName, false, false, false, 0f, 0);
             }
 
             var self = Environment.ProcessId;
@@ -173,16 +144,19 @@ internal static class WasapiRenderProbe
                         continue;
                     }
 
-                    var state = control.GetState(out var value) == 0 ? (int)value : -1;
+                    var active = control.GetState(out var state) == 0 && state == AudioSessionStateActive;
+                    // The per-session meter is a QueryInterface on the session control object.
+                    // MEASURED to work on this machine before it was relied on, never assumed:
+                    // see spine-tasks/SP-109-audio-capability/plan.md §0.
                     var meterReadable = false;
                     var peak = 0f;
-                    if (session is IAudioMeterInformation meter && meter.GetPeakValue(out var measured) == 0)
+                    if (session is IAudioMeterInformation meter && meter.GetPeakValue(out var value) == 0)
                     {
                         meterReadable = true;
-                        peak = measured;
+                        peak = value;
                     }
 
-                    return new SessionFact(true, count, true, state, meterReadable, peak);
+                    return new AudioRenderObservation(true, endpointName, true, active, meterReadable, peak, count);
                 }
                 finally
                 {
@@ -190,15 +164,18 @@ internal static class WasapiRenderProbe
                 }
             }
 
-            return new SessionFact(true, count, false, -1, false, 0f);
+            // Asked, reachable, and the OS holds no session for us. NOT the same as "not asked",
+            // and this is exactly the state a capability that trusted its own return value would
+            // have reported as working.
+            return new AudioRenderObservation(true, endpointName, false, false, false, 0f, count);
         }
         catch (COMException)
         {
-            return SessionFact.None;
+            return new AudioRenderObservation(true, endpointName, false, false, false, 0f, 0);
         }
         catch (InvalidCastException)
         {
-            return SessionFact.None;
+            return new AudioRenderObservation(true, endpointName, false, false, false, 0f, 0);
         }
         finally
         {
@@ -209,20 +186,12 @@ internal static class WasapiRenderProbe
         }
     }
 
-    [SupportedOSPlatform("windows")]
     private static IMMDeviceEnumerator? CreateEnumerator()
     {
-        var type = Type.GetTypeFromCLSID(new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"));
+        var type = Type.GetTypeFromCLSID(MmDeviceEnumeratorClsid);
         return type is null ? null : Activator.CreateInstance(type) as IMMDeviceEnumerator;
     }
 
-    [SupportedOSPlatform("windows")]
-    private static object ObjectFor(IntPtr unknown) => Marshal.GetObjectForIUnknown(unknown);
-
-    [SupportedOSPlatform("windows")]
-    private static void ReleasePointer(IntPtr unknown) => Marshal.Release(unknown);
-
-    [SupportedOSPlatform("windows")]
     private static void Release(object? com)
     {
         if (com is not null && Marshal.IsComObject(com))
@@ -230,8 +199,6 @@ internal static class WasapiRenderProbe
             Marshal.ReleaseComObject(com);
         }
     }
-
-    // ---------- the independent declarations (SDK-verified, see the class remarks) ----------
 
     [ComImport]
     [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
@@ -289,6 +256,7 @@ internal static class WasapiRenderProbe
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioSessionManager2
     {
+        // IAudioSessionManager (audiopolicy.h:762) is the base, so its two slots come first.
         [PreserveSig]
         int GetAudioSessionControl(IntPtr sessionGuid, uint streamFlags, out IntPtr sessionControl);
 
@@ -328,6 +296,7 @@ internal static class WasapiRenderProbe
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioSessionControl2
     {
+        // IAudioSessionControl (audiopolicy.h:337) is the base, so its nine slots come first.
         [PreserveSig]
         int GetState(out uint state);
 

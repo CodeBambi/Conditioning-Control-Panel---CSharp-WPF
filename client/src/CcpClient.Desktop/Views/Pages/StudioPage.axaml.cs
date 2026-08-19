@@ -48,6 +48,17 @@ namespace CcpClient.Desktop.Views.Pages;
 /// through the same one <see cref="SessionEngine.QuickToggle"/> entry — and its <b>panel is the
 /// first on this page with no surface line at all</b>, because a sentence about where its pixels
 /// went would be a sentence about a capability it deliberately never acquires.</para>
+///
+/// <para><b>SP-109 — a THIRD group, and the first two rows nobody can see.</b> <c>Mind Wipe</c> and
+/// <c>Brain Drain (audio half)</c> are from IMMERSION and their output is sound. The rack grammar
+/// again needed nothing new. Two things about them are new to this page. First, their closing notice
+/// is not a claim this page makes: it renders the AUDIO CAPABILITY's own typed outcome, so what a
+/// user reads about sound is what the operating system answered — including the peak level Windows
+/// measured on this process's stream — rather than a sentence about a platform. Second, the Brain
+/// Drain row is <b>half a row on purpose</b>: its title says so, its panel leads with the missing
+/// desktop blur, and its arm result carries that absence on every healthy run. Its dot is
+/// nonetheless <see cref="EffectDotState.Live"/> while its audio is running, because the dot is
+/// scoped to what the row says it is — which is exactly why the title is not editable prose.</para>
 /// </summary>
 public partial class StudioPage : UserControl
 {
@@ -57,6 +68,8 @@ public partial class StudioPage : UserControl
     private readonly PinkFilterEffect _pinkFilter;
     private readonly SpiralOverlayEffect _spiral;
     private readonly IntensityRampEffect _ramp;
+    private readonly MindWipeEffect _mindWipe;
+    private readonly BrainDrainEffect _brainDrain;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -71,6 +84,8 @@ public partial class StudioPage : UserControl
         _pinkFilter = session.PinkFilter;
         _spiral = session.Spiral;
         _ramp = session.Ramp;
+        _mindWipe = session.MindWipe;
+        _brainDrain = session.BrainDrain;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -81,6 +96,8 @@ public partial class StudioPage : UserControl
         RowSpiralOverlay.IsCheckedChanged += (_, _) => ApplySelection();
         RowPinkFilter.IsCheckedChanged += (_, _) => ApplySelection();
         RowIntensityRamp.IsCheckedChanged += (_, _) => ApplySelection();
+        RowMindWipe.IsCheckedChanged += (_, _) => ApplySelection();
+        RowBrainDrain.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -92,6 +109,8 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId);
         AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
         AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId);
+        AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId);
+        AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -103,6 +122,16 @@ public partial class StudioPage : UserControl
             OnEnableToggled(SpiralEnableToggle, _spiral, SpiralOverlayEffect.EffectId);
         RampEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(RampEnableToggle, _ramp, IntensityRampEffect.EffectId);
+        MindWipeEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(MindWipeEnableToggle, _mindWipe, MindWipeEffect.EffectId);
+        BrainDrainEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(BrainDrainEnableToggle, _brainDrain, BrainDrainEffect.EffectId);
+
+        // Brain Drain's high-refresh switch is one of the module's own dials, not its enable, so it
+        // writes through the module like the ramp's switches do rather than through the rack's
+        // quick-toggle.
+        BrainDrainHighRefreshToggle.IsCheckedChanged += (_, _) =>
+            OnBrainDrainHighRefreshToggled();
 
         // The ramp's remaining switches are its own dials, not the module's enable, so they write
         // through the module rather than through the rack's quick-toggle. Each one goes to a setter
@@ -124,10 +153,16 @@ public partial class StudioPage : UserControl
         OnSliderMoved(SpiralOpacitySlider, OnSpiralOpacityMoved);
         OnSliderMoved(RampDurationSlider, OnRampDurationMoved);
         OnSliderMoved(RampMultiplierSlider, OnRampMultiplierMoved);
+        OnSliderMoved(MindWipeFrequencySlider, OnMindWipeFrequencyMoved);
+        OnSliderMoved(MindWipeVolumeSlider, OnMindWipeVolumeMoved);
+        OnSliderMoved(BrainDrainIntensitySlider, OnBrainDrainIntensityMoved);
+        OnSliderMoved(BrainDrainVolumeSlider, OnBrainDrainVolumeMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
         _subliminals.Fired += _ => Refresh();
+        _mindWipe.Fired += _ => Refresh();
+        _brainDrain.Fired += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -156,6 +191,16 @@ public partial class StudioPage : UserControl
     /// holds dials belonging to other modules and owes them back (SP-108,
     /// <see cref="IntensityRampEffect"/>).</summary>
     public EffectDotState RenderedRampDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Mind Wipe row's dot, same reason — and the first on this page whose <c>Live</c>
+    /// depends on a fact from OUTSIDE this process: a firing on the clock AND an audio render session
+    /// the operating system confirms belongs to us (SP-109, <see cref="AudioCueEffect"/>).</summary>
+    public EffectDotState RenderedMindWipeDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Brain Drain row's dot. Same rule as Mind Wipe's, and it is deliberately
+    /// <see cref="EffectDotState.Live"/> while the audio half runs even though the row is half of its
+    /// upstream: the dot is scoped to what the ROW is, and this row's title says what it is.</summary>
+    public EffectDotState RenderedBrainDrainDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -214,12 +259,17 @@ public partial class StudioPage : UserControl
         var spiralOpen = RowSpiralOverlay.IsChecked == true;
         var pinkOpen = RowPinkFilter.IsChecked == true;
         var rampOpen = RowIntensityRamp.IsChecked == true;
+        var mindWipeOpen = RowMindWipe.IsChecked == true;
+        var brainDrainOpen = RowBrainDrain.IsChecked == true;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
         PinkFilterModulePanel.IsVisible = pinkOpen;
         RampModulePanel.IsVisible = rampOpen;
-        RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen;
+        MindWipeModulePanel.IsVisible = mindWipeOpen;
+        BrainDrainModulePanel.IsVisible = brainDrainOpen;
+        RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
+            && !mindWipeOpen && !brainDrainOpen;
     }
 
     /// <summary>
@@ -408,6 +458,89 @@ public partial class StudioPage : UserControl
         Refresh();
     }
 
+    /// <summary>
+    /// Mind Wipe's frequency dial. Writes through the module, which re-evaluates at once — the port's
+    /// convention for every module's dial since SP-105, and it matters more here than usual: this dial
+    /// changes the ODDS of the next ten-second window rather than the spacing of a schedule, so a user
+    /// who turns it up expects the very next window to be likelier.
+    /// </summary>
+    private void OnMindWipeFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _mindWipe.SetPerHour((int)Math.Round(MindWipeFrequencySlider.Value));
+        _ = _session.MindWipePreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Mind Wipe's volume dial. WPF pushes a moved slider onto the CLIP THAT IS PLAYING as
+    /// well (<c>MindWipeService.cs:103-118</c>); the port's audio seam has no live-gain path, so it
+    /// takes effect on the next cue — a divergence whose whole window is one short clip.</summary>
+    private void OnMindWipeVolumeMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _mindWipe.SetVolumePercent((int)Math.Round(MindWipeVolumeSlider.Value));
+        _ = _session.MindWipePreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Brain Drain's intensity dial — the AUDIO half's, which upstream's own comment insists
+    /// is not the blur's (<c>MainWindow/MainWindow.StartStop.cs:239-241</c>).</summary>
+    private void OnBrainDrainIntensityMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _brainDrain.SetIntensityPercent((int)Math.Round(BrainDrainIntensitySlider.Value));
+        _ = _session.BrainDrainPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Brain Drain's volume dial (port-local — upstream plays this module at the app-wide
+    /// master volume, which the port does not have).</summary>
+    private void OnBrainDrainVolumeMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _brainDrain.SetVolumePercent((int)Math.Round(BrainDrainVolumeSlider.Value));
+        _ = _session.BrainDrainPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>Brain Drain's high-refresh switch. It re-evaluates rather than waiting, and here that
+    /// is behaviour rather than convention: the window IS the schedule, so a switch that only took
+    /// effect at the next firing would leave a 5-second tick running after the user asked for
+    /// 500 ms.</summary>
+    private void OnBrainDrainHighRefreshToggled()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var target = BrainDrainHighRefreshToggle.IsChecked == true;
+        if (target == _brainDrain.Preset.HighRefresh)
+        {
+            return;
+        }
+
+        _brainDrain.SetHighRefresh(target);
+        _ = _session.BrainDrainPreset.Save();
+        Refresh();
+    }
+
     /// <summary>One of the ramp's own switches — its end-at-complete flag and its two links. Not the
     /// module's enable: that one goes through <see cref="SessionEngine.QuickToggle"/> like every
     /// other module's, because it is the same gesture the rack row's right-click makes.</summary>
@@ -480,6 +613,17 @@ public partial class StudioPage : UserControl
                 RampCurve.Exponential => 4,
                 _ => 0,
             };
+
+            var mindWipe = _session.MindWipePreset.Current;
+            MindWipeEnableToggle.IsChecked = mindWipe.Enabled;
+            MindWipeFrequencySlider.Value = mindWipe.PerHour;
+            MindWipeVolumeSlider.Value = mindWipe.VolumePercent;
+
+            var brainDrain = _session.BrainDrainPreset.Current;
+            BrainDrainEnableToggle.IsChecked = brainDrain.Enabled;
+            BrainDrainIntensitySlider.Value = brainDrain.IntensityPercent;
+            BrainDrainVolumeSlider.Value = brainDrain.VolumePercent;
+            BrainDrainHighRefreshToggle.IsChecked = brainDrain.HighRefresh;
         }
         finally
         {
@@ -541,6 +685,36 @@ public partial class StudioPage : UserControl
             RenderedRampDot, ramp, _ramp.Progress, _ramp.CurrentMultiplier, held.Count,
             _session.Engine.Running);
         RampCustodyState.Text = RampPanelNotices.DescribeRampCustody(_ramp.Dials.Count, held);
+
+        // The two audio rows. Their closing line is the CAPABILITY's own typed outcome plus the OS's
+        // own last measurement — never a sentence this page composed about a platform, which is the
+        // same rule the four drawing panels' surface lines follow.
+        var mindWipePreset = _session.MindWipePreset.Current;
+        MindWipeFrequencyValue.Text =
+            mindWipePreset.PerHour.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        MindWipeVolumeValue.Text = $"{mindWipePreset.VolumePercent}%";
+        RenderedMindWipeDot = PaintDot(MindWipeRowDot, _mindWipe);
+        MindWipeLiveState.Text = AudioPanelNotices.DescribeCueState(
+            RenderedMindWipeDot, "clip", _mindWipe.CueCount, _mindWipe.Last, _session.Engine.Running,
+            _mindWipe.Presence.IsRendering);
+        MindWipeClipState.Text = AudioPanelNotices.DescribeClipPool(_mindWipe.ClipCount, _mindWipe.ClipFolder);
+        MindWipeAudioState.Text = AudioPanelNotices.DescribeAudioCapability(
+            _session.Audio.LastOpen, _session.Audio.LastObservation);
+
+        var brainDrainPreset = _session.BrainDrainPreset.Current;
+        BrainDrainIntensityValue.Text = $"{brainDrainPreset.IntensityPercent}%";
+        BrainDrainVolumeValue.Text = $"{brainDrainPreset.VolumePercent}%";
+        RenderedBrainDrainDot = PaintDot(BrainDrainRowDot, _brainDrain);
+        BrainDrainLiveState.Text = AudioPanelNotices.DescribeCueState(
+            RenderedBrainDrainDot, "clip", _brainDrain.CueCount, _brainDrain.Last, _session.Engine.Running,
+            _brainDrain.Presence.IsRendering);
+        BrainDrainClipState.Text =
+            AudioPanelNotices.DescribeClipPool(_brainDrain.ClipCount, _brainDrain.ClipFolder);
+        BrainDrainAudioState.Text = AudioPanelNotices.DescribeAudioCapability(
+            _session.Audio.LastOpen, _session.Audio.LastObservation);
+        // The module's own constant, rendered verbatim. The same string the arm result's reason
+        // carries, so the panel and the typed outcome are one account of the absence rather than two.
+        BrainDrainVisualHalfState.Text = BrainDrainEffect.VisualHalfNotice;
     }
 
     /// <summary>

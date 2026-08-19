@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Lifecycle;
@@ -32,12 +33,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<PinkFilterPresetDocument> _pinkFilterPreset;
     private readonly PersistenceStore<SpiralPresetDocument> _spiralPreset;
     private readonly PersistenceStore<IntensityRampPresetDocument> _rampPreset;
+    private readonly PersistenceStore<MindWipePresetDocument> _mindWipePreset;
+    private readonly PersistenceStore<BrainDrainPresetDocument> _brainDrainPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
     private readonly ISubliminalSurface _subliminalSurface;
     private readonly IPinkFilterSurface _pinkFilterSurface;
     private readonly ISpiralSurface _spiralSurface;
+    private readonly IAudioPresence _audio;
     private readonly UiDispatchBoundary _uiDispatch;
     private readonly string _dataDirectory;
 
@@ -50,7 +54,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         ISubliminalSurface? subliminalSurface = null,
         Func<bool>? onSignalThread = null,
         IPinkFilterSurface? pinkFilterSurface = null,
-        ISpiralSurface? spiralSurface = null)
+        ISpiralSurface? spiralSurface = null,
+        IAudioPresence? audio = null,
+        IAudioCuePool? mindWipeClips = null,
+        IAudioCuePool? brainDrainClips = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -89,6 +96,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("IntensityRampPreset"), infra.Log,
             Path.Combine(dataDirectory, IntensityRampPresetDocument.FileName),
             IntensityRampPresetDocument.CurrentSchemaVersion);
+
+        // SP-109: the two AUDIO modules' own documents, same precedent again. Two documents rather
+        // than one shared "audio" file for the same blast-radius reason: one hand-broken value must
+        // not take both modules' dials to defaults, and these two rows are not equals — one is a
+        // whole row and the other is deliberately half of one.
+        _mindWipePreset = new PersistenceStore<MindWipePresetDocument>(
+            infra.OwnerFor("MindWipePreset"), infra.Log,
+            Path.Combine(dataDirectory, MindWipePresetDocument.FileName),
+            MindWipePresetDocument.CurrentSchemaVersion);
+
+        _brainDrainPreset = new PersistenceStore<BrainDrainPresetDocument>(
+            infra.OwnerFor("BrainDrainPreset"), infra.Log,
+            Path.Combine(dataDirectory, BrainDrainPresetDocument.FileName),
+            BrainDrainPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -188,6 +209,17 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // absent rather than present-and-inert (D93). The list is built HERE because the composition
         // root is the only thing that knows which modules exist — the ramp itself knows nothing about
         // spirals or tints, which is what lets it be exercised with no surface anywhere.
+        // SP-109: the AUDIO capability. Built HERE, once, and SHARED by both audio modules — a
+        // second presence would be a second device open on the same endpoint, and each module's
+        // stop-replace already has its own slot inside the one presence (keyed by module id), which
+        // is what upstream gets from having two separate services with one player field each.
+        //
+        // Selection is by platform and selection is NEVER availability: on Linux the factory hands
+        // back a typed refusal naming the manual gate, and on Windows the presence still has to earn
+        // Available from the operating system before either module's dot may light
+        // (runtime-capability-contract §2 rule 2; Audio/AudioPresenceFactory.cs).
+        _audio = audio ?? AudioPresenceFactory.Create(message => infra.Log.Log(message));
+
         Ramp = new IntensityRampEffect(
             infra.OwnerFor("IntensityRamp"),
             signal,
@@ -201,6 +233,28 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // Here only the half that touches a LIVE surface goes through the dispatch; the persisted
             // half is synchronous so a restore survives a teardown whose dispatcher is already down.
             Dispatch);
+
+        // SP-109: the first two modules whose output is not on the screen at all. They take the ONE
+        // shared audio presence and their own clip folder under the same user-media root every other
+        // pool reads from. Neither takes a surface: there is nothing to draw.
+        MindWipe = new MindWipeEffect(
+            infra.OwnerFor("MindWipe"),
+            signal,
+            sessionClock,
+            mindWipeClips ?? new AudioCuePool(AssetsRootFor(dataDirectory), MindWipeEffect.ClipFolderName),
+            _audio,
+            _mindWipePreset);
+
+        // HALF a row, deliberately and permanently: upstream's same flag also drives a desktop-wide
+        // blur this port cannot draw (OverlayService.cs:382-386, :1965-1995). The row's title, its
+        // panel notice and its arm result all say so — see BrainDrainEffect.
+        BrainDrain = new BrainDrainEffect(
+            infra.OwnerFor("BrainDrain"),
+            signal,
+            sessionClock,
+            brainDrainClips ?? new AudioCuePool(AssetsRootFor(dataDirectory), BrainDrainEffect.ClipFolderName),
+            _audio,
+            _brainDrainPreset);
 
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
@@ -220,7 +274,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // and StartEngine starts the ramp timer after every effect service (:265-269). Arming it last
         // also means that at STOP the dials it gives back belong to modules that have already been
         // disarmed, so the restore is a settings write with nothing live behind it.
-        Engine = new SessionEngine([Flash, Subliminals, Spiral, PinkFilter, Ramp], _preset, signal);
+        //
+        // SP-109 inserts the two IMMERSION rows BETWEEN the effects and the ramp, which is where both
+        // orders that matter put them, and they agree: upstream's rack puts IMMERSION after EFFECTS
+        // and GAMES & CARDS and before TIMING (StudioTabView.xaml.cs:482-541), and StartEngine starts
+        // Mind Wipe (:229-230) and Brain Drain (:241-244) after every effect service and before the
+        // ramp timer (:265-269). Mind Wipe first, Brain Drain second, upstream's own order in both.
+        Engine = new SessionEngine(
+            [Flash, Subliminals, Spiral, PinkFilter, MindWipe, BrainDrain, Ramp], _preset, signal);
 
         // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:547-555
         // calls StopEngine()). A module cannot call the engine that owns it without closing the cycle,
@@ -252,6 +313,19 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// reason, and it has no surface property beside it because it has no surface.</summary>
     public IntensityRampEffect Ramp { get; }
 
+    /// <summary>Mind Wipe, the first module the user HEARS rather than sees (SP-109).</summary>
+    public MindWipeEffect MindWipe { get; }
+
+    /// <summary>Brain Drain's AUDIO half — half a row, permanently, and it says so (SP-109).</summary>
+    public BrainDrainEffect BrainDrain { get; }
+
+    /// <summary>
+    /// The audio capability both audio modules play through. Public for the same reason every surface
+    /// is: a capability nobody can reach is a capability nobody can interrogate — and this is the one
+    /// whose <c>Available</c> is earned from the operating system rather than from a call returning.
+    /// </summary>
+    public IAudioPresence Audio => _audio;
+
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
     public IFlashSurface Surface => _surface;
@@ -280,6 +354,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Intensity Ramp module's persisted store, same reason.</summary>
     public PersistenceStore<IntensityRampPresetDocument> RampPreset => _rampPreset;
 
+    /// <summary>The Mind Wipe module's persisted store, same reason.</summary>
+    public PersistenceStore<MindWipePresetDocument> MindWipePreset => _mindWipePreset;
+
+    /// <summary>The Brain Drain module's persisted store, same reason.</summary>
+    public PersistenceStore<BrainDrainPresetDocument> BrainDrainPreset => _brainDrainPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -298,6 +378,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _pinkFilterPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _spiralPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _rampPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _mindWipePreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _brainDrainPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -309,6 +391,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("pinkfilter-preset", _pinkFilterPreset.LastLoadOutcome);
         LogIfDegraded("spiral-preset", _spiralPreset.LastLoadOutcome);
         LogIfDegraded("ramp-preset", _rampPreset.LastLoadOutcome);
+        LogIfDegraded("mindwipe-preset", _mindWipePreset.LastLoadOutcome);
+        LogIfDegraded("braindrain-preset", _brainDrainPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -339,9 +423,18 @@ public sealed class SessionParticipant : IBackgroundParticipant
         DisposeSurface(_pinkFilterSurface);
         DisposeSurface(_spiralSurface);
 
+        // The audio presence goes down HERE, inline, and not through the dispatch boundary the
+        // surfaces use. A native window belongs to the thread that made it; an audio device does not
+        // — upstream says the same of NAudio and deliberately tears audio down inline from its panic
+        // path for exactly that reason (Services/LockCard/MindWipeService.cs:243-251). Disposing it
+        // is also what drops this process's render session to AudioSessionStateInactive, which is the
+        // OS-observable far end of the chain this capability claims.
+        _audio.Dispose();
+
         return Task.WhenAll(
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
-            _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _assetSelection.StopAsync());
+            _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
+            _brainDrainPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -354,7 +447,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _spiralPreset.FlushAsync(boundedWait),
             // The ramp's own dials. The dials it BORROWS are restored synchronously by
             // Engine.Stop() above, so no flush here can ever write a ramped value over the user's.
-            _rampPreset.FlushAsync(boundedWait));
+            _rampPreset.FlushAsync(boundedWait),
+            _mindWipePreset.FlushAsync(boundedWait),
+            _brainDrainPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

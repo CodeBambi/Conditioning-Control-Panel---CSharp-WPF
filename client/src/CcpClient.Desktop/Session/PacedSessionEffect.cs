@@ -95,8 +95,25 @@ public abstract class PacedSessionEffect<TFiring> : OwnedSessionEffect
     /// It is a claim about the CLOCK, and it stays true over a firing that will show nothing —
     /// Subliminals with an empty pool is correctly <c>Live</c>. A continuous module cannot answer
     /// this way, which is why the clause is the module's and not the base's (SP-105).
+    ///
+    /// <para><b>Overridable, and it was SEALED until SP-109 (the packet's only shared-code change,
+    /// and it is one word).</b> SP-105 made this clause abstract in
+    /// <see cref="OwnedSessionEffect"/> on the finding that "the AUTHORITY behind the third one is
+    /// the module's, not the base's" — and then this class immediately took that authority back for
+    /// every paced module by sealing its answer. That held for four modules because for all four the
+    /// clock was the whole story. It broke on the fifth: an AUDIO module's firing can be perfectly
+    /// scheduled while the OS reports no render session for this process, and a dot that read
+    /// <c>Live</c> there would claim a sound that reaches nobody — in the one medium where a user
+    /// cannot check by looking.</para>
+    ///
+    /// <para><b>The contract for an override, and it is one-directional:</b> a subclass may only
+    /// NARROW this — it must keep <see cref="ScheduleArmed"/> as a conjunct and add its own further
+    /// condition. Widening it (returning true with no firing on the clock) would put back exactly the
+    /// stored "I was told to start" bool that <see cref="OwnedSessionEffect.WorkIsRunning"/> exists to
+    /// forbid. <see cref="ScheduleArmed"/> is public precisely so the narrowing is expressible, and
+    /// so a test can pin both conjuncts separately.</para>
     /// </summary>
-    protected sealed override bool WorkIsRunning => ScheduleArmed;
+    protected override bool WorkIsRunning => ScheduleArmed;
 
     /// <summary>
     /// Re-pace the pending firing against the current dial — WPF <c>RefreshSchedule</c>
