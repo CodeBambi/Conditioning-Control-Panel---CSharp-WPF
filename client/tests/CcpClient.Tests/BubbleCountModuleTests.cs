@@ -54,14 +54,18 @@ public class BubbleCountModuleTests
             BubbleCountSchedule.Interval(BubbleCountSchedule.MinPerHour, 0.5),
             BubbleCountSchedule.Interval(0, 0.5));
 
-        // And the floor: at ten an hour with the jitter at its floor the base is 288 s, so the
-        // minute floor does not bind — but a document written by hand could ask for more, and
-        // upstream's Math.Max(60, …) (:95) is ported as arithmetic rather than as a comment.
-        Assert.Equal(
-            BubbleCountSchedule.MinimumInterval,
-            TimeSpan.FromSeconds(Math.Max(
-                60,
-                BubbleCountSchedule.Interval(BubbleCountSchedule.MaxPerHour, 0.0).TotalSeconds - 1000)));
+        // AND THE SIXTY-SECOND FLOOR CAN NEVER BIND, which is a fact about upstream's own structure
+        // rather than a gap in this port. Upstream clamps the dial to ten AND floors the interval at
+        // sixty seconds (:88, :95); at ten an hour with the jitter at its minimum the interval is
+        // 3600/10*0.8 = 288 s, so the floor is unreachable through the clamp. It is ported anyway,
+        // because it is upstream's line and it sits where a later dial change would meet it — and
+        // the mutation that deletes it therefore SURVIVES, which is recorded rather than papered
+        // over with a fact that reaches the branch by some route no caller has.
+        Assert.True(
+            BubbleCountSchedule.Interval(BubbleCountSchedule.MaxPerHour, 0.0)
+                > BubbleCountSchedule.MinimumInterval,
+            "the clamp no longer keeps the interval above the floor, so the floor has become "
+            + "reachable and needs a fact of its own");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -245,6 +249,59 @@ public class BubbleCountModuleTests
         // processed at once, and the count still stops at the target.
         run.Paint(VideoFrame.Solid(320, 240, 0, 0, 0), TimeSpan.FromHours(1));
         Assert.Equal(run.Target, run.BubblesShown);
+    }
+
+    [Fact]
+    public void ACLIPTheOSReportsNOLengthForKeepsTheFallback_AndTheTargetFollowsIt()
+    {
+        // Found by the mutation sweep: nothing pinned Recompute's OWN fallback, because every fact
+        // handed Opening a positive duration. A container that reports no length is upstream's
+        // ordinary case, not an edge - its metadata cache misses on every unseen file
+        // (Windows/BubbleCountWindow.xaml.cs:703-712).
+        var run = new BubbleCountRun(BubbleCountDifficulty.Medium, new SequenceRandom([0.5]));
+        run.Opening(new VideoClipInfo(true, 320, 240, TimeSpan.FromMilliseconds(100), TimeSpan.Zero, false));
+
+        Assert.Equal(BubbleCountArithmetic.FallbackDuration, run.Duration);
+        Assert.Equal(
+            BubbleCountArithmetic.Target(BubbleCountDifficulty.Medium, BubbleCountArithmetic.FallbackDuration, 0.5),
+            run.Target);
+    }
+
+    [Fact]
+    public void BUBBLESDoNotAllPopTogether_AndAPoppingOneREALLYFades()
+    {
+        // Two sweep survivors in one fact. First: the lifetime's random span. Upstream's bubbles
+        // live 1000 + rand(500) ms (:1734) so they pop RAGGEDLY; a fixed lifetime would make every
+        // bubble spawned on the same tick vanish in lockstep, which is a different thing to count.
+        var run = new BubbleCountRun(BubbleCountDifficulty.Hard, new SequenceRandom([0.0, 0.5, 0.9]));
+        run.Opening(new VideoClipInfo(true, 320, 240, TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(300), false));
+        for (var i = 0; i < 6; i++)
+        {
+            run.Paint(
+                VideoFrame.Solid(320, 240, 0, 0, 0),
+                BubbleCountArithmetic.SpawnLeadIn + (run.SpawnInterval * i));
+        }
+
+        Assert.True(run.BubblesShown >= 2);
+        Assert.True(
+            run.Bubbles.Select(b => b.Lifetime).Distinct().Count() > 1,
+            "every bubble was given the same lifetime, so they pop in lockstep");
+        Assert.All(run.Bubbles, b => Assert.InRange(
+            b.Lifetime, BubbleCountRun.MinLifetime, BubbleCountRun.MinLifetime + BubbleCountRun.LifetimeSpan));
+
+        // Second: the pop itself. Upstream fades opacity by 0.12 and grows scale by 0.08 per 30 ms
+        // tick (:1755-1762). A pop that neither faded nor grew would be a bubble that simply
+        // vanished, and the animation would be decoration rather than the thing that tells a user
+        // it POPPED.
+        var bubble = run.Bubbles[0];
+        var (midScale, midOpacity) = BubbleCountRun.Animation(bubble, bubble.PopsAt + (BubbleCountRun.PopDuration / 2));
+        Assert.True(midOpacity is > 0 and < 1, $"a popping bubble's opacity was {midOpacity}");
+        Assert.True(midScale > 1.0, $"a popping bubble's scale was {midScale}");
+
+        // And before it pops it is fully opaque, growing from upstream's own birth scale.
+        var (bornScale, bornOpacity) = BubbleCountRun.Animation(bubble, bubble.BornAt);
+        Assert.Equal(1.0, bornOpacity);
+        Assert.Equal(BubbleCountRun.BirthScale, bornScale, precision: 10);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -598,6 +655,34 @@ public class BubbleCountModuleTests
         Assert.Equal(
             ["Ordinal", "At", "Difficulty"],
             typeof(BubbleCountEvent).GetProperties().Select(property => property.Name));
+    }
+
+    [Fact]
+    public void THEFIRSTGameIsDueAtTHISMODULESOwnInterval_NotAtSomeOtherRowsPace()
+    {
+        // Found by the mutation sweep: replacing the module's NextInterval with a constant survived,
+        // because every other fact advances to whatever the next due moment happens to be. The
+        // interval is upstream's arithmetic on this module's own dial, and a fact that never says
+        // which number it is cannot tell a re-paced module from a mis-paced one.
+        using var rig = new Rig();
+        rig.Pool.Clips.Add("only.mp4");
+        rig.Enable(perHour: 4);
+        var armedAt = rig.Clock.UtcNow;
+        rig.Effect.Arm();
+
+        // The rig's scripted roll is 0.5, so the interval is exactly the base: 3600/4 = 900 s.
+        Assert.Equal(armedAt + BubbleCountSchedule.Interval(4, 0.5), rig.Clock.NextDue);
+        Assert.Equal(armedAt + TimeSpan.FromSeconds(900), rig.Clock.NextDue);
+
+        // And it is NOT the video module's law. The JITTER arithmetic is identical — upstream writes
+        // it two ways that reduce to the same expression, which BubbleCountSchedule's own remarks
+        // say out loud — so the difference a user feels is the CLAMP: the same dial of 20 is ten
+        // games an hour here and twenty clips an hour there (BubbleCountService.cs:88 against
+        // VideoService.cs:2225 with ProgramDefinition.cs:442).
+        Assert.Equal(BubbleCountSchedule.Interval(1, 0.0), MandatoryVideoSchedule.Interval(1, 0.0));
+        Assert.NotEqual(BubbleCountSchedule.Interval(20, 0.5), MandatoryVideoSchedule.Interval(20, 0.5));
+        Assert.Equal(TimeSpan.FromSeconds(360), BubbleCountSchedule.Interval(20, 0.5));
+        Assert.Equal(TimeSpan.FromSeconds(180), MandatoryVideoSchedule.Interval(20, 0.5));
     }
 
     [Theory]

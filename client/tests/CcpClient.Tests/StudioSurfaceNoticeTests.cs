@@ -844,4 +844,147 @@ public class StudioSurfaceNoticeTests
         Assert.Contains("taken down when the session stopped", withdrawn, StringComparison.Ordinal);
         Assert.Equal(4, new[] { solved, dismissed, withdrawn, refusedForInk }.Distinct().Count());
     }
+
+    // =================================================================================
+    //  SP-112 - the row with TWO channels, and one sentence per state that can differ
+    // =================================================================================
+
+    [Fact]
+    public void EACHArmedSTATEOfTheTwoChannelRowGetsItsOwnSentence()
+    {
+        // THE SAME DEFECT CLASS, on a row that can be Armed for FIVE different reasons. A single
+        // "not running" sentence would be false about four of them, and two of the five are the
+        // states the two capabilities' own dot meanings exist for - a picture that stopped moving
+        // and a keyboard that went elsewhere.
+        string Line(
+            bool sessionRunning, bool display, bool user, bool playing, bool asking) =>
+            BubbleCountPanelNotices.DescribeGameState(
+                EffectDotState.Armed, playedCount: 0, last: null, sessionRunning, display, user,
+                playing, asking, BubbleCountResolution.None);
+
+        var noSession = Line(false, true, true, false, false);
+        var noDisplay = Line(true, false, true, false, false);
+        var noUser = Line(true, true, false, false, false);
+        var neither = Line(true, false, false, false, false);
+        var frozen = Line(true, true, true, true, false);
+        var unfocused = Line(true, true, true, false, true);
+        var unscheduled = Line(true, true, true, false, false);
+
+        Assert.Contains("until the session starts", noSession, StringComparison.Ordinal);
+        Assert.Contains("nothing it plays can reach a screen", noDisplay, StringComparison.Ordinal);
+        Assert.Contains("could never ask you the count", noUser, StringComparison.Ordinal);
+        Assert.Contains("neither half of this game can reach you", neither, StringComparison.Ordinal);
+        Assert.Contains("STOPPED changing", frozen, StringComparison.Ordinal);
+        Assert.Contains("given the keyboard to another window", unfocused, StringComparison.Ordinal);
+        Assert.Contains("not scheduled right now", unscheduled, StringComparison.Ordinal);
+
+        // NONE of the five running states tells a user to start a session they already started -
+        // the exact message SP-105 had to split apart.
+        foreach (var line in new[] { noDisplay, noUser, neither, frozen, unfocused, unscheduled })
+        {
+            Assert.DoesNotContain("until the session starts", line, StringComparison.Ordinal);
+        }
+
+        // Seven states, seven sentences.
+        Assert.Equal(
+            7,
+            new[] { noSession, noDisplay, noUser, neither, frozen, unfocused, unscheduled }
+                .Distinct().Count());
+    }
+
+    [Fact]
+    public void ALIVERowSaysWHICHHalfOfTheGameIsRunning_AndTheENDINGSAreAllDifferent()
+    {
+        string Live(bool playing, bool asking, BubbleCountResolution resolution, int played) =>
+            BubbleCountPanelNotices.DescribeGameState(
+                EffectDotState.Live, played, new BubbleCountEvent(3, default, BubbleCountDifficulty.Easy),
+                sessionRunning: true, canReachADisplay: true, canReachAUser: true, playing, asking,
+                resolution);
+
+        Assert.Contains("Counting now", Live(true, false, BubbleCountResolution.None, 0), StringComparison.Ordinal);
+        Assert.Contains("Asking you now", Live(false, true, BubbleCountResolution.None, 0), StringComparison.Ordinal);
+        Assert.Contains("next game is on the clock", Live(false, false, BubbleCountResolution.None, 0), StringComparison.Ordinal);
+
+        var counted = Live(false, false, BubbleCountResolution.Counted, 4);
+        var missed = Live(false, false, BubbleCountResolution.Missed, 4);
+        var dismissed = Live(false, false, BubbleCountResolution.Dismissed, 4);
+        var withdrawn = Live(false, false, BubbleCountResolution.Withdrawn, 4);
+        var refused = Live(false, false, BubbleCountResolution.Refused, 4);
+        var abandoned = Live(false, false, BubbleCountResolution.Abandoned, 4);
+
+        Assert.Contains("got the last count right", counted, StringComparison.Ordinal);
+        Assert.Contains("used up every try", missed, StringComparison.Ordinal);
+        Assert.Contains("closed the last question with Esc", dismissed, StringComparison.Ordinal);
+        Assert.Contains("taken down when the session stopped", withdrawn, StringComparison.Ordinal);
+        Assert.Contains("would not give it the keyboard", refused, StringComparison.Ordinal);
+
+        // ABANDONED IS NOT MISSED, and the sentence has to keep them apart: a user who was never
+        // asked must not be told they failed. That distinction is this module's own and it is the
+        // one a panel is most likely to blur.
+        Assert.Contains("could not really be watched", abandoned, StringComparison.Ordinal);
+        Assert.DoesNotContain("used up every try", abandoned, StringComparison.Ordinal);
+        Assert.DoesNotContain("wrong", abandoned, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            6, new[] { counted, missed, dismissed, withdrawn, refused, abandoned }.Distinct().Count());
+
+        // The count says "started", which is what it counts: games that really began a clip.
+        Assert.Contains("4 games started so far", counted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void THECLOSINGLineQuotesBOTHCapabilities_AndNeitherHalfSpeaksForTheOther()
+    {
+        // The only panel on the page that quotes two capabilities, because it is the only row that
+        // needs two. Each half reports its OWN typed outcome; a single sentence would be false
+        // about one of them whenever they disagree - which is exactly the interesting case.
+        var videoRefused = BubbleCountPanelNotices.DescribeBothCapabilities(
+            new CapabilityState.Unavailable(new CapabilityReason("video-no-display", "no display here")),
+            new CapabilityState.Available("the OS gave the card the keyboard"));
+
+        Assert.Contains("Video: no clip played. no display here", videoRefused, StringComparison.Ordinal);
+        Assert.Contains("Question: the operating system gave it the keyboard", videoRefused, StringComparison.Ordinal);
+
+        var inputRefused = BubbleCountPanelNotices.DescribeBothCapabilities(
+            new CapabilityState.Available("the OS is holding the picture"),
+            new CapabilityState.Unavailable(new CapabilityReason("input-not-captured", "the OS kept the foreground")));
+
+        Assert.Contains("Video: the operating system is holding the picture", inputRefused, StringComparison.Ordinal);
+        Assert.Contains("Question: none was shown. the OS kept the foreground", inputRefused, StringComparison.Ordinal);
+
+        // Before anything has been asked, BOTH halves say nobody asked - a different fact from "the
+        // answer was no", and the distinction the NotAsked observations exist to hold.
+        var cold = BubbleCountPanelNotices.DescribeBothCapabilities(null, null);
+        Assert.Contains("Video: nothing has been asked", cold, StringComparison.Ordinal);
+        Assert.Contains("Question: nothing has been asked", cold, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void THECLIPPoolLineNamesTheSHAREDFolder_SoNobodyGoesLookingForASecondOne()
+    {
+        var empty = BubbleCountPanelNotices.DescribeClipPool(0, @"C:\media\videos");
+        Assert.Contains("No clip to play", empty, StringComparison.Ordinal);
+        Assert.Contains(@"C:\media\videos", empty, StringComparison.Ordinal);
+        Assert.Contains("same folder Mandatory Video plays from", empty, StringComparison.Ordinal);
+
+        var full = BubbleCountPanelNotices.DescribeClipPool(3, @"C:\media\videos");
+        Assert.Contains("3 clips", full, StringComparison.Ordinal);
+        Assert.Contains("own shuffled order", full, StringComparison.Ordinal);
+
+        // One clip is not "1 clips".
+        Assert.Contains("1 clip in", BubbleCountPanelNotices.DescribeClipPool(1, "x"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void THEDIFFICULTYLineStatesUpstreamsOwnRate_InTheUnitsAUserThinksIn()
+    {
+        var easy = BubbleCountPanelNotices.DescribeDifficulty(BubbleCountDifficulty.Easy);
+        var hard = BubbleCountPanelNotices.DescribeDifficulty(BubbleCountDifficulty.Hard);
+
+        // 3 and 8 per thirty seconds are upstream's own numbers
+        // (Windows/BubbleCountWindow.xaml.cs:1139-1145), stated rather than hidden behind a word.
+        Assert.Contains("about 3 bubbles every 30 seconds", easy, StringComparison.Ordinal);
+        Assert.Contains("about 8 bubbles every 30 seconds", hard, StringComparison.Ordinal);
+        Assert.Contains("Three tries", easy, StringComparison.Ordinal);
+    }
 }
