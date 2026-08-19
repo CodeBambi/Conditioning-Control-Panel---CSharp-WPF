@@ -486,3 +486,8 @@ Floor pin **1472 unit / 90 headless**. Next task ID **SP-107**. FOUR effects: Fl
 Per-frame work fits `OwnedSessionEffect` with no scheduler in the module: the cadence belongs to the SURFACE PRESENTER, not the module. An interval deciding when a module is DUE is not the same as a cadence keeping a surface CORRECT.
 **Standing trap, do not relearn it:** `AsyncOperationOwner` runs cancellation callbacks INSIDE its own lock (`Lifecycle/OperationRegistry.cs:148-158`, `:161-167`), while `OwnedSessionEffect.Dot` holds the effect gate across `_owner.IsLive`. Taking the effect gate in a cancellation callback therefore inverts lock order and hangs shutdown. SP-106 tried it, passed a fully green suite anyway (every test drives that path on one thread), and reverted. New P1 board row owns the real fix.
 Bouncing Text and every moving-glyph module are BLOCKED on one overlay capability (D83/D84) plus an untested elapsed-time clock seam. New P0 board row.
+
+## 2026-08-19 - wave 47 landed
+Floor pin **1477 unit / 90 headless**. Next task ID **SP-108**.
+**NEVER run two `check-floor.mjs` gates concurrently, and never run one while a reviewer runs one.** That was the cause of the flake that weakened every land's evidence: real-desktop fixtures addressed machine-global state by constant. A cross-process lease now serializes them, but the orchestration lesson stands - reviewers were told to run the gate alone from SP-107 onward.
+**Three consecutive greens mean no two gate processes fought over the desktop. They do NOT mean the tree is green** - a ~5% residual on `FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden` is open and instrumented, fix gated on which of four verdicts fires next. Do not add a wait or relax it.
