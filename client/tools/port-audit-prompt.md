@@ -15,9 +15,22 @@ loop or lane logs.
 2. Run these, and read the real output (they take a few minutes — wait for them):
 
    ```
-   dotnet build client/CcpClient.sln -c Debug --nologo
+   node client/tests/floor/check-warnings.mjs
    node client/tests/floor/check-floor.mjs
    ```
+
+   The first command is the build-warning gate (SP-114). It IS the build — it runs
+   `dotnet build client/CcpClient.sln -c Debug --nologo --no-incremental`, captures the whole
+   unfiltered output, and exits non-zero unless it positively reads 0 warnings and 0 errors
+   across all four solution projects. Do NOT substitute a plain `dotnet build` and read the
+   output yourself: that is the exact reading that produced four false "0 warnings" reports.
+   Two measured reasons. SP-113's filter `grep -E "error|warning CS|Build succ"` cannot match
+   `warning xUnit2013`, so a filtered stream reported clean while two real warnings sat in the
+   tree. And an incremental build reports only the compilations it ran: at SP-114 the same
+   mandated build command printed `1 Warning(s)` and then `0 Warning(s)` over an UNCHANGED tree
+   holding a live `CS0219`, because MSBuild skipped CoreCompile. A non-zero exit is an audit
+   FAIL — name the gate's reason verbatim. It also leaves a fresh full build behind, which is
+   exactly what the second command needs.
 
    The second command is the test-floor wrapper (SP-065/SP-066): it runs BOTH test
    projects with TRX loggers and fails closed on any red, any count drift in either
@@ -36,7 +49,9 @@ loop or lane logs.
    count is evidence about the source only if the build that produced it is.
 
 3. Check every one of these:
-   - build reports 0 warnings and 0 errors;
+   - the warning gate exits 0 and its `WARNING GATE OK` line reports 0 warnings and 0 errors
+     across 4 projects. Report that line verbatim. It cannot see a SUPPRESSED warning — that
+     hole is held by `WarningSuppressionCensusTests` inside the floor run, not by you;
    - the wrapper exits 0 and its `FLOOR OK` line reports totals matching the claim EXACTLY
      (unit and headless);
    - any skipped tests are exactly the names pinned in `allowedSkips` — the wrapper itself

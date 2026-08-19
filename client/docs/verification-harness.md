@@ -12,6 +12,7 @@ Build + unit tests + headless tests. Runs on every iteration; the only tier that
   - `dotnet build client/CcpClient.sln -c Debug --nologo` — the solution build IS the affected-build check (the solution contains only projects that exist; there is no wider build to narrow).
   - `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` — pure unit tests (no Avalonia runtime, no app launch). Assertion-logic unit tests for the tier-3 console tool live here.
   - `dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` — headless Avalonia tests (in-memory windowing/rendering; no real display, no app launch).
+  - `node client/tests/floor/check-warnings.mjs` — the build-warning gate (SP-114). It performs the build above with `--no-incremental` and reads the whole unfiltered output, so "0 warnings / 0 errors" is observed rather than asserted. Run it immediately BEFORE `check-floor.mjs`; see "Build-warning evidence class" below for what it covers and what it cannot see.
 - Tier selection is by csproj path: a task touches only logic → run `CcpClient.Tests`; touches AXAML/visual tree → also run `CcpClient.HeadlessTests`. The full contract testCommand (all three commands) is the pre-`.DONE` gate.
 - The headless tests live in a SEPARATE project because `[assembly: AvaloniaTestApplication]` is assembly-wide; putting them in `CcpClient.Tests` would force an Avalonia application onto the 85 landed unit tests.
 
@@ -187,6 +188,37 @@ Some tier-1 facts are not headless. `OverlayCapabilityTests` (SP-099), `FlashDra
 - any other application that raises itself over the test's rectangle at the moment the hit test is asked.
 
 When that happens the facts **fail loudly**, and how much they can say differs by refusal: `OverlayInputNotReceived` names the winning window's class (it has a handle from `WindowFromPoint` to ask about), while `OverlayNotOnTop` can only report z-order indices, because a z-order walk that finds the surface below an ordinary window has no single culprit to name. Either way the port would rather see a red it can read than a green it cannot trust. None of these are `allowedSkips` candidates — that list is for properties of the MACHINE, and "something else was on top just then" is a property of the MOMENT. **The floor therefore claims exclusivity against other test processes and claims nothing at all against the rest of the desktop.** Sustained topmost under real contention, multi-monitor placement, cross-DPI behaviour and delivered (rather than routed) input remain tier-2 headed claims and the named manual gates in the SP-093/SP-099/SP-100 records.
+
+## Build-warning evidence class (SP-114)
+
+**Every landed wave of this port has reported "0 warnings / 0 errors", and until 2026-08-20 not one of those claims was checked by anything except a lane reading its own build output.** `check-floor.mjs` is a TEST floor: it runs `--no-build` by design and has never had any warning handling at all. The gate below closes that.
+
+```
+node client/tests/floor/check-warnings.mjs             # build + observe; exit 0 only on 0/0
+node client/tests/floor/check-warnings.mjs --self-test  # parser corpus only, no build
+```
+
+### The two false-green mechanisms it exists to kill, both measured
+
+- **A filtered stream cannot report what the filter cannot match.** SP-113 read its builds through `grep -E "error|warning CS|Build succ"`. That expression is structurally incapable of matching `warning xUnit2013`; the lane reported clean four times, and the two real warnings surfaced only when a reviewer forced a full rebuild. The gate keys on `warning <CODE>:` with the code as a wildcard, and its `--self-test` corpus carries the exact xUnit2013 line together with the retired filter, so the two are compared on every run. `WarningGateGuardTests` lifts the shipped regex out of the gate's source and executes it against that same line, so the fact binds the pattern that actually runs rather than a copy of it.
+- **An incremental build reports only the warnings of the compilations it actually ran, which can be none.** Measured at SP-114 on base `4332b8b9`, with a live `CS0219` sitting in a source file: `dotnet build client/CcpClient.sln -c Debug --nologo` printed `1 Warning(s)`, and the very next run of the same command over the unchanged tree printed `0 Warning(s)` — MSBuild skipped `CoreCompile` for an up-to-date project. A warning is a property of the **compilation**, not of the assembly. The gate therefore forces `--no-incremental`; without that flag it is vacuous, and `WarningGateGuardTests` pins the flag with that measurement as its stated reason.
+
+### It does not compromise the stale-build guard
+
+`check-floor.mjs` was not modified by SP-114. It still passes `--no-build`, still calls `assertBuildIsFresh`, still contains no build invocation, and a guard test pins all three. The warning gate builds because building is the thing it observes, into the same `bin/obj` the floor then reads — so in the intended order (warning gate, then floor) it *is* the "always build immediately before the gate" step and satisfies the floor's freshness precondition. **Hazard, named:** it rebuilds shared `bin/obj`, so it must never run concurrently with a floor run **in the same worktree**. Across worktrees each lane has its own output and `client/tools/gate/with-slot.mjs` already bounds machine-wide build concurrency.
+
+### What a green gate claims
+
+Zero warnings and zero errors, positively read, from a forced full compilation of every project in `client/CcpClient.sln` (`CcpClient.Desktop`, `CcpClient.Tests`, `CcpClient.HeadlessTests`, `CcpVerify`) in `Debug|Any CPU`, `net10.0`, on the SDK that ran it. It fails closed on every "I could not tell": a non-zero build exit, a missing or duplicated MSBuild summary counter line, a solution project that produced no output line, and any disagreement between its two independent readings (the per-diagnostic line parse and MSBuild's own `N Warning(s)` summary). It never reports a count it did not read.
+
+### What it cannot see — the boundary
+
+- **A suppressed warning, by construction.** `NoWarn`, an inline pragma disable, a code-analysis suppression attribute, an `.editorconfig` severity of `none`, a lowered `WarningLevel` — every one of them acts before MSBuild prints anything, so no output-reading gate can observe them. The mitigation is a **different instrument**: `WarningSuppressionCensusTests` pins every suppression under `client/` by file and code (measured at SP-114: one `NoWarn`, `AVLN3001` in `CcpClient.Desktop.csproj`, deliberate per `CLAUDE.md`; nine inline `CS0067` pragma sites; zero suppression attributes, zero `GlobalSuppressions.cs`, zero `.editorconfig` from `client/` up to the repository root, zero project-level warning policy). A new suppression fails that test with file and code. It is lexical, and it judges nothing about whether a pinned suppression is justified.
+- **An `.editorconfig` ABOVE the repository root.** Roslyn's discovery walks to the drive root; the census stops at the repository root, because a file outside the repository is not something an in-tree red could act on. Named, not closed.
+- **Anything outside `client/CcpClient.sln` in `Debug`.** The Release/RID publish path (`client/tools/publish/publish.ps1`) is not covered, and neither legacy tree (`ConditioningControlPanel/`, `CCP.*`) is in scope at all.
+- **Another machine's analyzer set.** The warning set is whatever this SDK and these package/analyzer versions emit (measured on SDK 10.0.303, MSBuild 18.6.14). A green here is not a claim about a different SDK.
+- **Restore-time (`NU*`) warnings on a run where restore no-ops.** `--no-incremental` forces compilation, not restore. The gate REPORTS when restore no-opped so the reader knows which reading they hold.
+- **Behaviour.** It observes a build. It discharges no `draw-verified` or `presentation-verified` claim, and proves nothing about rendering, timing, audio, focus, input or window behaviour.
 
 ## Check manifest schema
 

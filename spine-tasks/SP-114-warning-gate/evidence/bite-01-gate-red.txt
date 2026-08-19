@@ -1,0 +1,6 @@
+warning gate: dotnet build C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\CcpClient.sln -c Debug --nologo --no-incremental -tl:off
+WARNING GATE FAILED (SP-114):
+  2 BUILD WARNING(S):
+      [CS0219] C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\tests\CcpClient.Tests\Sp114BiteProbe.cs(11,13): warning CS0219: The variable 'unused' is assigned but its value is never used [C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\tests\CcpClient.Tests\CcpClient.Tests.csproj]
+      [xUnit2013] C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\tests\CcpClient.Tests\Sp114BiteProbe.cs(17,9): warning xUnit2013: Do not use Assert.Equal() to check for collection size. Use Assert.Single instead. (https://xunit.net/xunit.analyzers/rules/xUnit2013) [C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\client\tests\CcpClient.Tests\CcpClient.Tests.csproj]
+  full unfiltered build log: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a47b44268bce8d064\spine-tasks\SP-114-warning-gate\evidence\bite-01\build.log

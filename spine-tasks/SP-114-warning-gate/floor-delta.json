@@ -1,0 +1,6 @@
+{
+  "packet": "SP-114-warning-gate",
+  "unit": 8,
+  "headless": 0,
+  "reason": "SP-114 build-warning gate: 6 WarningGateGuardTests facts (the test floor still runs --no-build and keeps its stale-build guard; the gate forces --no-incremental; its build args weaken no warning; it covers every solution project; its own shipped regex matches the xUnit2013 line SP-113's filter could not; the gate is named in the workflow, the harness and the auditor prompt) and 2 WarningSuppressionCensusTests facts pinning every warning suppression under client/ by file and code"
+}

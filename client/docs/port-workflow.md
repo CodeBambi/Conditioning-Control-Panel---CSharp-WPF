@@ -202,6 +202,26 @@ The mechanical gate is `node client/tests/floor/check-floor.mjs`. A bare `dotnet
 
 **Always build immediately before the gate, in the same tree.** The wrapper runs `dotnet test --no-build`, so it tests whatever DLLs are sitting in `bin/` — which need not correspond to the source in the working tree. `git reset --hard`, `git checkout`, and switching branches all leave gitignored build output untouched. Observed at the wave-30 close (2026-08-14): after the port branch was reset back over a lane's commits, the gate reported **1022 against a source tree containing 1018** — a clean pass on tests that no longer existed in the checkout. It fails the other way just as easily: a stale DLL can red a tree that is actually green, or green a tree that is actually red. The count is only evidence about the source if the build that produced it is.
 
+### The warning gate (adopted 2026-08-20, SP-114)
+
+**"0 warnings / 0 errors" is a claim, and it is now made by a gate rather than by a lane reading its own build output.** Run, in this order:
+
+```
+node client/tests/floor/check-warnings.mjs
+node client/tests/floor/check-floor.mjs
+```
+
+The first builds and reads the build; the second still runs `dotnet test --no-build` and still carries its stale-build guard. In that order the warning gate IS the "always build immediately before the gate" step above, so it satisfies the floor's freshness precondition instead of competing with it. **Never merge the two, and never teach `check-floor.mjs` to build** — `client/docs/port-lessons.md:204` is the reason it does not, and `WarningGateGuardTests` pins it.
+
+Two measured facts drove this, and both were false-green mechanisms rather than opinions:
+
+- **A filtered stream cannot report what the filter cannot match.** SP-113 read its builds through `grep -E "error|warning CS|Build succ"`, which is structurally incapable of matching `warning xUnit2013`. It reported clean four times; the two real warnings surfaced only when a reviewer forced a full rebuild. **Never report a warning count obtained through a filter you have not verified against a known-matching case.**
+- **An incremental build reports the warnings of the compilations it actually ran, which can be none.** Measured at SP-114 on the base tree, with a live `CS0219` in a source file: `dotnet build client/CcpClient.sln -c Debug --nologo` printed `1 Warning(s)`, and the very next run of the same command over the unchanged tree printed `0 Warning(s)`, because MSBuild skipped `CoreCompile`. The gate therefore forces `--no-incremental`; without that flag it would be vacuous.
+
+The gate covers `client/CcpClient.sln` in `Debug` only, and it cannot see a warning that was **suppressed** before MSBuild printed it. That hole is covered by a second, lexical instrument, `WarningSuppressionCensusTests`, which pins every suppression under `client/` by file and code. The full boundary is in `client/docs/verification-harness.md`.
+
+Never silence a warning to make this gate pass. No `#pragma`, no `NoWarn`, no raised `WarningLevel`. If the tree has warnings, the honest outcome is a red gate and a report.
+
 Do not inherit the first attempt's long all-tabs smoke test or generic layer sweep. They consumed substantial time and missed visual defects.
 
 If a headed check cannot be automated, the task remains `WIP` or `BLOCKED` with the exact manual gate named. Do not mark it `DONE` because a command exited successfully.
