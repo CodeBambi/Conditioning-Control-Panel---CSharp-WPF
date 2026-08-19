@@ -84,6 +84,12 @@ public class RealDesktopCollectionGuardTests
         // machine-global screen, and the desktop-capture control would be reading the other run.
         "VideoSurfaceObservations",
         "Win32VideoPresence",
+
+        // SP-112. The second consumer's own run uses ALL THREE of the above at once — an overlay, a
+        // video surface carrying a picture this process painted, and a card that takes the
+        // foreground after it — so it contends for everything the three lines above contend for,
+        // and it must join the same collection for the same reasons.
+        "BubbleCountObservations",
     ];
 
     /// <summary>
