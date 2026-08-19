@@ -23,18 +23,18 @@ group label `st4_studio_group_timing` = `"TIMING"` (`en.json:4819`).
 
 | Packet criterion | Evidence |
 |---|---|
-| observable **without** an overlay surface | The whole mechanism is `settings.SpiralOpacity = newVal` etc. — a settings write, no window, no draw (`MainWindow/MainWindow.StartStop.cs:503-539`). WPF's own comment at `:513-517`: "the settings write is the whole job now… the Studio panels repaint off PropertyChanged" |
+| observable **without** an overlay surface | The whole mechanism is `settings.SpiralOpacity = newVal` etc. — a settings write, no window, no draw (`MainWindow/MainWindow.StartStop.cs:504-540`). WPF's own comment at `:451-456`: "the settings write is the whole job now… the Studio panels repaint off PropertyChanged" |
 | driven by **session progress** rather than a repaint cadence | `elapsed = (DateTime.Now - _rampStartTime).TotalMinutes; progress = Math.Min(elapsed / duration, 1.0)` (`:484-493`). The 2 s timer (`:426-431`) is a SAMPLING cadence, not a firing schedule — the ramp is never "due" |
-| **interacts with an existing module** rather than running beside it | It moves the dials of two modules the port has already landed: `settings.SpiralOpacity` (`:517`) and `settings.PinkFilterOpacity` (`:521`), which are exactly `SpiralPresetDocument.OpacityPercent` and `PinkFilterPresetDocument.OpacityPercent` |
+| **interacts with an existing module** rather than running beside it | It moves the dials of two modules the port has already landed: `settings.SpiralOpacity` (`:517`) and `settings.PinkFilterOpacity` (`:523`), which are exactly `SpiralPresetDocument.OpacityPercent` and `PinkFilterPresetDocument.OpacityPercent` |
 
 ### Behaviour to port, with citations
 
 - **Start** `StartRampTimer` (`MainWindow.StartStop.cs:413-435`): capture base values, `_rampStartTime = DateTime.Now`, 2 s `DispatcherTimer`. Started by `StartEngine` at `:265-269`, gated on `settings.IntensityRampEnabled`.
-- **Tick** `RampTimer_Tick` (`:481-554`): `progress = Math.Min(elapsed/duration, 1.0)`; `eased = RampCurves.ApplyCurve(progress, curve)`; `currentMult = 1.0 + (multiplier - 1.0) * eased`; per link `newVal = (int)Math.Min(base * currentMult, cap)`. Caps: flash 100 (`:508`), spiral 100 (`:517`), pink **50** (`:521`), master 100 (`:527`), sub 100 (`:535`). `(int)` is a TRUNCATION, not a round — kept.
-- **Curve** `Helpers/RampCurves.cs:47-73`, five shapes, endpoints preserved, input clamped 0..1. Persisted by ordinal, missing = Linear (`AppSettings.cs:2633-2640`).
+- **Tick** `RampTimer_Tick` (`:481-556`): `progress = Math.Min(elapsed/duration, 1.0)`; `eased = RampCurves.ApplyCurve(progress, curve)`; `currentMult = 1.0 + (multiplier - 1.0) * eased`; per link `newVal = (int)Math.Min(base * currentMult, cap)`. Caps: flash 100 (`:509`), spiral 100 (`:517`), pink **50** (`:523`), master 100 (`:529`), sub 100 (`:537`). `(int)` is a TRUNCATION, not a round — kept.
+- **Curve** `Helpers/RampCurves.cs:47-73`, five shapes, endpoints preserved, input clamped 0..1. Persisted by ordinal, missing = Linear (`AppSettings.cs:2631-2639`).
 - **Stop** `StopRampTimer` (`:437-479`): stop the timer and **restore every captured base value**, then clear the map.
-- **Auto-stop** (`:546-554`): `progress >= 1.0 && EndSessionOnRampComplete` → tray notification + `StopEngine()`. The completion test uses RAW linear progress, not eased — WPF says so at `:494-496`.
-- **Clamps** `CCP.Core/Models/AppSettings.cs:2582-2587` duration `[10,180]` default 60; `:2468-2472` multiplier `[1.0,3.0]` **default 1.0**; `:2575-2580` enabled default false; `:2625-2630` end-at-complete default false; `:2590-2622` five link flags, all default false.
+- **Auto-stop** (`:547-555`): `progress >= 1.0 && EndSessionOnRampComplete` → tray notification + `StopEngine()`. The completion test uses RAW linear progress, not eased — WPF says so at `:495-497`.
+- **Clamps** `CCP.Core/Models/AppSettings.cs:2581-2586` duration `[10,180]` default 60; `:2468-2472` multiplier `[1.0,3.0]` **default 1.0**; `:2575-2580` enabled default false; `:2625-2630` end-at-complete default false; `:2590-2622` five link flags, all default false.
 
 ### Why the other candidates are not this
 
@@ -46,7 +46,7 @@ group label `st4_studio_group_timing` = `"TIMING"` (`en.json:4819`).
 | | Bouncing Text | Already refused with evidence at SP-106 (**D83/D84**) |
 | IMMERSION | Mind Wipe | Reachable (the port has real audio), but it is a **PACED** module — random intervals off a frequency-per-hour dial, NAudio one-shots (`Services/LockCard/MindWipeService.cs:18-30`). `PacedSessionEffect<TFiring>` fits it. It would test the AUDIO capability, not the spine. **Runner-up, and it is less distant** |
 | | Brain Drain | Same paced-audio shape (`Services/LockCard/BrainDrainService.cs:13-30`) plus a screen-capture compositor layer that exists only in the CCP.* tree |
-| | Haptics | Device backends — Buttplug/Intiface, Lovense (`Services/Haptics/ButtplugProvider.cs`, `LovenseProvider.cs`). A capability the port does not have. Also the rack's one **paid** row (`StudioTabView.xaml.cs:527`, `tier: 1`) |
+| | Haptics | Device backends — Buttplug/Intiface, Lovense (`Services/Haptics/ButtplugProvider.cs`, `LovenseProvider.cs`). A capability the port does not have. Also the rack's one **paid** row (`StudioTabView.xaml.cs:528`, `tier: 1`) |
 | TIMING | Scheduler | **Structurally outside the spine**: it starts the engine from OUTSIDE a session (`MainWindow.StartStop.cs:562-620`), needs tray minimize + notification, and runs when nothing is running. It cannot be an `ISessionEffect` at all |
 
 **So the finding the packet offered as an escape is NOT taken.** One candidate in another group is fully in scope, and it is the one furthest from the four proven seams.
@@ -104,7 +104,7 @@ Why not the other candidates:
 **Threading, decided up front (this is the hazard SP-106 §4.2 was burned by).** Each `AsyncOperationOwner` owns its own lock (`Lifecycle/OperationRegistry.cs:122`), so the ramp's owner lock and a target's are different objects, and the dial adapters are strictly one-directional (ramp → target; no target ever calls the ramp). The write is split so nothing expensive happens under a lock and nothing touches a window off the UI thread:
 
 - `Write(value)` — the persisted dial only, thread-safe by `PersistenceStore.Mutate`, run SYNCHRONOUSLY on the caller's thread.
-- `Reapply()` — the owning module's `Refresh()`, which touches a native surface, run through an injected dispatch (WPF's own `Dispatcher.Invoke` at `MainWindow.StartStop.cs:503`, decomposed).
+- `Reapply()` — the owning module's `Refresh()`, which touches a native surface, run through an injected dispatch (WPF's own `Dispatcher.Invoke` at `MainWindow.StartStop.cs:504`, decomposed).
 
 This deliberately closes an upstream residue: WPF's window-close path stops the ramp timer WITHOUT restoring (`MainWindow/MainWindow.WindowChrome.cs:167` is a bare `_rampTimer?.Stop()`) and `SaveSettings()` runs five lines earlier at `:162`, so quitting mid-ramp persists the RAMPED opacity. The port restores the values synchronously on every release, so the flush can never write a ramped dial. Recorded as a divergence.
 

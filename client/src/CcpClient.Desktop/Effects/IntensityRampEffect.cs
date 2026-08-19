@@ -20,9 +20,9 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>MainWindow/MainWindow.StartStop.cs:265-269</c> -&gt; <c>:413-435</c>) after capturing the
 /// current value of every linkable dial. Each tick computes how far through the ramp the session is,
 /// shapes that by the chosen curve, and writes each linked dial to
-/// <c>base × currentMultiplier</c>, capped (<c>:481-539</c>). The stop restores every captured base
+/// <c>base × currentMultiplier</c>, capped (<c>:504-540</c>). The stop restores every captured base
 /// (<c>:437-479</c>). That is the entire feature: <b>a settings write is the whole job</b>, in
-/// upstream's own words at <c>:513-517</c>.</para>
+/// upstream's own words at <c>:451-456</c>.</para>
 ///
 /// <para><b>THE SEAM'S FOURTH VERDICT — what "running" means with nothing to look at.</b></para>
 /// <list type="bullet">
@@ -63,9 +63,9 @@ namespace CcpClient.Desktop.Effects;
 /// <para><b>What is NOT ported</b>, and is recorded rather than stubbed: the three of WPF's five
 /// links whose dial does not exist in this port (flash opacity, master volume, subliminal volume —
 /// see <see cref="IntensityRampPresetDocument"/>); the tray notification that accompanies the
-/// auto-stop (<c>MainWindow.StartStop.cs:550</c>, outside this packet's File Scope); and the
+/// auto-stop (<c>MainWindow.StartStop.cs:552</c>, outside this packet's File Scope); and the
 /// <c>!sessionActive</c> guard that makes the visual links stand down while a SCRIPTED preset
-/// session runs (<c>:489,505,512,520</c>) — the port has no scripted session, so that condition is
+/// session runs (<c>:490,507,513,521</c>) — the port has no scripted session, so that condition is
 /// constantly false here and the links are always live.</para>
 /// </summary>
 public sealed class IntensityRampEffect : OwnedSessionEffect
@@ -123,7 +123,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// <param name="dials">What this ramp is allowed to drive. Empty is a legal composition and
     /// produces a typed refusal, never a silent no-op.</param>
     /// <param name="dispatch">Where work that touches another module's LIVE state is run — WPF's own
-    /// <c>Dispatcher.Invoke</c> around the tick's writes (<c>MainWindow.StartStop.cs:503</c>). The
+    /// <c>Dispatcher.Invoke</c> around the tick's writes (<c>MainWindow.StartStop.cs:504</c>). The
     /// persisted half of a dial move does not go through here; see <see cref="IIntensityDial"/>.</param>
     public IntensityRampEffect(
         AsyncOperationOwner owner,
@@ -146,7 +146,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
 
     /// <summary>Raised once per engagement when the ramp reaches full progress and the user asked
     /// for the session to end there — WPF's <c>EndSessionOnRampComplete</c> branch
-    /// (<c>MainWindow/MainWindow.StartStop.cs:546-554</c>, which calls <c>StopEngine()</c>).
+    /// (<c>MainWindow/MainWindow.StartStop.cs:547-555</c>, which calls <c>StopEngine()</c>).
     ///
     /// <para>It is an EVENT rather than a call into <see cref="SessionEngine"/> because the engine
     /// owns the modules and a module that reached back into it would close the cycle. The
@@ -154,7 +154,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// that knows a session exists at all.</para>
     ///
     /// <para>Delivered through the same dispatch the dial writes use, so it lands where WPF's does:
-    /// on the UI thread, inside the tick's <c>Dispatcher.Invoke</c> (<c>:549-553</c>).</para></summary>
+    /// on the UI thread, inside the tick's <c>Dispatcher.Invoke</c> (<c>:551-554</c>).</para></summary>
     public event Action? Completed;
 
     /// <inheritdoc/>
@@ -181,7 +181,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     }
 
     /// <summary>What a linked dial's base is currently multiplied by — WPF's <c>currentMult</c>
-    /// (<c>MainWindow.StartStop.cs:500</c>). 1.0 before the first engagement, and 1.0 for the whole
+    /// (<c>MainWindow.StartStop.cs:501</c>). 1.0 before the first engagement, and 1.0 for the whole
     /// session when the multiplier dial is at its floor.</summary>
     public double CurrentMultiplier
     {
@@ -233,26 +233,26 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     }
 
     /// <summary>How long the climb takes — WPF's duration slider
-    /// (<c>Features/IntensityRampFeatureControl.xaml.cs:89-100</c>), clamped by the document.</summary>
+    /// (<c>Features/IntensityRampFeatureControl.xaml.cs:91-100</c>), clamped by the document.</summary>
     public void SetDurationMinutes(int minutes) =>
         MutateAndReapply(p => p.DurationMinutes = minutes);
 
     /// <summary>What a linked dial reaches at full progress — WPF's multiplier slider
-    /// (<c>IntensityRampFeatureControl.xaml.cs:102-113</c>).</summary>
+    /// (<c>IntensityRampFeatureControl.xaml.cs:102-111</c>).</summary>
     public void SetMultiplier(double multiplier) =>
         MutateAndReapply(p => p.Multiplier = multiplier);
 
     /// <summary>The shape of the climb — WPF's curve combo
-    /// (<c>IntensityRampFeatureControl.xaml.cs:124-137</c>).</summary>
+    /// (<c>IntensityRampFeatureControl.xaml.cs:122-136</c>).</summary>
     public void SetCurve(RampCurve curve) => MutateAndReapply(p => p.Curve = curve);
 
     /// <summary>End the whole session at full progress — WPF's "End at Complete" switch
-    /// (<c>IntensityRampFeatureControl.xaml.cs:115-122</c>).</summary>
+    /// (<c>IntensityRampFeatureControl.xaml.cs:113-120</c>).</summary>
     public void SetEndSessionOnComplete(bool end) =>
         MutateAndReapply(p => p.EndSessionOnComplete = end);
 
     /// <summary>Link the Spiral Overlay's opacity to this ramp — WPF's link switches, all written by
-    /// one handler (<c>IntensityRampFeatureControl.xaml.cs:139-150</c>).</summary>
+    /// one handler (<c>IntensityRampFeatureControl.xaml.cs:138-149</c>).</summary>
     public void SetLinkSpiralOpacity(bool linked) =>
         MutateAndReapply(p => p.LinkSpiralOpacity = linked);
 
@@ -266,7 +266,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// <para>The dial and the generation have already been checked by
     /// <see cref="OwnedSessionEffect"/>. What is left is this module's own three answers, and one
     /// invariant: <b>a re-engagement never restarts the climb.</b> WPF starts its ramp clock in
-    /// <c>StartRampTimer</c> and nowhere else (<c>MainWindow.StartStop.cs:423</c>), so a user who
+    /// <c>StartRampTimer</c> and nowhere else (<c>MainWindow.StartStop.cs:424</c>), so a user who
     /// moves the duration slider twenty minutes into a session is still twenty minutes into it.</para>
     /// </summary>
     protected override CapabilityState Engage(int generation)
@@ -323,12 +323,14 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// whatever the ramp had reached.</para>
     ///
     /// <para><b>The write is synchronous and the re-apply is dispatched, and the split matters
-    /// here.</b> On the teardown path a post is not delivered, so a combined operation would leave
-    /// the ramped value in the document for the persistence flush to write to disk. That is exactly
-    /// what upstream does when the window closes: a bare <c>_rampTimer?.Stop()</c> with no restore
-    /// (<c>MainWindow/MainWindow.WindowChrome.cs:167</c>), five lines after <c>SaveSettings()</c>
-    /// (<c>:162</c>). Here the VALUE always comes back; only the re-tint of a window that is being
-    /// destroyed anyway can be dropped.</para>
+    /// here.</b> On this port's teardown path a post is not delivered — the dispatcher is already
+    /// down — so a combined operation would leave the ramped value in the document for
+    /// <c>PersistenceStore.FlushAsync</c> to write to disk. Here the VALUE always comes back; only
+    /// the re-tint of a window that is being destroyed anyway can be dropped. <b>This is a port-side
+    /// hazard, not an upstream one:</b> WPF's every exit path stops the engine before it saves, and
+    /// <c>StopEngine</c> -&gt; <c>StopRampTimer</c> IS the restore
+    /// (<c>MainWindow/MainWindow.StartStop.cs:388</c> -&gt; <c>:437-479</c>). See
+    /// <see cref="IIntensityDial"/> and D95.</para>
     ///
     /// <para><b>Idempotent and lock-free with respect to <see cref="OwnedSessionEffect.Gate"/></b>,
     /// as the base class requires: one <c>Disarm</c> reaches this three times (directly, from the
@@ -393,7 +395,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// and write the dials that have actually moved.
     ///
     /// <para><b>The arithmetic is upstream's, line for line</b>
-    /// (<c>MainWindow/MainWindow.StartStop.cs:484-539</c>): raw progress is
+    /// (<c>MainWindow/MainWindow.StartStop.cs:484-540</c>): raw progress is
     /// <c>min(elapsedMinutes / duration, 1)</c>, the curve shapes it, the multiplier interpolates
     /// from 1.0, and each dial lands on <c>(int)min(base × mult, ceiling)</c> — an integer
     /// TRUNCATION, not a round, which is what makes a 10 % dial at 1.15× stay at 11 rather than

@@ -188,8 +188,9 @@ public class NonDrawingEffectSpineTests
         Assert.True(rig.Engine.Stop());
 
         // The DOCUMENTS are back where the user left them, which is what the persistence flush will
-        // later write. Upstream's window-close path does not do this (MainWindow.WindowChrome.cs:167
-        // stops the timer without restoring, five lines after SaveSettings at :162) — D95.
+        // later write. Upstream reaches the same outcome by a different route — every exit path calls
+        // StopEngine before SaveSettings, and StopEngine -> StopRampTimer IS the restore
+        // (MainWindow.StartStop.cs:388 -> :437-479) — so this is parity, not a fix. D95.
         Assert.Equal(12, rig.Session.PinkFilterPreset.Current.OpacityPercent);
         Assert.Equal(21, rig.Session.SpiralPreset.Current.OpacityPercent);
         Assert.Empty(rig.Ramp.HeldDials);
@@ -260,7 +261,7 @@ public class NonDrawingEffectSpineTests
         Assert.True(rig.Engine.QuickToggle(IntensityRampEffect.EffectId));
 
         // WPF's own ramp quick-toggle is INERT mid-session — it flips the flag and the running timer
-        // ignores it entirely (StudioTabView.xaml.cs:539-541 -> IntensityRampFeatureControl.xaml.cs:83-90,
+        // ignores it entirely (StudioTabView.xaml.cs:539-541 -> IntensityRampFeatureControl.xaml.cs:82-89,
         // which writes and saves and touches no timer), so upstream's dot goes dark while the ramp
         // keeps ramping. Here the dial is the authority the whole spine already gives it, so the
         // ramp really stops and really gives the dial back. D94.
@@ -288,7 +289,7 @@ public class NonDrawingEffectSpineTests
         rig.Clock.Advance(TimeSpan.FromMinutes(30));
 
         // WPF: `if (progress >= 1.0 && settings.EndSessionOnRampComplete && !sessionActive)` ->
-        // StopEngine() (MainWindow.StartStop.cs:546-554). The whole session goes down, every module
+        // StopEngine() (MainWindow.StartStop.cs:547-555). The whole session goes down, every module
         // with it, and the dials the ramp held come back on the way.
         Assert.False(rig.Engine.Running);
         Assert.False(rig.Flash.ScheduleArmed);
@@ -307,7 +308,7 @@ public class NonDrawingEffectSpineTests
         rig.Engine.Start();
         rig.Clock.Advance(TimeSpan.FromHours(4));
 
-        // EndSessionOnRampComplete ships OFF (AppSettings.cs:2625-2630), so the default outcome is a
+        // EndSessionOnRampComplete ships OFF (AppSettings.cs:2624-2629), so the default outcome is a
         // ramp that finishes and a session that keeps going. And the finished ramp is STILL Live: it
         // is still holding the user's dial and still owes it back, which is exactly why "Live means
         // it will change a moment from now" is the wrong rule for this module.

@@ -752,7 +752,7 @@ public class StudioRackHeadlessTests
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
 
         // WPF has FOUR groups — EFFECTS, GAMES & CARDS, IMMERSION, TIMING (§8.3, built at
-        // StudioTabView.xaml.cs:483/497/508/533) — and until SP-108 the port had rows in exactly one
+        // StudioTabView.xaml.cs:483/498/508/530) — and until SP-108 the port had rows in exactly one
         // of them, because every module it had ported was an EFFECT that painted an overlay. The
         // group headers are upstream's own strings (st4_studio_group_effects / _timing,
         // en.json:4816,4819).
@@ -790,7 +790,7 @@ public class StudioRackHeadlessTests
         var row = Descendant<RadioButton>(window, "RowIntensityRamp");
         var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
 
-        // It ships OFF (CCP.Core/Models/AppSettings.cs:2575-2580), so the dot starts unlit.
+        // It ships OFF (CCP.Core/Models/AppSettings.cs:2574-2579), so the dot starts unlit.
         Assert.False(window.Session.Ramp.Enabled);
         Assert.Equal(EffectDotState.Off, page.RenderedRampDot);
 
@@ -840,7 +840,12 @@ public class StudioRackHeadlessTests
         Assert.Contains("PinkFilterSurfaceState", named);
         Assert.DoesNotContain("RampSurfaceState", named);
 
-        // What it has instead: a custody line, saying it has borrowed nothing yet.
+        // What it has instead: a live-state line and a custody line, both rendered from the module.
+        // The module ships OFF (CCP.Core/Models/AppSettings.cs:2574-2579), so the live line is the
+        // dial's word and not the session's, and the custody line says it has borrowed nothing yet.
+        var live = Descendant<TextBlock>(window, "RampLiveState").Text ?? string.Empty;
+        Assert.Equal("Switched off. Nothing is ramped, session or no session.", live);
+
         var custody = Descendant<TextBlock>(window, "RampCustodyState").Text ?? string.Empty;
         Assert.Contains("Holding nothing", custody, StringComparison.Ordinal);
 
@@ -891,7 +896,7 @@ public class StudioRackHeadlessTests
         Click(window, Descendant<CheckBox>(window, "RampLinkPinkFilterToggle"));
         Assert.True(window.Session.RampPreset.Current.LinkPinkFilterOpacity);
 
-        // D93. WPF has FIVE link switches (AppSettings.cs:2590-2622); flash opacity, master volume
+        // D93. WPF has FIVE link switches (AppSettings.cs:2589-2621); flash opacity, master volume
         // and subliminal volume have no dial on any ported panel, so their switches are ABSENT rather
         // than present-and-inert — a switch that quietly does nothing is the greyed control §9 D7
         // refuses.

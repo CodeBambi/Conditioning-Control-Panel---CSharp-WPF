@@ -25,9 +25,9 @@ It satisfies all three of the packet's distance criteria at once, which no other
 
 | Criterion | Evidence |
 |---|---|
-| observable **without** an overlay surface | the mechanism is `settings.SpiralOpacity = newVal` and four siblings — no window, no draw (`MainWindow/MainWindow.StartStop.cs:503-539`). Upstream's own words at `:513-517`: "the settings write is the whole job now" |
+| observable **without** an overlay surface | the mechanism is `settings.SpiralOpacity = newVal` and four siblings — no window, no draw (`MainWindow/MainWindow.StartStop.cs:504-540`). Upstream's own words at `:451-456`: "the settings write is the whole job now" |
 | driven by **session progress** | `progress = Math.Min((DateTime.Now - _rampStartTime).TotalMinutes / duration, 1.0)` (`:484-493`) |
-| **interacts with** an existing module | it moves `SpiralOpacity` (`:517`) and `PinkFilterOpacity` (`:521`) — precisely `SpiralPresetDocument.OpacityPercent` and `PinkFilterPresetDocument.OpacityPercent`, the dials the two landed continuous modules read |
+| **interacts with** an existing module | it moves `SpiralOpacity` (`:517`) and `PinkFilterOpacity` (`:523`) — precisely `SpiralPresetDocument.OpacityPercent` and `PinkFilterPresetDocument.OpacityPercent`, the dials the two landed continuous modules read |
 
 The refusals for every other row, with citations, are in `plan.md` §1 and summarised in §7 below. The
 runner-up was **Mind Wipe** and it is named as the runner-up rather than dismissed: it is reachable
@@ -111,7 +111,7 @@ Running  =  the progress cadence is scheduled
 **Neither clause is redundant, and the SECOND one is the finding.** Without the first, a module whose
 tick died would keep claiming to be climbing. Without the second, the dot degenerates into the paced
 rule and lights up for a ramp with nothing linked — which, because every link ships OFF
-(`AppSettings.cs:2590-2622`), is the state a freshly enabled ramp is really in.
+(`AppSettings.cs:2589-2621`), is the state a freshly enabled ramp is really in.
 
 **Two rules that were right for earlier modules give the WRONG answer here, and that is why this is a
 fourth meaning rather than a re-use of one of the three.**
@@ -135,12 +135,15 @@ Three typed reason codes carry the difference: `ramp-no-dial`, `ramp-no-linked-d
    `ReleaseWork` writes every held base value back. Nothing before this had a counterpart: a paced
    module's release drops a one-shot, a continuous or moving module's withdraws a surface it owns.
 2. **A split between "write the value" and "apply the value"**, because they have different thread
-   rules and, it turned out, different failure modes. The persisted write is synchronous and
-   lock-safe; the re-apply touches a native overlay and is dispatched. **The split closes an upstream
-   data-loss bug** (D95): WPF's window-close path stops the ramp timer without restoring
-   (`MainWindow/MainWindow.WindowChrome.cs:167`), five lines after `SaveSettings()` at `:162`, so
-   quitting mid-ramp persists the ramped opacity as though the user had chosen it. Here the value
-   always comes back and only the re-tint of a window being destroyed anyway can be dropped.
+   rules and different failure modes. The persisted write is synchronous and lock-safe; the re-apply
+   touches a native overlay and is dispatched. **The split closes a PORT-SIDE hazard with no upstream
+   counterpart** (D95): in this port a post is not delivered once the dispatcher is down, and
+   `PersistenceStore.FlushAsync` runs after `Engine.Stop()`, so a single combined operation would
+   leave the ramped value in the document for the flush to write over the user's own. Upstream
+   reaches the same outcome by a different route — every writer of `_exitRequested` stops the engine
+   before `SaveSettings()`, and `StopEngine` -> `StopRampTimer` IS the restore
+   (`MainWindow/MainWindow.StartStop.cs:388` -> `:437-479`). **An earlier draft of this record and of
+   D95 claimed WPF loses the value here; that was false and is corrected — see §9.**
 3. **A seam so the module does not know what it drives.** `IIntensityDial` (`Id`, `Label`, `Ceiling`,
    `Read`, `Write`, `Reapply`) with two adapters built in the composition root. Upstream writes five
    named settings by hand inside its tick, which is why upstream's ramp cannot be exercised without an
@@ -153,7 +156,7 @@ Three typed reason codes carry the difference: `ramp-no-dial`, `ramp-no-linked-d
    session stops". A headless fact asserts that `RampSurfaceState` does not exist while the other four
    panels' surface lines do.
 5. **A way to end the session it is inside.** WPF's ramp calls `StopEngine()` at full progress when
-   the user asked for it (`MainWindow.StartStop.cs:546-554`). A module cannot call the engine that
+   the user asked for it (`MainWindow.StartStop.cs:547-555`). A module cannot call the engine that
    owns it without closing the cycle, so the module raises `Completed` and `SessionParticipant` — the
    only thing that knows a session exists — makes the call. **This is the first ported module that
    can stop a session.**
@@ -260,6 +263,16 @@ least one fact reds per module.** md5 before and after each mutation:
 `IntensityRampEffect.cs` `07ea8279e4a8a0ecebbd6b2f07136410`,
 `OwnedSessionEffect.cs` `6db92ca01a2622e3afe51fd92aba33ea`.
 
+**Three more at the code-review revision** (§9), against the revised files
+(`IntensityRampEffect.cs` `441241fc3931f03add9e32b1bde88af7`,
+`RampPanelNotices.cs` `ee6ae2b59b639c35f262f11ffd5b5bef`, both restored byte-identically):
+
+| Mutation | Result |
+|---|---|
+| the module's `Math.Min(baseValue × multiplier, dial.Ceiling)` becomes a bare cast — **the per-dial ceiling** | **2 FAILED** (`TheCeilingIsTheOWNINGDialsOwn…` on a request of **120**, `ADialLinkedMIDSESSION…` on **60**). Before the revision this mutation reded **nothing** — §5.2 |
+| `DescribeRampState` returns one constant sentence for every state | **9 FAILED**: all 7 rows of the ramp's notice theory plus 2 facts. Before the revision it reded **nothing** — §5.3 |
+| the module's `Math.Min(elapsed / duration, 1.0)` clamp is deleted — **the progress ceiling** | **2 FAILED** (`TheClimbStopsAtFullProgress…`, `ARampThatCompletesWithoutTheSwitch…`). Run because it was the third sweep candidate and reading alone had already been wrong once |
+
 ### 5.1 THE MUTATION THAT DID NOT BITE, AND THE HOLE IT FOUND IN MY OWN FACT
 
 `TheDialClimbsOnWpfsOwnArithmetic_AndTheIntegerIsTRUNCATEDNotRounded` was written around a value of
@@ -273,6 +286,48 @@ Re-run with the mutation: **FAILED, expected 12, actual 13.** Restored, green, m
 **Worth more than the fix:** a midpoint is the intuitive value to test a truncation with and it is the
 one value that cannot distinguish truncation from the default rounding mode. The fact read as though
 it proved something it did not, and only a mutation found that.
+
+**And the lesson was not applied.** I recorded this class and did not sweep the rest of the packet for
+it. The code review found a second instance immediately — §5.2 — which is the real finding here: a
+mutation that survives is a hole in the FACTS, and one hole of a given shape is evidence that others
+of the same shape exist.
+
+### 5.2 THE SECOND INSTANCE, FOUND BY THE CODE REVIEW: an assertion a COLLABORATOR satisfies
+
+`TheCeilingIsTheOWNINGDialsOwn_AndTheRampCannotDriveItPast` asserted `rig.Pink.Value == 50` after a
+base of 40 at 3.0×. Deleting the module's `Math.Min(baseValue × multiplier, dial.Ceiling)` makes the
+module ask for **120** — and the fact stayed green, because the test double's `Write` clamps on the
+way in, exactly as the real dial does (`PinkFilterPresetDocument.OpacityPercent` clamps to 50 in its
+own setter). `Assert.Equal(50, rig.Pink.Ceiling)` beside it was a tautology about the double.
+**The module's ceiling clamp was pinned by nothing, in either test project.**
+
+The fix is to assert against **what the module ASKED for** rather than what the collaborator stored:
+`FakeDial` now records every raw request, and the fact asserts no request ever leaves `[0, 50]` and
+the last one is exactly 50. Verified: the mutation now reds it, and reds
+`ADialLinkedMIDSESSION…` with it (which had the identical blind spot at its own `Assert.Equal(50, …)`).
+
+**The generalised rule this packet ends with:** *when an assertion's expected value could be produced
+by a collaborator's own guard, it does not test the code under test.* A clamp, a `Math.Clamp` in a
+document setter, a `Math.Min` in a helper and a default in a `switch` are all collaborators in this
+sense.
+
+### 5.3 THE SWEEP, and what it found
+
+Every new fact in the packet re-read against that rule, and each candidate settled by MUTATION rather
+than by reading — because reading alone had already been wrong twice.
+
+| Fact | Verdict |
+|---|---|
+| `TheCeilingIsTheOWNINGDialsOwn…` | **HOLE** — the double's clamp satisfied it. Fixed (§5.2) |
+| `ADialLinkedMIDSESSION…` | **HOLE**, same shape at its `Assert.Equal(50, …)`. Fixed the same way |
+| `TheClimbStopsAtFullProgress…` | **SOUND, and it looked like a third hole.** `RampCurves.ApplyCurve` clamps its own input, so deleting the module's progress `Math.Min` still leaves the dial at 20 — but the fact also asserts `Ramp.Progress == 1.0`, which reads the module's own stored value. Mutation confirms: 2 red |
+| `TheRampsLiveLine…` theory | **HOLE of a different shape** — no comparison between states at all. Fixed (Blocker 3), and the mutation now reds all 7 rows |
+| `TheDialClimbsOnWpfsOwnArithmetic…` | sound since §5.1's fix; `FakeDial`'s ceiling of 100 is never reached, so no clamp can mask it |
+| `ADialIsWrittenOnlyWhenItsIntegerReallyMoves…` | sound — it counts writes, and no collaborator can suppress one |
+| `AStopGivesEveryHeldDialBackEXACTLY…`, the two quick-toggle facts, the teardown fact | sound — the expected values (17, 23, 12, 21) are arbitrary user numbers no clamp can produce |
+| the five-module spine facts asserting 24/36 | sound — both are below the 50 ceiling, so no clamp is in the path |
+
+**Two holes found, two fixed, one near-miss identified and proved sound.**
 
 ---
 
@@ -318,7 +373,7 @@ if the next packet wants a module from GAMES & CARDS or IMMERSION, this is what 
 | | Bouncing Text | already refused with evidence at SP-106 (D83/D84) |
 | IMMERSION | Mind Wipe | **reachable**, and the runner-up. NAudio one-shots at random intervals (`Services/LockCard/MindWipeService.cs:18-30`) — a PACED module `PacedSessionEffect<TFiring>` fits, so it tests the audio capability rather than the spine |
 | | Brain Drain | same paced-audio shape (`Services/LockCard/BrainDrainService.cs:13-30`), plus a screen-capture compositor layer that exists only in the `CCP.*` tree |
-| | Haptics | device backends — Buttplug/Intiface and Lovense (`Services/Haptics/ButtplugProvider.cs`, `LovenseProvider.cs`). A capability the port does not have, and the rack's one paid row (`StudioTabView.xaml.cs:527`, `tier: 1`) |
+| | Haptics | device backends — Buttplug/Intiface and Lovense (`Services/Haptics/ButtplugProvider.cs`, `LovenseProvider.cs`). A capability the port does not have, and the rack's one paid row (`StudioTabView.xaml.cs:528`, `tier: 1`) |
 | TIMING | Scheduler | structurally outside the spine: it starts the engine from OUTSIDE a session (`MainWindow.StartStop.cs:562-620`), needs tray minimize plus notification, and runs when nothing is running. D92 |
 
 **The honest summary for the board:** of the eight unported rows in the other three groups, **one**
@@ -362,3 +417,92 @@ from four names to five).
 a stashed baseline.
 
 **Docs** `client/docs/wpf-surface-reachability.md` (D92–D100).
+
+---
+
+## 9. THE CODE-REVIEW REVISION (REVISE -> three blockers, all addressed)
+
+### 9.1 D95 asserted an upstream bug that does not exist — CORRECTED
+
+The first draft claimed WPF loses the user's opacity when the window closes mid-ramp, citing the bare
+`_rampTimer?.Stop()` at `MainWindow/MainWindow.WindowChrome.cs:167`. **That was false**, and the
+review was right. Verified at the source before correcting:
+
+- `:167` runs only inside `if (_exitRequested)` (`MainWindow/MainWindow.WindowChrome.cs:137`).
+- All three writers of `_exitRequested` restore first: the tray Exit handler
+  (`MainWindow/MainWindow.xaml.cs:327-328`, `_exitRequested = true; if (_isRunning) StopEngine();`),
+  the in-app Exit button (`MainWindow/MainWindow.Settings.cs:454-462`, `StopEngine()` inside
+  `if (_isRunning)` and the flag after it), and the double-panic exit
+  (`MainWindow/MainWindow.xaml.cs:1207,1230`, gated on `!_isRunning` with `StopEngine()` already run
+  at `:1169`).
+- `StopEngine` -> `StopRampTimer` (`MainWindow/MainWindow.StartStop.cs:388` -> `:437-479`) **IS** the
+  restore, and it runs before `SaveSettings()` on every one of those paths.
+- `:167` is a defensive "Stop ALL timers" sweep (`:165`) over a timer already nulled at
+  `MainWindow.StartStop.cs:440`. `SaveSettings()` is at `:163`, four lines before it, not five.
+
+**The product is unaffected.** The split write is independently correct for a port-side reason that
+has no upstream counterpart: here a post is not delivered once the dispatcher is down, and
+`PersistenceStore.FlushAsync` runs after `Engine.Stop()`.
+`TheWriteIsSYNCHRONOUSAndTheReApplyIsDISPATCHED_SoARestoreSurvivesADispatcherThatIsDown` proves that
+property without needing any claim about WPF. Corrected in all six places the claim appeared: the D95
+row, `Effects/IntensityDial.cs`, `Effects/IntensityRampEffect.cs`, this record's §1.4,
+`IntensityRampEffectTests.cs` and `NonDrawingEffectSpineTests.cs`.
+
+**What went wrong in the method, not just in the fact.** I read one line and inferred a control flow
+around it. Every other WPF claim in this packet was taken from a body I had read end to end; this one
+was taken from a `grep` hit. **A citation is only as good as the enclosing scope you read with it.**
+
+### 9.2 The ceiling clamp was pinned by nothing — FIXED, and the sweep is §5.3
+
+See §5.2 and §5.3. Two holes of the same shape, both fixed, both proved by mutation; one further
+candidate proved sound the same way rather than by argument.
+
+### 9.3 The ramp's notice theory could not fail — FIXED
+
+`TheRampsLiveLineSaysADIFFERENTTrueThingInEveryStateItCanBeIn` asserted only non-blankness and a
+trailing full stop, so a `DescribeRampState` returning one constant would have passed all seven rows.
+Both landed siblings in the same file carry a distinctness loop plus SP-105's final-review rule, and
+that guard exists because SP-105 shipped exactly this bug. The theory now:
+
+- builds every other state's sentence through a `RampLineFor` helper and asserts **no two states share
+  a sentence**;
+- asserts every RUNNING state starts with `"Running"` and never says `"When a session starts"`, and
+  every non-running state never says `"Running"`.
+
+**One product line changed with it, and it is a real improvement.** The finished-ramp sentence used to
+open `"Finished:"`. At full progress the dot reads **Live** — that is this packet's own headline
+finding — so a line opening "Finished" contradicted the dot on the same row. It now opens
+`"Running: the climb has FINISHED at N x ..."`. The panel and the dot agree, which is the property the
+three-state design exists to enforce.
+
+`RampLiveState` was also asserted by no test in either project; the headless panel fact now pins its
+exact rendered sentence.
+
+### 9.4 Citation drift — CORRECTED, and two of the review's corrections were themselves wrong
+
+Systematic 1-2 line drift throughout, behaviour correct everywhere. Every citation re-derived from the
+source rather than taken on trust, which caught two errors in the review's own list:
+
+| Citation | Review said | Source says | Kept |
+|---|---|---|---|
+| `AppSettings.cs:2675` (spiral opacity clamp) | should be `:2674` | `:2674` is the getter; the `Math.Clamp(value, 0, 100)` setter is `:2675` | **mine** |
+| `AppSettings.cs:3737` (pink opacity clamp) | should be `:3736` | `:3736` is the getter; the `Math.Clamp(value, 0, 50)` setter is `:3737` | **mine** |
+
+Everything else in the review's list was correct and is applied, plus several the review did not list
+that the same re-derivation caught: the flash cap `:508`->`:509`, the auto-stop condition
+`:546`->`:547` and its block `:546-554`->`:547-555`, the notification `:550`->`:552`, the tick
+`:481-539`->`:481-556`, the two link branches `:514-519`/`:520-524`->`:513-519`/`:521-525`, the
+haptics tier row `:527`->`:528`, the ramp settings region `:2575-2641`->`:2574-2640` and every
+property inside it, all six panel handlers, the combo default `:53`->`:54` and the write default
+`:135`->`:133`. D96's `AppSettings.cs:2469` was the `SchedulerMultiplier` getter and is replaced by
+the two setters the row is actually about (`:2675`, `:3737`).
+
+`plan.md`'s citations were corrected too. Its content, predictions and refusals are unchanged — it
+remains the pre-edit checkpoint it was written as, with the same numbers pointing at the right lines.
+
+### 9.5 Not a blocker, and not changed
+
+The §4 concurrency residual stands as recorded: `_hold` is a genuine leaf lock and the ramp never
+takes another module's lock while holding its own, but no test in this packet drives two real threads,
+so §4's lock-graph argument remains a reading and not a measurement. The review accepted it as
+honestly recorded and it becomes a follow-up row at land.

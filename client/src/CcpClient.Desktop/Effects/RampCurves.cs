@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Effects;
 ///
 /// <para><b>Persisted by ordinal</b>, exactly as upstream persists it: "Stored by ordinal like the
 /// other enum settings here; missing = Linear = unchanged legacy behaviour"
-/// (<c>CCP.Core/Models/AppSettings.cs:2632-2640</c>). <see cref="System.Text.Json"/> writes an enum
+/// (<c>CCP.Core/Models/AppSettings.cs:2631-2639</c>). <see cref="System.Text.Json"/> writes an enum
 /// as its numeric value by default, so a document written by this build and a document written by
 /// WPF agree on the wire, and a document with no field at all deserializes to
 /// <see cref="Linear"/> — which is the value that changes nothing.</para>
@@ -14,7 +14,7 @@ namespace CcpClient.Desktop.Effects;
 /// <para><b>An ordinal outside this set is not an error and is not corrected.</b>
 /// <see cref="RampCurves.ApplyCurve"/> falls through to linear for anything it does not recognise,
 /// which is upstream's own <c>default:</c> arm (<c>Helpers/RampCurves.cs:69-71</c>) and its combo
-/// box's <c>_ =&gt; 0</c> (<c>Features/IntensityRampFeatureControl.xaml.cs:53</c>). Preserving the
+/// box's <c>_ =&gt; 0</c> (<c>Features/IntensityRampFeatureControl.xaml.cs:54</c>). Preserving the
 /// unknown value rather than rewriting it is the persistence contract's unknown-member rule applied
 /// to a value instead of a member: a newer build's curve survives a round trip through this one.</para>
 /// </summary>

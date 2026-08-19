@@ -489,7 +489,42 @@ public class StudioSurfaceNoticeTests
     [InlineData(RampLine.RunningAtNeutralGain)]
     [InlineData(RampLine.Climbing)]
     [InlineData(RampLine.Finished)]
-    public void TheRampsLiveLineSaysSomethingDifferentAndTrueInEveryStateItCanBeIn(RampLine line)
+    public void TheRampsLiveLineSaysADIFFERENTTrueThingInEveryStateItCanBeIn(RampLine line)
+    {
+        var text = RampLineFor(line);
+
+        // No line may be blank, and NO TWO STATES MAY SHARE A SENTENCE. Without this loop a
+        // DescribeRampState that returned one constant would pass every row of this theory — which
+        // is the bug SP-105 shipped, a review caught, and the sibling theory above has guarded
+        // against ever since. Caught here at code review before it landed.
+        Assert.False(string.IsNullOrWhiteSpace(text), $"{line} renders as blank space");
+        Assert.EndsWith(".", text.TrimEnd(), StringComparison.Ordinal);
+        foreach (var other in Enum.GetValues<RampLine>())
+        {
+            if (other != line)
+            {
+                Assert.NotEqual(RampLineFor(other), text);
+            }
+        }
+
+        // And the load-bearing half, in this module's own currency: only a state with NO session
+        // running may tell the user to start one, and every running state must say it is running —
+        // INCLUDING the finished one, because a ramp at full progress still holds the user's dials
+        // and its dot still reads Live.
+        var running = line is RampLine.RunningHoldingNothing or RampLine.RunningAtNeutralGain
+            or RampLine.Climbing or RampLine.Finished;
+        if (running)
+        {
+            Assert.StartsWith("Running", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("When a session starts", text, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("Running", text, StringComparison.Ordinal);
+        }
+    }
+
+    private static string RampLineFor(RampLine line)
     {
         var preset = new IntensityRampPresetDocument { Enabled = true, DurationMinutes = 60 };
         var dot = EffectDotState.Live;
@@ -539,10 +574,7 @@ public class StudioSurfaceNoticeTests
         }
 
         var sessionRunning = line is not (RampLine.Off or RampLine.ReadyWithALink or RampLine.ReadyWithNoLink);
-        var text = RampPanelNotices.DescribeRampState(dot, preset, progress, current, held, sessionRunning);
-
-        Assert.False(string.IsNullOrWhiteSpace(text), $"{line} renders as blank space");
-        Assert.EndsWith(".", text.TrimEnd(), StringComparison.Ordinal);
+        return RampPanelNotices.DescribeRampState(dot, preset, progress, current, held, sessionRunning);
     }
 
     [Fact]
@@ -576,7 +608,7 @@ public class StudioSurfaceNoticeTests
     [Fact]
     public void AFreshlyEnabledRampIsToldWhatToDoNext_BecauseEveryLinkShipsOff()
     {
-        // Every link flag defaults false (AppSettings.cs:2590-2622), so switching this module on and
+        // Every link flag defaults false (AppSettings.cs:2589-2621), so switching this module on and
         // walking away is the state a first-time user really lands in, and "nothing happened" is not
         // an acceptable answer to it.
         var preset = new IntensityRampPresetDocument { Enabled = true, Multiplier = 2.0 };

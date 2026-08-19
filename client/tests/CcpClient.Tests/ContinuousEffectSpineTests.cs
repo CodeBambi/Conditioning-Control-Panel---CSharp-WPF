@@ -206,7 +206,7 @@ public class ContinuousEffectSpineTests
         Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[PinkFilterEffect.EffectId]);
 
         // Subliminals ships off, and so does SP-108's Intensity Ramp
-        // (CCP.Core/Models/AppSettings.cs:2575-2580); the continuous module took the session.
+        // (CCP.Core/Models/AppSettings.cs:2574-2579); the continuous module took the session.
         Assert.Equal(
             [SubliminalsEffect.EffectId, IntensityRampEffect.EffectId],
             rig.Engine.ArmRefusals.Select(r => r.Id));

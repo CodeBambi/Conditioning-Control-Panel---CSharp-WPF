@@ -183,7 +183,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // rides, because its 2 s progress sample is its own (WPF's _rampTimer,
         // MainWindow/MainWindow.StartStop.cs:426-431) and there is no surface to keep it in.
         //
-        // Its dials are the two the port really has. WPF links five (AppSettings.cs:2590-2622); flash
+        // Its dials are the two the port really has. WPF links five (AppSettings.cs:2589-2621); flash
         // opacity, master volume and subliminal volume have no dial on any ported panel, so they are
         // absent rather than present-and-inert (D93). The list is built HERE because the composition
         // root is the only thing that knows which modules exist — the ramp itself knows nothing about
@@ -197,7 +197,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
                 new SpiralOpacityDial(_spiralPreset, Spiral),
                 new PinkFilterOpacityDial(_pinkFilterPreset, PinkFilter),
             ],
-            // WPF wraps the tick's dial writes in Dispatcher.Invoke (MainWindow.StartStop.cs:503).
+            // WPF wraps the tick's dial writes in Dispatcher.Invoke (MainWindow.StartStop.cs:504).
             // Here only the half that touches a LIVE surface goes through the dispatch; the persisted
             // half is synchronous so a restore survives a teardown whose dispatcher is already down.
             Dispatch);
@@ -222,7 +222,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // disarmed, so the restore is a settings write with nothing live behind it.
         Engine = new SessionEngine([Flash, Subliminals, Spiral, PinkFilter, Ramp], _preset, signal);
 
-        // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:546-554
+        // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:547-555
         // calls StopEngine()). A module cannot call the engine that owns it without closing the cycle,
         // so the module raises and the composition root — the only thing that knows a session exists —
         // makes the call. Stop() is idempotent and returns false when nothing is running.

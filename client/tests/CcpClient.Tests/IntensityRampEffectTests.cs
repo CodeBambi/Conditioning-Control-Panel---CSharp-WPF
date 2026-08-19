@@ -71,7 +71,7 @@ public class IntensityRampEffectTests
     public void AnUnknownCurveOrdinalIsTreatedAsLinear_AndIsNotCorrectedAway()
     {
         // Upstream's own default arm (RampCurves.cs:69-71) and its combo box's `_ => 0`
-        // (IntensityRampFeatureControl.xaml.cs:53). A document written by a newer build survives a
+        // (IntensityRampFeatureControl.xaml.cs:54). A document written by a newer build survives a
         // round trip through this one rather than being rewritten to Linear on load, which is the
         // persistence contract's unknown-member rule applied to a VALUE.
         var future = (RampCurve)99;
@@ -92,7 +92,7 @@ public class IntensityRampEffectTests
         var rig = Rig.Create();
         rig.Enable();
         rig.Link(rig.Spiral);
-        // The multiplier ships at its 1.0 floor (AppSettings.cs:2468), which is its own typed
+        // The multiplier ships at its 1.0 floor (AppSettings.cs:2467), which is its own typed
         // Degraded state; this fact is about custody, so the gain is moved off neutral first.
         rig.Preset.Mutate(p => p.Multiplier = 2.0);
 
@@ -229,7 +229,7 @@ public class IntensityRampEffectTests
     [Fact]
     public void TheCeilingIsTheOWNINGDialsOwn_AndTheRampCannotDriveItPast()
     {
-        // The pink tint's cap is 50, not 100 (MainWindow.StartStop.cs:521; AppSettings.cs:3737), and
+        // The pink tint's cap is 50, not 100 (MainWindow.StartStop.cs:523; AppSettings.cs:3737), and
         // it is the dial's own clamp maximum — so the ramp can never ask for a value the owning
         // document would silently correct behind it.
         var rig = Rig.Create();
@@ -245,8 +245,16 @@ public class IntensityRampEffectTests
         rig.Ramp.Arm();
         rig.Clock.Advance(TimeSpan.FromMinutes(60));
 
+        // ASSERTED AGAINST THE REQUEST, NOT THE STORED VALUE, and that is the whole point of this
+        // fact. 40 x 3.0 is 120; the MODULE's `Math.Min(baseValue * multiplier, dial.Ceiling)` is
+        // what has to turn that into 50. An assertion on rig.Pink.Value alone cannot see it — every
+        // real dial clamps on the way in too (PinkFilterPresetDocument.OpacityPercent does), so
+        // deleting the module's clamp would leave the stored value at 50 and the fact still green.
+        // Found by mutation, after the same class of hole was found once already (record §5.1).
+        Assert.NotEmpty(rig.Pink.Requested);
+        Assert.All(rig.Pink.Requested, requested => Assert.InRange(requested, 0, 50));
+        Assert.Equal(50, rig.Pink.Requested[^1]);
         Assert.Equal(50, rig.Pink.Value);
-        Assert.Equal(50, rig.Pink.Ceiling);
     }
 
     [Fact]
@@ -311,7 +319,7 @@ public class IntensityRampEffectTests
     public void TheShapeOfTheClimbIsTheCurvesAndTheFINISHLINEIsTheClocks()
     {
         // Upstream shapes the VALUE with the eased progress and tests COMPLETION against the raw
-        // linear progress, and says why at MainWindow.StartStop.cs:494-496: "the completion check
+        // linear progress, and says why at MainWindow.StartStop.cs:495-497: "the completion check
         // below still uses the raw linear progress so the ramp ends at its configured duration
         // regardless of curve". Two inputs, one clock.
         var rig = Rig.Create();
@@ -397,10 +405,11 @@ public class IntensityRampEffectTests
     [Fact]
     public void TheWriteIsSYNCHRONOUSAndTheReApplyIsDISPATCHED_SoARestoreSurvivesADispatcherThatIsDown()
     {
-        // D95. On the teardown path a post is never delivered, so a combined operation would leave
-        // the ramped value in the document for the persistence flush to write over the user's own.
-        // That is what upstream does when the window closes: a bare `_rampTimer?.Stop()` with no
-        // restore (MainWindow/MainWindow.WindowChrome.cs:167), five lines after SaveSettings() (:162).
+        // D95, and it is a PORT-SIDE hazard rather than an upstream one. On this port's teardown path
+        // a post is never delivered — the dispatcher is already down — so a combined operation would
+        // leave the ramped value in the document for PersistenceStore.FlushAsync to write over the
+        // user's own. Upstream has no such hole: every exit path stops the engine before it saves,
+        // and StopEngine -> StopRampTimer IS the restore (MainWindow.StartStop.cs:388 -> :437-479).
         var dropped = 0;
         var rig = Rig.Create(dispatch: _ => dropped++);
         rig.Enable();
@@ -429,7 +438,7 @@ public class IntensityRampEffectTests
     [Fact]
     public void TheClimbIsNotRestartedByARefresh_SoMovingASliderMidSessionDoesNotRewindTheRamp()
     {
-        // WPF starts its ramp clock in StartRampTimer and nowhere else (MainWindow.StartStop.cs:423).
+        // WPF starts its ramp clock in StartRampTimer and nowhere else (MainWindow.StartStop.cs:424).
         // A user twenty minutes into a session who moves the duration slider is still twenty minutes
         // in; a re-engage that reset the clock would hand them their ramp back from the beginning.
         var rig = Rig.Create();
@@ -511,7 +520,11 @@ public class IntensityRampEffectTests
         Assert.Equal(30, rig.Ramp.BaseValueFor(rig.Pink.Id));
 
         rig.Clock.Advance(TimeSpan.FromHours(2));
-        Assert.Equal(50, rig.Pink.Value);              // climbed, and hit its own ceiling
+        // Climbed, and the ceiling was applied by the MODULE — 30 x 2.0 is 60 and nothing above 50
+        // was ever asked for. Asserted against the request for the reason in
+        // TheCeilingIsTheOWNINGDialsOwn_AndTheRampCannotDriveItPast.
+        Assert.All(rig.Pink.Requested, requested => Assert.InRange(requested, 0, 50));
+        Assert.Equal(50, rig.Pink.Value);
 
         rig.Ramp.Disarm();
         Assert.Equal(30, rig.Pink.Value);              // back to what the USER last chose
@@ -655,9 +668,18 @@ public class IntensityRampEffectTests
         });
     }
 
-    /// <summary>A dial with no module behind it: it counts what the ramp asked for and touches
-    /// nothing. That it can exist at all is the point — the ramp knows nothing about spirals or
-    /// tints, which is why none of these facts needs a surface.</summary>
+    /// <summary>
+    /// A dial with no module behind it: it records what the ramp asked for and touches nothing. That
+    /// it can exist at all is the point — the ramp knows nothing about spirals or tints, which is why
+    /// none of these facts needs a surface.
+    ///
+    /// <para><b>It keeps the RAW request beside the stored value, and that is not decoration.</b>
+    /// A real dial clamps on the way in — <c>PinkFilterPresetDocument.OpacityPercent</c> does
+    /// (<c>Session/PinkFilterPresetDocument.cs:67</c>) and so does this double — so an assertion made
+    /// only against <see cref="Value"/> cannot tell the MODULE's ceiling clamp from the DIAL's. That
+    /// is exactly the shape of the fact that survived a mutation in this packet (record §5.1), and
+    /// <see cref="Requested"/> is what closes it.</para>
+    /// </summary>
     private sealed class FakeDial(string id, int ceiling, int initial) : IIntensityDial
     {
         public string Id => id;
@@ -672,6 +694,9 @@ public class IntensityRampEffectTests
 
         public int Reapplies { get; private set; }
 
+        /// <summary>Every value the ramp ASKED for, before this dial clamped anything.</summary>
+        public List<int> Requested { get; } = [];
+
         /// <summary>A hand move by the user, which the ramp neither made nor counts.</summary>
         public void Set(int value) => Value = value;
 
@@ -679,6 +704,7 @@ public class IntensityRampEffectTests
 
         public void Write(int percent)
         {
+            Requested.Add(percent);
             Value = Math.Clamp(percent, 0, ceiling);
             Writes++;
         }

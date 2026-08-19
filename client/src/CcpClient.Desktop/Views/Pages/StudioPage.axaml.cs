@@ -347,7 +347,7 @@ public partial class StudioPage : UserControl
 
     /// <summary>
     /// The ramp's duration slider — WPF's writes the setting and saves
-    /// (<c>Features/IntensityRampFeatureControl.xaml.cs:89-100</c>), and does NOT poke the running
+    /// (<c>Features/IntensityRampFeatureControl.xaml.cs:91-100</c>), and does NOT poke the running
     /// ramp: upstream's tick re-reads the setting at its next 2 s sample. Here the write goes through
     /// the module, which re-evaluates at once — the same relationship the opacity sliders above have
     /// to their modules, and indistinguishable from upstream's to a human. D98.
@@ -364,7 +364,7 @@ public partial class StudioPage : UserControl
         Refresh();
     }
 
-    /// <summary>The ramp's multiplier slider (<c>IntensityRampFeatureControl.xaml.cs:102-113</c>).
+    /// <summary>The ramp's multiplier slider (<c>IntensityRampFeatureControl.xaml.cs:102-111</c>).
     /// It is the one dial on this panel a user will move mid-session and expect to feel at once, and
     /// it is why the re-evaluate is worth having.</summary>
     private void OnRampMultiplierMoved()
@@ -379,7 +379,7 @@ public partial class StudioPage : UserControl
         Refresh();
     }
 
-    /// <summary>The curve picker (<c>IntensityRampFeatureControl.xaml.cs:124-137</c>). An index this
+    /// <summary>The curve picker (<c>IntensityRampFeatureControl.xaml.cs:122-136</c>). An index this
     /// build does not know maps to <see cref="RampCurve.Linear"/>, which is upstream's own
     /// <c>_ =&gt; Models.RampCurve.Linear</c> at <c>:135</c>.</summary>
     private void OnRampCurvePicked()

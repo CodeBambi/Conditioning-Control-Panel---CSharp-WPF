@@ -75,7 +75,11 @@ public static class RampPanelNotices
 
         if (progress >= 1.0)
         {
-            return $"Finished: the climb reached {Fixed(preset.Multiplier)}× and the "
+            // It leads with "Running" because it IS running: the dot reads Live at full progress,
+            // since the module still holds the user's dials and still owes them back. A line that
+            // opened with "Finished" would contradict the dot on the row two inches to its left,
+            // which is the disagreement the three-state design exists to prevent.
+            return $"Running: the climb has FINISHED at {Fixed(preset.Multiplier)}×, and the "
                 + $"{Dials(heldCount)} it holds stay there until you stop. They go back to where you "
                 + "left them then.";
         }

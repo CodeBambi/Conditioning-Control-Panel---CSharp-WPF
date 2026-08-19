@@ -102,7 +102,7 @@
           </RadioButton>
 
           <!-- SP-108 — THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
-               IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/497/508/533); the
+               IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
                is upstream's own string (st4_studio_group_timing = "TIMING", en.json:4819) and
                the group exists because a module needs it, not to fill the rack out: the other
@@ -489,7 +489,7 @@
                     AutomationProperties.Name="End the session when the ramp finishes"
                     Content="End the session when the ramp finishes" />
 
-          <!-- TWO links where WPF has five (AppSettings.cs:2590-2622). Flash opacity, master
+          <!-- TWO links where WPF has five (AppSettings.cs:2589-2621). Flash opacity, master
                volume and subliminal volume have no dial on any ported panel, so their switches
                are ABSENT rather than present-and-inert — a switch that quietly does nothing is
                the greyed control §9 D7 refuses. D93. -->
