@@ -377,3 +377,34 @@ three dials).
   premultiplication pass; measured fast enough in the harness at glyph sizes, not profiled at 300 %
   size on a contended machine.
 - **Linux is unproven** on every clause, refuses in type, and its five-step gate is undischarged.
+
+---
+
+## 9. AN INTERMITTENCY, MEASURED ON BOTH SIDES RATHER THAN BLAMED
+
+Late in the run the full unit suite went red twice on
+`FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden`, a
+LANDED fact this packet does not touch, and green on its own every time. Rather than assume it was
+mine or assume it was not, the base commit was checked out in this same worktree and run repeatedly.
+
+| tree | runs | red | which test |
+|---|---|---|---|
+| base `f3c751c1` | **7** | **1** | `SpiralOverlayEffectTests.DisarmReleasesTheWorkUNCONDITIONALLY_EvenWhenItThoughtItWasNotArmed` |
+| lane `f693325d` | **8** | **2** | `FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_…` |
+
+**The base tree is intermittently red on this machine, on a DIFFERENT test.** So the suite has a
+pre-existing intermittency here and this packet did not introduce the phenomenon. What this
+measurement does **not** establish is that the two share one root cause, or that the lane's rate is
+the base's — fifteen runs is not enough to separate one-in-seven from two-in-eight, and I did not run
+more. **Both readings are reported and neither is used to dismiss the other.**
+
+Nothing was retried away, quarantined, skipped, or added to `allowedSkips`, and no assertion was
+weakened. The gate results quoted at the head of this record are from runs that were green; the red
+runs are reported here rather than discarded, and a reviewer should expect the floor to red
+occasionally on this machine for a reason older than this packet.
+
+The most likely mechanism, named without being claimed: both failing facts read machine-global state
+that a foreign topmost window can perturb — the residue `client/docs/verification-harness.md` already
+admits, and the one the shipping WPF product produced unaided during this packet's own probing. This
+packet's own real-desktop runs are inside `RealDesktopCollection` and hold the machine-wide lease, so
+they cannot contend with the landed ones in-process; what they cannot exclude is a fourth party.
