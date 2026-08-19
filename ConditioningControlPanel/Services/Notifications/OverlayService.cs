@@ -2173,8 +2173,13 @@ public class OverlayService : IDisposable
         {
             var all = App.GetAllScreensCached();
             if (all.Length == 0) return "none enumerated";
+            // DPI is part of the description because the compositor host places itself in DEVICE
+            // pixels while WPF lays out in DIPs: a mixed-DPI arrangement is the one topology where
+            // "the overlay is up but you cannot see it" can be a placement bug rather than a
+            // capture bug, and a report could not tell the two apart without these numbers.
             return string.Join(" | ", all.Select(s =>
-                $"{s.DeviceName}{(s.Primary ? "*" : "")} {s.Bounds.Width}x{s.Bounds.Height}@{s.Bounds.X},{s.Bounds.Y}"));
+                $"{s.DeviceName}{(s.Primary ? "*" : "")} {s.Bounds.Width}x{s.Bounds.Height}@{s.Bounds.X},{s.Bounds.Y} " +
+                $"@{Compositor.CompositorHostWindow.GetDpiScaleForScreen(s) * 100:F0}%"));
         }
         catch { return "enumeration threw"; }
     }
