@@ -4581,19 +4581,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void BtnLinkedJsonOpenFolder_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(_filePath)) return;
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"/select,\"{_filePath}\"",
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("DeeperEditor: open folder failed: {Error}", ex.Message);
-            }
+            ConditioningControlPanel.Helpers.ExplorerLauncher.RevealInExplorer(_filePath);
         }
 
         private void BtnLinkedJsonSwap_Click(object sender, RoutedEventArgs e)

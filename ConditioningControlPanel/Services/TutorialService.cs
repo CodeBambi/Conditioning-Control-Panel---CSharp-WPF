@@ -296,6 +296,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Start(TutorialType type = TutorialType.FullTour)
         {
+            // A tutorial is nothing but spotlight cut-outs positioned over MainWindow's controls.
+            // If the window is minimized, or tucked in the tray by Settings > "Start hidden", every
+            // step resolves a target with no on-screen rectangle and the tour draws its boxes over
+            // the bare desktop, pointing at nothing (ccp-bugs #999). Restore the window first -
+            // before TutorialStarted fires, so the overlay measures against a real window.
+            EnsureMainWindowVisible();
+
             _currentTutorialType = type;
             _currentSteps = GetStepsForTutorial(type);
             ApplyCallbacksToSteps();
@@ -317,6 +324,37 @@ namespace ConditioningControlPanel.Services
         public void Start()
         {
             Start(TutorialType.FullTour);
+        }
+
+        /// <summary>
+        /// Brings MainWindow back on screen if it is minimized or hidden, so the tutorial spotlight
+        /// has something to point at (ccp-bugs #999). No-op when the window is already up.
+        /// </summary>
+        private static void EnsureMainWindowVisible()
+        {
+            try
+            {
+                if (Application.Current?.MainWindow is not MainWindow mw) return;
+                if (mw.IsVisible && mw.WindowState != WindowState.Minimized) return;
+
+                // Hidden-to-tray uses Hide(), so the window must be Show()n before WindowState
+                // means anything. ShowFromTray() is the canonical restore: it does Show() first,
+                // re-centres a window whose saved position is off every live screen (#475), and
+                // takes the foreground.
+                mw.ShowFromTray();
+
+                // Belt and braces - covers a plain minimize and the case where the tray service
+                // never came up (ShowFromTray null-checks it away silently).
+                if (!mw.IsVisible) mw.Show();
+                if (mw.WindowState == WindowState.Minimized) mw.WindowState = WindowState.Normal;
+                mw.Activate();
+
+                App.Logger?.Information("Tutorial: restored MainWindow before starting the tour");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Tutorial: could not restore MainWindow before starting the tour");
+            }
         }
 
         private void ApplyCallbacksToSteps()
@@ -2390,16 +2428,7 @@ namespace ConditioningControlPanel.Services
                     {
                         try
                         {
-                            var path = TutorialEventBus.LastSavedEnhancementPath;
-                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                            {
-                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                                {
-                                    FileName = "explorer.exe",
-                                    Arguments = $"/select,\"{path}\"",
-                                    UseShellExecute = true
-                                });
-                            }
+                            Helpers.ExplorerLauncher.RevealInExplorer(TutorialEventBus.LastSavedEnhancementPath);
                         }
                         catch { }
                         try { App.Tutorial?.Skip(); } catch { }
@@ -2855,16 +2884,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var path = TutorialEventBus.LastSavedEnhancementPath;
-                        if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                        {
-                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = "explorer.exe",
-                                Arguments = $"/select,\"{path}\"",
-                                UseShellExecute = true
-                            });
-                        }
+                        Helpers.ExplorerLauncher.RevealInExplorer(TutorialEventBus.LastSavedEnhancementPath);
                     }
                     catch { }
                     try { App.Tutorial?.Skip(); } catch { }

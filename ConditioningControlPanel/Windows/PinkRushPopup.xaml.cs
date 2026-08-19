@@ -26,6 +26,10 @@ public partial class PinkRushPopup : Window
 
         PositionWindow();
 
+        // Never take the foreground. ShowActivated="False" alone still leaves an activatable
+        // window, which stole mouse capture from fullscreen games mid-match (ccp-bugs #1000).
+        Helpers.PassiveToastWindow.Apply(this);
+
         // Countdown timer ticks every second
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _countdownTimer.Tick += CountdownTimer_Tick;
