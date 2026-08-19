@@ -243,12 +243,20 @@ internal static class InputCaptureObservations
 
     /// <param name="OffScreenPromptClaimedAvailable">A card asked for at a rectangle no display
     /// covers.</param>
-    /// <param name="OffScreenPromptCode">The reason code it refused with.</param>
+    /// <param name="OffScreenPromptCode">The reason code, or <c>"none"</c> when the state was not
+    /// <c>Unavailable</c> — which is what this edge actually produces.</param>
     /// <param name="OffScreenWindowLeftVisible">
-    /// Whether the refused card was left ON SCREEN. Must be false: a window that holds the user's
-    /// screen, answers nothing and cannot be dismissed is strictly worse than no window.
+    /// Whether the card is still on screen afterwards. <b>TRUE, on purpose</b>, and an earlier draft
+    /// of this doc said the opposite and asserted nothing — which is how a real bug got through.
+    /// A card on no display passes every OS-ROUTING check (WindowFromPoint walks the window tree,
+    /// not the monitors) and fails only the ink read-back, so the outcome is <c>Degraded</c>, and a
+    /// <c>Degraded</c> prompt deliberately keeps its window: the operating system HAS given it the
+    /// input. Taking it down is the MODULE's job, and its fact
+    /// (<c>LockCardModuleTests.ACardThatIsFocusedAndBLANK_IsAlsoTakenBackDown...</c>) is only
+    /// testing something real while this stays true.
     /// </param>
-    /// <param name="OffScreenPresenceStillPrompting">Whether the presence still claims a card.</param>
+    /// <param name="OffScreenPresenceStillPrompting">Whether the presence still claims a card. Moves
+    /// with the field above, for the same reason.</param>
     /// <param name="BlankPromptClaimedAvailable">A card whose content is entirely empty.</param>
     /// <param name="BlankPromptWasDegraded">It must be <c>Degraded</c>, not Available: the OS gave
     /// it the keyboard and there is nothing on it to read.</param>
@@ -494,7 +502,14 @@ internal static class InputCaptureObservations
             new InputPromptContent(Question, "1 of 1", string.Empty, "Press Esc to close"),
             _ => { }));
 
-        var cardTookTheInput = presence.HoldsTheInput;
+        // TAKEN FROM THE PROBE, not from the presence. Every other leg of this fixture reads the
+        // window manager through OverlayWindowProbe's own declarations; sourcing the one leg that
+        // says "a card really was up" from the thing under test would let a presence that lied about
+        // holding the input turn the whole coexistence run into a test of nothing happening.
+        var cardWindow = presence.NativeHandles.Window;
+        var cardTookTheInput = InputWindowProbe.WindowIsVisible(cardWindow)
+            && InputWindowProbe.Foreground() == cardWindow
+            && InputWindowProbe.SystemKeyboardFocus() == cardWindow;
         var during = Read();
 
         presence.Dismiss();

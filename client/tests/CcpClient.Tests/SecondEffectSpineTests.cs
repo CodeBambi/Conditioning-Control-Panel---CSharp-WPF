@@ -139,9 +139,8 @@ public class SecondEffectSpineTests
         // CCP.Core/Models/AppSettings.cs:3726), SP-108 a fourth (Intensity Ramp, :2575-2580) and
         // SP-109 a fifth and sixth (both audio modules), and SP-110 a seventh (Lock Card, which ships
         // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. The FACT
-        // is unchanged and the assertion is stronger each time: seven modules declined the same
-        // session for the same reason and all seven are named, which is the whole point of a typed
-        // arm.
+        // is unchanged and the assertion is stronger each time: SIX modules declined the same session
+        // for the same reason and all six are named, which is the whole point of a typed arm.
         Assert.Equal(
             [
                 SubliminalsEffect.EffectId, PinkFilterEffect.EffectId, LockCardEffect.EffectId,

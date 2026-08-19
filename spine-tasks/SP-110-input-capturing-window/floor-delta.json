@@ -1,6 +1,6 @@
 {
   "packet": "SP-110-input-capturing-window",
-  "unit": 57,
+  "unit": 58,
   "headless": 4,
-  "reason": "input capture facts (27: OS foreground/focus/hit-test/delivery, the thread-local focus trap, the ink differential, overlay coexistence) plus the Lock Card module's own (30: schedule, typing, phrase rotation, three-clause dot, both resolutions); 4 headless for the row, its panel and its dials"
+  "reason": "input capture facts (27: OS foreground/focus/hit-test/delivery, the thread-local focus trap, the ink differential, overlay coexistence) plus the Lock Card module's own (31: schedule, typing, phrase rotation, three-clause dot, every resolution, and the re-armed run's first-card offset); 4 headless for the row, its panel and its dials"
 }

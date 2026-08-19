@@ -1,8 +1,8 @@
 # SP-110 — record
 
 Branch `lane/SP-110-input-capturing-window`, base `b8187eb4`.
-Floor: pin **1589 unit / 100 headless**; observed **1646 unit / 104 headless**; declared delta
-**+57 unit / +4 headless** (`floor-delta.json`). 1589 + 57 = 1646 and 100 + 4 = 104, confirmed by
+Floor: pin **1589 unit / 100 headless**; observed **1647 unit / 104 headless**; declared delta
+**+58 unit / +4 headless** (`floor-delta.json`). 1589 + 58 = 1647 and 100 + 4 = 104, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-110-input-capturing-window`. The floor
 run therefore REPORTS a violation against the pin, and that is the expected shape: the orchestrator
 sums the deltas and applies one bump. Two skips, both pre-existing
@@ -58,10 +58,14 @@ SP-108 §7 named three rows blocked on this capability. I verified each against
 | Row | Survey's claim | Verdict |
 |---|---|---|
 | Bubble Pop | 4918 lines, spawn timer + per-bubble `DispatcherTimer` hops, clickable moving windows | **holds** — `wc -l` is 4918 exactly; `IsHitTestVisible = _isClickable` at `:2960/:2988/:3103` with `MouseLeftButtonDown` at `:2966/:3018/:3113` |
-| Bubble Count | needs video playback and interactive message windows (`:30-39`) | **holds**, with a one-line citation drift: the video field is at `:29`, not `:30`. Class summary at `:18-21` is "plays a video … then asks for the total" |
+| Bubble Count | needs video playback and interactive message windows (`:30-39`) | **holds, and the citation is exact.** `:30` is `private string _videosPath = "";`, `:31-33` the pack-video lists, `:38` `List<Window> _messageWindows`. Class summary at `:18-21`: "plays a video … then asks for the total" |
 | Lock Card | `ShowOnAllMonitors(...)` at `LockCardService.cs:299` — an input-capturing modal on every monitor | **holds** — exact call at `:299`; the foreground grab is `LockCardWindow.xaml.cs:594-601` |
 
-**The survey is correct on all three rows.** The only correction is Bubble Count's line number.
+**The survey is correct on all three rows, and it needed no correction.** An earlier draft of this
+record claimed Bubble Count's video field had drifted to `:29`; that was MY error and it is
+withdrawn — `:29` is `private bool _isBusy;` and `:30` is the `_videosPath` the survey cited.
+Recorded rather than quietly deleted, because a wrong correction propagated into the next
+packet's survey is worse than no correction at all.
 
 **Lock Card chosen**, because "simplest to prove" is a property of the OS question, not of the
 feature: it needs ONE STATIC WINDOW holding the keyboard, which is `GetForegroundWindow`,
@@ -166,7 +170,7 @@ opposite lie.
 
 ## 4. PROVING IT BITES — the mutation sweep
 
-**60 mutations, THREE rounds, 54 caught, 6 survivors — and round 1 found nine real holes.** Every
+**66 mutations, FOUR rounds, 57 caught, 7 survivors — and round 1 found nine real holes, round 4 the review's.** Every
 conjunct of every predicate this packet added was mutated one at a time, the WHOLE unit suite was run
 against each, and each file was restored byte-identically afterwards (verified by `git status` and by
 grepping the three key predicates back out). The sweep is not bounded by where the last hole was
@@ -243,6 +247,23 @@ The schedule arithmetic (M-ak…M-ap), every typing rule (M-aq…M-aw), the phra
 **M-ak is caught by WEDGING the suite** — it reintroduces the hot loop of §6, and the hang *is* the
 assertion. The sweep driver bounds each run so a wedge is reported rather than stalling it, and that
 outcome is recorded as what it is rather than dressed up as a failing assertion.
+
+### Round 4 — the code review's own fixes, mutated in turn: 3 caught, 1 uncovered
+
+| # | mutation | verdict |
+|---|---|---|
+| **M-bi** | **`Deliver`'s refusal branch drops `_presence.Dismiss()`** — the user-harm bug itself | **caught ×2**, by both refusal facts, once the double was made to mirror the product |
+| M-al | `OnDisarmed` never resets the schedule counter | **caught** by `ARE_ArmedRunGetsItsFirstCardOffsetBACK...`, which did not exist before the review said this clause had no coverage |
+| M-bh | the ink control point is never read (re-run against its new call site) | caught |
+| M-bj | a painted band may reach the card's edge, where the control point is read | **SURVIVED** → uncovered, named below |
+
+**M-bj is a structural guarantee replacing an incidental one, and no reachable card size makes its
+absence observable.** Without the floor the first band's inset is `width / 12`, which only reaches the
+control point's column for a card narrower than ~24 px — and the product's own placement is 55 % of a
+display, while every fixture uses hundreds of pixels. Writing a 12-pixel card to reach it would be
+asserting against `DrawText`'s behaviour in a one-pixel-tall rectangle, which is not a fact about this
+capability. The floor stays because it makes the invariant a property of the painter rather than an
+accident of one inset; it is reported here rather than covered by a fact that would prove nothing.
 
 ### The six survivors, and not one of them is papered over with a fact that asserts shape
 
@@ -379,6 +400,61 @@ Two more safety properties fall out of the same reasoning and are pinned:
 * **The port's card is not fullscreen and not on every monitor** (D110). The outcome — a question you
   cannot ignore — is carried by foreground + focus, not by area, and a fullscreen focus-stealing
   cover is the one shape this port must not ship while strict mode has no panic key behind it.
+
+---
+
+## 8b. WHAT THE CODE REVIEW CAUGHT — a user-harm bug this record had already claimed was avoided
+
+**§8 above was true of the intent and false of the code, and the review found it.** Three findings,
+all real, all fixed:
+
+**1. A `Degraded` card was left on the user's screen with Escape dead.** `Deliver`'s refusal branch
+resolved and returned **without dismissing**. For `Unavailable` that is safe — the presence's
+`RefuseAndWithdraw` hides the window itself — but `Degraded` is the case where the OS DID give the
+card the foreground and the keyboard and only the ink read-back refused, so `_prompting` is true and
+the window stays up. The consequences compound exactly as the review described: `Resolve` clears
+`_attempt`, so `OnKeystroke`'s identity guard discards **every key including Escape**; `Compose`'s
+already-prompting guard then drops every future card for the rest of the session; and the dot keeps
+reading `Live` throughout. A topmost blank window holding the keyboard with no way out is the precise
+shape `IInputPresence`'s own contract forbids. **`_presence.Dismiss()` now runs on every non-Available
+outcome**, and the mutation that removes it (M-bi) is caught.
+
+**2. The test double diverged from the product exactly where the bug lived.**
+`RecordingInputPresence.Prompt` set `IsPrompting` only on `Available`; the real presence sets it from
+`observation.Confirmed`, which excludes ink. So the double reported "no card up" in the one state that
+traps the user, and no fact built on it could have seen the defect. The double now mirrors the
+product (`outcome is not Unavailable`), and both refusal facts assert `Dismissals == 1` and
+`IsPrompting == false` — which the three sibling facts already did and these two alone did not.
+
+**3. Evidence for the same defect was measured and not asserted.** `OffScreenWindowLeftVisible` and
+`OffScreenPresenceStillPrompting` were populated and asserted nowhere, under a doc-comment that said
+"must be false". Both are now asserted — **and the doc was the thing that was wrong**: a `Degraded`
+prompt keeps its window ON PURPOSE, because the operating system has given it the input, and taking
+it down is the MODULE's job. The corrected doc says so, and the assertion is what keeps the
+module-side fact testing something real rather than a window that was never up.
+
+**Four smaller corrections in the same pass:**
+
+* **My "survey correction" was itself wrong and is withdrawn.** `BubbleCountService.cs:30` really is
+  `private string _videosPath = "";` — SP-108 §7's citation was exact. `:29` is `_isBusy`. Recorded
+  rather than silently deleted, because a wrong correction propagated into the next packet's survey
+  is worse than no correction at all.
+* `SecondEffectSpineTests`' comment said "seven modules … all seven are named" over a six-name list.
+  Corrected to six.
+* `OnDisarmed`'s schedule-counter reset had no fact behind it. Now pinned by
+  `ARE_ArmedRunGetsItsFirstCardOffsetBACK_BecauseEveryRunIsANewFirstCard`, measured through the
+  clock (a re-armed run fires immediately at a zero offset; without the reset it waits the ordinary
+  interval).
+* The ink control point was read at a fixed `(2, 2)`, which falls inside a text band on a card
+  narrow enough that the proportional inset collapses. Every band is now floored at
+  `ControlMargin = 3`, so the outermost rows and columns are always background at any size, and the
+  mutation that removes the floor (M-bj) is caught.
+* `CoexistenceRun.CardTookTheInput` was sourced from the product's own `HoldsTheInput` while every
+  other leg was probe-sourced. It now comes from the probe, so the "during" leg cannot be softened by
+  the thing under test.
+* `CardCount`'s doc claimed a refused card is not counted; the code counts every firing that got as
+  far as calling the capability. **The doc was corrected, not the counter** — what the user did with
+  a card is `LastResolution`/`SolvedCount`/`DismissedCount`, which is where that question belongs.
 
 ---
 

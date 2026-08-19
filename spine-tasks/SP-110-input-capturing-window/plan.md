@@ -81,7 +81,7 @@ SP-108 §7 names three rows blocked on an input-capturing window. I checked all 
 | Row | Survey's claim | Verified | Verdict |
 |---|---|---|---|
 | **Bubble Pop** | "4918 lines of spawn timer plus per-bubble `DispatcherTimer` hops (`BubbleService.cs:192,392,430,796,1779`) driving clickable moving windows" | `wc -l` = **4918** exactly. `:189-194` is the spawn `DispatcherTimer`; `:391-396`, `:429-434`, `:1778-1783` are per-target `DispatcherTimer` hop chains; `:794-799` re-paces the spawn timer. Clickability is real and per-bubble: `IsHitTestVisible = _isClickable` (`:2960`, `:2988`, `:3103`) with `MouseLeftButtonDown` handlers (`:2966`, `:3018`, `:3113`) | **claim holds.** Needs mouse hits on MOVING windows — D84's cost class on top of the input need |
-| **Bubble Count** | "needs video playback and interactive message windows (`BubbleCountService.cs:30-39`)" | The class summary at `:18-21` is "plays a video with bubbles to count, then asks for the total"; `_videosPath` at `:29`, `_regularVideos`/`_packVideos` at `:31-33`, `List<Window> _messageWindows` at `:38` | **claim holds**, with a one-line citation drift: the video field starts at `:29`, not `:30`. Needs a video capability the port has no seam for |
+| **Bubble Count** | "needs video playback and interactive message windows (`BubbleCountService.cs:30-39`)" | The class summary at `:18-21` is "plays a video with bubbles to count, then asks for the total"; `_videosPath` at `:30`, `_regularVideos`/`_packVideos` at `:31-33`, `List<Window> _messageWindows` at `:38` | **claim holds, citation exact.** (An earlier draft of this table misread `:29`/`:30` and is corrected here.) Needs a video capability the port has no seam for |
 | **Lock Card** | "`LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest, voice)` (`LockCardService.cs:299`) — an input-capturing modal on every monitor" | Exact call at `:299`. `LockCardWindow.xaml.cs:1496` is the method; the input owner takes the foreground at `:594-601` (`SetWindowPos(HWND_TOPMOST)` → `SetForegroundWindow` → `Activate()` → `FocusInput()`) | **claim holds** |
 
 **Lock Card is chosen** because its input need is the *simplest to prove*, and simplest is a
@@ -99,8 +99,7 @@ property of the OS question, not of the feature:
 It is also PACED (`LockCardService.cs:127-134`), so `PacedSessionEffect<TFiring>` fits and the
 packet's novelty lands entirely on the capability instead of on the spine.
 
-**Survey correction (one, minor):** Bubble Count's video evidence begins at `BubbleCountService.cs:29`,
-not `:30`. Nothing else in §7's three rows is wrong.
+**Survey correction: NONE.** All three rows check out, citations included.
 
 ---
 

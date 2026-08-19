@@ -418,14 +418,27 @@ public class InputCapabilityTests
         //
         // That is the honest shape of this edge and it is recorded rather than dressed up as the
         // refusal it is not: the ink link is the only one of the six that a card nobody can see
-        // fails. The module then takes it down, which is a separate fact
-        // (LockCardModuleTests.ACardThatIsFocusedAndBLANK_IsAlsoTakenBackDown...).
+        // fails.
+        //
+        // AND THE PRESENCE'S SIDE OF THE CONTRACT IS ASSERTED HERE, not merely measured. A Degraded
+        // card is DELIBERATELY left up by the presence — the OS gave it the foreground and the
+        // keyboard, and only the content check said no, so the presence is still prompting and the
+        // window is still on screen. That is the state the MODULE has to clear, and this fact pins
+        // the presence's half of it so the module's half (LockCardModuleTests.
+        // ACardThatIsFocusedAndBLANK_IsAlsoTakenBackDown...) is testing something real rather than a
+        // window that was never up.
         var run = InputCaptureObservations.Edges;
 
         Assert.False(run.OffScreenPromptClaimedAvailable,
             "a card on no display at all claimed Available. Every OS-routing check passes for it, so the ink "
             + "read-back is the ONLY thing standing between this and a green claim about a card nobody can see");
         Assert.Equal("none", run.OffScreenPromptCode);
+        Assert.True(run.OffScreenWindowLeftVisible == InputWindowProbe.MachineHasInteractiveDesktop,
+            $"the presence's window visibility after a DEGRADED prompt is {run.OffScreenWindowLeftVisible}. "
+            + "Degraded means the OS gave the card the input and only the ink check refused, so the presence "
+            + "leaves it up ON PURPOSE — and the module is what must take it down. If this is false the presence "
+            + "has started withdrawing on Degraded too, and the module-side fact is no longer testing anything");
+        Assert.Equal(run.OffScreenWindowLeftVisible, run.OffScreenPresenceStillPrompting);
     }
 
     [Fact]

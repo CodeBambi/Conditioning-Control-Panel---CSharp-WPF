@@ -44,6 +44,13 @@ public sealed class Win32InputPresence : IInputPresence
     /// repainted on every keystroke.</summary>
     public const int InkSampleStride = 3;
 
+    /// <summary>
+    /// How far every painted band is held away from the card's edge, so the outermost rows and
+    /// columns are ALWAYS background and the ink differential's control point can be read from them
+    /// at any card size. Three, so the point itself sits at (1, 1) with a pixel of slack.
+    /// </summary>
+    public const int ControlMargin = 3;
+
     /// <summary>Roughly how many pixels the ink read aims to sample, whatever the card's size. Same
     /// idea and same reason as <c>Win32OverlayPresence.ContentSampleTarget</c>: a card covering half
     /// a 4K display must not cost proportionally more to check than a small one.</summary>
@@ -686,13 +693,24 @@ public sealed class Win32InputPresence : IInputPresence
     private const uint CentredWrapped =
         Win32InputInterop.DtCenter | Win32InputInterop.DtWordbreak;
 
+    /// <summary>
+    /// One text band, inset by at least <see cref="ControlMargin"/> on every side.
+    ///
+    /// <para><b>The floor is what makes the ink read-back's control point trustworthy at any card
+    /// size.</b> The proportional inset (<c>width / 12</c>, 6 % of the height) collapses to ZERO on a
+    /// small card, and then the control point the differential reads sits inside a band the painter
+    /// writes glyphs into — so a card that WAS painted could read back "no background" and degrade,
+    /// or worse, a stray glyph pixel at the control point could hide a missing fill. Clamping every
+    /// band away from the outermost rows and columns guarantees the margin is background and nothing
+    /// else, whatever the caller asked for.</para>
+    /// </summary>
     private static Win32InputInterop.Rect Band(int width, int height, double top, double bottom) =>
         new()
         {
-            Left = width / 12,
-            Top = (int)(height * top),
-            Right = width - (width / 12),
-            Bottom = (int)(height * bottom),
+            Left = Math.Max(ControlMargin, width / 12),
+            Top = Math.Max(ControlMargin, (int)(height * top)),
+            Right = Math.Max(ControlMargin + 1, width - (width / 12)),
+            Bottom = Math.Max(ControlMargin + 2, (int)(height * bottom)),
         };
 
     /// <summary>
@@ -724,8 +742,10 @@ public sealed class Win32InputPresence : IInputPresence
         try
         {
             // The control point: inside the client area, inside the filled rectangle, and outside
-            // every band the painter writes text into (the first band starts at 6 % of the height).
-            var backgroundHeld = Win32InputInterop.GetPixel(dc, 2, 2) == BackgroundColour;
+            // every band the painter writes into — guaranteed by Band's ControlMargin floor rather
+            // than by the proportional inset, which collapses to zero on a small card.
+            var backgroundHeld =
+                Win32InputInterop.GetPixel(dc, ControlMargin - 2, ControlMargin - 2) == BackgroundColour;
 
             var left = bounds.Width / 12;
             var right = bounds.Width - left;

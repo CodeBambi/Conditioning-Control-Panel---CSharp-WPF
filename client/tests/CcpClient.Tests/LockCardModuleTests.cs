@@ -391,11 +391,23 @@ public class LockCardModuleTests
         Assert.Empty(rig.Shown);
         Assert.Contains(LockCardResolution.Refused, rig.Resolutions);
         Assert.IsType<CapabilityState.Unavailable>(rig.LockCard.LastPrompt);
+        Assert.Equal(1, rig.Input.Dismissals);
+        Assert.False(rig.Input.IsPrompting);
     }
 
     [Fact]
     public async Task ACardThatIsFocusedAndBLANK_IsAlsoTakenBackDown_BecauseAQuestionNobodyCanReadIsNotAQuestion()
     {
+        // THE HARMFUL CASE, and the one a code review caught this packet shipping. Degraded is NOT
+        // Unavailable: the OS confirmed the card holds the foreground and the keyboard focus, and the
+        // presence therefore leaves the window UP — only the ink read-back said no. The module has to
+        // take it down itself.
+        //
+        // What the missing Dismiss produced: a topmost, blank window holding the user's keyboard,
+        // with Resolve having cleared _attempt so OnKeystroke discards every key INCLUDING ESCAPE,
+        // and Compose's already-prompting guard then dropping every future card for the rest of the
+        // session while the dot still read Live. The two assertions the fact was missing are the two
+        // that see it.
         await using var rig = await Rig.StartAsync();
         rig.EnableLockCard(perHour: 10);
         rig.Input.NextPromptOutcome = new CapabilityState.Degraded(
@@ -406,6 +418,25 @@ public class LockCardModuleTests
 
         Assert.Equal(LockCardResolution.Refused, rig.LockCard.LastResolution);
         Assert.Empty(rig.Shown);
+        Assert.Equal(1, rig.Input.Dismissals);
+        Assert.False(rig.Input.IsPrompting,
+            "a Degraded card was left on screen. It is topmost, blank, holds the user's keyboard, and every key "
+            + "they press — Escape included — is discarded by a module that has already stopped tracking it");
+        Assert.Null(rig.LockCard.Attempt);
+
+        // AND THE SESSION IS NOT POISONED. Compose refuses while a card is up, so a card left behind
+        // would silently end the module for the rest of the run.
+        rig.Input.NextPromptOutcome = null;
+        rig.Clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal(2, rig.Input.Prompts.Count);
+        Assert.Equal(LockCardResolution.None, rig.LockCard.LastResolution);
+        Assert.NotNull(rig.LockCard.Attempt);
+
+        // TWO, not one: CardCount is cards this module ASKED FOR, and it asked twice — the first
+        // answer just came back blank. What the user did with them is LastResolution's business, and
+        // the assertions above are where that is checked.
+        Assert.Equal(2, rig.LockCard.CardCount);
     }
 
     [Fact]
@@ -453,6 +484,35 @@ public class LockCardModuleTests
         Assert.True(rig.LockCard.ScheduleArmed,
             "the schedule must survive an unproductive firing — upstream's timer keeps running when a tick shows "
             + "nothing");
+    }
+
+    [Fact]
+    public async Task ARE_ArmedRunGetsItsFirstCardOffsetBACK_BecauseEveryRunIsANewFirstCard()
+    {
+        // The other half of the schedule counter, and it had no coverage until a review said so:
+        // deleting the reset in OnDisarmed reddened nothing. Upstream recomputes the first-card
+        // offset in Start() EVERY time (LockCardService.cs:74), so a second run of a session is a
+        // first card again — not a continuation of the previous run's spacing.
+        //
+        // Measured through the CLOCK rather than through a field: with the roll pinned at 0 the
+        // offset is zero minutes, so a run that gets it fires a card immediately, and a run that
+        // does not waits the ordinary 4.2-minute interval. The second Start must behave like the
+        // first.
+        await using var rig = await Rig.StartAsync();
+        rig.EnableLockCard(perHour: 10);
+
+        rig.Engine.Start();
+        rig.Clock.Advance(TimeSpan.Zero);
+        Assert.Single(rig.Input.Prompts);
+
+        rig.Engine.Stop();
+        Assert.False(rig.Input.IsPrompting);
+
+        rig.Engine.Start();
+        rig.Clock.Advance(TimeSpan.Zero);
+
+        Assert.Equal(2, rig.Input.Prompts.Count);
+        Assert.Equal(2, rig.LockCard.CardCount);
     }
 
     [Fact]
@@ -806,14 +866,27 @@ public class LockCardModuleTests
             Prompts.Add(request);
             var outcome = NextPromptOutcome
                 ?? new CapabilityState.Available("recording presence: the OS gave the card the keyboard");
-            if (outcome is CapabilityState.Available)
+
+            // MIRRORS THE PRODUCT, and the difference is where a real user-harm bug lived. The real
+            // presence sets its prompting flag from the OS's CONFIRMATION (Win32InputPresence:218,
+            // `_prompting = observation.Confirmed`), and Confirmed does NOT include ink — so a card
+            // the OS focused but that has nothing written on it comes back Degraded WITH THE WINDOW
+            // STILL UP. A double that flipped the flag only on Available reported the opposite of the
+            // product in exactly the state that traps the user, and no fact built on it could see the
+            // card being left behind.
+            if (outcome is not CapabilityState.Unavailable)
             {
                 IsPrompting = true;
                 _onKeystroke = request.OnKeystroke;
             }
 
             LastObservation = new InputCaptureObservation(
-                true, 1, true, IsPrompting, request.Bounds, true, IsPrompting, IsPrompting, 1, 10, 100, true, 0);
+                true, 1, true, IsPrompting, request.Bounds, true, IsPrompting, IsPrompting,
+                HitTestWinner: 1,
+                InkedPixels: outcome is CapabilityState.Available ? 10 : 0,
+                SampledPixels: 100,
+                BackgroundHeld: true,
+                KeystrokesSeen: 0);
             return LastPrompt = outcome;
         }
 

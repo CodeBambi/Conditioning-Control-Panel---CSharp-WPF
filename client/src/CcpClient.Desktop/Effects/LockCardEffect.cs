@@ -166,9 +166,20 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     /// <summary>How many phrases are in play. The panel shows it so an empty pool has an answer.</summary>
     public int PhraseCount => _pool.ActiveCount;
 
-    /// <summary>Cards that really went up. A firing that found no phrase, or found the OS unable to
-    /// take the input, is not one of these — upstream counts nothing in either case
-    /// (<c>LockCardService.cs:275-280</c>, <c>:305-313</c>).</summary>
+    /// <summary>
+    /// Cards this module ASKED FOR — firings that got as far as drawing a phrase and calling the
+    /// capability.
+    ///
+    /// <para><b>Precisely, because a review found the previous wording overclaiming.</b> A firing
+    /// that found no phrase, that found a card already up, or that found no desktop to ask on is NOT
+    /// counted: <see cref="Compose"/> returns null and the base counts nothing, which is upstream's
+    /// own behaviour in the same situations (<c>LockCardService.cs:275-280</c>, <c>:193-199</c>). A
+    /// firing whose card the capability then REFUSED, or accepted and could not ink, IS counted —
+    /// the module asked, and the answer came back from the operating system afterwards. What the
+    /// user actually did with the cards that stayed up is <see cref="SolvedCount"/>,
+    /// <see cref="DismissedCount"/> and <see cref="LastResolution"/>, which is where that question
+    /// belongs.</para>
+    /// </summary>
     public int CardCount => FireCount;
 
     /// <summary>The most recent card, or null if none has happened yet.</summary>
@@ -382,6 +393,16 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
 
         if (outcome is not CapabilityState.Available)
         {
+            // THE DISMISS IS LOAD-BEARING AND IT IS NOT REDUNDANT. An Unavailable outcome has
+            // already hidden the window inside the presence (Win32InputPresence.RefuseAndWithdraw),
+            // but a DEGRADED one has not: the OS confirmed the card holds the foreground and the
+            // keyboard focus, and only the ink read-back said no. Without this call that card stays
+            // on screen — topmost, blank, holding the user's keyboard — while Resolve below clears
+            // _attempt, which makes OnKeystroke discard EVERY key including Escape, and
+            // Compose's already-prompting guard then drops every future card for the rest of the
+            // session. Upstream force-closes on its own error path for exactly this reason
+            // (Services/LockCard/LockCardService.cs:305-313).
+            _presence.Dismiss();
             Resolve(attempt, LockCardResolution.Refused);
             return;
         }
