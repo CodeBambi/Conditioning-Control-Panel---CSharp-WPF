@@ -1,0 +1,6 @@
+WAVE: 50
+PACKETS: SP-110-input-capturing-window
+LANES: 1
+BASE: 26195113
+GATE: validate-wave.mjs WAVE OK; floor 1589/100
+OPENED: 2026-08-19T04:52:41Z
