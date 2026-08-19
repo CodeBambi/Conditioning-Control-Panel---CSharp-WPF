@@ -1,6 +1,0 @@
-WAVE: 48
-PACKETS: SP-108-non-drawing-module
-LANES: 1
-BASE: db1c5103
-GATE: validate-wave.mjs WAVE OK; floor 1477/90
-OPENED: 2026-08-19T00:12:28Z
