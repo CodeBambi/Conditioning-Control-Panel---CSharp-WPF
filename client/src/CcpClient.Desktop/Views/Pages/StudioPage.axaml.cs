@@ -39,6 +39,15 @@ namespace CcpClient.Desktop.Views.Pages;
 /// <see cref="EffectDotState.Live"/> is a claim about the SCREEN rather than about a clock — but
 /// that is decided inside the effect (see <see cref="OwnedSessionEffect.WorkIsRunning"/>) and
 /// this page reads the same three states off the same property for all three modules.</para>
+///
+/// <para><b>SP-108 — the rack gets a SECOND GROUP, and the module in it draws nothing.</b> WPF's
+/// rack has four groups (§8.3); this port had rows in one because every module it had ported was an
+/// EFFECT that painted an overlay. <c>Intensity Ramp</c> is from TIMING, has no surface, and its
+/// whole visible output is the opacity numbers on the Spiral Overlay and Pink Filter panels next to
+/// it. The rack grammar needed nothing new for it — left-click opens, right-click quick-toggles
+/// through the same one <see cref="SessionEngine.QuickToggle"/> entry — and its <b>panel is the
+/// first on this page with no surface line at all</b>, because a sentence about where its pixels
+/// went would be a sentence about a capability it deliberately never acquires.</para>
 /// </summary>
 public partial class StudioPage : UserControl
 {
@@ -47,6 +56,7 @@ public partial class StudioPage : UserControl
     private readonly SubliminalsEffect _subliminals;
     private readonly PinkFilterEffect _pinkFilter;
     private readonly SpiralOverlayEffect _spiral;
+    private readonly IntensityRampEffect _ramp;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -60,6 +70,7 @@ public partial class StudioPage : UserControl
         _subliminals = session.Subliminals;
         _pinkFilter = session.PinkFilter;
         _spiral = session.Spiral;
+        _ramp = session.Ramp;
 
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
@@ -69,6 +80,7 @@ public partial class StudioPage : UserControl
         RowSubliminals.IsCheckedChanged += (_, _) => ApplySelection();
         RowSpiralOverlay.IsCheckedChanged += (_, _) => ApplySelection();
         RowPinkFilter.IsCheckedChanged += (_, _) => ApplySelection();
+        RowIntensityRamp.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -79,6 +91,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId);
         AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId);
         AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
+        AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -88,12 +101,29 @@ public partial class StudioPage : UserControl
             OnEnableToggled(PinkFilterEnableToggle, _pinkFilter, PinkFilterEffect.EffectId);
         SpiralEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(SpiralEnableToggle, _spiral, SpiralOverlayEffect.EffectId);
+        RampEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(RampEnableToggle, _ramp, IntensityRampEffect.EffectId);
+
+        // The ramp's remaining switches are its own dials, not the module's enable, so they write
+        // through the module rather than through the rack's quick-toggle. Each one goes to a setter
+        // that mutates and re-evaluates, which is the same shape the opacity sliders above use and
+        // WPF's own per-control write-then-save (Features/IntensityRampFeatureControl.xaml.cs:115-150).
+        RampEndSessionToggle.IsCheckedChanged += (_, _) =>
+            OnRampSwitch(RampEndSessionToggle, _ramp.Preset.EndSessionOnComplete, _ramp.SetEndSessionOnComplete);
+        RampLinkSpiralToggle.IsCheckedChanged += (_, _) =>
+            OnRampSwitch(RampLinkSpiralToggle, _ramp.Preset.LinkSpiralOpacity, _ramp.SetLinkSpiralOpacity);
+        RampLinkPinkFilterToggle.IsCheckedChanged += (_, _) =>
+            OnRampSwitch(
+                RampLinkPinkFilterToggle, _ramp.Preset.LinkPinkFilterOpacity, _ramp.SetLinkPinkFilterOpacity);
+        RampCurvePicker.SelectionChanged += (_, _) => OnRampCurvePicked();
 
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
         OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
         OnSliderMoved(SubliminalFrequencySlider, OnSubliminalFrequencyMoved);
         OnSliderMoved(PinkFilterOpacitySlider, OnPinkFilterOpacityMoved);
         OnSliderMoved(SpiralOpacitySlider, OnSpiralOpacityMoved);
+        OnSliderMoved(RampDurationSlider, OnRampDurationMoved);
+        OnSliderMoved(RampMultiplierSlider, OnRampMultiplierMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -120,6 +150,12 @@ public partial class StudioPage : UserControl
     /// behind it: a MOVING module is <c>Live</c> only while its surface is up AND still changing
     /// (SP-106, <see cref="SpiralSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedSpiralDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Intensity Ramp row's dot, same reason — and the one whose <c>Live</c> is a claim
+    /// about neither a clock nor a screen but about CUSTODY: the module is running exactly while it
+    /// holds dials belonging to other modules and owes them back (SP-108,
+    /// <see cref="IntensityRampEffect"/>).</summary>
+    public EffectDotState RenderedRampDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
@@ -177,11 +213,13 @@ public partial class StudioPage : UserControl
         var subliminalOpen = RowSubliminals.IsChecked == true;
         var spiralOpen = RowSpiralOverlay.IsChecked == true;
         var pinkOpen = RowPinkFilter.IsChecked == true;
+        var rampOpen = RowIntensityRamp.IsChecked == true;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
         PinkFilterModulePanel.IsVisible = pinkOpen;
-        RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen;
+        RampModulePanel.IsVisible = rampOpen;
+        RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen;
     }
 
     /// <summary>
@@ -308,6 +346,90 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
+    /// The ramp's duration slider — WPF's writes the setting and saves
+    /// (<c>Features/IntensityRampFeatureControl.xaml.cs:89-100</c>), and does NOT poke the running
+    /// ramp: upstream's tick re-reads the setting at its next 2 s sample. Here the write goes through
+    /// the module, which re-evaluates at once — the same relationship the opacity sliders above have
+    /// to their modules, and indistinguishable from upstream's to a human. D98.
+    /// </summary>
+    private void OnRampDurationMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _ramp.SetDurationMinutes((int)Math.Round(RampDurationSlider.Value));
+        _ = _session.RampPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>The ramp's multiplier slider (<c>IntensityRampFeatureControl.xaml.cs:102-113</c>).
+    /// It is the one dial on this panel a user will move mid-session and expect to feel at once, and
+    /// it is why the re-evaluate is worth having.</summary>
+    private void OnRampMultiplierMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _ramp.SetMultiplier(RampMultiplierSlider.Value);
+        _ = _session.RampPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>The curve picker (<c>IntensityRampFeatureControl.xaml.cs:124-137</c>). An index this
+    /// build does not know maps to <see cref="RampCurve.Linear"/>, which is upstream's own
+    /// <c>_ =&gt; Models.RampCurve.Linear</c> at <c>:135</c>.</summary>
+    private void OnRampCurvePicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var curve = RampCurvePicker.SelectedIndex switch
+        {
+            1 => RampCurve.EaseIn,
+            2 => RampCurve.EaseOut,
+            3 => RampCurve.SCurve,
+            4 => RampCurve.Exponential,
+            _ => RampCurve.Linear,
+        };
+
+        if (curve == _ramp.Preset.Curve)
+        {
+            return;
+        }
+
+        _ramp.SetCurve(curve);
+        _ = _session.RampPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>One of the ramp's own switches — its end-at-complete flag and its two links. Not the
+    /// module's enable: that one goes through <see cref="SessionEngine.QuickToggle"/> like every
+    /// other module's, because it is the same gesture the rack row's right-click makes.</summary>
+    private void OnRampSwitch(CheckBox toggle, bool current, Action<bool> write)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var target = toggle.IsChecked == true;
+        if (target == current)
+        {
+            return;
+        }
+
+        write(target);
+        _ = _session.RampPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
     /// The session's state can move on a thread that is not this one — teardown stops the engine
     /// from the shutdown path. This handler nonetheless touches controls directly, because since
     /// SP-101 the marshalling is the PRODUCER's: every module raises <c>Changed</c> through
@@ -342,6 +464,22 @@ public partial class StudioPage : UserControl
             var spiral = _session.SpiralPreset.Current;
             SpiralEnableToggle.IsChecked = spiral.Enabled;
             SpiralOpacitySlider.Value = spiral.OpacityPercent;
+
+            var ramp = _session.RampPreset.Current;
+            RampEnableToggle.IsChecked = ramp.Enabled;
+            RampDurationSlider.Value = ramp.DurationMinutes;
+            RampMultiplierSlider.Value = ramp.Multiplier;
+            RampEndSessionToggle.IsChecked = ramp.EndSessionOnComplete;
+            RampLinkSpiralToggle.IsChecked = ramp.LinkSpiralOpacity;
+            RampLinkPinkFilterToggle.IsChecked = ramp.LinkPinkFilterOpacity;
+            RampCurvePicker.SelectedIndex = ramp.Curve switch
+            {
+                RampCurve.EaseIn => 1,
+                RampCurve.EaseOut => 2,
+                RampCurve.SCurve => 3,
+                RampCurve.Exponential => 4,
+                _ => 0,
+            };
         }
         finally
         {
@@ -392,6 +530,37 @@ public partial class StudioPage : UserControl
             _spiral.FrameCount, _session.Engine.Running, _spiral.LastPlacement);
         SpiralLibraryState.Text = DescribeSpiralLibrary(_spiral.SpiralPath, _session.SpiralsFolder);
         SpiralSurfaceState.Text = DescribeSpiralSurface(_spiral.LastPlacement);
+
+        var ramp = _ramp.Preset;
+        RampDurationValue.Text = $"{ramp.DurationMinutes} min";
+        RampMultiplierValue.Text =
+            $"{ramp.Multiplier.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)}x";
+        RenderedRampDot = PaintDot(RampRowDot, _ramp);
+        var held = HeldDials();
+        RampLiveState.Text = RampPanelNotices.DescribeRampState(
+            RenderedRampDot, ramp, _ramp.Progress, _ramp.CurrentMultiplier, held.Count,
+            _session.Engine.Running);
+        RampCustodyState.Text = RampPanelNotices.DescribeRampCustody(_ramp.Dials.Count, held);
+    }
+
+    /// <summary>
+    /// What the ramp is holding right now, as the panel reports it. Read off the MODULE's own custody
+    /// list and the dials' own current values — never off the ramp's arithmetic — so a line that says
+    /// "10% → 13%" is two facts the user can check against the other module's panel rather than a
+    /// prediction.
+    /// </summary>
+    private IReadOnlyList<RampDialHold> HeldDials()
+    {
+        var holds = new List<RampDialHold>(_ramp.Dials.Count);
+        foreach (var dial in _ramp.Dials)
+        {
+            if (_ramp.BaseValueFor(dial.Id) is { } baseValue)
+            {
+                holds.Add(new RampDialHold(dial.Label, baseValue, dial.Read()));
+            }
+        }
+
+        return holds;
     }
 
     private static EffectDotState PaintDot(Shape dot, ISessionEffect effect)

@@ -100,6 +100,29 @@
                        AutomationProperties.AutomationId="PinkFilterRowDot" />
             </Grid>
           </RadioButton>
+
+          <!-- SP-108 — THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
+               IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/497/508/533); the
+               port now has two, because it now has a module in a second one. The group header
+               is upstream's own string (st4_studio_group_timing = "TIMING", en.json:4819) and
+               the group exists because a module needs it, not to fill the rack out: the other
+               TIMING row, Scheduler, starts the engine from OUTSIDE a session and is therefore
+               not a session module at all. -->
+          <TextBlock Classes="rack-group" Text="TIMING" />
+
+          <RadioButton x:Name="RowIntensityRamp"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowIntensityRamp"
+                       AutomationProperties.Name="Intensity Ramp rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Intensity Ramp" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="RampRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="RampRowDot" />
+            </Grid>
+          </RadioButton>
         </StackPanel>
       </Border>
     </StackPanel>
@@ -387,6 +410,117 @@
                        x:Name="PinkFilterSurfaceState"
                        AutomationProperties.AutomationId="PinkFilterSurfaceState"
                        Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Intensity Ramp ================= -->
+        <!-- THE FIRST PANEL ON THIS PAGE WITH NO SURFACE LINE, and its absence is the point.
+             Every module before it ends in a "where did it go on screen" notice because every
+             module before it drew something. This one draws nothing at all: its output is the
+             OTHER modules' opacity numbers, so what it reports instead is what it is holding
+             and what it will give back. A surface line here would be a sentence about a
+             capability this module deliberately never acquires. -->
+        <StackPanel x:Name="RampModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Intensity Ramp" />
+          <TextBlock Classes="page-blurb"
+                     Text="Turns the effects you link to it up as the session goes on, and puts them back where you left them when it stops." />
+
+          <CheckBox x:Name="RampEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="RampEnableToggle"
+                    AutomationProperties.Name="Intensity Ramp enabled"
+                    Content="Enable Intensity Ramp" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Duration" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="RampDurationSlider"
+                    Minimum="10" Maximum="180"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="RampDurationSlider"
+                    AutomationProperties.Name="Ramp duration" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="RampDurationValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="RampDurationValue"
+                       Text="" />
+          </Grid>
+
+          <!-- Minimum 1, not 0: this dial can only ever make an effect stronger
+               (AppSettings.cs:2471 clamps to [1.0, 3.0]), and it SHIPS at 1.0 — a ramp that
+               changes nothing until the user moves it. -->
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Multiplier" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="RampMultiplierSlider"
+                    Minimum="1" Maximum="3"
+                    SmallChange="0.1" LargeChange="0.5"
+                    IsSnapToTickEnabled="True" TickFrequency="0.1"
+                    AutomationProperties.AutomationId="RampMultiplierSlider"
+                    AutomationProperties.Name="Ramp multiplier" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="RampMultiplierValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="RampMultiplierValue"
+                       Text="" />
+          </Grid>
+
+          <!-- The five shapes, in the enum's own order, with upstream's own wording
+               (en.json:1458-1462). -->
+          <Grid ColumnDefinitions="150,*" RowDefinitions="Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Ramp curve" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      x:Name="RampCurvePicker"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.AutomationId="RampCurvePicker"
+                      AutomationProperties.Name="Ramp curve">
+              <ComboBoxItem Content="Linear" />
+              <ComboBoxItem Content="Ease In (slow start)" />
+              <ComboBoxItem Content="Ease Out (fast start)" />
+              <ComboBoxItem Content="S-Curve (smooth)" />
+              <ComboBoxItem Content="Exponential (late surge)" />
+            </ComboBox>
+          </Grid>
+
+          <CheckBox x:Name="RampEndSessionToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="RampEndSessionToggle"
+                    AutomationProperties.Name="End the session when the ramp finishes"
+                    Content="End the session when the ramp finishes" />
+
+          <!-- TWO links where WPF has five (AppSettings.cs:2590-2622). Flash opacity, master
+               volume and subliminal volume have no dial on any ported panel, so their switches
+               are ABSENT rather than present-and-inert — a switch that quietly does nothing is
+               the greyed control §9 D7 refuses. D93. -->
+          <TextBlock Classes="dial-label" Text="Link to ramp" Margin="0,4,0,0" />
+          <CheckBox x:Name="RampLinkSpiralToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="RampLinkSpiralToggle"
+                    AutomationProperties.Name="Link Spiral Overlay opacity to the ramp"
+                    Content="Spiral Overlay opacity" />
+          <CheckBox x:Name="RampLinkPinkFilterToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="RampLinkPinkFilterToggle"
+                    AutomationProperties.Name="Link Pink Filter opacity to the ramp"
+                    Content="Pink Filter opacity" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="RampLiveState"
+                         AutomationProperties.AutomationId="RampLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="RampCustodyState"
+                         AutomationProperties.AutomationId="RampCustodyState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
           </Border>
         </StackPanel>
       </Panel>

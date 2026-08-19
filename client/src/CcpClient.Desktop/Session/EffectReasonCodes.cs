@@ -102,4 +102,40 @@ public static class EffectReasonCodes
     /// that reads <c>Armed</c>.
     /// </summary>
     public const string SpiralTransparent = "spiral-transparent";
+
+    /// <summary>
+    /// Intensity Ramp: this composition gave the ramp no dials at all, so there is nothing for it to
+    /// drive (SP-108). The <see cref="EffectNoSurface"/> shape on a module that has no surface: a
+    /// build or a test that composed the module without its targets, said in type rather than run as
+    /// a timer that writes nothing.
+    /// </summary>
+    public const string RampNoDial = "ramp-no-dial";
+
+    /// <summary>
+    /// Intensity Ramp: dials exist and the user has linked none of them, so the ramp will run for
+    /// the whole session and change nothing (SP-108). Every link ships OFF
+    /// (<c>CCP.Core/Models/AppSettings.cs:2590-2622</c>), so this is the state a freshly enabled ramp
+    /// is in until the user ticks something — which makes it the one refusal here a user is likely to
+    /// meet, and the reason the arm result is <see cref="Capabilities.CapabilityState.Degraded"/>
+    /// rather than silence.
+    ///
+    /// <para><b>It is also the dot's negative control.</b> A ramp holding no dial has taken nothing
+    /// and owes nothing back, so <see cref="EffectDotState.Live"/> would be a claim about a module
+    /// the user cannot observe by any means.</para>
+    /// </summary>
+    public const string RampNoLinkedDial = "ramp-no-linked-dial";
+
+    /// <summary>
+    /// Intensity Ramp: the multiplier is at its floor of 1.0×
+    /// (<c>CCP.Core/Models/AppSettings.cs:2468-2472</c> — the default), so
+    /// <c>currentMult = 1.0 + (1.0 - 1.0) × eased</c> is 1.0 for the whole session and no held dial
+    /// will climb (<c>MainWindow/MainWindow.StartStop.cs:500</c>).
+    ///
+    /// <para><b>This takes the SUBLIMINALS answer, not the PINK FILTER answer, and the difference is
+    /// the dot.</b> A tint at 0 % opacity has no window at all, so it is <c>Degraded</c> and reads
+    /// <c>Armed</c>. A ramp at neutral gain is a live machine holding real state — moving the
+    /// multiplier makes the dials climb with no re-arm, and STOP still gives them back — so it is
+    /// <c>Degraded</c> and reads <c>Live</c>, exactly as a paced module over an empty pool is.</para>
+    /// </summary>
+    public const string RampMultiplierFlat = "ramp-multiplier-flat";
 }

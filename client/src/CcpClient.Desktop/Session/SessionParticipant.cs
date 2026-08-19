@@ -31,6 +31,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<SubliminalPresetDocument> _subliminalPreset;
     private readonly PersistenceStore<PinkFilterPresetDocument> _pinkFilterPreset;
     private readonly PersistenceStore<SpiralPresetDocument> _spiralPreset;
+    private readonly PersistenceStore<IntensityRampPresetDocument> _rampPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -82,6 +83,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("SpiralPreset"), infra.Log,
             Path.Combine(dataDirectory, SpiralPresetDocument.FileName),
             SpiralPresetDocument.CurrentSchemaVersion);
+
+        // SP-108: the non-drawing module's own document, same precedent again.
+        _rampPreset = new PersistenceStore<IntensityRampPresetDocument>(
+            infra.OwnerFor("IntensityRampPreset"), infra.Log,
+            Path.Combine(dataDirectory, IntensityRampPresetDocument.FileName),
+            IntensityRampPresetDocument.CurrentSchemaVersion);
 
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
@@ -171,6 +178,30 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _pinkFilterPreset,
             _pinkFilterSurface);
 
+        // SP-108: the first ported module that draws nothing. It takes NO surface and no presenter —
+        // there is nothing to present — and it takes the same session clock the other modules' work
+        // rides, because its 2 s progress sample is its own (WPF's _rampTimer,
+        // MainWindow/MainWindow.StartStop.cs:426-431) and there is no surface to keep it in.
+        //
+        // Its dials are the two the port really has. WPF links five (AppSettings.cs:2590-2622); flash
+        // opacity, master volume and subliminal volume have no dial on any ported panel, so they are
+        // absent rather than present-and-inert (D93). The list is built HERE because the composition
+        // root is the only thing that knows which modules exist — the ramp itself knows nothing about
+        // spirals or tints, which is what lets it be exercised with no surface anywhere.
+        Ramp = new IntensityRampEffect(
+            infra.OwnerFor("IntensityRamp"),
+            signal,
+            sessionClock,
+            _rampPreset,
+            [
+                new SpiralOpacityDial(_spiralPreset, Spiral),
+                new PinkFilterOpacityDial(_pinkFilterPreset, PinkFilter),
+            ],
+            // WPF wraps the tick's dial writes in Dispatcher.Invoke (MainWindow.StartStop.cs:503).
+            // Here only the half that touches a LIVE surface goes through the dispatch; the persisted
+            // half is synchronous so a restore survives a teardown whose dispatcher is already down.
+            Dispatch);
+
         // Rack order is WPF's (StudioTabView.xaml.cs:484-493), and it is also the order StartEngine
         // arms in — flash first (MainWindow.StartStop.cs:178), then subliminals (:186), then the
         // overlay service that owns the continuous pair (:192-193). Mandatory Video sits between
@@ -183,7 +214,19 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // rack's order — so there is no single upstream order to copy and the RACK's is taken, on
         // the ground that the rack is the order the user has learned and the two are independent
         // full-screen layers whose start order nothing observable depends on. Recorded as D90.
-        Engine = new SessionEngine([Flash, Subliminals, Spiral, PinkFilter], _preset, signal);
+        //
+        // SP-108 adds the fifth, and it goes LAST for two reasons that agree: WPF's rack puts the
+        // TIMING group after EFFECTS, GAMES & CARDS and IMMERSION (StudioTabView.xaml.cs:482-541),
+        // and StartEngine starts the ramp timer after every effect service (:265-269). Arming it last
+        // also means that at STOP the dials it gives back belong to modules that have already been
+        // disarmed, so the restore is a settings write with nothing live behind it.
+        Engine = new SessionEngine([Flash, Subliminals, Spiral, PinkFilter, Ramp], _preset, signal);
+
+        // WPF's ramp ends the session itself when the user asked it to (MainWindow.StartStop.cs:546-554
+        // calls StopEngine()). A module cannot call the engine that owns it without closing the cycle,
+        // so the module raises and the composition root — the only thing that knows a session exists —
+        // makes the call. Stop() is idempotent and returns false when nothing is running.
+        Ramp.Completed += () => Engine.Stop();
     }
 
     public string Name => "Session";
@@ -204,6 +247,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>Spiral Overlay, the first MOVING module (SP-106). Public for the same reason.</summary>
     public SpiralOverlayEffect Spiral { get; }
+
+    /// <summary>Intensity Ramp, the first module that draws NOTHING (SP-108). Public for the same
+    /// reason, and it has no surface property beside it because it has no surface.</summary>
+    public IntensityRampEffect Ramp { get; }
 
     /// <summary>Where its flashes are drawn. Public for the same reason: a surface nobody can
     /// reach is a surface nobody can interrogate.</summary>
@@ -230,6 +277,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Spiral Overlay module's persisted store, same reason.</summary>
     public PersistenceStore<SpiralPresetDocument> SpiralPreset => _spiralPreset;
 
+    /// <summary>The Intensity Ramp module's persisted store, same reason.</summary>
+    public PersistenceStore<IntensityRampPresetDocument> RampPreset => _rampPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -247,6 +297,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _subliminalPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _pinkFilterPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _spiralPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _rampPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -257,6 +308,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("subliminal-preset", _subliminalPreset.LastLoadOutcome);
         LogIfDegraded("pinkfilter-preset", _pinkFilterPreset.LastLoadOutcome);
         LogIfDegraded("spiral-preset", _spiralPreset.LastLoadOutcome);
+        LogIfDegraded("ramp-preset", _rampPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -289,7 +341,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
         return Task.WhenAll(
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
-            _spiralPreset.StopAsync(), _assetSelection.StopAsync());
+            _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -299,7 +351,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset.FlushAsync(boundedWait),
             _subliminalPreset.FlushAsync(boundedWait),
             _pinkFilterPreset.FlushAsync(boundedWait),
-            _spiralPreset.FlushAsync(boundedWait));
+            _spiralPreset.FlushAsync(boundedWait),
+            // The ramp's own dials. The dials it BORROWS are restored synchronously by
+            // Engine.Stop() above, so no flush here can ever write a ramped value over the user's.
+            _rampPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {
