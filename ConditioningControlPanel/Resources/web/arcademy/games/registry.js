@@ -30,7 +30,11 @@ export const GAME_PATHS = Object.freeze({
 /** Fallback descriptors (see header). Families per SYNTHESIS #3. */
 export const GAME_META = Object.freeze({
   daily_trigger: { family: 'word', meaty: false, flagship: true, timeBudgetSec: 90 },
-  lost_and_found: { family: 'search', meaty: false, flagship: true, timeBudgetSec: 120 },
+  // MEATY: mirrors the module's own export. This table is only the parachute the
+  // suspended stub flies under, but the timetable reads a suspended class's
+  // descriptor too, so a mismatch would quietly change the day's shape on the one
+  // day the import fails.
+  lost_and_found: { family: 'search', meaty: true, flagship: true, timeBudgetSec: 120 },
   deja_vu: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 90 },
   impulse_control: { family: 'reflex', meaty: false, flagship: false, timeBudgetSec: 90 },
 });

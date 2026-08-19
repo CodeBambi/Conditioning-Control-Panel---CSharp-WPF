@@ -341,7 +341,11 @@ const WALK_CACHE_MAX = 8;
 
 function signature(pool, calendar) {
   const p = pool.map((g) => `${g.key}:${g.family}:${g.meaty ? 1 : 0}${g.flagship ? 'F' : ''}:${g.timeBudgetSec}`).join(',');
-  const c = calendar ? Object.keys(calendar).sort().join(',') : '';
+  // Contents, not just date keys: two calendars naming the same date must not
+  // share a memo entry (a key-only signature served the first one's board).
+  const c = calendar
+    ? Object.keys(calendar).sort().map((k) => k + '=' + JSON.stringify(calendar[k])).join(',')
+    : '';
   return p + '|' + c;
 }
 

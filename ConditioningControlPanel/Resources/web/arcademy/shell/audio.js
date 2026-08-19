@@ -21,6 +21,13 @@
  * duckDepth cap (engine/curves.js DUCK .4/.25/.15). We ramp the affected buses to
  * `mult` and back over ~200ms. A duck is never a snap.
  *
+ * PITCH: `detail.pitch` (optional, 0.5-2, default 1) multiplies every frequency in
+ * the recipe - oscillator sweeps, arpeggio steps, the noise band and the stamp's
+ * body thunk. That is the whole feature: three games wanted a pitch ratchet (a
+ * rising chain of hits) and were reduced to ratcheting the LEVEL instead, which
+ * reads as "louder", not as "climbing". Garbage clamps to 1, so an older engine
+ * that never sends the field sounds exactly as it did.
+ *
  * AUTOPLAY: no AudioContext is created until the first user gesture; requests
  * before that are dropped silently (a beep the browser refuses is not an error).
  * No AudioContext at all (headless, old webview) -> every call is a no-op.
@@ -56,6 +63,13 @@ const SOUNDS = {
 };
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
+
+/** Playback-rate multiplier for a cue. Anything unusable is 1 (unpitched). */
+const PITCH_MIN = 0.5;
+const PITCH_MAX = 2;
+const clampPitch = (v) => (
+  Number.isFinite(+v) && +v > 0 ? Math.max(PITCH_MIN, Math.min(PITCH_MAX, +v)) : 1
+);
 
 /**
  * @param {Object} o
@@ -137,9 +151,15 @@ export function createAudio({ init, bridge, log } = {}) {
     if (g) node.connect(g.level);
   }
 
-  function playRecipe(rec, bus, amp) {
+  /** Frequencies live in a 20Hz..20kHz sanity window whatever the pitch asks for. */
+  const hz = (f, pitch) => Math.max(20, Math.min(20000, f * pitch));
+
+  function playRecipe(rec, bus, amp, pitch) {
+    const p = clampPitch(pitch);
     const env = ac.createGain();
     voiceOut(bus, env);
+    // Duration is deliberately NOT scaled: a pitch ratchet should climb, not
+    // speed up - the cadence belongs to whoever is firing the cues.
     const { t, dur } = envelope(env, amp * (rec.gain == null ? 0.7 : rec.gain), rec.ms, rec.attack);
     const stop = t + dur + 0.02;
 
@@ -149,7 +169,7 @@ export function createAudio({ init, bridge, log } = {}) {
       s.loop = true;
       const f = ac.createBiquadFilter();
       f.type = 'bandpass';
-      f.frequency.value = Math.sqrt(Math.max(40, rec.hp) * Math.max(80, rec.lp));
+      f.frequency.value = hz(Math.sqrt(Math.max(40, rec.hp) * Math.max(80, rec.lp)), p);
       f.Q.value = rec.bits ? 1.6 : 0.7;
       s.connect(f); f.connect(env);
       s.start(t); s.stop(stop);
@@ -160,7 +180,7 @@ export function createAudio({ init, bridge, log } = {}) {
         const o = ac.createOscillator();
         const g = ac.createGain();
         o.type = 'triangle';
-        o.frequency.value = f0;
+        o.frequency.value = hz(f0, p);
         const at = t + i * (rec.ms / 1000) * 0.75;
         g.gain.setValueAtTime(0.0001, at);
         g.gain.linearRampToValueAtTime(amp * rec.gain * 0.6, at + 0.012);
@@ -172,16 +192,16 @@ export function createAudio({ init, bridge, log } = {}) {
     }
     const o = ac.createOscillator();
     o.type = rec.type || 'sine';
-    o.frequency.setValueAtTime(rec.f0, t);
-    if (rec.riser) o.frequency.linearRampToValueAtTime(rec.f1, t + dur);
-    else o.frequency.exponentialRampToValueAtTime(Math.max(20, rec.f1), t + dur);
+    o.frequency.setValueAtTime(hz(rec.f0, p), t);
+    if (rec.riser) o.frequency.linearRampToValueAtTime(hz(rec.f1, p), t + dur);
+    else o.frequency.exponentialRampToValueAtTime(hz(rec.f1, p), t + dur);
     o.connect(env);
     o.start(t); o.stop(stop);
     if (rec.thunk) {                     // a stamp is a tone AND a body hit
       const n = ac.createBufferSource();
       n.buffer = noiseBuffer();
       const f = ac.createBiquadFilter();
-      f.type = 'lowpass'; f.frequency.value = 420;
+      f.type = 'lowpass'; f.frequency.value = hz(420, p);
       const g = ac.createGain();
       envelope(g, amp * 0.5, Math.min(90, rec.ms));
       n.connect(f); f.connect(g); voiceOut(bus, g);
@@ -212,14 +232,17 @@ export function createAudio({ init, bridge, log } = {}) {
   function onSfx(e) {
     const d = (e && e.detail) || {};
     stats.handled += 1;
-    stats.last = { name: d.name || null, level: d.level, bus: d.bus || 'fx', duck: d.duck || null };
+    const pitch = clampPitch(d.pitch);
+    stats.last = {
+      name: d.name || null, level: d.level, bus: d.bus || 'fx', duck: d.duck || null, pitch,
+    };
     if (mute || master <= 0) { stats.dropped += 1; return; }
     if (!ensureContext()) { stats.dropped += 1; return; }
     const bus = BUSES.indexOf(d.bus) >= 0 ? d.bus : 'fx';
     const amp = clamp01(d.level == null ? 0.5 : d.level);
     if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; return; }
     try {
-      playRecipe(SOUNDS[String(d.name || '')] || SOUNDS.blip, bus, amp);
+      playRecipe(SOUNDS[String(d.name || '')] || SOUNDS.blip, bus, amp, pitch);
       stats.played += 1;
     } catch (err) { stats.dropped += 1; say('[audio] ' + (d.name || '?') + ' failed: ' + ((err && err.message) || err)); }
     if (d.duck) duck(d.duck);

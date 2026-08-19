@@ -235,6 +235,11 @@ export function createKeybinds({ init, bridge, log } = {}) {
         /** The current binding for a declared verb (for on-screen hints). */
         keyFor(verb) { return api.get(gameKey, verb); },
         labelFor(verb) { return keyLabel(api.get(gameKey, verb)); },
+        /** The app's projected panic key (or null), so a class can keep its own
+         *  on-screen hints off it. READ-ONLY and a LAUNCH-TIME SNAPSHOT: nothing
+         *  here ever handles the key, and a mid-class rebind does not move it
+         *  (ProjectedSetting does not echo panicKey - see CLAUDE.md trap 19). */
+        panicKey,
         destroy() {
           handlers.clear();
           if (node) {

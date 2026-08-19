@@ -598,6 +598,7 @@ internal static class ArcademyHostService
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
         ["done"] = "Done",
+        ["retake"] = "Retake",
         ["xp"] = "XP",
         ["streak"] = "Streak",
         // ---- share marks (Daily Trigger's emoji grid) ----------------------------------
@@ -613,6 +614,159 @@ internal static class ArcademyHostService
         ["game_deja_vu"] = "Deja Vu",
         ["game_impulse_control"] = "Impulse Control",
         ["game_lost_and_found"] = "Lost & Found",
+        // ---- per-game rows (Semester 1) -------------------------------------------------
+        // Keys that are not prefixed by a game: the shell and more than one class render
+        // them (Daily Trigger mints them today).
+        ["absorbed"] = "ABSORBED",
+        ["detention_so_close"] = "One letter. It kept the last one for itself.",
+        ["mark_hit"] = "right letter, right place",
+        ["mark_miss"] = "not in the word",
+        ["mark_near"] = "right letter, wrong place",
+        ["revision_day"] = "Revision",
+        ["revision_day_hint"] = "Revision: you have met this one before.",
+        // ---- Daily Trigger (games/daily-trigger) --------------------------------------
+        ["dt_absorb_jackpot"] = "It sticks. Deeper than usual.",
+        ["dt_absorbed_line"] = "Absorbed. It rides with you through the rest of today.",
+        ["dt_cell_empty"] = "empty",
+        ["dt_commit"] = "COMMIT ROW",
+        ["dt_detention_stamp"] = "DETENTION",
+        ["dt_enter"] = "ENTER",
+        ["dt_gold_chip"] = "GOLD \u2728",
+        ["dt_gold_solved"] = "Gilded: solved on a gold letter day.",
+        ["dt_hard_chip"] = "HARD",
+        ["dt_hard_hit"] = "Hard mode: keep the revealed letters in place",
+        ["dt_hard_mode"] = "Hard mode",
+        ["dt_hard_mode_hint"] = "Every revealed letter must be reused. Forced on at Year 4.",
+        ["dt_hard_near"] = "Hard mode: use every revealed letter",
+        ["dt_keyboard_layout"] = "Keyboard layout",
+        ["dt_keyboard_layout_hint"] = "Auto follows the layout your system reports.",
+        ["dt_ladder"] = "Ladder",
+        ["dt_near_miss"] = "One letter away",
+        ["dt_not_a_word"] = "Not in the word list",
+        ["dt_not_enough"] = "Not enough letters",
+        ["dt_phrase_chip"] = "PHRASE",
+        ["dt_phrase_hint"] = "Two words today. The gap is free.",
+        ["dt_retake"] = "Retake",
+        ["dt_skip"] = "Tap to continue",
+        ["dt_study_hint"] = "Study hint: one letter is already in place. It costs you nothing.",
+        ["dt_theme_word"] = "One of your own words.",
+        ["dt_twist_telegraph"] = "The whispers are real words - just not today's.",
+        ["dt_type_to_guess"] = "Type to guess",
+        ["dt_type_to_guess_hint"] = "Use the physical keyboard instead of tapping the on-screen one.",
+        // ---- Deja Vu (games/deja-vu) --------------------------------------------------
+        ["dv_bell"] = "The bell. Time is up.",
+        ["dv_card"] = "Card",
+        ["dv_clear"] = "Board clear.",
+        ["dv_cram_assist"] = "Cram Assist",
+        ["dv_cram_hint"] = "Hold to re-study the board. Using it caps this class at A.",
+        ["dv_cram_key"] = "Cram Assist key",
+        ["dv_cram_on"] = "Cramming.",
+        ["dv_cram_ready"] = "Cram Assist ready. Hold it - it caps this class at A.",
+        ["dv_deal_hint"] = "Dealing the board.",
+        ["dv_drift_hint"] = "A whole line is sliding.",
+        ["dv_endgame"] = "Last pair.",
+        ["dv_jackpot"] = "JACKPOT",
+        ["dv_matched_loops"] = "Matched pairs",
+        ["dv_near_miss"] = "SO CLOSE",
+        ["dv_peek_hold"] = "Card hold length",
+        ["dv_peek_hold_hint"] = "How long a mismatched pair stays face up. Above 1.25x counts as a tempo assist.",
+        ["dv_play_hint"] = "Find the pairs.",
+        ["dv_preview_hint"] = "Memorize the board.",
+        ["dv_retake"] = "Retake",
+        ["dv_stamp_bell"] = "BELL",
+        ["dv_stamp_clear"] = "CLEAR",
+        ["dv_stamp_match"] = "PAIR",
+        ["dv_swap_hint"] = "The board is moving.",
+        ["dv_swap_tell"] = "swap tell",
+        ["dv_swaps"] = "swaps",
+        ["dv_tracked"] = "Tracked through the static.",
+        // ---- Lost & Found (games/lost-and-found) --------------------------------------
+        ["lf_briefing"] = "Memorize her, then find her five times.",
+        ["lf_clutch"] = "The board relents",
+        ["lf_final_bell"] = "Final bell",
+        ["lf_find_prompt"] = "Find her",
+        ["lf_found"] = "Found her",
+        ["lf_jackpot"] = "Jackpot",
+        ["lf_misclick"] = "Wrong one",
+        ["lf_misclick_streak"] = "Focus",
+        ["lf_misses"] = "Misses",
+        ["lf_modifier"] = "The board wakes up",
+        ["lf_peek_input"] = "Peek input",
+        ["lf_peek_input_hint"] = "Hold the key, tap to toggle, or let the pointer decide.",
+        ["lf_peek_key"] = "Peek key",
+        ["lf_relocate"] = "It moved - the same glitch hides the churn",
+        ["lf_timeout"] = "Time",
+        ["lf_warm"] = "Warm",
+        ["lf_zen"] = "Zen mode",
+        ["lf_zen_clock"] = "--:--",
+        ["lf_zen_hint"] = "No clock and no grade. The class still counts for attendance.",
+        // ---- Impulse Control (games/impulse-control, mirrors lex.js IC_LEX) ------------
+        ["ic_almost"] = "Almost had you",
+        ["ic_assessment"] = "Reflex & Compliance Assessment",
+        ["ic_assessment_block"] = "Block",
+        ["ic_baseline"] = "baseline",
+        ["ic_baseline_block"] = "Calibration",
+        ["ic_baseline_new"] = "Baseline established. Later classes are scored against it.",
+        ["ic_block_clear"] = "Block clear",
+        ["ic_breather"] = "Breathe. The next block runs hotter.",
+        ["ic_calibrating"] = "Calibrating - hold still, subject.",
+        ["ic_clean"] = "clean",
+        ["ic_commended"] = "COMMENDED",
+        ["ic_composure_hold"] = "Composure hold",
+        ["ic_debrief"] = "Debrief",
+        ["ic_debrief_buzzer_body"] = "A clean GO was answered with the error buzzer to shake your streak. The response was correct. The machine was not.",
+        ["ic_debrief_buzzer_lied"] = "That buzzer lied.",
+        ["ic_debrief_clean_line"] = "No interference was active. That one's yours.",
+        ["ic_debrief_induced_line"] = "You heard it, and you obeyed. Logged as induced, not yours.",
+        ["ic_debrief_no_errors"] = "No errors. Nothing to attribute.",
+        ["ic_debrief_no_lies"] = "No interference was active this round. An honest test.",
+        ["ic_err_commission"] = "Impulse error",
+        ["ic_err_isi"] = "Commission during rest",
+        ["ic_err_late"] = "Late response",
+        ["ic_err_miss"] = "Missed cue",
+        ["ic_go_hint"] = "Press {key} or tap the aperture when the GO face shows. Its near-twin means withhold.",
+        ["ic_go_key"] = "GO key",
+        ["ic_hold_intro"] = "Composure hold. Withhold, mostly.",
+        ["ic_induced"] = "induced",
+        ["ic_interference_log"] = "Interference log",
+        ["ic_inverse_audio"] = "Allow the false error buzzer (Year 4)",
+        ["ic_just_made_it"] = "JUST made it",
+        ["ic_legend"] = "top row: interference events   bottom row: your errors",
+        ["ic_lie_commitment_trap"] = "mid-presentation swap",
+        ["ic_lie_false_cue"] = "false go-sting",
+        ["ic_lie_inverse_audio"] = "false error buzzer",
+        ["ic_lie_peripheral_decoy"] = "peripheral decoys",
+        ["ic_lie_priming_flash"] = "subliminal priming",
+        ["ic_new_best"] = "NEW BEST",
+        ["ic_nogo_share"] = "NO-GO share",
+        ["ic_personal_record"] = "personal record",
+        ["ic_recalibrate"] = "Recalibrate baseline",
+        ["ic_recalibrate_confirm"] = "Tap again to confirm",
+        ["ic_recalibrated"] = "Baseline cleared - the next class recalibrates.",
+        ["ic_restraint"] = "restraint",
+        ["ic_session_median"] = "session median",
+        ["ic_show_rt"] = "Show reaction time",
+        ["ic_slip_both"] = "Both axes slipped. Reassessment recommended.",
+        ["ic_slip_none"] = "Speed and restraint both held. Filed.",
+        ["ic_slip_restraint"] = "Reflexes on record. Restraint slipped - reassessment recommended.",
+        ["ic_slip_speed"] = "Restraint held. Reflexes off your record - reassessment recommended.",
+        ["ic_stimulus_style"] = "Stimulus style",
+        ["ic_subject"] = "Subject",
+        ["ic_submit"] = "Submit report",
+        ["ic_warn_armed"] = "INTERFERENCE ARMED",
+        ["ic_withheld"] = "Withheld",
+        ["ic_word_go_1"] = "OBEY",
+        ["ic_word_go_2"] = "GOOD",
+        ["ic_word_go_3"] = "DEEPER",
+        ["ic_word_go_4"] = "FOCUS",
+        ["ic_word_go_5"] = "HOLD",
+        ["ic_word_go_6"] = "YIELD",
+        ["ic_word_nogo_1"] = "OBEV",
+        ["ic_word_nogo_2"] = "G00D",
+        ["ic_word_nogo_3"] = "DEEPEB",
+        ["ic_word_nogo_4"] = "FOCVS",
+        ["ic_word_nogo_5"] = "H0LD",
+        ["ic_word_nogo_6"] = "YEILD",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
@@ -851,18 +1005,38 @@ internal static class ArcademyHostService
             if (zen || !XpGradeMult.ContainsKey(grade)) grade = zen ? "pass" : "C";
             double flavor = Math.Clamp((double?)o["flavorXp"] ?? 0, 0, FlavorXpCap);
 
-            double xp = XpBase[tier] * XpGradeMult[grade] + flavor;
+            // THE FARM GUARD: one payout per class per UTC day. Replaying a class is a supported,
+            // deliberately free thing to do (the day's seed makes it the same script), so the
+            // second run of the day grades and stamps exactly as before and pays nothing. The
+            // ledger is host-owned (ArcademyMetaStore.XpPaidKey) and the day is re-derived here
+            // when the page's `dayUtc` is missing or malformed - otherwise dropping the field
+            // would be the bypass.
+            var dayUtc = ((string?)o["dayUtc"] ?? "").Trim();
+            if (!DateTime.TryParseExact(dayUtc, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out _))
+            {
+                dayUtc = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
+            bool firstToday = _meta?.TryClaimXpDay(gameKey, dayUtc) ?? true;
+
+            double xp = firstToday ? XpBase[tier] * XpGradeMult[grade] + flavor : 0;
 
             int levelBefore = App.Settings?.Current?.PlayerLevel ?? 0;
             // Same ProgressionService path DTRH's run-ended payout takes; XPSource.Other is the
             // hosted-experience precedent (IntakeHostService, JustDrop, Programs) - Chaos would
             // route Arcademy classes through the descent's companion bonuses and barks.
-            try { App.Progression?.AddXP(xp, XPSource.Other); }
-            catch (Exception ex) { App.Logger?.Debug("ArcademyHost payout AddXP: {E}", ex.Message); }
+            if (xp > 0)
+            {
+                try { App.Progression?.AddXP(xp, XPSource.Other); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost payout AddXP: {E}", ex.Message); }
+            }
             int levelAfter = App.Settings?.Current?.PlayerLevel ?? levelBefore;
 
             // LOCAL date rolls attendance; the page's dayUtc only ever seeded the content (#978),
-            // so it is deliberately NOT what gets written here.
+            // so it is deliberately NOT what gets written here. RecordAttendance is idempotent per
+            // (day, gameKey), so a retake cannot inflate todayClasses or perfect attendance - and
+            // running it unconditionally is what keeps a retake on a NEW local day (same UTC day,
+            // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var (streak, perfect, classesToday) = _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0);
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
@@ -876,10 +1050,13 @@ internal static class ArcademyHostService
                 streak,
                 perfectAttendance = perfect,
                 classesToday,
+                // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
+                retake = !firstToday,
             });
             App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP, streak {Streak}, {Today}/3 today",
-                gameKey, tier, grade, xp, streak, classesToday);
+                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/3 today",
+                gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
+                streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
     }

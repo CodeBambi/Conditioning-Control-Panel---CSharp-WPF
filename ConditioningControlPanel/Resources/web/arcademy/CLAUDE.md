@@ -17,6 +17,7 @@ This file is the *implementation* companion: what the pieces are, where the trap
 | S/A/B/C + caps | `core/grades.js` (pure) | a game grading itself |
 | grade tier (Year 1–4) | `games/registry.js` + meta store | a game choosing its tier |
 | XP numbers | **C#** (`payout-result`) | any page-side XP table |
+| "already paid today" | **C#** (`ArcademyMetaStore.XpPaidKey`) | the page deciding a retake is free |
 | settings values | **C#** (`set-setting` → `setting` echo) | the page assuming its own clamp |
 | screens, ctx, lifecycle | `shell/shell.js` | a game calling `bridge` directly |
 | effects | `engine/` (parallel agent) | a game exceeding `effectsConsumed` |
@@ -49,8 +50,20 @@ shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
+                   GAME_META here is the PARACHUTE: it must mirror each module's
+                   own family/meaty/flagship/timeBudgetSec, because the timetable
+                   reads a suspended class's descriptor too
 games/<key>/index.js  one folder per game; games NEVER import each other
+  daily-trigger/   the daily word (homeroom, flagship)  - bank/board/ladder/words-*
+  lost-and-found/  the mosaic hunt (MEATY, flagship)    - board/grade/hud/util
+  deja-vu/         the pair memory                      - script (the swap plan)
+  impulse-control/ the go/nogo assessment               - lex/lies/scoring/stimset/stream
 ```
+
+Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
+one of them** (200 rows as of Semester 1) or the shell renders raw keys for the settings
+page's `label_key` / `hint_key`. Impulse Control exports its table as data
+(`impulse-control/lex.js` `IC_LEX`) - copy the values, do not re-word them.
 
 ## 3. Cross-agent seams — change these only with the other side
 
@@ -78,6 +91,11 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   handler that requires `key` silently drops the authoritative streak.
 - **Board size** is a per-game setting under a derived key, `<gameKey>_board_size`
   (`shell/settings.js` `boardSizeKey()`), also surfaced to games as `ctx.settings.boardSize`.
+- **`shell/audio.js` accepts an optional `pitch`** on the `arcademy-sfx` detail (0.5-2,
+  default 1). It multiplies every frequency in the recipe - oscillator sweep, arpeggio step,
+  noise band, stamp thunk - and deliberately NOT the duration, so a pitch ratchet climbs
+  instead of speeding up. Anything unusable clamps to 1, so an emitter that never sends the
+  field sounds exactly as before.
 - **Protocol** (`bridge.PROTOCOL = 1`) must match the host's `PROTOCOL` int. A mismatch
   fails the boot on purpose — a page mis-reading the projection would mis-clamp settings.
 - **`engine/index.js` `createEngine(opts)` / `provider/index.js` `createAssets(opts)`** are
@@ -157,6 +175,49 @@ games/<key>/index.js  one folder per game; games NEVER import each other
     `init.settings`, and it is a LAUNCH-TIME SNAPSHOT - `ProjectedSetting` does not echo it, so
     rebinding the app's panic key mid-class does not move the page's conflict check until the
     next launch. The page only ever refuses to bind over it; it never handles the key.
+20. **`manifest.boardSizes.values[0]` is the SHELL's default.** Both `shell/settings.js`
+    (`gameValue(..., bs.values[0])`) and `shell.js`'s `gameSettingsFallback` fall back to the
+    FIRST entry, so the list has to be ordered with the intended default first - Lost & Found
+    ships `[40, 30, 24, 20, 16, 12]`, descending, for exactly that reason. The A-cap then
+    hangs off `par`, not off the list: `chosen < par[tier]` is "below par board". Two ways to
+    get this wrong: put the easiest size first and every untouched install plays capped, or
+    write a `par` value that is not in `values` and par can never be met.
+21. **A manifest settings enum needs `values`, not `options`.** `shell/settings.js` tests
+    `s.kind === 'enum' && Array.isArray(s.values)`; an `options` array falls through every
+    branch and the row simply **never renders** - no warning, no fallback control, and the
+    setting silently keeps its default forever. (`selectRow()` takes `options` internally,
+    which is where the confusion comes from.)
+22. **`fire('glitch_swap').onSwap` rides the engine's timer registry.** The midpoint callback
+    is scheduled through the engine's own timers, and `suspend()` kills them (`timers.kill()`)
+    while `dispose()` disposes them. A class that does its content swap *only* in `onSwap`
+    loses the swap if a mandatory video lands mid-transition. Games must keep their own
+    backstop - resolve the swap promise themselves on a deadline and treat `onSwap` as the
+    nicety it is.
+23. **XP pays ONCE per (game, UTC day); a retake is a free replay.**
+    `ArcademyMetaStore.TryClaimXpDay` is the ledger (host-owned key `xpPaidDays`), and a
+    repeat `class-ended` answers `payout-result {xp: 0, retake: true}` while still grading,
+    stamping and sharing normally. Three consequences: the page must not compute XP from the
+    grade (it never could - trap: `results[key].xp` comes only from the payout frame); the
+    day's `days[date].classes[key]` row keeps the **first** grade (`shell.js` skips
+    `recordClass` on a retake, so a bad second run cannot erase an S); and attendance is
+    untouched, because `RecordAttendance` is idempotent per (local day, gameKey) and runs
+    either way - which is what still credits a new LOCAL day that shares a UTC day.
+    Board rows for a graded class stay CLICKABLE and wear a `t('retake')` chip;
+    `classSpec.retake` tells the game.
+24. **`ctx.absorb(word)` / `ctx.sessionWords` is SESSION-ONLY.** A class may add to the day's
+    word pool and every engine built *after* that gets the longer list (Daily Trigger absorbs
+    the word you solved). Nothing is persisted, nothing is posted to the host, and
+    `SubliminalPool` is never written - DECISIONS #10, the ramp-never-writes precedent. Reload
+    and it is gone. Validated: <= 40 chars, no control characters, no duplicates, 64 adds max.
+25. **The timetable memo is keyed on the calendar's DATE KEYS, not its contents.**
+    `core/timetable.js` `signature()` hashes the pool plus `Object.keys(calendar)`, so two
+    *different* override calendars that name the same date share one memo entry and the second
+    silently gets the first one's board. Invisible in the app (one calendar per page load);
+    it will eat a test suite that boots repeatedly. `clearTimetableCache()` exists for that.
+26. **A `NeutralLexicon` value longer than 96 characters can never be mod-skinned.**
+    `MergeModTable` drops any mod string over `Length > 96`, so the long Impulse Control
+    debrief rows (`ic_debrief_buzzer_body`, the `ic_slip_*` lines) always render English. If a
+    mod must re-voice one, split it into two rows rather than raising the cap.
 
 ## 5. The game module contract (short version)
 
@@ -170,18 +231,30 @@ export default {
 ```
 `ctx = { root, engine, assets, lexicon:t, caps, rng, settings, keys, peek, ceremonies,
 store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
-and `classSpec = { gradeTier 1..4, seed, timeBudgetSec }`.
+plus the additive read-only projection: `platform` (init's `{isTouch, hasHaptics, host}`),
+`motion` (`{reducedMotion, motionLevel}`), `audioAudible` (resolved `SubAudioAudible` - FALSE
+means a cue is mixed but inaudible, so carry a visual tell), `words` (a COPY of the day pool),
+`absorb(word)` / `sessionWords` (trap 24), and `keys.panicKey` (the projected panic key name,
+a launch-time snapshot - see trap 19).
+`classSpec = { gradeTier 1..4, seed, timeBudgetSec, retake }` - `retake` is true when today
+already has a row for this class (trap 23). The seed is unchanged on a retake, on purpose:
+the day's script IS the day's script.
+
+The per-class engine handle carries the pinned surface (`setHeat/fire/sustain/stop/setpiece/
+beat/ceremony`) **plus** the engine's additive helpers as pass-throughs: `setPhase`, `armTail`,
+`rewardRoll`, `isPlainBeat`, `plainShare`, `cadenceMs`, `channels`, `diagnostics`. Only
+`fire`/`sustain` are kind-addressed, so only those two are fenced by `effectsConsumed`; the
+rest read clamped state or drive the director the class already drives. A NULL engine answers
+`undefined` for all of them, which is why a game still needs its own fallback - presence on
+the handle is not a promise of an effect.
 
 A game must not: import another game, touch `bridge.js`, re-expose a global setting (the
 settings page skips + logs it), grade itself, or call `endClass` twice (the runner ignores
 the second call and logs).
 
-The four files in `games/*/index.js` today are **placeholder stubs**: they render a
-"class placeholder" card proving the ctx wiring and end the class with a B. The game agents
-replace them wholesale. Each stub deliberately exercises one shell mechanism —
-Daily Trigger the share payload and an out-of-manifest effect refusal, Lost & Found peek +
-board sizes + an asset claim, Déjà Vu peek-as-cram-assist, Impulse Control a keybind verb
-and a failed hard gate.
+The four `games/*/index.js` are **real games** now (Semester 1) - the placeholder stubs are
+gone. The shell suite therefore keeps a fixture of its own rather than driving a real game's
+UI: see §6.
 
 ## 6. Verifying changes (no app UI — the owner is remote)
 
@@ -199,9 +272,21 @@ drives the real modules. Rebuild it when you need it — the recipe is:
 - node 24: `navigator` is getter-only, so `Object.defineProperty` it.
 - Fresh `boot.js` instance = `import('./boot.js?instance=2')` (query defeats the ESM cache).
 
-Last full run: **113 assertions, 0 failures** (timetable 27, grades 23, shell 37, bridge+boot 13,
-**e2e seams 13**), against the live `engine/` + `provider/` modules (the note line in the shell
-run says which), plus the engine agent's own 238 + 84.
+**The shell suite has a fixture class of its own.** Now that `games/*` are real games, none of
+them can be driven board -> `endClass` from one synthetic click, and a SHELL case should not
+have to fight a game's UI to assert a meta write. The harness drops
+`arc/games/test-class/` (the union of what the four retired stubs each proved, with knobs:
+`tc_zen`, `tc_fail_gate`, `tc_absorb`) into its COPY of the web root and patches the COPY of
+`games/registry.js` with one opt-in hook - `globalThis.__ARC_TEST_GAMES__ = {key: path}`
+read at `loadGames()` time. The repo's registry stays a frozen four-entry table: the shell
+must never grow a test seam that ships. Cases opt in through an `overrideCalendar`, so every
+other case still sees the shipping four-game pool and the seeded boards it asserts against.
+Remember `clearTimetableCache()` between boots (trap 25).
+
+Last full run: **118 assertions, 0 failures** (timetable 27, grades 23, shell 41,
+bridge+boot 13, **e2e seams 14**), against the live `engine/` + `provider/` modules (the note
+line in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
+`games-ic`) drive the REAL games and run green alongside it.
 
 `test-e2e.mjs` is the cross-agent one: a realistic C# init (with `settings.localAssets`) →
 board → class → `assets-request` → a host `assets` reply absorbed by reqId → `class-ended` →
@@ -221,10 +306,16 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   table now mirrors `DEFAULT_LEXICON` key-for-key plus one `game_<key>` row per registered
   game (asserted by the scratch e2e suite). `MergeModTable` still only merges declared keys,
   which is the point: completing the table is the fix, relaxing the filter is not.
-  - **Still unskinnable: per-game setting/keybind labels.** `shell/settings.js` renders them
-    as `t(manifest.settings[].label_key, key)` (`dt_hard_mode`, `lf_zen`, `ic_go_key`, …).
-    Those keys come from game manifests and the stubs' are placeholders, so they were left
-    out on purpose — each game agent adds its own final rows to `NeutralLexicon`.
+  - ~~**Still unskinnable: per-game setting/keybind labels.**~~ **CLOSED** — every row the
+    four Semester-1 games can render is in `NeutralLexicon` (147 added: `dt_*` 28, `dv_*` 26,
+    `lf_*` 19, `ic_*` 66, plus `absorbed`, `detention_so_close`, `revision_day(_hint)`,
+    `mark_hit/near/miss` and the shell's `retake`). The list is derived mechanically - a
+    scratch script extracts every `t('key'` call site and `label_key`/`hint_key` in `games/**`
+    and diffs it against the C# table; the three keys built by concatenation
+    (`ic_err_`, `ic_lie_`, `mark_`) are enumerated in that script, so a NEW suffix in a game
+    means adding it there too. Deja Vu's enum key is **`dv_matched_loops`** (`auto` /
+    `keep-playing` / `freeze`) - the stub-era `dv_freeze_matched` never shipped and no longer
+    exists anywhere.
 - **`init.palette` matches** the host's seven keys (`ground/navy/panel/ink/pink/lavender/
   gold`); `shell.js` `PALETTE_TOKENS` also tolerates `accent`/`accent2`/`line` aliases and
   logs anything unknown.

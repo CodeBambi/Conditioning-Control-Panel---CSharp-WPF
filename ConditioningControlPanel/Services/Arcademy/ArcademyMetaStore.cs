@@ -40,8 +40,16 @@ internal sealed class ArcademyMetaStore
     /// <summary>Host-owned: game keys completed on <see cref="AttendanceKey"/>'s day.</summary>
     public const string TodayClassesKey = "todayClasses";
 
+    /// <summary>Host-owned: the XP ledger, <c>{ "&lt;utcDay&gt;": ["&lt;gameKey&gt;", …] }</c>. A class pays
+    /// its XP once per UTC day; every later run of the same class that day is a free replay.</summary>
+    public const string XpPaidKey = "xpPaidDays";
+
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
     private const int ClassesPerDay = 3;
+
+    /// <summary>UTC days of XP ledger kept. Older days can no longer be replayed into (the page
+    /// only ever ends a class on today's seed), so keeping them would just grow the blob.</summary>
+    private const int XpPaidDayHistory = 14;
 
     private const int MaxKeyLength = 128;
     private const int MaxBlobChars = 512 * 1024;   // a meta file this big is a bug, not a save
@@ -50,7 +58,7 @@ internal sealed class ArcademyMetaStore
     /// <c>class-ended</c>, so a set/merge naming one is dropped (and logged) rather than applied.</summary>
     private static readonly HashSet<string> HostOwnedKeys = new(StringComparer.Ordinal)
     {
-        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey,
+        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey,
     };
 
     private readonly object _lock = new();
@@ -201,6 +209,47 @@ internal sealed class ArcademyMetaStore
 
             Touch();
             return (streak, perfect, today.Count);
+        }
+    }
+
+    /// <summary>
+    /// Claim the one XP payment a <paramref name="gameKey"/> is worth on <paramref name="dayUtc"/>.
+    /// True the first time that pair is seen, false forever after.
+    ///
+    /// <para>THE FARM GUARD. A class is replayable by design (the seed is the day's, so a retake is
+    /// the same script) and nothing stops a player finishing Daily Trigger ten times before lunch.
+    /// The ledger lives here rather than page-side for the same reason the streak does: a stale or
+    /// edited page must not be able to mint a payout. Attendance is deliberately NOT keyed off this
+    /// — <see cref="RecordAttendance"/> is idempotent on its own terms and runs on the LOCAL date
+    /// (#978), so a retake still cannot double-count a class but a genuine new local day still
+    /// credits one.</para>
+    /// </summary>
+    public bool TryClaimXpDay(string? gameKey, string? dayUtc)
+    {
+        if (string.IsNullOrWhiteSpace(gameKey) || string.IsNullOrWhiteSpace(dayUtc)) return true;
+        lock (_lock)
+        {
+            if (_state[XpPaidKey] is not JObject paid)
+            {
+                paid = new JObject();
+                _state[XpPaidKey] = paid;
+            }
+            if (paid[dayUtc] is not JArray day)
+            {
+                day = new JArray();
+                paid[dayUtc] = day;
+            }
+            if (day.Any(t => string.Equals((string?)t, gameKey, StringComparison.Ordinal))) return false;
+
+            day.Add(gameKey);
+            foreach (var stale in paid.Properties().Select(p => p.Name)
+                         .OrderBy(n => n, StringComparer.Ordinal)
+                         .SkipLast(XpPaidDayHistory).ToList())
+            {
+                paid.Remove(stale);
+            }
+            Touch();
+            return true;
         }
     }
 

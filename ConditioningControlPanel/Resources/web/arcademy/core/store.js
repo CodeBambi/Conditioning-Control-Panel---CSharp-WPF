@@ -21,6 +21,9 @@
  *   perfectAttendance       : number   lifetime all-three days
  *   lastAttendanceLocalDate : string
  *   todayClasses            : string[] game keys credited today
+ *   xpPaidDays              : { '<utcDay>': [gameKey] }  the XP ledger: a class
+ *                             pays once per UTC day, every later run that day is
+ *                             a free replay (payout-result carries retake:true)
  *
  * PAGE-OWNED:
  *   days   : { '2026-08-19': { classes: { <gameKey>: {grade, zen, at} },
@@ -43,7 +46,7 @@ const DAY_HISTORY_MAX = 30;   // keep the local view small; C# owns the archive
 
 /** Keys the host mints. The page never writes them (the write would be refused). */
 export const HOST_OWNED_KEYS = Object.freeze([
-  'streak', 'perfectAttendance', 'lastAttendanceLocalDate', 'todayClasses',
+  'streak', 'perfectAttendance', 'lastAttendanceLocalDate', 'todayClasses', 'xpPaidDays',
 ]);
 const HOST_OWNED = new Set(HOST_OWNED_KEYS);
 

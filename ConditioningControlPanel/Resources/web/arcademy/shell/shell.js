@@ -109,6 +109,41 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- state ----------------------------------------- */
   const utcDateSeed = String(src.utcDateSeed || '');
   const localDate = String(src.localDate || utcDateSeed);
+
+  /* THE DAY'S WORD POOL. init.words is the floor (it may legally be EMPTY); a
+   * class may ADD to it through ctx.absorb / ctx.sessionWords, and every engine
+   * built after that gets the longer list - so a word absorbed in Homeroom rides
+   * the rest of today's classes. SESSION-ONLY, both ways: nothing here is
+   * persisted, nothing is sent to the host, and SubliminalPool is never written
+   * (DECISIONS #10, the ramp-never-writes precedent). Reload and it is gone. */
+  const ABSORB_MAX_LEN = 40;         // a subliminal card, not a paragraph
+  const ABSORB_MAX_ADDED = 64;       // a runaway game cannot grow this unbounded
+  const dayWords = (Array.isArray(src.words) ? src.words : [])
+    .filter((w) => typeof w === 'string' && w.trim());
+  let absorbed = 0;
+
+  /** @returns {boolean} true when the word was taken (new, legal, under the cap). */
+  function absorbWord(word) {
+    if (typeof word !== 'string') return false;
+    const w = word.trim();
+    // Control characters would render as tofu in a sub_flash card; a newline
+    // would break the one-line layout outright.
+    if (!w || w.length > ABSORB_MAX_LEN || /[\u0000-\u001f\u007f]/.test(w)) return false;
+    if (absorbed >= ABSORB_MAX_ADDED) return false;
+    if (dayWords.some((x) => x.toUpperCase() === w.toUpperCase())) return false;
+    dayWords.push(w);
+    absorbed += 1;
+    say('absorbed a session word (' + dayWords.length + ' in the day pool)');
+    return true;
+  }
+
+  /** The sink a class reaches for. `add` is the verb Daily Trigger probes. */
+  const sessionWords = {
+    add: absorbWord,
+    list: () => dayWords.slice(),
+    get size() { return dayWords.length; },
+  };
+
   const store = createStore({ bridge, initialMeta: src.meta, log: say });
   const keybinds = createKeybinds({ init: src, bridge, log: say });
 
@@ -192,6 +227,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return keys.length > 0 && keys.every((k) => !!results[k]);
   }
 
+  /**
+   * Today's recorded row for a class, from this session OR from the meta store
+   * (the player may have graded it, closed the Arcademy and come back). Its
+   * presence is what makes the next run a RETAKE: still playable, still graded,
+   * still stamped - but the host has already paid the day's XP for it and the
+   * day's record keeps the FIRST grade.
+   * @returns {?{grade:string, zen:boolean}}
+   */
+  function todaysRecord(gameKey) {
+    if (results[gameKey]) return results[gameKey];
+    try {
+      const day = store.day(localDate);
+      const row = day && day.classes ? day.classes[gameKey] : null;
+      return (row && row.grade) ? row : null;
+    } catch (e) { return null; }
+  }
+
   function clearScreen() {
     if (!dom || !dom.screen) return;
     dom.screen.textContent = '';
@@ -249,7 +301,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     const rows = timetable.classes.map((c) => {
       const entry = games.byKey[c.gameKey];
-      const done = !!results[c.gameKey];
+      const record = todaysRecord(c.gameKey);
+      const done = !!record;
       const suspended = c.missing || !entry || !entry.ok;
       const chips = [];
       if (c.homeroom) chips.push({ text: t('homeroom', 'Homeroom'), kind: 'homeroom' });
@@ -257,8 +310,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
       if (suspended) chips.push({ text: t('class_suspended', 'Class Suspended'), kind: 'warn' });
       if (done) {
-        const r = results[c.gameKey];
-        chips.push({ text: t('grade', 'Grade') + ' ' + String(r.grade).toUpperCase() });
+        chips.push({ text: t('grade', 'Grade') + ' ' + String(record.grade).toUpperCase() });
+        // The row stays CLICKABLE on purpose - a graded class is replayable, it
+        // just pays nothing (the host's per-UTC-day XP ledger) and keeps the
+        // grade it already earned. The note is the whole warning.
+        chips.push({ text: t('retake', 'Retake') });
       }
       return {
         id: c.gameKey,
@@ -359,7 +415,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ============================ THE CLASS RUNNER ======================== */
-  function classScreenChrome(cls, gradeTier) {
+  function classScreenChrome(cls, gradeTier, retake) {
     const panel = el('div', 'arc-panel');
     const bar = el('div', 'arc-classbar');
     const back = el('button', 'btn ghost', t('leave_class', 'Leave class'));
@@ -369,6 +425,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bar.appendChild(el('span', 'arc-title', gameName(cls.gameKey)));
     bar.appendChild(el('span', 'chip year', tierLabel(gradeTier)));
     bar.appendChild(el('span', 'chip', t('family_' + cls.family, cls.family)));
+    if (retake) bar.appendChild(el('span', 'chip', t('retake', 'Retake')));
     bar.appendChild(el('span', 'arc-spacer'));
     const clock = el('span', 'chip num', cls.timeBudgetSec + 's');
     bar.appendChild(clock);
@@ -420,6 +477,31 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       setpiece: safe('setpiece'),
       beat: safe('beat'),
       ceremony: safe('ceremony'),
+
+      /* The engine's additive helpers (engine/index.js header). None of them is
+       * kind-addressed, so the manifest allowlist has nothing to say about them -
+       * they only READ the clamped state or advance a director the class already
+       * drives through beat()/setpiece(). Exposed for consistency: every game
+       * currently reimplements a local fallback for the ones it wants, and the
+       * next one should not have to.
+       *   setPhase(phaseKeyOrIndex)      eligiblePhases + anti-clump bookkeeping
+       *   armTail(on)                    arm forceTail for the class's last beat
+       *   rewardRoll(opts) -> outcome    the variable-ratio canon (schedule.js)
+       *   isPlainBeat(i01, floor, early) rolls the plain-share on the seeded rng
+       *   plainShare(i01, floor, early)  the .80 -> .30 ramp itself
+       *   cadenceMs(kind) -> ms          heat-scaled cadence (Infinity = silent)
+       *   channels() -> {…}              the CLAMPED channel vector (a copy)
+       *   diagnostics() -> {…}           live node counts, setpieces, refusals
+       * A null engine answers undefined for all of them, which is why every game
+       * keeps its own fallback: presence is not a promise of an effect. */
+      setPhase: safe('setPhase'),
+      armTail: safe('armTail'),
+      rewardRoll: safe('rewardRoll'),
+      isPlainBeat: safe('isPlainBeat'),
+      plainShare: safe('plainShare'),
+      cadenceMs: safe('cadenceMs'),
+      channels: safe('channels'),
+      diagnostics: safe('diagnostics'),
       // suspend()/dispose() are deliberately absent: the shell owns lifecycle.
     };
   }
@@ -439,11 +521,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       cls.meaty ? MEATY_MAX_SEC : QUICK_MAX_SEC
     );
     const seed = utcDateSeed + '|' + cls.gameKey + '|t' + gradeTier;
+    // RETAKE: this class already has today's row. The seed is unchanged on
+    // purpose (the day's script IS the day's script), so a game with an
+    // identical-script replay needs nothing from this flag; it is here so a
+    // game that wants to dress a replay differently can, and so the chrome can
+    // say what is happening.
+    const retake = !!todaysRecord(cls.gameKey);
 
     screen = 'class';
     clearScreen();
     renderTopbar();
-    const chrome = classScreenChrome(Object.assign({}, cls, { timeBudgetSec }), gradeTier);
+    const chrome = classScreenChrome(Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake);
 
     /* --- engine for this class --- */
     let engine;
@@ -454,7 +542,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         masterIntensity: src.masterIntensity == null ? 1 : src.masterIntensity,
         effectIntensity: src.effectIntensity == null ? 0.85 : src.effectIntensity,
         rng: makeRng(seed + '|engine'),
-        words: Array.isArray(src.words) ? src.words : [],
+        // The DAY pool, not init.words: a word absorbed by an earlier class this
+        // session is in here (ctx.absorb), and createEngine copies at construction.
+        words: dayWords.slice(),
         assets,
         motionLevel: src.motionLevel == null ? 2 : src.motionLevel,
         reducedMotion,
@@ -504,6 +594,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       peek,
       ceremonies: classCeremonies,
       store,
+
+      /* ---- additive read-only projection (all from init) ----------------
+       * A class that needs to know the shape of the machine it is running on
+       * should not have to re-probe the browser for it: the host already told
+       * us, and its answer outranks a media query (`performanceMode` and the
+       * app's own motion policy have no CSS equivalent). */
+      platform: src.platform || { isTouch: false, hasHaptics: false, host: 'desktop' },
+      motion: {
+        reducedMotion,
+        motionLevel: src.motionLevel == null ? 2 : src.motionLevel,
+      },
+      // Resolved SubAudioAudible: FALSE means a cue will be MIXED but inaudible,
+      // so a class that leans on audio has to carry a visual tell instead.
+      audioAudible: !!src.audioAudible,
+
+      /* The day's word pool, and the sink that adds to it. `words` is a COPY
+       * (a game may not splice the shared array); `absorb` is the only way in
+       * and is SESSION-ONLY - never persisted, never sent to the host, and
+       * never a write into SubliminalPool. A word taken here reaches LATER
+       * classes because their engines are built from the same day pool. */
+      words: dayWords.slice(),
+      absorb: absorbWord,
+      sessionWords,
+
       log: (m) => say('[' + cls.gameKey + '] ' + m),
       endClass: (result) => {
         if (ended) { say('[' + cls.gameKey + '] endClass called twice - ignored'); return; }
@@ -531,7 +645,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bridge.send({ type: 'class-started', gameKey: cls.gameKey, gradeTier });
 
     try {
-      instance.start({ gradeTier, seed, timeBudgetSec });
+      instance.start({ gradeTier, seed, timeBudgetSec, retake });
     } catch (e) {
       say('game ' + cls.gameKey + ' start() threw: ' + ((e && e.message) || e));
       showSuspendedOverlay('This class could not start. Your attendance is safe.');
@@ -573,19 +687,40 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const graded = gradeClass(input);
     const flavorXp = Math.max(0, Math.min(FLAVOR_XP_CAP, Math.round(Number(r.flavorXp) || 0)));
 
-    results[cls.gameKey] = {
-      grade: graded.grade,
-      zen: graded.zen,
-      composite: graded.composite,
-      capped: capsRaised(input),
-      tier: gradeTier,
-      xp: null,                     // filled by payout-result; C# owns the table
-    };
+    // THE FIRST GRADE OF THE DAY IS THE ONE THAT COUNTS. A retake is a free
+    // replay: it re-runs, re-stamps and re-shares, but it does not overwrite the
+    // row - otherwise a bad second attempt would erase an S, and the host has
+    // already paid the day's XP for the first (payout-result carries retake:true
+    // and xp 0, which is what the report card's XP line then shows).
+    const priorRow = todaysRecord(cls.gameKey);
+    const isRetake = !!priorRow;
+
+    if (!isRetake) {
+      results[cls.gameKey] = {
+        grade: graded.grade,
+        zen: graded.zen,
+        composite: graded.composite,
+        capped: capsRaised(input),
+        tier: gradeTier,
+        xp: null,                   // filled by payout-result; C# owns the table
+      };
+    } else {
+      // Keep the recorded grade; note the replay so the card can explain the 0.
+      const keep = results[cls.gameKey] || {
+        grade: priorRow.grade, zen: !!priorRow.zen, composite: 0, capped: [], tier: gradeTier,
+      };
+      keep.retake = true;
+      keep.xp = null;
+      results[cls.gameKey] = keep;
+    }
+    // The share card always reflects what you just played - it is a transcript,
+    // not a record, and a retake you are proud of is the one you want to paste.
     if (r.share && typeof r.share === 'object') shares[cls.gameKey] = r.share;
 
     say('class ended: ' + cls.gameKey + ' tier ' + gradeTier + ' -> ' + graded.grade
       + ' (composite ' + graded.composite.toFixed(3)
-      + (graded.capped.length ? ', capped: ' + graded.capped.join(',') : '') + ')');
+      + (graded.capped.length ? ', capped: ' + graded.capped.join(',') : '')
+      + (isRetake ? ', RETAKE - the day keeps ' + String(priorRow.grade).toUpperCase() : '') + ')');
 
     bridge.send({
       type: 'class-ended',
@@ -599,15 +734,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     /* meta writes: per-game progression, the day's row, the streak */
     try {
-      const adv = advance(store.gameMeta(cls.gameKey), graded.grade);
-      store.mergeGameMeta(cls.gameKey, {
-        tier: adv.tier, promotions: adv.promotions, played: adv.played,
-        best: adv.best, lastGrade: adv.lastGrade,
-      });
-      if (adv.promoted) shout(tierLabel(adv.tier) + ' unlocked');
-      store.recordClass(localDate, cls.gameKey, {
-        grade: graded.grade, zen: graded.zen, at: Date.now(),
-      });
+      // Retakes advance nothing: a free replay that still fed `promotions`
+      // would let grinding replays climb tiers (and tomorrow's XP base) for
+      // free. The first attempt of the day is the only one that progresses.
+      if (!isRetake) {
+        const adv = advance(store.gameMeta(cls.gameKey), graded.grade);
+        store.mergeGameMeta(cls.gameKey, {
+          tier: adv.tier, promotions: adv.promotions, played: adv.played,
+          best: adv.best, lastGrade: adv.lastGrade,
+        });
+        if (adv.promoted) shout(tierLabel(adv.tier) + ' unlocked');
+      }
+      // Not on a retake: the day's row is written once, by the first attempt.
+      if (!isRetake) {
+        store.recordClass(localDate, cls.gameKey, {
+          grade: graded.grade, zen: graded.zen, at: Date.now(),
+        });
+      }
       // ATTENDANCE IS NOT WRITTEN HERE. ArcademyMetaStore mints the streak and
       // perfect-attendance count from this very `class-ended` frame (so a stale
       // page cannot forge one) and ships the numbers back on `payout-result`;
