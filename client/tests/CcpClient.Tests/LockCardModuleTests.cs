@@ -494,6 +494,18 @@ public class LockCardModuleTests
 
         var outcome = Assert.IsType<CapabilityState.Unavailable>(rig.Engine.ArmOutcomes[LockCardEffect.EffectId]);
         Assert.Equal(EffectReasonCodes.InputCaptureUnavailable, outcome.Reason.Code);
+
+        // AND NOTHING IS EVER SHOWN. Found by mutation: the arm result alone left Compose free to
+        // draw a phrase and put a card up on a desktop that cannot take input, which is upstream's
+        // "endpoint down — stay quiet, don't spin" (MindWipeService.cs:771) transposed to this
+        // medium. The schedule keeps running so a session that regains a desktop is picked up at the
+        // next card rather than at the next session.
+        rig.Clock.Advance(TimeSpan.FromHours(2));
+
+        Assert.Empty(rig.Input.Prompts);
+        Assert.Equal(0, rig.LockCard.CardCount);
+        Assert.True(rig.LockCard.ScheduleArmed,
+            "the schedule must survive a firing that could not ask anything");
     }
 
     [Fact]
@@ -801,7 +813,7 @@ public class LockCardModuleTests
             }
 
             LastObservation = new InputCaptureObservation(
-                true, 1, true, IsPrompting, request.Bounds, true, IsPrompting, IsPrompting, 1, 10, 100, 0);
+                true, 1, true, IsPrompting, request.Bounds, true, IsPrompting, IsPrompting, 1, 10, 100, true, 0);
             return LastPrompt = outcome;
         }
 

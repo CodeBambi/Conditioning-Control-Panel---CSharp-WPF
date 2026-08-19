@@ -192,6 +192,23 @@ internal static class InputWindowProbe
         return SendInput(2, inputs, Marshal.SizeOf<Input>()) == 2;
     }
 
+    /// <summary>
+    /// Put one <c>WM_CHAR</c> straight into a window's queue.
+    ///
+    /// <para><b>This is NOT the OS routing input</b>, and no fact built on it may say it is — that
+    /// claim belongs to <see cref="InjectKey"/>, which goes through the system input stream. It
+    /// exists for the one thing injection cannot do safely: hand this window a CONTROL character
+    /// (Ctrl+V's 0x16, Ctrl+Z's 0x1A) without pressing Ctrl+V on the user's desktop, where a
+    /// keystroke that escaped the card would paste into whatever window caught it.</para>
+    /// </summary>
+    internal static void PostCharacter(nint window, char character)
+    {
+        if (WindowsHost && window != 0)
+        {
+            PostMessageW(window, WmChar, character, 0);
+        }
+    }
+
     /// <summary>Drain and dispatch up to <paramref name="max"/> of this thread's messages,
     /// translating each so a key becomes a character.</summary>
     internal static int Pump(int max)
@@ -717,6 +734,7 @@ internal static class InputWindowProbe
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref Msg msg);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint DispatchMessageW(ref Msg msg);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool PostThreadMessageW(uint thread, uint message, nuint wParam, nint lParam);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string? name);

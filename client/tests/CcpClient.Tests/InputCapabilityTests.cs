@@ -320,7 +320,7 @@ public class InputCapabilityTests
             Asked: true, Window: 7, WindowExists: true, WindowVisible: true,
             HeldBounds: new InputBounds(0, 0, 10, 10), AboveEveryOrdinaryWindow: true,
             IsForegroundWindow: true, SystemKeyboardFocusIsThisWindow: true, HitTestWinner: 7,
-            InkedPixels: 5, SampledPixels: 10, KeystrokesSeen: 1);
+            InkedPixels: 5, SampledPixels: 10, BackgroundHeld: true, KeystrokesSeen: 1);
 
         Assert.True(confirmed.Confirmed);
         Assert.False((confirmed with { Asked = false }).Confirmed);
@@ -334,6 +334,19 @@ public class InputCapabilityTests
             "Confirmed survived the OS routing the keyboard to another window. This is the clause the thread-local "
             + "focus read would have satisfied while nothing arrived");
         Assert.False((confirmed with { HitTestWinner = 9 }).Confirmed);
+
+        // And the hit test's own non-zero guard, which is NOT redundant: without it an observation
+        // about NO window reports that a hit test routes to it, because 0 == 0.
+        Assert.False(InputCaptureObservation.NotAsked.HitTestRoutesHere,
+            "an observation with no window at all claims the window manager routes a point to it");
+        Assert.False((confirmed with { Window = 0, HitTestWinner = 0 }).HitTestRoutesHere);
+
+        // The ink differential: a count with no background behind it is not ink.
+        Assert.True(confirmed.Inked);
+        Assert.False((confirmed with { BackgroundHeld = false }).Inked,
+            "pixels differing from a background that was never painted were counted as ink — which is what an "
+            + "UNPAINTED window's device context looks like");
+        Assert.False((confirmed with { InkedPixels = 0 }).Inked);
 
         var station = new InputStationObservation(true, true, 1, true);
         Assert.True(station.Confirmed);
@@ -390,6 +403,133 @@ public class InputCapabilityTests
         Assert.False(presence.HoldsTheInput);
         Assert.False(presence.IsPrompting);
         Assert.Equal(0, presence.Pump(16));
+    }
+
+    [Fact]
+    public void ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt()
+    {
+        // A card asked for at a rectangle no monitor covers. THE MEASUREMENT THAT SURPRISED THIS
+        // PACKET: the window manager still routes that rectangle's centre to the window —
+        // WindowFromPoint walks the window tree, not the monitors — so every capture check passes.
+        // The OS reports it visible, at the right rectangle, above every ordinary window, as the
+        // foreground and as the keyboard focus. What CANNOT pass is the content read-back: the OS
+        // holds no painted background for a window on no display, so the ink differential answers no
+        // and the state is Degraded.
+        //
+        // That is the honest shape of this edge and it is recorded rather than dressed up as the
+        // refusal it is not: the ink link is the only one of the six that a card nobody can see
+        // fails. The module then takes it down, which is a separate fact
+        // (LockCardModuleTests.ACardThatIsFocusedAndBLANK_IsAlsoTakenBackDown...).
+        var run = InputCaptureObservations.Edges;
+
+        Assert.False(run.OffScreenPromptClaimedAvailable,
+            "a card on no display at all claimed Available. Every OS-routing check passes for it, so the ink "
+            + "read-back is the ONLY thing standing between this and a green claim about a card nobody can see");
+        Assert.Equal("none", run.OffScreenPromptCode);
+    }
+
+    [Fact]
+    public void ACardWithNothingWrittenOnIt_IsDEGRADED_AndTheInkCheckKnowsAPaintedBackgroundFromAnUnpaintedWindow()
+    {
+        // The ink DIFFERENTIAL, and the mutation that forced it. The card's window class registers no
+        // background brush, so an UNPAINTED window's device context holds whatever the OS left in it
+        // — which differs from the background colour just as reliably as text does. A bare count
+        // therefore reported "inked" for a window nothing had ever drawn on, and the mutation that
+        // deletes the paint call entirely SURVIVED the first sweep.
+        //
+        // So the check is now two-sided: a control point in the filled margin must read back exactly
+        // the background, and only then does a differing pixel in the question band mean ink. This
+        // fact drives a card whose every band is empty: the background IS held, and there is no ink.
+        var run = InputCaptureObservations.Edges;
+
+        Assert.False(run.BlankPromptClaimedAvailable,
+            "a card with nothing written on it claimed Available. The OS gave it the keyboard and there is nothing "
+            + "on it to read");
+        Assert.True(run.BlankPromptWasDegraded == InputWindowProbe.MachineHasInteractiveDesktop,
+            $"a blank card must be Degraded (it holds the input and shows nothing), and it was not: "
+            + $"code={run.BlankPromptCode}");
+        Assert.Equal(
+            InputWindowProbe.MachineHasInteractiveDesktop ? InputReasonCodes.InputPromptNotInked : "none",
+            run.BlankPromptCode);
+        Assert.True(run.BlankPromptBackgroundHeld == InputWindowProbe.MachineHasInteractiveDesktop,
+            "the painted background was NOT read back from the blank card's own device context. Without that the "
+            + "ink count means nothing: an unpainted window's DC differs from the background too");
+        Assert.Equal(0, run.BlankPromptInkedPixels);
+    }
+
+    [Fact]
+    public void AControlCharacterIsNotTyping_AndAPrintableOneIs()
+    {
+        // Upstream's whole clipboard-gesture list (LockCardWindow.xaml.cs:246-264) exists because its
+        // card is a TextBox. This port's card has no edit control, so the list reduces to ONE rule:
+        // a control character is not typing. Ctrl+V arrives as WM_CHAR 0x16 and must be ignored.
+        //
+        // Delivered by PostMessage, and labelled as such: this is NOT the OS routing input (that
+        // claim is the SendInput leg above). It is the only way to hand the window a control
+        // character without pressing Ctrl+V on the user's desktop, where an escaped keystroke would
+        // paste into whatever window caught it.
+        var run = InputCaptureObservations.Edges;
+
+        Assert.True(run.PrintableCharacterReachedTheCaller == InputWindowProbe.MachineHasInteractiveDesktop,
+            "a printable character posted to the card did not reach the caller — so the control-character "
+            + "assertion below is also true of a window that ignores everything");
+        Assert.False(run.ControlCharacterReachedTheCaller,
+            "WM_CHAR 0x16 — what Ctrl+V produces in a window with no edit control — arrived at the caller as "
+            + "typing. Upstream's anti-cheat reduces to exactly this one rule here");
+    }
+
+    [Fact]
+    public void AfterDismissTheCardStopsFeedingTheCaller_EvenForAMessageAlreadyInItsQueue()
+    {
+        // The guard that survives the window being hidden: a message already queued for the card can
+        // still be dispatched to its window procedure, and the callback must be gone by then. Not
+        // reachable through the OS's own routing — a hidden window is not the focus — so it is
+        // reached by PostMessage, and labelled as such.
+        var run = InputCaptureObservations.Edges;
+
+        Assert.False(run.CharacterAfterDismissReachedTheCaller,
+            "a character posted to the card AFTER it was dismissed reached the caller. The presence hid the window "
+            + "but kept feeding a module that had stopped asking");
+    }
+
+    [Fact]
+    public void HoldingTheInputRequiresTheFOREGROUND_NotJustAFocusRead()
+    {
+        // The mutation that survived the first sweep and is the sharpest of them: dropping the
+        // FOREGROUND clause from HoldsTheInput. It is not redundant with the focus read, because
+        // GetGUIThreadInfo(0).hwndFocus can name a window of the foreground thread that is NOT the
+        // foreground window — the case a process with several top-level windows on one thread
+        // produces, which is exactly this test process.
+        //
+        // The rig: prompt (the card takes the foreground), then hand the foreground to a scratch
+        // window this probe owns. The card is still visible, still a window, still focused inside its
+        // own thread — and HoldsTheInput must be FALSE, because nothing the user types reaches it.
+        using var presence = new Win32InputPresence();
+        var state = presence.Prompt(new InputPromptRequest(
+            InputCaptureObservations.CentreBounds,
+            new InputPromptContent("HOLDING THE INPUT", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+
+        var heldWhileForeground = presence.HoldsTheInput;
+        var window = presence.NativeHandles.Window;
+
+        using var thief = InputWindowProbe.ScratchWindow.Create(
+            "CcpInputHoldThief", 20, 20, 200, 140, show: true);
+        var thiefTook = InputWindowProbe.TakeForeground(thief.Handle);
+        var heldAfterTheft = presence.HoldsTheInput;
+        var cardStillVisible = InputWindowProbe.WindowIsVisible(window);
+
+        Assert.True(heldWhileForeground == InputWindowProbe.MachineHasInteractiveDesktop,
+            "the card did not hold the input immediately after a successful Prompt: "
+            + InputCaptureObservations.Describe(state));
+        Assert.True(thiefTook == InputWindowProbe.MachineHasInteractiveDesktop,
+            "the probe could not take the foreground away, so the assertion below is untested");
+        Assert.True(cardStillVisible == InputWindowProbe.MachineHasInteractiveDesktop,
+            "the card stopped being visible when the foreground moved, which would make the assertion below true "
+            + "for the wrong reason");
+        Assert.False(heldAfterTheft,
+            "the card still reports holding the input while ANOTHER window holds the foreground. Every keystroke "
+            + "is going somewhere else and the module's dot would claim the user is being asked a question");
     }
 
     [Fact]

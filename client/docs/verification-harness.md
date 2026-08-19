@@ -105,6 +105,71 @@ manual gate (`Audio/AudioPresenceFactory.LinuxManualGate` — `pactl list short 
 `pactl list sink-inputs` filtered on `application.process.id`, `pw-dump` for the rendering node, and a
 human). WSLg cannot discharge it.
 
+## Input evidence class (SP-110)
+
+Input needs its own class for the mirror of SP-099's reason. That packet proved a surface is
+click-**through** and its review recorded that "input passes through" is the property most easily
+faked, because *a window that does not exist satisfies it too*. Proving input is **captured** is
+faked just as cheaply and in more ways: a handler was attached, `WS_EX_TRANSPARENT` was not set,
+`SetForegroundWindow` returned, a focus API answered yes. So this class is defined, like the audio
+one, by **what was asked of the operating system** — and by one measurement that made the definition
+necessary.
+
+> **The measurement.** On this machine, before any of it was written: a plain `SetForegroundWindow`
+> from a process that did not already own the foreground **returned FALSE**, the OS kept the keyboard
+> where it was, every synthesised keystroke went to the other application — and
+> `GetGUIThreadInfo(<i>ourThreadId</i>).hwndFocus` **still answered "our window"**. That read is
+> THREAD-LOCAL. The system-wide fact is `GetGUIThreadInfo(0)`, documented as the foreground thread,
+> and in the same instant it answered the other application's window
+> (`spine-tasks/SP-110-input-capturing-window/plan.md` §0, run 1).
+
+- **`focus-verified`** — the check asserts that the operating system reports the window as **the
+  foreground window** (`GetForegroundWindow`) **and** as **the foreground THREAD's keyboard focus**
+  (`GetGUIThreadInfo(0).hwndFocus`), and that the window manager routes a hit test at an interior
+  point **to** it (`WindowFromPoint`), read back through an instrument INDEPENDENT of the code that
+  created the window. Both focus facts are required: foreground without focus routes keystrokes to a
+  child or to nothing, and a focus read without foreground is the thread-local answer above.
+  Satisfiable inside `dotnet test` on a Windows box with an interactive desktop
+  (`InputCapabilityTests`); on a box without one both sides go false together and the assertion still
+  bites.
+- **`input-delivered`** — the strongest automated input claim this port can make: a keystroke
+  **synthesised at OS level** (`SendInput`) was **received by the window's own window procedure**,
+  and was **not** received when another window held the foreground. The negative leg is what stops
+  the first from passing vacuously — an instrument that counted its own calls would pass both.
+  `SendInput` enters the system input stream below the driver and above the hardware, so the OS's own
+  raw-input thread does the routing by the same rules it routes a keyboard.
+- **`answered-verified`** — **a human pressed the keys.** NOT satisfiable by any automated step on
+  any platform, Windows included. It is a manual gate and it is the only thing that closes the last
+  link.
+
+**An `input-delivered` green is never an `answered-verified` green.** `input-delivered` proves the
+operating system routed input to this window. It says nothing about a person: every keystroke in the
+suite is injected, and injection is refused outright by UIPI against a higher-integrity window and by
+the secure desktop, which the fixture detects rather than skips. It also says nothing about whether
+the card is **legible**: the ink read-back (the OS's own `GetPixel` over the card's client area)
+proves the OS holds non-background pixels in the question band, not that the phrase is readable,
+unclipped, correctly laid out, or on a screen anybody is looking at. That remains
+`presentation-verified` and is undischarged for this surface.
+
+**What tier 1 cannot cover for input**, as its own list:
+
+1. **Nobody typed anything.** No tier discharges `answered-verified`.
+2. **The foreground is LENT, not owned.** Any process can take it back the instant after the check,
+   so every claim here is "what the OS said when it was asked" and never "what the OS will keep
+   saying". The product's own escalation (`AttachThreadInput` + `SetForegroundWindow`, a divergence
+   from WPF's plain call) is bounded and then *asked about*; it is never trusted.
+3. **The host's own message loop is not proven to translate keystrokes for this window.** The
+   product's pump is Avalonia's; the evidence here is taken on the presence's own bounded pump.
+
+**Linux input capture is `focus-verified`-INCAPABLE in this build**, and refuses in type rather than
+claiming anything: `InputPresenceFactory` returns a typed refusal carrying its own five-step manual
+gate (`Input/InputPresenceFactory.LinuxManualGate`) which is run separately on X11 and on Wayland
+**because they answer differently** — `_NET_ACTIVE_WINDOW` plus an input-focus query on X11, and
+`wl_keyboard.enter` under Wayland, where the protocol deliberately offers **no** unprompted
+activation at all (`xdg-activation-v1` needs a token minted from a real user interaction). The gate
+says in its own text that Wayland will probably fail its step 2 **by design**, and that the honest
+outcome there is a named refusal rather than a card shown anyway.
+
 ## What tier 1 does NOT cover on the real desktop (SP-107, admitted rather than hidden)
 
 Some tier-1 facts are not headless. `OverlayCapabilityTests` (SP-099), `FlashDrawTests` (SP-100) and `TrayCapabilityTests` (SP-093) put REAL windows on the developer's REAL desktop inside `dotnet test` and ask the operating system about them: presence, z-order, click-through routing, layered alpha, composited pixels. That is deliberate and it is the port's only OS-level evidence for those capabilities. It also means those facts share a resource with everything else on the machine, so the boundary has to be stated.

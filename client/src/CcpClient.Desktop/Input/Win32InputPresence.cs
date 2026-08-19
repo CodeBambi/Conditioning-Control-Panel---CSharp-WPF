@@ -38,10 +38,16 @@ public sealed class Win32InputPresence : IInputPresence
     /// </summary>
     public const int MaxForegroundAttempts = 32;
 
-    /// <summary>How many pixels of the question band are sampled for ink. A grid, not every pixel:
-    /// the fact is "the OS holds ink for this window", and a sparse grid answers it for the cost of
-    /// a few hundred <c>GetPixel</c> calls rather than a few hundred thousand.</summary>
+    /// <summary>The FLOOR on the ink grid's spacing. A grid, not every pixel: the fact is "the OS
+    /// holds ink for this window", and a sparse grid answers it for the cost of a few hundred
+    /// <c>GetPixel</c> calls rather than a few hundred thousand — which matters because the card is
+    /// repainted on every keystroke.</summary>
     public const int InkSampleStride = 3;
+
+    /// <summary>Roughly how many pixels the ink read aims to sample, whatever the card's size. Same
+    /// idea and same reason as <c>Win32OverlayPresence.ContentSampleTarget</c>: a card covering half
+    /// a 4K display must not cost proportionally more to check than a small one.</summary>
+    public const int InkSampleTarget = 512;
 
     /// <summary>WPF's own lock-card palette, as <c>COLORREF</c> (0x00BBGGRR).
     /// Background <c>#1A1A2E</c> (<c>CCP.Core/Models/AppSettings.cs:3386</c>).</summary>
@@ -258,16 +264,16 @@ public sealed class Win32InputPresence : IInputPresence
                 + "and its input behaviour cannot be distinguished from being buried");
         }
 
-        if (observation.InkedPixels <= 0)
+        if (!observation.Inked)
         {
             return LastPrompt = new CapabilityState.Degraded(
                 "the operating system has given this card the foreground and the keyboard focus, and keystrokes "
                 + "will reach it",
                 new CapabilityReason(InputReasonCodes.InputPromptNotInked,
-                    $"the OS holds no ink for window 0x{window:X}'s own client area "
-                    + $"({observation.InkedPixels} of {observation.SampledPixels} sampled pixels differ from the "
-                    + "painted background); the card is focused and blank, so the user has the keyboard and no "
-                    + "question to answer"));
+                    $"the OS holds no readable question in window 0x{window:X}'s own client area: "
+                    + $"background-held={observation.BackgroundHeld}, {observation.InkedPixels} of "
+                    + $"{observation.SampledPixels} sampled pixels differ from the painted background. The card is "
+                    + "focused and blank, so the user has the keyboard and no question to answer"));
         }
 
         return LastPrompt = new CapabilityState.Available(
@@ -428,7 +434,7 @@ public sealed class Win32InputPresence : IInputPresence
             ? Win32InputInterop.WindowFromPoint(new Win32InputInterop.Point { X = x, Y = y })
             : 0;
 
-        var (inked, sampled) = exists ? ReadInk(window, held) : (0, 0);
+        var (inked, sampled, backgroundHeld) = exists ? ReadInk(window, held) : (0, 0, false);
 
         return new InputCaptureObservation(
             Asked: true,
@@ -442,6 +448,7 @@ public sealed class Win32InputPresence : IInputPresence
             HitTestWinner: winner,
             InkedPixels: inked,
             SampledPixels: sampled,
+            BackgroundHeld: backgroundHeld,
             KeystrokesSeen: Volatile.Read(ref _keystrokesSeen));
     }
 
@@ -616,8 +623,8 @@ public sealed class Win32InputPresence : IInputPresence
             Win32InputInterop.ReleaseDC(window, dc);
         }
 
-        var (inked, _) = ReadInk(window, CurrentBounds());
-        return inked;
+        var (inked, _, backgroundHeld) = ReadInk(window, CurrentBounds());
+        return backgroundHeld ? inked : 0;
     }
 
     private InputBounds CurrentBounds()
@@ -689,35 +696,52 @@ public sealed class Win32InputPresence : IInputPresence
         };
 
     /// <summary>
-    /// Ask the OS for the card's own pixels back and count the ones that are not its background. The
-    /// question band only: that is where the text the user must read is, and a count over the whole
-    /// window would be satisfied by the hint line alone.
+    /// Ask the OS for the card's own pixels back and count the ones that are not its background,
+    /// **and check that the background is really there.**
+    ///
+    /// <para><b>The second half is not decoration — the mutation sweep found its absence.</b> The
+    /// window's class registers no background brush, so an UNPAINTED card's device context holds
+    /// whatever the OS left in it, which differs from the background colour just as reliably as text
+    /// does. A count alone therefore reported "inked" for a card nothing had ever drawn on: the
+    /// mutation that deletes the paint call entirely survived the first sweep. So the read is a
+    /// DIFFERENTIAL, like every other fact in this port: a control point in a margin the painter
+    /// fills and never writes on must read back EXACTLY the background colour — which is what proves
+    /// the fill happened — and only then does a differing pixel in the question band mean ink.</para>
     /// </summary>
-    private static (int Inked, int Sampled) ReadInk(nint window, InputBounds bounds)
+    private static (int Inked, int Sampled, bool BackgroundHeld) ReadInk(nint window, InputBounds bounds)
     {
         if (bounds.Width <= 0 || bounds.Height <= 0)
         {
-            return (0, 0);
+            return (0, 0, false);
         }
 
         var dc = Win32InputInterop.GetDC(window);
         if (dc == 0)
         {
-            return (0, 0);
+            return (0, 0, false);
         }
 
         try
         {
+            // The control point: inside the client area, inside the filled rectangle, and outside
+            // every band the painter writes text into (the first band starts at 6 % of the height).
+            var backgroundHeld = Win32InputInterop.GetPixel(dc, 2, 2) == BackgroundColour;
+
             var left = bounds.Width / 12;
             var right = bounds.Width - left;
             var top = (int)(bounds.Height * 0.22);
             var bottom = (int)(bounds.Height * 0.52);
+
+            // A stride derived from the band's own size, so the cost is bounded on a card that
+            // covers half a 4K display instead of growing with its area — the same reason
+            // Win32OverlayPresence samples its content to a target count rather than a fixed step.
+            var stride = SampleStride(right - left, bottom - top);
             var inked = 0;
             var sampled = 0;
 
-            for (var y = top; y < bottom; y += InkSampleStride)
+            for (var y = top; y < bottom; y += stride)
             {
-                for (var x = left; x < right; x += InkSampleStride)
+                for (var x = left; x < right; x += stride)
                 {
                     sampled++;
                     if (Win32InputInterop.GetPixel(dc, x, y) != BackgroundColour)
@@ -727,12 +751,26 @@ public sealed class Win32InputPresence : IInputPresence
                 }
             }
 
-            return (inked, sampled);
+            return (inked, sampled, backgroundHeld);
         }
         finally
         {
             Win32InputInterop.ReleaseDC(window, dc);
         }
+    }
+
+    /// <summary>A stride that keeps the sample count near <see cref="InkSampleTarget"/> whatever the
+    /// card's size, floored at <see cref="InkSampleStride"/> so a small card is not sampled every
+    /// pixel.</summary>
+    private static int SampleStride(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return InkSampleStride;
+        }
+
+        var step = (int)Math.Sqrt((double)width * height / InkSampleTarget);
+        return Math.Max(InkSampleStride, step);
     }
 
     /// <summary>

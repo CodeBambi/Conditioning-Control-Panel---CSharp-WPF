@@ -1028,3 +1028,72 @@ discharges it. Also undischarged: no headed capture is taken; Linux audio is unp
 type; and D101's desktop blur, D105's live gain, D106's master volume and D107's seven unported
 behaviours are recorded rather than built.
 
+
+## SP-110 — the first window that TAKES input, and the first module that asks the user something
+
+**Why this packet, and what it settles.** Seven modules had landed and every one of them was
+**passive**: it drew, tinted, paced, ramped or played, and none of them ever asked the user for
+anything. SP-108's survey (§7) found **three** unported rows blocked on the same missing capability —
+a window that **captures** input. All three claims were re-verified against `ConditioningControlPanel/`
+before choosing (`spine-tasks/SP-110-input-capturing-window/plan.md` §1); one citation drifted by a
+line and is corrected there. **Lock Card** was chosen because its input need is the simplest to
+PROVE: one static window holding the keyboard, which is three OS questions with an unambiguous answer
+each. Bubble Pop needs the same facts per bubble on windows that MOVE (the hit test's answer is a
+function of a position that changes between asking and clicking, plus D84); Bubble Count needs a
+video capability the port does not have at all.
+
+**What landed.** One row in a new rack group, GAMES & CARDS: **Lock Card** (`lockcard`,
+`Views/Tabs/StudioTabView.xaml.cs:504-505`), engine-started at
+`MainWindow/MainWindow.StartStop.cs:206-209` and stopped at `:339` with its visible card dropped at
+`:367`. The rack is now **4 groups / 8 rows** against WPF's 4 / 15 — the port has a row in every one
+of upstream's groups, and nothing was reordered as they arrived.
+
+**What the service is, upstream.** A `DispatcherTimer` whose first delay is an OFFSET into the
+opening interval and whose later delays are `60/perHour ±30 %`
+(`Services/LockCard/LockCardService.cs:74`, `:127-134`, `:159-168`). Each tick shows
+`LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest, voice)` (`:299`): a fullscreen
+`WS_EX_LAYERED` cover on EVERY monitor, one of which owns the keyboard and mirrors its input to the
+others, which takes the foreground with `SetWindowPos(HWND_TOPMOST)` -> `SetForegroundWindow` ->
+`Activate()` -> `TxtInput.Focus()` (`Windows/LockCardWindow.xaml.cs:594-601`) and re-grabs it from its
+own `Deactivated` handler whenever it is lost (`:160-176`).
+
+**Where the port and v6.8.1 differ for this module:**
+
+| # | v6.8.1 fact | Port at SP-110 | Reason |
+|---|---|---|---|
+| **D110** | The card is a **fullscreen cover on EVERY monitor**, with one primary window owning the keyboard and the rest mirroring its text (`Windows/LockCardWindow.xaml.cs:1496-1607`, `_sharedInput` / `SyncInputToAllWindows`) | **One card on the primary display**, sized to 55 % x 38 % of it and centred | The user-observable outcome — a question you cannot ignore, because the OS routes your keyboard to it — is carried by foreground + focus, not by area. The mirror machinery is a per-monitor echo of one window's text, not an outcome the user needs. **A fullscreen focus-stealing cover is also the one shape this port must not ship carelessly**: upstream can afford it because strict mode leans on a panic-key hook (D112), and this build has none. **Re-opens if the port grows a panic hook and the multi-monitor enumeration is wired to the input presence** |
+| **D111** | The card can be solved by **SPEAKING the phrase** into an offline Vosk microphone (`LockCardVoiceMode`, `LockCardWindow.xaml.cs:423`, `:1037`), falling back to typing when the mic is unavailable | Typed only; **no voice switch exists** | The port has no microphone capability at all. A greyed voice switch would be the dead dial §9 D7 refuses, and worse here: it would imply a microphone is one setting away. The panel's scope notice names the absence in the user's own words. **Closes with a speech-recognition capability** |
+| **D112** | **Strict mode gates Escape**: `EscClosesCard => !strict \|\| !PanicEscapeIsLive` (`LockCardWindow.xaml.cs:632`), where "live" means the panic key's `WH_KEYBOARD_LL` hook is really installed (`:621-622`) | **Escape always closes a card**, strict or not — and strict still refuses the window manager's close (`:678-681`) | **This is upstream's own rule evaluated against this build's facts, not a weakening.** The port has no panic-key hook, so `PanicEscapeIsLive` is false and upstream's rule returns true. Upstream's own comment is the authority: strict mode "must never become an inescapable trap ... every failure mode here has to fall open, not shut". Shipping the other reading would have put a window on the user's screen that takes their keyboard and cannot be dismissed. **Re-opens when a panic-key capability lands** |
+| **D113** | A card that arrives while another interaction is up is **deferred and replayed** through `InteractionQueueService`, with a one-re-defer cap (`LockCardService.cs:193-263`) | A card that comes due while one is up is **dropped**, and nothing is counted | This is upstream's OWN answer for this input: `ResolveBlockedCardAction(cardAlreadyOpen: true, isDeferredReplay: false, hasInteractionQueue: false)` returns `DropNoQueue` (`:193-199`). The port has no interaction queue and no other fullscreen interaction to contend with. **Re-opens when a second interrupting module lands** |
+| **D114** | The dot is the persisted `LockCardEnabled` flag (`StudioTabView.xaml.cs:505`) | `Live = a firing is on the clock && the OS says this process can put a window in front of a user && (nothing is being asked \|\| the OS says the card holds the foreground and the keyboard focus)` | **The dot's sixth meaning: DEMAND — a claim on the user's ATTENTION, which the OS grants and can revoke without this process doing anything.** Measured: a card can be visible, topmost and hit-testable while the keyboard belongs to another application entirely, and a lit dot there claims a question nobody is being asked. Waiting for a human IS the work, so the module is `Live` while a card is up and unanswered — but only because the OS says the question is really in front of them (`Effects/LockCardEffect.cs`) |
+| **D115** | The foreground is taken with a plain `SetForegroundWindow` (`LockCardWindow.xaml.cs:598`), and a loss is answered by re-grabbing forever from `Deactivated` (`:160-176`) | The port **escalates once, bounded**: plain `SetForegroundWindow`, then `AttachThreadInput` to the current foreground thread plus `SetForegroundWindow`/`BringWindowToTop`/`SetActiveWindow`/`SetFocus`, detached immediately — then **asks the OS whether it worked** and refuses in type if it did not | Measured on this machine: a plain `SetForegroundWindow` from a non-foreground process **returns FALSE** and no keystroke arrives (plan.md §0, run 1); with the attach it returns TRUE and the OS hands over foreground and system focus (run 2). Upstream survives the failure because of its re-grab loop; this port must EARN the claim or refuse it, and a refusal takes the card back down rather than leaving an unanswerable window up. **The escalation is a divergence and it is a real one** — `AttachThreadInput` briefly shares input state with another process's thread |
+| **D116** | The phrase pool is edited in-app through a `TextEditorDialog` (`Features/LockCardFeatureControl.xaml.cs:203-210`), and lives in `AppSettings.LockCardPhrases` with per-mod and per-mode overlays (`CCP.Core/Models/AppSettings.cs:1536-1549`) | The five built-in phrases ship in the module's own JSON document, **which is the editor**; the panel LISTS what will be asked and names the file | The same arrangement the two audio modules already have with their clip folders: content lives outside the panel and the panel says where. The mod system is not ported. **Re-opens when the port grows an in-app text-list editor** |
+| **D117** | Every card is logged with its **phrase in plain text** (`LockCardService.cs:303`) | The phrase never reaches an event, a log line or a subscriber; `LockCardEvent` carries the ordinal, the moment, the repeat count, strictness and the phrase's LENGTH | The port's standing rule since SP-098: a subscriber, a log line and a bug report get a COUNT, never the content (`FlashEvent`, `SubliminalEvent`, `AudioCueEvent`). The phrase travels on `LockCardFiring`, which only the card window sees |
+| **D118** | The card is a **pooled, keep-alive WPF window** behind a **dead-man's-switch watchdog** that force-drops the cover at the Win32 level and can `FailFast` the process (`LockCardWindow.xaml.cs:53-119`), plus `DisableProcessWindowsGhosting` | Neither | Both exist for WPF hazards this port's window does not have: the pool avoids a synchronous `MediaContext.CompleteRender` on a fresh `AllowsTransparency` window (the #494 freeze), and the watchdog exists because every escape hatch from a WPF card runs on the UI dispatcher. The port's card is a raw `WS_POPUP` window with a GDI paint and no dispatcher between the user and its window procedure. **Re-opens if the card is ever moved onto a framework window** |
+| **D119** | The gate that refuses a full-phrase match nobody typed (`HasTypedEnough`, `LockCardWindow.xaml.cs:272`, applied at `:743-758`) is load-bearing, because upstream's card is a `TextBox` with a clipboard, an undo stack, a context menu and IME bulk commits | The rule is **ported and applied, and in this build it can never fire** | The port's card has **no edit control**: its only content path is one `WM_CHAR` at a time, crediting exactly one keystroke per appended character, so at the instant the answer equals the phrase the credit is already at least the phrase's length. **Recorded as a finding rather than presented as protection**, and pinned by a fact that asserts the structural property instead of faking a back door to reach the branch. The rule is kept because it is the rule, sitting where a future keystroke source that appends without crediting would meet it |
+| **D120** | Linux is not a target of the shipping app at all | The input capability **refuses typed on Linux** with `input-mechanism-absent` and a five-step manual gate run separately on X11 and Wayland | The refusal is NOT "Linux cannot show a window". What is missing is the PROOF: `Available` here means the OS reported this window as the foreground AND as the foreground thread's keyboard focus AND as the hit test's answer, and those reads are `GetForegroundWindow` / `GetGUIThreadInfo(0)` / `WindowFromPoint`. The X11 analogues exist (`_NET_ACTIVE_WINDOW`, an input-focus query); **under Wayland the answer is probably "no by design"** — a client cannot take activation unprompted, `xdg-activation-v1` needs a token minted from a real user interaction, and a compositor that granted it on request would be granting a focus-stealing primitive. The gate says so in its own text and names a NAMED REFUSAL, never a card shown anyway, as the honest Wayland outcome. **Closes when the gate in `Input/InputPresenceFactory.LinuxManualGate` runs on real Linux hardware** |
+
+**What SP-110 proves, and where it STOPS.** Proven, from the operating system rather than from a call
+returning: the card is a window the OS holds, reports visible, at the exact rectangle asked for, and
+places above every ordinary window in its own top-level z-order; **`GetForegroundWindow()` is the
+card**; **`GetGUIThreadInfo(0).hwndFocus` — the FOREGROUND thread's focus — is the card**; the window
+manager routes a hit test at an interior point **to** the card; the OS holds ink in the card's own
+client area, read back out of its device context; and **a keystroke synthesised at OS level reaches
+the card's own window procedure, arrives as a translated character, and does NOT arrive when another
+window holds the foreground.**
+
+**Not proven, and never claimed:** that **any human pressed anything** — every keystroke in the suite
+is `SendInput`, and "a person answered" is a **named manual gate** that no automated step on any
+platform discharges. That the card is legible: ink is not layout, and `presentation-verified` is
+untouched for this surface. That the foreground will still be ours a moment later — it is lent, and
+every other process can take it. That Avalonia's own message loop translates keystrokes for this
+window: the evidence is taken on the presence's own bounded pump. And every part of Linux, which
+refuses in type.
+
+**The overlay was proven UNHARMED rather than assumed to be** (`InputOverlayCoexistenceTests`): with
+a real `Win32OverlayPresence` up, the window manager still routes the overlay's own centre point PAST
+it, the OS's z-order still puts it above every ordinary window, it still holds its `LWA_ALPHA` and its
+`WS_EX_TRANSPARENT`, it never becomes the foreground, and its own `Present` still earns `Available` —
+before a card exists, while a card holds the foreground, and after the card is dismissed and its
+presence disposed. The differential is re-run on the overlay itself, so "the point went elsewhere"
+cannot be satisfied by an overlay that quietly stopped existing. `Overlay/**` was not edited.

@@ -137,6 +137,13 @@ public sealed record InputStationObservation(
 /// blank window.</param>
 /// <param name="SampledPixels">How many were sampled — the ink check's own negative control, so a
 /// read-back that degenerated into "sampled nothing" is visible.</param>
+/// <param name="BackgroundHeld">
+/// A control point in a margin the painter FILLS and never writes text into reads back exactly the
+/// painted background colour. <b>Without this the ink count means nothing:</b> the card's window
+/// class registers no background brush, so an UNPAINTED window's device context holds whatever the
+/// OS left there — which differs from the background just as reliably as text does. The mutation
+/// that deletes the paint call entirely survived a sweep that counted ink without this clause.
+/// </param>
 /// <param name="KeystrokesSeen">How many keys this window's own window procedure has received since
 /// it was created. Not a claim that a human pressed any of them.</param>
 public sealed record InputCaptureObservation(
@@ -151,14 +158,22 @@ public sealed record InputCaptureObservation(
     nint HitTestWinner,
     int InkedPixels,
     int SampledPixels,
+    bool BackgroundHeld,
     int KeystrokesSeen)
 {
     /// <summary>Nothing was asked, because this build has no way to ask.</summary>
     public static InputCaptureObservation NotAsked { get; } =
-        new(false, 0, false, false, default, false, false, false, 0, 0, 0, 0);
+        new(false, 0, false, false, default, false, false, false, 0, 0, 0, false, 0);
 
-    /// <summary>The window manager routes the card's centre to the card.</summary>
+    /// <summary>The window manager routes the card's centre to the card. The non-zero test is not
+    /// redundant: without it an observation about NO window reports that a hit test routes to it,
+    /// because <c>0 == 0</c>.</summary>
     public bool HitTestRoutesHere => Window != 0 && HitTestWinner == Window;
+
+    /// <summary>The OS holds a readable question in the card's client area: the painted background
+    /// is really there AND pixels in the question band differ from it. A DIFFERENTIAL, for the
+    /// reason on <see cref="BackgroundHeld"/>.</summary>
+    public bool Inked => BackgroundHeld && InkedPixels > 0;
 
     /// <summary>
     /// The OS has given this window the input. This — and only this — is what

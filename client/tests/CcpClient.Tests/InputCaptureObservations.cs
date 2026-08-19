@@ -239,6 +239,124 @@ internal static class InputCaptureObservations
             DismissState: dismissState);
     }
 
+    // ---------- the states the ordinary lifecycle cannot reach ----------
+
+    /// <param name="OffScreenPromptClaimedAvailable">A card asked for at a rectangle no display
+    /// covers.</param>
+    /// <param name="OffScreenPromptCode">The reason code it refused with.</param>
+    /// <param name="OffScreenWindowLeftVisible">
+    /// Whether the refused card was left ON SCREEN. Must be false: a window that holds the user's
+    /// screen, answers nothing and cannot be dismissed is strictly worse than no window.
+    /// </param>
+    /// <param name="OffScreenPresenceStillPrompting">Whether the presence still claims a card.</param>
+    /// <param name="BlankPromptClaimedAvailable">A card whose content is entirely empty.</param>
+    /// <param name="BlankPromptWasDegraded">It must be <c>Degraded</c>, not Available: the OS gave
+    /// it the keyboard and there is nothing on it to read.</param>
+    /// <param name="BlankPromptCode">The reason code that degradation carries.</param>
+    /// <param name="BlankPromptInkedPixels">What the ink read-back counted for it.</param>
+    /// <param name="BlankPromptBackgroundHeld">Whether the painted background was really there —
+    /// which is what tells "nothing was drawn" from "nothing was painted at all".</param>
+    /// <param name="ControlCharacterReachedTheCaller">A <c>WM_CHAR</c> carrying a control character
+    /// (Ctrl+V's 0x16) posted straight to the card must NOT arrive as typing.</param>
+    /// <param name="PrintableCharacterReachedTheCaller">The same route with a printable character
+    /// MUST arrive — otherwise the line above is satisfied by a window that ignores everything.</param>
+    /// <param name="CharacterAfterDismissReachedTheCaller">A character posted to the window AFTER
+    /// the card was dismissed must not reach the caller: the presence has to have dropped the
+    /// callback, not merely hidden the window.</param>
+    internal sealed record EdgeRun(
+        bool OffScreenPromptClaimedAvailable,
+        string OffScreenPromptCode,
+        bool OffScreenWindowLeftVisible,
+        bool OffScreenPresenceStillPrompting,
+        bool BlankPromptClaimedAvailable,
+        bool BlankPromptWasDegraded,
+        string BlankPromptCode,
+        int BlankPromptInkedPixels,
+        bool BlankPromptBackgroundHeld,
+        bool ControlCharacterReachedTheCaller,
+        bool PrintableCharacterReachedTheCaller,
+        bool CharacterAfterDismissReachedTheCaller);
+
+    private static readonly Lazy<EdgeRun> LazyEdges =
+        new(RunEdges, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    internal static EdgeRun Edges => LazyEdges.Value;
+
+    /// <summary>
+    /// The three states the ordinary lifecycle never reaches on a healthy machine, each constructed
+    /// rather than simulated: a card the window manager cannot route to, a card with nothing written
+    /// on it, and characters delivered by <c>PostMessage</c> — which is explicitly NOT OS routing and
+    /// is labelled as such, but is the only way to hand this window a character it would never
+    /// receive from a keyboard.
+    /// </summary>
+    private static EdgeRun RunEdges()
+    {
+        var content = new InputPromptContent(Question, "1 of 1", string.Empty, "Press Esc to close");
+
+        // (1) A rectangle no display covers. The window exists and is topmost, and the window
+        // manager routes nothing to it — which is exactly the refusal path, and the assertion is
+        // that the card does not stay on the user's screen afterwards.
+        var offScreen = new Win32InputPresence();
+        var offScreenState = offScreen.Prompt(new InputPromptRequest(
+            new InputBounds(-30000, -30000, 300, 200), content, _ => { }));
+        var offScreenWindow = offScreen.NativeHandles.Window;
+        var offScreenVisible = InputWindowProbe.WindowIsVisible(offScreenWindow);
+        var offScreenPrompting = offScreen.IsPrompting;
+        offScreen.Dispose();
+
+        // (2) A card with nothing written on it. Every band is empty, so the painter fills the
+        // background and draws no glyph — the ink differential must see the background and no ink.
+        var blank = new Win32InputPresence();
+        var blankState = blank.Prompt(new InputPromptRequest(
+            CentreBounds,
+            new InputPromptContent(string.Empty, string.Empty, string.Empty, string.Empty),
+            _ => { }));
+        var blankObservation = blank.LastObservation;
+        blank.Dismiss();
+        blank.Dispose();
+
+        // (3) Characters by PostMessage. NOT a claim about OS routing — that is the SendInput leg in
+        // the lifecycle run. This is the only way to hand the window procedure a control character,
+        // which is what upstream's whole clipboard-gesture list reduces to in a window with no edit
+        // control (LockCardWindow.xaml.cs:246-264).
+        var delivered = new List<InputKeystroke>();
+        var typed = new Win32InputPresence();
+        typed.Prompt(new InputPromptRequest(CentreBounds, content, delivered.Add));
+        var window = typed.NativeHandles.Window;
+
+        InputWindowProbe.PostCharacter(window, ''); // Ctrl+V's WM_CHAR
+        InputWindowProbe.PumpUntil(() => { typed.Pump(64); return false; });
+        var controlArrived = delivered.Any(k => k.Kind == InputKeystrokeKind.Character);
+
+        InputWindowProbe.PostCharacter(window, 'z');
+        var printableArrived = InputWindowProbe.PumpUntil(() =>
+        {
+            typed.Pump(64);
+            return delivered.Any(k => k.Kind == InputKeystrokeKind.Character && k.Character == 'z');
+        });
+
+        typed.Dismiss();
+        var before = delivered.Count;
+        InputWindowProbe.PostCharacter(window, 'q');
+        InputWindowProbe.PumpUntil(() => { typed.Pump(64); return false; });
+        var afterDismiss = delivered.Count > before;
+        typed.Dispose();
+
+        return new EdgeRun(
+            OffScreenPromptClaimedAvailable: offScreenState is CapabilityState.Available,
+            OffScreenPromptCode: offScreenState is CapabilityState.Unavailable u ? u.Reason.Code : "none",
+            OffScreenWindowLeftVisible: offScreenVisible,
+            OffScreenPresenceStillPrompting: offScreenPrompting,
+            BlankPromptClaimedAvailable: blankState is CapabilityState.Available,
+            BlankPromptWasDegraded: blankState is CapabilityState.Degraded,
+            BlankPromptCode: blankState is CapabilityState.Degraded d ? d.Reason.Code : "none",
+            BlankPromptInkedPixels: blankObservation.InkedPixels,
+            BlankPromptBackgroundHeld: blankObservation.BackgroundHeld,
+            ControlCharacterReachedTheCaller: controlArrived,
+            PrintableCharacterReachedTheCaller: printableArrived,
+            CharacterAfterDismissReachedTheCaller: afterDismiss);
+    }
+
     /// <summary>Everything a refusal-shaped presence answers, from one construction.</summary>
     internal sealed record RefusalRun(
         bool ClaimedAvailable,
