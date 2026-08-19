@@ -1,1 +1,6 @@
-{ "packet": "SP-112-second-consumer", "unit": 0, "headless": 0, "reason": "provisional — revised in the same lane once the facts land" }
+{
+  "packet": "SP-112-second-consumer",
+  "unit": 77,
+  "headless": 4,
+  "reason": "Bubble Count as the second consumer of the video and input capabilities: the module, both capability seams, the counting arithmetic, the answer machine, the two-meaning dot, the real-desktop composed-picture read-back and the overlay coexistence; 4 headless for the row, its panel and its dials"
+}
