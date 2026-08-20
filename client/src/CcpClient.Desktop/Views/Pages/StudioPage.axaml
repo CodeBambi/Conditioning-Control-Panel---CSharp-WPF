@@ -296,6 +296,40 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-119 — THE LAST ROW IN IMMERSION, and upstream's own position: Haptics is added
+               immediately after Brain Drain and before the TIMING group header
+               (StudioTabView.xaml.cs:513/519/530). It is upstream's one PAID rack module
+               (`tier: 1`, :526-527 — "the rack's one paid module"), and it is the first row on
+               this page behind a premium gate.
+
+               ITS DOT IS EARNED, AND IT HAS ONLY TWO REACHABLE VALUES. Upstream passes a dot
+               predicate here (() => App.Settings?.Current?.Haptics?.Enabled, :520), so the row
+               HAS a dot, unlike Visuals' null at :496. Off = the switch is off, or nothing in
+               this build can reach a device. Armed = the switch is on and a device really is
+               reachable. LIVE IS UNREACHABLE, deliberately: it would have to mean something is
+               being sent, and nothing is — the thirteen ported effect modules are silent to this
+               sink where upstream drives it from eight sites in three of them. See
+               Haptics/HapticParticipant.Dot.
+
+               THE ROW TAKES THE RIGHT-CLICK, and it is the one gesture on this page that can be
+               REFUSED. Upstream's toggle flips the panel's own master box so the real handler
+               runs "including the premium gate that reverts the box for a free account"
+               (:521-525), and its rack re-reads the dot one beat later because "a refusal can
+               undo the write (the haptics premium gate flips IsChecked back)" (:1121-1124). -->
+          <RadioButton x:Name="RowHaptics"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowHaptics"
+                       AutomationProperties.Name="Haptics rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Haptics" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="HapticsRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="HapticsRowDot" />
+            </Grid>
+          </RadioButton>
+
           <!-- SP-108 — THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
                IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
@@ -1392,6 +1426,70 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="BrainDrainAudioState"
                        AutomationProperties.AutomationId="BrainDrainAudioState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Haptics ================= -->
+        <!-- ONE CONTROL, and the count is the finding rather than an omission. Upstream's haptics
+             page is 1640 lines over a 9193-line service (Views/Tabs/HapticsTabView.xaml,
+             Services/Haptics/**): two provider boxes with their own URLs, an auto-connect box, a
+             per-event routing table, a master cap, a temperament and a DSP block. Every one of them
+             configures a connection this build cannot make, so every one of them would be a control
+             that decides nothing (§9 D7). What IS here is the one control the premium gate guards.
+
+             NO SURFACE LINE OF THE USUAL KIND, and a capability line instead. Every drawing
+             module's panel ends with "where did the picture go"; this module's output is not on
+             this screen and not in this process at all — it is in another program, over loopback —
+             so what it reports is what the sink last said about that.
+
+             THE GATE'S ANSWER IS ITS OWN LINE, and it is never merged with the capability line. The
+             Windows app shows one modal for both ("Haptic feedback is available for Patreon
+             supporters.", en.json:3394, MainWindow/MainWindow.Haptics.cs:490-495) whether the answer
+             was "no pledge" or "I could not ask". Those are different facts about different things
+             and this panel says which. -->
+        <StackPanel x:Name="HapticsModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Haptics" />
+          <TextBlock Classes="page-blurb"
+                     x:Name="HapticsWhatItIs"
+                     TextWrapping="Wrap"
+                     AutomationProperties.AutomationId="HapticsWhatItIs"
+                     Text="" />
+
+          <CheckBox x:Name="HapticsEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="HapticsEnableToggle"
+                    AutomationProperties.Name="Haptics enabled"
+                    Content="Enable Haptics" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="HapticsLiveState"
+                         AutomationProperties.AutomationId="HapticsLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="HapticsGateState"
+                         AutomationProperties.AutomationId="HapticsGateState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="HapticsSinkState"
+                         AutomationProperties.AutomationId="HapticsSinkState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="HapticsAbsenceState"
+                       AutomationProperties.AutomationId="HapticsAbsenceState"
                        Text="" />
           </Border>
         </StackPanel>

@@ -454,9 +454,26 @@ public class CapabilityTests
             var capabilities = Assert.IsType<CapabilityRegistry>(host!.Capabilities);
             // SP-046: the companion participant's probes register at construction (before
             // the demonstrator registrations) — registration order IS this list's order.
+            // SP-119 appends the haptic sink, and registering it is the point rather than a side
+            // effect: it refuses EVERY user on EVERY platform, and a capability that refuses
+            // everyone while staying invisible in the one place the port reports what it cannot do
+            // is exactly the shape the truthful-capability contract exists to prevent.
             Assert.Equal(
-                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement"],
+                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement", "haptic-sink"],
                 capabilities.Names);
+
+            // And it reports the ADMITTED-PROVIDER gap, never a missing device: the classification's
+            // first arm is the admission question, so no run of this build can reach the
+            // DependencyMissing("a haptic device …") arm.
+            var hapticState = Assert.IsType<CapabilityState.Unavailable>(
+                capabilities.GetState(CompositionRoot.HapticCapabilityName));
+            Assert.Equal("haptic-no-admitted-provider", hapticState.Reason.Code);
+            // It says so in as many words, and it does NOT carry upstream's device-refusal wording
+            // ("No devices found. Connect your device in Intiface first.", ButtplugProvider.cs:135),
+            // which is what a build with a client and no toy would say.
+            Assert.Contains("THIS IS NOT \"no device found\"", hapticState.Reason.Detail, StringComparison.Ordinal);
+            Assert.DoesNotContain("Connect your device in Intiface first",
+                hapticState.Reason.Detail, StringComparison.OrdinalIgnoreCase);
 
             // SP-046 AI provider probes: real typed states. local-ollama is a REAL
             // loopback probe — Available iff an Ollama-shaped service answers api/version

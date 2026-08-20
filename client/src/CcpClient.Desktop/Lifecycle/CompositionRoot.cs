@@ -50,6 +50,10 @@ public sealed class CompositionRoot
     /// <summary>Flush bounded wait for teardown (persistence contract §11 rule 2): backstop only — the chained writer is the mechanism.</summary>
     public static readonly TimeSpan DefaultFlushTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>SP-119: the registered name of the haptic sink's capability. A constant so the
+    /// System page's row and the registration cannot be spelled two different ways.</summary>
+    public const string HapticCapabilityName = "haptic-sink";
+
     /// <summary>SP-057 HARNESS-ONLY isolation seam: when this environment variable names an
     /// absolute directory, it replaces the per-user data root (%APPDATA%\CcpClient /
     /// $XDG_CONFIG_HOME/CcpClient) for EVERY consumer — honored inside
@@ -126,6 +130,24 @@ public sealed class CompositionRoot
     /// session the predicate refuses.</para>
     /// </summary>
     public Func<Scheduling.IScheduleClock>? ScheduleClockFactory { get; init; }
+
+    /// <summary>
+    /// SP-119: the HAPTIC SINK seam. Product default is <c>Haptics.HapticSinkFactory.Create()</c>,
+    /// which refuses on every platform because this build admits no provider client at all — the
+    /// gap is a property of the BUILD, not of the machine, and not of whether a toy is attached.
+    ///
+    /// <para>A test substitutes a recording sink so the ownership, teardown-ordering and
+    /// entitlement-transition facts are about real calls. <b>Nothing may inject a sink that claims
+    /// <c>Available</c> on a product path</b> — that is the fake-available shape the truthful
+    /// capability contract bans, and it would do it on the one capability whose failure a person
+    /// feels rather than sees.</para>
+    /// </summary>
+    public Func<Haptics.IHapticSink>? HapticSinkFactory { get; init; }
+
+    /// <summary>The entitlement capability the NEXT ParticipantsFactory call composes against (set
+    /// by Build before invoking the factory, the same way <see cref="_capabilitiesForParticipants"/>
+    /// is). Null inside <see cref="Validate"/>, where no DPAPI read may happen.</summary>
+    private Entitlement.HostLoginEntitlement? _entitlementForParticipants;
 
     public CompositionRoot()
     {
@@ -258,6 +280,25 @@ public sealed class CompositionRoot
             new Scheduling.SchedulerParticipant(
                 infra, Path.GetDirectoryName(SettingsPathFactory())!, session.Engine,
                 ScheduleClockFactory?.Invoke()),
+            // SP-119 the HAPTIC SINK, and it is the second participant here that belongs to the app
+            // rather than to a session — upstream's is a static built at startup and never engine
+            // started (App.xaml.cs:533, :2060; zero hits for App.Haptics in
+            // MainWindow/MainWindow.StartStop.cs). Registered LAST for the same reason the scheduler
+            // is registered after the session: participant stop is REVERSE order, so at teardown the
+            // sink is released before anything that could still be driving it.
+            //
+            // It takes the entitlement capability the composition root already owns, so the object
+            // the haptics gate consults is the SAME object whose probe the System page reports and
+            // the same one the DTRH door consults. A second entitlement here would let one door
+            // refuse a user the other let through.
+            //
+            // Construction connects to nothing, and neither does phase 3 while no provider route is
+            // admitted: upstream guards its own auto-connect the same way and says why
+            // (App.xaml.cs:2098-2105).
+            new Haptics.HapticParticipant(
+                infra, Path.GetDirectoryName(SettingsPathFactory())!,
+                HapticSinkFactory?.Invoke(),
+                _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null),
         ];
     }
 
@@ -297,8 +338,18 @@ public sealed class CompositionRoot
         // construction; probes still execute only in the CapabilityProbes phase.
         var capabilities = new CapabilityRegistry();
         _capabilitiesForParticipants = capabilities;
+        // SP-119: the entitlement capability is CONSTRUCTED here, before the participants factory
+        // runs, because the haptic participant is gated on it and a participant cannot be handed an
+        // object that does not exist yet. Its capability REGISTRATION stays where SP-094 put it,
+        // below, so the registry's name order is unchanged. Validate() leaves this field null and no
+        // DPAPI read happens there.
+        var entitlement = EntitlementFactory is { } entitlementFactory
+            ? entitlementFactory(log)
+            : Entitlement.HostLoginEntitlement.ForCurrentPlatform(log: log.Log);
+        _entitlementForParticipants = entitlement;
         var participants = ParticipantsFactory(infra) ?? throw new InvalidOperationException("Validate must run before Build.");
         _capabilitiesForParticipants = null;
+        _entitlementForParticipants = null;
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
@@ -314,6 +365,13 @@ public sealed class CompositionRoot
         // on the way out decides whether a session appears tomorrow, so it is the LAST setting the
         // port may lose (persistence contract §11).
         var scheduler = participants.OfType<Scheduling.SchedulerParticipant>().FirstOrDefault();
+        // SP-119: the haptic sink's ALL-STOP takes the HEAD of the same slot, ahead of every flush.
+        // Upstream's ordering, and upstream's reason: "Haptics FIRST and synchronously (bounded ~2s):
+        // a Lovense level has no server-side watchdog, so a toy we don't countermand keeps running
+        // after the app is gone. This cannot be left to Haptics.Dispose() further down"
+        // (ConditioningControlPanel/App.xaml.cs:4401-4407). A settings write that lost its race would
+        // cost a dial; a level that lost its race is still running when the user has closed the app.
+        var haptics = participants.OfType<Haptics.HapticParticipant>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
@@ -347,24 +405,39 @@ public sealed class CompositionRoot
         // The probe answers a NARROWER question than the gate (can this environment read the
         // shipping app's login at all) and never claims a tier: a readable login with no
         // authority behind it is Degraded, never Available (HostLoginEntitlement.ProbeAsync).
-        var entitlement = EntitlementFactory is { } entitlementFactory
-            ? entitlementFactory(log)
-            : Entitlement.HostLoginEntitlement.ForCurrentPlatform(log: log.Log);
         capabilities.Register(Entitlement.HostLoginEntitlement.CapabilityName, entitlement.ProbeAsync);
+        // SP-119 registers the haptic sink for the same reason SP-094 registered the entitlement
+        // capability: this build refuses every user, and a capability that refuses everyone while
+        // staying invisible in the ONE place the port reports what it cannot do is exactly the shape
+        // the truthful-capability contract exists to prevent. The probe asks the sink and classifies
+        // the answer; it can never produce Available here, because the classification's first arm is
+        // the admitted-provider question (Haptics/IHapticSink.cs, HapticServerObservation.Classify).
+        if (haptics is not null)
+        {
+            capabilities.Register(HapticCapabilityName, async token =>
+                (await haptics.Sink.ObserveAsync(token).ConfigureAwait(false)).Classify());
+        }
+
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
             preDrainFlush: store is null && slotStores is null && companion is null && session is null
-                && scheduler is null
+                && scheduler is null && haptics is null
                 ? null
                 : async () =>
                 {
+                    // FIRST, ahead of every flush: see the haptics comment above. Bounded by the
+                    // sink itself and never throwing here — ApplicationHost already guards this
+                    // slot, and a teardown that threw on the way to countermanding a device would
+                    // be the worst possible place to lose the rest of the sequence.
+                    if (haptics is not null) await haptics.ShutdownStopAsync().ConfigureAwait(false);
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (session is not null) await session.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (scheduler is not null) await scheduler.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (haptics is not null) await haptics.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                 },
             capabilities: capabilities, probeRunner: probeRunner, entitlement: entitlement);
     }
