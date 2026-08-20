@@ -1350,7 +1350,7 @@ unreadable time falls back rather than opening; the window's end is CLOSED on bo
 equal start/end is EMPTY; the grace is silent; teardown is final; one opening starts one session.
 
 **No `ISessionClock` was widened.** The scheduler needs LOCAL time and `Session/SessionClock.cs:17-25`
-is `UtcNow`; the symbol's consumers were enumerated by `grep` before the decision (twelve modules and
+is `UtcNow`; the symbol's consumers were enumerated by `grep` before the decision (**seventeen** modules and
 presenters under `Effects/**`, the `PacedSessionEffect` base, `CompositionRoot.SessionClockFactory`,
 `SessionParticipant`, and ~24 hand-written implementations under `client/tests/**`), and `Effects/**`
 was outside this packet's File Scope, so the widening was unreachable as well as inadvisable. A new
@@ -1368,11 +1368,16 @@ anywhere in this packet.**
 | **D186** | — (port-internal; a consequence of upstream's clause order, recorded because it reads like a bug) | Switching the scheduler OFF mid-session leaves the scheduled session RUNNING, and the window's close does not end it | `if (!settings.SchedulerEnabled) return;` is the tick's FIRST statement (`:604`), before `IsInScheduledTimeWindow()` and before both the stop branch (`:622`) and the reset branch (`:635`). So a disabled scheduler clears no flags and stops nothing. Ported faithfully and pinned (`R1b`) rather than "fixed", because the fix would be a scheduler that acts while switched off — and the user's own STOP button is unaffected. The panel's last-check line says the tick "changed nothing" |
 | **D187** | — (port-internal; the same clause order, the other consequence) | `_schedulerAutoStarted` records that **this window's OPENING has been served**, not that the current session is the scheduler's. A user who stops the scheduled session and restarts it by hand still has that session stopped when the window closes | Upstream's flag is written only at `:619`/`:630`/`:637`; neither manual branch (`:98-107`) touches it. Pinned inside `R4c` rather than left to be discovered, because the name reads like "the scheduler started what is running now" and it does not. It is also the SAFE direction of the two: it ends a session, it never begins one |
 
+| **D188** | WPF's scheduler tick carries no shutdown guard of its own: the grace continuation checks `Application.Current?.Dispatcher?.HasShutdownStarted` (`MainWindow/MainWindow.xaml.cs:629`) and the `DispatcherTimer` is stopped at window close (`MainWindow.WindowChrome.cs:166`), and that is all | The port re-checks liveness **twice** in one callback: once on entry, and again after the next tick is armed, before the DECISION runs | Found by writing the fact for `Arm`'s own post-check, and it was a real defect. `ApplicationHost.ShutdownAsync` cancels and drains every generation BEFORE it stops participants, so between those two steps the scheduler is still running with a live token — and `Arm` is two statements plus a clock call, so the generation can die inside it. With one check only, a tick could start a conditioning session with the host already draining. WPF's ordering is untouched: the next tick still goes on the clock before any decision runs (`:634-635`). Pinned by `AGenerationCancelledWHILETheClockIsBeingAsked_LeavesNoLiveTickBehind`, and the entry-check's own unique contribution — that a refused tick asks the clock for nothing at all — is pinned separately |
+| **D189** | — (port-internal; a code the port shipped and nothing emitted) | `scheduler-not-polling` is **removed**; `scheduler-balloon-absent` stays | The capability contract's rule is that "codes are additive; new codes land with their consumer row". The first named a state carried entirely by the dot's `Off` and the panel's own "not watching the clock yet" line, and no path ever produced it. The second is on the other side of that line deliberately: it names a DECLARED ABSENCE (D183's two balloons) rather than a tick outcome, and it is cited from the code that would otherwise have sent them |
+
 **Undischarged, and named:** every part of Linux (the scheduler itself is platform-neutral — it
 reads a clock and calls the engine — but the session it starts draws through capabilities that
 refuse there); that a human ever saw a window minimize, a tray icon appear, or a session begin
 while they were away from the keyboard, none of which any headless frame can claim; the real
-`SystemScheduleClock`, which no test drives, so the 60 s grace and the 30 s poll are proved only on
-an injected clock; behaviour across a daylight-saving transition or a timezone change, which is
+the 60 s grace and the 30 s poll as INTERVALS — `SystemScheduleClock` itself is now executed
+(containment, reporting, both delay clamps, cancellation and the local reading), but no test waits
+an interval out, so "thirty seconds means thirty seconds" rests on the constant reaching
+`System.Threading.Timer`; behaviour across a daylight-saving transition or a timezone change, which is
 exactly what makes this the one seam in the port that must NOT be UTC and is exactly what is not
 tested; and the two balloons of D183.

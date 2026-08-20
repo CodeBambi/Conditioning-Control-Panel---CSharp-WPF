@@ -1,8 +1,8 @@
 # SP-118 — record
 
 Branch `lane/SP-118-scheduler`, base `907ea805`.
-Floor: pin **2123 unit / 125 headless**; observed **2182 unit / 133 headless**, zero failures;
-declared **+59 unit / +8 headless** (`floor-delta.json`). 2123 + 59 = 2182 and 125 + 8 = 133,
+Floor: pin **2123 unit / 125 headless**; observed **2188 unit / 133 headless**, zero failures;
+declared **+65 unit / +8 headless** (`floor-delta.json`). 2123 + 65 = 2188 and 125 + 8 = 133,
 confirmed by `node client/tests/floor/sum-deltas.mjs --check --packets SP-118-scheduler`. The floor
 run therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator
 sums the deltas and applies one bump. Two skips, both pre-existing
@@ -23,7 +23,7 @@ Build: 0 errors, 0 warnings (`check-warnings.mjs`, forced non-incremental, 4 pro
 **This is the first thing the port has built that OWNS the engine rather than running under it.**
 Thirteen ported rows are modules inside a session someone started. This one runs on a 30 s timer
 while nothing is running and calls `StartEngine()` / `StopEngine()`
-(`ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs:601-639`, `:618`, `:628`).
+(`ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs:601-639`, `:618`, `:629`).
 
 So a defect here does not degrade an effect. **It puts a conditioning session on a user's screen
 unbidden, or refuses to end one.** SP-110 shipped a card the user could not dismiss and a reviewer
@@ -44,12 +44,12 @@ Every line number below was read before anything rested on it. The full table is
 |---|---|---|---|
 | P1 | `:645` | `var now = DateTime.Now;` — **LOCAL** (`Kind == Local`, measured) | `IScheduleClock.LocalNow` |
 | P2 | `:648-659` | seven per-day booleans on `now.DayOfWeek`, plus an unreachable `_ => false` | `ScheduleWindow.IsDayActive`, same seven, same default arm |
-| P3 | `:661-665` | `if (!isDayActive) return false;` — **the day gate short-circuits BEFORE either parse** | the verdict conjoins `DayActive`, which is exactly `isDayActive ? inWindow : false` |
+| P3 | `:660-664` | `if (!isDayActive) return false;` — **the day gate short-circuits BEFORE either parse** | the verdict conjoins `DayActive`, which is exactly `isDayActive ? inWindow : false` |
 | P4 | `:667-671` | `TimeSpan.TryParse(SchedulerStartTime, …)`, fallback `new TimeSpan(16,0,0)` | the SAME BCL call on the same current-culture overload; `StartFallback = 16:00` |
 | P5 | `:673-677` | same for the end, fallback `new TimeSpan(22,0,0)` | `EndFallback = 22:00` |
 | P6 | `:679` | `var currentTime = now.TimeOfDay;` | same |
-| P7 | `:682-685` | `if (endTime < startTime) inWindow = currentTime >= startTime \|\| currentTime < endTime;` | same operators, same order |
-| P8 | `:687-690` | `else inWindow = currentTime >= startTime && currentTime < endTime;` | same |
+| P7 | `:683-686` | `if (endTime < startTime) inWindow = currentTime >= startTime \|\| currentTime < endTime;` | same operators, same order |
+| P8 | `:688-691` | `else inWindow = currentTime >= startTime && currentTime < endTime;` | same |
 
 ### 1.1 The four consequences that are behaviour, and are pinned at the tick
 
@@ -58,15 +58,15 @@ Every line number below was read before anything rested on it. The full table is
   `TheSameDayWindowIsHalfOpen_TheStartTickIsIN_AndTheENDTickIsOUT` and
   `TheOvernightWrapIsHalfOpenTOO_AndItsENDIsTheCLOSEDOne` assert at `end - 1 tick`, `end`, and
   `end + 1s`, so a `<=` cannot hide between samples.
-* **`start == end` is an EMPTY window, never a whole day.** `<` at `:682` is strict, so an equal
+* **`start == end` is an EMPTY window, never a whole day.** `<` at `:683` is strict, so an equal
   pair takes the SAME-DAY branch and the test becomes `t >= x && t < x`. Swept as **M-e**
   (`end <= start`), which turns it into an all-day window; caught.
 * **The fallbacks are NOT the defaults.** `AppSettings` ships `SchedulerStartTime = "00:00"` and
   `SchedulerEndTime = "22:00"` (`CCP.Core/Models/AppSettings.cs:2510`, `:2517`) and both setters
-  null-coalesce to those (`:2515`, `:2522`), so **a null can never reach `TryParse`** — only
+  null-coalesce to those (`:2514`, `:2521`), so **a null can never reach `TryParse`** — only
   non-null unparseable text can, which is the only way the **16:00** at P4 is reachable. The
   `16:00`/`22:00` literals in `Features/SchedulerFeatureControl.xaml:47,56` are design-time text
-  that `LoadFromSettings` overwrites on `Loaded` (`.xaml.cs:42-43`).
+  that `LoadFromSettings` overwrites on `Loaded` (`.xaml.cs:43-44`).
 * **`TimeSpan.TryParse` is not a time-of-day parser**, measured on this runtime rather than
   remembered: `"8"` parses SUCCESSFULLY as **8 days** (192 h), `"25:00"` and `"24:00"` fail into the
   fallback, `"-01:00"` is minus one hour, `"9:5"` is 09:05. A user who types `8` meaning eight in
@@ -93,9 +93,9 @@ a disabled scheduler **does not stop the session it started** (D186, `R1b`), and
 current session is the scheduler's (D187, inside `R4c`).
 
 **And one shipping method is provably dead.** `CheckSchedulerAfterSettingsChange` (`:583-599`) is
-reached only from `MainWindow.Settings.cs:364`, whose condition is
+reached only from `MainWindow.Settings.cs:363`, whose condition is
 `s.SchedulerEnabled && !schedulerWasEnabled` — with `schedulerWasEnabled` assigned from
-`s.SchedulerEnabled` on the line immediately above (`:363`). That is `b && !b`: a tautological
+`s.SchedulerEnabled` on the line immediately above (`:362`). That is `b && !b`: a tautological
 false. The shipping product's own note reaches the same conclusion from the other direction
 ("enabling the scheduler now arms within one 30s SchedulerTimer_Tick instead of instantly",
 `Views/Controls/Studio/SchedulerRackPanel.xaml.cs:14-18`). **The port ports the LIVE behaviour and
@@ -155,7 +155,7 @@ four properties from machinery that already exists:
 | phase 3 starts it AFTER the session's preset load | registration order IS start order (`ApplicationHost.StartParticipantsAsync`) | the timer is a `MainWindow` field created during window construction (`MainWindow.xaml.cs:206`, `:616-620`) |
 | teardown stops it FIRST | participant stop is reverse order | `_schedulerTimer?.Stop()` at close (`MainWindow.WindowChrome.cs:166`) |
 | a tick in flight cannot act during teardown | an owned generation (`infra.OwnerFor("Scheduler")`) plus the `_running` re-check inside the callback | `if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;` (`MainWindow.xaml.cs:629`) |
-| its nine settings reach disk | the reserved pre-drain flush slot in `CompositionRoot.Build` | `SaveSettings()` on close (`MainWindow.WindowChrome.cs:163`) |
+| its ten settings reach disk | the reserved pre-drain flush slot in `CompositionRoot.Build` | `SaveSettings()` on close (`MainWindow.WindowChrome.cs:163`) |
 
 The participant owns the **60 s grace** one-shot and re-arms a **30 s** one-shot after every tick
 (the port has no repeating-timer seam; `ScheduledFire` + a one-shot is the landed shape, and the
@@ -188,10 +188,10 @@ is not to have a double.
 | R4c | ignore a manual START, which overrides the latch | `R4c_AManualSTARTOverridesTheHandStop…` | `:107` |
 | R4d | latch on a stop OUTSIDE the window | `R4d_StoppingOUTSIDETheWindowLatchesNothing…` | `:98` |
 | R4e | latch on a stop with the scheduler OFF | `R4e_AndTheSameStopWithTheSchedulerOFFLatchesNothingEither` | `:98` |
-| R5 | start on an unticked day, whatever the clock says | `R5_AnUntickedDayRefusesForTheWholeDay…` (15 polls, then Tuesday works) | `:661-665` |
+| R5 | start on an unticked day, whatever the clock says | `R5_AnUntickedDayRefusesForTheWholeDay…` (15 polls, then Tuesday works) | `:660-664` |
 | R6 | treat unreadable text as "no window" — it MOVES the window to 16:00 | `R6_AnUnreadableStartTimeReallyDOESMoveTheWindowToSixteenHundred_ThroughTheLiveTick` | `:667-671` |
-| R7 | be in the window at exactly `endTime` | `R7_TheWindowsCLOSEDEndIsWhatTheLiveTickUses…` | `:684`, `:689` |
-| R8 | read `start == end` as all day | `R8_AnEmptyWindowStartsNothing_AllDayAndEveryDay` | `:682` |
+| R7 | be in the window at exactly `endTime` | `R7_TheWindowsCLOSEDEndIsWhatTheLiveTickUses…` | `:686`, `:691` |
+| R8 | read `start == end` as all day | `R8_AnEmptyWindowStartsNothing_AllDayAndEveryDay` | `:683` |
 | R9 | act during the 60 s grace | `R9_NothingHappensDuringTheSixtySecondGrace…` (59 s: nothing; 60 s: the start-up check runs) | `MainWindow.xaml.cs:624-635` |
 | R10 | act after teardown | `R10_AfterTeardown_NoAmountOfClockMakesItStartASession` (six hours of clock after `ShutdownAsync`) | `:629`, `WindowChrome.cs:166` |
 | R12 | mark a session auto-started when the engine refused the start | `R12_AStartTheSessionRefuses_IsNotCountedAsSchedulerStarted` | port-only — see D182 |
@@ -205,7 +205,7 @@ scheduler records `scheduler-start-refused-by-session` instead of claiming it. D
 
 ---
 
-## 5. PROVING IT BITES — 68 mutations, three rounds, **1 survivor, and it is UNCOVERED not equivalent**
+## 5. PROVING IT BITES — 73 mutations, five rounds, **1 survivor, and it is UNCOVERED not equivalent**
 
 Every conjunct, boundary, constant, flag write and wiring line this packet added was mutated one at
 a time by `spine-tasks/SP-118-scheduler/sweep.mjs`, which lives inside this packet's folder and
@@ -216,15 +216,15 @@ rejects is reported as `NOT COMPILED` rather than counted as a catch, and restor
 byte-identically. The raw logs are beside this record (`sweep-round1.log`, `-round2.log`,
 `-round3.log`) and every count below is taken from them.
 
-**A needle-only pre-pass (`--match-only`) ran first and is why `NOT PATCHED` is zero:** it applies
-and restores all 68 without building, so a needle that no longer matches is found in seconds instead
-of an hour into a round. It found one (M-bm) and it is an instrument for the driver, never evidence
-about the code.
+**A needle-only pre-pass (`--match-only`) ran before every round and is why `NOT PATCHED` is
+zero:** it applies and restores all 73 without building, so a needle that no longer matches is found
+in seconds instead of an hour into a round. It found two (M-bm at authoring, M-ax after the round-4
+hardening moved the lines under it) and it is an instrument for the driver, never evidence about the
+code.
 
-**The books: 68 distinct mutations; 58 (round 1) + 8 (round 2) + 1 (round 3) = 67 caught; 1
-survives; 0 not patched; 0 not compiled.** Every round's log carries a non-zero passing count from
-the same filters (59, then 67-68 unit / 62-63 headless), so no filter in this sweep matched zero
-tests.
+**The books: 73 distinct mutations; 72 caught; 1 survives; 0 not patched; 0 not compiled.** Every
+round's log carries a non-zero passing count from the same filters (59, then 67-74 unit / 62-63
+headless), so no filter in this sweep matched zero tests.
 
 > **A note on the driver's own tree check.** Rounds 2 and 3 report `tree restored byte-identically:
 > NO — M SchedulerParticipant.cs`. That is MY uncommitted edit (the `GenerationLive` property added
@@ -283,6 +283,47 @@ in reverse, so between those two steps the scheduler is still `_running`, its po
 the slot, and its generation is dead. Reproduced exactly by
 `ATickThatComesDueBETWEENTheGenerationDrainAndTheParticipantStop_StartsNothing`, and caught in round 3.
 
+### Round 4 — the CODE REVIEW's round, and it found the biggest hole in the packet
+
+**`SystemScheduleClock` was compiled and never executed**, which is SP-101's exact finding
+reproduced in a new class nine waves later. It is the default on every product path
+(`SchedulerParticipant`'s constructor), its callback runs `Tick()` → `SessionEngine.Start()` →
+`Arm()` across the whole rack on a pool thread with no caller above it, and the only fact touching
+it read `LocalNow.Kind` twice. **Deleting its `catch` left 2182/133 green and both gates green.**
+The sweep had one `F.clock` entry, which contradicted this record's own claim to have mutated every
+line the packet added — the claim was false and is corrected here rather than defended.
+
+`client/tests/CcpClient.Tests/SystemScheduleClockTests.cs` closes it, structured on
+`SystemSessionClockTests` so the two clocks read side by side, with **no wall-clock wait**: every
+fact waits on a deterministic signal through the approved helper, and the negative observation uses
+an ordering barrier rather than an interval. Five new mutations came with it, all CAUGHT:
+
+| id | mutation | closer |
+|---|---|---|
+| M-bq | the fault is caught **silently** — the reporting dropped | `ACallbackThatThrows_IsContainedAndREPORTED…` |
+| M-br | **no containment at all**; the exception escapes and ends the process | the same fact, and its catch really is the host dying — named, because that is the crashed-host channel rather than an assertion |
+| M-bs | the `Math.Max(0, …)` negative-delay clamp dropped | `ANegativeDelay_IsClampedToImmediate_RatherThanThrowing` |
+| M-bt | `Arm`'s post-check dropped — a stop leaves a live one-shot | `AGenerationCancelledWHILETheClockIsBeingAsked_LeavesNoLiveTickBehind` |
+| M-bu | the second liveness gate dropped (see below) | the same fact |
+
+**And writing M-bt's closer found a real defect in the product.** `Arm`'s post-check tears the new
+one-shot down when the generation dies mid-schedule — but `OnDue` then ran its DECISION anyway, so a
+tick could start a conditioning session with the host already draining. **One product change closes
+it:** `OnDue` re-checks liveness after `Arm` and refuses the decision, which is the port's analogue
+of upstream's own `HasShutdownStarted` refusal (`MainWindow.xaml.cs:629`) and leaves WPF's ordering
+untouched (the next tick is still on the clock before any decision runs, `:634-635`).
+
+### Round 5 — and M-av had to be re-closed, which is recorded rather than quietly re-run
+
+**Round 4's hardening RE-OPENED a mutation round 3 had caught.** M-av drops `OnDue`'s FIRST liveness
+check; the new second gate then refuses the same decision, so the fact that used to catch it passed.
+That is a masked mutant, not a fixed one, and the honest reading is that the first check's unique
+contribution had never been isolated. It is this: **a callback arriving after the drain must not ask
+the clock for anything either.** Without the first check the callback runs on to `Arm`, which puts a
+one-shot up and has it torn straight back down — invisible in `PendingCount`, and a teardown racing
+an endless re-arm. The test clock now counts `Schedules` and the fact asserts it does not move.
+Re-closed in round 5.
+
 ### The ONE survivor, and it is dispositioned UNCOVERED — never "equivalent"
 
 **M-aa: `if (_engine.Start())` → `if (_engine.Start() || true)` in the TICK.**
@@ -314,7 +355,11 @@ would end it. That is a stop, never an unbidden start.
 `compiles()` gated every round here, so the NOT-COMPILED channel is closed. **The remaining
 false-clean channels — an empty `--filter`, a crashed test host, and the 15-minute timeout — are
 UNCLOSED**, and are named here rather than left for a reader to find. The filter channel is bounded
-empirically: every round's log shows a non-zero passing count from the same filters.
+empirically: every round's log shows a non-zero passing count from the same filters. The
+crashed-host channel is no longer only theoretical — **M-br deliberately produces it**, and its
+CAUGHT verdict comes from the host dying rather than from an assertion. That is the right outcome
+for that mutation (the process kill IS the defect) but it is stated plainly, because a reader
+counting M-br as an assertion catch would be counting something that never ran.
 
 ---
 
@@ -351,8 +396,8 @@ from `SessionEngine.Effects` (asserted), so its right-click does not go through
 `toggle:` does and what upstream's own comment says it does ("neither drives a service directly …
 so the honest quick-toggle is the panel's own enable box", `:532-534`).
 
-**The panel is upstream's nine controls and no more** — an enable, two free-text times and seven day
-boxes (`Features/SchedulerFeatureControl.xaml.cs:41-51`), asserted as a SET so a tenth cannot
+**The panel is upstream's TEN controls and no more** — an enable, two free-text times and seven day
+boxes (`Features/SchedulerFeatureControl.xaml.cs:42-51`), asserted as a SET so an eleventh cannot
 arrive unnoticed. The four other `Scheduler*` settings on `AppSettings` (`:2461-2478`) belong to the
 intensity RAMP and appear on no scheduler surface upstream either.
 
@@ -365,18 +410,21 @@ The box keeps what the user typed and the panel reports what was really parsed.
 ## 7. FILES CHANGED
 
 **Product — new (`Scheduling/**`, the whole folder):** `ScheduleClock.cs` (the LOCAL seam and the
-real clock), `SchedulerPresetDocument.cs` (upstream's nine settings, its defaults and its
+real clock), `SchedulerPresetDocument.cs` (upstream's ten settings, its defaults and its
 null-coalesce), `ScheduleWindow.cs` (the predicate and the reading), `SessionScheduler.cs` (the tick
 machine, the two flags, the dot and the manual-toggle note), `SchedulerParticipant.cs` (the
 app-lifetime owner, the grace and the poll), `SchedulerReasonCodes.cs` (eight codes, six of them
 refusals). Plus `Views/Pages/SchedulerPanelNotices.cs` (the panel's five sentences).
 
 **Product — changed:** `Scheduling/SchedulerParticipant.cs` gained ONE read-only property after
-the sweep (`GenerationLive`, §5), `Lifecycle/CompositionRoot.cs` (the `ScheduleClockFactory` seam, the session
+the sweep (`GenerationLive`, §5) and, after the code review, the second liveness gate in `OnDue`
+that refuses a decision when teardown began during `Arm`; `Scheduling/SchedulerReasonCodes.cs` lost
+`scheduler-not-polling`, a code no path ever emitted (the contract's rule is that codes land with
+their consumer row); `Lifecycle/CompositionRoot.cs` (the `ScheduleClockFactory` seam, the session
 built into a local so the scheduler takes ITS engine, the ninth participant, the flush slot),
 `Views/MainWindow.axaml.cs` (the scheduler reached from the host, the START/STOP button's
 manual-toggle note, the duck on auto-start), `Views/Pages/StudioPage.axaml` + `.axaml.cs` (the row
-in WPF's TIMING position, the nine-control panel, the dot, the right-click, the four notice lines).
+in WPF's TIMING position, the ten-control panel, the dot, the right-click, the four notice lines).
 
 **All six capability folders, `Effects/**`, `Persistence/**` and `Tray/**` are byte-identical to
 base** (`git diff --stat` over each is empty).
@@ -384,14 +432,15 @@ base** (`git diff --stat` over each is empty).
 **Tests — new:** `SchedulerWindowTests.cs` (**27** cases: the boundaries at the tick, the empty
 window, the day gate per day and outside the seven, both fallbacks, the parse trap, the defaults,
 and a week-long verdict sweep), `SchedulerModuleTests.cs` (**32** cases: two positives, the thirteen
-refusals, the poll cadence, the dot, the settings round-trip, the real composition root, and eight
-of the sweep's nine closers — the ninth is a predicate fact and lives next door), `SchedulerRowHeadlessTests.cs` (**8** cases on real input).
+refusals, the poll cadence, the dot, the settings round-trip, the real composition root, and the
+sweep's closers), `SystemScheduleClockTests.cs` (**6** cases on the REAL clock that ships — the
+review's blocker), `SchedulerRowHeadlessTests.cs` (**8** cases on real input).
 **Tests — changed at zero count:** `CompositionRootValidationTests.cs` and `IntegrationProofTests.cs`
 (8 → 9 participants, plus new assertions that the ninth starts NO session),
 `StudioRackHeadlessTests.cs` (the row list gains `RowScheduler` in WPF's position, and the
 order fact gains two assertions: this row HAS a dot and has NO effect behind it).
 
-27 + 32 = **59** unit, **8** headless — the declared delta.
+27 + 32 + 6 = **65** unit, **8** headless — the declared delta.
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-118, **D180-D187**).
 **Sweep artefacts, inside this packet's folder:** `sweep.mjs`, `sweep-round*.log`.
@@ -404,10 +453,12 @@ order fact gains two assertions: this row HAS a dot and has NO effect behind it)
 start.** Every fact stops at the engine's `Running`, the row's dot, or the document behind them. No
 headed capture was taken; `presentation-verified` is untouched.
 
-- **The REAL clock is never driven.** Both the 60 s grace and the 30 s poll are proved only on an
-  injected `IScheduleClock`. `SystemScheduleClock` — the class that will actually be running in a
-  user's app at 4 a.m. — is exercised by no test in this packet, and its `DateTime.Now` read is
-  covered only by a mutation (M-bd, which swaps it for `UtcNow`).
+- **The real clock is now driven, but only at the seam.** `SystemScheduleClockTests` executes
+  `SystemScheduleClock` — containment, reporting, the zero and negative delays, cancellation, and
+  the local reading — which is what the code review's blocker was about. What is still NOT proved
+  is the 60 s grace and the 30 s poll as INTERVALS: no test waits one out, deliberately, so
+  "thirty seconds means thirty seconds on a user's machine" rests on `TimeSpan.FromSeconds(30)`
+  reaching `System.Threading.Timer` and on nothing else.
 - **Daylight saving and timezone changes are untested**, which is uncomfortable precisely because
   "this seam must be LOCAL, not UTC" is §2's whole argument. A window that spans a transition, or a
   machine whose timezone changes while the app runs, is unproven in either direction.
