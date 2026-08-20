@@ -99,7 +99,7 @@ your own tool.
 | testCommand | `node client/tests/floor/check-floor.mjs` |
 | floorDelta | `spine-tasks/SP-121-zero-execution-census/floor-delta.json` |
 | fileScopeMustChange | `client/tools/coverage` |
-| fileScopeMustNotChange | `client/src/**`, `client/tests/floor/**`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/CcpClient.Tests.csproj`, `client/docs/task-board.md`, `client/tools/verify/**`, `client/tools/gate/**`, `client/tools/wave/**`, `client/tools/citations/**`, `client/tools/publish/**`, `ConditioningControlPanel/**`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
+| fileScopeMustNotChange | `client/src/**`, `client/tests/floor/floor.json`, `client/tests/floor/**`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/CcpClient.Tests.csproj`, `client/docs/task-board.md`, `client/tools/verify/**`, `client/tools/gate/**`, `client/tools/wave/**`, `client/tools/citations/**`, `client/tools/publish/**`, `ConditioningControlPanel/**`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
 | artifactsMustExist | `spine-tasks/SP-121-zero-execution-census/record.md`, `spine-tasks/SP-121-zero-execution-census/floor-delta.json` |
 
 **Pin: 2247 unit / 141 headless.** `sum-deltas` before deleting any delta file. **Keep every artifact
