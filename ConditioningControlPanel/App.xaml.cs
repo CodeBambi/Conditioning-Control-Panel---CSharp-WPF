@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -1507,6 +1507,22 @@ namespace ConditioningControlPanel
             // append-only, so without this it accumulates months of old crashes and the reporter
             // ships them all (the last 120KB), burying the real failure and polluting triage.
             RotateCrashLogForVersion(logPath);
+
+            // Before a single service starts: prove the bundled natives actually unpacked. A
+            // truncated single-file extraction cache is never repaired by the .NET host on its
+            // own, so it bricks every subsequent launch - and it surfaces as a XamlParseException
+            // blaming AmbientFxCanvas, which sends everyone hunting the wrong bug. This has to run
+            // ahead of the service block below because Skia backs the compositor, flashes,
+            // subliminals and bubbles, not just that one FX canvas. See NativeBundleGuard.
+            if (!Services.NativeBundleGuard.VerifyOrRepair(() =>
+                {
+                    try { _splash?.CloseImmediate(); } catch { }
+                    _splash = null;
+                }))
+            {
+                Shutdown();
+                return;
+            }
 
             // Surface a single-instance takeover (a prior wedged/headless process was killed so
             // this launch could proceed). Recorded here because Logger isn't up during the handshake.
