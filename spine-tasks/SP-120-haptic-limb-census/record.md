@@ -1,6 +1,6 @@
 # SP-120 — record
 
-Branch `lane/SP-120-haptic-limb-census`, base `4276249e`.
+Branch `lane/SP-120-haptic-limb-census`, base `4276249e`, merged up to `b5f789de`.
 Floor: pin **2247 unit / 141 headless**; observed **2260 unit / 141 headless**; declared
 **+13 unit / +0 headless** (`floor-delta.json`). 2247 + 13 = 2260 and 141 + 0 = 141, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-120-haptic-limb-census`. The floor run
@@ -17,8 +17,12 @@ Build: 0 errors, 0 warnings (`check-warnings.mjs`, forced non-incremental, 4 pro
 above are from the post-merge run: **zero test failures** (`Failed: 0, Passed: 2258, Skipped: 2,
 Total: 2260` for the unit project; `Failed: 0, Passed: 141` for the headless one), and the only thing
 `check-floor.mjs` still reports is the expected total drift of 2260 against a pin of 2247 — which is
-2247 + 13 and is this packet's declared delta, not a failure. The headless project is run separately
-because the floor script stops at the drifting project before it reaches the second one.
+2247 + 13 and is this packet's declared delta, not a failure. **Both projects run in the one invocation**:
+`check-floor.mjs:359-386` catches a drifting project and continues, and the run's own results
+directory holds two TRX files — `CcpClient.HeadlessTests/results.trx` reads
+`total="141" passed="141" failed="0"` and `CcpClient.Tests/results.trx` reads
+`total="2260" passed="2258" failed="0"` with the two pre-existing skips. (An earlier draft of this
+record said the script stops at the first drift. It does not, and the TRX pair is the evidence.)
 
 > **The method was committed before the first mapping**, at
 > `spine-tasks/SP-120-haptic-limb-census/plan.md`, commit `9237ba1b`, and the coordinator approved it
@@ -42,9 +46,17 @@ divergence rows plus one in-place correction in the ledger.
 | 13 | thirteen, three files | D202, `Haptics/IHapticSink.cs:210-215` | three files' worth of sites, and three FunScript commands |
 | 14 | fourteen, adding `VideoService.Browser.cs:452` | this packet's brief | `VideoService.Browser.cs:453`, `BouncingTextService.cs:516`, and the same three FunScript commands |
 | **18** | **this census** | `client/docs/haptic-limb-census.md` | — |
+| 21 | **this packet's own committed plan** | `plan.md:140-141` | nothing — it counts the same commands by a different unit. It is what the count would be if the plan's helper clause governed instead of the census's, and §1 below strikes it and says why |
 
-**Every correction so far, including mine, came from widening the search rather than from reading the
-same lines harder.** Eight became thirteen by reading one file properly; thirteen became fourteen by
+**Not every step came from a wider search, and the two rulings that did not are struck-and-stated
+below** (§1). **Three** of the eighteen exist because I struck the `adjacent` bucket's port-side
+clause (the FunScript commands), and **two more sit on the lines they do because of a helper clause
+that reverses my own committed plan** — under the plan as committed, those two lines are not sites,
+five call paths are, and **the number is 21**. That is in the table above rather than in a footnote,
+and in the owner-facing census as its own section.
+
+**Every correction to the SEARCH so far, including mine, came from widening it rather than from
+reading the same lines harder.** Eight became thirteen by reading one file properly; thirteen became fourteen by
 adding one file; fourteen became eighteen by searching three DIRECTORIES instead of a list of files,
 which is the only version of the search that cannot miss a file nobody thought to name. The
 coordinator's mid-task correction is the proof that the file-list method was still failing while this
@@ -102,13 +114,40 @@ guards, the `suppressHaptic` plumbing, the helper call paths, the `catch`/log of
 `try`. **A reader who wants the older figure can take it from the same table: fifteen sites command
 the haptic service directly and three command it through the script player.**
 
-**The helper rule, applied identically in both places (review item 7).** One site = one call
-expression; a helper's CALLERS are `adjacent` call paths, never extra sites. That keeps
-`FlashService.cs:1627` as the luminance site (its guard and only call path, `:1525`, is an `adjacent`
-row) and `SubliminalService.cs:588` as the silent-branch site (its four call paths at `:246`, `:265`,
-`:321`, `:396` are `adjacent` rows). **Named explicitly so it does not read as a correction to the
-thirteen**: D202's line numbers for those two sites were right; the alternative reading — count the
-call sites instead — would have produced 21 and made the reconciliation meaningless.
+**THE SECOND RULING, AND IT REVERSES MY OWN COMMITTED PLAN. This is the disclosure the first draft
+of this record owed and did not make.** The census counts a helper's call expression as the site and
+its callers as `adjacent` call paths. **`plan.md:140-141`, committed before I mapped anything, says
+the exact opposite**:
+
+> *"A helper called from two places is **one site per call site of the helper**, and the helper's own
+> body is not a site — otherwise the same command is counted twice."*
+
+**Under the rule I committed, the headline is 21, not 18.** `FlashService.cs:1627` and
+`SubliminalService.cs:588` stop being sites, and five call paths become them: `FlashService.cs:1525`
+and `SubliminalService.cs:246`, `:265`, `:321`, `:396`. The first draft named 21 as "the alternative
+reading" and said the census rule was "applied identically in both places" — both true, and beside
+the point. **A reader has to be able to see that the number moved because a rule changed, and when.**
+It is now in the owner-facing document as its own section (`client/docs/haptic-limb-census.md` §2.1)
+and as a row in the reconciliation table beside 8, 13 and 14.
+
+**Why the plan's clause is struck rather than followed, and it is the same ground as the FunScript
+ruling.** The same plan defines a command by **C1: "a method invocation whose target IS the haptic
+subsystem"**. All five of those call paths invoke an app-side helper — `ApplyLuminanceSync`,
+`TriggerSubliminalWithHapticPattern` — and not the haptic subsystem, so the helper clause admits as
+sites exactly the lines C1 excludes. **The plan carried two rules that contradict each other**, and
+the census resolves that in favour of the definitional one, exactly as it struck the `adjacent`
+bucket's port-side clause for contradicting §1. C1 also keeps the enumeration comparable with the
+three prior counts, which are all call-expression counts: D202 cites `:1627` and `:588`, and no prior
+enumeration has ever cited `:1525` or `:246`.
+
+**The objection I owe an answer to**, because it is the reasoning I used to keep sites 1-3 apart:
+"two lines somebody must port or refuse" is exactly what the plan's clause was tracking. The
+difference is what the two rules MEASURE. Sites 1-3 are three call expressions INTO the haptic
+subsystem, so C1 admits all three; the five call paths are not. What the plan's clause was really
+counting is distinct MOMENTS, and a limb author needs those too — so all five are `adjacent` rows in
+the census and **each now names the moment it carries** (FlashSubliminal's silent branch, the
+FlashSubliminalCustom entry, Bambi Freeze's and Bambi Reset's silent branches, and the luminance
+guard). **The count is of commands to write; the moments are in the table beside them, not lost.**
 
 **Two bucket definitions were widened, and the widening is stated rather than smuggled.** `settings`
 covers reads of haptic configuration only; the `suppressHaptic` opt-out moved into `adjacent` because
@@ -242,9 +281,11 @@ lines, by `HapticSiteCensusTests.TheDecayLadderNeverSpansTwoSeconds_InAnyMode_So
 
 **D206 — `TriggerBambiFreeze` and `SubAudioAudible`. CONFIRMED, with corrected citations and a worse
 consequence.** The predicates are at `SubliminalService.cs:220` and `:379`
-(`audioPath != null && App.Settings.Current.SubAudioAudible`) and at **`:286`** (`audioPath != null`
-alone) — the brief's `:221`, `:380` and `:289` are the opening braces and the ducking check
-respectively. The consequence is not only "one guard differs": `PlayWhisperAudio` (`:521`) has no
+(`audioPath != null && App.Settings.Current.SubAudioAudible`) and at **`:287`** (`audioPath != null`
+alone). The brief's `:221` and `:380` are opening braces; its `:289` is a comment and the ducking
+check is `:290`. **My own first draft of this row said `:286`, which is blank** — an off-by-one on the
+very citation the row exists to correct, caught in review. Every number in this paragraph now comes
+from `grep -n`, not from counting a `sed` window. The consequence is not only "one guard differs": `PlayWhisperAudio` (`:521`) has no
 check of its own, so **with whispers turned off the freeze phrase still plays its whisper and still
 ducks other audio.** Neither the branch nor the phrase is ported
 (`Effects/SubliminalsEffect.cs:54-56`), so this is recorded to stop a later reader tidying one guard
@@ -282,12 +323,26 @@ census so nobody later reads the number as "all".
 | a continuous layer that self-clears | 4 | level = image luminance × scale, `autoZeroMs` = the flash's own lifetime |
 | a continuous layer that does NOT self-clear, plus an explicit stop | 6, 7, 12 | level = `VideoIntensity * 0.1`, floored at 0.06 |
 | a transient that rides OVER a floor by priority | 10 (absent anyway) | priority 3 over the video layer |
+| **two transients of the SAME priority overlapping** | **1-3 with 14-15, and 18 with itself** | **peak-of-SUM within the group, then max across groups** (`HapticMixer.cs:476-502`), the floor combined by `Math.Max` at `:506` |
 | a per-event enable, intensity and mode | all | upstream's routing matrix, twelve rows |
 
-**And two facts that bound every option.** First, the SP-119 seam is keyed by **device AND actuator**
-(`Haptics/IHapticSink.cs:82-90`), so whoever calls it must hold device keys from an `ObserveAsync`;
-a module cannot. Second, **`SetOutputsAsync` is level-set with no duration by design** (D193), so
-every duration in the table above has to be turned into a schedule of level-sets by somebody.
+**And three facts that bound every option.** First, the SP-119 seam is keyed by **device AND
+actuator** (`Haptics/IHapticSink.cs:82-90`), so whoever calls it must hold device keys from an
+`ObserveAsync`; a module cannot. Second, **`SetOutputsAsync` is level-set with no duration by design**
+(D193), so every duration in the table above has to be turned into a schedule of level-sets by
+somebody. Third — and the first draft of this section got it wrong — **the combination rule is
+exercised by REACHABLE sites.** The flash decay ladder posts at **priority 1**
+(`HapticService.cs:786`), the subliminal pulse posts at **priority 1** (`:880`) and the bounce posts
+at **priority 0** (`:821`); upstream SUMS within a priority group, so a flash overlapping a
+subliminal, or two bounces overlapping, combine by peak-of-sum rather than by MAX. **At the shipped
+defaults** — master intensity **0.7** (`Models/HapticSettings.cs:29`, `HapticMixer.cs:215`) and cap
+**0.70** (`:77`), applied in `Finish` at `:509-517` — two overlapping 0.5 transients sum to 1.0, scale
+to 0.70 and meet the cap, while a MAX-only design gives 0.5, scales to **0.35** and does not.
+**A factor of two on the level a user feels.** **What does NOT sum, even upstream,
+is flash overlapping flash**: `PlayDecayLadder` cancels any running flash ladder before posting
+(`:775-776`), so the reachable summing pairs are flash-with-subliminal and bounce-with-bounce.
+`TrackKind` (`:408-411`) only records the live sequence per kind and cancels nothing, so same-kind
+overlap sums too.
 
 ### Option A — per-module literals
 
@@ -312,14 +367,16 @@ to prevent.
 | cost in files | 4-6 new (`Haptics/HapticMixer.cs`, layers, envelopes, routing) plus a lifetime for the loop; ~4 edits |
 | effect on the seam | **wraps it**, byte-identical: the mixer becomes the sink's only caller and the only holder of device keys |
 | forecloses | little; it is the maximal option |
-| reproduces | **all five**: ladder, auto-zero latch, priority arbitration, 0.06 floor, 0.70 cap |
+| reproduces | **all five named behaviours** — ladder, auto-zero latch, priority arbitration, 0.06 floor, 0.70 cap — **plus the two that turned out to matter more**: peak-of-sum within a priority group and the concurrency cap, **and** the two time-based ones nothing else has, the rate limit and the periodic re-assert of unchanged targets and zeros (`HapticMixer.cs:92-99`) |
 | 10 Hz loop | **yes, and it is a new lifetime question.** SP-119 §7 was careful to invent no second lifetime model; a 10 Hz output loop is exactly that, and whether it belongs to SP-118's scheduler is an architecture decision |
 | no-provider build | the loop runs against a sink that refuses. It needs a predicate to idle, or it burns a thread producing nothing |
 | blast radius | 4 modules, the composition root, a participant, possibly the scheduler |
 
-**Its real cost is unexercised behaviour.** Peak-of-sum-within-priority-group, concurrency eviction and
-soft-ramp are 67 KB of upstream mixer whose observable is a motor nobody here can watch. SP-119 refused
-to shape a seam around code this port has never run against a device; B is that same risk one layer up.
+**Its real cost is unexercised behaviour and a lifetime.** Concurrency eviction, temperament scaling
+and the band-split are part of 67 KB of upstream mixer whose observable is a motor nobody here can
+watch, and SP-119 refused to shape a seam around code this port has never run against a device; B is
+that same risk one layer up. **But peak-of-sum is NOT in that category** — five reachable sites
+exercise it (§6's demand table), and the recommendation below is made against that, not around it.
 
 ### Option C — a thin command vocabulary over the port's own scheduling, no loop
 
@@ -331,11 +388,31 @@ than on a poll.
 |---|---|
 | cost in files | 2 new (`Haptics/HapticLimb.cs`, `Haptics/HapticEnvelope.cs`); ~4 edits |
 | effect on the seam | **wraps it**, byte-identical |
-| forecloses | **priority arbitration and peak-of-sum.** Two simultaneous pulses combine by MAX or by arrival, not by upstream's group rule. C is a strict subset of B and upgrades into it without a rewrite |
-| reproduces | ladder **yes** (a fixed 8-rung shape computed once at post time); auto-zero latch **yes** (a scheduled zero); 0.06 floor **yes**; 0.70 cap **yes**; priority arbitration **no** |
+| forecloses | **peak-of-sum, and with it the concurrency cap.** Each source is scheduled independently, so two overlapping transients combine by MAX at the send boundary rather than by upstream's group sum — **and §6's demand table shows five reachable sites exercising that rule.** Priority arbitration ACROSS groups is MAX either way, so C loses nothing there. C is a strict subset of B and of C+ and upgrades into either without a rewrite |
+| reproduces | ladder **yes** (a fixed 8-rung shape computed once at post time); auto-zero latch **yes** (a scheduled zero); soft ramp **yes** (a rise is a scheduled shape like any other); 0.06 floor **yes**; 0.70 cap **yes**; **peak-of-sum no**; priority arbitration across groups **yes, trivially, because it is MAX** |
 | 10 Hz loop | **none.** Sends happen on layer change, pulse start and each rung boundary. **This trades away upstream's rate limit**, which the 10 Hz loop exists to provide for the Lovense LAN API (`HapticMixer.cs:69-70`), so a minimum inter-send interval has to be stated as an explicit property of the limb rather than falling out of a tick |
 | no-provider build | nothing is armed, nothing runs, nothing to idle |
 | blast radius | 4 modules |
+
+### Option C+ — C plus a shared-instant evaluator, still no loop
+
+The frontier is not binary, and the first draft of this section implied it was. What forecloses
+peak-of-sum in C is not the absence of a timer; it is that each source is scheduled independently. Keep
+an active-envelope list, evaluate every live source on one shared instant grid at each send boundary,
+and the group sum falls out — with no poll.
+
+| axis | answer |
+|---|---|
+| cost in files | 3 new (C's two plus `Haptics/HapticCombine.cs`); ~4 edits |
+| effect on the seam | **wraps it**, byte-identical |
+| forecloses | nothing the reachable sites ask for. Still no periodic re-assert (see the recommendation) |
+| reproduces | everything C does, **plus peak-of-sum within a group and the concurrency cap** |
+| 10 Hz loop | **none.** Sends still happen at envelope boundaries |
+| no-provider build | as C: nothing armed, nothing running |
+| blast radius | 4 modules |
+
+**This is B's evaluator without B's timer**, and it is the honest middle of the menu: the thing the
+10 Hz loop buys that an evaluator does not is time-based, not combination-based.
 
 ### Option D — build nothing yet
 
@@ -356,19 +433,49 @@ reachable.
 
 ### The recommendation
 
-**C, and the reason is the reproduction table crossed with the demand table.** Four of the five named
-behaviours are demanded by sites that HAVE a port trigger point; **priority arbitration is demanded
-only by site 10, which is `absent-by-decision` and cannot fire here.** So B's whole advantage over C is
-a behaviour no reachable site in this port asks for, bought with a 10 Hz loop, a new lifetime and a
-body of unexercised combine logic. A is not viable: it puts device-key selection and the safety cap in
-four places. D is defensible and its argument is above, but C's cost is two files, and the four
-behaviours it does reproduce are the ones the port's own trigger points need on the day a provider is
-admitted.
+**The first draft of this recommendation was wrong on its central claim and it is corrected here.**
+It said B's whole advantage over C was priority arbitration, demanded only by the absent site 10.
+**That is false.** B also buys **peak-of-sum within a priority group**, and five REACHABLE sites
+exercise it: the flash ladder and the subliminal pulse both post at priority 1
+(`HapticService.cs:786`, `:880`), so a flash overlapping a subliminal sums upstream and would MAX
+under C — **0.70 against 0.35** at the shipped defaults, a factor of two — and two bounces at
+priority 0 (`:821`) do the same.
+Only flash-with-flash is exempt, because the ladder cancels itself (`:775-776`). The owner would have
+been choosing against a summary that hid the one thing C actually gives up.
+
+**Re-priced, the recommendation is still C, but for a different reason, and C+ is named beside it.**
+
+1. **B's advantage over C is now correctly stated as TWO behaviours, not one**: peak-of-sum (reachable,
+   five sites) and the concurrency cap (reachable when four transients overlap). Priority arbitration
+   across groups is MAX in both, so it was never the differentiator.
+2. **Neither of those needs a 10 Hz loop.** C+ buys both for one more file and no timer. If the owner
+   wants the combination rule, **C+ is the option to take, not B** — that is the real frontier, and
+   the first draft hid it by treating the menu as binary.
+3. **What the loop alone buys is time-based and belongs to the PROVIDER, not the limb.** The two
+   properties that need a tick are the self-imposed rate limit for the Lovense LAN API
+   (`HapticMixer.cs:69-70`) and the periodic re-assert of unchanged targets **including zeros**
+   (`:92-99`), which is *"the only thing that self-heals a dropped, reordered or IO-failed zero"* —
+   directly relevant to D203's harm. **Both are delivery properties**, and SP-119's seam already
+   places delivery on the provider's side of the line: the hold is *"provider's choice, documented in
+   the provider"* (`Services/Haptics/Core/HapticContracts.cs:70-73`), and the port's own record has
+   the Lovense sink owing a keep-alive. A limb that grew a loop to solve them would be taking work
+   the sink already owes.
+4. **The size of C's loss is bounded and measurable the day a device exists.** It is confined to how
+   loud an OVERLAP feels — never to whether something fires, latches or stops — and it is bounded
+   above by the same 0.70 cap both designs apply. It is not small, though: the worked case is 0.70
+   against 0.35. **This is the number the owner is really choosing about**, and it is the one the
+   first draft did not put in front of them.
+5. A is not viable: it puts device-key selection and the safety cap in four places. D is defensible
+   and its argument is above.
+
+**So: C to start, C+ if the owner wants upstream's combination rule, B only if the loop's own
+time-based properties are wanted in the limb rather than in the provider.** C upgrades into either
+without a rewrite, which is why starting at C forecloses nothing.
 
 **Whatever is chosen, `Haptics/IHapticSink.cs` stays byte-identical.** Every option wraps the seam
 rather than changing it, which is SP-119's own claim being cashed: a limb is the missing layer ABOVE
 the sink, and the sink's refusals (no duration, no mode, no priority, keyed by device and actuator)
-survive all four options intact.
+survive all five options intact.
 
 **Two things the next packet must include or the limb is invisible:** the dot's `Live` value becoming
 reachable (§4), and the stop placed on both teardown paths (D203).
@@ -385,11 +492,11 @@ never shrink the search.
 |---|---|
 | `EveryHapticLineInTheFamilyIsAccountedFor_RederivedFromTheShippingBytesAndNotFromTheDocument` | a new haptic call, a moved line or a deleted row. It recomputes the 80 candidates from the bytes and never reads the document's own totals |
 | `EveryCitedUpstreamLineStillCarriesItsRecordedNeedle` | a citation rotting into a different statement while keeping its number |
-| `EveryCitedPortLineStillCarriesItsRecordedNeedle_SoATriggerPointCannotRotIntoAnotherStatement` | the same on the port side, plus "at least five distinct trigger points" |
+| `EveryCitedPortLineStillCarriesItsRecordedNeedle_SoATriggerPointCannotRotIntoAnotherStatement` | the same on the port side, plus **exactly** five distinct trigger points — `Assert.Equal(5, ...)`, because the document claims five and a `>=` would let a sixth appear unremarked |
 | `TheVerdictVocabularyIsClosed_AndEveryMappedSiteCitesBothSides` | a new verdict word, a mapped site with no port citation, an absent site with one |
 | `EveryAbsenceQuotesADecisionAndTheQuoteIsReallyAtThatPortLine` | an absence justified by a citation whose words are not there (review item 2) |
 | `TheDecayLadderNeverSpansTwoSeconds_InAnyMode_SoTheSourcesOwnCommentIsRefuted` | the D205 refutation being taken on trust: all six modes computed, 3503 and 3308 asserted |
-| `TheLadderConstantsAreStillAtTheLinesTheCensusCites` | the arithmetic drifting from the source it claims to reproduce |
+| `TheLadderConstantsAreStillAtTheLinesTheCensusCites` | the arithmetic drifting from the source it claims to reproduce. It tethers the ladder's loop constants **and the Constant arm's envelope formulas** (`Core/HapticPatterns.cs:126-127`), because `RenderedRungMs` reproduces that arm and D205's 3503 ms is that reproduction: without the second pair, a change to `Render` would leave the number wrong and the fact green |
 | six fixture facts over temp repositories | the guard passing vacuously: an unaccounted line, a rotted needle, a HALF-present reference tree (a hard failure, not the unreachable branch — review item 3), the unreachable branch still enforcing document shape, an absence with no quote, a quote not at its line |
 
 Root-not-found and a missing census are hard failures, never skips. The branch taken is written to the

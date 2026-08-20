@@ -102,8 +102,7 @@ public sealed class HapticSiteCensusTests
         _output.WriteLine(report.Describe());
 
         Assert.Empty(report.RottedPortCitations);
-        Assert.True(report.PortTriggerPoints >= 5,
-            $"the census claims five distinct port trigger points; it names {report.PortTriggerPoints}");
+        Assert.Equal(5, report.PortTriggerPoints);
     }
 
     [Fact]
@@ -559,6 +558,11 @@ public sealed class HapticSiteCensusTests
         Require(service, 787, "i * 450", violations);
         Require(patterns, 36, "MinFeltOnMs = 130", violations);
         Require(patterns, 40, "MinFeltDurationMs = 200", violations);
+        // The ENVELOPE arithmetic, not only the loop's constants. RenderedRungMs below reproduces
+        // Render's Constant arm, and D205's 3503 ms is that reproduction; without these two the
+        // arm could change and leave the number wrong with the fact still green.
+        Require(patterns, 126, "Math.Clamp(durationMs / 6, 10, 60)", violations);
+        Require(patterns, 127, "Math.Clamp(durationMs / 4, 30, 150)", violations);
         return violations;
     }
 
@@ -772,7 +776,7 @@ public sealed class HapticSiteCensusTests
         repo.Write("ConditioningControlPanel/Services/Haptics/HapticService.cs", string.Join(Environment.NewLine,
             Enumerable.Range(1, 790).Select(LadderFixtureLine)));
         repo.Write("ConditioningControlPanel/Services/Haptics/Core/HapticPatterns.cs", string.Join(Environment.NewLine,
-            Enumerable.Range(1, 40).Select(PatternsFixtureLine)));
+            Enumerable.Range(1, 130).Select(PatternsFixtureLine)));
         repo.Write("client/src/CcpClient.Desktop/Effects/FlashSurfacePresenter.cs", string.Join(Environment.NewLine, new string[]
         {
             "class FlashSurfacePresenter",
@@ -826,6 +830,8 @@ public sealed class HapticSiteCensusTests
     {
         36 => "        public const int MinFeltOnMs = 130;",
         40 => "        public const int MinFeltDurationMs = 200;",
+        126 => "                    var attack = Math.Clamp(durationMs / 6, 10, 60);",
+        127 => "                    var decay = Math.Clamp(durationMs / 4, 30, 150);",
         _ => "        // filler",
     };
 }

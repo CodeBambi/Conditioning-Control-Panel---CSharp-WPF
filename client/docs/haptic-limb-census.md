@@ -71,8 +71,35 @@ program a script to play.
 mutually exclusive branches are two sites (they are two lines somebody must port or refuse); whether
 the port merges them is a verdict, never a subtraction. **A helper is not double counted**: where an
 app-side helper holds the call, the call expression is the site and the helper's callers are
-`adjacent` call paths. That rule is what keeps `FlashService.cs:1627` and `SubliminalService.cs:588`
-as the sites rather than their four and five call paths, and it is applied identically to both.
+`adjacent` call paths. That rule keeps `FlashService.cs:1627` and `SubliminalService.cs:588` as the
+sites rather than their one and four call paths, and it is applied identically to both.
+
+### 2.1 THE HELPER CLAUSE IN THE COMMITTED PLAN SAID THE OPPOSITE, AND IT IS STRUCK HERE
+
+**The number moved because a rule changed, and this section is where that is visible.** The method
+committed before any mapping (`spine-tasks/SP-120-haptic-limb-census/plan.md:140-141`) reads:
+
+> *"A helper called from two places is **one site per call site of the helper**, and the helper's own
+> body is not a site — otherwise the same command is counted twice."*
+
+That is the reverse of the rule above. **Under the committed clause the count is 21, not 18**:
+`FlashService.cs:1627` and `SubliminalService.cs:588` stop being sites and five call paths become
+them — `FlashService.cs:1525` and `SubliminalService.cs:246`, `:265`, `:321`, `:396`.
+
+**Why the plan's clause is struck rather than followed.** The same plan defines a command by **C1 —
+"a method invocation whose target IS the haptic subsystem"**. All five of those call paths invoke an
+app-side helper, not the haptic subsystem, so the helper clause admits as sites exactly the lines C1
+excludes. **The plan carried two rules that contradict each other**, and this census resolves the
+contradiction in favour of the definitional one, the same way and for the same reason it struck the
+`adjacent` bucket's port-side clause (§6). C1 also keeps the enumeration comparable with the three
+prior counts, all of which are call-expression counts: D202 cites `:1627` and `:588`, and no prior
+enumeration has ever cited `:1525` or `:246`.
+
+**What the plan's clause was tracking is not lost.** It was counting distinct MOMENTS, which is a
+real thing a limb author needs: those five lines are five separate occasions on which upstream
+reaches one command. Every one of them is in §5 as an `adjacent` row and each says which site it
+reaches and that it is a distinct moment. **The count is of commands to write; the moments are in the
+table beside them.**
 
 **A port trigger point** is a specific existing statement in `client/src/CcpClient.Desktop/**`, cited
 `File.cs:line`, at which the same user-observable moment occurs. Three tests: **T1** moment identity,
@@ -108,7 +135,7 @@ cited line; the pin checks both sides.
 | 9 | `Services/Video/VideoService.Browser.cs:453` | `App.Haptics?.FunScript?.OnVideoStarted(_browserPath ?? "")` | absent-by-decision | — | — | — | Same, on the default engine. Not in any prior count. |
 | 10 | `Services/Video/VideoService.cs:4585` | `App.Haptics?.VideoTargetHitAsync()` | absent-by-decision | — | — | — | An attention target is caught during a clip. |
 | 11 | `Services/Video/VideoService.cs:4673` | `App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.ToyButtonReward)` | absent-by-decision | — | — | — | An attention check is satisfied by squeezing the toy instead of clicking. Absent twice over: the moment needs attention checks, and the reward needs toy INPUT. |
-| 12 | `Services/Video/VideoService.cs:6580` | `App.Haptics?.StopVideoBackgroundVibeAsync()` | present | `Effects/MandatoryVideoEffect.cs:372` | `private void OnClipEnded()` | fail: latch | The clip stops holding the screen. **The port's second teardown path, `Effects/MandatoryVideoEffect.cs:299` (`OnDisarmed`), does NOT reach `OnClipEnded`** — `Effects/VideoSurfacePresenter.cs:466` clears the callback — so a limb must place the stop on BOTH or it repeats upstream's D203 defect. |
+| 12 | `Services/Video/VideoService.cs:6580` | `App.Haptics?.StopVideoBackgroundVibeAsync()` | present | `Effects/MandatoryVideoEffect.cs:374` | `RefreshSchedule()` | fail: latch | The clip stops holding the screen; `:374` is the first statement of the `OnClipEnded` handler declared at `:372`, cited as a statement because §2 defines a trigger point as one. **The port's second teardown path, `Effects/MandatoryVideoEffect.cs:299` (`OnDisarmed`), does NOT reach `OnClipEnded`** — `Effects/VideoSurfacePresenter.cs:466` clears the callback — so a limb must place the stop on BOTH or it repeats upstream's D203 defect. |
 | 13 | `Services/Video/VideoService.cs:6584` | `App.Haptics?.FunScript?.OnVideoStopped()` | absent-by-decision | — | — | — | The clip ends and any script following it must be dropped and its layer zeroed. |
 | 14 | `Services/Subliminal/SubliminalService.cs:230` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:197` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | A subliminal phrase is shown. Upstream's WITH-whisper-audio branch of `FlashSubliminal` (`:203`, guard `:220`). |
 | 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:197` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
@@ -123,7 +150,7 @@ cited line; the pin checks both sides.
 |---|---|---|
 | `Effects/FlashSurfacePresenter.cs:298` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
 | `Effects/MandatoryVideoEffect.cs:279` | 6, 7 | raise the continuous video layer |
-| `Effects/MandatoryVideoEffect.cs:372` (+ `:299`) | 12 | zero it, on every path that takes the clip off the screen |
+| `Effects/MandatoryVideoEffect.cs:374` (+ `:299`) | 12 | zero it, on every path that takes the clip off the screen |
 | `Effects/SubliminalsEffect.cs:197` | 14, 15 | one short pulse per card |
 | `Effects/BouncingTextField.cs:223` | 18 | one 60 ms pulse per bounce |
 
@@ -139,7 +166,6 @@ would be `absent-unexplained`, and there are none.
 | site | decision | quote |
 |---|---|---|
 | 5 | `Effects/FlashSurfacePresenter.cs:294` | `serve pop / hydra / XP mechanics this port does not have` |
-| 5 | `Effects/BubblePopSurfacePresenter.cs:86` | `gaze-pop targets` |
 | 8 | `Haptics/IHapticSink.cs:219` | `a script player this port has not ported at all` |
 | 9 | `Haptics/IHapticSink.cs:219` | `a script player this port has not ported at all` |
 | 10 | `Effects/MandatoryVideoEffect.cs:363` | `not ported and not shown as dead controls: attention` |
@@ -153,10 +179,12 @@ would be `absent-unexplained`, and there are none.
 **Site 5 — the flash pop.** The quoted sentence is the reason the port's flash surfaces are created
 `ClickThrough: true` unconditionally (`Effects/FlashSurfacePresenter.cs:297`): a surface that caught
 clicks it does nothing with would swallow the user's input. **The moment this site fires on is a
-flash being popped**, and with every flash surface click-through there is no pop. The second quote
-covers upstream's other two routes to the same handler: the gaze pop (`FlashService.cs:294` calls
-`OnFlashClicked(..., fromGaze: true)`) needs gaze tracking, and the port declares gaze-pop targets
-unported in the same breath as it declares haptics unported for that module.
+flash being popped**, and with every flash surface click-through there is no pop. **The quote covers all three
+upstream routes, because it names the MECHANIC rather than the input**: `pop / hydra / XP mechanics
+this port does not have` is as true of the gaze pop (`FlashService.cs:294`, which calls
+`OnFlashClicked(..., fromGaze: true)`) and of the layered-visual click (`:3632`) as of the mouse. The
+port has no gaze subsystem anywhere, but that is a whole-tree absence rather than a decision written
+about this moment, so it is stated here and not cited as one.
 
 **Sites 8, 9, 13 — the funscript player.** The quoted words are about `App.Haptics.FunScript`
 specifically, which is the exact member all three sites call. **The moment is a clip starting or
@@ -201,7 +229,7 @@ phrase is shown by this port.
 | `Services/Flash/FlashService.cs:1452` | `suppressHaptic` | adjacent | the guard on site 1 |
 | `Services/Flash/FlashService.cs:1479` | `suppressHaptic` | adjacent | the guard on site 2 |
 | `Services/Flash/FlashService.cs:1515` | `suppressHaptic` | adjacent | the guard on site 3 |
-| `Services/Flash/FlashService.cs:1525` | `suppressHaptic` | adjacent | the guard on site 4 and its only call path into ApplyLuminanceSync |
+| `Services/Flash/FlashService.cs:1525` | `suppressHaptic` | adjacent | the guard on site 4 and its only call path into ApplyLuminanceSync. **A distinct moment, and the site itself under the struck helper clause (§2.1)** |
 | `Services/Flash/FlashService.cs:1602` | `haptic` | settings | reads the service handle |
 | `Services/Flash/FlashService.cs:1603` | `haptic` | settings | reads LuminanceSyncEnabled, default false |
 | `Services/Flash/FlashService.cs:1606` | `haptic` | settings | reads LuminanceSyncIntensity |
@@ -228,14 +256,14 @@ phrase is shown by this port.
 | `Services/Video/VideoService.cs:6708` | `funscript` | noise | prose in the browser-parity checklist |
 | `Services/Subliminal/BouncingTextService.cs:515` | `haptic` | noise | prose introducing site 18 |
 | `Services/Subliminal/SubliminalService.cs:227` | `haptic` | noise | prose introducing site 14 |
-| `Services/Subliminal/SubliminalService.cs:246` | `haptic` | adjacent | a call path into the helper that holds site 15 |
+| `Services/Subliminal/SubliminalService.cs:246` | `haptic` | adjacent | a call path into the helper that holds site 15. **A distinct moment — FlashSubliminal's silent branch — and a site under the struck helper clause (§2.1)** |
 | `Services/Subliminal/SubliminalService.cs:258` | `suppressHaptic` | adjacent | the opt-out on FlashSubliminalCustom |
-| `Services/Subliminal/SubliminalService.cs:265` | `suppressHaptic` | adjacent | a call path into the helper that holds site 15 |
+| `Services/Subliminal/SubliminalService.cs:265` | `suppressHaptic` | adjacent | a call path into the helper that holds site 15. **A distinct moment — the FlashSubliminalCustom entry point — and a site under the struck helper clause (§2.1)** |
 | `Services/Subliminal/SubliminalService.cs:294` | `haptic` | noise | prose introducing site 16 |
 | `Services/Subliminal/SubliminalService.cs:320` | `haptic` | noise | prose on the freeze silent branch |
-| `Services/Subliminal/SubliminalService.cs:321` | `haptic` | adjacent | a call path into the helper that holds site 15 |
+| `Services/Subliminal/SubliminalService.cs:321` | `haptic` | adjacent | a call path into the helper that holds site 15. **A distinct moment — Bambi Freeze's silent branch — and a site under the struck helper clause (§2.1)** |
 | `Services/Subliminal/SubliminalService.cs:384` | `haptic` | noise | prose introducing site 17 |
-| `Services/Subliminal/SubliminalService.cs:396` | `haptic` | adjacent | a call path into the helper that holds site 15 |
+| `Services/Subliminal/SubliminalService.cs:396` | `haptic` | adjacent | a call path into the helper that holds site 15. **A distinct moment — Bambi Reset's silent branch — and a site under the struck helper clause (§2.1)** |
 | `Services/Subliminal/SubliminalService.cs:573` | `haptic` | noise | prose on the helper |
 | `Services/Subliminal/SubliminalService.cs:575` | `buttplug` | noise | prose naming the 1.3 s provider latency |
 | `Services/Subliminal/SubliminalService.cs:577` | `suppressHaptic` | adjacent | the helper declaration that holds site 15 |
@@ -257,6 +285,7 @@ phrase is shown by this port.
 | **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:210-215` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
 | **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:516` and `VideoService.Browser.cs:453` |
 | **18 sites** | this census | derived from the bytes by §2 |
+| **21 sites** | **this packet's own committed plan**, `plan.md:140-141` | what the census's helper clause would yield if the plan's opposite clause governed instead. It does not, and §2.1 says why and lists the five lines that move |
 
 Line by line, from 13 to 18:
 
@@ -349,15 +378,32 @@ each:
 ## 9. THE VOCABULARY LAYER, PRICED — SUMMARY ONLY
 
 Full pricing, on seven fixed axes chosen before the options were known, is in
-`spine-tasks/SP-120-haptic-limb-census/record.md` §6. **The decision is the owner's and this packet
-does not take it.**
+`spine-tasks/SP-120-haptic-limb-census/record.md` §6, and this summary carries the same facts.
+**The decision is the owner's and this packet does not take it.**
 
-| option | seam | files | reproduces |
-|---|---|---|---|
-| **A. Per-module literals** — each module sends a level it computes itself | unchanged, wrapped by nothing | ~5 edits, 0 new | none of the five behaviours; no ladder, no latch, no arbitration |
-| **B. A port-side envelope+layer mixer** — one 10 Hz loop, layers by MAX, transients over them, the 0.06 floor and 0.70 cap | unchanged; the mixer becomes the sink's only caller | 4-6 new files, ~5 edits | all five |
-| **C. A thin command vocabulary, no loop** — `Pulse(level,ms)` / `Layer(level,autoZeroMs)` over a scheduler the port already owns | unchanged; wrapped | 2 new files, ~5 edits | ladder, latch and floor/cap; NOT priority arbitration |
+| option | seam | files | reproduces | does NOT reproduce |
+|---|---|---|---|---|
+| **A. Per-module literals** — each module sends a level it computes itself | unchanged, wrapped by nothing | 0 new, ~4 edits | nothing; the 0.06 floor and 0.70 cap only by duplicating them per module | ladder, latch, peak-of-sum, arbitration, and it puts device-key selection in four places |
+| **B. A port-side envelope+layer mixer** — one 10 Hz loop, layers by MAX, transients over them, peak-of-sum within a priority group, concurrency cap, floor and cap | unchanged; the mixer becomes the sink's only caller | 4-6 new, ~4 edits | **all five named behaviours, plus peak-of-sum and the concurrency cap** | — |
+| **C. A thin command vocabulary, no loop** — `Pulse(level,ms)` / `Layer(level,autoZeroMs)`, each source scheduled independently, MAX at the send boundary | unchanged; wrapped | 2 new, ~4 edits | decay ladder, auto-zero latch, soft ramp (as a scheduled shape), 0.06 floor, 0.70 cap | **peak-of-sum within a priority group** and the concurrency cap. Priority arbitration across groups is MAX either way |
+| **C+. C plus a shared-instant evaluator, still no loop** | unchanged; wrapped | 3 new, ~4 edits | everything C does, **plus peak-of-sum and the cap** | nothing the reachable sites ask for |
+| **D. Build nothing yet** | untouched | 0 | nothing | everything — and the panel already says so in words |
 
-**Recommended: C**, and the reason is in the record. Every option leaves `Haptics/IHapticSink.cs`
-byte-identical, which is the SP-119 seam's own claim being cashed: a limb is a layer above the sink,
-never a change to it.
+**What C's one real loss costs, in numbers rather than adjectives.** Upstream sums transients WITHIN
+a priority group and takes the max ACROSS groups (`Services/Haptics/Core/HapticMixer.cs:476-502`,
+combined with the continuous floor by `Math.Max` at `:506`). The flash decay ladder posts at
+**priority 1** (`HapticService.cs:786`) and the subliminal pulse posts at **priority 1**
+(`:880`) — sites 1-3 and 14-15, all reachable here — so a flash overlapping a subliminal sums
+upstream and would MAX under C. **Worked at the shipped defaults** (master intensity 0.7,
+`Models/HapticSettings.cs:29`; cap 0.70, `HapticMixer.cs:77`): two overlapping 0.5 transients sum to
+1.0, scale to 0.70 and hit the cap, while MAX gives 0.5, scales to **0.35** and does not.
+**A factor of two on the level a user feels.**
+Bounces post at priority 0 (`:821`) and sum with each other the same way. **Flash overlapping flash
+does NOT sum even upstream**: `PlayDecayLadder` cancels any running flash ladder first
+(`:775-776`).
+
+**Recommended: C**, with C+ named as the upgrade that buys the one reachable loss without a poll; the
+full reasoning, including why the 10 Hz loop's own safety properties belong to the provider rather
+than to the limb, is in the record. Every option leaves `Haptics/IHapticSink.cs` byte-identical,
+which is the SP-119 seam's own claim being cashed: a limb is a layer above the sink, never a change
+to it.
