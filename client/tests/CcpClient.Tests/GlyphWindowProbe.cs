@@ -93,6 +93,26 @@ internal static class GlyphWindowProbe
     internal static bool IsForeground(nint window) => WindowsHost && window != 0 && GetForegroundWindow() == window;
 
     /// <summary>
+    /// Gives a window UNIFORM layered attributes, through this probe's own declaration.
+    ///
+    /// <para><b>This is a one-way door and it is used deliberately.</b> Measured: once a window has
+    /// uniform attributes, <c>UpdateLayeredWindow</c> refuses it for the rest of its life with
+    /// last-error 87. It exists so a fact can STAGE the state the product's
+    /// <see cref="CcpClient.Desktop.Glyph.GlyphReasonCodes.GlyphUniformAlphaMode"/> refusal is FOR -
+    /// this packet's central hazard - rather than leaving that refusal as a branch nothing reaches.
+    /// Any surface this is called on is poisoned and must be disposed straight after.</para>
+    /// </summary>
+    internal static bool PoisonWithUniformAlpha(nint window, byte alpha)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return false;
+        }
+
+        return SetLayeredWindowAttributes(window, 0, alpha, LwaAlpha);
+    }
+
+    /// <summary>
     /// Writes the extended style through THIS probe's own declaration, so the input differential
     /// can flip click-through without asking the capability under test to certify itself.
     ///

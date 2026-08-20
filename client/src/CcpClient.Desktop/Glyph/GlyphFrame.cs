@@ -126,9 +126,15 @@ public sealed class GlyphFrame
     /// draft of this method truncated and the differential caught it, which is the reading being
     /// used as an oracle rather than as decoration.</para>
     ///
-    /// <para>Only <paramref name="constantAlpha"/> = 255 has been measured against a screen. At
-    /// lower values the same arithmetic is applied to the source term, and that arm is arithmetic
-    /// rather than evidence.</para>
+    /// <para><b>What is measured, and what is one unit out.</b> At
+    /// <paramref name="constantAlpha"/> = 255 this is EXACT against a composited-desktop read, at
+    /// every sampled point. At 128 it is exact at three of four sampled points and <b>one unit low
+    /// in the red channel of the fourth</b> (predicts <c>0xD65E47</c>, the screen holds
+    /// <c>0xD65E48</c>): the compositor rounds the per-pixel-times-constant product somewhere this
+    /// model does not, and no reading of the documented formula reproduces it. <b>The model is
+    /// deliberately NOT tuned to that observation</b> - fitting it would make the oracle a copy of
+    /// the one measurement it is supposed to check - so the harness asserts exactness at 255 and
+    /// within one unit at 128, and says so.</para>
     /// </summary>
     /// <param name="x">Sample column.</param>
     /// <param name="y">Sample row.</param>

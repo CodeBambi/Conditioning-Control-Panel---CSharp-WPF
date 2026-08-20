@@ -58,6 +58,14 @@ internal static class GlyphSurfaceObservations
     /// </summary>
     internal const int ArbitrationAttempts = 32;
 
+    /// <summary>
+    /// How far a HALF-opacity sample may be from the predicted composite, per channel. Zero is the
+    /// tolerance at full opacity and is asserted there; see
+    /// <c>DifferentialRun.EveryHalfOpacityPointIsWithinOneOfThePrediction</c> for the one measured
+    /// unit this exists for and for why the model was not tuned to remove it.
+    /// </summary>
+    internal const int HalfOpacityTolerance = 1;
+
     private static readonly Lazy<LifecycleRun> LazyLifecycle =
         new(RunLifecycle, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -70,6 +78,9 @@ internal static class GlyphSurfaceObservations
     private static readonly Lazy<GlyphWindowProbe.NegativeControl> LazyControl =
         new(GlyphWindowProbe.RunNegativeControl, LazyThreadSafetyMode.ExecutionAndPublication);
 
+    private static readonly Lazy<UniformModeRun> LazyUniformMode =
+        new(RunUniformMode, LazyThreadSafetyMode.ExecutionAndPublication);
+
     internal static LifecycleRun Lifecycle => LazyLifecycle.Value;
 
     internal static DifferentialRun Differential => LazyDifferential.Value;
@@ -78,6 +89,9 @@ internal static class GlyphSurfaceObservations
 
     /// <summary>The instrument's own negative control, re-run on every suite execution.</summary>
     internal static GlyphWindowProbe.NegativeControl Control => LazyControl.Value;
+
+    /// <summary>The staged uniform-alpha hazard: a real surface, poisoned mid-life.</summary>
+    internal static UniformModeRun UniformMode => LazyUniformMode.Value;
 
     internal static string Describe(CapabilityState? state) => state switch
     {
@@ -399,6 +413,68 @@ internal static class GlyphSurfaceObservations
         return matches;
     }
 
+    // ---------------------------------------------------------------- uniform-alpha mode
+
+    /// <param name="MachineHasInteractiveDesktop">Whether there was anywhere for a surface to go.</param>
+    /// <param name="FirstPresent">The surface really composited before it was poisoned.</param>
+    /// <param name="PoisonApplied">The probe's own SetLayeredWindowAttributes returned TRUE.</param>
+    /// <param name="UniformAlphaAfterPoison">What the OS now holds for it. 200 when poisoned.</param>
+    /// <param name="RePresentAfterPoison">What the capability says when asked to composite again.</param>
+    /// <param name="PaintAfterPoison">And what a content-only call says.</param>
+    internal sealed record UniformModeRun(
+        bool MachineHasInteractiveDesktop,
+        CapabilityState FirstPresent,
+        bool PoisonApplied,
+        int UniformAlphaAfterPoison,
+        CapabilityState RePresentAfterPoison,
+        CapabilityState PaintAfterPoison);
+
+    /// <summary>
+    /// Stages THIS PACKET'S CENTRAL HAZARD on a real surface and asks the capability what it says.
+    ///
+    /// <para>A dedicated, throwaway surface, because the poison is permanent: once a window holds
+    /// uniform layered attributes, <c>UpdateLayeredWindow</c> refuses it forever (measured, err 87).
+    /// The surface is disposed immediately afterwards and nothing else in this file uses it.</para>
+    ///
+    /// <para><b>Why it is worth staging rather than classing as unreachable.</b> The
+    /// <c>glyph-uniform-alpha-mode</c> refusal is the product's own guard for the exact conversion
+    /// SP-099 recorded, and a first draft of this packet classified it as a branch nothing could
+    /// reach. It is reachable with instruments this suite already shipped: the surface exposes its
+    /// own handle, and the probe already declares the call.</para>
+    /// </summary>
+    private static UniformModeRun RunUniformMode()
+    {
+        var (screenWidth, screenHeight) = GlyphWindowProbe.PrimarySize;
+        var bounds = new GlyphBounds(
+            Math.Max(0, (screenWidth / 2) - 900),
+            Math.Max(0, (screenHeight / 2) + 60),
+            SurfaceSide,
+            SurfaceSide);
+
+        var frame = Quadrants(SurfaceSide);
+        using var surface = new Win32GlyphSurface();
+        var request = new GlyphSurfaceRequest(bounds, 1.0, ClickThrough: true);
+
+        var first = surface.Present(request, frame);
+        var window = surface.NativeHandles.Window;
+
+        // The conversion, applied from OUTSIDE the capability with the probe's own declaration -
+        // the capability itself has no such call to make, which is the point.
+        var poisoned = GlyphWindowProbe.PoisonWithUniformAlpha(window, 200);
+        var alphaAfter = GlyphWindowProbe.LayeredAlphaOf(window);
+
+        var rePresent = surface.Present(request, frame);
+        var paint = surface.Paint(GlyphFrame.Solid(SurfaceSide, SurfaceSide, 0x10, 0xE0, 0x40, 0xFF));
+
+        return new UniformModeRun(
+            MachineHasInteractiveDesktop: GlyphWindowProbe.MachineHasInteractiveDesktop,
+            FirstPresent: first,
+            PoisonApplied: poisoned,
+            UniformAlphaAfterPoison: alphaAfter,
+            RePresentAfterPoison: rePresent,
+            PaintAfterPoison: paint);
+    }
+
     // ---------------------------------------------------------------- differential
 
     /// <param name="MachineHasInteractiveDesktop">Whether there was anywhere for a surface to go.</param>
@@ -414,9 +490,17 @@ internal static class GlyphSurfaceObservations
     /// pixel claim is conditioned on emptiness rather than assumed.
     /// </param>
     /// <param name="CaptureTaken">Whether the composited-desktop read returned anything at all.</param>
-    /// <param name="WithGlyph">The five sample points with the surface up.</param>
+    /// <param name="WithGlyph">The five sample points with the surface up at FULL opacity.</param>
     /// <param name="WithoutGlyph">The same five with it hidden. The control.</param>
     /// <param name="ExpectedWithGlyph">What premultiplied source-over predicts for those points.</param>
+    /// <param name="HalfOpacity">
+    /// The same five points with the SAME frame composited at opacity 0.5. This is what proves the
+    /// dial reaches the compositor at all: with the surface's constant alpha pinned at 255 these
+    /// would be byte-identical to <paramref name="WithGlyph"/>.
+    /// </param>
+    /// <param name="ExpectedHalfOpacity">What the same arithmetic predicts at constant alpha 128.</param>
+    /// <param name="HalfOpacityPresented">Whether the half-opacity placement earned Available.</param>
+    /// <param name="HalfOpacityState">That state, for failure messages.</param>
     internal sealed record DifferentialRun(
         bool MachineHasInteractiveDesktop,
         bool BackdropPresented,
@@ -428,7 +512,11 @@ internal static class GlyphSurfaceObservations
         bool CaptureTaken,
         uint[] WithGlyph,
         uint[] WithoutGlyph,
-        uint[] ExpectedWithGlyph)
+        uint[] ExpectedWithGlyph,
+        uint[] HalfOpacity,
+        uint[] ExpectedHalfOpacity,
+        bool HalfOpacityPresented,
+        CapabilityState HalfOpacityState)
     {
         /// <summary>True when the machine really hosted the run: a desktop, both surfaces up, a
         /// capture taken, and NOBODY between them over the sampled area.</summary>
@@ -476,11 +564,89 @@ internal static class GlyphSurfaceObservations
         internal bool EveryPointMatchesThePrediction =>
             ArbitrationHeld && WithGlyph.SequenceEqual(ExpectedWithGlyph);
 
+        /// <summary>The half-opacity leg really happened: the surface earned Available at 0.5 and a
+        /// capture came back.</summary>
+        internal bool HalfOpacityHeld =>
+            ArbitrationHeld && HalfOpacityPresented && HalfOpacity.Length == WithGlyph.Length;
+
+        /// <summary>
+        /// <b>The uniform multiplier really reaches the compositor.</b> The same frame at half
+        /// opacity reads differently at every point the frame is not transparent at - which a
+        /// surface that ignored the dial could not produce, because it would hand the compositor
+        /// exactly the same bytes and the same constant.
+        /// </summary>
+        internal bool TheDialReachesTheCompositor =>
+            HalfOpacityHeld
+            && HalfOpacity[2] != WithGlyph[2]
+            && HalfOpacity[3] != WithGlyph[3]
+            && HalfOpacity[4] != WithGlyph[4];
+
+        /// <summary>At half opacity an OPAQUE BLACK pixel is no longer black: it is black composited
+        /// over the background at 50 %, which is neither.</summary>
+        internal bool HalfOpacityBlackIsNeitherBlackNorBackground =>
+            HalfOpacityHeld && HalfOpacity[2] != 0x000000u && HalfOpacity[2] != BackdropColour;
+
+        /// <summary>A fully TRANSPARENT pixel is unchanged by the dial, because zero times anything
+        /// is zero. The control on the leg above.</summary>
+        internal bool HalfOpacityLeavesTheTransparentPixelAlone =>
+            HalfOpacityHeld && HalfOpacity[1] == BackdropColour && HalfOpacity[0] == BackdropColour;
+
+        /// <summary>
+        /// Every half-opacity point is within <see cref="HalfOpacityTolerance"/> of the same
+        /// arithmetic at constant alpha 128, per channel.
+        ///
+        /// <para><b>A tolerance, and it is named rather than hidden.</b> At constant alpha 255 the
+        /// prediction is EXACT and is asserted as such. At 128 it is exact at three of the four
+        /// sampled points and one unit out in the red channel of the fourth (predicted
+        /// <c>0xD65E47</c>, screen <c>0xD65E48</c>) - the compositor evidently rounds the
+        /// per-pixel-times-constant product somewhere this model does not, and no reading of the
+        /// documented formula reproduces it. Fitting <c>CompositeOver</c> to that single observation
+        /// would be tuning the oracle to the data, so the model is left alone and the residue is
+        /// declared. The claim this leg is FOR - that the dial reaches the compositor - does not
+        /// rest on this at all; it rests on the half-opacity capture DIFFERING from the
+        /// full-opacity one, which is a difference of tens of units, not one.</para>
+        /// </summary>
+        internal bool EveryHalfOpacityPointIsWithinOneOfThePrediction
+        {
+            get
+            {
+                if (!HalfOpacityHeld)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < HalfOpacity.Length; i++)
+                {
+                    if (!WithinTolerance(HalfOpacity[i], ExpectedHalfOpacity[i]))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        private static bool WithinTolerance(uint held, uint expected)
+        {
+            for (var shift = 0; shift <= 16; shift += 8)
+            {
+                var a = (int)((held >> shift) & 0xFF);
+                var b = (int)((expected >> shift) & 0xFF);
+                if (Math.Abs(a - b) > HalfOpacityTolerance)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         internal string Why =>
             $"desktop={MachineHasInteractiveDesktop} backdropPresented={BackdropPresented} "
             + $"backdropPainted={BackdropPainted} glyphPresented={GlyphPresented} capture={CaptureTaken} "
             + $"intruders=[{string.Join(" | ", Intruders)}] backdrop={Describe(BackdropState)} "
-            + $"glyph={Describe(GlyphState)}";
+            + $"glyph={Describe(GlyphState)} halfOpacity={Describe(HalfOpacityState)}";
     }
 
     private static DifferentialRun RunDifferential()
@@ -534,15 +700,38 @@ internal static class GlyphSurfaceObservations
         var points = SamplePoints(offsetX, offsetY, SurfaceSide);
         var withGlyph = SampleDesktop(backdropX, backdropY, points);
 
+        // THE SAME FRAME AT HALF OPACITY. Nothing about the bytes handed over changes; only the
+        // surface's uniform multiplier does. Without this leg the dial could be pinned at 255 inside
+        // the backend and no reading anywhere would notice - which was a live mutation survivor, on
+        // the one control the product actually ships to a user.
+        var halfState = glyph.Present(
+            new GlyphSurfaceRequest(glyphBounds, 0.5, ClickThrough: true), frame);
+        for (var attempt = 0; attempt < ArbitrationAttempts; attempt++)
+        {
+            GlyphWindowProbe.RaiseTopmost(backdropWindow);
+            GlyphWindowProbe.RaiseTopmost(glyphWindow);
+            if (GlyphWindowProbe.Intruders(
+                    glyphWindow, backdropWindow, backdropX, backdropY, BackdropWidth,
+                    BackdropHeight).Count == 0)
+            {
+                break;
+            }
+        }
+
+        var halfOpacity = SampleDesktop(backdropX, backdropY, points);
+
         glyph.Withdraw();
         var withoutGlyph = SampleDesktop(backdropX, backdropY, points);
 
         var expected = new uint[points.Length];
+        var expectedHalf = new uint[points.Length];
         expected[0] = BackdropColour;
+        expectedHalf[0] = BackdropColour;
         for (var i = 1; i < points.Length; i++)
         {
             var (x, y) = points[i];
             expected[i] = frame.CompositeOver(x - offsetX, y - offsetY, BackdropColour, 255);
+            expectedHalf[i] = frame.CompositeOver(x - offsetX, y - offsetY, BackdropColour, 128);
         }
 
         return new DifferentialRun(
@@ -556,7 +745,11 @@ internal static class GlyphSurfaceObservations
             CaptureTaken: withGlyph.Length == points.Length && withoutGlyph.Length == points.Length,
             WithGlyph: withGlyph,
             WithoutGlyph: withoutGlyph,
-            ExpectedWithGlyph: expected);
+            ExpectedWithGlyph: expected,
+            HalfOpacity: halfOpacity,
+            ExpectedHalfOpacity: expectedHalf,
+            HalfOpacityPresented: halfState is CapabilityState.Available,
+            HalfOpacityState: halfState);
     }
 
     /// <summary>

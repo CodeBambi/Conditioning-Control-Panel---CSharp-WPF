@@ -147,6 +147,52 @@ public class GlyphAlphaDifferentialTests
     }
 
     [Fact]
+    public void THEOPACITYDIALREALLYREACHESTHECOMPOSITOR_SameFrame_SameBytes_DifferentScreen()
+    {
+        // THE SURVIVOR THIS LEG EXISTS FOR. Pinning the surface's constant alpha at 255 inside the
+        // backend was undetectable: the request carried the dial, nothing read it back off a screen,
+        // and the user-facing control the product ships at 100 could have stopped working silently.
+        // Here the SAME frame is composited twice with only the multiplier changed, and every point
+        // the frame is not transparent at reads differently.
+        var run = GlyphSurfaceObservations.Differential;
+
+        Assert.True(run.TheDialReachesTheCompositor == run.MachineHasInteractiveDesktop,
+            $"full opacity read [{string.Join(", ", run.WithGlyph.Select(v => $"0x{v:X6}"))}] and half opacity "
+            + $"read [{string.Join(", ", run.HalfOpacity.Select(v => $"0x{v:X6}"))}]. If those are equal the "
+            + $"dial is not reaching the compositor. {run.Why}");
+    }
+
+    [Fact]
+    public void ATHALFOPACITYANOPAQUEBLACKPIXELIsNoLongerBlack_AndATransparentOneIsUnchanged()
+    {
+        // The two halves of the same claim, and the second is the control: zero times anything is
+        // zero, so a fully transparent pixel must be UNMOVED by the dial while every opaque one
+        // moves. A surface that simply drew something different would fail the second half.
+        var run = GlyphSurfaceObservations.Differential;
+
+        Assert.True(run.HalfOpacityBlackIsNeitherBlackNorBackground == run.MachineHasInteractiveDesktop, run.Why);
+        Assert.True(run.HalfOpacityLeavesTheTransparentPixelAlone == run.MachineHasInteractiveDesktop, run.Why);
+    }
+
+    [Fact]
+    public void ANDEVERYHALFOPACITYPOINTIsWithinONEUnitOfTheSameArithmetic()
+    {
+        // WITHIN ONE, and the tolerance is the finding rather than a convenience. At full opacity
+        // the prediction is EXACT and is asserted as such two facts above. At half opacity it is
+        // exact at three of the four points and one unit out in the red channel of the fourth. The
+        // model was NOT tuned to remove that unit: fitting CompositeOver to a single observation
+        // would make the oracle a copy of the data. The residue is declared here, in the record and
+        // at the constant.
+        var run = GlyphSurfaceObservations.Differential;
+
+        Assert.True(
+            run.EveryHalfOpacityPointIsWithinOneOfThePrediction == run.MachineHasInteractiveDesktop,
+            $"predicted [{string.Join(", ", run.ExpectedHalfOpacity.Select(v => $"0x{v:X6}"))}] and the screen "
+            + $"holds [{string.Join(", ", run.HalfOpacity.Select(v => $"0x{v:X6}"))}], further apart than "
+            + $"{GlyphSurfaceObservations.HalfOpacityTolerance} unit per channel. {run.Why}");
+    }
+
+    [Fact]
     public void EVERYPOINTMATCHESTHEPREDICTEDCOMPOSITE_NotJustTheOnesChosenToBeEasy()
     {
         // The whole predicted row at once, so a future change that got one quadrant right by

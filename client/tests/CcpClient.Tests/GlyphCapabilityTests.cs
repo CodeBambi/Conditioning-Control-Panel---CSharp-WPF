@@ -84,6 +84,53 @@ public class GlyphCapabilityTests
     }
 
     [Fact]
+    public void THEUNIFORMALPHAREFUSALISSTAGEDOnARealSurface_NotClassedAsUnreachable()
+    {
+        // THIS PACKET'S CENTRAL HAZARD, driven end to end against the product. A real surface
+        // composites, is then given uniform layered attributes from OUTSIDE the capability with the
+        // probe's own declaration, and is asked to composite again. The capability must name the
+        // mode rather than report the OS's bare "87".
+        //
+        // A first draft classified this refusal as a branch nothing could reach. It is reachable
+        // with instruments this suite already shipped.
+        var run = GlyphSurfaceObservations.UniformMode;
+
+        Assert.True(
+            run.MachineHasInteractiveDesktop
+                ? run.FirstPresent is CapabilityState.Available
+                : run.FirstPresent is CapabilityState.Unavailable,
+            $"the surface did not composite before it was poisoned, so the refusal below would be about a "
+            + $"window that never worked: {GlyphSurfaceObservations.Describe(run.FirstPresent)}");
+
+        Assert.Equal(run.MachineHasInteractiveDesktop, run.PoisonApplied);
+        Assert.Equal(run.MachineHasInteractiveDesktop ? 200 : -1, run.UniformAlphaAfterPoison);
+    }
+
+    [Fact]
+    public void ANDTHECAPABILITYNAMESTHEMODE_OnBothEntryPoints()
+    {
+        var run = GlyphSurfaceObservations.UniformMode;
+        if (!run.MachineHasInteractiveDesktop)
+        {
+            Assert.IsType<CapabilityState.Unavailable>(run.RePresentAfterPoison);
+            Assert.IsType<CapabilityState.Unavailable>(run.PaintAfterPoison);
+            return;
+        }
+
+        var present = Assert.IsType<CapabilityState.Unavailable>(run.RePresentAfterPoison);
+        Assert.Equal(GlyphReasonCodes.GlyphUniformAlphaMode, present.Reason.Code);
+        Assert.Contains("SetLayeredWindowAttributes mode", present.Reason.Detail, StringComparison.Ordinal);
+        Assert.Contains("permanently", present.Reason.Detail, StringComparison.Ordinal);
+
+        // Paint has no mode check of its own - it reaches UpdateLayeredWindow, which the OS now
+        // refuses - so it must report the COMPOSITE refusal with the OS's own error rather than a
+        // success. Both answers are refusals; they are different refusals and both are true.
+        var paint = Assert.IsType<CapabilityState.Unavailable>(run.PaintAfterPoison);
+        Assert.Equal(GlyphReasonCodes.GlyphCompositeRefused, paint.Reason.Code);
+        Assert.Contains("87", paint.Reason.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheInstrumentLeavesNothingBehind()
     {
         Assert.True(GlyphSurfaceObservations.Control.ScratchWindowsGoneAfterTeardown);

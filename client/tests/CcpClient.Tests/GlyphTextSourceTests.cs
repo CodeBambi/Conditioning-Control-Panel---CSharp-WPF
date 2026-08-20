@@ -150,6 +150,14 @@ public class GlyphTextSourceTests
         Assert.Null(source.Render("OBEY", 0x00FF00FF, 0, 40, Dials()));
         Assert.Null(source.Render("OBEY", 0x00FF00FF, 100, 0, Dials()));
         Assert.Equal((0, 0), source.Measure(string.Empty, Dials()));
+
+        // WHITESPACE is the interesting one, and it is what pins the ink refusal at this seam:
+        // `string.IsNullOrEmpty` does NOT catch it, so a space goes all the way through GDI+, draws
+        // no glyph, and comes back as a frame with no provable ink. Returning that frame instead of
+        // null was a live mutation survivor - the surface would refuse it a moment later with a
+        // capability code the user cannot act on, where the honest answer is "no frame this tick".
+        Assert.Null(source.Render(" ", 0x00FF00FF, 100, 40, Dials()));
+        Assert.Null(source.Render("   ", 0x00FF00FF, 200, 80, Dials()));
     }
 
     [Fact]
