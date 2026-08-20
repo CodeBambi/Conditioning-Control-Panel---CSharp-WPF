@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Overlay;
 

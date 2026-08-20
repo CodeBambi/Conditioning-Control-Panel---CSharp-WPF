@@ -1,9 +1,9 @@
-﻿# SP-116 — record
+# SP-116 — record
 
 Branch `lane/SP-116-flake-characterisation`, base `11036bbc`, worktree
 `.claude/worktrees/agent-a76eaa63a39ac984b`.
-Floor: pin **2062 unit / 121 headless**; observed **2065 unit / 121 headless**; declared delta
-**+3 unit / +0 headless** (`floor-delta.json`). 2065 = 2062 + 3 and 121 = 121 + 0, confirmed by
+Floor: pin **2062 unit / 121 headless**; observed **2067 unit / 121 headless**; declared delta
+**+5 unit / +0 headless** (`floor-delta.json`). 2067 = 2062 + 5 and 121 = 121 + 0, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-116-flake-characterisation`.
 Two skips, both pre-existing (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`,
 `ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps`); **none added, and
@@ -136,6 +136,11 @@ captured=132300 controlPixels=0 majority=0x26171E majorityCount=14323
   occlusion hypothesis is REFUTED**, not assumed away. This is the control that would have failed
   had the reading been wrong, and it is the one every previous packet lacked: SP-107 §5 and
   SP-115 §9 both reached for "a foreign topmost window" and neither could test it.
+- `majority=0x26171E majorityCount=14323` — **identical on every one of the 34 misses**, a review
+  finding this record originally undersold. `isOurs=True` refutes a foreign owner of the POINT; the
+  identical majority refutes a VARYING foreign occluder as well, because a window that had covered
+  the rectangle would have to have painted byte-identical content on each of 34 separate occasions.
+  What is behind the rectangle is static, and it is what came back.
 - `rendersOwnColour=True` — the paint had landed; the window's own bits are the control colour.
 - `captured=132300` — a full read came back.
 - `controlPixels=0`, `majority=0x26171E` — the read returned the desktop BEHIND the window.
@@ -191,7 +196,7 @@ evidence. **It is right, and the sharper statement is about a COUNT rather than 
 
 **One stop releases the work three times** (`OwnedSessionEffect.cs`):
 
-1. `Disarm`'s own call, synchronous, on the caller's thread (`:212`);
+1. `Disarm`'s own call, synchronous, on the caller's thread (`:219`);
 2. the generation's cancellation registration (`:352`) — on the disarming thread when the parked
    body has already registered, and inline on the POOL thread when it has not, because registering
    an already-cancelled token invokes the callback immediately;
@@ -203,7 +208,8 @@ evidence. **It is right, and the sharper statement is about a COUNT rather than 
 (`SpiralOverlayEffect.cs:268`). In the product that is `Dispatcher.UIThread.Post` and the surface is
 only ever touched on one thread. **In the rig it is `InlineDispatch`, which runs the action on
 whatever thread posted it — the pool thread.** The test then re-engages the surface directly
-(`SpiralOverlayEffectTests.cs:340` — the ONLY direct `Surface.Engage` in the entire project), so the
+(`SpiralOverlayEffectTests.cs:363` after this lane's own edit, `:340` at base — the ONLY direct
+`Surface.Engage` in the entire project), so the
 tail's `Engaged` guard turns true again and the withdraw lands on the thing the test just put up.
 `Showing` and `Withdrawals` are plain non-volatile fields of a rig double read from the test thread.
 
@@ -214,9 +220,18 @@ between, and only this test does. The two `GenerationProbe` facts in `MovingEffe
 their counter only AFTER the re-arm that invalidates the stale tail's generation, so they are safe;
 they were checked and left alone.
 
+**A claim in that same file is now false, and is corrected rather than deleted.**
+`MovingEffectSpineTests.cs:203-205` said a pin that could force this ordering "would need either a
+wall-clock wait, which is banned, or a scheduler seam in the shared body". `TailProbe` needs
+neither: it parks the release itself on a gate the test opens. The sentence is corrected in place
+with its own history, because the wrong half of it is precisely why the hazard went unpinned for
+ten packets.
+
 **The fix is the edge, and the precedent is in the sibling file.**
-`MovingEffectSpineTests.AStaleTeardownArrivingAfterARestart_…` already awaits the old generations'
-completions for exactly this reason and says so at `:171-174` and `:196-197`. The spiral fact now
+`MovingEffectSpineTests` already awaits an old generation's completion for exactly this reason at
+`:171-174` — the "Drained on purpose" note and the `await stopped!` it explains — and again at
+`:218`. (An earlier draft of this record cited `:196-197` for that precedent; those lines are the
+comment that DISCUSSES it, not the await. Corrected at review.) The spiral fact now
 does the same through `TestWait.Until(Task)` — the ONE approved bounded signal wait — and then
 asserts the typed `Cancelled` outcome. It is not a wait for an assertion to pass: the operation is
 finished or the window fails loudly, and the sequence after it is single-threaded.
@@ -233,8 +248,57 @@ must not carry the defect it measures.
   used to be the pool's coin flip happens on every run. **The control that fails if the reading is
   wrong is the wait itself:** if the tail never reached `ReleaseWork` after `Disarm` returned, the
   arrival signal never completes and `TestWait` fails loudly with `CONDITION-NEVER-TRUE` rather than
-  passing quietly. The gate is opened in a `finally`, so a failed assertion cannot leave a pool
-  thread parked.
+  passing quietly — **which is true only because of §4.1; as first written it emitted the opposite
+  verdict.** The gate is opened in a `finally`, so a failed assertion cannot leave a pool thread
+  parked, and `DisarmUnderObservation` marks the thread that is INSIDE the disarm so a release
+  arriving synchronously on it is not parked. Without that (a review finding) a refactor making the
+  release synchronous inside `Disarm` would have parked the only thread able to open the gate and
+  this fact would have HUNG, in a suite with no per-test timeout; it now reds the `Live` assertion
+  with a message naming both possible causes.
+
+  **That mitigation was wrong once, and the floor caught it.** The first draft compared against the
+  test thread's managed id alone. Under full-suite load the pool REUSES that id for the very
+  continuation being measured, the park was skipped, and the fact went red on a full run while
+  passing in isolation — this packet's own subject matter, produced by this packet, inside the
+  packet. It is caught by the mark instead: a pool continuation cannot be running on a thread that
+  is still inside `Disarm`, and the mark is cleared the moment `Disarm` returns, so a later reuse of
+  the same id still parks. That is exact rather than heuristic, and the full suite is green on it.
+
+### 4.1 THE CONTROL EMITTED THE VERDICT THAT SAYS "RE-RUN", AND THAT WAS THE REVIEW BLOCKER
+
+`TestWait` leads every expiry failure with one of two greppable tokens, and they carry opposite
+instructions: `CONDITION-NEVER-TRUE` says "treat as a REAL product/test failure" and
+`ENVIRONMENT-STARVED` says "rerun or reduce load BEFORE treating this as a failure". The selector
+was a poll-loop heuristic — worst scheduler slip, or fewer polls than a tenth of the window's
+expected count. **The signal overload has no poll loop.** It passed the sentinel `Polls = -1`
+(`TestWait.cs:168` as it was), and `-1` is below a tenth of every window, so the selector answered
+`starved` **every time**: every expired signal wait in both projects — about ten call sites,
+including this lane's own two new awaits — emitted the verdict that tells the reader to re-run it.
+
+Nothing green ever hid behind it: the test still FAILED. What was wrong is what the failure SAID,
+and it travels into the TRX text. **On a genuine break of the exact mechanism this packet spent
+1200 samples establishing, the falsification control would have instructed the next engineer to
+re-run — this packet's central prohibition, asserted backwards on its own control.** The record said
+the opposite in as many words, so the claim was false as well as the code.
+
+Fixed, not recorded-and-left: the selector is now `TestWait.Verdict(...)`, one place, and a signal
+wait can never read as starved because there is no loop to starve. The evidence line no longer
+prints `polls=-1, worst-scheduler-slip=-1` as though they were measurements; the signal path
+measures and prints its own elapsed against its window and states plainly that it observes nothing
+about starvation.
+
+**Both verdicts are now pinned against each other** in `TestWaitVerdictTests` — **neither was pinned
+anywhere before**, which is how this survived. One fact drives a real expiry through the public API
+and asserts the token, the absence of `ENVIRONMENT-STARVED`, and the absence of the word "rerun";
+the other drives the selector through all four rows of its truth table, because a fix of "never say
+starved" would pass a one-sided test and would throw away the differential the verdict exists for.
+The starved branch cannot be produced deterministically through a real wait — whether a 1 ms window
+manages zero polls or one is a tick-boundary accident — and building a fact on that accident is the
+thing this packet is about, so the selector is called directly instead.
+
+**Demonstrated to bite:** restoring the pre-SP-116 one-line selector reds both facts, with
+`Assert.Contains() Failure … String: "TIMING-VERDICT:ENVIRONMENT-STARVED — the wait loop"… Not
+found: "TIMING-VERDICT:CONDITION-NEVER-TRUE"`. The tree was restored afterwards.
 
 **This is NOT a product defect and `client/src/**` stayed shut.** On a real dispatcher the withdraw
 is posted to the UI thread, every touch of a surface is single-threaded by construction, and a
@@ -255,6 +319,7 @@ Every launched run counted. Nothing re-run, nothing discarded.
 | A/B, base half (`ab-arm.log`) | `11036bbc` | 30 | 2 | 6.7 % |
 | A/B, lane half (`ab-arm.log`) | `2c3316da` | 30 | **0** | 0 % |
 | **base, all** | | **90** | **5** | **5.6 %** |
+| REVISE, after the review fixes (`revise-arm.log`) | lane head | 6 | **0** | 0 % |
 
 The A/B arm is **strictly alternating in one window** — base run, lane run, base run — with the six
 touched test files checked out of each commit and rebuilt before each run, which is the only design
@@ -268,6 +333,11 @@ arm was interrupted by the harness being killed after pair 28 and the final two 
 immediately afterwards in the same window with the same script — so `ab-arm.log` carries two `A/B
 TOTAL` lines and the totals above are counted from the per-run lines, which is why they are stated
 that way.
+
+**The six REVISE runs are a REGRESSION check, not a rate.** They were taken after the review fixes,
+on the tree being landed, because the review round changed test code and one of its own changes
+(the first, wrong hang-mitigation) had reddened a full run. Six runs bound nothing useful about a
+5 % fault — the expectation at 5.6 % is 0.34 events — and they are reported as what they are.
 
 **What 30 lane runs can and cannot say.** 0 red in 30 bounds the lane's rate at **9.5 %** (95 %
 one-sided) and NOT at zero. It cannot on its own demonstrate an improvement over 5.6 %: those
@@ -286,7 +356,13 @@ counts overlap. **The strong evidence is the mechanism-level measurement — 34 
 - **SP-106's three LOST names remain lost** and this packet did not recover them. `repeat.mjs`
   exists so the next one is not lost: it prints every failed test's name and message out of the TRX.
 - **The residual rate after the fix is not zero and is not measured to be zero.** 0 in 30 suite runs
-  and 0 in 1500 fenced reads is what there is.
+  and 0 in 1500 fenced reads is what there is: those bound it at 9.5 % and 0.20 % respectively.
+  `verification-harness.md` said "SP-116 closed the residual" in its first draft, which outran those
+  counts; it now says NAMED and bounded, and it keeps the sentence this whole wave earned — *three
+  consecutive greens are worth far more than they were and are still not proof.*
+- **The verdict misclassification of §4.1 was live for every `TestWait.Until(Task, …)` call site in
+  both projects and nobody had noticed**, because a failure message is only read once something is
+  already broken. How many past reds carried the wrong instruction is not recoverable.
 
 ## 7. WHAT THIS WORK DOES NOT PROVE
 
@@ -316,14 +392,16 @@ counts overlap. **The strong evidence is the mechanism-level measurement — 34 
 | `client/tests/CcpClient.Tests/FlashEndToEndObservations.cs` | Same, for the end-to-end read: the fifth verdict behind a count of zero. |
 | `client/tests/CcpClient.Tests/FlashDrawTests.cs` | NEW fact pinning the fence; the four-verdict message gains the fifth; one stale "no wait anywhere" comment corrected. |
 | `client/tests/CcpClient.Tests/SpiralOverlayEffectTests.cs` | The post-disarm ordering edge on the module's own completion. |
-| `client/tests/CcpClient.Tests/MovingEffectSpineTests.cs` | TWO new facts and the `TailProbe` that makes the teardown tail deterministic. |
+| `client/tests/CcpClient.Tests/MovingEffectSpineTests.cs` | TWO new facts and the `TailProbe` that makes the teardown tail deterministic; the superseded "would need a wall-clock wait or a scheduler seam" sentence corrected in place. |
+| `client/tests/CcpClient.Tests/TestWait.cs` | §4.1: the verdict selector extracted, made signal-aware, and stopped from telling anyone to re-run a real break. |
+| `client/tests/CcpClient.Tests/TestWaitVerdictTests.cs` | NEW. Both verdicts pinned against each other; neither was pinned anywhere before. |
 | `client/docs/verification-harness.md` | What the floor now claims about composited reads, the fence, and what the numbers license. |
 | `spine-tasks/SP-116-flake-characterisation/plan.md` | The protocol, committed before the first measurement. |
 | `spine-tasks/SP-116-flake-characterisation/repeat.mjs` | The sample loop; names failures out of the TRX. |
 | `spine-tasks/SP-116-flake-characterisation/ab.mjs` | The interleaved A/B arm. |
 | `spine-tasks/SP-116-flake-characterisation/sweep-control.cs.txt` | The high-rate mechanism rig, archived as evidence rather than shipped. |
 | `spine-tasks/SP-116-flake-characterisation/*.log`, `floor-01.txt` | Every launched run's verdict, and the floor's own output. |
-| `spine-tasks/SP-116-flake-characterisation/floor-delta.json` | +3 unit / +0 headless. |
+| `spine-tasks/SP-116-flake-characterisation/floor-delta.json` | +5 unit / +0 headless. |
 
 ## 9. Three things a reviewer should check first
 
@@ -346,3 +424,7 @@ counts overlap. **The strong evidence is the mechanism-level measurement — 34 
      (FlashPixelProbe.LastCompositorFenceResult = 0x80000000; 80000000 means no fence was taken at
      all, 80000001 means dwmapi was not there to ask, anything else is DWM refusing). ...
    ```
+
+4. **That the verdict pins bite too.** Restore the pre-SP-116 one-line selector in
+   `TestWait.Verdict` (drop the `!deterministicSignal &&`) and both `TestWaitVerdictTests` facts
+   must red. Demonstrated at review; the tree was restored afterwards.

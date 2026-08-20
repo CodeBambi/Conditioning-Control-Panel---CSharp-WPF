@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Overlay;
@@ -200,9 +200,13 @@ public class MovingEffectSpineTests
         // the guard in place it passes always. It is SOUND but NOT COMPLETE: whether the tail lands
         // before or after the re-arm is the thread pool's choice, so with the guard removed it fails
         // only on the runs where the bad ordering really happens (measured: it does happen under
-        // suite load, and did not on an isolated run). A pin that could force the ordering would
-        // need either a wall-clock wait, which is banned, or a scheduler seam in the shared body,
-        // which is a bigger change than the defect. The bound is stated here rather than glossed.
+        // suite load, and did not on an isolated run). The bound is stated here rather than glossed.
+        //
+        // SP-116 SUPERSEDES THE REST OF THIS PARAGRAPH. It used to say a pin that could force the
+        // ordering "would need either a wall-clock wait, which is banned, or a scheduler seam in the
+        // shared body". Both were wrong: ATailThatLandsAfterSomethingWasPutBackUp_… below forces it
+        // with neither, by parking the release itself on a gate the test opens. The sentence is
+        // corrected rather than deleted, because the wrong half is why the defect went unpinned.
         await using var rig = await Rig.StartAsync();
         rig.EnablePinkFilter();
         rig.Engine.Start();
@@ -276,7 +280,7 @@ public class MovingEffectSpineTests
     {
         // SP-116. The shared body's teardown is not one call and it does not all happen on the
         // caller's thread. Per stop, EXACTLY three:
-        //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:212);
+        //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:219);
         //   2. the generation's cancellation registration (:352), which runs inside
         //      AsyncOperationOwner.Cancel on the disarming thread when the parked body has already
         //      registered, and inline on the POOL thread when it has not (registering an
@@ -337,7 +341,17 @@ public class MovingEffectSpineTests
         var stopped = probe.Completion!;
         try
         {
-            probe.Disarm();
+            // DisarmUnderObservation, not Disarm: it marks the thread that is INSIDE the disarm, so
+            // the probe can refuse to park a release that arrived synchronously on it. Without that
+            // refusal, a refactor making release 3 synchronous would park the only thread able to
+            // open the gate (OpenGate is in the finally, BELOW the disarm) and this fact would HANG
+            // rather than fail, in a suite with no per-test timeout. The test is exact rather than
+            // a thread-id guess: a pool continuation cannot be running on that thread while that
+            // thread is still inside Disarm, and once Disarm returns the mark is cleared, so a pool
+            // thread that later REUSES the same managed id still parks. (A first draft compared
+            // against the test thread's id alone and reddened this fact under full-suite load for
+            // exactly that reason.)
+            probe.DisarmUnderObservation();
             await TestWait.Until(
                 probe.TailArrived,
                 "the parked operation's tail to reach ReleaseWork after Disarm had already returned",
@@ -352,7 +366,12 @@ public class MovingEffectSpineTests
         }
 
         Assert.IsType<OperationOutcome.Cancelled>(await stopped);
-        Assert.False(probe.Live);
+        Assert.False(
+            probe.Live,
+            "the re-engagement made after the disarm survived the parked release. Either the guard "
+            + "at OwnedSessionEffect.cs:417 now blocks a release for the module's OWN live "
+            + "generation, or release 3 has become synchronous inside Disarm and the park was "
+            + "skipped to keep this fact from hanging — see DisarmUnderObservation");
         Assert.Equal(3, probe.Releases);
     }
 
@@ -632,6 +651,7 @@ public class MovingEffectSpineTests
         private readonly TaskCompletionSource _arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _releases;
         private int _parked = -1;
+        private int _disarmingThread = -1;
         private int _live;
 
         public override string Id => "tail-probe";
@@ -658,8 +678,39 @@ public class MovingEffectSpineTests
         {
         }
 
-        /// <summary>Hold the Nth release until <see cref="OpenGate"/>.</summary>
+        /// <summary>Hold the Nth release until <see cref="OpenGate"/>, unless it arrives
+        /// synchronously inside <see cref="DisarmUnderObservation"/> — see there for why.</summary>
         public void ParkReleaseNumber(int number) => Volatile.Write(ref _parked, number);
+
+        /// <summary>
+        /// <see cref="OwnedSessionEffect.Disarm"/>, with the calling thread marked for as long as it
+        /// is inside it.
+        ///
+        /// <para><b>Why the mark exists.</b> The gate is opened by the thread that called this, in a
+        /// <c>finally</c> BELOW it. If a future change made the third release land SYNCHRONOUSLY
+        /// inside the disarm, parking it would block the only thread that can ever open the gate and
+        /// the fact would hang forever in a suite with no per-test timeout. With the mark it refuses
+        /// to park that one release, the re-engagement survives, and the <c>Live</c> assertion reds
+        /// with a verdict a reader can act on.</para>
+        ///
+        /// <para><b>Why the mark and not the thread id alone.</b> A pool continuation cannot be
+        /// running on this thread while this thread is still inside <c>Disarm</c>, and the mark is
+        /// cleared the moment it returns — so a pool thread that later REUSES the same managed id
+        /// still parks, which is the common case under suite load and which a bare id comparison got
+        /// wrong.</para>
+        /// </summary>
+        public void DisarmUnderObservation()
+        {
+            Volatile.Write(ref _disarmingThread, Environment.CurrentManagedThreadId);
+            try
+            {
+                Disarm();
+            }
+            finally
+            {
+                Volatile.Write(ref _disarmingThread, -1);
+            }
+        }
 
         public void OpenGate() => _gate.Set();
 
@@ -674,7 +725,10 @@ public class MovingEffectSpineTests
             if (number == Volatile.Read(ref _parked))
             {
                 _arrived.TrySetResult();
-                _gate.Wait();
+                if (Environment.CurrentManagedThreadId != Volatile.Read(ref _disarmingThread))
+                {
+                    _gate.Wait();
+                }
             }
 
             Volatile.Write(ref _live, 0);

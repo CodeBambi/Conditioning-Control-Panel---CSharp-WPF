@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
 using Xunit;

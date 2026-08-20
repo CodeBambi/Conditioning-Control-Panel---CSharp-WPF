@@ -131,7 +131,16 @@ internal static class FlashPixelProbe
     /// and refused" are different answers.</summary>
     internal const int FenceNotTaken = int.MinValue;
 
-    /// <summary>True when the last screen read really was ordered behind the compositor.</summary>
+    /// <summary>
+    /// True when the last screen read really was ordered behind the compositor.
+    ///
+    /// <para><b>This and <see cref="LastCompositorFenceResult"/> are plain mutable statics, and they
+    /// are safe only because every caller sits inside <see cref="RealDesktopCollection"/>, whose
+    /// tests run sequentially in-process under a machine-wide lease.</b> A caller added outside that
+    /// collection would race these and could read another fixture's fence. Read the value into your
+    /// own record beside the capture it belongs to, as both observation classes do, rather than
+    /// consulting it later.</para>
+    /// </summary>
     internal static bool CompositorFenceHeld => LastCompositorFenceResult == 0;
 
     /// <summary>
@@ -146,11 +155,15 @@ internal static class FlashPixelProbe
     /// because the compositor has not published it yet. Measured on this machine, with the pool
     /// loaded, over a rig that replicates
     /// <c>FlashDrawObservations</c>'s own control window: <b>34 misses in 1200</b> reads with no
-    /// fence, <b>0 in 900</b> with one, and on every single miss the control window OWNED the point
-    /// (so occlusion by a foreign window is refuted, not assumed) and rendered its own colour
-    /// through <c>PrintWindow</c> (so the paint had landed). Decomposed: <c>GdiFlush</c> alone is
-    /// 8 in 300 — no effect, GDI batching is not the mechanism — and <c>DwmFlush</c> alone is
-    /// 0 in 300. Evidence: <c>spine-tasks/SP-116-flake-characterisation/sweep-control.log</c>.</para>
+    /// fence and <b>0 in 1500</b> with one — 900 through the rig's own fence plus 600 more through
+    /// THIS method once it shipped. On every single miss the control window OWNED the point and
+    /// rendered its own colour through <c>PrintWindow</c>, and the read came back with the IDENTICAL
+    /// majority colour <c>0x26171E</c> at the identical count every time: the same static content
+    /// behind the window, which refutes a VARYING foreign occluder as well as a foreign owner of the
+    /// point. Decomposed: <c>GdiFlush</c> alone is 8 in 300 — no effect, GDI batching is not the
+    /// mechanism — and <c>DwmFlush</c> alone is 0 in 300. Evidence:
+    /// <c>spine-tasks/SP-116-flake-characterisation/sweep-control.log</c> and
+    /// <c>sweep-control-postfix.log</c>.</para>
     ///
     /// <para><b>Why this is not a wait, a retry or a widened window.</b> <c>DwmFlush</c> blocks
     /// until the compositor's NEXT PRESENT has consumed the outstanding surface updates — it is an

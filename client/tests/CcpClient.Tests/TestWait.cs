@@ -72,6 +72,7 @@ public static class TestWait
         Task signal, string what, Func<string>? state = null, TimeSpan? window = null)
     {
         var effectiveWindow = window ?? DefaultWindow;
+        var started = MonotonicNow();
         using var timeoutCts = new CancellationTokenSource();
         var timeout = Task.Delay(effectiveWindow, timeoutCts.Token);
         // NO ConfigureAwait(false) anywhere in this helper: headless UI tests poll
@@ -85,7 +86,8 @@ public static class TestWait
             return;
         }
 
-        throw new Xunit.Sdk.XunitException(FailureMessage(what, state, Stats.ForSignal(effectiveWindow)));
+        throw new Xunit.Sdk.XunitException(
+            FailureMessage(what, state, Stats.ForSignal(effectiveWindow, MonotonicNow() - started)));
     }
 
     /// <summary>Synchronous variant for fixtures that must pump a dispatcher inline.</summary>
@@ -135,19 +137,49 @@ public static class TestWait
         return new Stats(false, polls, worstSlip, Environment.TickCount64 - started, window);
     }
 
+    /// <summary>
+    /// SP-116. The verdict selector, and the ONE place either token is chosen.
+    ///
+    /// <para><b>The bug this shape exists to make impossible.</b> Both branches used to be reached
+    /// through the poll heuristic alone, and the SIGNAL overload has no poll loop: it filled
+    /// <c>Polls</c> with the sentinel <c>-1</c>, which is below a tenth of any window's expected
+    /// polls, so EVERY expired signal wait emitted
+    /// <c>TIMING-VERDICT:ENVIRONMENT-STARVED — … rerun or reduce load BEFORE treating this as a
+    /// failure</c>. That token is greppable and travels into the TRX failure text, so a genuine
+    /// break of a deterministic signal told the next engineer to RE-RUN it, which is the one
+    /// instruction this suite must never give. A signal wait therefore never reads as starved:
+    /// there is no loop to starve, and this helper does not guess about what it did not
+    /// measure.</para>
+    ///
+    /// <para>Internal rather than private so BOTH verdicts can be pinned against each other
+    /// (<c>TestWaitVerdictTests</c>). Before SP-116 neither was pinned anywhere, which is how the
+    /// misclassification survived across ten call sites: the only evidence was a failure message
+    /// nobody reads until something is already broken.</para>
+    /// </summary>
+    internal static string Verdict(
+        string what, TimeSpan window, bool deterministicSignal, int polls, long worstSlipMs)
+    {
+        // A starved ACTOR leaves this loop on schedule, which is why the verdict is a hypothesis
+        // and the evidence beside it is what lets a reader overturn it.
+        var starved = !deterministicSignal
+            && (worstSlipMs > StarvationSlipMs || polls < window.TotalMilliseconds / PollMs / 10);
+        if (starved)
+        {
+            return "TIMING-VERDICT:ENVIRONMENT-STARVED — the wait loop itself was scheduler-starved " +
+                $"while waiting for {what}: the machine was too slow to observe the full window; " +
+                "rerun or reduce load BEFORE treating this as a failure";
+        }
+
+        var subject = deterministicSignal
+            ? "the deterministic signal never completed"
+            : "it never became true";
+        return $"TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full {window.TotalSeconds:0.#}s " +
+            $"for {what} and {subject}: treat as a REAL product/test failure";
+    }
+
     private static string FailureMessage(string what, Func<string>? state, Stats stats)
     {
-        // The verdict is a hypothesis from THIS thread's scheduling; the evidence is what
-        // lets the reader confirm or overturn it (a starved ACTOR leaves this loop on
-        // schedule — the state snapshot is the differential).
-        var starved = stats.WorstSlipMs > StarvationSlipMs
-            || stats.Polls < stats.Window.TotalMilliseconds / PollMs / 10;
-        var verdict = starved
-            ? "TIMING-VERDICT:ENVIRONMENT-STARVED — the wait loop itself was scheduler-starved " +
-              $"while waiting for {what}: the machine was too slow to observe the full window; " +
-              "rerun or reduce load BEFORE treating this as a failure"
-            : $"TIMING-VERDICT:CONDITION-NEVER-TRUE — waited the full {stats.Window.TotalSeconds:0.#}s " +
-              $"for {what} and it never became true: treat as a REAL product/test failure";
+        var verdict = Verdict(what, stats.Window, stats.DeterministicSignal, stats.Polls, stats.WorstSlipMs);
         string snapshot;
         try
         {
@@ -158,13 +190,24 @@ public static class TestWait
             snapshot = $"<state snapshot threw {ex.GetType().Name}: {ex.Message}>";
         }
 
-        return $"{verdict}. EVIDENCE: polls={stats.Polls}, elapsed={stats.ElapsedMs}ms, " +
-               $"worst-scheduler-slip={stats.WorstSlipMs}ms, threadpool-pending={ThreadPool.PendingWorkItemCount}, " +
+        var evidence = stats.DeterministicSignal
+            ? "deterministic signal wait, so there is NO poll loop here and this helper neither " +
+              "observes nor claims anything about scheduler starvation on this path; " +
+              $"elapsed={stats.ElapsedMs}ms against a {stats.Window.TotalMilliseconds:0}ms window"
+            : $"polls={stats.Polls}, elapsed={stats.ElapsedMs}ms, worst-scheduler-slip={stats.WorstSlipMs}ms";
+
+        return $"{verdict}. EVIDENCE: {evidence}, " +
+               $"threadpool-pending={ThreadPool.PendingWorkItemCount}, " +
                $"actor-state: {snapshot}";
     }
 
-    private sealed record Stats(bool Met, int Polls, long WorstSlipMs, long ElapsedMs, TimeSpan Window)
+    private sealed record Stats(
+        bool Met, int Polls, long WorstSlipMs, long ElapsedMs, TimeSpan Window, bool DeterministicSignal = false)
     {
-        public static Stats ForSignal(TimeSpan window) => new(false, -1, -1, -1, window);
+        /// <summary>SP-116: the signal overload carries its OWN measured elapsed and says plainly
+        /// that it had no poll loop, instead of filling the poll fields with sentinels the verdict
+        /// selector then read as starvation.</summary>
+        public static Stats ForSignal(TimeSpan window, long elapsedMs) =>
+            new(false, -1, -1, elapsedMs, window, DeterministicSignal: true);
     }
 }

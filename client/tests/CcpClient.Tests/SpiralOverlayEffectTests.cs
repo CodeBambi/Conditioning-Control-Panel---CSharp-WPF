@@ -343,8 +343,8 @@ public class SpiralOverlayEffectTests
         // Assert.True(Showing) is decided by the scheduler.
         //
         // Awaiting the module's own published completion is the ordering edge, and it is the same
-        // one MovingEffectSpineTests already takes for the same reason (:196-197, and the drained
-        // note at :171-174). It is not a wait for an assertion to pass: the operation is finished
+        // one MovingEffectSpineTests already takes for the same reason (:171-174, the drained note
+        // and the await it explains). It is not a wait for an assertion to pass: the operation is finished
         // or the window fails loudly, and the sequence below is then single-threaded.
         // ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN in MovingEffectSpineTests forces
         // that ordering deterministically, so the hazard is pinned rather than merely avoided.

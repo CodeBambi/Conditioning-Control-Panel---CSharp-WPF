@@ -1,0 +1,14 @@
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-jOhlSr
+FLOOR CHECK FAILED (SP-065):
+  dotnet test exited 1 for CcpClient.Tests — runner-level failure (see tail below)
+  --- CcpClient.Tests: 1 named failure(s) from the TRX ---
+    CcpClient.Tests.MovingEffectSpineTests.ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN_WhichIsWhyThePostDisarmAwaitIsNotOptional
+      the re-engagement made after the disarm survived the parked release. Either the guard at OwnedSessionEffect.cs:417 now blocks a release for the module's OWN live generation, or release 3 has become synchronous inside Disarm and the park was skipped to keep this fact from hanging — see ParkReleaseNumber's exceptOnThread
+  --- CcpClient.Tests dotnet output tail ---
+     at CcpClient.Tests.MovingEffectSpineTests.ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN_WhichIsWhyThePostDisarmAwaitIsNotOptional() in C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a76eaa63a39ac984b\client\tests\CcpClient.Tests\MovingEffectSpineTests.cs:line 364
+--- End of stack trace from previous location ---
+Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-jOhlSr\CcpClient.Tests\results.trx
+
+Failed!  - Failed:     1, Passed:  2064, Skipped:     2, Total:  2067, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+[xUnit.net 00:00:07.69]     CcpClient.Tests.MovingEffectSpineTests.ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN_WhichIsWhyThePostDisarmAwaitIsNotOptional [FAIL]
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-jOhlSr

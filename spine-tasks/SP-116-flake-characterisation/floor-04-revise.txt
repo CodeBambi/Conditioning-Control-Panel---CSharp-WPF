@@ -1,0 +1,11 @@
+floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-BUfTcp
+FLOOR CHECK FAILED (SP-065):
+  CcpClient.Tests: FLOOR VIOLATION — total drift: 2067 result(s) (pin total 2062). A count drift in EITHER direction fails the contract (SP-065/SP-066). If this change is intentional, bump client/tests/floor/floor.json in the SAME commit and state the reason in the message.
+  --- CcpClient.Tests dotnet output tail ---
+  Skipped CcpClient.Tests.SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked [1 ms]
+[xUnit.net 00:00:08.04]     CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps [SKIP]
+  Skipped CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps [1 ms]
+Results File: C:\Users\Micha\AppData\Local\Temp\ccp-floor-BUfTcp\CcpClient.Tests\results.trx
+
+Passed!  - Failed:     0, Passed:  2065, Skipped:     2, Total:  2067, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+results directory (preserved for evidence): C:\Users\Micha\AppData\Local\Temp\ccp-floor-BUfTcp

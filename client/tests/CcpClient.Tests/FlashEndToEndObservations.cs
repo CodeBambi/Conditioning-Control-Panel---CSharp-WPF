@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Effects;
+using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Session;
 
@@ -53,10 +53,13 @@ internal static class FlashEndToEndObservations
     /// </param>
     /// <param name="CompositorFenceHeldDuring">
     /// SP-116, and the fifth verdict behind a count of zero. Whether the screen read that produced
-    /// <see cref="Run.DesktopPixelsDuring"/> was ordered behind the compositor at all
-    /// (<see cref="FlashPixelProbe.CompositorFenceHeld"/>). Without that edge a layered top-most
-    /// window this process had just shown and painted was absent from the read 34 times in 1200 on
-    /// this machine, with the window owning its own centre point every time. Diagnostic only.
+    /// <see cref="Run.DesktopPixelsDuring"/> was ordered behind the compositor at all. Without that
+    /// edge a layered top-most window this process had just shown and painted was absent from the
+    /// read 34 times in 1200 on this machine, with the window owning its own centre point every
+    /// time. <b>Captured inside that read rather than read off the static afterwards</b> (review
+    /// finding): the evidence write and the after-hide capture each take their own fence, so a
+    /// later read of <see cref="FlashPixelProbe.CompositorFenceHeld"/> would report a DIFFERENT
+    /// capture's fence under a name that says "During". Diagnostic only; nothing is asserted on it.
     /// </param>
     /// <param name="DesktopUniformPixelsDuring">
     /// SP-107: how many of those returned pixels equal the first one. A read that came back UNIFORM
@@ -159,7 +162,8 @@ internal static class FlashEndToEndObservations
 
             var before = CountDesktop(display);
             presenter.Show([imagePath]);
-            var (during, sampledDuring, uniformDuring, firstDuring, captureHorizontal, captureVertical) =
+            var (during, sampledDuring, uniformDuring, firstDuring, captureHorizontal, captureVertical,
+                fenceDuring) =
                 CountDesktopWithSampleSize(display, evidence: "desktop-with-a-real-flash.bmp", display);
             var shown = presenter.SurfacesShown;
 
@@ -177,7 +181,7 @@ internal static class FlashEndToEndObservations
                 DesktopPixelsDuring: during,
                 DesktopPixelsAfterHide: after,
                 DesktopPixelsSampledDuring: sampledDuring,
-                CompositorFenceHeldDuring: FlashPixelProbe.CompositorFenceHeld,
+                CompositorFenceHeldDuring: fenceDuring,
                 DesktopUniformPixelsDuring: uniformDuring,
                 DesktopFirstPixelDuring: firstDuring,
                 PlacementScreen: (screenWidth, screenHeight),
@@ -236,7 +240,8 @@ internal static class FlashEndToEndObservations
     }
 
     private static (int Count, int Sampled, int Uniform, uint First,
-        (int Virtual, int Physical) Horizontal, (int Virtual, int Physical) Vertical) CountDesktopWithSampleSize(
+        (int Virtual, int Physical) Horizontal, (int Virtual, int Physical) Vertical,
+        bool FenceHeld) CountDesktopWithSampleSize(
         OverlayBounds display, string? evidence = null, OverlayBounds? area = null)
     {
         var rect = area ?? display;
@@ -245,6 +250,10 @@ internal static class FlashEndToEndObservations
         var captureHorizontal = FlashPixelProbe.HorizontalResolutions;
         var captureVertical = FlashPixelProbe.VerticalResolutions;
         var pixels = FlashPixelProbe.CaptureDesktop(rect.X, rect.Y, rect.Width, rect.Height);
+        // SP-116 (review finding): read on THIS call, before the evidence write below takes another
+        // capture and overwrites the static. A field called "…During" that reports a LATER read's
+        // fence would be exactly the kind of true-looking number this packet exists to refuse.
+        var fenceHeld = FlashPixelProbe.CompositorFenceHeld;
         if (evidence is not null && pixels.Length > 0)
         {
             var (virtualWidth, physicalWidth) = FlashPixelProbe.HorizontalResolutions;
@@ -257,7 +266,7 @@ internal static class FlashEndToEndObservations
 
         var (uniform, first) = Uniformity(pixels);
         return (FlashPixelProbe.CountOf(pixels, ImageColour), pixels.Length, uniform, first,
-            captureHorizontal, captureVertical);
+            captureHorizontal, captureVertical, fenceHeld);
     }
 
     /// <summary>The smallest clock that satisfies the presenter: this run shows one image, so
