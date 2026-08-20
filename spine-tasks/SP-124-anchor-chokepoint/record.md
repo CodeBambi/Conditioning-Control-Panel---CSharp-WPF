@@ -2,7 +2,20 @@
 
 Branch `lane/SP-124-anchor-chokepoint`, worktree
 `C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-ae4549e78574234be`, base
-`b76856a7`. Two commits: `f9bfc93f5` (the anchor), `913eab0be` (the three clock guards).
+`b76856a7`. **Five commits:**
+
+| commit | carries |
+|---|---|
+| `f9bfc93f5` | the anchor: `census.mjs --metadata-json` / `--check-stale`, the shared `metadataView`, and `MetadataReader_AndReflection_SeeTheSameShippedTypes` plus the three new facts replacing the stored-scalar comparison |
+| `913eab0be` | the three clock guards: the dispose fact rewritten in all three files, the struck no-reporter claim, the corrected sound-clock cross-reference, and the three class-doc paragraphs |
+| `8f617dd04` | `record.md` and `floor-delta.json` — the baseline, the mutation evidence and the drift trade |
+| `b18ddaaaf` | code review's five items: the `--check-stale` write-time diagnostic and its pin, the wedged-`node` tree kill, the unclosed `<para>`, the `ScheduleClock.cs:65-67` off-by-one, and the timing-guard hand-off added to §7a |
+| **HEAD** (this commit, `fix(SP-124): scope the method-body clause…`) | final review's two prose defects: this commit inventory, and the method-body clause scoped to the C2/C3-surviving subset with the excluded-row `hasIl` gap named |
+
+The last row describes the commit that adds it, and is named rather than given a SHA because that
+SHA cannot exist before the commit does. The previous version of this line said "two commits" and
+then SURVIVED a commit that edited this very file — exactly the stale sentence this packet exists to
+strike, in the packet's own required artifact.
 
 ## 1. THE CHOKEPOINT BASELINE — measured first, as required
 
@@ -76,14 +89,26 @@ requirement of this tree. If node is absent the fact FAILS with that message; it
 ## 3. WHAT STILL FAILS IF THE READER STARTS MISCOUNTING
 
 **If `census.mjs`'s ECMA-335 walk goes wrong in any way that changes which type definitions it
-reports, what kind each one is, or which of them carry a method body, then its own output stops
-matching what `Assembly.GetTypes()`, `Type.IsInterface` and `MethodBase.GetMethodBody()` report for
-the identical file, and `MetadataReader_AndReflection_SeeTheSameShippedTypes` fails naming the exact
-names that differ.**
+reports, what kind each one is, or which of the C2/C3-SURVIVING ones carry a method body, then its
+own output stops matching what `Assembly.GetTypes()`, `Type.IsInterface` and
+`MethodBase.GetMethodBody()` report for the identical file, and
+`MetadataReader_AndReflection_SeeTheSameShippedTypes` fails naming the exact names that differ.**
 
-That sentence claims the TypeDef walk, the kind decode and the MethodDef walk — and nothing else.
-The reader also returns `ns`, which drives the census's namespace headings and its nested/top-level
-split; **no fact compares `ns`**, and the old anchor did not either. Named, not hidden.
+That sentence claims the TypeDef walk, the kind decode and the MethodDef walk **over the
+C2/C3-surviving subset** — and nothing else. Two gaps, both named, neither covered by the anchor
+this replaces:
+
+- **`ns` is compared by nothing.** It drives the census's namespace headings and its nested/top-level
+  split.
+- **`hasIl` on an EXCLUDED TypeDef is compared by nothing.** Comparison 4 reads the reader's
+  `noMethodBody`, which `census.mjs:419` has already narrowed to `authored.filter(t => !t.hasIl)`,
+  and `MetadataRow.HasIl` is carried into C# but never used. So a walk defect flipping `hasIl` on a
+  compiler-generated row changes the emitted output and reds nothing. Consequence for the census is
+  nil — `hasIl` has exactly one consumer, that filter — and closing it is a fifth multiset over
+  every row. Named rather than closed; final review directed prose only, no mechanism change.
+
+The method-body clause was scoped on this pass. It is the sentence's third: plan review caught it
+over-claiming on `ns`/`kind`, `kind` was added and `ns` named, and this was the residue.
 
 Proved by making the reader wrong three times (each mutation applied to the committed
 `census.mjs`, run, then `git checkout --`; blob restored to `e690fed196fd9b40aff309bd578a20c16bbbdc1a`
@@ -278,10 +303,46 @@ disclosed in their class docs. When that guard file is next open: add the token,
 `// wallclock-allow:` markers, pin the three sites. Guard file plus three test files, no product
 code."*
 
-Recording it here rather than leaving it in a review message, for the same reason as 7b: a finding
+Recording it here rather than leaving it in a review message, for the same reason as 7c: a finding
 that lives only in a reviewer's message dies with the review.
 
-### 7b. `DtrhBarkRouting.Composition.cs` cites the anchor by its old name — `client/src/**` is closed
+### 7b. An intermittent I observed once, in a test outside my File Scope
+
+On the FIRST floor run of the final-review pass, one fact I have never touched failed:
+
+```
+CcpClient.Tests.SoundArbitrationTests.Construction_LockUnavailableAtCompletion_AbandonsWithoutCounting_NothingWasParked
+Assert.Equal() Failure: Values differ / Expected: 0 / Actual: 1   (SoundArbitrationTests.cs:1625)
+Failed!  - Failed: 1, Passed: 2309, Skipped: 2, Total: 2312
+```
+
+**It is that test's own declared starvation mode**, written at `SoundArbitrationTests.cs:1616-1619`:
+"The one scheduling assumption is that a trivial already-ungated construction returns inside the
+200 ms budget; if a starved pool ever broke that, this fact REDS (it would take route (a) and count
+1) — it can never pass vacuously." `Actual: 1` is exactly route (a). Its author chose red-on-starved
+over pass-vacuously, so this is the fact behaving as designed on a loaded machine, not a defect it
+failed to catch.
+
+**Did my change cause it?** I checked rather than assumed, from that run's own TRX. The failing test
+ran 06:36:30.188 → 06:36:31.150. All four of my node-spawning facts started AFTER it ended
+(06:36:32.73, 06:36:33.47, 06:36:34.34, 06:36:34.66), so no external process of mine was concurrent
+with it. Two of the three dispose facts did overlap in wall-clock (Sound 06:36:28.89 → 06:36:30.96,
+Schedule 06:36:29.92 → 06:36:31.93) — but during those two seconds they hold three timers and await
+signals through `TestWait`, which is `Task.WhenAny` over a delay: no poll loop, no spin, about six
+trivial callbacks total. If anything they lower CPU pressure by occupying a parallel slot while
+idle. **I cannot rule my change out entirely, and I am not claiming to.**
+
+Runs at this head: **red once, then green three times** (2310 passed / 2 skipped / 2312 total, and
+144/144 headless). `SoundArbitrationTests.cs` is not in this packet's File Scope, so I could not
+have touched it in any case; this is reported, not acted on.
+
+**Proposed board row:** *"`SoundArbitrationTests.Construction_LockUnavailableAtCompletion_AbandonsWithoutCounting_NothingWasParked`
+reds on a starved pool by its own design (`:1616-1619`) and did so once during SP-124's final-review
+floor runs (1 red in 4). Not a quarantine candidate — it is red-on-starved by deliberate choice, and
+`allowedSkips` would be exactly the wrong instrument. Decide whether the 200 ms construction budget
+should be `TestWait.InjectedBudget` instead."*
+
+### 7c. `DtrhBarkRouting.Composition.cs` cites the anchor by its old name — `client/src/**` is closed
 
 `client/src/CcpClient.Desktop/Features/Dtrh/DtrhBarkRouting.Composition.cs:24-31` explains why
 SP-123's lift is a `partial` and not a type of its own, and its mechanical half is now **doubly
@@ -340,6 +401,10 @@ three dispose facts were rewritten in place.
   types are really dead remains a question for a reader.
 - **`ns` is not compared** (§3), so a defect isolated to the namespace read would be invisible to it,
   as it was to the anchor this replaces.
+- **`hasIl` is not compared on C2/C3-EXCLUDED rows** (§3). Comparison 4 reads `noMethodBody`, which
+  the tool has already narrowed to the authored subset, so a walk defect flipping `hasIl` on a
+  compiler-generated TypeDef changes the reader's output and reds nothing. Nil consequence for the
+  census — one consumer — and one multiset away from closed, but not closed here.
 - **`--check-stale` checks three scalars and says so.** It cannot see the coverage-derived rows or
   the embedded run table, and it prints that on every run rather than letting a quiet exit imply it.
 - **`--check-stale` reads the BUILT ASSEMBLY, so its own input can be stale.** A leftover Debug

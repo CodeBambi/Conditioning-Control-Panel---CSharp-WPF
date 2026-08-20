@@ -264,12 +264,22 @@ public sealed class ExecutionCensusTests
     ///
     /// <para>WHAT STILL FAILS IF THE READER STARTS MISCOUNTING, in one checkable sentence: if
     /// <c>census.mjs</c>'s ECMA-335 walk goes wrong in any way that changes which type definitions
-    /// it reports, what kind each one is, or which of them carry a method body — a wrong row width,
-    /// a wrong heap-index size, a dropped or duplicated TypeDef row, a <c>methodList</c> range off
-    /// by one, a mis-decoded <c>extends</c> coded index — then its own output stops matching what
-    /// <see cref="Assembly.GetTypes"/>, <see cref="Type.IsInterface"/> and
-    /// <see cref="MethodBase.GetMethodBody"/> report for THE IDENTICAL FILE, and this fact fails
-    /// naming the exact names that differ.</para>
+    /// it reports, what kind each one is, or which of the C2/C3-SURVIVING ones carry a method body
+    /// — a wrong row width, a wrong heap-index size, a dropped or duplicated TypeDef row, a
+    /// <c>methodList</c> range off by one, a mis-decoded <c>extends</c> coded index — then its own
+    /// output stops matching what <see cref="Assembly.GetTypes"/>, <see cref="Type.IsInterface"/>
+    /// and <see cref="MethodBase.GetMethodBody"/> report for THE IDENTICAL FILE, and this fact
+    /// fails naming the exact names that differ.</para>
+    ///
+    /// <para>THAT CLAUSE IS SCOPED, AND BOTH GAPS ARE NAMED. "Carry a method body" is asserted only
+    /// over the C2/C3-surviving subset, because comparison 4 reads <c>noMethodBody</c>, which
+    /// <c>census.mjs</c> has ALREADY narrowed to <c>authored.filter(t =&gt; !t.hasIl)</c>. So a walk
+    /// defect flipping <c>hasIl</c> on an EXCLUDED TypeDef changes the reader's emitted output and
+    /// reds nothing here. Its consequence for the census is nil — <c>hasIl</c> has exactly one
+    /// consumer, that filter — and closing it would be a fifth multiset over every row; it is named
+    /// rather than closed. The second gap is <c>ns</c>, which drives the census's namespace headings
+    /// and its nested/top-level split and is compared by nothing here. Neither gap was covered by
+    /// the anchor this replaces either.</para>
     ///
     /// <para>Both sides are live, so a packet adding an ordinary shipped type moves both and this
     /// stays green; a reader defect moves one and it reds. That is the whole difference from the
