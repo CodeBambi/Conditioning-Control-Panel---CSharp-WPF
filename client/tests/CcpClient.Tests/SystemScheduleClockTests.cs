@@ -91,7 +91,7 @@ public class SystemScheduleClockTests
     public async Task ACallbackThatThrowsWithNoReporter_IsStillContained()
     {
         // The constructor's parameter is optional and its doc says an unreported fault "is only
-        // correct for a caller that has no log" (ScheduleClock.cs:66-68). So a null reporter is a
+        // correct for a caller that has no log" (ScheduleClock.cs:65-67). So a null reporter is a
         // real configuration and this exercises it: the invoke inside the catch is null-conditional,
         // and the clock keeps servicing work afterwards.
         //

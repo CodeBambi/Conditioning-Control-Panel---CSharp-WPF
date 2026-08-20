@@ -138,9 +138,11 @@ arithmetic inside the document, so a lane adding a type does not move them.
 - **Required: nothing.** This packet adds no shipped type. Verified independently:
   `1325 / 884 / 212` from the reader on a clean Debug build, matching `execution-census.md:60,61,64`.
   **`client/docs/execution-census.md` needs no regeneration for SP-124.**
-- **Recommended, once, after the wave's product packets land:**
-  `node client/tools/gate/with-slot.mjs -- node client/tools/coverage/census.mjs --check-stale`
-  (needs a Debug build). If it reds, the remedy is `node client/tools/coverage/census.mjs`.
+- **Recommended, once, after the wave's product packets land:** build Debug FIRST, then
+  `node client/tools/gate/with-slot.mjs -- node client/tools/coverage/census.mjs --check-stale`.
+  It reads the BINARY, so it prints that binary's write time on every run — if that predates the
+  wave's last source change, rebuild and re-run before believing either verdict. If it still reds,
+  the remedy is `node client/tools/coverage/census.mjs`.
 - **Verified the generation path still works** through the shared `metadataView`:
   `census.mjs --filter "FullyQualifiedName~HapticGateTests" --print` still renders
   `| type definitions ... | 1325 |`, `| ... authored name shape ... | 884 |`,
@@ -251,7 +253,35 @@ that reds when the negative leg's precondition stops being reachable. Proved in 
 That is my answer to SP-123's "three instances argues for a guard": the guard is a required SHAPE
 for negative facts, enforced at review, not a scanner pretending to decide undecidable questions.
 
-## 7. FINDING I COULD NOT ACT ON — `client/src/**` is closed
+## 7. FINDINGS I COULD NOT ACT ON
+
+### 7a. The three new due-time literals are class-3 sites the timing guard cannot see
+
+`TestTimingGuardTests` (`TestTimingGuardTests.cs:8-13`) defines a class-3 site as an elapsed-time
+subject, requiring an inline `// wallclock-allow: <reason>` marker AND a pin in that file. The three
+`DoomedDue`/`BarrierDue` literals I added are exactly that by the guard's own taxonomy, and they
+carry neither.
+
+**This is not a regression in the guard's reach.** Its `ForbiddenTokens` list
+(`TestTimingGuardTests.cs:20-41`) covers `Thread.Sleep(`, `Task.Delay(`, `.WaitAsync(TimeSpan`,
+`CancelAfter(`, `Timeout = TimeSpan.` and the clock-reading tokens — it never covered a bare
+`TimeSpan.From*` handed to a PRODUCT API, so the ten-minute literals these replace were equally
+unseen, in all three files, before this packet. The exception is named loudly in all three class doc
+comments and again at each site, so it is disclosed rather than smuggled; and `TestTimingGuardTests.cs`
+is outside this packet's File Scope, so adding the token and the three pins was not mine to do.
+
+**Proposed board row:** *"`TestTimingGuardTests.ForbiddenTokens` does not cover a bare `TimeSpan.From*`
+passed to a product scheduling API, so a due-time literal whose elapsing IS a fact's subject is
+neither marked nor pinned. Three such sites exist after SP-124 (`DoomedDue`/`BarrierDue` in
+`SystemSessionClockTests.cs`, `SystemScheduleClockTests.cs`, `SystemSoundClockTests.cs`), all
+disclosed in their class docs. When that guard file is next open: add the token, add
+`// wallclock-allow:` markers, pin the three sites. Guard file plus three test files, no product
+code."*
+
+Recording it here rather than leaving it in a review message, for the same reason as 7b: a finding
+that lives only in a reviewer's message dies with the review.
+
+### 7b. `DtrhBarkRouting.Composition.cs` cites the anchor by its old name — `client/src/**` is closed
 
 `client/src/CcpClient.Desktop/Features/Dtrh/DtrhBarkRouting.Composition.cs:24-31` explains why
 SP-123's lift is a `partial` and not a type of its own, and its mechanical half is now **doubly
@@ -312,6 +342,12 @@ three dispose facts were rewritten in place.
   as it was to the anchor this replaces.
 - **`--check-stale` checks three scalars and says so.** It cannot see the coverage-derived rows or
   the embedded run table, and it prints that on every run rather than letting a quiet exit imply it.
+- **`--check-stale` reads the BUILT ASSEMBLY, so its own input can be stale.** A leftover Debug
+  binary makes it report `STALE ROW` over a census that describes the source tree perfectly — review
+  hit exactly that with a leftover probe build. It cannot detect this, so it now prints the DLL's
+  write time and the instruction to rebuild on BOTH outcomes, and
+  `StaleCheck_IsQuietWhenTheDocumentDescribesTheAssembly` pins that the line is printed. Disclosed,
+  not solved: reading a binary is what makes the check cheap enough to run at a land.
 - **The suppression facts are ordering arguments, not happens-before edges** (§5b). A sufficiently
   starved pool could let one read green.
 - **The stale-check facts run against synthetic documents.** They prove the checker bites; they do

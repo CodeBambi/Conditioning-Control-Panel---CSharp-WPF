@@ -489,6 +489,16 @@ function checkStale(rule, dllPath, censusPath) {
     }
   }
 
+  // THE CHECKER'S OWN INPUT CAN BE STALE, so it never lets that pass unsaid. A leftover Debug
+  // binary makes every verdict below wrong in the LOUD direction — a STALE ROW against a document
+  // that describes the source tree perfectly — and review hit exactly that with a stale probe
+  // build. The write time is printed on both outcomes because "rebuild and re-run" has to be the
+  // first thing a reader checks, not the last. Deliberately console output and never the document:
+  // the census itself must carry no timestamp (Census_IsDeterministicAndCarriesNoMachineIdentity).
+  const built = fs.statSync(dllPath).mtime.toISOString().replace(/\.\d+Z$/, "Z");
+  console.log(`read ${path.basename(dllPath)}, last written ${built} — if that predates your last`);
+  console.log("source change, REBUILD and re-run: this tool compares the document against the");
+  console.log("BINARY, so a stale binary produces a stale verdict in either direction.");
   console.log("checked: the three scalars this tool reads from the shipped assembly's own metadata.");
   console.log("NOT CHECKED, and stale by construction the moment a test or a covered line moves:");
   console.log("  * the embedded suite run table (passed/failed/skipped per project) — it is a");

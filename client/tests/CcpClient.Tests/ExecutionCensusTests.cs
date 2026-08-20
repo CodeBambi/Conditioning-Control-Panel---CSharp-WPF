@@ -53,7 +53,7 @@ namespace CcpClient.Tests;
 /// packet reddened this file, and the only remedy — regenerating the census — is closed to lanes
 /// for the same reason <c>floor.json</c> is. Measured, not argued: with a throwaway shipped type
 /// present this class reported <c>Failed: 1, Passed: 9</c>, failing at
-/// <c>Assert.Equal() ... Expected: 885 / Actual: 884</c>.
+/// <c>Assert.Equal() ... Expected: 885 / Actual: 884</c>.</para>
 ///
 /// <para>So both halves now run at RUNTIME.
 /// <see cref="MetadataReader_AndReflection_SeeTheSameShippedTypes"/> asks <c>census.mjs</c> for its
@@ -413,6 +413,12 @@ public sealed class ExecutionCensusTests
             Assert.DoesNotContain("STALE ROW", run.StdErr, StringComparison.Ordinal);
             Assert.Contains("NOT CHECKED", run.StdOut, StringComparison.Ordinal);
             Assert.Contains("run table", run.StdOut, StringComparison.Ordinal);
+
+            // ...and it names when the BINARY it read was written. The checker's own input can be
+            // stale: a leftover Debug build makes every verdict wrong, in the loud direction, over a
+            // document that describes the source tree perfectly. Pinned rather than trusted, because
+            // a diagnostic nobody asserts is a diagnostic that quietly stops being printed.
+            Assert.Contains("last written", run.StdOut, StringComparison.Ordinal);
         }
         finally
         {
@@ -638,7 +644,32 @@ public sealed class ExecutionCensusTests
         {
             var stdout = process.StandardOutput.ReadToEndAsync();
             var stderr = process.StandardError.ReadToEndAsync();
-            await TestWait.Until(process.WaitForExitAsync(), $"census.mjs {args[0]} to exit");
+            try
+            {
+                await TestWait.Until(process.WaitForExitAsync(), $"census.mjs {args[0]} to exit");
+            }
+            catch
+            {
+                // A wedged node must not OUTLIVE the fact that started it. The window expiring is
+                // already a failure and stays one — this only stops the failure from leaving a
+                // process behind to hold the assembly open and confuse the next run.
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // It exited between the window expiring and the kill; nothing to clean up.
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // The OS refused the kill. Reporting THAT instead of the timeout would bury the
+                    // real failure, so the original exception wins.
+                }
+
+                throw;
+            }
+
             return new ToolRun(process.ExitCode, await stdout, await stderr);
         }
     }
