@@ -394,8 +394,8 @@ right-click, the one-control panel, the four notice lines).
 **All six existing capability folders, `Effects/**`, `Entitlement/**`, `Scheduling/**`,
 `Persistence/**`, `Tray/**` and the csproj are byte-identical to base.**
 
-**Tests — new:** `HapticCapabilityTests.cs` (**22**), `HapticGateTests.cs` (**13**),
-`HapticParticipantTests.cs` (**21**, the last two being the sweep's M-av and M-ax closers) — 56 unit;
+**Tests — new:** `HapticCapabilityTests.cs` (**28**), `HapticGateTests.cs` (**10**),
+`HapticParticipantTests.cs` (**18**, two of them the sweep's M-av and M-ax closers) — 56 unit;
 `HapticsRowHeadlessTests.cs` (**8**) headless.
 **Tests — changed at zero count:** `CompositionRootValidationTests.cs` and `IntegrationProofTests.cs`
 (9 → 10 participants, plus new assertions that the tenth connects to nothing and holds the root's own
@@ -405,7 +405,7 @@ they are about — order relative to the session — asserted unchanged),
 `StudioRackHeadlessTests.cs` (the row list gains `RowHaptics` in WPF's position, and the order fact
 gains two assertions: this row HAS a dot and has NO effect behind it).
 
-22 + 13 + 21 = **56** unit, **8** headless — the declared delta.
+28 + 10 + 18 = **56** unit, **8** headless — the declared delta (theory cases counted as the runner counts them).
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-119, **D191-D202**),
 `client/docs/verification-harness.md` (the haptic evidence class).
