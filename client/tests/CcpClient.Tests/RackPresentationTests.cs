@@ -110,6 +110,40 @@ public class RackPresentationTests
     }
 
     /// <summary>
+    /// The surface guard above covers <c>-Surface</c> only, and a surface is half a capture:
+    /// <c>capture.ps1</c> pairs each surface with the states it can actually DRIVE
+    /// (<c>$statesFor</c>), and refuses an unpaired combination by name because it would otherwise
+    /// capture whatever the last state happened to leave behind. A manifest check whose STATE is
+    /// undrivable is the same decoration as one whose surface is.
+    /// </summary>
+    [Fact]
+    public void EveryManifestSurfaceStatePairIsOneTheCaptureScriptCanDrive()
+    {
+        var script = CaptureScriptCode();
+        var start = script.IndexOf("$statesFor = @{", StringComparison.Ordinal);
+        Assert.InRange(start, 0, script.Length);
+        var end = script.IndexOf("\n}", start, StringComparison.Ordinal);
+        Assert.InRange(end, start, script.Length);
+
+        var drivable = new HashSet<string>(StringComparer.Ordinal);
+        foreach (System.Text.RegularExpressions.Match row in System.Text.RegularExpressions.Regex.Matches(
+            script[start..end], @"'(?<surface>[a-z-]+)'\s*=\s*@\((?<states>[^)]*)\)"))
+        {
+            foreach (System.Text.RegularExpressions.Match state in
+                System.Text.RegularExpressions.Regex.Matches(row.Groups["states"].Value, "'(?<s>[a-z-]+)'"))
+            {
+                drivable.Add($"{row.Groups["surface"].Value}/{state.Groups["s"].Value}");
+            }
+        }
+
+        Assert.NotEmpty(drivable);
+        foreach (var check in CheckManifest.Load(ManifestPath()))
+        {
+            Assert.Contains($"{check.Surface}/{check.State}", drivable);
+        }
+    }
+
+    /// <summary>
     /// THE TOLERANCE RULE, MECHANICAL. A tolerance is the size of the defect it hides, and here the
     /// defect has a name and a number: <c>RadioButton.rack-row:pointerover</c> is <c>#FF241E2A</c>
     /// (<c>MainWindow.axaml:98-100</c>), which is 11/10/11 from the rack's <c>#FF19141F</c> ground,
@@ -162,10 +196,62 @@ public class RackPresentationTests
     }
 
     /// <summary>
+    /// <b>THE THRESHOLD IS THE WHOLE BITE OF THE NARROWEST CHECK, AND NOTHING PINNED IT.</b>
+    /// <c>Ellipse.dot</c> strokes <c>#FF6B5B73</c> and <c>Ellipse.dot.armed</c> FILLS AND STROKES
+    /// the same colour (<c>MainWindow.axaml:386-389</c>), so <c>rack-row-dot-armed</c> separates a
+    /// filled disc from a hollow ring by AREA alone — 0.714 against 0.224. Drop its
+    /// <c>minPixelFraction</c> from 0.5 to 0.2 and it passes on the real <c>off</c> capture while
+    /// every other fact in this file stays green: the tolerance guard reads only
+    /// <c>Tolerance</c>, and the synthetic buffers below are solid colours that score 0.000 either
+    /// way. A green floor would then be equally consistent with a check that no longer bites.
+    ///
+    /// <para>So each threshold is pinned STRICTLY BETWEEN the two fractions its own real captures
+    /// produced (<c>record.md</c> §3). The extra 0.1 clearance is required on the WRONG side only,
+    /// and the asymmetry is deliberate: a threshold creeping down toward the wrong-state fraction
+    /// is a check going quietly blind, whereas a threshold close under a pass fraction of exactly
+    /// 1.000 is what a flat, unantialiased fill legitimately earns.</para>
+    /// </summary>
+    [Fact]
+    public void EveryRackThresholdSitsBetweenTheFractionsItsOwnCapturesProduced()
+    {
+        // (check, fraction on the WRONG state's real capture, fraction on its OWN real capture)
+        (string Name, double Wrong, double Pass)[] measured =
+        [
+            ("rack-row-unselected-ground", 0.000, 1.000),
+            ("rack-row-selected-marker", 0.000, 0.862),
+            ("rack-row-selected-fill", 0.000, 1.000),
+            ("rack-row-dot-armed", 0.224, 0.714),
+            ("rack-row-dot-off", 0.000, 1.000),
+        ];
+
+        var checks = RackChecks();
+        var pinned = 0;
+        foreach (var (name, wrong, pass) in measured)
+        {
+            var threshold = checks.Single(c => c.Name == name).MinPixelFraction;
+            pinned++;
+            Assert.True(threshold > wrong && threshold < pass,
+                $"check '{name}' has minPixelFraction {threshold}, which is not strictly between the "
+                + $"fractions its own real captures produced: {wrong} on the wrong state, {pass} on its "
+                + "own. Outside that window the check either cannot fail or cannot pass");
+            Assert.True(threshold - wrong >= 0.1,
+                $"check '{name}' has minPixelFraction {threshold}, only {threshold - wrong:F3} above the "
+                + $"{wrong} its WRONG state really scores. That is a check on the edge of not biting; "
+                + "if the states are genuinely that close, the check is measuring the wrong thing");
+        }
+
+        // Every rack check is covered by the table, and the table names no check that has gone —
+        // otherwise a new check could ship with an unpinned threshold and this would not notice.
+        Assert.Equal(checks.Count, pinned);
+    }
+
+    /// <summary>
     /// The bite, on synthetic pixels: each rack check rejects a surface painted entirely in the
-    /// colour the OTHER state of that surface really is. These are the same rejections the real
-    /// captures produced (0.000, 0.000, 0.000, 0.224, 0.000 — record.md §3), reproduced here so a
-    /// widened threshold reddens the floor rather than waiting for the next headed run.
+    /// colour the OTHER state of that surface really is. Note what this can and cannot stand in
+    /// for — a solid buffer scores 0.000 for every one of these, INCLUDING
+    /// <c>rack-row-dot-armed</c>, whose real wrong-state capture scores 0.224 because a hollow ring
+    /// is not a solid ground. The 0.224 is pinned by
+    /// <see cref="EveryRackThresholdSitsBetweenTheFractionsItsOwnCapturesProduced"/>, not here.
     /// </summary>
     [Theory]
     [InlineData("rack-row-unselected-ground", 0x2A, 0x21, 0x30)]   // the row is OPEN
@@ -202,6 +288,14 @@ public class RackPresentationTests
     /// asserted because dropping any one of them silently breaks a different half of it: the wrong
     /// path contends with nobody, <c>FileShare.None</c> makes the holder unnameable, and a
     /// <c>StreamWriter</c>'s BOM makes <c>HolderProcessId</c> read "no readable holder".
+    ///
+    /// <para><b>THE CALL SITE IS MATCHED LINE-EXACTLY, and the first version of this guard was
+    /// INERT for want of that.</b> It searched for <c>"Take-Lease"</c> starting one character past
+    /// <c>"function Take-Lease"</c>, which finds the substring eight characters later — still
+    /// inside the DEFINITION header, never the call. Review deleted the call line outright and
+    /// every one of the six assertions stayed green: the script could run entirely unleased with
+    /// this test passing. A definition is not an invocation, and a guard over this packet's #1
+    /// correctness requirement has to know the difference.</para>
     /// </summary>
     [Fact]
     public void TheCaptureScriptTakesTheMachineWideRealDesktopLease()
@@ -212,13 +306,28 @@ public class RackPresentationTests
         Assert.Contains("[Text.Encoding]::UTF8.GetBytes(\"pid=$PID\")", script, StringComparison.Ordinal);
         Assert.DoesNotContain("StreamWriter", script, StringComparison.Ordinal);
 
+        // A whole line that is exactly `Take-Lease` is a CALL. Nothing else in PowerShell is.
+        var call = System.Text.RegularExpressions.Regex.Match(
+            script, @"^Take-Lease[ \t]*\r?$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        Assert.True(call.Success,
+            "capture.ps1 defines Take-Lease but never CALLS it at top level — the script would run "
+            + "unleased, which is exactly the SP-107 condition this guard exists to prevent");
+
         // Taken before the app is launched, released after it exits: the WINDOW is the thing that
         // must not contend, not merely the pixel read.
-        var take = script.IndexOf("Take-Lease", script.IndexOf("function Take-Lease", StringComparison.Ordinal) + 1, StringComparison.Ordinal);
         var launch = script.IndexOf("Process]::Start($exe)", StringComparison.Ordinal);
-        var release = script.LastIndexOf("Release-Lease", StringComparison.Ordinal);
-        Assert.InRange(take, 0, launch);
-        Assert.InRange(release, launch, script.Length);
+        Assert.InRange(launch, 0, script.Length);
+        Assert.InRange(call.Index, 0, launch);
+
+        // Released on EVERY path, not just the happy one: once from Fail (indented, inside the
+        // function) and once at top level after the process has exited. A single call site means a
+        // failed capture wedges the machine for whoever runs next.
+        var releases = System.Text.RegularExpressions.Regex.Matches(
+            script, @"^[ \t]*Release-Lease[ \t]*\r?$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        Assert.True(releases.Count >= 2,
+            $"capture.ps1 calls Release-Lease {releases.Count} time(s); it must release on the failure "
+            + "path as well as the success path, or a failed capture leaves the lease held");
+        Assert.InRange(releases[^1].Index, launch, script.Length);
     }
 
     /// <summary>

@@ -7,7 +7,7 @@
 #
 # SP-122: the SAME seed covers the RACK, and it costs one extra capture per build to prove it.
 # #FFE066FF is not door-specific — it is also RadioButton.rack-row:checked's BorderBrush and
-# Ellipse.dot.live's Fill (MainWindow.axaml:67-70, :101-105, :390-393) — so one throwaway edit
+# Ellipse.dot.live's Fill (MainWindow.axaml:68-71, :101-105, :390-393) — so one throwaway edit
 # breaks the rail door's selected border AND the rack row's selection marker, and both named
 # checks must trip on it. That is what separates a check that catches a REAL regression in product
 # markup from one that only distinguishes two captures of a working build.

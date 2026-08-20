@@ -301,7 +301,7 @@ at the source with `exit 0`, which makes the pre-existing guards mean something 
 
 ## 7. Tests added, and each one shown to bite
 
-`client/tests/CcpClient.Tests/RackPresentationTests.cs` — **17 facts**. Manifest shape (every rack
+`client/tests/CcpClient.Tests/RackPresentationTests.cs` — **19 facts**. Manifest shape (every rack
 check is `presentation-verified`; both surfaces covered in both states); the surface set derived
 from `capture.ps1`'s own `ValidateSet` rather than restated (the SP-094 rule); the tolerance
 separation property; ten synthetic-buffer facts that each check accepts its own state's colour and
@@ -322,15 +322,19 @@ Deliberate mutations, each reverted from git afterwards and the tree confirmed c
 | `DwmFlush()` call removed | `Assert.InRange() Failure: Value not in range` |
 | lease `FileShare.Read` -> `FileShare.None` | `Assert.Contains() Failure: Sub-string not found` |
 | `session_preset.json` dropped from the deterministic-start set | `Assert.Contains() Failure: Sub-string not found` |
+| **the `Take-Lease` CALL LINE deleted, definition left intact** | `capture.ps1 defines Take-Lease but never CALLS it at top level — the script would run unleased` |
+| `Release-Lease` removed from the `Fail` path | `capture.ps1 calls Release-Lease 1 time(s); it must release on the failure path as well as the success path` |
+| **`rack-row-dot-armed` `minPixelFraction` 0.5 -> 0.2** | `has minPixelFraction 0,2, which is not strictly between the fractions its own real captures produced: 0,224 on the wrong state, 0,714 on its own` (18 of 19 rack facts stayed green — which is review's whole point) |
+| `'armed'` removed from `capture.ps1`'s `$statesFor` map | `Assert.Contains() Failure: Item not found in set` |
 
-**The last two are LEXICAL and prove deletion, not disabling.** A commented-out lease would keep
-them green. §4's transcripts are what prove the mechanism, and the test file says so in its own
-summary rather than leaving a reader to assume otherwise.
+**The capture-path guards are LEXICAL and prove deletion, not disabling.** A commented-out lease
+would keep them green. §4's transcripts are what prove the mechanism, and the test file says so in
+its own summary rather than leaving a reader to assume otherwise.
 
 ## 8. Floor
 
-Pin **2270 unit / 141 headless**. Declared delta: **+17 unit / +3 headless**
-(`spine-tasks/SP-122-rack-presentation/floor-delta.json`). Expected observed totals: **2287 unit /
+Pin **2270 unit / 141 headless**. Declared delta: **+19 unit / +3 headless**
+(`spine-tasks/SP-122-rack-presentation/floor-delta.json`). Expected observed totals: **2289 unit /
 144 headless**. Observed and both gates' results are in the final report. `floor.json` was never
 opened. Both gates were run alone and never beside a capture.
 
@@ -348,8 +352,74 @@ opened. Both gates were run alone and never beside a capture.
 - `CopyFromScreen` reads the composited desktop, so unlike SP-115's `PrintWindow` it is not
   structurally blind to transparent-versus-black. It IS blind to a foreign top-most window owning
   the point, and the lease cannot exclude one (`RealDesktopCollection.cs:44-48`). Unchanged residue.
+- **`rack-row-dot-off` cannot see a missing dot.** It reads the open row's fill through a hollow
+  ring, so an unrendered dot passes it. Only `rack-row-dot-armed` constrains that the dot exists,
+  and only by area above its threshold.
 - The captures are gitignored artifacts. What survives in the repository is the manifest, the
   capture path and the guards; the pixels themselves are reproducible, not archived.
+
+## 9a. WHAT CODE REVIEW CAUGHT: two guards that passed over the thing they existed to catch
+
+Review returned REVISE with two blockers, both demonstrated empirically rather than argued, and
+both of the same class. Both are now fixed and both fixes are mutation-proved above.
+
+**BLOCKER 1 — the lease guard was INERT, over this packet's #1 correctness requirement.** It read
+`script.IndexOf("Take-Lease", script.IndexOf("function Take-Lease") + 1)`. Searching from F+1 finds
+the substring at F+9 — still inside the DEFINITION header `function Take-Lease {` — and never
+reaches the call site. Review resolved the offset (3305, context `"function Take-Lease {\r\n    $d"`),
+deleted the call line at `capture.ps1:291`, and re-evaluated all six assertions: **every one stayed
+true.** So `capture.ps1` could have run entirely unleased with the guard green. My own disclosure
+("a commented-out lease would keep them green") understated it — the guard did not prove the call
+existed at all. And §7's mutation row for it only ever exercised
+`FileShare.Read -> FileShare.None`, which trips a different `Assert.Contains`, so the deletion case
+was never mutation-tested. The guard now matches a line-exact `^Take-Lease\s*$` call statement,
+requires it to precede the launch, and additionally requires at least TWO `Release-Lease` call
+sites so the failure path cannot quietly stop releasing. Both cases are now in the mutation table.
+
+**BLOCKER 2 — nothing pinned `minPixelFraction`, which is the entire discriminating power of the
+narrowest check.** `Ellipse.dot` strokes `#FF6B5B73` and `Ellipse.dot.armed` fills AND strokes the
+same colour (`MainWindow.axaml:386-389`), so `rack-row-dot-armed` separates a filled disc from a
+1-DIP ring by AREA alone: 0.714 against 0.224 at a 0.5 threshold.
+`NoRackCheckAcceptsTheColourOfAnotherRackState` constrains `Tolerance` only, and nothing in the diff
+read `MinPixelFraction`. Review dropped it to 0.2 — the check then PASSES on the real `off` capture
+(0.224 >= 0.2) while both `Theory` cases stay green, because the synthetic buffers are solid
+`#2A2130` and score 0.000 either way. A green floor would have been equally consistent with a check
+that no longer bites. `EveryRackThresholdSitsBetweenTheFractionsItsOwnCapturesProduced` now pins
+every threshold strictly between the two fractions its own real captures scored, with an extra 0.1
+clearance required on the WRONG side only — the asymmetry is deliberate, because a threshold
+creeping toward the wrong-state fraction is a check going blind, whereas a threshold just under a
+pass fraction of exactly 1.000 is what a flat unantialiased fill legitimately earns.
+
+**The four non-blocking items, all applied.**
+
+1. `self-test.ps1` cited `MainWindow.axaml:67-70` for `RadioButton.door:checked`; the selector is
+   at 68 and closes at 71 (67 is the last comment line). Corrected.
+2. **`rack-row-dot-off` also passes if the dot is not rendered at all** — it reads the open row's
+   fill showing through a transparent centre. Only `rack-row-dot-armed` constrains that the dot
+   exists, and only above its threshold, which is why blocker 2 mattered more than it looked. Now
+   stated in `checks.json` beside the checks and in §9 below.
+3. `capture.ps1`'s `$statesFor` surface/state map had no floor guard —
+   `EveryManifestSurfaceIsOneTheCaptureScriptAccepts` covered `-Surface` only. Added
+   `EveryManifestSurfaceStatePairIsOneTheCaptureScriptCanDrive`, mutation-proved.
+4. The doc comment on `EachRackCheckRejectsTheOtherStatesColour` claimed it reproduced the real
+   fractions "0.000, 0.000, 0.000, 0.224, 0.000"; the synthetic dot-armed case yields 0.000, not
+   0.224, because a solid buffer is not a hollow ring. Reworded to say exactly what a solid buffer
+   can and cannot stand in for, and to point at the fact that does pin the 0.224.
+
+**One more thing I am recording rather than fixing:** the `//` comments make `checks.json` JSONC.
+That is safe today — `CheckManifest.Load` sets `JsonCommentHandling.Skip` (`CheckManifest.cs:50`)
+and nothing else parses the file, including the headless anchor test, which passes the same option.
+But **a strict JSON parser can no longer read the manifest**, and anything added later that reads it
+must opt into comments.
+
+Review confirmed the rest independently: no product byte changed, the probe-refusal arithmetic
+(351 px against a 965 px viewport, 5.2 rows below the fold), all four harness defects genuinely
+present at base and genuinely fixed, the lease byte contract exact against
+`RealDesktopCollection.cs:113,144,148`, the tolerances correctly below 10, and 0.714 vs 0.224 as a
+real filled disc against an antialiased ring (pi/4 = 0.785 in a 14x14 cell) rather than noise. It
+also checked that the seeded-regression discrimination is genuine rather than `selected-fill` being
+insensitive: that check reads a Background the seed never touched, and it does fail 1.000 -> 0.000
+on the unselected capture.
 
 ## 10. Divergences (D207 onward)
 
