@@ -229,9 +229,12 @@ ten packets.
 
 **The fix is the edge, and the precedent is in the sibling file.**
 `MovingEffectSpineTests` already awaits an old generation's completion for exactly this reason at
-`:171-174` — the "Drained on purpose" note and the `await stopped!` it explains — and again at
-`:218`. (An earlier draft of this record cited `:196-197` for that precedent; those lines are the
-comment that DISCUSSES it, not the await. Corrected at review.) The spiral fact now
+`:171-174` — the "Drained on purpose" note and the `await stopped!` it explains, valid against
+BOTH base and head — and again at `:222-223` **at head** (`:218` at base, before this lane's own
+two facts moved it). (An earlier draft cited `:196-197`, which is the comment that DISCUSSES the
+precedent rather than the await, and then `:218`, which is base-only and silently mixed trees inside
+one paragraph. Both corrected at final review; every line number in this record is now stated with
+the tree it is valid against wherever the two differ.) The spiral fact now
 does the same through `TestWait.Until(Task)` — the ONE approved bounded signal wait — and then
 asserts the typed `Cancelled` outcome. It is not a wait for an assertion to pass: the operation is
 finished or the window fails loudly, and the sequence after it is single-threaded.
@@ -302,8 +305,13 @@ found: "TIMING-VERDICT:CONDITION-NEVER-TRUE"`. The tree was restored afterwards.
 
 **This is NOT a product defect and `client/src/**` stayed shut.** On a real dispatcher the withdraw
 is posted to the UI thread, every touch of a surface is single-threaded by construction, and a
-second withdraw of an already-withdrawn surface is the no-op the contract requires
-(`OwnedSessionEffect.cs:298-302`). The defect is in a TEST that reaches around its own module.
+second withdraw of an already-withdrawn surface is the no-op the contract requires —
+**`SpiralOverlayEffect.cs:263-266`**, the guard itself:
+`if (_surface is not { Engaged: true }) { return; }`. (An earlier draft cited
+`OwnedSessionEffect.cs:298-302` here, which is the `EngageIfEligible` XML doc comment and not a
+guard at all. The claim was true and its evidence pointed at prose; since this is the citation that
+discharges "no board row is owed", it now points at the code that discharges it. Corrected at final
+review.) The defect is in a TEST that reaches around its own module.
 
 **What this does NOT claim.** The natural rate of this race was **0 in 60** at base, so no rate
 reduction is claimed for it and none can be: 0/60 bounds it at 4.9 %, not at zero. What is claimed
@@ -344,10 +352,46 @@ one-sided) and NOT at zero. It cannot on its own demonstrate an improvement over
 counts overlap. **The strong evidence is the mechanism-level measurement — 34 in 1200 against 0 in
 1500 through the shipped code path — and this record does not pretend otherwise.**
 
+### 3.4 THE CONTROL THE SWEEP DOES NOT HAVE, AND IT IS THE ONE THIS PACKET'S DEFENCE RESTS ON
+
+**There is no equal-elapsed-time, NO-FENCE arm.** `GdiFlush` returns near-instantly, so mode D
+against mode E separates "some flush" from "the COMPOSITOR's flush" — which is a real and useful
+separation, and it is not the one the defence needs. It does not separate **"an ordering edge on the
+compositor"** from **"roughly one present interval of elapsed time"**. An arm that burned a
+comparable interval without fencing would have told those two apart. It was not run.
+
+**This matters more than an ordinary gap, because "this is not a wait" is this packet's own
+load-bearing defence against its own central prohibition.** So the claim has to be split:
+
+- **Established interventionally, by measurement:** the composited read had no happens-before edge
+  against the compositor, and supplying one removes the fault. Every competing explanation was
+  refuted by a PRINTED control rather than argued away — occlusion (`isOurs=True` on all 34 misses,
+  plus the identical majority colour), allocation (5,184,000 returned), blank display (0.8 %
+  uniform), geometry desynchronisation (identical metric pairs), and GDI batching (`GdiFlush` alone,
+  8 in 300).
+- **A best-supported READING, not a measurement:** that the operative property of `DwmFlush` here is
+  its FENCE SEMANTICS rather than the elapsed time it happens to cost. That rests on the documented
+  contract — it blocks until the next present has consumed outstanding surface updates — and on the
+  mechanism being a publication ordering rather than a duration. It does not rest on anything this
+  lane measured.
+
+A successor that wants the stronger claim needs the equal-elapsed no-fence arm. Nothing else in this
+record depends on it: the fence is in the instrument, not in the product, and no assertion anywhere
+is conditioned on how long it took.
+
 ## 6. WHAT REMAINS UNEXPLAINED
 
 - **Nothing from strand 1/3 remains unexplained**, which is the change. The five verdicts are now
   discriminated by printed numbers and the fifth has a mechanism, a measurement and a pin.
+- **THE SECOND FALSIFICATION CONTROL FOR STRAND 2 RETURNED ZERO OBSERVATIONS.** `plan.md` §2 named
+  two controls: the thread-of-release instrument, and *"the observed failure MESSAGE from the base
+  arm — if the reds are neither of the two predicted signatures, the hypothesis is wrong regardless
+  of how good the reading is"*. **The spiral never reddened in 60 base runs, so that control neither
+  confirmed nor refuted anything.** What this packet establishes is a mechanism *capable of*
+  producing SP-115's signature, pinned deterministically and removed by construction. **That
+  SP-115's red WAS that mechanism remains an inference** — from the shape of the only race in that
+  test, not from a message anyone read. The one artifact that would settle it is the failure text of
+  SP-115's own red, and it was not captured.
 - **Strand 2's OBSERVED RATE remains unexplained.** SP-115 saw it 1 in 7 at base; this lane saw it
   0 in 60 on the same machine five days later. The mechanism is real and now deterministically
   reproducible, but what made it fire seven times more often in SP-115's window is not known and 60
