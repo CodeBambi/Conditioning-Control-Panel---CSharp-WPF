@@ -102,7 +102,7 @@ of the defect it hides. No wall-clock waits. Both gates alone.
 | testCommand | `node client/tests/floor/check-floor.mjs` |
 | floorDelta | `spine-tasks/SP-120-haptic-limb-census/floor-delta.json` |
 | fileScopeMustChange | `client/docs/haptic-limb-census.md` |
-| fileScopeMustNotChange | `client/src/**`, `client/tests/floor/**`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/ExecutionCensusTests.cs`, `client/docs/task-board.md`, `client/docs/port-digest.md`, `client/docs/verification-harness.md`, `client/tools/**`, `ConditioningControlPanel/**`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
+| fileScopeMustNotChange | `client/src/**`, `client/tests/floor/**`, `client/tests/floor/floor.json`, `client/tests/CcpClient.HeadlessTests/**`, `client/tests/CcpClient.Tests/ExecutionCensusTests.cs`, `client/docs/task-board.md`, `client/docs/port-digest.md`, `client/docs/verification-harness.md`, `client/tools/**`, `ConditioningControlPanel/**`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
 | artifactsMustExist | `spine-tasks/SP-120-haptic-limb-census/record.md`, `spine-tasks/SP-120-haptic-limb-census/floor-delta.json` |
 
 **Pin: 2247 unit / 141 headless.** `sum-deltas` before deleting any delta file. **Keep every artifact
