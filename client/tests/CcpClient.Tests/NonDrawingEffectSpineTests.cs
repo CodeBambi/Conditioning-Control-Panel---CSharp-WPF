@@ -197,6 +197,50 @@ public class NonDrawingEffectSpineTests
     }
 
     [Fact]
+    public async Task TheRampsTHIRDDialIsFlashOpacity_AndItIsHeldDrivenAndGivenBackLikeTheOtherTwo()
+    {
+        // SP-117. D93 said flash opacity's link was absent because it had "no dial on any ported
+        // panel"; the Visuals row is that panel, so this is the condition being discharged rather
+        // than waived. The dial's Reapply is a NO-OP (D174 — a live flash keeps the alpha it was
+        // placed with), so the whole of custody has to rest on Write, and that is what this checks.
+        // The base is SIXTY on purpose. WPF's arm is min(base * currentMult, 100)
+        // (MainWindow/MainWindow.StartStop.cs:508): the cap is a CEILING, not a target, so a base
+        // of 30 at 2.0x finishes at 60 and never reaches it. At 60 the climb is unclamped halfway
+        // (90) and clamped at the end (120 -> 100), which is the only way one run exercises both.
+        await using var rig = await Rig.StartAsync();
+        rig.Session.VisualsPreset.Mutate(p => p.FlashOpacityPercent = 60);
+        rig.Session.RampPreset.Mutate(p =>
+        {
+            p.Enabled = true;
+            p.LinkFlashOpacity = true;
+            p.Multiplier = 2.0;
+            p.DurationMinutes = 60;
+        });
+
+        rig.Engine.Start();
+        Assert.Contains(FlashImagesEffect.EffectId, rig.Ramp.HeldDials);
+        Assert.Equal(60, rig.Ramp.BaseValueFor(FlashImagesEffect.EffectId));
+
+        rig.Clock.Advance(TimeSpan.FromMinutes(30));
+
+        // The Visuals panel's own number really moved, and so did the reading the NEXT flash will
+        // be drawn with — the ramp wrote the module's own persisted dial, not a shadow copy.
+        var halfway = rig.Session.VisualsPreset.Current.FlashOpacityPercent;
+        Assert.Equal(90, halfway);
+        Assert.Equal(halfway, rig.Session.Visuals.Draw().OpacityPercent);
+
+        // A full climb lands exactly on the ceiling rather than past it — the multiply would give
+        // 120, and both WPF's own min and the document's clamp put it at 100.
+        rig.Clock.Advance(TimeSpan.FromHours(2));
+        Assert.Equal(VisualsPresetDocument.MaxFlashOpacityPercent,
+            rig.Session.VisualsPreset.Current.FlashOpacityPercent);
+
+        Assert.True(rig.Engine.Stop());
+        Assert.Equal(60, rig.Session.VisualsPreset.Current.FlashOpacityPercent);
+        Assert.Empty(rig.Ramp.HeldDials);
+    }
+
+    [Fact]
     public async Task HostTeardownGivesTheDialsBackToo_WithoutGoingThroughStopAtAll()
     {
         var rig = await Rig.StartAsync();

@@ -689,9 +689,10 @@ public class StudioRackHeadlessTests
 
         // WPF's EFFECTS group is flash, video, subliminal, spiral, pinkfilter, visuals
         // (StudioTabView.xaml.cs:483-497). SP-111 lands Mandatory Video SECOND, where upstream puts
-        // it; the two still-unported rows (Magenta Filter, Visuals) are the ones the ported rows
-        // close up around. The ORDER is upstream.s and is asserted, because a rack that reorders
-        // itself as modules land stops being the rack the user learned.
+        // it; SP-117 lands Visuals SIXTH and LAST, where upstream puts it, so the EFFECTS group is
+        // now upstream's complete group with nothing closed up around. The ORDER is upstream's and
+        // is asserted, because a rack that reorders itself as modules land stops being the rack the
+        // user learned.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
             .Where(r => r.Classes.Contains("rack-row"))
             .Select(r => r.Name)
@@ -699,7 +700,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
-                "RowBouncingText", "RowPinkFilter",
+                "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
                 "RowIntensityRamp",
             ],
@@ -707,9 +708,10 @@ public class StudioRackHeadlessTests
 
         // SP-105: three of the four had an effect whose state could be reported, and D5/D6 stayed
         // open for exactly one row. SP-106 gave that row an effect, so the loop below is now every
-        // row on the page — see TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack.
-        // SP-108 adds a fifth from a different rack GROUP (TIMING), placed after the EFFECTS block
-        // exactly as upstream orders its groups (StudioTabView.xaml.cs:482-541).
+        // row on the page WITH AN EFFECT BEHIND IT — see
+        // TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack. SP-108 adds a fifth from
+        // a different rack GROUP (TIMING), placed after the EFFECTS block exactly as upstream orders
+        // its groups (StudioTabView.xaml.cs:482-541).
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
@@ -723,6 +725,17 @@ public class StudioRackHeadlessTests
                     .OfType<Avalonia.Controls.Shapes.Ellipse>(),
                 e => e.Classes.Contains("dot"));
         }
+
+        // SP-117 — AND THE ONE ROW THAT MUST NOT HAVE ONE. The method's name has always said "every
+        // row WITH A PORTED EFFECT BEHIND IT", and Visuals is the first row in this rack with no
+        // effect behind it at all: upstream's entry passes null where every other row passes a dot
+        // predicate (StudioTabView.xaml.cs:496) because there is no master toggle to read, and its
+        // own comment says a dot that cannot be wired honestly is omitted (:494-495). Asserted
+        // rather than left implicit, because "the row exists" and "the row tells the truth about
+        // itself" are different facts and only the second one is worth having.
+        Assert.Empty(
+            Descendant<RadioButton>(window, "RowVisuals").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>());
 
         await boot.Host.ShutdownAsync();
     }
@@ -908,7 +921,7 @@ public class StudioRackHeadlessTests
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
-                "RowBouncingText", "RowPinkFilter",
+                "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
                 "RowIntensityRamp",
             ],
@@ -1026,7 +1039,7 @@ public class StudioRackHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task TheRampsOwnLinkSwitchesWriteItsDocument_AndOnlyTheTwoDialsThePortReallyHas()
+    public async Task TheRampsOwnLinkSwitchesWriteItsDocument_AndOnlyTheThreeDialsThePortReallyHas()
     {
         var boot = await BootAsync();
         var window = boot.Window;
@@ -1039,14 +1052,173 @@ public class StudioRackHeadlessTests
         Click(window, Descendant<CheckBox>(window, "RampLinkPinkFilterToggle"));
         Assert.True(window.Session.RampPreset.Current.LinkPinkFilterOpacity);
 
-        // D93. WPF has FIVE link switches (AppSettings.cs:2589-2621); flash opacity, master volume
-        // and subliminal volume have no dial on any ported panel, so their switches are ABSENT rather
-        // than present-and-inert — a switch that quietly does nothing is the greyed control §9 D7
-        // refuses.
+        // SP-117 — THE THIRD SWITCH, and the reason it is admissible now is the reason it was
+        // refused before, not a change of mind. D93's rule is that a link whose dial has no ported
+        // panel is ABSENT rather than present-and-inert; the Visuals row IS flash opacity's panel,
+        // so the precondition is discharged for this one link and for no other.
+        Click(window, Descendant<CheckBox>(window, "RampLinkFlashToggle"));
+        Assert.True(window.Session.RampPreset.Current.LinkFlashOpacity);
+
+        // And it is a link the ramp can really drive, not just a flag: the dial is in the built
+        // composition, keyed to the module whose value it borrows rather than to the panel the
+        // slider is drawn on.
+        Assert.Contains(window.Session.Ramp.Dials, d => d.Id == FlashImagesEffect.EffectId);
+
+        // D93 for the two that are still absent. WPF has FIVE link switches
+        // (CCP.Core/Models/AppSettings.cs:2589-2621); master volume and subliminal volume still have
+        // no dial on any ported panel, so their switches stay absent — a switch that quietly does
+        // nothing is the greyed control §9 D7 refuses.
         var names = window.GetVisualDescendants().OfType<CheckBox>().Select(c => c.Name).ToList();
-        Assert.DoesNotContain("RampLinkFlashToggle", names);
         Assert.DoesNotContain("RampLinkMasterAudioToggle", names);
         Assert.DoesNotContain("RampLinkSubliminalAudioToggle", names);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    // =====================================================================================
+    //  SP-117 — the Visuals row: a rack row that is not a module
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task TheVisualsRowOpensAPanelWithNOENABLEBOX_BecauseUpstreamHasNoMasterToggleEither()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+
+        Assert.True(Descendant<StackPanel>(window, "VisualsModulePanel").IsVisible);
+        Assert.False(Descendant<StackPanel>(window, "FlashModulePanel").IsVisible);
+        Assert.False(Descendant<TextBlock>(window, "RackHint").IsVisible);
+
+        // THE ABSENCE THIS ROW EXISTS TO PROVE. Every other panel in the rack opens with an enable
+        // checkbox; this one has none, because upstream has none — "no enable pill: Visuals is the
+        // one module with no master toggle at all" (Features/VisualsFeatureControl.xaml:12-14).
+        // Asserted by NAME PREFIX rather than by counting the panel's children, so a later packet
+        // that adds an unrelated control cannot make this pass by accident.
+        var boxes = Descendant<StackPanel>(window, "VisualsModulePanel").GetVisualDescendants()
+            .OfType<CheckBox>().Select(c => c.Name).ToList();
+        Assert.Empty(boxes);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheVisualsDialsCarryWpfsOwnRangesAndDefaults_AndNoneOfThemIsGreyed()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+
+        var scale = Descendant<Slider>(window, "VisualsScaleSlider");
+        var opacity = Descendant<Slider>(window, "VisualsOpacitySlider");
+        var duration = Descendant<Slider>(window, "VisualsDurationSlider");
+
+        // WPF's own slider bounds (Features/VisualsFeatureControl.xaml:54, :70, :102), which are
+        // also its setter clamps (CCP.Core/Models/AppSettings.cs:849, :859, :929).
+        Assert.Equal(VisualsPresetDocument.MinImageScalePercent, scale.Minimum);
+        Assert.Equal(VisualsPresetDocument.MaxImageScalePercent, scale.Maximum);
+        Assert.Equal(VisualsPresetDocument.MinFlashOpacityPercent, opacity.Minimum);
+        Assert.Equal(VisualsPresetDocument.MaxFlashOpacityPercent, opacity.Maximum);
+        Assert.Equal(VisualsPresetDocument.MinFlashDurationSeconds, duration.Minimum);
+        Assert.Equal(VisualsPresetDocument.MaxFlashDurationSeconds, duration.Maximum);
+
+        Assert.Equal(VisualsPresetDocument.DefaultImageScalePercent, scale.Value);
+        Assert.Equal(VisualsPresetDocument.DefaultFlashOpacityPercent, opacity.Value);
+        Assert.Equal(VisualsPresetDocument.DefaultFlashDurationSeconds, duration.Value);
+
+        Assert.True(scale.IsEnabled);
+        Assert.True(opacity.IsEnabled);
+        Assert.True(duration.IsEnabled);
+
+        // The two upstream controls that are ABSENT rather than greyed (§9 D7), asserted by name so
+        // a later packet that ships either one has to change this fact deliberately.
+        var controls = Descendant<StackPanel>(window, "VisualsModulePanel").GetVisualDescendants()
+            .OfType<Control>().Select(c => c.Name).ToList();
+        Assert.DoesNotContain("VisualsFadeSlider", controls);
+        Assert.DoesNotContain("VisualsAudioLinkToggle", controls);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task MovingAVisualsDial_WritesItsDocument_AndReachesTheVERYNEXTFLASHSPLACEMENT()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+
+        Descendant<Slider>(window, "VisualsScaleSlider").Value = 200;
+        Descendant<Slider>(window, "VisualsOpacitySlider").Value = 40;
+        Descendant<Slider>(window, "VisualsDurationSlider").Value = 12;
+
+        Assert.Equal(200, window.Session.VisualsPreset.Current.ImageScalePercent);
+        Assert.Equal(40, window.Session.VisualsPreset.Current.FlashOpacityPercent);
+        Assert.Equal(12, window.Session.VisualsPreset.Current.FlashDurationSeconds);
+
+        Assert.Equal("200", Descendant<TextBlock>(window, "VisualsScaleValue").Text);
+        Assert.Equal("40", Descendant<TextBlock>(window, "VisualsOpacityValue").Text);
+        Assert.Equal("12", Descendant<TextBlock>(window, "VisualsDurationValue").Text);
+
+        // The dials are not decoration: the reading the presenter will use for the next flash is
+        // the one the user just set. This is the whole point of the row — before SP-117 these three
+        // numbers were constants inside FlashSurfacePresenter.
+        var draw = window.Session.Visuals.Draw();
+        Assert.Equal(200, draw.ScalePercent);
+        Assert.Equal(0.4, draw.Opacity);
+        Assert.Equal(TimeSpan.FromSeconds(13), draw.Lifetime);
+
+        // And the panel's own sentence says WHEN the change lands, because it is not "now": a flash
+        // already up keeps the alpha it was placed with (D174).
+        var line = Descendant<TextBlock>(window, "VisualsDialState").Text!;
+        Assert.Contains("NEXT flash", line, StringComparison.Ordinal);
+        Assert.Contains("200%", line, StringComparison.Ordinal);
+        Assert.Contains("12 seconds", line, StringComparison.Ordinal);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheVisualsPanelNamesTheModuleTheDialsBelongTo_AndBothMissingUpstreamControls()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+
+        // Flash Images ships ON (CCP.Core/Models/AppSettings.cs:751-756), so the ownership line
+        // starts in its positive arm.
+        Assert.True(window.Session.Flash.Enabled);
+        var owned = Descendant<TextBlock>(window, "VisualsOwnershipState");
+        Assert.Contains("Flash Images", owned.Text!, StringComparison.Ordinal);
+        Assert.DoesNotContain("switched off", owned.Text!, StringComparison.Ordinal);
+
+        // Switch the owning module off from ITS row and the sentence must follow, or a user moving
+        // these sliders would be told nothing about why the screen stays empty.
+        Click(window, Descendant<RadioButton>(window, "RowFlashImages"), MouseButton.Right);
+        Assert.False(window.Session.Flash.Enabled);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+        Assert.Contains(
+            "switched off",
+            Descendant<TextBlock>(window, "VisualsOwnershipState").Text!,
+            StringComparison.Ordinal);
+
+        // The absence line is on the PAGE, not only in a record: both of upstream's missing
+        // controls are named with the reason a user can act on.
+        var absence = Descendant<TextBlock>(window, "VisualsAbsenceState").Text!;
+        Assert.Contains("Fade", absence, StringComparison.Ordinal);
+        Assert.Contains("Link to audio", absence, StringComparison.Ordinal);
+        Assert.Contains("silent", absence, StringComparison.Ordinal);
+
+        // And the surface line is the overlay capability's own last answer, not a platform claim.
+        // Nothing has been drawn in this run, so it is the honest "not attempted".
+        Assert.Null(window.Session.Surface.LastPlacement);
+        Assert.Contains(
+            "has not been asked",
+            Descendant<TextBlock>(window, "VisualsSurfaceState").Text!,
+            StringComparison.Ordinal);
 
         await boot.Host.ShutdownAsync();
     }
